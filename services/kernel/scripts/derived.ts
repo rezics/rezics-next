@@ -17,6 +17,7 @@ import { migrate, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from 
 import { cleanup, docker, run } from './check.ts';
 import { cgroupArgs } from './search.ts';
 import { withCommandPhase } from './command-phases.ts';
+import { prepareReyloAnalysisCache } from './reylo-cache.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repository = resolve(directory, '../..');
@@ -354,15 +355,22 @@ function recordOpenApiGeneration(): void {
   } satisfies OpenApiCacheState);
 }
 
-/** Start or reuse a migration-matched throwaway database, run `work`, and remove one-run containers. */
+/**
+ * Start or reuse a migration-matched throwaway database, run `work`, and remove one-run containers. Unless `analysis` is
+ * false, `work` also gets the host's warm Reylo analysis as REYLO_CONFIG, in its environment and in this process, so the
+ * Kernel modules it loads read their statements from the cache instead of describing them against the database.
+ */
 export async function withThrowawayDatabase<T>(
   work: (env: NodeJS.ProcessEnv) => Promise<T> | T,
-  options: { reuse?: boolean } = {},
+  options: { reuse?: boolean; analysis?: boolean } = {},
 ): Promise<T> {
   const reuse = options.reuse ?? false;
+  const analysis = options.analysis ?? true;
   let container = '';
+  let disposeAnalysis: (() => void) | undefined;
   const inheritedUrl = process.env.DATABASE_URL;
   const inheritedContainer = process.env.KERNEL_DATABASE_CONTAINER;
+  const inheritedAnalysis = process.env.REYLO_CONFIG;
   const onSigint = (): void => {
     if (!reuse) cleanup([container]);
     process.exit(130);
@@ -392,15 +400,27 @@ export async function withThrowawayDatabase<T>(
     }
     process.env.KERNEL_DATABASE_CONTAINER = container;
     process.env.DATABASE_URL = url;
-    const env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
+    const env: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
+    if (analysis) {
+      const prepared = await withCommandPhase('sql-analysis', () => prepareReyloAnalysisCache(env), env);
+      disposeAnalysis = prepared.dispose;
+      const reyloConfig = prepared.environment.REYLO_CONFIG;
+      if (reyloConfig !== undefined) {
+        env.REYLO_CONFIG = reyloConfig;
+        process.env.REYLO_CONFIG = reyloConfig;
+      }
+    }
     return await work(env);
   } finally {
+    disposeAnalysis?.();
     if (!reuse) await withCommandPhase('cleanup', () => cleanup([container]));
-    // A later consumer must not inherit a URL this one-run container no longer serves.
+    // A later consumer must not inherit a URL or analysis this one-run container no longer serves.
     if (inheritedUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = inheritedUrl;
     if (inheritedContainer === undefined) delete process.env.KERNEL_DATABASE_CONTAINER;
     else process.env.KERNEL_DATABASE_CONTAINER = inheritedContainer;
+    if (inheritedAnalysis === undefined) delete process.env.REYLO_CONFIG;
+    else process.env.REYLO_CONFIG = inheritedAnalysis;
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
   }
@@ -429,7 +449,8 @@ async function main(): Promise<void> {
   const migrations = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrations, new Date());
   if (action === 'schema') {
-    await withThrowawayDatabase(writeSchemaDumps, { reuse: true });
+    // Schema dumps read the catalogue only; they never load a Kernel module, so they skip the analysis cache.
+    await withThrowawayDatabase(writeSchemaDumps, { reuse: true, analysis: false });
     return;
   }
   const generateOpenApi = generateOpenApiIfNeeded();

@@ -617,6 +617,21 @@ share the native `/signin` attempt budget. Errors use fixed codes.
 | `GET /passkeys`                   | Session cookie; returns `{ passkeys: [{ id, name, created_at, last_used_at }] }` for this person only, limited to 32. `last_used_at` is null before the first sign-in.                                                                                                  |
 | `POST /passkeys/remove`           | Session cookie and `{ id }`; stages, approves and applies `remove-passkey`, with a committed credential floor receipt and bounded session revocation, returning `{ success: true }`.                                                                                    |
 
+Decision: passkey label rename is an own-human, fresh-session `POST /passkeys/rename` with
+`{id,name,reviewed_account_id}` and exact `{id,name}` acknowledgement. Names are trimmed, nonempty and at most
+128 UTF-16 units. It changes only the label, without advancing the credential floor or revoking sessions.
+A changed account or unowned credential refuses the write. A lost response requires deliberate current-label
+review; that observation does not establish the earlier command's outcome. Human credential retirement requires
+a password or passkey to remain; account keys cannot substitute for an interactive credential. Consent Allow and
+reduction refuse a changed reviewed grant set at the final native writer, including changes after initial preparation.
+An absent consent row is an empty grant with a null pending reference. Requested-scope queries reach the consent
+read boundary parser; unrelated query parameters remain refused.
+Session/client/consent inventory retains catalogue-derived bounds; Security, passkey and registration projections
+retain their fixed budgets. Enrollment requires the pinned `rezics.com` / `REZICS` RP. Current-session review after
+a lost password replacement acknowledgement does not renew the original opening epoch or confirm that command;
+its exact retry remains unknown when native revalidation refuses it. Successful human password-retirement fixtures
+enroll an actual native passkey; independent account keys alone do not qualify that fixture.
+
 Enrollment responses use `packages/auth-contract/src/passkey-enrollment-response-bounds.ts`.
 Decision: bound the pinned complete creation DTO and exact credential-effect acknowledgement; stop malformed
 preparation before the browser prompt and retain unknown custody after ambiguous dispatch, without retries or new calls.

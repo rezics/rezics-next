@@ -6,6 +6,7 @@ import { createShelfMetadataReaders } from './shelf-reader-metadata.ts';
 import { createShelfTypeLookup } from './shelf-reader-types.ts';
 import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { readShelfGeneration } from './shelf-reader-generation.ts';
+import { readPersonalScoreCurrentness } from './personal-score.ts';
 
 export type ShelfNativeReadBindings = Pick<
   ShelfReadDependencies,
@@ -22,6 +23,7 @@ export function createDefaultShelfReads(
   const metadata = createShelfMetadataReaders(generation);
   return createShelfReads({
     ...dependencies,
+    scoreCurrentness: dependencies.scoreCurrentness ?? readPersonalScoreCurrentness,
     generation,
     pageReader: createShelfPageReader(),
     summaryReader: metadata,

@@ -97,7 +97,7 @@ test('native shelf defaults resolve within limits, URL choices win, and replaced
   expect(explicit.search.cursor).toBe('current-order');
   expect(explicit.cursorInvalidated).toBe(false);
   expect(unsupportedShelfColumns(shelf)).toEqual(['creator', 'rating', 'started']);
-  expect(unsupportedShelfSorts(shelf)).toEqual([{ tab: 'planned', field: 'title' }]);
+  expect(unsupportedShelfSorts(shelf)).toEqual([]);
   expect(shelfColumnIds).not.toContain('creator' as never);
 
   const explicitDefaults = validateShelfSearch({
@@ -333,11 +333,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     ).toEqual(['creator', 'rating', 'started']);
     expect(
       initial.signedIn && 'preferences' in initial ? unsupportedShelfSorts(initial.preferences.shelf!) : [],
-    ).toEqual([
-      { tab: 'all', field: 'rating' },
-      { tab: 'completed', field: 'rating' },
-      { tab: 'planned', field: 'title' },
-    ]);
+    ).toEqual([]);
     const initialPreferences = initial.signedIn && 'preferences' in initial ? initial.preferences : undefined;
     if (!initialPreferences) throw new Error('Native preference fixture did not load');
     const io = preferences.shelf;
@@ -435,7 +431,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await render();
       expect(host.querySelectorAll('select')).toHaveLength(9);
       expect(host.textContent).toContain(m.settings_shelf_columns_unavailable({ columns: 'creator, rating, started' }));
-      expect(host.textContent).toContain(
+      expect(host.textContent).not.toContain(
         m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
       );
 
@@ -444,7 +440,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         [4, m.library_score_highest()],
       ] as const) {
         const option = host.querySelectorAll<HTMLSelectElement>('select')[index]!.selectedOptions[0]!;
-        expect(option.disabled).toBe(true);
+        expect(option.disabled).toBe(false);
+        expect(option.value.startsWith('rating:')).toBe(true);
         expect(option.textContent).toContain(direction);
       }
 
@@ -455,6 +452,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await click(m.settings_shelf_reload());
       expect(host.textContent).toContain(m.settings_shelf_review());
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
+      await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(host.querySelector('[role="status"]')?.textContent).toBe(m.settings_saved());
       expect(patches[0]?.body).toEqual({ expectedVersion: 4, shelf: { layouts: { all: 'table' } } });
@@ -513,6 +511,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(host.textContent).toContain(m.settings_shelf_review());
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('list');
       expect(confirmedVersion).toBe(7);
+      await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(patches[4]?.body).toEqual({ expectedVersion: 7, shelf: { layouts: { all: 'list' } } });
       expect(confirmedVersion).toBe(8);
@@ -622,6 +621,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
       expect((host.querySelectorAll('select')[1] as HTMLSelectElement).value).toBe('large');
       expect((host.querySelectorAll('select')[9] as HTMLSelectElement).value).toBe('grid');
+      await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(patches[8]?.body).toEqual({ expectedVersion: 11, shelf: { layouts: { [movie]: 'grid' } } });
       await select(8, absent);

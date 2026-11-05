@@ -287,6 +287,9 @@ A run already inside `/srv/rezics-check/runs/<id>` is considered remote only whe
 The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. The slot holder also stops its run's systemd scope and slice and removes that run's labelled containers if its SSH input ends before the run writes `exit-status`. The slot and its processes therefore end together; the stale-file sweep remains a backstop. Every physical run has the estimate-derived host deadline described below, capped at two hours; `--max-ms <n>` can shorten it. A host lifetime timeout exits 124 with a durable infrastructure receipt; transport failure exits 75.
 
 Kept outputs require declared workspace-relative return paths; stack-heavy runs remain on a or b.
+A walk worker whose brief lists native or browser acceptance may run one bounded local stack through `dev-stack.ts walk`;
+its admission, names and teardown are in [local stack walk stacks](../docs/development/local-stack.md#walk-stacks). Its
+checks keep the placement above.
 Local/off markers such as `REZICS_STACK_REMOTE=off`, `REZICS_STACK_SLOT`, `KERNEL_CHECK_ON_REMOTE` and `REZICS_STACK_LEASE` do not change heavy-check placement.
 
 `KERNEL_CHECK_ON_REMOTE` and `REZICS_STACK_LEASE` do not decide shared stack placement.
@@ -314,6 +317,8 @@ SQL analysis 182.75s for 1,994 files, and TypeScript 17.81s. The warm run on the
 analyses and took 36.16s admitted-command time: database image 1.70s, migrations 6.70s, SQL analysis 3.51s, and
 TypeScript 22.35s. Its wrapper took 78.6s including 50.2s dependency setup. Both commands returned the unchanged
 Kernel diagnostics (exit 2); the focused cache test also asserts an identical cold/warm diagnostic string.
+
+Observation: On 2026-11-05 (UTC), a focused `bun run --cwd services/kernel check scripts/check.test.ts` on check host c, with the analysis for this toolchain and schema already warm, took 71.7s of admitted-command time. Before its tests started it spent 22.4s in the database image, 15.6s in migrations, 2.7s in the schema dump, 1.1s in SQL analysis (2,001 files, none analysed, no entries written) and 16.6s in the compiler: 58.4s in total. Cold runs of the same code, reached by a comment-only edit to the cache module that changes the toolchain identity and was then reverted, analysed all 2,001 files in 240.3s on host c (1,995 statement entries written; database image 68.4s, migrations 12.6s, compiler 19.9s) and in 264.1s on host b, where the database image took 234.8s under that host's load. A changed schema dump starts a cold analysis for the new schema.
 
 Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
 root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.

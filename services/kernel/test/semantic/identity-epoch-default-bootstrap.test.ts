@@ -53,12 +53,12 @@ test('default Community worker closes every native legacy home and then repairs 
   expect(closure).toEqual([{ homes: 4096, custody: 4096, remaining: 0 }]);
   const { system } = communityFixtureRuntime();
   expect((await installIdentityEpochBootstrap(system.database.pool)).mode).toBe('legacy');
-  expect(await identityEpochStore.readMapping(system.database.pool, legacy)).toMatchObject({
+  expect(await identityEpochStore().readMapping(system.database.pool, legacy)).toMatchObject({
     state: 'mapped',
     original: legacy,
     terminal: legacy,
   });
-  expect(await identityEpochStore.readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
+  expect(await identityEpochStore().readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
     state: 'mapped',
     original: fixture.subject.id,
     terminal: fixture.subject.id,
@@ -77,7 +77,7 @@ test('default Community worker closes every native legacy home and then repairs 
   );
   expect(dirty).toHaveLength(1);
   expect(dirty[0]!.captured_revision).toBe(dirty[0]!.revision);
-  expect(await identityEpochStore.readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
+  expect(await identityEpochStore().readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
     state: 'mapped',
     original: fixture.subject.id,
     terminal: fixture.subject.id,
@@ -104,7 +104,7 @@ test('fresh native default startup does not sweep empty homes when no legacy ide
   `);
   expect(closure).toEqual([{ empty_home_exports: 0, empty_home_custody: 0 }]);
   const { system } = communityFixtureRuntime();
-  expect(await identityEpochStore.readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
+  expect(await identityEpochStore().readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
     state: 'mapped',
     original: fixture.subject.id,
     terminal: fixture.subject.id,
@@ -358,8 +358,11 @@ test('absence repair visits a new dirty home before wrapping to an unfinished ea
         progress = await stepIdentityEpochBootstrap(f.pool, home(original));
       } while (progress.state !== 'caught-up');
     }
-    expect(await identityEpochStore.readMapping(f.pool, high)).toMatchObject({ state: 'mapped', terminal: highTarget });
-    expect(await identityEpochStore.readMapping(f.pool, low)).toMatchObject({ state: 'mapped', terminal: lowTarget });
+    expect(await identityEpochStore().readMapping(f.pool, high)).toMatchObject({
+      state: 'mapped',
+      terminal: highTarget,
+    });
+    expect(await identityEpochStore().readMapping(f.pool, low)).toMatchObject({ state: 'mapped', terminal: lowTarget });
     expect(
       (await f.admin.query('SELECT count(*)::integer homes FROM semantic.identity_epoch_bootstrap_home')).rows,
     ).toEqual([{ homes: 2 }]);

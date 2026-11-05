@@ -58,7 +58,7 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
     async run(event) {
       if (
         (event.type !== decisionType && event.type !== operationType) ||
-        !Value.Check(CONTENT_EVENTS[event.type], event.data)
+        !Value.Check(CONTENT_EVENTS()[event.type], event.data)
       )
         throw new TypeError('Invalid party locator event');
       const data = event.data as Record<string, string>;

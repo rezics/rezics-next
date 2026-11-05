@@ -1,11 +1,15 @@
 import type { Pool } from 'pg';
 import {
+  readNativePublicFilterPublicationCompletion,
+  type PublicFilterSourceBinding,
+} from '../semantic/public-filter-source-binding.ts';
+import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
 } from '../access/account-discovery-source.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
-import { hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
+import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicFilterConsumerContext,
@@ -762,6 +766,15 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
     ): Promise<{ status: 'released'; cost: PublicFilterCost } | PublicFilterConsumerUnavailable>;
   }>;
 
+// The generation owner installs the original native binding on its existing writer.
+const publicationBindings = new WeakMap<SearchWriterPublicationGuard, PublicFilterSourceBinding>();
+export function bindSearchWriterPublicationSource(
+  guard: SearchWriterPublicationGuard,
+  binding: PublicFilterSourceBinding,
+) {
+  publicationBindings.set(guard, binding);
+}
+
 // Producer-private native readers retain the actual supplied Source/listing composition. This is
 // neither a generation registry nor caller evidence: only this factory installs a reader.
 const generationReaders = new WeakMap<
@@ -987,10 +1000,21 @@ export function createSearchWriterGuard(options: {
     if (erasure.rowCount !== 1) return pendingPublication();
     return erasure.rows[0]!;
   }
-  async function publicationSource(value: SearchWriterPublicationFence, context: PublicFilterConsumerContext) {
+  async function publicationSource(
+    value: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+    cost: PublicFilterCost,
+  ) {
     const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value));
-    // Generation publication retains its own owner protocol; its unavailable receiving proof stays pending.
-    if (!job.barrier) return pendingPublication();
+    if (!job.barrier) {
+      const binding = publicationBindings.get(guard);
+      if (!binding) return pendingPublication();
+      const completion = await readNativePublicFilterPublicationCompletion(binding, { job: value.job }, context);
+      for (const key of Object.keys(cost) as (keyof PublicFilterCost)[])
+        (cost as { -readonly [K in keyof PublicFilterCost]: number })[key] += completion.cost[key];
+      if (completion.status !== 'complete') return pendingPublication();
+      return;
+    }
     const proof = await readSubjectErasureSourceProof({ pool: options.pool }, job.barrier, context);
     if (!proof) return pendingPublication();
     const verified = await runCommand(
@@ -1075,7 +1099,7 @@ export function createSearchWriterGuard(options: {
         await publicationPhysical(input);
         const before = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
         if (before.publication_home === 4096) {
-          await publicationSource(input, context);
+          await publicationSource(input, context, cost);
           return { status: 'drained' as const, fence: input, cost };
         }
         const home = before.publication_home;
@@ -1085,7 +1109,8 @@ export function createSearchWriterGuard(options: {
           await publicationLock(tx, false);
           const retained = await publicationRetained(tx, input);
           if (retained.publication_revision !== before.publication_revision) return pendingPublication();
-          const copiesPending = await hasRetainedWriterPublicationCopies(tx, home, options.index);
+          const proofDrained = await drainGenerationPublicationProofCopy(tx, home, options.index, input.job);
+          const copiesPending = await hasRetainedWriterPublicationCopies(tx, home, options.index, input.job);
           const page = (
             await tx.query<{
               copies: {
@@ -1129,8 +1154,9 @@ export function createSearchWriterGuard(options: {
             uncertain:
               copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
             revoked: revocable.length,
+            proofDrained,
           };
-          return revocable.length ? { value: progress, events: changed() } : noEffect(progress);
+          return revocable.length || proofDrained ? { value: progress, events: changed() } : noEffect(progress);
         });
         const { page, uncertain, revoked } = result.value;
         await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
@@ -1168,7 +1194,7 @@ export function createSearchWriterGuard(options: {
     adoptPublication(value, context) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost) => {
-        await publicationSource(input, context);
+        await publicationSource(input, context, cost);
         await publicationPhysical(input);
         const row = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
         if (row.publication_home !== 4096) return pendingPublication();
@@ -1712,7 +1738,11 @@ export async function fenceSearchIdentityWriter(
   const partition = subjectPartition(options.original);
   const { incarnation } = await readSearchWriterPhysicalTarget(options.search, options.index);
   const result = await runCommand(pool, { partition }, async (tx, context) => {
-    await identityEpochStore.admitHomeEffect(tx, { kind: 'structural', job: options.job, original: options.original });
+    await identityEpochStore().admitHomeEffect(tx, {
+      kind: 'structural',
+      job: options.job,
+      original: options.original,
+    });
     const receipt = await native(tx, context.transactionId);
     const previous = (
       await tx.query(

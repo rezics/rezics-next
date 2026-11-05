@@ -209,7 +209,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       denied: writer.denied,
       async prepare(attempt) {
         const writerEvidence = await writer.prepare?.(attempt);
-        const subjectIdentity = await identityEpochStore.readMapping(config.pool, association.subjectId);
+        const subjectIdentity = await identityEpochStore().readMapping(config.pool, association.subjectId);
         if (cleared) return { writerEvidence, subjectIdentity };
         const semantic = (await observe(input.actor, [association], input.deadline)).get(key);
         const fence = (await fences([tuple(next.payload)], input.deadline)).get(tupleKey(tuple(next.payload)));
@@ -218,7 +218,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       async authorize(tx, attempt, evidence) {
         const prepared = evidence as {
           writerEvidence: unknown;
-          subjectIdentity: Awaited<ReturnType<typeof identityEpochStore.readMapping>>;
+          subjectIdentity: Awaited<ReturnType<ReturnType<typeof identityEpochStore>['readMapping']>>;
           semantic?: ClassificationAssociationResolution;
           fence?: SourceFence;
         };

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import {
   MAX_PROFILE_BYTES,
   platformRegistry,
@@ -10,7 +11,9 @@ import canonicalize from 'canonicalize';
 import { types } from 'node:util';
 
 const MAX_ENTRIES = 4;
-const MAX_BYTES = 4 * MAX_PROFILE_BYTES;
+function MAX_BYTES() {
+  return memoizedValue(MAX_BYTES, () => 4 * MAX_PROFILE_BYTES);
+}
 
 export class ProfileInputError extends Error {
   constructor(readonly violations: CompositionViolation[]) {
@@ -129,8 +132,8 @@ export class ProfileCache {
     if (canonical === undefined) return snapshot;
     const bytes = Buffer.byteLength(canonical, 'utf8');
     // Cache admission is never an additional public validation rule.
-    if (bytes > MAX_BYTES) return snapshot;
-    while (this.#entries.size >= MAX_ENTRIES || this.#bytes + bytes > MAX_BYTES) {
+    if (bytes > MAX_BYTES()) return snapshot;
+    while (this.#entries.size >= MAX_ENTRIES || this.#bytes + bytes > MAX_BYTES()) {
       const oldest = this.#entries.entries().next().value;
       if (!oldest) break;
       this.#entries.delete(oldest[0]);

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { defineQuery } from 'reylo';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
@@ -15,17 +16,21 @@ import { STANDARD_QUESTION_ID } from './votes.ts';
 
 const MAX_SUBJECTS = 256;
 
-const readPublicRatingEpoch = defineQuery<
-  (typeof readPublicRatingEpochSql)['~reylo']['input'],
-  (typeof readPublicRatingEpochSql)['~reylo']['element'],
-  typeof readPublicRatingEpochSql.cardinality,
-  'postgres'
->({
-  dialect: readPublicRatingEpochSql.dialect,
-  sql: readPublicRatingEpochSql.raw,
-  params: readPublicRatingEpochSql.params,
-  cardinality: readPublicRatingEpochSql.cardinality,
-});
+function readPublicRatingEpoch() {
+  return memoizedValue(readPublicRatingEpoch, () =>
+    defineQuery<
+      (typeof readPublicRatingEpochSql)['~reylo']['input'],
+      (typeof readPublicRatingEpochSql)['~reylo']['element'],
+      typeof readPublicRatingEpochSql.cardinality,
+      'postgres'
+    >({
+      dialect: readPublicRatingEpochSql.dialect,
+      sql: readPublicRatingEpochSql.raw,
+      params: readPublicRatingEpochSql.params,
+      cardinality: readPublicRatingEpochSql.cardinality,
+    }),
+  );
+}
 
 type PriorEpochRow = { priorEpoch: number | null };
 
@@ -103,7 +108,7 @@ export function createPublicRatingSource(pool: Pool): PublicRatingSource {
 
     async epoch(): Promise<PublicRatingEpoch> {
       return withConnection(pool, async (client) => {
-        const row = (await readPublicRatingEpoch.run(client, {
+        const row = (await readPublicRatingEpoch().run(client, {
           route: routeOf(GLOBAL_CONTEXT.id)!,
           question_id: STANDARD_QUESTION_ID,
           population_id: GLOBAL_CONTEXT.id,

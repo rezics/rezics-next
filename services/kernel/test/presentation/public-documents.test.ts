@@ -113,7 +113,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1; // Dependent owners must release their connection before the next native read.
   await bootstrapRelease(db.pool, bundledRelease);
-  await bootstrapProfile(db.pool, platformProfile);
+  await bootstrapProfile(db.pool, platformProfile());
   real = await createRealAccess(db.admin, accounts, actions);
   for (const action of actions) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'author', action);
   app = createKernel({

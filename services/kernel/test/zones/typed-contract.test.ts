@@ -4,7 +4,7 @@ import { ZonePageRequestSchema, ZonePublicSchema } from '../../src/zones/contrac
 
 const id = '019a1b2c-3d4e-7f00-8a00-6a0010000001';
 test('Zone page request is a closed route-or-subject target with the shared view vocabulary', () => {
-  const check = Compile(ZonePageRequestSchema);
+  const check = Compile(ZonePageRequestSchema());
   expect(check.Check({ target: { route: '' } })).toBe(true);
   expect(check.Check({ target: { subject: id, view: 'overview' }, languages: ['en'] })).toBe(true);
   expect(check.Check({ target: { route: '', subject: id } })).toBe(false);
@@ -13,7 +13,7 @@ test('Zone page request is a closed route-or-subject target with the shared view
   expect(check.Check({ target: { route: '' }, ownerId: id })).toBe(false);
 });
 test('public Zone schema cannot serialize private owner mount or scope descriptors', () => {
-  const check = Compile(ZonePublicSchema);
+  const check = Compile(ZonePublicSchema());
   const visible = {
     id,
     revision: '1',

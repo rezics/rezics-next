@@ -1,35 +1,48 @@
+import { memoizedValue } from '../../../memoized.ts';
 import type { DiscoveryPage } from '../../discovery.ts';
 import { t } from 'elysia';
 import { routeOf } from '../../../route/route.ts';
 import { viewerFactsResponseSchema } from '../../../library/viewer-facts.ts';
 import { closed, unavailable } from './primitives.ts';
 import type { DiscoveryHttpPage } from './page.ts';
-const viewerFactsUnavailable = t.Object(
-  {
-    state: t.Literal('unavailable'),
-    reason: t.Union([t.Literal('identity'), t.Literal('currentness'), t.Literal('response_limit')]),
-    retryable: t.Boolean(),
-  },
-  closed,
-);
-const currentViewerFactsSchema = viewerFactsResponseSchema.anyOf[0]!;
-const searchViewerFacts = t.Object(
-  {
-    ...currentViewerFactsSchema.properties,
-    rows: t.Array(
-      t.Object(
-        {
-          ...currentViewerFactsSchema.properties.rows.items.properties,
-          resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
-        },
-        closed,
-      ),
-      { maxItems: 100 },
+function viewerFactsUnavailable() {
+  return memoizedValue(viewerFactsUnavailable, () =>
+    t.Object(
+      {
+        state: t.Literal('unavailable'),
+        reason: t.Union([t.Literal('identity'), t.Literal('currentness'), t.Literal('response_limit')]),
+        retryable: t.Boolean(),
+      },
+      closed,
     ),
-  },
-  closed,
-);
-export const viewerFacts = t.Union([t.Null(), searchViewerFacts, viewerFactsUnavailable]);
+  );
+}
+function currentViewerFactsSchema() {
+  return memoizedValue(currentViewerFactsSchema, () => viewerFactsResponseSchema.anyOf[0]!);
+}
+function searchViewerFacts() {
+  return memoizedValue(searchViewerFacts, () =>
+    t.Object(
+      {
+        ...currentViewerFactsSchema().properties,
+        rows: t.Array(
+          t.Object(
+            {
+              ...currentViewerFactsSchema().properties.rows.items.properties,
+              resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
+            },
+            closed,
+          ),
+          { maxItems: 100 },
+        ),
+      },
+      closed,
+    ),
+  );
+}
+export function viewerFacts() {
+  return memoizedValue(viewerFacts, () => t.Union([t.Null(), searchViewerFacts(), viewerFactsUnavailable()]));
+}
 
 export function admitCollectionFollows(page: DiscoveryHttpPage) {
   if (page.collectionFollows?.state === 'current') {

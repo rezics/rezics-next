@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { Compile } from 'typebox/compile';
 import { ProblemError } from '../http/problem.ts';
 import type { CommandTransaction, AuthoritativeTime } from '../command/command.ts';
@@ -14,7 +15,9 @@ export type ExplicitLibraryRemoval = Extract<BulkAdmission, { action: 'remove_fr
   selection: Extract<BulkAdmission['selection'], { kind: 'explicit' }>;
 };
 
-const validate = Compile(bulkAdmissionSchema);
+function validate() {
+  return memoizedValue(validate, () => Compile(bulkAdmissionSchema));
+}
 
 /** Validate the whole native command before any subject access or canonicalization. */
 export function explicitLibraryRemoval(
@@ -31,7 +34,7 @@ export function explicitLibraryRemoval(
   const validationInput: BulkAdmission = emptyQueryCapture
     ? { ...input, selection: { kind: 'explicit', targets: [{ subjectId: '00000000-0000-0000-0000-000000000000' }] } }
     : input;
-  if (!validate.Check(validationInput)) throw new TypeError('Invalid bulk selection');
+  if (!validate().Check(validationInput)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'remove_from_library' || input.selection.kind !== 'explicit')
     throw new ProblemError('dependency_unavailable');
   const targets = input.selection.targets.map(({ subjectId }) => ({ subjectId: subjectId.toLowerCase() }));

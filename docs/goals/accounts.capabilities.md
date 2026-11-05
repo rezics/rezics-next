@@ -12,6 +12,8 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Personas:** Anonymous visitor; active human; automated actor; organization; expired token; revoked token; fenced account (401); suspended account, whose pre-suspension bearer answers every route with HTTP 401, JSON problem code `invalid_credentials` and `WWW-Authenticate: Bearer error="invalid_token"`; correct-password sign-in answers 403 `ACCOUNT_SUSPENDED` and issues no session, cookie or token, while wrong-password sign-in answers as for an active account. The kernel's 403 `account_suspended` is only a defensive branch for a verified bearer of a suspended, unfenced account, reached only by `services/kernel/test/access/suspended-bearer.test.ts`, and is not a persona.
 
+**Implementation choice:** Auth's zero-scope `login` client establishes identity; the configured website client owns requested-scope consent, and Web returns through its registered callback to the bounded destination. Signup requirements and viewer advice load after mount through Auth's same-origin POST BFF. A sign-in without a confirmed response remains unknown, clears the password and requires deliberate current-session review without replay.
+
 **Released fixture data:** `privacy` (accounts produces personas and account states); no catalogue release is needed.
 
 **Surface cells:** Authentication is a shared bearer check, not a list abstraction.
@@ -28,6 +30,23 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 **Frozen scenarios:** Existing: “person registration claims pending handle and authenticates the same immutable account through Better Auth” and “Access commits epoch fence and durable receipt before Auth revokes sessions and stale recovery cannot undo it” (`specs/account-lifecycle-outcomes.test.ts`; native binding: `services/kernel/test/access/account-lifecycle-outcome.test.ts`). Existing: “a person opens a session only with its own credential” (`specs/account-lifecycle-outcomes.test.ts`; native binding: `services/kernel/test/access/account-lifecycle-outcome.test.ts`). `authentication-bearer-personas`: `services/kernel/test/access/suspended-sign-in.test.ts` covers sign-in refusal, the pre-suspension bearer and reinstatement; `services/kernel/test/access/suspended-bearer.test.ts` covers only the defensive branch.
 
 **Native acceptance:** `sh -c 'bun run --cwd services/auth check test/workflows.test.ts && bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/session-revocation.test.ts test/access/suspension.test.ts test/access/suspended-sign-in.test.ts test/access/suspended-bearer.test.ts'`.
+
+**Worker focused evidence:** At head `7275db3bd2`, `bun test apps/auth/tests/recovery.test.ts` passed 21/21, `bun test apps/auth/tests/step-up.test.ts` passed 3/3, and `bun run --cwd apps/auth typecheck` reported no type errors in 228 files. At head `79815141d3`, `bun test apps/auth/tests/login.test.ts` passed 4/4 and `bun test apps/auth/tests/signup.test.ts` passed 8/8; Auth source and those test files are unchanged at `7275db3bd2`. Seeded persona acceptance and the full browser/native walk remain deferred to the verifier.
+
+## credential-session-consent
+
+**User job:** Replace a password, enroll/name/remove a passkey, review and revoke sessions, and explicitly approve
+or reduce connected-application scopes without attributing an uncertain response to a later session.
+
+**Implementation choice:** Retain catalogue-derived session/client/consent inventory bounds and fixed Security,
+enrollment and registration budgets. Passkey rename changes only the owned label and binds the reviewed account.
+Human retirement retains a password or passkey; reviewed consent writes refuse concurrent grant changes.
+
+**Native acceptance:** `bun run --cwd services/kernel check test/access/credential-effect-outcome.test.ts test/access/credential-effect-outcome-security.test.ts test/access/auth-session-capability.test.ts test/access/auth-credential-capability.test.ts test/access/auth-consent.test.ts`.
+The Security adapter uses `createAuthHost`, issued clients, migrated isolated Auth/Kernel databases and the production
+Kernel HTTP handler. It inspects persisted credentials, sessions and consent and exercises real bearer outcomes.
+Native evidence does not establish seeded mounted journey acceptance; those journeys remain held for infrastructure
+recovery. Auth response and page transport suites pin fixed RP receiving, exact acknowledgements and unknown sends.
 
 ## permission-formula
 

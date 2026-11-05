@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
@@ -63,17 +64,21 @@ const scoreSelection = t.Union([
   t.Object({ action: t.Literal('set'), units: t.Integer({ minimum: 0, maximum: 20 }) }, closed),
   t.Object({ action: t.Literal('clear') }, closed),
 ]);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
 const result = <T>() => t.Unsafe<T>(t.Any());
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
 function detail(operationId: string, write = true) {
   return {
     operationId,
@@ -119,8 +124,8 @@ export function bangumiImportRoutes(
       customMethod('/v1/libraryImports/bangumi', 'preview'),
       {
         body: t.Object({ upload: t.String({ maxLength: BANGUMI_LIMITS.bytes }) }, closed),
-        headers,
-        response: { 200: t.Object({ uploadId: id, count: t.Integer() }), ...failures },
+        headers: headers(),
+        response: { 200: t.Object({ uploadId: id, count: t.Integer() }), ...failures() },
         detail: detail('library_bangumi.preview'),
       },
       ({ actor, body, headers, admission, job, set }) => {
@@ -139,7 +144,7 @@ export function bangumiImportRoutes(
         query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: 99, default: -1 })) }, closed),
         response: {
           200: result<{ uploadId: string; cancelled: boolean; rows: BangumiRow[]; next: number | null }>(),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_bangumi.read', false),
       },
@@ -152,9 +157,9 @@ export function bangumiImportRoutes(
       customMethod('/v1/libraryImports/bangumi/:uploadId', 'review'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ ordinal, target: t.Optional(id), score: t.Optional(scoreSelection) }, closed),
-        response: { 200: result<{ ordinal: number; review: BangumiReview }>(), ...failures },
+        response: { 200: result<{ ordinal: number; review: BangumiReview | null }>(), ...failures() },
         detail: detail('library_bangumi.review'),
       },
       ({ actor, params, body, headers, admission, job, set }) => {
@@ -177,12 +182,12 @@ export function bangumiImportRoutes(
       customMethod('/v1/libraryImports/bangumi/:uploadId', 'reviewMetadata'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ ordinal, sourceReviewToken: id }, closed),
-        response: { 200: result<{ ordinal: number; reviewToken: string }>(), ...failures },
+        response: { 200: result<{ ordinal: number; reviewToken: string }>(), ...failures() },
         detail: {
           ...detail('library_bangumi.review_metadata'),
-          'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes,
+          'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes,
         },
       },
       ({ actor, params, body, headers, admission, job, set }) => {
@@ -205,7 +210,7 @@ export function bangumiImportRoutes(
       {
         params: metadataParams,
         query: t.Object({ reviewToken: id }, closed),
-        response: { 200: result<Output<'metadata'>>(), ...failures },
+        response: { 200: result<Output<'metadata'>>(), ...failures() },
         detail: detail('library_bangumi.read_metadata', false),
       },
       ({ actor, params, query, set }) => {
@@ -223,16 +228,16 @@ export function bangumiImportRoutes(
             reviewToken: id,
             fields: t.Array(metadataSelection, {
               minItems: 1,
-              maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields,
+              maxItems: ENTRY_IMPORT_METADATA_LIMITS().fields,
               uniqueItems: true,
             }),
           },
           closed,
         ),
-        response: { 200: result<Output<'applyMetadata'>>(), ...failures },
+        response: { 200: result<Output<'applyMetadata'>>(), ...failures() },
         detail: {
           ...detail('library_bangumi.apply_metadata'),
-          'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes,
+          'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes,
         },
       },
       ({ actor, params, body, request, admission, job, set }) => {
@@ -266,7 +271,10 @@ export function bangumiImportRoutes(
           },
           closed,
         ),
-        response: { 200: result<{ uploadId: string; outcomes: BangumiOutcome[]; remaining: number[] }>(), ...failures },
+        response: {
+          200: result<{ uploadId: string; outcomes: BangumiOutcome[]; remaining: number[] }>(),
+          ...failures(),
+        },
         detail: { ...detail('library_bangumi.apply'), 'x-body-limit': BANGUMI_LIMITS.applyRequestBytes },
       },
       ({ actor, params, body, request, admission, job, set }) => {
@@ -286,7 +294,7 @@ export function bangumiImportRoutes(
           { after: t.Optional(t.Integer({ minimum: -1, maximum: BANGUMI_LIMITS.rowBytes, default: -1 })) },
           closed,
         ),
-        response: { 200: result<BangumiTagPage>(), ...failures },
+        response: { 200: result<BangumiTagPage>(), ...failures() },
         detail: detail('library_bangumi.tags', false),
       },
       ({ actor, params, query, set }) => {
@@ -298,7 +306,7 @@ export function bangumiImportRoutes(
       customMethod('/v1/libraryImports/bangumi/:uploadId', 'reviewLabels'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             ordinal,
@@ -319,7 +327,7 @@ export function bangumiImportRoutes(
           },
           closed,
         ),
-        response: { 200: result<{ ordinal: number; labels: BangumiLabelState }>(), ...failures },
+        response: { 200: result<{ ordinal: number; labels: BangumiLabelState }>(), ...failures() },
         detail: detail('library_bangumi.review_labels'),
       },
       ({ actor, params, body, headers, admission, job, set }) => {
@@ -345,7 +353,7 @@ export function bangumiImportRoutes(
         body: t.Object({ ordinal, reviewToken: id }, closed),
         response: {
           200: result<{ uploadId: string; ordinal: number; outcomes: BangumiLabelOutcome[]; remaining: number[] }>(),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_bangumi.apply_labels'),
       },
@@ -362,8 +370,8 @@ export function bangumiImportRoutes(
       customMethod('/v1/libraryImports/bangumi/:uploadId', 'cancel'),
       {
         params,
-        headers,
-        response: { 200: t.Object({ uploadId: id, cancelled: t.Boolean() }), ...failures },
+        headers: headers(),
+        response: { 200: t.Object({ uploadId: id, cancelled: t.Boolean() }), ...failures() },
         detail: detail('library_bangumi.cancel'),
       },
       ({ actor, params, headers, admission, job, set }) => {
@@ -379,8 +387,8 @@ export function bangumiImportRoutes(
       '/v1/libraryImports/bangumi/:uploadId',
       {
         params,
-        headers,
-        response: { 200: t.Object({ deleted: t.Boolean() }), ...failures },
+        headers: headers(),
+        response: { 200: t.Object({ deleted: t.Boolean() }), ...failures() },
         detail: detail('library_bangumi.delete'),
       },
       ({ actor, params, headers, admission, job, set }) => {

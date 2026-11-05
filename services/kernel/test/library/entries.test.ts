@@ -333,8 +333,8 @@ test('an account keeps one library entry per readable subject whose state change
     { partition_no: partitionOf(route), type: deletedEvent, subject: owner.accountId, data: { subjectId } },
   ]);
   for (const type of [updatedEvent, deletedEvent] as const) {
-    expect(Value.Check(EVENT_TYPES[type], { subjectId })).toBe(true);
-    expect(Value.Check(EVENT_TYPES[type], { subjectId, state: 'completed' })).toBe(false);
+    expect(Value.Check(EVENT_TYPES()[type], { subjectId })).toBe(true);
+    expect(Value.Check(EVENT_TYPES()[type], { subjectId, state: 'completed' })).toBe(false);
   }
   const seen: { type: string; subject?: string; data: unknown }[] = [];
   expect(

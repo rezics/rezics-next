@@ -851,5 +851,18 @@
   "auth_members_page_count": "Accounts on this page: {count}",
   "auth_members_previous_boundary": "Previous is unavailable at the oldest retained target. You can deliberately return to the first page.",
   "auth_members_previous_page": "Previous page",
-  "auth_members_reload_current": "Reload current page"
+  "auth_members_reload_current": "Reload current page",
+  "auth_security_passkey_rename": "Rename",
+  "auth_security_passkey_rename_label": "Passkey name",
+  "auth_security_passkey_rename_save": "Save name",
+  "auth_security_passkey_rename_cancel": "Cancel rename",
+  "auth_security_passkey_rename_invalid": "Enter a name of 1–128 characters.",
+  "auth_security_passkey_rename_saved": "Passkey name saved.",
+  "auth_security_passkey_rename_step_up": "Sign in again before renaming this passkey.",
+  "auth_security_passkey_rename_failed": "The name was not changed. Review your session before trying again.",
+  "auth_security_passkey_rename_unknown": "The rename response was not confirmed. Check the current name before another decision.",
+  "auth_security_passkey_rename_review": "Check current name",
+  "auth_security_passkey_rename_review_failed": "The current name is unavailable. The earlier rename is still unconfirmed.",
+  "auth_security_passkey_rename_observed": "Current name: {name}. This does not confirm the earlier rename.",
+  "auth_security_passkey_rename_history": "An earlier passkey rename may have completed. Checking the current name does not confirm that operation."
 }

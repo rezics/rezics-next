@@ -430,7 +430,7 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
     terminal = await confirm(source.id, terminalEvidence);
   expect(terminal.status).toBe(201);
   const terminalId = (await terminal.json()).confirmationId,
-    erased = await ownedQueries.label_consolidation.run(
+    erased = await ownedQueries().label_consolidation.run(
       { query: f.pool.query.bind(f.pool) },
       { route, account_id: f.owner.actor.accountId },
     );

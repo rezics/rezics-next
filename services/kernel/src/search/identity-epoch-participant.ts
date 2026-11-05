@@ -105,7 +105,7 @@ export function createSearchIdentityEpochParticipant(options: {
       await (
         await installed
       ).run({ deadline, identityConsumerWork: token, ceiling, allowance }, async () => {
-        const saved = await withReadTransaction(pool, (tx) => identityEpochStore.readJob(tx, ref), deadline);
+        const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, ref), deadline);
         if (!saved) throw unavailable('Search requires an exact admitted native job');
         const completed = saved.participants['search-canonical-index'];
         if (completed?.state === 'complete') {

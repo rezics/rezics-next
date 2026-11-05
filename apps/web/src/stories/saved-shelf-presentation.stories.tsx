@@ -220,9 +220,6 @@ function SavedShelfJourney({
                   ? {
                       ...libraryPage,
                       sort: presentation.sort,
-                      ...(presentation.sort.orderBy === 'personalScore'
-                        ? { readState: 'score-unavailable' as const, entries: [], next: null }
-                        : {}),
                     }
                   : libraryPage;
                 return (

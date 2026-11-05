@@ -24,6 +24,9 @@ test('every attempt-ending failure and landing refusal has a non-empty priced gu
   expect(GUARDS['dev-landing-transpile'].repair).toContain('original worker session');
   expect(GUARDS['dev-landing-transpile'].repair).toContain('Cost target: <1000ms');
   expect(GUARDS['dev-landing-transpile'].repair).toContain('Measured disposable fixture: 7ms');
+  expect(GUARDS['dev-landing-architecture']).toMatchObject({ owner: 'control-plane', since: '2026-11-06' });
+  expect(GUARDS['dev-landing-architecture'].repair).toContain('Cost target: <15000ms');
+  expect(GUARDS['dev-landing-architecture'].repair).toContain('Measured full base-delta check: 14.6s');
   expect(GUARDS['dev-landing-schema'].defect).toContain('regenerated schema dump');
   expect(GUARDS['dev-landing-schema'].repair).toContain('original worker session');
   expect(GUARDS['dev-landing-schema'].repair).toContain('Cost target: <30000ms');

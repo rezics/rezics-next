@@ -417,9 +417,9 @@ test('rightsTakedown invokes both real APIs independently; the closed media even
       securityRevision: fence.value.securityRevision,
     },
   ]);
-  expect(CONTENT_EVENTS[eventType]).toBe(MEDIA_MODERATION_EVENTS[eventType]);
-  for (const [name, schema] of Object.entries(MEDIA_EVENTS)) expect(Reflect.get(CONTENT_EVENTS, name)).toBe(schema);
-  expect(Value.Check(CONTENT_EVENTS[eventType], media.value)).toBe(true);
+  expect(CONTENT_EVENTS()[eventType]).toBe(MEDIA_MODERATION_EVENTS[eventType]);
+  for (const [name, schema] of Object.entries(MEDIA_EVENTS)) expect(Reflect.get(CONTENT_EVENTS(), name)).toBe(schema);
+  expect(Value.Check(CONTENT_EVENTS()[eventType], media.value)).toBe(true);
   for (const patch of [
     { reason: 'text' },
     { credit: 'text' },
@@ -427,7 +427,7 @@ test('rightsTakedown invokes both real APIs independently; the closed media even
     { securityRevision: '01' },
     { securityRevision: '0' },
   ])
-    expect(Value.Check(CONTENT_EVENTS[eventType], { ...media.value, ...patch })).toBe(false);
+    expect(Value.Check(CONTENT_EVENTS()[eventType], { ...media.value, ...patch })).toBe(false);
   const rows = (
     await admin.query('SELECT * FROM core.outbox WHERE partition_no=$1 AND position=$2', [
       media.partition,

@@ -55,10 +55,9 @@ otherwise use `all`. Settings edits `all` and individual admitted types. Grid si
 controls. `last_activity`, `added` and `finished` map to the currently admitted native Library date orders. Saved
 `title` maps to native localized title order and uses its explicit bounded preparation step; priority order is
 selectable for a visit but is not a saved preference.
-Saved `rating` maps losslessly to the `personalScore` address and direction for each state, including `all`.
-This preserves intent only: the existing whole-shelf capability fence still reports score ordering unavailable,
-with retry of the same intent or an explicit date-order recovery. Settings shows the retained score direction as a
-disabled saved choice; it does not offer new unsupported orders. Release-date and progress orders remain saved and
+Saved `rating` maps losslessly to the `personalScore` address and direction for each state, including `all`, and is an
+offered Settings choice. Native preparation or Content currentness can still refuse a visit: preparation uses the
+bounded score-installation step; currentness keeps date-order recovery. Release-date and progress orders remain saved and
 are described as unavailable. The table maps the
 currently supplied cover, title, type, status, active progress, added, finished and last-activity fields. Unsupported
 creator, rating and started columns remain in the native preference array and never appear as Library controls.
@@ -71,7 +70,7 @@ save can retry only with its original idempotency key; refreshing reads the curr
 draft. A saved sort that changes the loaded order drops the old cursor. Table progress is the supplied active session
 value, preserving its unit and mode; no row reads or local page sorting are added.
 
-Decision: saved rating is a score address intent, while native availability independently controls execution and offered choices.
+Decision: saved rating is an executable score order; native preparation and Content currentness independently refuse a visit.
 
 Decision: type selection only inspects a local draft; Settings uses replacement pages from the private Library type index, keeps absent saved types removable, and clears a single override with a nullable map entry. Type navigation carries explicit URL layouts while implicit layouts resolve again for the destination type.
 

@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["src", "test-support"]
+  "include": ["src", "test-support", "scripts/test-timings.ts", "scripts/test-timings.test.ts"]
 }

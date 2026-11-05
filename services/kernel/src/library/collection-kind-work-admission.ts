@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { OperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -290,7 +291,9 @@ function completeSourceFrontier(value: unknown, captureId: string): boolean {
 }
 
 /** The caller already holds the genuine home. Named plan terms reserve before IO. */
-const terms = COLLECTION_KIND_INPUT_TERMS;
+function terms() {
+  return memoizedValue(terms, () => COLLECTION_KIND_INPUT_TERMS());
+}
 
 /** Locks the exact current enrolled episode, committed Source scope and retained custody. */
 export async function admitCollectionKindPreparationStep(
@@ -311,7 +314,7 @@ export async function admitCollectionKindPreparationStep(
       preparation_id: locator.preparationId,
       deadline_at: String(invocation.deadline),
     };
-    const consumers: ConsumerRow[] = await invokeCollectionKindInput(work, terms.admissionEpisode, () =>
+    const consumers: ConsumerRow[] = await invokeCollectionKindInput(work, terms().admissionEpisode, () =>
       admitEpisode.run(tx, episodeInput),
     );
     if (!currentInvocation(tx, locator, work) || commandTime(tx) !== time) return null;
@@ -343,7 +346,7 @@ export async function admitCollectionKindPreparationStep(
       source_fence: token.fence,
       capture_id: token.captureId,
     };
-    const scope: SourceRow | null | undefined = await invokeCollectionKindInput(work, terms.admissionSource, () =>
+    const scope: SourceRow | null | undefined = await invokeCollectionKindInput(work, terms().admissionSource, () =>
       readSource.run(tx, sourceInput),
     );
     if (!currentInvocation(tx, locator, work) || commandTime(tx) !== time) return null;
@@ -372,7 +375,7 @@ export async function admitCollectionKindPreparationStep(
           allowance,
           deadline: invocation.deadline,
         }),
-      collectionKindInputWorkDimensions(terms.custody),
+      collectionKindInputWorkDimensions(terms().custody),
     );
     if (
       held.status !== 'held' ||

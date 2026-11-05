@@ -262,9 +262,9 @@ export function mediaEligibilityCallbacks<E>(
           verified.delete(context);
           metered.delete(context);
           if (context.evidence !== options.evidence) return undefined;
-          if (!bound) throw new AccessWorkUnavailableError(options.dependency ?? MEDIA_DOWNLOAD_WORK_DEPENDENCY);
+          if (!bound) throw new (AccessWorkUnavailableError())(options.dependency ?? MEDIA_DOWNLOAD_WORK_DEPENDENCY);
           const nested = cover?.access.bound(context);
-          if (cover && !nested) throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
+          if (cover && !nested) throw new (AccessWorkUnavailableError())(COVER_MEDIA_WORK_DEPENDENCY);
           metered.add(context);
           return nested ? sum(bound, nested) : bound;
         },
@@ -284,7 +284,7 @@ export function mediaEligibilityCallbacks<E>(
       const bounded = metered.delete(context);
       // Direct calls cannot turn an explicitly metered cover into ordinary IO.
       if (cover && 'work' in context && context.work && !bounded)
-        throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
+        throw new (AccessWorkUnavailableError())(COVER_MEDIA_WORK_DEPENDENCY);
       let spent = EMPTY_ACCESS_WORK;
       let ancestorIndex = 0;
       const dispatched = new Set<string>();
@@ -359,7 +359,7 @@ export function mediaEligibilityCallbacks<E>(
       if (bounded && cover) {
         if (!dispatched.has('subject')) throw new TypeError('Missing cover subject existence dispatch');
         const receipt = cover.access.actual(context);
-        if (!receipt) throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
+        if (!receipt) throw new (AccessWorkUnavailableError())(COVER_MEDIA_WORK_DEPENDENCY);
         spent = sum(spent, receipt);
       }
       if (bounded && ((plan && !dispatched.has('parent')) || (mediaPlan && !dispatched.has('media'))))

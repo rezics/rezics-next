@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { t } from 'elysia';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -37,20 +38,32 @@ import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
 const nullableText = t.Union([t.String(), t.Null()]);
-const summarySchema = t.Union([
-  SubjectSummarySchema,
-  t.Object({ id: t.String(), type: t.String(), label: t.String() }, { additionalProperties: false }),
-  t.Null(),
-]);
+function summarySchema() {
+  return memoizedValue(summarySchema, () =>
+    t.Union([
+      SubjectSummarySchema,
+      t.Object({ id: t.String(), type: t.String(), label: t.String() }, { additionalProperties: false }),
+      t.Null(),
+    ]),
+  );
+}
 const accountSchema = t.Union([
   t.Object({ id: t.String(), handle: nullableText, displayName: nullableText }, { additionalProperties: false }),
   t.Null(),
 ]);
-export const subjectFields = { subject: t.Optional(summarySchema) };
-export const sessionFields = { ...subjectFields, versionSubject: t.Optional(summarySchema) };
+export function subjectFields() {
+  return memoizedValue(subjectFields, () => ({ subject: t.Optional(summarySchema()) }));
+}
+export function sessionFields() {
+  return memoizedValue(sessionFields, () => ({ ...subjectFields(), versionSubject: t.Optional(summarySchema()) }));
+}
 export const curatorFields = { curator: t.Optional(accountSchema) };
-export const logFields = { ...subjectFields, account: t.Optional(accountSchema) };
-export const targetFields = { target: t.Optional(summarySchema) };
+export function logFields() {
+  return memoizedValue(logFields, () => ({ ...subjectFields(), account: t.Optional(accountSchema) }));
+}
+export function targetFields() {
+  return memoizedValue(targetFields, () => ({ target: t.Optional(summarySchema()) }));
+}
 export function embedded<S extends TProperties, F extends TProperties>(schema: TObject<S>, fields: F) {
   return t.Object({ ...schema.properties, ...fields }, { additionalProperties: false });
 }

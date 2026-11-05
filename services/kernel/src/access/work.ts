@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -43,13 +44,20 @@ export type AccessWorkResult<T> =
   | Readonly<{ state: 'unavailable'; dependency: string; usage: AccessWork }>
   | Readonly<{ state: 'failed'; error: unknown; usage: AccessWork }>;
 
-export class AccessWorkUnavailableError extends AccessUnavailableError {
-  constructor(readonly dependency: string) {
-    super('overloaded');
-    this.name = 'AccessWorkUnavailableError';
-    this.message = `Access work unavailable: ${dependency}`;
-  }
+export function AccessWorkUnavailableError() {
+  return memoizedValue(
+    AccessWorkUnavailableError,
+    () =>
+      class AccessWorkUnavailableError extends AccessUnavailableError {
+        constructor(readonly dependency: string) {
+          super('overloaded');
+          this.name = 'AccessWorkUnavailableError';
+          this.message = `Access work unavailable: ${dependency}`;
+        }
+      },
+  );
 }
+export type AccessWorkUnavailableError = InstanceType<ReturnType<typeof AccessWorkUnavailableError>>;
 
 function copy(work: AccessWork): AccessWork {
   if (!work || ACCESS_WORK_AXES.some((axis) => !Number.isSafeInteger(work[axis]) || work[axis] < 0))
@@ -104,13 +112,13 @@ export class AccessWorkAccounting {
       return { state: 'complete', value, usage: this.usage() };
     } catch (error) {
       this.fail(error);
-      return error instanceof AccessWorkUnavailableError
+      return error instanceof AccessWorkUnavailableError()
         ? { state: 'unavailable', dependency: error.dependency, usage: this.usage() }
         : { state: 'failed', error, usage: this.usage() };
     }
   }
   unavailable(dependency: string): never {
-    throw new AccessWorkUnavailableError(dependency);
+    throw new (AccessWorkUnavailableError())(dependency);
   }
   /** Exact receipt of this admitted invocation, independent of concurrent roots. */
   async invocation<T>(

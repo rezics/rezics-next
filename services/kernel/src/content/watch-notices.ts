@@ -29,7 +29,7 @@ type WorkRow = {
 };
 
 function validateEvent(event: CloudEvent): { source: WatchSource; route: number; publishedAt: Date } {
-  if (event.type !== postPublished || !Value.Check(CONTENT_EVENTS[postPublished], event.data))
+  if (event.type !== postPublished || !Value.Check(CONTENT_EVENTS()[postPublished], event.data))
     throw new TypeError('Invalid thread-watch notice source event');
   const source = event.data as WatchSource;
   const route = routeOf(source.itemId);

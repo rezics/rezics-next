@@ -851,5 +851,18 @@
   "auth_members_page_count": "Comptes sur cette page : {count}",
   "auth_members_previous_boundary": "La page précédente n’est plus conservée à ce point. Vous pouvez revenir volontairement à la première page.",
   "auth_members_previous_page": "Page précédente",
-  "auth_members_reload_current": "Recharger la page actuelle"
+  "auth_members_reload_current": "Recharger la page actuelle",
+  "auth_security_passkey_rename": "Renommer",
+  "auth_security_passkey_rename_label": "Nom de la clé d’accès",
+  "auth_security_passkey_rename_save": "Enregistrer le nom",
+  "auth_security_passkey_rename_cancel": "Annuler le renommage",
+  "auth_security_passkey_rename_invalid": "Saisissez un nom de 1 à 128 caractères.",
+  "auth_security_passkey_rename_saved": "Nom enregistré.",
+  "auth_security_passkey_rename_step_up": "Reconnectez-vous pour renommer cette clé d’accès.",
+  "auth_security_passkey_rename_failed": "Le nom n’a pas changé. Vérifiez votre session avant de réessayer.",
+  "auth_security_passkey_rename_unknown": "Le renommage n’a pas été confirmé. Vérifiez le nom actuel avant une nouvelle décision.",
+  "auth_security_passkey_rename_review": "Vérifier le nom actuel",
+  "auth_security_passkey_rename_review_failed": "Le nom actuel est indisponible. Le renommage précédent reste non confirmé.",
+  "auth_security_passkey_rename_observed": "Nom actuel : {name}. Cela ne confirme pas le renommage précédent.",
+  "auth_security_passkey_rename_history": "Un renommage précédent a pu aboutir. Vérifier le nom actuel ne le confirme pas."
 }

@@ -48,7 +48,7 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
-  const { useSlowModeVisit } = await import('../src/threads/slow-mode/caller');
+  const { SlowModePortProvider, useSlowModeVisit } = await import('../src/threads/slow-mode/caller');
   type SlowModeVisit = import('../src/threads/slow-mode/caller').SlowModeVisit;
   const client = new QueryClient();
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'original' };
@@ -70,14 +70,26 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
     };
   };
   let selection = selectionOwner(selected);
+  let port: SlowModePort = {
+    read: async () => ({ kind: 'unavailable' }),
+    change: async () => ({ kind: 'unknown' }),
+  };
   let visit: SlowModeVisit | null = null;
   function Probe() {
     visit = useSlowModeVisit(recorded.thread.boardId, 'inline-reply', 'session', source, selection);
     return null;
   }
   const root = createRoot(window.document.createElement('div'));
+  const render = () =>
+    root.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(SlowModePortProvider, { port, children: createElement(Probe) }),
+      ),
+    );
   try {
-    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
+    await act(async () => render());
     for (const replace of [
       () => client.setQueryData(sessionQuery.queryKey, { ...owner }),
       async () => {
@@ -97,13 +109,21 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
       expect(visit!.current()).toBe(true);
     }
 
+    const portVisit = visit!;
+    port = { ...port };
+    await act(async () => render());
+    expect(portVisit.current()).toBe(false);
+    expect(portVisit.controller.signal.aborted).toBe(true);
+    expect(visit!.id).not.toBe(portVisit.id);
+    expect(visit!.current()).toBe(true);
+
     const sourceVisit = visit!;
     sourceCurrent = false;
     expect(sourceVisit.current()).toBe(false);
     sourceCurrent = true;
     expect(sourceVisit.current()).toBe(false);
     source = { identity: {}, current: () => sourceCurrent };
-    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
+    await act(async () => render());
     expect(visit!.id).not.toBe(sourceVisit.id);
     expect(visit!.current()).toBe(true);
 
@@ -113,7 +133,7 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
     selected = { parent: prior.parent, identity: {} };
     expect(selectionVisit.current()).toBe(false);
     selection = selectionOwner(selected);
-    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
+    await act(async () => render());
     expect(visit!.id).not.toBe(selectionVisit.id);
     expect(visit!.current()).toBe(true);
   } finally {
@@ -200,7 +220,8 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       if (changes.length === 1) return { kind: 'unknown' };
       if (read.kind !== 'available') return { kind: 'unavailable' };
       acknowledgedIntervals.push(intervalSeconds);
-      return { kind: 'applied', policy: { ...read.policy, intervalSeconds } };
+      read = { kind: 'available', policy: { ...read.policy, intervalSeconds } };
+      return { kind: 'applied', policy: read.policy };
     },
   };
   const submits: { key: string; title: string }[] = [];
@@ -312,6 +333,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => {
       await user.click(thirty!);
     });
+    await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const save = [...host.querySelectorAll('button')].find((button) => button.textContent === m.slow_mode_apply());
     await act(async () => {
       await user.click(save!);
@@ -333,22 +355,18 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       credentialMode: 'session',
     });
     expect(acknowledgedIntervals).toEqual([30]);
-    expect(readCalls).toBe(readsBeforeAcknowledgement);
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: ['board-slow-mode'] });
-    });
     expect(readCalls).toBeGreaterThan(readsBeforeAcknowledgement);
+    expect(host.querySelector('#thread-title')).toHaveProperty('value', 'Cooldown draft');
     expect(
       client
         .getQueryCache()
         .findAll({ queryKey: ['board-slow-mode'] })
         .some((query) => {
           const current = query.state.data as SlowModeRead | undefined;
-          return current?.kind === 'available' && current.policy.intervalSeconds === 45;
+          return current?.kind === 'available' && current.policy.intervalSeconds === 30;
         }),
     ).toBe(true);
     expect(host.textContent).toContain(m.slow_mode_saved());
-    await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const send = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
     await act(async () => {
       await user.click(send!);
@@ -394,7 +412,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => {
       await router.navigate({ to: '/en/compose' as never });
     });
-    await appeared(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }));
+    await appeared(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }));
     const latePolicy: SlowModeRead = {
       kind: 'available',
       policy: {

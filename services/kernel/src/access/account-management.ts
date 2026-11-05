@@ -295,7 +295,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
           .map((item) => item.id)
           .sort();
       } catch (error) {
-        if (!(error instanceof MembershipInverseIncompleteError)) throw error;
+        if (!(error instanceof MembershipInverseIncompleteError())) throw error;
         return {
           account,
           viewer,

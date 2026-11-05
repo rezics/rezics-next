@@ -137,7 +137,7 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     try {
@@ -149,6 +149,8 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
           hydrated: await page.locator('html').getAttribute('data-hydrated'),
           alerts: await page.getByRole('alert').allTextContents(),
           status: await page.getByRole('status').allTextContents(),
+          browserRoutes: urls.map((value) => new URL(value).pathname),
+          issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
         })}`,
         { cause },
       );
@@ -206,7 +208,20 @@ async function submit(page: Page) {
   await controls.address.fill(email);
   await controls.secret.fill(password);
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
+    page
+      .waitForResponse((response) => new URL(response.url()).pathname === '/signin')
+      .catch(async (cause) => {
+        throw new Error(
+          `Sign-in response missing: ${JSON.stringify({
+            url: page.url(),
+            alerts: await page.getByRole('alert').allTextContents(),
+            status: await page.getByRole('status').allTextContents(),
+            browserUrl: page.url(),
+            issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          })}`,
+          { cause },
+        );
+      }),
     controls.submit.click(),
   ]);
   return controls;
@@ -225,7 +240,19 @@ test(
       expect(login.searchParams.get('sig')).toBeTruthy();
       const before = signIns().length;
       await submit(page);
-      await page.waitForURL(`${origin}/authorize?${authorizationQuery}`);
+      const resumed = `${origin}/authorize?${authorizationQuery}`;
+      try {
+        await page.waitForURL(resumed);
+      } catch {
+        throw new Error(
+          JSON.stringify({
+            url: page.url(),
+            alerts: await page.getByRole('alert').allTextContents(),
+            status: await page.getByRole('status').allTextContents(),
+            requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          }),
+        );
+      }
       await page.waitForLoadState('networkidle');
       expect(signIns().length).toBe(before + 1);
       submitted(signIns().at(-1));
@@ -303,30 +330,55 @@ test(
         }
         await submit(page);
         const alert = page.getByRole('alert');
-        await alert.waitFor({ state: 'visible' });
-        // Browser updates are asynchronous after the network response; wait for the resulting focus and clearing.
-        await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'alert');
-        expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
-        expect(await address.inputValue()).toBe(email);
-        expect(await secret.inputValue()).toBe('');
         expect(page.url()).toBe(login);
         expect(signIns().length).toBe(1);
         submitted(signIns()[0]);
-        const message = (await alert.innerText()).trim();
-        if (status === 401 || status === 403) {
-          expect(message).toMatch(/email\s+or\s+password/i);
-          expect(message).toMatch(/incorrect|wrong|invalid/i);
-          expect(message).not.toMatch(
-            /^(?:the |your )?(?:email|password)\s+(?:is\s+)?(?:incorrect|wrong|invalid|unknown|not found)/i,
-          );
-          expect(message).not.toMatch(/not registered|does not exist|unknown (?:email|account)/i);
-        } else if (status === 429) {
-          expect(message).toMatch(/wait|try again|too many/i);
-          expect(message).toMatch(new RegExp(`\\b${retryAfter}\\b`));
-          expect(message).toMatch(/seconds?/i);
+        if (status === 503) {
+          const choice = page.locator('section[aria-label="Sign in"]');
+          const uncertain = choice.getByRole('status').filter({ hasText: /sign-in outcome could not be confirmed/i });
+          await uncertain.waitFor({ state: 'visible' });
+          await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'status');
+          expect(await uncertain.evaluate((element) => element === document.activeElement)).toBe(true);
+          expect(await alert.count()).toBe(0);
+          expect(await page.getByLabel(/^password$/i).count()).toBe(0);
+          const review = choice.getByRole('button', { name: 'Review current session', exact: true });
+          await review.waitFor({ state: 'visible' });
+          await Promise.all([
+            page.waitForResponse(
+              (response) =>
+                new URL(response.url()).pathname === '/signin/page' && response.request().method() === 'POST',
+            ),
+            review.click(),
+          ]);
+          await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
+          await choice
+            .getByText('The sign-in outcome could not be confirmed.', { exact: false })
+            .waitFor({ state: 'visible' });
+          expect(await page.getByLabel(/^email$/i).inputValue()).toBe('');
+          expect(await page.getByLabel(/^password$/i).inputValue()).toBe('');
+          expect(await alert.count()).toBe(0);
+          expect(signIns()).toHaveLength(1);
+          expect(calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin/page')).toHaveLength(2);
         } else {
-          expect(message).toMatch(/sign[ -]?in/i);
-          expect(message).toMatch(/unavailable|not available/i);
+          await alert.waitFor({ state: 'visible' });
+          // Browser updates are asynchronous after the network response; wait for the resulting focus and clearing.
+          await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'alert');
+          expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
+          expect(await address.inputValue()).toBe(email);
+          expect(await secret.inputValue()).toBe('');
+          const message = (await alert.innerText()).trim();
+          if (status === 401 || status === 403) {
+            expect(message).toMatch(/email\s+or\s+password/i);
+            expect(message).toMatch(/incorrect|wrong|invalid/i);
+            expect(message).not.toMatch(
+              /^(?:the |your )?(?:email|password)\s+(?:is\s+)?(?:incorrect|wrong|invalid|unknown|not found)/i,
+            );
+            expect(message).not.toMatch(/not registered|does not exist|unknown (?:email|account)/i);
+          } else {
+            expect(message).toMatch(/wait|try again|too many/i);
+            expect(message).toMatch(new RegExp(`\\b${retryAfter}\\b`));
+            expect(message).toMatch(/seconds?/i);
+          }
         }
         expect(authorizations()).toEqual([]);
         privatePassword(page, urls);

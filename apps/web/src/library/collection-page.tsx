@@ -2695,6 +2695,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
   onReferenceNavigate,
   viewerProjection,
   viewerActionHref,
+  collection,
   onCopy,
 }: {
   members: readonly Member[];
@@ -2712,6 +2713,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
   onReferenceNavigate?: (() => void) | undefined;
   viewerProjection?: CollectionViewerProjection;
   viewerActionHref?: (member: Member) => string | undefined;
+  collection?: { builtinKind?: string | null };
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
@@ -2765,6 +2767,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
         }}
         {...(viewerProjection ? { viewerProjection } : {})}
         {...(actionHref ? { actionHref } : {})}
+        {...(collection ? { collection } : {})}
       />
     );
 

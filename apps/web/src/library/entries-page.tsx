@@ -30,6 +30,7 @@ import { ShelfTypes } from './shelf-types';
 import { SaveQueryLink } from './save-query';
 import { admitSavedQuerySelection } from './saved-query-editor/selection';
 import { ShelfTitlePreparation } from './shelf-title-preparation';
+import { ShelfScorePreparation } from './shelf-score-preparation';
 
 import {
   ShelfSummaryCount,
@@ -115,6 +116,7 @@ export function PersonalLibraryPage({
   continueCurrent,
   continueScope,
   titlePreparation,
+  scorePreparation,
   entriesAdmitted = true,
   continueAdmitted = true,
   isCurrent,
@@ -139,6 +141,10 @@ export function PersonalLibraryPage({
   continueScope?: string;
   titlePreparation?: {
     prepare: (key: string) => Promise<import('./personal-library-server').ShelfTitlePreparationReceipt>;
+    refresh: () => Promise<void>;
+  };
+  scorePreparation?: {
+    prepare: (key: string) => Promise<import('./personal-library-server').ShelfScorePreparationReceipt>;
     refresh: () => Promise<void>;
   };
   entriesAdmitted?: boolean;
@@ -303,6 +309,15 @@ export function PersonalLibraryPage({
         ) : null}
         {page.readState === 'score-unavailable' ? (
           <ShelfScoreUnavailable locale={locale} view={firstPage} />
+        ) : page.readState === 'preparing' && sort.orderBy === 'personalScore' && scorePreparation ? (
+          <div className="flex flex-col items-start gap-3">
+            <ShelfScorePreparation
+              isCurrent={isCurrent ?? (() => true)}
+              prepare={scorePreparation.prepare}
+              refresh={scorePreparation.refresh}
+            />
+            <EntriesFirstPage locale={locale} view={firstPage} />
+          </div>
         ) : page.readState === 'preparing' && sort.orderBy === 'title' && titlePreparation ? (
           <div className="flex flex-col items-start gap-3">
             <ShelfTitlePreparation
@@ -329,7 +344,11 @@ export function PersonalLibraryPage({
           <ShelfEntries
             key={`${page.type ?? ''}:${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
             mutationLease={mutationLease}
-            {...(titlePreparation ? { refreshEntries: titlePreparation.refresh } : {})}
+            {...(titlePreparation || scorePreparation
+              ? { refreshEntries: (scorePreparation ?? titlePreparation)!.refresh }
+              : {})}
+            {...(page.scoreQuestion ? { scoreQuestion: page.scoreQuestion } : {})}
+            {...(page.viewerFacts ? { viewerFacts: page.viewerFacts } : {})}
             {...(isCurrent ? { isCurrent } : {})}
             {...typeSearch}
             sort={sort}

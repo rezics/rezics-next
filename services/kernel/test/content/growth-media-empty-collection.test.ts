@@ -293,7 +293,7 @@ function assertSingleTargetSelection(evidence: ScheduleEvidence, partition: numb
 
 function assertFullBatchAndTerminalPage(evidence: ScheduleEvidence, partition: number) {
   expect(evidence.pageOutcomes).toEqual([
-    { partition, examined: COLLECTION_BOUNDS.batch, collected: COLLECTION_BOUNDS.batch, complete: false },
+    { partition, examined: COLLECTION_BOUNDS().batch, collected: COLLECTION_BOUNDS().batch, complete: false },
     { partition, examined: 0, collected: 0, complete: true },
   ]);
 }
@@ -348,7 +348,7 @@ test('Empty eligible selection and the post-batch empty page stay bounded throug
   const operations: unknown[] = [];
   let workerTime = '2031-01-02T00:00:00.000Z';
   try {
-    expect(COLLECTION_BOUNDS.batch).toBe(MAX_EXPECTED_BATCH);
+    expect(COLLECTION_BOUNDS().batch).toBe(MAX_EXPECTED_BATCH);
     system = await createContentSystem({
       databaseUrl,
       namespace: `media_empty_collection_${crypto.randomUUID().replaceAll('-', '')}`,
@@ -496,7 +496,7 @@ test('Empty eligible selection and the post-batch empty page stay bounded throug
 
     async function createTargetBatch(scale: number, repetition: number) {
       const targets: HttpMedia[] = [];
-      for (let index = 0; index < COLLECTION_BOUNDS.batch; index++) {
+      for (let index = 0; index < COLLECTION_BOUNDS().batch; index++) {
         targets.push(
           await makeHttpMedia(
             system!,
@@ -509,7 +509,7 @@ test('Empty eligible selection and the post-batch empty page stay bounded throug
         );
       }
       const ids = targets.map(({ id }) => id);
-      expect(new Set(ids).size).toBe(COLLECTION_BOUNDS.batch);
+      expect(new Set(ids).size).toBe(COLLECTION_BOUNDS().batch);
       const selected = await system!.database.pool.query<{ count: number }>(
         `SELECT count(*)::integer AS count FROM content.media
             WHERE route=$1 AND container_id=$2 AND media_id=ANY($3::uuid[])
@@ -517,7 +517,7 @@ test('Empty eligible selection and the post-batch empty page stay bounded throug
               AND created_at <= $4::timestamptz`,
         [thread.route, thread.id, ids, MEDIA_NATIVE_GROWTH_BASE],
       );
-      expect(selected.rows[0]?.count).toBe(COLLECTION_BOUNDS.batch);
+      expect(selected.rows[0]?.count).toBe(COLLECTION_BOUNDS().batch);
       return targets;
     }
 
@@ -597,7 +597,7 @@ test('Empty eligible selection and the post-batch empty page stay bounded throug
         },
         async operation(_db, scale, repetition) {
           const targets = prepared;
-          if (!targets || targets.length !== COLLECTION_BOUNDS.batch)
+          if (!targets || targets.length !== COLLECTION_BOUNDS().batch)
             throw new Error('The measured terminal page lacks one full native media batch');
           const run = await runRegisteredSweep({
             runtime: runtime!,
@@ -660,7 +660,7 @@ test('Empty eligible selection and the post-batch empty page stay bounded throug
           targetRoute: thread.route,
           targetContainerId: thread.id,
           scheduledPartitions: [thread.partition],
-          batchBound: COLLECTION_BOUNDS.batch,
+          batchBound: COLLECTION_BOUNDS().batch,
           guardMediaIds: { claimed: guard.claimed.id, fresh: guard.fresh.id },
           growthScales: SCALE,
           repetitions: REPETITIONS,

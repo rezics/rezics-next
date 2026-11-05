@@ -1,4 +1,5 @@
 /** The public Search service entry. Implementation modules stay private behind this surface. */
+export { CollectionDiscoverySummarySchema } from './collection-discovery-schema.ts';
 export type {
   AccountDiscoverySource,
   AccountDiscoverySummary,

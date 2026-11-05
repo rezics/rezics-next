@@ -1473,7 +1473,7 @@ Sources keeps selected evidence, reviewed source-record attribution and licence,
 
 Correction eligibility is limited to the exact currently disclosed own scalar evidence allowed by the native action projection. Selected or historical evidence does not establish a writable candidate. If the selected Context or Realm is unsupported, the page explains that scope and drops its unsupported intent. A Global-only correction requires an explicit fresh Global choice before the existing editor mounts; the editor then reacquires the current Global Subject and action advice, and commands reauthorize.
 
-Exact selected-synopsis Sources remains unsupported until the [synopsis owner](subject-pages.md#choose-a-supplied-work-synopsis) delivers admitted Context, document, digest and language. General Sources remains independent; its facts, citations and locators do not establish selected admission. Identity never comes from an href, spelling or locator; the existing Sources reader owns return and focus.
+Exact selected-synopsis Sources follows the [synopsis owner contract](subject-pages.md#exact-selected-synopsis-sources-contract), including independent document admission and the final selected-slot check. General Sources remains independent; its facts, citations and locators do not establish selected admission. Identity never comes from an href, spelling or locator; the existing Sources reader owns return and focus.
 
 The destination rereads current admission and selection. Proposing or accepting a candidate never injects it as selected support. Reader replacement retires pending reads; retries retain their exact command custody.
 

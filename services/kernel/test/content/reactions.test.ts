@@ -278,7 +278,7 @@ if (Bun.main === import.meta.path) {
         expect(event.partition_no).toBe(partitionOf(f.home));
         expect(event.type).toBe('com.rezics.content.reaction.changed.v1');
         expect(event.data).toEqual({ actorId: f.accountId, targetKind, targetId, previousKind, kind });
-        expect(Value.Check(CONTENT_EVENTS['com.rezics.content.reaction.changed.v1'], event.data)).toBe(true);
+        expect(Value.Check(CONTENT_EVENTS()['com.rezics.content.reaction.changed.v1'], event.data)).toBe(true);
         const rows = (
           await f.db.admin.query(
             `SELECT * FROM content.reaction WHERE route=$1 AND actor_account_id=$2 AND target_id=$3`,

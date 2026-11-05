@@ -44,7 +44,7 @@ function parse(event: CloudEvent) {
   if (!sourceTypes.includes(event.type as (typeof sourceTypes)[number]))
     throw new TypeError('Unsupported author item source event');
   const type = event.type as (typeof sourceTypes)[number];
-  if (!Value.Check(CONTENT_EVENTS[type], event.data)) throw new TypeError('Invalid author item source payload');
+  if (!Value.Check(CONTENT_EVENTS()[type], event.data)) throw new TypeError('Invalid author item source payload');
   const data = event.data as ContentEventData<typeof type>;
   const creation = 'threadId' in data ? data : null;
   const id = creation ? creation.itemId : (data as ContentEventData<typeof postErased>).postId;

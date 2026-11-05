@@ -20,6 +20,8 @@ does not start an unprotected worker.
 ```sh
 bun install --cwd tools/goal --frozen-lockfile
 bun run --cwd tools/goal check
+bun tools/goal/scripts/test-timings.ts
+bun tools/goal/scripts/test-timings.ts --fast
 bun tools/goal/src/cli.ts dispatch .temp/goal/brief.md
 bun tools/goal/src/cli.ts status
 bun tools/goal/src/cli.ts attempts --json
@@ -33,6 +35,20 @@ one task, `attempts --task <task> [--after <attempt>] [--limit <count>] [--json]
 include `hasMore`; when more records remain, `nextAfter` is the attempt number to pass to the next `--after` request.
 The text form also prints whether more attempts remain and the continuation attempt number.
 Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
+
+## Testing
+
+`bun tools/goal/scripts/test-timings.ts` runs this package's tests in isolated processes, at most sixteen files at
+once (`GOAL_TEST_PARALLEL` raises or lowers that). It prints wall time per file and per test, slowest first, and the
+total. Git fixtures are built once per file and cloned with `git clone --shared`. Tests that wait for time to pass use
+an injected clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
+
+Before this runner the suite took about 15 minutes or more; three files for one change took 5 to 8 minutes. After, the
+full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal test:fast` is the seconds-scale set for
+ordinary edits.
+
+Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
+integration split.
 
 `goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
@@ -85,6 +101,7 @@ call with a yield of at least 300 seconds. A supplied acceptance command defines
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
+Decision: an owner decision that does not fit the prompt points to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -154,7 +171,8 @@ cleanup supplied by the receiving tree; parallel proof commands all settle befor
 positively owned dev lease. The same existing dev drain then takes a turn,
 even if the initial idle dev drain returned or found another live owner. No manager signal or extra enqueue is needed.
 The main request stays pending and unpublished; it is not retried again in that drain. Another live dev owner is never
-removed or replaced. Stale code cancels its own proof and uses the existing current-code handoff.
+removed or replaced. Stale code lets the proof command already running finish, then stops at the next command boundary,
+before any publication, and uses the existing current-code handoff; the successor reruns the proof with current code.
 
 `control-plane-proof-<queue-id>.json` retains each ordinary attempt's exact source, candidate, captured refs, status and
 separate log. An interrupted or crashed proof remains non-green, with no reusable proof or release record. A later
@@ -416,20 +434,21 @@ fields listed below; the empty policy object deliberately provides no account po
 }
 ```
 
-| Pool field              | Meaning                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------- |
-| `name`                  | Local pool name; appears only in local state and configuration.                          |
-| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.        |
-| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.   |
-| `command`               | Official CLI executable or an absolute local launcher path.                              |
-| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.           |
-| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                         |
-| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events. |
-| `policy.weight`         | Required positive number for relative pool preference.                                   |
-| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                     |
-| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.         |
-| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                  |
-| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                        |
+| Pool field              | Meaning                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `name`                  | Local pool name; appears only in local state and configuration.                            |
+| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.          |
+| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.     |
+| `command`               | Official CLI executable or an absolute local launcher path.                                |
+| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.             |
+| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                           |
+| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.   |
+| `policy.weight`         | Required positive number for relative pool preference.                                     |
+| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                       |
+| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.           |
+| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                    |
+| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                          |
+| `policy.maxConcurrent`  | Optional positive integer cap on this pool's current pending, running and waiting workers. |
 
 Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool. When a
 CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: a used-up window or a reading older
@@ -439,7 +458,11 @@ failures exclude all aliases of that allowance immediately. There is no credit p
 
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
 minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A reset is not burn. `status` lists
-each pool's rate.
+each pool's rate and the ready tasks waiting on it.
+
+Decision: `policy.maxConcurrent` is an optional positive integer per pool name, not per shared allowance. Selection
+counts that pool's current pending, running and waiting attempts and skips a full pool like an exhausted one, for new
+tasks and retries alike. `status` lists running against the cap. Pools that omit the key keep today's admission.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
@@ -505,7 +528,7 @@ explicit helper output bounds retain precedence. All path-matching consumers for
 Launch smoke forwards its startup policy snapshot to its inner process. Its UUID shapes, two provider invocations,
 fixture command delays, evidence traversal accounting, JSON syntax costs and UTF-8 shrink factor are fixed protocol
 or fixture constants. Owner-decision IDs retain their fixed 128-character persisted identity format; input and
-manager-message limits use the caller policy. Brief estimate defaults remain guidance, without estimate caps.
+manager-message limits use the caller policy. Brief estimate defaults remain guidance.
 Merge helpers append an optional command policy after existing brief arguments; pool-selection options carry the
 provider policy through fallbacks. Pool-local freshness and explicit routing still take precedence. Completed Git
 output that exceeds the byte bound fails instead of becoming successful partial evidence or ancestry.
@@ -588,16 +611,18 @@ protocol or representation meaning; they are not operator limits.
 | `policy.launchSmoke.launchErrors`                     | `8`                                  | Launch errors retained in a smoke evidence snapshot.                                                                                                                                        |
 | `policy.launchSmoke.resultCharacters`                 | `400`                                | Failed resumed-worker result excerpt characters.                                                                                                                                            |
 | `policy.launchSmoke.drainWaitMs`                      | `5000`                               | Wait for an owned worker start to settle during smoke cleanup (ms).                                                                                                                         |
-| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                        |
+| `policy.prompt.workerRoleBytes`                       | `10000`                              | Worker role and generated architecture map measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                  |
 | `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template measurement budget in one prompt (UTF-8 bytes); overruns do not block launch.                                                                                   |
 | `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                         |
 | `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                       |
 | `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                             |
-| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                      |
+| `policy.prompt.researchRoleBytes`                     | `9000`                               | Research role and generated architecture map measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                |
 | `policy.brief.bytes`                                  | `12288`                              | Brief lint threshold (UTF-8 bytes); over-budget briefs dispatch with a warning.                                                                                                             |
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
+| `policy.brief.minimumEstimateLines`                   | `1200`                               | Estimate floor at backlog dispatch.                                                                                                                                                         |
+| `policy.brief.maximumBodyCharacters`                  | `4000`                               | Body ceiling at backlog dispatch.                                                                                                                                                           |
 | `policy.workerPrompt.characters`                      | `20000`                              | Total worker prompt characters when delivering an owner decision.                                                                                                                           |
 | `policy.workerPrompt.gitBufferBytes`                  | `16777216`                           | Worker prompt changed-path Git output buffer (bytes).                                                                                                                                       |
 | `policy.history.attemptPageSize`                      | `100`                                | Maximum attempt or attempt-record page size.                                                                                                                                                |
@@ -637,6 +662,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.backlog.stoppedTaskLimitMs`                   | `3600000`                            | Stopped product task age before cancellation into failed backlog (ms).                                                                                                                      |
 | `policy.backlog.stoppedTasksPerGoalPerRun`            | `20`                                 | Maximum stopped tasks cancelled per Goal per sweep.                                                                                                                                         |
 | `policy.backlog.dispatchesPerSweep`                   | `4`                                  | Maximum briefs dispatched by one synchronous sweep.                                                                                                                                         |
+| `policy.backlog.allowanceWaitingBound`                | `10`                                 | Ready tasks waiting only on allowance count toward the dispatch cap only past this many.                                                                                                    |
 | `policy.backlog.settleMs`                             | `10000`                              | Minimum unchanged brief age before dispatch (ms).                                                                                                                                           |
 | `policy.backlog.refusalBriefs`                        | `4`                                  | Maximum refused briefs listed in a notification.                                                                                                                                            |
 | `policy.backlog.refusalReasonCharacters`              | `160`                                | Maximum characters per listed refusal reason.                                                                                                                                               |
@@ -651,6 +677,10 @@ protocol or representation meaning; they are not operator limits.
 | `policy.validation.notifierArgumentCharacters`        | `4096`                               | Maximum characters per notifier argument.                                                                                                                                                   |
 | `policy.validation.hourlyReportMaxTimeoutMs`          | `120000`                             | Maximum accepted notifier deadline (ms).                                                                                                                                                    |
 | `policy.flowHistoryMs`                                | `2592000000`                         | Delivery flow reporting lookback (ms).                                                                                                                                                      |
+| `policy.chain.maximumContextTokens`                   | `150000`                             | Session context at or above which a landed session is not chained.                                                                                                                          |
+| `policy.chain.maximumTasks`                           | `4`                                  | Tasks in one chain of warm sessions, including the first.                                                                                                                                   |
+| `policy.chain.contextTailBytes`                       | `1048576`                            | Transcript bytes read from the end to find the session's context size.                                                                                                                      |
+| `policy.chain.offerWindowMs`                          | `3600000`                            | Age limit for landed-session offers the backlog run still answers (ms).                                                                                                                     |
 | `policy.worker.capacityPauseMs`                       | `10000`                              | Pause before retrying a model-capacity refusal (ms).                                                                                                                                        |
 | `policy.worker.usageLimitRetryPauseMs`                | `180000`                             | Same-pool retry pause for a refusal with fresh allowance left (ms).                                                                                                                         |
 | `policy.worker.usageLimitRefusalWindowMs`             | `3600000`                            | Lookback when counting ambiguous usage-limit refusals (ms).                                                                                                                                 |
@@ -691,6 +721,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.process.signalDiagnosticCharacters`           | `4096`                               | Maximum retained signal-helper stderr characters.                                                                                                                                           |
 | `policy.process.resolverTerminationGraceMs`           | `1000`                               | Termination grace for resolver recovery without a task runtime (ms).                                                                                                                        |
 | `policy.host.stateSweepIntervalMs`                    | `60000`                              | Host state-directory sweep interval (ms).                                                                                                                                                   |
+| `policy.host.codePollMs`                              | `1000`                               | Host poll for a newer published tools/goal revision (ms).                                                                                                                                   |
+| `policy.host.restartIntervalMs`                       | `600000`                             | Minimum host run before it retires for a newer tools/goal (ms).                                                                                                                             |
 | `policy.host.recoveryIntervalMs`                      | `60000`                              | Orphan recovery and host periodic work interval (ms).                                                                                                                                       |
 | `policy.host.recoveryReadinessMs`                     | `100`                                | Recovery progress wait before publishing host readiness (ms).                                                                                                                               |
 | `policy.host.requestTimeoutMs`                        | `60000`                              | Default manager host RPC deadline (ms).                                                                                                                                                     |
@@ -737,6 +769,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.pacing.alertUnusedPercent`                    | `20`                                 | Unused allowance percentage triggering a near-reset pacing alert.                                                                                                                           |
 | `policy.pacing.alertResetHours`                       | `24`                                 | Remaining reset hours qualifying for an unused-allowance alert.                                                                                                                             |
 | `policy.pacing.alertEveryMs`                          | `10800000`                           | Minimum interval between pacing alerts for the same allowance (ms).                                                                                                                         |
+| `policy.pacing.nearCeilingPercent`                    | `25`                                 | Burn-rate proximity to a pool ceiling that starts gradual admission (%).                                                                                                                    |
+| `policy.pacing.nearCeilingStarts`                     | `2`                                  | Maximum new starts per sweep on a pool in the near-ceiling band.                                                                                                                            |
 | `policy.manager.sleepAlarmPerHour`                    | `10`                                 | Sleep calls allowed per manager per UTC hour before one alarm.                                                                                                                              |
 | `policy.manager.sleepHistoryHours`                    | `24`                                 | UTC-hour sleep-counter history retained per manager.                                                                                                                                        |
 | `policy.manager.inboxPollMs`                          | `2000`                               | Manager inbox filesystem watcher fallback interval (ms).                                                                                                                                    |
@@ -916,7 +950,7 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.cpSync.failureLines`                       | `30`        | cpSync: failure lines.                       |
 | `policy.cpSync.conflictPaths`                      | `10`        | cpSync: conflict paths.                      |
 | `policy.cpSync.changedPaths`                       | `10`        | cpSync: changed paths.                       |
-| `policy.cpSync.residentSamples`                    | `10`        | cpSync: resident samples.                    |
+| `policy.cpSync.residentSamples`                    | `4`         | cpSync: resident samples.                    |
 | `policy.cpSync.residentSampleMs`                   | `60000`     | cpSync: resident sample ms.                  |
 | `policy.cpSync.statColumns`                        | `120`       | cpSync: stat columns.                        |
 | `policy.gateParity.budgetMs`                       | `270000`    | gateParity: budget ms.                       |
@@ -960,7 +994,9 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 
 ### Delivery flow telemetry
 
-`report --flow [--since <time>] [--json]` reads durable flow events. Decision: after one stable sort, `flowReport`
+`report --flow [--since <time>] [--json]` reads durable flow events. Its `chain` section counts offers, chained and unchained
+tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
+[Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
 reports stage/Goal totals, efficiency, attempts per integrated task, and queue length and age. Its guard ledger prices registered attempt endings and landing refusals over seven days by
 firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
@@ -1376,7 +1412,8 @@ The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun in
 independent verifier runs them after integration; a failure is reported with the command and first failure and does
 not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
 branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
-Decision: Each final composed dev candidate, including direct, batch, resolver-replayed and control-plane publication, runs these prepublication repairs against the exact target base after replay, formatting and any derived/schema commits, then returns the first diagnostic and retained log to the original worker session without a failed attempt: unbundled Bun transpile of changed executable `.ts`/`.tsx`/`.mts`/`.cts` files (`dev-landing-transpile`; deleted files, declarations and other extensions skipped); Kernel schema-dump regeneration when a migration changed (`dev-landing-schema`, before derived generators on the direct path); and, when any `services/kernel/src/` path changed, one candidate-scoped import of `services/kernel/src/server.ts` and `worker.ts` (`dev-landing-kernel-import`).
+Decision: Each final composed dev candidate, including direct, batch, resolver-replayed and control-plane publication, runs these prepublication repairs against the exact target base after replay, formatting and any derived/schema commits, then returns the first diagnostic and retained log to the original worker session without a failed attempt: unbundled Bun transpile of changed executable `.ts`/`.tsx`/`.mts`/`.cts` files (`dev-landing-transpile`; deleted files, declarations and other extensions skipped); architecture delta check (`dev-landing-architecture`); Kernel schema-dump regeneration when a migration changed (`dev-landing-schema`, before derived generators on the direct path); and, when any `services/kernel/src/` path changed, one candidate-scoped import of `services/kernel/src/server.ts` and `worker.ts` (`dev-landing-kernel-import`).
+Decision: Immediately after transpile, each composed dev candidate runs `bun scripts/architecture.ts --changed <base>` once. The check compares the candidate graph with its captured base so existing violations do not hold clean candidates; unchanged architecture inputs pass by diff, while new violation lines return to the source owner's retained session and check timings are recorded as `dev-architecture` flow events. Worker and research role budgets include the generated manifest map: 10,000 and 9,000 UTF-8 bytes respectively. The measured full base-delta check is 14.6 seconds for 7,433 production files in this worktree; the original full-check measurement was 10.5 seconds for 6,876 files without a database.
 The Kernel import uses real dynamic imports so `import.meta.main` is false, two fresh Bun processes so one entry's module cache cannot mask the other, and one migrated throwaway database from the candidate's `withThrowawayDatabase` seam with `DATABASE_URL` set before either graph loads. Unrelated paths skip it. A batch runs it once. A replayed candidate is imported again. First-error handback can end the phase; success must import both entries. It does not start HTTP or worker services, inherit a developer database URL, or replace transpile. Costs stay on the existing flow report: transpile counters unchanged, schema rows unchanged, Kernel import priced as setup/import/cleanup without double-counting batch members. Measured samples live on the matching guards. The root typecheck, optional boot check, independent verifier, page-data, walkthrough, native/browser, growth and money acceptance retain their owners.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
@@ -1958,8 +1995,9 @@ and decisions from earlier attempts cannot supersede a later current-attempt dec
 start or replace an attempt; delivery waits for the next normal prompt boundary.
 The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
-prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
-prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
+prompt. References that do not fit remain pending. A summary that does not fit is replaced by a pointer to a worktree file
+holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Only a
+successful launch records delivery against the accepted event sequence.
 Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
 per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
 No projection cache is persisted, and the delivery protocol is unchanged.
@@ -2193,15 +2231,26 @@ process, like promotion: dispatch runs Git and dependency installation synchrono
 host's socket. The host skips the minute while the previous child is still running, and the run holds the
 `leases/backlog` lease, so only one run exists even across a host restart. Each run:
 
-- **Dispatch.** While running and ready tasks are fewer than the cap (`maxWorkers` in `<state>/capacity.json`, else
-  32), the sweep dispatches up to four of the oldest `*.md` briefs, by modification time, round-robin across Goals,
-  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next run. It uses
+- **Dispatch.** While running tasks and ready tasks that are not waiting only on allowance, plus ready tasks waiting
+  only on allowance beyond `policy.backlog.allowanceWaitingBound`, are fewer than the cap (`maxWorkers` in
+  `<state>/capacity.json`, else 32), the sweep dispatches up to four `*.md` briefs. Before claiming, it routes each
+  candidate and prefers briefs whose profile or a fallback has an allowed pool now; oldest-first within each group,
+  round-robin across Goals, starting with the Goal served longest ago. A pool whose burn is within
+  `policy.pacing.nearCeilingPercent` of its ceiling admits at most `policy.pacing.nearCeilingStarts` new starts that
+  sweep. Ready tasks waiting only on allowance never occupy slots used to dispatch a brief that can start now. A brief
+  changed in the last ten seconds waits for the next run. It uses
   the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
   next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
   `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
   beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
   the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
   matches.
+  A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
+  reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
+  lists path-prefix merge candidates; status and hourly reports count them.
+  Decision: omitted estimates on ordinary product briefs count as 1,500 lines, matching parseBrief. Interface, claim and
+  bulk-text are product. Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix
+  overlap, at most three. Invalid YAML in a backlog file is untrusted input and is not a size return.
   A brief
   left in `.dispatching/` by a host that stopped after creating the task is archived once as
   `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
@@ -2232,20 +2281,58 @@ host's socket. The host skips the minute while the previous child is still runni
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
   receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
+- **Chained briefs.** Before the dispatch above, each landed session's offer is answered; see
+  [Chained briefs](#chained-briefs).
 - **Low backlog.** A running, active Goal manager whose backlog holds fewer than eight ready briefs receives at most
   one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
   directory count as ready; at eight or more, no low-backlog event is sent.
 
-`goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
+`goal backlog status [--json]` prints ready, dispatched, failed and returned brief counts per Goal. It reads only the
 directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
 
 #### Cost: backlog run
 
-- **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
-  latest-event lookup each, the running manager rows, and the backlog directories' entries.
+- **Touches:** one indexed count of running tasks, current ready-task bodies to classify allowance waiters when routing
+  is configured, the stopped tasks through the task-state index with one latest-event lookup each, the running manager
+  rows, and the backlog directories' entries.
 - **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
   is proportional to stopped tasks, not task history.
 - **Growth check:** `tools/goal/src/backlog-growth.test.ts`: `backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps`. It scales settled task/event history with fixed selected work, stopped tasks, and ready entries independently; it records SQLite executions and returned rows, JSON-decoded bytes, and actual backlog-directory enumerations and returned entries. Query plans and returned rows are not physical scan counts. The scenario includes empty backlog and cap continuation; `backlog.test.ts` covers interrupted uncommitted claims and replay after committed dispatch.
+
+#### Chained briefs
+
+A landed attempt offers its provider session to the next brief of its Goal, so the next brief starts in the warm
+session instead of orienting again. Landing records the offer with the session, pool, model, effort, landed paths and
+chain depth. Each minute the backlog run answers every offer from the last `policy.chain.offerWindowMs`, before ordinary
+dispatch, and answers each offer exactly once:
+
+- **Chained.** The oldest settled ordinary brief of the same Goal, with no `after` dependency and the landed brief's
+  target, whose paths overlap the landed paths (shared paths such as documentation do not count) is claimed and
+  dispatched as a new task. The task has its own identity, brief, branch and worktree from current dev, and a `chain`
+  link to the landed attempt. Its first attempt resumes that provider session (`codex resume`, `claude --resume`) with
+  the new brief as its prompt, on the landed attempt's pool and model. If that pool or model is no longer routable, the
+  attempt starts a fresh session. Its attempts, gate outcomes and landing are its own.
+- **Declined.** The session ends as it does without chaining, and the reason is recorded: `maximum-tasks` (the chain
+  already holds `policy.chain.maximumTasks` tasks), `context-unknown` (no transcript reports the session's context),
+  `context-limit` (the latest request's input is at or above `policy.chain.maximumContextTokens`),
+  `no-overlapping-brief`, or `dispatch-refused` (the brief is refused and archived like any refused brief). A declined
+  brief still runs through the ordinary sweep in a fresh session.
+
+Context is the input of the session's latest model request: `last_token_usage.input_tokens` in a Codex rollout, and the
+input with cache reads and writes of the latest assistant message in a Claude transcript. A transcript is read from its
+last `policy.chain.contextTailBytes` bytes. Urgent, verification, research, claim and continuation briefs never chain.
+
+Decision: chain decisions run in the backlog child, not at landing: a chained dispatch creates a worktree and may
+install dependencies, and landing only records the offer.
+
+Decision: product-brief size returns run before chain answers, so a chained brief meets the same size bar as an ordinary
+dispatch.
+
+Decision: `report --flow` states chained and unchained tasks on the same terms: landed lines over the worker time those
+tasks spent, with declined offers counted by reason.
+
+Cost: offers read through the flow table's (stage, action, time) index within the window, and each decision reads the
+Goal's ready briefs until one overlaps. The chain adds at most the sweep's dispatch budget per run.
 
 ### Check result reuse
 
@@ -2530,6 +2617,24 @@ Processes hand over on the new `main:tools/goal`. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
 
+A release runs the checks, publishes, restarts the resident units and then observes for three minutes. There is no
+observation window before publication: cp-sync reads one instant of live-worker width and of undelivered landing
+requests on tasks in the landing state, then publishes. After the restart it verifies that each resident unit started
+after publication, then takes four readings a minute apart (`policy.cpSync.residentSamples` and
+`policy.cpSync.residentSampleMs`). It rolls back only on a real regression: live workers fell by more than half, or no
+landing merged in that window while landings already in flight before publication were requested. A quiet window with
+no landing in flight never rolls back. A stale train started from the previous `tools/goal` lets its running command
+finish, stops at the next command boundary, releases its lanes and exits; its successor runs the published code. The
+resident host, which runs attempt supervision, is restarted by systemd: it finishes its active requests on SIGTERM, and
+workers keep their scopes. No process is killed by hand.
+
+A resident host also notices a publication that cp-sync did not make, such as a control-plane train release that moves
+`main`. It polls `main:tools/goal` every `policy.host.codePollMs`. Once it has run for `policy.host.restartIntervalMs`
+and `main` names another revision, it starts no new attempt, finishes its active requests, and exits; systemd starts it
+on the published code, and its successor adopts the running attempts. A host restarts this way at most once per
+interval. cp-sync restarts the host after its own publication whatever the interval, and a host that cannot read `main`
+keeps its revision.
+
 cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
 moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
 `--dry-run` does everything except moving refs and the checkout, prints the diff stat, step results and the ref moves
@@ -2736,11 +2841,14 @@ systemd termination. Daily audit dispatch stays with manager recovery.
 Decision: keep the minute sweep to 45 seconds by default and run regeneration separately hourly with a ten-minute
 budget; both bounds are configurable under `policy.maintenance` and applied when installing services.
 
-Decision: cp-sync records ten-minute mean live-worker width and successful gates and landings before and after
-publication; only failed host or verifier readiness, a unit whose process did not start after publication, zero live
-workers while ready tasks were observed, or zero landings while current undelivered landing requests were observed
-restores the previous tree in a forward commit. Lower nonzero counts and quiet windows are normal. Demand is sampled
-throughout the post-publication window.
+Decision: cp-sync takes one instant reading before publication and a three-minute post-publication window of four
+readings. Only failed host or verifier readiness, a unit whose process did not start after publication, live workers
+falling by more than half, or no landing merged in the window while landings already in flight before publication
+restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
+Decision: after publication a stale train lets its running control-plane command finish and hands off at the next command
+boundary instead of cancelling it, so the release does not restart a running check; the successor runs the published code.
+Decision: a resident host retires once main publishes another tools/goal, at most once per restartIntervalMs. A retiring
+host starts no new attempt, finishes its active requests and exits; systemd starts it on the published code.
 After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published
 main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
 unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual

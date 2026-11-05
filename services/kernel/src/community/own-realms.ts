@@ -81,7 +81,7 @@ async function accountEpoch(client: AccessClient, actor: AccountActor): Promise<
   try {
     await requireMembershipInverseReady(client, actor);
   } catch (error) {
-    if (error instanceof MembershipInverseIncompleteError) throw new ProblemError('dependency_unavailable');
+    if (error instanceof MembershipInverseIncompleteError()) throw new ProblemError('dependency_unavailable');
     if (error instanceof LifecycleDeniedError) throw new ProblemError('authentication_required');
     throw error;
   }

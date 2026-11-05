@@ -77,7 +77,7 @@ const valid = {
     targetId: ids.postId,
     revisionId: ids.revisionId,
   },
-} satisfies Partial<Record<keyof typeof CONTENT_EVENTS, unknown>>;
+} satisfies Partial<Record<keyof ReturnType<typeof CONTENT_EVENTS>, unknown>>;
 
 function assertOriginalContracts(catalogue: Record<string, TSchema>): void {
   for (const [type, data] of Object.entries(valid)) {
@@ -94,10 +94,10 @@ function assertOriginalContracts(catalogue: Record<string, TSchema>): void {
 }
 
 test('content event contracts are closed typed ID-only schemas and reject unknown fields or authored body copies', () => {
-  assertOriginalContracts(CONTENT_EVENTS);
+  assertOriginalContracts(CONTENT_EVENTS());
 
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.thread.created.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.thread.created.v1'], {
       threadId: ids.threadId,
       itemId: ids.itemId,
       revisionId: ids.revisionId,
@@ -106,21 +106,21 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
     }),
   ).toBe(false);
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.media.rejected.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.media.rejected.v1'], {
       mediaId: ids.mediaId,
       containerId: ids.containerId,
       decisionId: 'not-an-id',
     }),
   ).toBe(false);
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.moderation.takedown.v1'], {
       targetKind: 'account',
       targetId: ids.postId,
       securityRevision: '3',
     }),
   ).toBe(false);
 
-  const takedown = CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'];
+  const takedown = CONTENT_EVENTS()['com.rezics.content.moderation.takedown.v1'];
   for (const securityRevision of ['1', '9223372036854775807', '999999999999999999999999999999999999']) {
     expect(Value.Check(takedown, { targetKind: 'board', targetId: ids.containerId, securityRevision })).toBe(true);
   }
@@ -129,7 +129,7 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
   }
   expect(Value.Check(takedown, { targetKind: 'media', targetId: ids.mediaId, securityRevision: '1' })).toBe(false);
 
-  const report = CONTENT_EVENTS['com.rezics.content.report.created.v1'];
+  const report = CONTENT_EVENTS()['com.rezics.content.report.created.v1'];
   for (const targetKind of ['board', 'thread', 'post']) {
     expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(true);
   }
@@ -144,7 +144,7 @@ test('a synthetic closed additive event coexists with every required original co
     { mediaId: Type.Literal(ids.mediaId), containerId: Type.Literal(ids.containerId) },
     { additionalProperties: false },
   );
-  const extended = { ...CONTENT_EVENTS, [type]: schema };
+  const extended = { ...CONTENT_EVENTS(), [type]: schema };
   assertOriginalContracts(extended);
 
   const data = { mediaId: ids.mediaId, containerId: ids.containerId };
@@ -169,7 +169,7 @@ test('a synthetic closed additive event coexists with every required original co
 });
 
 test('first-publication evidence requires the exact revision and closed index fields', () => {
-  const schema = CONTENT_EVENTS['com.rezics.content.post.published.v1'];
+  const schema = CONTENT_EVENTS()['com.rezics.content.post.published.v1'];
   const data = valid['com.rezics.content.post.published.v1'];
   for (const field of Object.keys(data)) {
     const missing: Record<string, unknown> = { ...data };

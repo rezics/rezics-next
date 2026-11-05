@@ -10,8 +10,8 @@ test('Zone create configure and public schemas retain one authored primary name 
     pages: [{ route: '', document: { root: { props: {} }, content: [] } }],
     scope: [],
   };
-  const create = Compile(ZoneCreateInputSchema);
-  const configure = Compile(ZoneConfigureInputSchema);
+  const create = Compile(ZoneCreateInputSchema());
+  const configure = Compile(ZoneConfigureInputSchema());
   const check = (value: unknown) => validateZoneConfiguration(platformRegistry, value, { filters: new Set() });
   for (const labels of [{ ja: '本棚' }, { ja: '本棚', de: 'Bücher' }]) {
     const next = { ...configuration, labels };
@@ -34,5 +34,5 @@ test('Zone create configure and public schemas retain one authored primary name 
     appearance: {},
     navigation: [{ route: '' }],
   };
-  expect(Compile(ZonePublicSchema).Check(shell)).toBe(true);
+  expect(Compile(ZonePublicSchema()).Check(shell)).toBe(true);
 });

@@ -326,7 +326,7 @@ test('historical replay retains UNKNOWN benefit and current checkout state while
   // The other active offer has the same unavailable Content source. Fresh execution cannot use history as authority.
   const active = await commands.readOffer(offer.id);
   await expect(commands.createOrder(buyer().actor, offer.id, active!.revision, randomUUID())).rejects.toBeInstanceOf(
-    ContentEditionUnavailableError,
+    ContentEditionUnavailableError(),
   );
   expect(await footprint()).toEqual(before);
   const unscoped = await system.auth.issue({

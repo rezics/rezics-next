@@ -154,9 +154,7 @@ export function resolveShelfPresentation(
           ? 'all'
           : 'application';
   const unsupportedSavedSort =
-    savedSortPreference && (!savedSort || savedSort.orderBy === 'personalScore')
-      ? savedSortPreference.field.replaceAll('_', ' ')
-      : undefined;
+    savedSortPreference && !savedSort ? savedSortPreference.field.replaceAll('_', ' ') : undefined;
   const unsupportedSort = search.orderBy === undefined ? unsupportedSavedSort : undefined;
   return {
     intent,
@@ -232,8 +230,7 @@ export function unsupportedShelfSorts(shelf: ShelfPreferences): Array<{ tab: She
   return (Object.entries(shelf.sorts ?? {}) as Array<[ShelfPreferenceTab, ShelfPreferenceSort]>).flatMap(
     ([tab, sort]) => {
       const intent = libraryOrderFromShelf(sort);
-      // Recognizing a saved address does not admit a native whole-shelf order.
-      return intent && intent.orderBy !== 'personalScore' ? [] : [{ tab, field: sort.field.replaceAll('_', ' ') }];
+      return intent ? [] : [{ tab, field: sort.field.replaceAll('_', ' ') }];
     },
   );
 }

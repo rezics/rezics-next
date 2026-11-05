@@ -121,7 +121,7 @@ export function createCreatorEditionIndexEffect(pool: Pool): Effect {
     name: 'content_creator_edition',
     types: [created],
     async run(event) {
-      if (event.type !== created || !Value.Check(CONTENT_EVENTS[created], event.data))
+      if (event.type !== created || !Value.Check(CONTENT_EVENTS()[created], event.data))
         throw new TypeError('Invalid creator edition event');
       const data = event.data as { editionId: string; editionRevision: string };
       const route = routeOf(data.editionId);

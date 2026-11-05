@@ -671,7 +671,7 @@ async function assertPublicSynopsis(origin: URL, synopsisValue: Synopsis, type: 
 describe.skipIf(!retainedStackAvailable)('retained doctor catalogue readback', () => {
   test('native Home, released relations and accepted Bangumi synopses read independently', async () => {
     const origin = resolveKernelOrigin();
-    const expectedHome = resolveTemplate(platformProfile, { route: '/' });
+    const expectedHome = resolveTemplate(platformProfile(), { route: '/' });
 
     for (const persona of ['anonymous', 'member'] as const) {
       const active = await nativeRequest(origin, 'GET', '/v1/definitions/active', persona);
@@ -680,7 +680,7 @@ describe.skipIf(!retainedStackAvailable)('retained doctor catalogue readback', (
 
       const page = await nativeRequest(origin, 'POST', '/v1/pages:read', persona, { target: { route: '/' } });
       const pageBody = status(page, 200, `${persona} shipped Home page read`);
-      expect(pageBody.profile).toBe(profileDigest(platformProfile));
+      expect(pageBody.profile).toBe(profileDigest(platformProfile()));
       expect(pageBody.template).toEqual({ scope: 'route', key: '/' });
       expect(pageBody.document).toEqual(expectedHome.document);
 

@@ -193,6 +193,10 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     else if (message) alert.current?.focus();
   }, [emailError, passwordFieldError, message]);
 
+  useLayoutEffect(() => {
+    if (hasFragment && !credentials && message) alert.current?.focus();
+  }, [credentials, hasFragment, message, page]);
+
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!attempt.available || !page?.actions.start || !page.methods.email) return;
@@ -345,7 +349,17 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
         <ErrorAlert tabIndex={-1} ref={alert}>
           {message}
         </ErrorAlert>
-        <a href="/recovery">{m.auth_recovery_new_link()}</a>
+        <a
+          href="/recovery"
+          onClick={(event) => {
+            event.preventDefault();
+            setHasFragment(false);
+            setMessage('');
+            setFresh(true);
+          }}
+        >
+          {m.auth_recovery_new_link()}
+        </a>
       </AuthPage>
     );
   }

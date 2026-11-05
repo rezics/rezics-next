@@ -337,7 +337,7 @@ test('custom authenticate callbacks remain unavailable when a request supplies a
   const deadline = Date.now() + 5000;
   const metered = accounting(deadline);
   await expect(actorOf(custom, bearer(await token()), { pool, deadline, work: metered.work })).rejects.toBeInstanceOf(
-    AccessWorkUnavailableError,
+    AccessWorkUnavailableError(),
   );
   expect(invoked).toBe(false);
   expect(metered.reservations).toEqual([]);
@@ -354,7 +354,7 @@ test('the original producer refuses a caller deadline that differs from its Acce
       deadline: frameDeadline + 1,
       work: metered.work,
     }),
-  ).rejects.toBeInstanceOf(AccessWorkUnavailableError);
+  ).rejects.toBeInstanceOf(AccessWorkUnavailableError());
   expect(fetches).toBe(fetchCount);
   expect(metered.reservations).toEqual([]);
 });

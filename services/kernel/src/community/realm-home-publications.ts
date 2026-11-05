@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
@@ -25,32 +26,36 @@ export const RealmHomePublicationQuerySchema = t.Object(
   },
   closed,
 );
-export const RealmHomePublicationPageSchema = t.Object(
-  {
-    items: t.Array(
-      t.Object(
-        {
-          publication: t.Object(
+export function RealmHomePublicationPageSchema() {
+  return memoizedValue(RealmHomePublicationPageSchema, () =>
+    t.Object(
+      {
+        items: t.Array(
+          t.Object(
             {
-              realmId: id,
-              subjectId: id,
-              publicationId: id,
-              verdict: t.Literal('adopt'),
-              subjectRevisionId: t.Null(),
-              publishedAt: t.String({ format: 'date-time' }),
+              publication: t.Object(
+                {
+                  realmId: id,
+                  subjectId: id,
+                  publicationId: id,
+                  verdict: t.Literal('adopt'),
+                  subjectRevisionId: t.Null(),
+                  publishedAt: t.String({ format: 'date-time' }),
+                },
+                closed,
+              ),
+              summary: SubjectSummarySchema,
             },
             closed,
           ),
-          summary: SubjectSummarySchema,
-        },
-        closed,
-      ),
-      { maxItems: REALM_HOME_PUBLICATION_LIMIT },
+          { maxItems: REALM_HOME_PUBLICATION_LIMIT },
+        ),
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
     ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
+  );
+}
 
 /** The same bounded reader serves the initial home and its publication-only
  * continuation. Its cursor is the ordinary native publication cursor at limit12.

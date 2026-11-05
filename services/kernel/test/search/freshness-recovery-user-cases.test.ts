@@ -1493,7 +1493,7 @@ for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
       );
       expect(answer.headers.get('cache-control')).toBe('private, no-store');
       if (answer.status === 202) {
-        expect(Compile(ZonePageReadProgressSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+        expect(Compile(ZonePageReadProgressSchema()).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
         const next = answer.body.next as string;
         expect(cursors.has(next)).toBe(false);
         cursors.add(next);
@@ -1501,7 +1501,7 @@ for (let jobIndex = 0; jobIndex < 4; jobIndex++) {
         continue;
       }
       status(answer, 200);
-      expect(Compile(ZonePageResponseSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+      expect(Compile(ZonePageResponseSchema()).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
       expect(answer.body.document).toEqual(document);
       expect(answer.body.zone).toMatchObject({ id: zone.id, revision });
       expect(JSON.stringify(answer.body)).not.toContain('Second occurrence with a distinct note');

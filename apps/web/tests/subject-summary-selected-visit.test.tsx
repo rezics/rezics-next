@@ -12,6 +12,7 @@ import {
 } from '@tanstack/react-router';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { fromPlainText } from '@rezics/document';
+import { createKernelClient } from '@rezics/client';
 import { authoredFixture } from '../src/kernel/fake/authored-field';
 import { readAuthoredField, type AuthoredAddress, type AuthoredRead } from '../src/features/catalogue/authored-field';
 import { candidateContext } from '../src/subject/candidates';
@@ -65,6 +66,27 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     candidateId: second.id,
     body: fromPlainText('The exact second synopsis.'),
   });
+  const japanese = structuredClone(second);
+  japanese.id = '00000000-0000-4000-8000-000000000103';
+  const japaneseContent = { document: '00000000-0000-4000-8000-000000000203', digest: 'd'.repeat(64), language: 'ja' };
+  const japaneseCitation = 'https://example.test/japanese-synopsis';
+  japanese.value = { type: 'value', content: japaneseContent };
+  japanese.references = [
+    {
+      hash: 'japanese-reference',
+      parts: [
+        { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: japaneseCitation } },
+      ],
+    },
+  ];
+  fixture.publicRead.subject.statements['schema:abstract']!.push(japanese);
+  fixture.documents.set(japaneseContent.document, {
+    ...[...fixture.documents.values()][0]!,
+    ...japaneseContent,
+    id: japaneseContent.document,
+    candidateId: japanese.id,
+    body: fromPlainText('日本語の概要。'),
+  });
   let held: { resolve: (read: AuthoredRead) => void; address: AuthoredAddress } | undefined;
   let holdNext = false;
   const noCommand = () => {
@@ -84,11 +106,75 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     loadAuthoredReview: noCommand,
     confirmAuthoredField: noCommand,
   }));
+  const sourceRequests: unknown[] = [];
+  const sourcesClient = createKernelClient('http://sources.test', {
+    fetch: (async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const supplied = url.searchParams.get('selectedSynopsis');
+      const selected = supplied ? JSON.parse(supplied) : undefined;
+      sourceRequests.push(selected);
+      const live = fixture.publicRead.subject.statements['schema:abstract']!.find(
+        (row) => row.id === selected?.statement,
+      );
+      const { rezics: _revision, ...fact } = live ?? second;
+      const current = live?.value.type === 'value' ? (live.value.content as typeof content) : undefined;
+      const matches =
+        live &&
+        current &&
+        selected.document === current.document &&
+        selected.digest === current.digest &&
+        selected.language === current.language &&
+        selected.release === fixture.publicRead.subject.release;
+      return new Response(
+        JSON.stringify({
+          ...fixture.publicRead,
+          ...(selected
+            ? {
+                selectedSynopsis: matches
+                  ? {
+                      kind: 'matched',
+                      fact: { ...fact, value: { type: 'somevalue' } },
+                      context: selected.context,
+                      release: selected.release,
+                    }
+                  : { kind: 'changed' },
+              }
+            : {}),
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch,
+  });
+  const { readSubjectSources } = await import('../src/features/catalogue/subject-sources');
+  const sourceRead = ({ data }: { data: { id: string; locale: string; via?: string } }) =>
+    readSubjectSources(sourcesClient, data.id, data.locale, undefined, false, data.via);
+  let holdSourceRefresh = false;
+  let failSourceRefresh = false;
+  let releaseSource: (() => void) | undefined;
+  mock.module('../src/features/catalogue/subject-sources-actions', () => ({
+    loadSubjectSources: sourceRead,
+    readCurrentSubjectSources: async (request: Parameters<typeof sourceRead>[0]) => {
+      if (failSourceRefresh) return { kind: 'unavailable' };
+      const result = await sourceRead(request);
+      if (!holdSourceRefresh) return result;
+      holdSourceRefresh = false;
+      return new Promise<typeof result>((resolve) => {
+        releaseSource = () =>
+          resolve(
+            result.kind === 'ready'
+              ? { ...result, page: { ...result.page, title: { text: 'Late retired Sources' } } }
+              : result,
+          );
+      });
+    },
+  }));
+  const queries = await import('../src/features/pages/subject-queries');
+  mock.module('../src/features/pages/subject-queries', () => ({
+    ...queries,
+    subjectRequestReader: async () => null,
+  }));
   const { createRoot } = await import('react-dom/client');
   const { PageData, dataComponents } = await import('../src/features/pages/data');
-  const { SubjectSourcesPage } = await import('../src/features/catalogue/subject-sources-page');
-  const { explainSubjectSources } = await import('../src/features/catalogue/subject-sources');
-  const { sourceDefinitions } = await import('../src/kernel/fake/catalogue-sources');
   const { CompositionRender } = await import('../src/features/pages/render');
   const { pageDefinitions } = await import('../src/features/pages/layout');
   const { Route: AuthoredRoute } = await import('../src/routes/subjects/$id_.$slug_.authored');
@@ -154,18 +240,12 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     getParentRoute: () => rootRoute,
     loader: () => ({ id: fixture.id }),
   } as never);
-  const sources = createRoute({
+  const { Route: SourcesRoute } = await import('../src/routes/subjects/$id_.$slug_.sources');
+  const sources = SourcesRoute.update({
+    id: '/subjects/$id_/$slug_/sources',
     getParentRoute: () => rootRoute,
     path: '/en/subjects/$id/$slug/sources',
-    validateSearch: (search: Record<string, unknown>) => ({ via: subjectVisitReturn(search.via, 'en') }),
-    component: () => (
-      <SubjectSourcesPage
-        result={{ kind: 'ready', page: explainSubjectSources(fixture.publicRead, 'en', sourceDefinitions) }}
-        locale="en"
-        returnTo={sources.useSearch().via!}
-      />
-    ),
-  });
+  } as never);
   window.history.replaceState({}, '', href);
   const router = createRouter({
     routeTree: rootRoute.addChildren([workRoute, destination, sources]),
@@ -178,7 +258,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   // Browser anchor adapter: follow the actual mounted href through the destination router.
   host.addEventListener('click', (event: any) => {
     const link = event.target.closest('a');
-    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey) return;
+    if (event.defaultPrevented || !link || event.button !== 0 || event.metaKey || event.ctrlKey) return;
     const target = link.getAttribute('href');
     if (target?.startsWith('/en/subjects/')) {
       event.preventDefault();
@@ -217,18 +297,69 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       await user.selectOptions(chooser, second.id);
     });
     const evidence = host.querySelector('#subject-summary-evidence')!;
-    expect(evidence.querySelector('[role="status"]')?.textContent).toBe(m.subject_synopsis_sources_unsupported());
+    expect([...evidence.querySelectorAll('a')].some((link) => link.href.includes('via='))).toBe(true);
     expect(evidence.textContent).toContain(m.sources_no_citations());
     const general = [...evidence.querySelectorAll('a')].find(
-      (link) => link.textContent === m.subject_synopsis_general_sources(),
+      (link) => link.textContent === m.subject_synopsis_evidence(),
     )!;
     await click(general);
     expect(host.querySelector('[data-slot="subject-sources-detail"]')).not.toBeNull();
+    expect(sourceRequests.at(-1)).toMatchObject({ statement: second.id, document: content.document, language: 'en' });
+    expect(host.textContent).toContain(m.sources_no_citations());
     expect(host.textContent).not.toContain('The exact second synopsis.');
     expect(host.textContent).not.toContain(content.document);
+    expect(host.innerHTML).not.toContain(content.document);
+    expect(host.innerHTML).not.toContain(content.digest);
+    const session = (subject: string, token: string) => ({ state: 'signed-in', subject, csrfToken: token });
+    holdSourceRefresh = true;
+    await act(async () => client.setQueryData(sessionQuery.queryKey, session(fixture.transport.reader!, 'held-a')));
+    await settle();
+    expect(releaseSource).toBeDefined();
+    for (const subject of ['another-reader', fixture.transport.reader!]) {
+      await act(async () => client.setQueryData(sessionQuery.queryKey, session(subject, 'held-a')));
+      await settle();
+      expect(host.querySelector('[data-slot="subject-sources-detail"]')).not.toBeNull();
+    }
+    await act(async () => releaseSource!());
+    await settle();
+    expect(host.textContent).not.toContain('Late retired Sources');
+    failSourceRefresh = true;
+    await act(async () => client.setQueryData(sessionQuery.queryKey, session(fixture.transport.reader!, 'retry-a')));
+    await settle();
+    const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.sources_retry())!;
+    expect(retry).toBeDefined();
+    failSourceRefresh = false;
+    await act(async () => {
+      retry.focus();
+      await user.keyboard('{Enter}');
+    });
+    await settle();
+    expect(sourceRequests.at(-1)).toMatchObject({ statement: second.id, document: content.document });
+    expect(
+      window.document.activeElement === host.querySelector('[data-slot="view-heading"] h1'),
+      window.document.activeElement?.outerHTML,
+    ).toBe(true);
     await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
     expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
     expect(window.document.activeElement?.id).toBe('subject-summary-evidence');
+    await act(async () => user.selectOptions(host.querySelector('select')!, japanese.id));
+    await settle();
+    await click(
+      [...host.querySelectorAll('#subject-summary-evidence a')].find(
+        (link) => link.textContent === m.subject_synopsis_evidence(),
+      )!,
+    );
+    expect(sourceRequests.at(-1)).toMatchObject({
+      statement: japanese.id,
+      document: japaneseContent.document,
+      language: 'ja',
+    });
+    expect(host.textContent).toContain(japaneseCitation);
+    expect(host.textContent).not.toContain('日本語の概要。');
+    await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
+    expect((host.querySelector('select') as HTMLSelectElement).value).toBe(japanese.id);
+    await act(async () => user.selectOptions(host.querySelector('select')!, second.id));
+    await settle();
     const correction = [...host.querySelectorAll('a')].find((link) => link.textContent === m.correction_title())!;
     const selectedAddress = correction.getAttribute('href')!;
     expect(selectedAddress).toContain('via=');
@@ -297,6 +428,12 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(host.textContent).toContain(m.subject_synopsis_global_only());
     expect(host.textContent).not.toContain('The exact second synopsis.');
 
+    const beforeOversized = sourceRequests.length;
+    await navigate(`${href}/sources?${new URLSearchParams({ via: selectedVia, extra: 'x'.repeat(2048) })}`);
+    expect(sourceRequests.length).toBe(beforeOversized);
+    expect(host.textContent).toContain(m.sources_unavailable());
+    expect(host.innerHTML).not.toContain(content.document);
+
     const encodedFragment = summaryReadingFragment({
       ...selection,
       documentId: '字'.repeat(128),
@@ -314,4 +451,4 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 20_000);

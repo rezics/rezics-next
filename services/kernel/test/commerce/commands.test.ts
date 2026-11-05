@@ -432,7 +432,7 @@ test('a fulfilment command writes order state transactions and entitlement toget
   const persisted = await pool.query("SELECT type,data FROM core.outbox WHERE type LIKE 'com.rezics.commerce.%'");
   for (const row of persisted.rows) {
     const schema = COMMERCE_EVENTS[row.type as keyof typeof COMMERCE_EVENTS];
-    expect(EVENT_TYPES[row.type as keyof typeof EVENT_TYPES]).toBe(schema);
+    expect(EVENT_TYPES()[row.type as keyof ReturnType<typeof EVENT_TYPES>]).toBe(schema);
     expect(Value.Check(schema, row.data)).toBe(true);
     expect(Value.Check(schema, { ...row.data, title: 'unexpected' })).toBe(false);
   }
@@ -504,7 +504,9 @@ test('command statement counts do not grow with unrelated rows', async () => {
 });
 
 test('fresh native edition offer remains unavailable without Content authority and has no effects', async () => {
-  const { ContentEditionUnavailableError } = await import('../../src/commerce/benefit.ts');
+  const { ContentEditionUnavailableError: ContentEditionUnavailableErrorGetter } =
+    await import('../../src/commerce/benefit.ts');
+  const ContentEditionUnavailableError = ContentEditionUnavailableErrorGetter();
   const before = await footprint();
   const { targetSubjectId: _historicalSubject, ...terms } = input();
   await expect(

@@ -85,7 +85,7 @@ async function visible(index: string, id: string) {
 }
 
 test('the public figure proposal uses the registered production schema, including nullable figures', () => {
-  const schema = EVENT_TYPES[changed];
+  const schema = EVENT_TYPES()[changed];
   expect(schema).toBeDefined();
   const validator = Compile(schema!);
   const data = figure(newId(151 * 16));

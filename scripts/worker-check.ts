@@ -841,7 +841,7 @@ export async function startControllerWorkerCheck(value: ControllerProofBindingV1
           cwd: binding.cwd,
           argv: [...binding.argv],
           status: 'running',
-          log: relative(binding.cwd, logPath(binding.cwd)),
+          log: relative(binding.cwd, logPath(binding.cwd, binding.checkId)),
           physicalRunId: randomUUID(),
           ownership: { taskId: binding.taskId, attempt: binding.attempt },
         };
@@ -987,12 +987,13 @@ function updatePhysicalRecord(
   return next;
 }
 
-function logPath(cwd: string): string {
+/** A physical run's log is named after its check id, so a result record can name only its own check's log. */
+function logPath(cwd: string, id: string): string {
   const directory = join(cwd, '.temp', 'goal', 'checks');
   mkdirSync(directory, { recursive: true });
   return join(
     directory,
-    `worker-check-${new Date().toISOString().replaceAll(':', '-')}-${randomUUID().slice(0, 8)}.log`,
+    `worker-check-${id}-${new Date().toISOString().replaceAll(':', '-')}-${randomUUID().slice(0, 8)}.log`,
   );
 }
 
@@ -1197,10 +1198,8 @@ export async function runWorkerCheck(
   const declaredReturns = validateArtifactDeclarations(returnPaths);
   returnPaths.splice(0, returnPaths.length, ...declaredReturns);
   const root = resolve(cwd);
-  const cancellation = workerCheckCancellation(
-    recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID()),
-    root,
-  );
+  const checkId = recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID());
+  const cancellation = workerCheckCancellation(checkId, root);
   const cancelled = () => executionCancellation(cancellation);
   const cancelFromSignal = (signal: 1 | 2 | 15): void => {
     // A verified watchdog stop ends this incarnation; external cancellation ends the logical check.
@@ -1209,7 +1208,7 @@ export async function runWorkerCheck(
   };
   const initialIntent = cancelled();
   if (initialIntent) return 128 + initialIntent.signal;
-  const file = recordedLog ?? logPath(root);
+  const file = recordedLog ?? logPath(root, checkId);
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   wait.begin();
@@ -2276,7 +2275,7 @@ async function scheduleOverloadRerun(
 ): Promise<void> {
   if (executionCancellation(workerCheckCancellation(id, root))) throw new CheckCancelled();
   const physicalRunId = randomUUID();
-  const file = logPath(root);
+  const file = logPath(root, id);
   writeFileSync(file, line, { mode: 0o600, flag: 'wx' });
   const next = await withCheckFence(root, id, () => {
     if (
@@ -2351,7 +2350,7 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
   registryForStart(process.env, ownership);
   const id = randomUUID();
   const physicalRunId = randomUUID();
-  const file = logPath(root);
+  const file = logPath(root, id);
   const record: CheckRecord = {
     custodyVersion: CHECK_RECORD_CUSTODY_VERSION,
     id,
@@ -3246,7 +3245,7 @@ async function rerunInterruptedCheck(
     return 1;
   }
   const newPhysicalRunId = randomUUID();
-  const rerunLog = logPath(root);
+  const rerunLog = logPath(root, id);
   const next = await withCheckFence(root, id, () => {
     if (executionCancellation(workerCheckCancellation(id, root)) || checkCancelled(root, id))
       throw new CheckCancelled();

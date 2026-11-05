@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { DurableOperationAnchor } from './durable-initiator.ts';
 import { routeOf } from '../route/route.ts';
 import { defineQuery } from 'reylo';
@@ -10,17 +11,21 @@ import { families, rateLimitBudgets } from './write-rate-budgets.ts';
 import { spendWriteRateCounter } from './write-rate-counter.ts';
 import { rateIdentity } from './write-rate-identity.ts';
 
-const spendChunkQuery = defineQuery<
-  (typeof chunkStatement)['~reylo']['input'],
-  (typeof chunkStatement)['~reylo']['element'],
-  typeof chunkStatement.cardinality,
-  'postgres'
->({
-  dialect: chunkStatement.dialect,
-  sql: chunkStatement.raw,
-  params: chunkStatement.params,
-  cardinality: chunkStatement.cardinality,
-});
+function spendChunkQuery() {
+  return memoizedValue(spendChunkQuery, () =>
+    defineQuery<
+      (typeof chunkStatement)['~reylo']['input'],
+      (typeof chunkStatement)['~reylo']['element'],
+      typeof chunkStatement.cardinality,
+      'postgres'
+    >({
+      dialect: chunkStatement.dialect,
+      sql: chunkStatement.raw,
+      params: chunkStatement.params,
+      cardinality: chunkStatement.cardinality,
+    }),
+  );
+}
 
 export type WriteRateFamily = 'write' | 'upload' | 'report' | 'correspondence' | 'search' | 'provider' | 'address';
 export type AccountRateClass = 'anonymous' | 'new-account' | 'member' | 'trusted' | 'service';
@@ -131,7 +136,7 @@ export function createWriteRateLimiter(config: WriteRateConfig = {}): DurableWri
       try {
         if (!secret) throw new WriteRateUnavailableError();
         const identity = rateIdentity(context, secret);
-        const [row] = await spendChunkQuery.run(deadlineClient(context.pool, identity.deadline), {
+        const [row] = await spendChunkQuery().run(deadlineClient(context.pool, identity.deadline), {
           route: identity.route,
           identity_digest: identity.identityDigest,
           account_id: identity.accountId ?? '',

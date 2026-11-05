@@ -1,12 +1,19 @@
+import { memoizedValue } from '../memoized.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ProgressActivity, ShelfHeads, ShelfWrite } from './shelf-contract.ts';
 import ensureHeadQuery from './shelf-head-ensure.sql';
 import touchHeadQuery from './shelf-head-touch.sql';
 import raiseEntryQuery from './shelf-entry-raise.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
-const ensureHead = shelfMaintenanceQuery(ensureHeadQuery);
-const touchHead = shelfMaintenanceQuery(touchHeadQuery);
-const raiseEntry = shelfMaintenanceQuery(raiseEntryQuery);
+function ensureHead() {
+  return memoizedValue(ensureHead, () => shelfMaintenanceQuery(ensureHeadQuery));
+}
+function touchHead() {
+  return memoizedValue(touchHead, () => shelfMaintenanceQuery(touchHeadQuery));
+}
+function raiseEntry() {
+  return memoizedValue(raiseEntry, () => shelfMaintenanceQuery(raiseEntryQuery));
+}
 
 function parameters(write: ShelfWrite, subjectId: string) {
   partitionOf(write.route);
@@ -22,7 +29,7 @@ export function createShelfHeads(): ShelfHeads {
   return {
     async ensure(write, subjectId) {
       const input = parameters(write, subjectId);
-      return ensureHead.run({ query: write.client.query.bind(write.client) }, input);
+      return ensureHead().run({ query: write.client.query.bind(write.client) }, input);
     },
   };
 }
@@ -33,9 +40,9 @@ export function createProgressActivity(): ProgressActivity {
     async touch(write, touch) {
       const input = { ...parameters(write, touch.subjectId), time: touch.time, completed: touch.completed };
       const client = { query: write.client.query.bind(write.client) };
-      await touchHead.run(client, input);
+      await touchHead().run(client, input);
       // READ COMMITTED needs a fresh statement snapshot after waiting for an entry writer's head lock.
-      await raiseEntry.run(client, input);
+      await raiseEntry().run(client, input);
     },
   };
 }

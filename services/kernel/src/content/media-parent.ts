@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessClient } from '../request/access.ts';
@@ -11,8 +12,12 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import parent from './read-media-parent.sql';
 import board from './read-media-parent-board.sql';
 
-export const parentStatement: string = parent.sql;
-export const boardStatement: string = board.sql;
+export function parentStatement(): string {
+  return memoizedValue(parentStatement, () => parent.sql);
+}
+export function boardStatement(): string {
+  return memoizedValue(boardStatement, () => board.sql);
+}
 
 export type MediaParent = {
   kind: 'post' | 'thread' | 'board';

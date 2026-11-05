@@ -15,9 +15,9 @@ import { platformProfile } from '../../src/presentation/setup.ts';
 
 const subject = '00000000-0000-8000-8000-000000000000';
 const pick = (type: string) =>
-  resolveTemplate(platformProfile, { type, bases: bundledRelease.types[type]?.bases ?? [] });
+  resolveTemplate(platformProfile(), { type, bases: bundledRelease.types[type]?.bases ?? [] });
 const lists = (type: string, view: View = 'overview') => {
-  const resolved = resolveView(platformProfile, { type, bases: bundledRelease.types[type]?.bases ?? [] }, view);
+  const resolved = resolveView(platformProfile(), { type, bases: bundledRelease.types[type]?.bases ?? [] }, view);
   if (resolved === null) throw new Error(`Missing ${view} view for ${type}`);
   return Object.values(planReads(platformRegistry, resolved.document, { subject }).reads).flatMap((read) =>
     read.kind === 'links' ? [read.property] : [],
@@ -56,8 +56,8 @@ test('people, organisations, concepts, characters and series list their works', 
 });
 
 test('every default page stays within the page read budget', () => {
-  const documents = [platformProfile.generic, ...platformProfile.bases, ...platformProfile.types].flatMap((template) =>
-    Object.values(templateViews(template)),
+  const documents = [platformProfile().generic, ...platformProfile().bases, ...platformProfile().types].flatMap(
+    (template) => Object.values(templateViews(template)),
   );
   for (const document of documents) {
     const { reads } = planReads(platformRegistry, document, { subject });

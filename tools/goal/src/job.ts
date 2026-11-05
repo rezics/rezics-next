@@ -22,6 +22,7 @@ import type {
   AttemptRef,
 } from './contracts.ts';
 import { recordFlow } from './flow.ts';
+import { recordChainOffer } from './chain.ts';
 import {
   liveGroups,
   processGroupCpuTicks,
@@ -213,6 +214,8 @@ export class WorkerJob implements GateOutcomeSink {
     private readonly acquireOrphanLease: (path: string) => DirectoryLease = (path) =>
       acquireDirectoryLease(path, tasks.settings.policy?.leases),
     private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
+    // False once this host retires for a newer tools/goal: the attempts it already follows continue, but none starts.
+    private readonly startsAllowed: () => boolean = () => true,
   ) {}
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
@@ -243,6 +246,7 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   private async runRetryIntent(ref: AttemptRef): Promise<void> {
+    if (!this.startsAllowed()) return;
     const key = `${ref.taskId}:${ref.attempt}`;
     if (this.retryIntentsInProgress.has(key)) return;
     this.retryIntentsInProgress.add(key);
@@ -359,6 +363,7 @@ export class WorkerJob implements GateOutcomeSink {
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
+    if (!this.startsAllowed()) return;
     const task = this.tasks.store.task(taskId);
     if (
       task.currentAttempt > 0 &&
@@ -434,7 +439,7 @@ export class WorkerJob implements GateOutcomeSink {
   /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
   private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
-    if (this.starting.has(taskId)) return;
+    if (!this.startsAllowed() || this.starting.has(taskId)) return;
     this.starting.add(taskId);
     try {
       try {
@@ -482,6 +487,7 @@ export class WorkerJob implements GateOutcomeSink {
     return observed.status === 'pending' ? null : observed.resumeText;
   }
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
+    if (!this.startsAllowed()) return;
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const failureCount = () =>
       this.tasks.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')
@@ -1803,33 +1809,42 @@ export class WorkerJob implements GateOutcomeSink {
     store.assertCurrent(ref);
     const task = store.task(ref.taskId);
     const record = store.record(ref);
-    if (!record) throw new Error('dev landing compiler handback requires a settled worker record');
+    if (!record) throw new Error('dev landing repair handback requires a settled worker record');
+    const architectureRepair = handoff.guard === 'dev-landing-architecture';
     const schemaRepair = handoff.guard === 'dev-landing-schema';
     const kernelImportRepair = handoff.guard === 'dev-landing-kernel-import';
     const location = `${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}`;
     const diagnostic = [
-      schemaRepair
-        ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-        : kernelImportRepair
-          ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-          : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
+      architectureRepair
+        ? `Architecture check rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+        : schemaRepair
+          ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+          : kernelImportRepair
+            ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+            : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
       `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
-      schemaRepair
-        ? `Regeneration error: ${handoff.diagnostic.message}`
-        : kernelImportRepair
-          ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
-          : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
-      schemaRepair
-        ? `Retained regeneration log: ${handoff.logPath}`
-        : kernelImportRepair
-          ? `Retained import log: ${handoff.logPath}`
-          : `Retained compiler log: ${handoff.logPath}`,
+      architectureRepair
+        ? `New architecture violations:\n${handoff.diagnostic.message}`
+        : schemaRepair
+          ? `Regeneration error: ${handoff.diagnostic.message}`
+          : kernelImportRepair
+            ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
+            : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
+      architectureRepair
+        ? `Retained architecture log: ${handoff.logPath}`
+        : schemaRepair
+          ? `Retained regeneration log: ${handoff.logPath}`
+          : kernelImportRepair
+            ? `Retained import log: ${handoff.logPath}`
+            : `Retained compiler log: ${handoff.logPath}`,
       kernelImportRepair && handoff.argv?.length ? `Argv: ${JSON.stringify(handoff.argv)}` : '',
-      schemaRepair
-        ? `Changed files: ${handoff.changedFiles.join(', ')}`
-        : kernelImportRepair
-          ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
-          : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
+      architectureRepair
+        ? `Changed paths: ${handoff.changedFiles.join(', ')}`
+        : schemaRepair
+          ? `Changed files: ${handoff.changedFiles.join(', ')}`
+          : kernelImportRepair
+            ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
+            : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
       `Repair ${schemaRepair ? 'the migration' : 'this source'} in place, then return through normal landing preparation in this same task session.`,
     ]
       .filter(Boolean)
@@ -1853,10 +1868,11 @@ export class WorkerJob implements GateOutcomeSink {
       recordFlow(store.db, {
         ...ref,
         stage: 'landing',
-        action: kernelImportRepair ? 'dev-kernel-import' : 'dev-transpile',
+        action: architectureRepair ? 'dev-architecture' : kernelImportRepair ? 'dev-kernel-import' : 'dev-transpile',
         at: new Date().toISOString(),
         detail: JSON.stringify({
           outcome: 'repair-handback',
+          guard: handoff.guard,
           base: handoff.base,
           candidate: handoff.candidate,
           changedFileCount: handoff.changedFiles.length,
@@ -1984,6 +2000,7 @@ export class WorkerJob implements GateOutcomeSink {
             }
           });
           if (plan) store.clearIntegrationPlan(outcome);
+          recordChainOffer(store.db, task, store.attempt(outcome), new Date().toISOString(), this.policy.records);
           released = this.releaseMetDependents();
           if (outcome.frozenAcceptanceChanges?.length) {
             const paths = canonicalConflictPaths(outcome.frozenAcceptanceChanges);

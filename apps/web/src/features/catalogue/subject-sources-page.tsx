@@ -13,6 +13,7 @@ import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sourc
 import { SourceObservationReader } from './source-observation/reader';
 import type { SourceObservationInspect, SourceObservationProvider } from './source-observation/contract';
 import { NamesReturnAnchor } from './work-names/navigation';
+import { summaryReadingReturn } from '../pages/subject-visit-navigation';
 
 type SourceObservationMount = {
   source: SourceObservationProvider;
@@ -87,9 +88,11 @@ export function SubjectSourcesPage({
                 ? m.sources_denied({}, o)
                 : result.kind === 'invalid'
                   ? m.sources_invalid({}, o)
-                  : result.kind === 'conflict'
-                    ? m.sources_conflict({}, o)
-                    : m.sources_unavailable({}, o)}
+                  : result.kind === 'unsupported'
+                    ? m.subject_synopsis_sources_unsupported({}, o)
+                    : result.kind === 'conflict'
+                      ? m.sources_conflict({}, o)
+                      : m.sources_unavailable({}, o)}
         </p>
         {onRetry && result.kind !== 'loading' && result.kind !== 'missing' && (
           <Button
@@ -139,6 +142,17 @@ export function SubjectSourcesPage({
       data-slot="subject-sources-detail"
       className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]"
     >
+      {page.selectedSynopsis && page.selectedSynopsis !== 'matched' && (
+        <p role="status">
+          {page.selectedSynopsis === 'unsupported'
+            ? m.subject_synopsis_sources_unsupported({}, o)
+            : page.selectedSynopsis === 'changed'
+              ? m.subject_synopsis_visit_changed({}, o)
+              : page.selectedSynopsis === 'missing'
+                ? m.subject_synopsis_unavailable({}, o)
+                : m.sources_unavailable({}, o)}
+        </p>
+      )}
       <SubjectFrame
         frame={{ id: page.id, type: '', title: page.title, summary: null }}
         locale={locale}
@@ -153,11 +167,12 @@ export function SubjectSourcesPage({
             <a className={linkClassName} href={page.href}>
               {m.sources_back({}, o)}
             </a>
-            {returnTo && (
-              <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
-                {m.subject_synopsis_return({}, o)}
-              </NamesReturnAnchor>
-            )}
+            {returnTo &&
+              (page.selectedSynopsis || !summaryReadingReturn(new URL(returnTo, 'https://rezics.invalid').hash)) && (
+                <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
+                  {m.subject_synopsis_return({}, o)}
+                </NamesReturnAnchor>
+              )}
             <a className={linkClassName} href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}>
               {m.subject_details({}, o)}
             </a>

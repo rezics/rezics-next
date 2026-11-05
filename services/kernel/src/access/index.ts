@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 export { createAccountPublicEligibility } from './account-authority.ts';
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
 export type * from './kind-audience.ts';
@@ -554,16 +555,16 @@ export function createAccess(config: AccessConfig): Access {
           const context = input.context;
           const locator = Object.freeze({ ...input.locator });
           if (!hasKindRequestOrigin(input))
-            throw new AccessWorkUnavailableError('Collection Kind audience actual native request origin');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience actual native request origin');
           if (!sameKindEpisode(input.actor, input.context, input.locator, true))
-            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original episode changed');
           if (permissions.kindAudience!.capture.bound(input) === undefined)
-            throw new AccessWorkUnavailableError('Accounts Kind audience origin capture producer');
+            throw new (AccessWorkUnavailableError())('Accounts Kind audience origin capture producer');
           if (
             input.actor.kind === 'account' &&
             !liveKindRequest({ kind: 'authenticated', actor: input.actor, context: input.context })
           )
-            throw new AccessWorkUnavailableError('Collection Kind audience current authenticated request');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience current authenticated request');
           const result = await permissions.kindAudience!.capture.run(input);
           if (
             input.actor !== actor ||
@@ -574,9 +575,9 @@ export function createAccess(config: AccessConfig): Access {
               !liveKindRequest({ kind: 'authenticated', actor: input.actor, context: input.context }))
           ) {
             input.context.work.fail(
-              new AccessWorkUnavailableError('Collection Kind audience request expired during capture'),
+              new (AccessWorkUnavailableError())('Collection Kind audience request expired during capture'),
             );
-            throw new AccessWorkUnavailableError('Collection Kind audience request expired during capture');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience request expired during capture');
           }
           return result;
         },
@@ -599,13 +600,13 @@ export function createAccess(config: AccessConfig): Access {
             !sameKindRequestEpisode(input.request, input.origin.locator) ||
             !hasFreshKindRequest(input.request, input.context.pool, input.context.deadline)
           )
-            throw new AccessWorkUnavailableError('Collection Kind audience original fresh request');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original fresh request');
           if (!sameKindRequestEpisode(input.request, input.origin.locator, true))
-            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original episode changed');
           if (permissions.kindAudience!.prepare.bound(input) === undefined)
-            throw new AccessWorkUnavailableError('Accounts Kind audience evidence preparation producer');
+            throw new (AccessWorkUnavailableError())('Accounts Kind audience evidence preparation producer');
           if (!liveKindRequest(input.request))
-            throw new AccessWorkUnavailableError('Collection Kind audience original current formula');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original current formula');
           const result = await permissions.kindAudience!.prepare.run(input);
           if (
             !sameRequest(input.request) ||
@@ -616,9 +617,9 @@ export function createAccess(config: AccessConfig): Access {
           ) {
             if (input.request?.kind === 'authenticated')
               input.request.context.work.fail(
-                new AccessWorkUnavailableError('Collection Kind audience request expired during preparation'),
+                new (AccessWorkUnavailableError())('Collection Kind audience request expired during preparation'),
               );
-            throw new AccessWorkUnavailableError('Collection Kind audience request expired during preparation');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience request expired during preparation');
           }
           return result;
         },
@@ -640,13 +641,13 @@ export function createAccess(config: AccessConfig): Access {
             !exactKindLocator(input.origin.locator, input.work.locator) ||
             !hasKindOperationRequest(input.request, input.work, input.deadline)
           )
-            throw new AccessWorkUnavailableError('Collection Kind audience current request for input resolution');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience current request for input resolution');
           if (!sameKindRequestEpisode(input.request, input.work.locator, true))
-            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original episode changed');
           if (permissions.kindAudience!.resolveInput.bound(input) === undefined)
-            throw new AccessWorkUnavailableError('Accounts Kind committed input resolver');
+            throw new (AccessWorkUnavailableError())('Accounts Kind committed input resolver');
           if (!liveKindRequest(input.request))
-            throw new AccessWorkUnavailableError('Collection Kind audience original formula for input resolution');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original formula for input resolution');
           const result = await permissions.kindAudience!.resolveInput.run(input);
           if (
             !sameRequest(input.request) ||
@@ -657,9 +658,9 @@ export function createAccess(config: AccessConfig): Access {
           ) {
             if (input.request?.kind === 'authenticated')
               input.request.context.work.fail(
-                new AccessWorkUnavailableError('Collection Kind request expired during input resolution'),
+                new (AccessWorkUnavailableError())('Collection Kind request expired during input resolution'),
               );
-            throw new AccessWorkUnavailableError('Collection Kind request expired during input resolution');
+            throw new (AccessWorkUnavailableError())('Collection Kind request expired during input resolution');
           }
           return result;
         },
@@ -681,13 +682,17 @@ export function createAccess(config: AccessConfig): Access {
             !exactKindLocator(input.evidence.locator, input.work.locator) ||
             !hasKindOperationRequest(input.request, input.work, input.deadline)
           )
-            throw new AccessWorkUnavailableError('Collection Kind audience current request for Source verification');
+            throw new (AccessWorkUnavailableError())(
+              'Collection Kind audience current request for Source verification',
+            );
           if (!sameKindRequestEpisode(input.request, input.work.locator, true))
-            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+            throw new (AccessWorkUnavailableError())('Collection Kind audience original episode changed');
           if (permissions.kindAudience!.verifySource.bound(input) === undefined)
-            throw new AccessWorkUnavailableError('Accounts Kind audience Source currentness producer');
+            throw new (AccessWorkUnavailableError())('Accounts Kind audience Source currentness producer');
           if (!liveKindRequest(input.request))
-            throw new AccessWorkUnavailableError('Collection Kind audience original formula for Source verification');
+            throw new (AccessWorkUnavailableError())(
+              'Collection Kind audience original formula for Source verification',
+            );
           const result = await permissions.kindAudience!.verifySource.run(input);
           if (
             !sameRequest(input.request) ||
@@ -698,9 +703,9 @@ export function createAccess(config: AccessConfig): Access {
           ) {
             if (input.request?.kind === 'authenticated')
               input.request.context.work.fail(
-                new AccessWorkUnavailableError('Collection Kind request expired during Source verification'),
+                new (AccessWorkUnavailableError())('Collection Kind request expired during Source verification'),
               );
-            throw new AccessWorkUnavailableError('Collection Kind request expired during Source verification');
+            throw new (AccessWorkUnavailableError())('Collection Kind request expired during Source verification');
           }
           return result;
         },
@@ -1020,7 +1025,9 @@ export function authorizePlatformGate(
 }
 
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
-export const access: Access = createAccess({ actions: new Map() });
+export function access(): Access {
+  return memoizedValue(access, () => createAccess({ actions: new Map() }));
+}
 
 export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import {
   MediaImportRequestSchema,
   MediaImportAcceptedSchema,
@@ -281,23 +282,35 @@ export const ReportResponseSchema = t.Object(
 
 const subjects = t.Array(ContentIdSchema, { maxItems: 128, uniqueItems: true });
 const media = t.Array(ContentIdSchema, { maxItems: 32, uniqueItems: true });
-const voteCitation = t.Object(
-  {
-    questionId: ContentIdSchema,
-    units: t.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }),
-    revision: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-  },
-  closed,
-);
+function voteCitation() {
+  return memoizedValue(voteCitation, () =>
+    t.Object(
+      {
+        questionId: ContentIdSchema,
+        units: t.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }),
+        revision: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+      },
+      closed,
+    ),
+  );
+}
 const licence = t.String({ minLength: 1, maxLength: 128 });
-const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
+function document() {
+  return memoizedValue(document, () => t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema));
+}
 const visibility = t.Union(['published', 'draft', 'protected', 'taken_down'].map((value) => t.Literal(value)));
-const reactionKind = t.Unsafe<ViewerReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
+function reactionKind() {
+  return memoizedValue(reactionKind, () =>
+    t.Unsafe<ViewerReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind)))),
+  );
+}
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 const subjectReactionKind = t.Unsafe<(typeof subjectReactionKinds)[number]>(
   t.Union(subjectReactionKinds.map((kind) => t.Literal(kind))),
 );
-const viewerReaction = { viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])) };
+function viewerReaction() {
+  return memoizedValue(viewerReaction, () => ({ viewerReaction: t.Optional(t.Union([reactionKind(), t.Null()])) }));
+}
 const reactionCount = t.Integer({ minimum: 1 });
 const reactions = {
   reactions: t.Optional(
@@ -328,38 +341,44 @@ const metadata = {
   createdAt: t.String({ format: 'date-time' }),
 };
 const references = { licence, subjectIds: subjects, boardId: ContentIdSchema };
-const item = {
-  ...metadata,
-  ...references,
-  threadId: ContentIdSchema,
-  authorId: ContentIdSchema,
-  parentId: nullableId,
-  revisionId: ContentIdSchema,
-  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
-  mediaIds: media,
-  voteCitation: t.Union([voteCitation, t.Null()]),
-  revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-  ...viewerReaction,
-  ...reactions,
-};
+function item() {
+  return memoizedValue(item, () => ({
+    ...metadata,
+    ...references,
+    threadId: ContentIdSchema,
+    authorId: ContentIdSchema,
+    parentId: nullableId,
+    revisionId: ContentIdSchema,
+    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    mediaIds: media,
+    voteCitation: t.Union([voteCitation(), t.Null()]),
+    revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    ...viewerReaction(),
+    ...reactions,
+  }));
+}
 
 /** The erased variant cannot carry authored bytes, even to an authorized reader. */
-export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>(
-  t.Union([
-    t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
-    t.Object(
-      {
-        ...item,
-        availability: t.Literal('erased'),
-        removed: t.Literal(true),
-        body: t.Null(),
-        sha256: t.Null(),
-        restorableUntil: t.Optional(t.String({ format: 'date-time' })),
-      },
-      closed,
+export function ItemViewSchema() {
+  return memoizedValue(ItemViewSchema, () =>
+    t.Unsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>(
+      t.Union([
+        t.Object({ ...item(), availability: t.Literal('available'), body: document() }, closed),
+        t.Object(
+          {
+            ...item(),
+            availability: t.Literal('erased'),
+            removed: t.Literal(true),
+            body: t.Null(),
+            sha256: t.Null(),
+            restorableUntil: t.Optional(t.String({ format: 'date-time' })),
+          },
+          closed,
+        ),
+      ]),
     ),
-  ]),
-);
+  );
+}
 export const ErasedPlaceholderSchema = t.Object(
   {
     id: ContentIdSchema,
@@ -374,42 +393,48 @@ export const ErasedPlaceholderSchema = t.Object(
   },
   closed,
 );
-export const PostEntrySchema = t.Unsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>(
-  t.Union([
-    ItemViewSchema,
-    ErasedPlaceholderSchema,
-    t.Object(
-      {
-        ...item,
-        availability: t.Literal('withheld'),
-        removed: t.Literal(true),
-        body: t.Null(),
-        sha256: t.Null(),
-        decisionId: t.Optional(ContentIdSchema),
-      },
-      closed,
+export function PostEntrySchema() {
+  return memoizedValue(PostEntrySchema, () =>
+    t.Unsafe<PostEntry & ViewerReactionSlot & ReactionCountsSlot>(
+      t.Union([
+        ItemViewSchema(),
+        ErasedPlaceholderSchema,
+        t.Object(
+          {
+            ...item(),
+            availability: t.Literal('withheld'),
+            removed: t.Literal(true),
+            body: t.Null(),
+            sha256: t.Null(),
+            decisionId: t.Optional(ContentIdSchema),
+          },
+          closed,
+        ),
+      ]),
     ),
-  ]),
-);
-export const ThreadViewSchema = t.Unsafe<
-  ThreadView & ViewerReactionSlot & ReactionCountsSlot & Readonly<{ reviewContext?: FeedReviewContext }>
->(
-  t.Object(
-    {
-      ...metadata,
-      ...references,
-      authorId: ContentIdSchema,
-      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-      title: t.Union([t.String(), t.Null()]),
-      availability,
-      firstPost: PostEntrySchema,
-      reviewContext: t.Optional(FeedReviewContextSchema),
-      ...viewerReaction,
-      ...reactions,
-    },
-    closed,
-  ),
-);
+  );
+}
+export function ThreadViewSchema() {
+  return memoizedValue(ThreadViewSchema, () =>
+    t.Unsafe<ThreadView & ViewerReactionSlot & ReactionCountsSlot & Readonly<{ reviewContext?: FeedReviewContext }>>(
+      t.Object(
+        {
+          ...metadata,
+          ...references,
+          authorId: ContentIdSchema,
+          kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+          title: t.Union([t.String(), t.Null()]),
+          availability,
+          firstPost: PostEntrySchema(),
+          reviewContext: t.Optional(FeedReviewContextSchema),
+          ...viewerReaction(),
+          ...reactions,
+        },
+        closed,
+      ),
+    ),
+  );
+}
 export const BoardRecordSchema = t.Object(
   {
     ...metadata,
@@ -420,46 +445,65 @@ export const BoardRecordSchema = t.Object(
   },
   closed,
 );
-export const BoardViewSchema = t.Unsafe<BoardView>(
-  t.Object({ ...BoardRecordSchema.properties, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed),
-);
-export const ThreadInputSchema = t.Object(
-  {
-    kind: t.Optional(t.Union([t.Literal('discussion'), t.Literal('review')])),
-    title: t.String({ minLength: 1, maxLength: 1024 }),
-    body: document,
-    ...references,
-    visibility: t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected')]),
-    mediaIds: t.Optional(media),
-    voteCitation: t.Optional(voteCitation),
-  },
-  closed,
-);
-export const PostInputSchema = t.Object(
-  {
-    visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected')])),
-    body: document,
-    licence,
-    parentId: t.Optional(nullableId),
-    subjectIds: t.Optional(subjects),
-    boardId: t.Optional(ContentIdSchema),
-    mediaIds: t.Optional(media),
-  },
-  closed,
-);
-export const RevisionInputSchema = t.Object(
-  {
-    title: t.Optional(t.String({ minLength: 1, maxLength: 1024 })),
-    visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft')])),
-    body: document,
-    licence: t.Optional(licence),
-    subjectIds: t.Optional(subjects),
-    boardId: t.Optional(ContentIdSchema),
-    mediaIds: t.Optional(media),
-    voteCitation: t.Optional(voteCitation),
-  },
-  closed,
-);
+export function BoardViewSchema() {
+  return memoizedValue(BoardViewSchema, () =>
+    t.Unsafe<BoardView>(
+      t.Object(
+        { ...BoardRecordSchema.properties, community: t.Union([CommunityPresentationSchema(), t.Null()]) },
+        closed,
+      ),
+    ),
+  );
+}
+export function ThreadInputSchema() {
+  return memoizedValue(ThreadInputSchema, () =>
+    t.Object(
+      {
+        kind: t.Optional(t.Union([t.Literal('discussion'), t.Literal('review')])),
+        title: t.String({ minLength: 1, maxLength: 1024 }),
+        body: document(),
+        ...references,
+        visibility: t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected')]),
+        mediaIds: t.Optional(media),
+        voteCitation: t.Optional(voteCitation()),
+      },
+      closed,
+    ),
+  );
+}
+export function PostInputSchema() {
+  return memoizedValue(PostInputSchema, () =>
+    t.Object(
+      {
+        visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected')])),
+        body: document(),
+        licence,
+        parentId: t.Optional(nullableId),
+        subjectIds: t.Optional(subjects),
+        boardId: t.Optional(ContentIdSchema),
+        mediaIds: t.Optional(media),
+      },
+      closed,
+    ),
+  );
+}
+export function RevisionInputSchema() {
+  return memoizedValue(RevisionInputSchema, () =>
+    t.Object(
+      {
+        title: t.Optional(t.String({ minLength: 1, maxLength: 1024 })),
+        visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft')])),
+        body: document(),
+        licence: t.Optional(licence),
+        subjectIds: t.Optional(subjects),
+        boardId: t.Optional(ContentIdSchema),
+        mediaIds: t.Optional(media),
+        voteCitation: t.Optional(voteCitation()),
+      },
+      closed,
+    ),
+  );
+}
 export const ContentPageQuerySchema = t.Object(
   {
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
@@ -467,8 +511,12 @@ export const ContentPageQuerySchema = t.Object(
   },
   closed,
 );
-export const ReactionInputSchema = t.Object({ kind: reactionKind }, closed);
-export const ReactionResponseSchema = t.Object({ kind: reactionKind }, closed);
+export function ReactionInputSchema() {
+  return memoizedValue(ReactionInputSchema, () => t.Object({ kind: reactionKind() }, closed));
+}
+export function ReactionResponseSchema() {
+  return memoizedValue(ReactionResponseSchema, () => t.Object({ kind: reactionKind() }, closed));
+}
 export const SubjectReactionInputSchema = t.Object({ kind: subjectReactionKind }, closed);
 export const SubjectReactionResponseSchema = t.Object({ kind: subjectReactionKind }, closed);
 export const SubjectOwnReactionResponseSchema = t.Object({ kind: t.Union([subjectReactionKind, t.Null()]) }, closed);
@@ -478,16 +526,24 @@ export const SubjectReactionRedirectResponseSchema = t.Object(
   },
   closed,
 );
-export const ThreadResponseSchema = t.Object(
-  {
-    thread: ThreadViewSchema,
-    reactionsAsOf: t.Optional(reactionFreshness),
-    authorErasure: t.Optional(t.Object({ authorId: ContentIdSchema, mayErase: t.Boolean() }, closed)),
-  },
-  closed,
-);
-export const PostResponseSchema = t.Object({ post: PostEntrySchema }, closed);
-export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
+export function ThreadResponseSchema() {
+  return memoizedValue(ThreadResponseSchema, () =>
+    t.Object(
+      {
+        thread: ThreadViewSchema(),
+        reactionsAsOf: t.Optional(reactionFreshness),
+        authorErasure: t.Optional(t.Object({ authorId: ContentIdSchema, mayErase: t.Boolean() }, closed)),
+      },
+      closed,
+    ),
+  );
+}
+export function PostResponseSchema() {
+  return memoizedValue(PostResponseSchema, () => t.Object({ post: PostEntrySchema() }, closed));
+}
+export function BoardResponseSchema() {
+  return memoizedValue(BoardResponseSchema, () => t.Object({ board: BoardViewSchema() }, closed));
+}
 const ReviewDestinationSourceSchema = t.Object(
   {
     partition: t.Integer({ minimum: 0, maximum: 4095 }),
@@ -570,18 +626,23 @@ export const GlobalBoardDirectoryQuerySchema = t.Object(
   },
   closed,
 );
-export const GlobalBoardDirectoryResponseSchema = t.Object(
-  { boards: t.Array(BoardViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
-  closed,
-);
-export const PostPageResponseSchema = t.Object(
-  {
-    posts: t.Array(PostEntrySchema, { maxItems: 100 }),
-    next: t.Union([t.String(), t.Null()]),
-    reactionsAsOf: t.Optional(reactionFreshness),
-  },
-  closed,
-);
+export function GlobalBoardDirectoryResponseSchema() {
+  return memoizedValue(GlobalBoardDirectoryResponseSchema, () =>
+    t.Object({ boards: t.Array(BoardViewSchema(), { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) }, closed),
+  );
+}
+export function PostPageResponseSchema() {
+  return memoizedValue(PostPageResponseSchema, () =>
+    t.Object(
+      {
+        posts: t.Array(PostEntrySchema(), { maxItems: 100 }),
+        next: t.Union([t.String(), t.Null()]),
+        reactionsAsOf: t.Optional(reactionFreshness),
+      },
+      closed,
+    ),
+  );
+}
 export const AvatarSummarySchema = t.Union([
   t.Object(
     {
@@ -623,48 +684,63 @@ const historyMention = t.Union([
   t.Object({ id: ContentIdSchema, state: t.Literal('available'), handle: t.String({ maxLength: 64 }) }, closed),
   t.Object({ id: ContentIdSchema, state: t.Literal('concealed') }, closed),
 ]);
-const historyCover = t.Union([
-  t.Object(
-    {
-      media: ContentIdSchema,
-      width: t.Integer({ minimum: 1 }),
-      height: t.Integer({ minimum: 1 }),
-      placeholder: t.Object(
-        { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+function historyCover() {
+  return memoizedValue(historyCover, () =>
+    t.Union([
+      t.Object(
+        {
+          media: ContentIdSchema,
+          width: t.Integer({ minimum: 1 }),
+          height: t.Integer({ minimum: 1 }),
+          placeholder: t.Object(
+            { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+            closed,
+          ),
+          variants: t.Array(
+            t.Object(
+              { format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) },
+              closed,
+            ),
+            { maxItems: 12 },
+          ),
+          focalPoint: t.Union([
+            t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+            t.Null(),
+          ]),
+          credit: t.Union([CoverCreditSchema, t.Null()]),
+        },
         closed,
       ),
-      variants: t.Array(
-        t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
-        { maxItems: 12 },
-      ),
-      focalPoint: t.Union([
-        t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
-        t.Null(),
-      ]),
-      credit: t.Union([CoverCreditSchema, t.Null()]),
-    },
-    closed,
-  ),
-  t.Null(),
-]);
-const historySubjectSummary = t.Object(
-  {
-    id: ContentIdSchema,
-    type: t.String({ minLength: 1, maxLength: 128 }),
-    types: t.Array(t.String({ minLength: 1, maxLength: 128 }), { maxItems: 128 }),
-    label: t.Union([
-      t.Object({ value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed),
       t.Null(),
     ]),
-    creativeWork: t.Boolean(),
-    cover: historyCover,
-  },
-  closed,
-);
-const historySubject = t.Union([
-  t.Object({ id: ContentIdSchema, state: t.Literal('available'), summary: historySubjectSummary }, closed),
-  t.Object({ id: ContentIdSchema, state: t.Literal('concealed'), summary: t.Null() }, closed),
-]);
+  );
+}
+function historySubjectSummary() {
+  return memoizedValue(historySubjectSummary, () =>
+    t.Object(
+      {
+        id: ContentIdSchema,
+        type: t.String({ minLength: 1, maxLength: 128 }),
+        types: t.Array(t.String({ minLength: 1, maxLength: 128 }), { maxItems: 128 }),
+        label: t.Union([
+          t.Object({ value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed),
+          t.Null(),
+        ]),
+        creativeWork: t.Boolean(),
+        cover: historyCover(),
+      },
+      closed,
+    ),
+  );
+}
+function historySubject() {
+  return memoizedValue(historySubject, () =>
+    t.Union([
+      t.Object({ id: ContentIdSchema, state: t.Literal('available'), summary: historySubjectSummary() }, closed),
+      t.Object({ id: ContentIdSchema, state: t.Literal('concealed'), summary: t.Null() }, closed),
+    ]),
+  );
+}
 const historyQuestion = t.Object(
   {
     id: ContentIdSchema,
@@ -685,62 +761,79 @@ const historyQuestion = t.Object(
   },
   closed,
 );
-const historyReviewItem = t.Union([
-  t.Object(
-    { revisionId: ContentIdSchema, state: t.Literal('available'), citation: voteCitation, question: historyQuestion },
-    closed,
-  ),
-  t.Object(
-    { revisionId: ContentIdSchema, state: t.Literal('unavailable'), citation: t.Null(), question: t.Null() },
-    closed,
-  ),
-]);
-const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
-const imageDimension = t.Integer({ minimum: 1 });
-const historyImage = t.Object(
-  {
-    id: ContentIdSchema,
-    containerId: ContentIdSchema,
-    digest: mediaDigest,
-    width: imageDimension,
-    height: imageDimension,
-    variants: t.Array(
+function historyReviewItem() {
+  return memoizedValue(historyReviewItem, () =>
+    t.Union([
       t.Object(
         {
-          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
-          width: t.Integer({ minimum: 1, maximum: 2560 }),
-          height: imageDimension,
+          revisionId: ContentIdSchema,
+          state: t.Literal('available'),
+          citation: voteCitation(),
+          question: historyQuestion,
         },
         closed,
       ),
-      { minItems: 1, maxItems: 12 },
-    ),
-    placeholder: t.Union([
       t.Object(
-        { thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+        { revisionId: ContentIdSchema, state: t.Literal('unavailable'), citation: t.Null(), question: t.Null() },
         closed,
       ),
-      t.Null(),
     ]),
-    focalPoint: t.Union([
-      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
-      t.Null(),
+  );
+}
+const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
+const imageDimension = t.Integer({ minimum: 1 });
+function historyImage() {
+  return memoizedValue(historyImage, () =>
+    t.Object(
+      {
+        id: ContentIdSchema,
+        containerId: ContentIdSchema,
+        digest: mediaDigest,
+        width: imageDimension,
+        height: imageDimension,
+        variants: t.Array(
+          t.Object(
+            {
+              format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+              width: t.Integer({ minimum: 1, maximum: 2560 }),
+              height: imageDimension,
+            },
+            closed,
+          ),
+          { minItems: 1, maxItems: 12 },
+        ),
+        placeholder: t.Union([
+          t.Object(
+            { thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+            closed,
+          ),
+          t.Null(),
+        ]),
+        focalPoint: t.Union([
+          t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+          t.Null(),
+        ]),
+        credit: t.Union([CoverCreditSchema, t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+function historyMediaItem() {
+  return memoizedValue(historyMediaItem, () =>
+    t.Union([
+      t.Object(
+        {
+          id: ContentIdSchema,
+          state: t.Literal('available'),
+          image: historyImage(),
+        },
+        closed,
+      ),
+      t.Object({ id: ContentIdSchema, state: t.Literal('concealed') }, closed),
     ]),
-    credit: t.Union([CoverCreditSchema, t.Null()]),
-  },
-  closed,
-);
-const historyMediaItem = t.Union([
-  t.Object(
-    {
-      id: ContentIdSchema,
-      state: t.Literal('available'),
-      image: historyImage,
-    },
-    closed,
-  ),
-  t.Object({ id: ContentIdSchema, state: t.Literal('concealed') }, closed),
-]);
+  );
+}
 const historyOperation = t.Object(
   {
     action: t.String({ minLength: 1, maxLength: 128 }),
@@ -792,124 +885,150 @@ const historyPageCurrentness = t.Object(
   },
   closed,
 );
-export const HistoryPageContextSchema = t.Object(
-  {
-    viewer: t.Union([
-      t.Object({ kind: t.Literal('account'), id: ContentIdSchema }, closed),
-      t.Object({ kind: t.Literal('anonymous') }, closed),
-    ]),
-    conversation: t.Object(
+export function HistoryPageContextSchema() {
+  return memoizedValue(HistoryPageContextSchema, () =>
+    t.Object(
       {
-        id: ContentIdSchema,
-        kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-        title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
-        authorId: ContentIdSchema,
-        boardId: ContentIdSchema,
-        subjectIds: t.Array(ContentIdSchema, { maxItems: 128 }),
-        createdAt: t.String({ format: 'date-time' }),
-      },
-      closed,
-    ),
-    board: BoardViewSchema,
-    place: t.Union([
-      t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
-      t.Object({ kind: t.Literal('realm'), id: ContentIdSchema }, closed),
-    ]),
-    head: t.Object(
-      {
-        postId: ContentIdSchema,
-        revisionId: t.Union([ContentIdSchema, t.Null()]),
-        state: t.Union([t.Literal('current'), t.Literal('erased')]),
-        authorId: t.Union([ContentIdSchema, t.Null()]),
-        createdAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-        revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-      },
-      closed,
-    ),
-    authors: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        items: t.Array(historyAuthor, { maxItems: 102 }),
-      },
-      closed,
-    ),
-    mentions: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        items: t.Array(historyMention, { maxItems: 100 }),
-      },
-      closed,
-    ),
-    subjects: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        limit: t.Literal(4),
-        items: t.Array(historySubject, { maxItems: 4 }),
-      },
-      closed,
-    ),
-    reviewScores: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        items: t.Array(historyReviewItem, { maxItems: 100 }),
-      },
-      closed,
-    ),
-    media: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        items: t.Array(historyMediaItem, { maxItems: 3200 }),
-      },
-      closed,
-    ),
-    actions: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        references: t.Array(historyActionReference, { maxItems: 2 }),
-      },
-      closed,
-    ),
-    navigation: t.Object(
-      {
-        exact: t.Array(t.Object({ postId: ContentIdSchema, revisionId: ContentIdSchema }, closed), { maxItems: 100 }),
-        compareToHead: t.Array(
-          t.Object({ postId: ContentIdSchema, fromRevisionId: ContentIdSchema, toRevisionId: ContentIdSchema }, closed),
-          { maxItems: 100 },
+        viewer: t.Union([
+          t.Object({ kind: t.Literal('account'), id: ContentIdSchema }, closed),
+          t.Object({ kind: t.Literal('anonymous') }, closed),
+        ]),
+        conversation: t.Object(
+          {
+            id: ContentIdSchema,
+            kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+            title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+            authorId: ContentIdSchema,
+            boardId: ContentIdSchema,
+            subjectIds: t.Array(ContentIdSchema, { maxItems: 128 }),
+            createdAt: t.String({ format: 'date-time' }),
+          },
+          closed,
         ),
+        board: BoardViewSchema(),
+        place: t.Union([
+          t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+          t.Object({ kind: t.Literal('realm'), id: ContentIdSchema }, closed),
+        ]),
+        head: t.Object(
+          {
+            postId: ContentIdSchema,
+            revisionId: t.Union([ContentIdSchema, t.Null()]),
+            state: t.Union([t.Literal('current'), t.Literal('erased')]),
+            authorId: t.Union([ContentIdSchema, t.Null()]),
+            createdAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+            revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+          },
+          closed,
+        ),
+        authors: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            items: t.Array(historyAuthor, { maxItems: 102 }),
+          },
+          closed,
+        ),
+        mentions: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            items: t.Array(historyMention, { maxItems: 100 }),
+          },
+          closed,
+        ),
+        subjects: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            limit: t.Literal(4),
+            items: t.Array(historySubject(), { maxItems: 4 }),
+          },
+          closed,
+        ),
+        reviewScores: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            items: t.Array(historyReviewItem(), { maxItems: 100 }),
+          },
+          closed,
+        ),
+        media: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            items: t.Array(historyMediaItem(), { maxItems: 3200 }),
+          },
+          closed,
+        ),
+        actions: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            references: t.Array(historyActionReference, { maxItems: 2 }),
+          },
+          closed,
+        ),
+        navigation: t.Object(
+          {
+            exact: t.Array(t.Object({ postId: ContentIdSchema, revisionId: ContentIdSchema }, closed), {
+              maxItems: 100,
+            }),
+            compareToHead: t.Array(
+              t.Object(
+                { postId: ContentIdSchema, fromRevisionId: ContentIdSchema, toRevisionId: ContentIdSchema },
+                closed,
+              ),
+              { maxItems: 100 },
+            ),
+          },
+          closed,
+        ),
+        currentness: historyPageCurrentness,
+        retry: t.Union([
+          t.Object(
+            {
+              state: t.Literal('same_cursor'),
+              cursor: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+            },
+            closed,
+          ),
+          t.Object({ state: t.Literal('none') }, closed),
+        ]),
       },
       closed,
     ),
-    currentness: historyPageCurrentness,
-    retry: t.Union([
-      t.Object(
-        { state: t.Literal('same_cursor'), cursor: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]) },
-        closed,
-      ),
-      t.Object({ state: t.Literal('none') }, closed),
-    ]),
-  },
-  closed,
-);
-export const RevisionPageResponseSchema = t.Object(
-  {
-    revisions: t.Array(ItemViewSchema, { maxItems: 100 }),
-    next: t.Union([t.String(), t.Null()]),
-    page: HistoryPageContextSchema,
-  },
-  closed,
-);
+  );
+}
+export function RevisionPageResponseSchema() {
+  return memoizedValue(RevisionPageResponseSchema, () =>
+    t.Object(
+      {
+        revisions: t.Array(ItemViewSchema(), { maxItems: 100 }),
+        next: t.Union([t.String(), t.Null()]),
+        page: HistoryPageContextSchema(),
+      },
+      closed,
+    ),
+  );
+}
 
 // Portable semantic validators include the shared bulk Rights checks. The exact
 // portable schema also supplies OpenAPI; Elysia must not strip unknown members.
-export const MediaImportInputSchema = strictContentSchema(MediaImportRequestSchema, checkMediaImportRequest);
-export const MediaImportReceiptSchema = strictContentSchema(MediaImportAcceptedSchema);
-export const MediaImportPollSchema = strictContentSchema(MediaImportStatusSchema, checkMediaImportStatus);
+export function MediaImportInputSchema() {
+  return memoizedValue(MediaImportInputSchema, () =>
+    strictContentSchema(MediaImportRequestSchema, checkMediaImportRequest),
+  );
+}
+export function MediaImportReceiptSchema() {
+  return memoizedValue(MediaImportReceiptSchema, () => strictContentSchema(MediaImportAcceptedSchema));
+}
+export function MediaImportPollSchema() {
+  return memoizedValue(MediaImportPollSchema, () =>
+    strictContentSchema(MediaImportStatusSchema, checkMediaImportStatus),
+  );
+}
 export const BoardThreadsQuerySchema = t.Object(
   {
     ...ContentPageQuerySchema.properties,
@@ -918,15 +1037,19 @@ export const BoardThreadsQuerySchema = t.Object(
   },
   closed,
 );
-export const BoardThreadsResponseSchema = t.Object(
-  {
-    pinnedThreads: t.Array(ThreadViewSchema, { maxItems: 5 }),
-    threads: t.Array(ThreadViewSchema, { maxItems: 100 }),
-    next: t.Union([t.String(), t.Null()]),
-    rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-  },
-  closed,
-);
+export function BoardThreadsResponseSchema() {
+  return memoizedValue(BoardThreadsResponseSchema, () =>
+    t.Object(
+      {
+        pinnedThreads: t.Array(ThreadViewSchema(), { maxItems: 5 }),
+        threads: t.Array(ThreadViewSchema(), { maxItems: 100 }),
+        next: t.Union([t.String(), t.Null()]),
+        rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
 const boardAdvice = t.Union([
   t.Literal('allowed'),
   t.Literal('denied'),
@@ -985,36 +1108,50 @@ const boardOpeningComments = t.Union([
   ),
   t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
-const boardOpeningMedia = t.Union([
-  t.Object({ state: t.Literal('none'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
-  t.Object(
-    { state: t.Literal('available'), images: t.Array(RealmPresentationImageSchema, { minItems: 1, maxItems: 32 }) },
-    closed,
-  ),
-  t.Object({ state: t.Literal('unavailable'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
-]);
-export const BoardOpeningCardSchema = t.Object(
-  {
-    thread: ThreadViewSchema,
-    target: t.Object({ kind: t.Literal('thread'), id: ContentIdSchema, boardId: ContentIdSchema }, closed),
-    authors: t.Object({ thread: boardAuthor, openingPost: boardAuthor }, closed),
-    media: boardOpeningMedia,
-    interaction: t.Object(
+function boardOpeningMedia() {
+  return memoizedValue(boardOpeningMedia, () =>
+    t.Union([
+      t.Object({ state: t.Literal('none'), images: t.Array(RealmPresentationImageSchema(), { maxItems: 0 }) }, closed),
+      t.Object(
+        {
+          state: t.Literal('available'),
+          images: t.Array(RealmPresentationImageSchema(), { minItems: 1, maxItems: 32 }),
+        },
+        closed,
+      ),
+      t.Object(
+        { state: t.Literal('unavailable'), images: t.Array(RealmPresentationImageSchema(), { maxItems: 0 }) },
+        closed,
+      ),
+    ]),
+  );
+}
+export function BoardOpeningCardSchema() {
+  return memoizedValue(BoardOpeningCardSchema, () =>
+    t.Object(
       {
-        target: t.Object({ kind: t.Literal('thread'), id: ContentIdSchema }, closed),
-        counts: boardOpeningCounts,
-        viewer: t.Union([
-          t.Object({ state: t.Literal('current'), reaction: t.Union([reactionKind, t.Null()]) }, closed),
-          t.Object({ state: t.Literal('not-applicable') }, closed),
-        ]),
+        thread: ThreadViewSchema(),
+        target: t.Object({ kind: t.Literal('thread'), id: ContentIdSchema, boardId: ContentIdSchema }, closed),
+        authors: t.Object({ thread: boardAuthor, openingPost: boardAuthor }, closed),
+        media: boardOpeningMedia(),
+        interaction: t.Object(
+          {
+            target: t.Object({ kind: t.Literal('thread'), id: ContentIdSchema }, closed),
+            counts: boardOpeningCounts,
+            viewer: t.Union([
+              t.Object({ state: t.Literal('current'), reaction: t.Union([reactionKind(), t.Null()]) }, closed),
+              t.Object({ state: t.Literal('not-applicable') }, closed),
+            ]),
+          },
+          closed,
+        ),
+        comments: boardOpeningComments,
+        actions: t.Object({ reply: boardAdvice, react: boardAdvice, share: t.Literal('available') }, closed),
       },
       closed,
     ),
-    comments: boardOpeningComments,
-    actions: t.Object({ reply: boardAdvice, react: boardAdvice, share: t.Literal('available') }, closed),
-  },
-  closed,
-);
+  );
+}
 export const BoardPageQuerySchema = t.Object(
   {
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
@@ -1022,20 +1159,24 @@ export const BoardPageQuerySchema = t.Object(
   },
   closed,
 );
-export const BoardPageResponseSchema = t.Object(
-  {
-    board: BoardViewSchema,
-    pinRevision: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
-    pinnedThreads: t.Array(BoardOpeningCardSchema, { maxItems: 5 }),
-    threads: t.Array(BoardOpeningCardSchema, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-    rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-    reactionsAsOf: reactionFreshness,
-    viewer: t.Object({ participation: boardAdvice }, closed),
-    actions: t.Object({ createThread: boardAdvice }, closed),
-  },
-  closed,
-);
+export function BoardPageResponseSchema() {
+  return memoizedValue(BoardPageResponseSchema, () =>
+    t.Object(
+      {
+        board: BoardViewSchema(),
+        pinRevision: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
+        pinnedThreads: t.Array(BoardOpeningCardSchema(), { maxItems: 5 }),
+        threads: t.Array(BoardOpeningCardSchema(), { maxItems: 20 }),
+        next: t.Union([t.String(), t.Null()]),
+        rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+        reactionsAsOf: reactionFreshness,
+        viewer: t.Object({ participation: boardAdvice }, closed),
+        actions: t.Object({ createThread: boardAdvice }, closed),
+      },
+      closed,
+    ),
+  );
+}
 /** Private, exact selected inspection; it is not a Board page or command. */
 export const BoardPinAdviceInputSchema = t.Object(
   {
@@ -1117,11 +1258,15 @@ export const SubjectThreadsQuerySchema = t.Object(
   },
   closed,
 );
-const subjectThreadCardAuthor = t.Union([
-  t.Object({ state: t.Literal('current'), identity: FeedAuthorSchema }, closed),
-  t.Object({ state: t.Literal('unavailable') }, closed),
-  t.Object({ state: t.Literal('withheld') }, closed),
-]);
+function subjectThreadCardAuthor() {
+  return memoizedValue(subjectThreadCardAuthor, () =>
+    t.Union([
+      t.Object({ state: t.Literal('current'), identity: FeedAuthorSchema }, closed),
+      t.Object({ state: t.Literal('unavailable') }, closed),
+      t.Object({ state: t.Literal('withheld') }, closed),
+    ]),
+  );
+}
 const subjectThreadCardOperation = t.Object(
   {
     action: t.String(),
@@ -1147,194 +1292,302 @@ const subjectThreadCardActionReference = t.Object(
   },
   closed,
 );
-const subjectThreadCardImage = t.Object(
-  {
-    id: ContentIdSchema,
-    containerId: ContentIdSchema,
-    digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-    width: t.Integer({ minimum: 1 }),
-    height: t.Integer({ minimum: 1 }),
-    variants: t.Array(
-      t.Object(
-        {
-          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
-          width: t.Integer({ minimum: 1, maximum: 2560 }),
-          height: t.Integer({ minimum: 1 }),
-        },
-        closed,
-      ),
-      { minItems: 1, maxItems: 12 },
-    ),
-    placeholder: t.Union([
-      t.Object(
-        { thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
-        closed,
-      ),
-      t.Null(),
-    ]),
-    focalPoint: t.Union([
-      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
-      t.Null(),
-    ]),
-    credit: t.Union([CoverCreditSchema, t.Null()]),
-  },
-  closed,
-);
-export const SubjectThreadCardSchema = t.Unsafe<SubjectThreadCard>(
-  t.Object(
-    {
-      state: t.Union([t.Literal('current'), t.Literal('erased')]),
-      authors: t.Object({ thread: subjectThreadCardAuthor, openingPost: subjectThreadCardAuthor }, closed),
-      presentation: t.Union([
-        t.Object(
-          { state: t.Literal('current'), language: t.Union([t.String(), t.Null()]), spoiler: t.Boolean() },
-          closed,
-        ),
-        t.Object({ state: t.Literal('withheld') }, closed),
-      ]),
-      media: t.Object(
-        {
-          state: t.Union([t.Literal('none'), t.Literal('available'), t.Literal('unavailable'), t.Literal('withheld')]),
-          images: t.Array(subjectThreadCardImage, { maxItems: 32 }),
-        },
-        closed,
-      ),
-      comments: t.Union([
-        t.Object(
-          {
-            state: t.Literal('current'),
-            cohort: t.Literal('public'),
-            count: t.Object(
-              { kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]), value: t.Integer({ minimum: 0 }) },
-              closed,
-            ),
-            lastActivityAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-            source: t.Object({ epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[0-9]+$' }) }, closed),
-          },
-          closed,
-        ),
-        t.Object({ state: t.Union([t.Literal('unavailable'), t.Literal('withheld')]) }, closed),
-      ]),
-      actions: t.Object(
-        {
-          state: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
-          retryable: t.Boolean(),
-          references: t.Array(subjectThreadCardActionReference, { maxItems: 2 }),
-        },
-        closed,
-      ),
-      reply: t.Object(
-        {
-          state: t.Union([
-            t.Literal('available'),
-            t.Literal('sign_in_required'),
-            t.Literal('denied'),
-            t.Literal('withheld'),
-            t.Literal('unavailable'),
-          ]),
-        },
-        closed,
-      ),
-      watch: t.Union([
-        t.Object({ state: t.Literal('current'), watching: t.Boolean() }, closed),
-        t.Object({ state: t.Literal('sign_in_required') }, closed),
-        t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
-        t.Object({ state: t.Literal('withheld') }, closed),
-      ]),
-      parentContext: t.Optional(FeedParentContextSchema),
-      currentness: t.Object(
-        {
-          source: t.Literal('current'),
-          place: t.Literal('current'),
-          authors: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
-          reactions: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
-          actions: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
-          watch: t.Union([
-            t.Literal('current'),
-            t.Literal('sign_in_required'),
-            t.Literal('unavailable'),
-            t.Literal('not_applicable'),
-          ]),
-          media: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
-          comments: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
-        },
-        closed,
-      ),
-    },
-    closed,
-  ),
-);
-const SubjectThreadEntrySchema = t.Unsafe<SubjectThreadCardEntry>(
-  t.Object(
-    {
-      ...metadata,
-      ...references,
-      authorId: ContentIdSchema,
-      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-      title: t.Union([t.String(), t.Null()]),
-      availability,
-      firstPost: PostEntrySchema,
-      reviewContext: t.Optional(FeedReviewContextSchema),
-      ...viewerReaction,
-      ...reactions,
-      card: SubjectThreadCardSchema,
-    },
-    closed,
-  ),
-);
-export const SubjectThreadsResponseSchema = t.Object(
-  {
-    entry: t.Unsafe<SubjectThreadEntry>(
-      t.Union([
-        t.Object(
-          {
-            state: t.Literal('not_selected'),
-            request: t.Object(
-              {
-                subjectId: ContentIdSchema,
-                placeId: ContentIdSchema,
-                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-                selectedBoardId: t.Optional(ContentIdSchema),
-              },
-              closed,
-            ),
-          },
-          closed,
-        ),
-        ...(['concealed', 'unavailable'] as const).map((state) =>
+function subjectThreadCardImage() {
+  return memoizedValue(subjectThreadCardImage, () =>
+    t.Object(
+      {
+        id: ContentIdSchema,
+        containerId: ContentIdSchema,
+        digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+        width: t.Integer({ minimum: 1 }),
+        height: t.Integer({ minimum: 1 }),
+        variants: t.Array(
           t.Object(
             {
-              state: t.Literal(state),
-              request: t.Object(
-                {
-                  subjectId: ContentIdSchema,
-                  placeId: ContentIdSchema,
-                  kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-                  selectedBoardId: ContentIdSchema,
-                },
-                closed,
-              ),
+              format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+              width: t.Integer({ minimum: 1, maximum: 2560 }),
+              height: t.Integer({ minimum: 1 }),
             },
             closed,
           ),
+          { minItems: 1, maxItems: 12 },
         ),
-        t.Object(
-          {
-            state: t.Literal('current'),
-            request: t.Object(
+        placeholder: t.Union([
+          t.Object(
+            { thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+            closed,
+          ),
+          t.Null(),
+        ]),
+        focalPoint: t.Union([
+          t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+          t.Null(),
+        ]),
+        credit: t.Union([CoverCreditSchema, t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+export function SubjectThreadCardSchema() {
+  return memoizedValue(SubjectThreadCardSchema, () =>
+    t.Unsafe<SubjectThreadCard>(
+      t.Object(
+        {
+          state: t.Union([t.Literal('current'), t.Literal('erased')]),
+          authors: t.Object({ thread: subjectThreadCardAuthor(), openingPost: subjectThreadCardAuthor() }, closed),
+          presentation: t.Union([
+            t.Object(
+              { state: t.Literal('current'), language: t.Union([t.String(), t.Null()]), spoiler: t.Boolean() },
+              closed,
+            ),
+            t.Object({ state: t.Literal('withheld') }, closed),
+          ]),
+          media: t.Object(
+            {
+              state: t.Union([
+                t.Literal('none'),
+                t.Literal('available'),
+                t.Literal('unavailable'),
+                t.Literal('withheld'),
+              ]),
+              images: t.Array(subjectThreadCardImage(), { maxItems: 32 }),
+            },
+            closed,
+          ),
+          comments: t.Union([
+            t.Object(
               {
-                subjectId: ContentIdSchema,
-                placeId: ContentIdSchema,
-                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-                selectedBoardId: ContentIdSchema,
+                state: t.Literal('current'),
+                cohort: t.Literal('public'),
+                count: t.Object(
+                  { kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]), value: t.Integer({ minimum: 0 }) },
+                  closed,
+                ),
+                lastActivityAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+                source: t.Object(
+                  { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[0-9]+$' }) },
+                  closed,
+                ),
               },
               closed,
             ),
-            board: BoardViewSchema,
-            actions: t.Object({ createThread: boardAdvice }, closed),
-            observations: t.Object(
+            t.Object({ state: t.Union([t.Literal('unavailable'), t.Literal('withheld')]) }, closed),
+          ]),
+          actions: t.Object(
+            {
+              state: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+              retryable: t.Boolean(),
+              references: t.Array(subjectThreadCardActionReference, { maxItems: 2 }),
+            },
+            closed,
+          ),
+          reply: t.Object(
+            {
+              state: t.Union([
+                t.Literal('available'),
+                t.Literal('sign_in_required'),
+                t.Literal('denied'),
+                t.Literal('withheld'),
+                t.Literal('unavailable'),
+              ]),
+            },
+            closed,
+          ),
+          watch: t.Union([
+            t.Object({ state: t.Literal('current'), watching: t.Boolean() }, closed),
+            t.Object({ state: t.Literal('sign_in_required') }, closed),
+            t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
+            t.Object({ state: t.Literal('withheld') }, closed),
+          ]),
+          parentContext: t.Optional(FeedParentContextSchema),
+          currentness: t.Object(
+            {
+              source: t.Literal('current'),
+              place: t.Literal('current'),
+              authors: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+              reactions: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+              actions: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+              watch: t.Union([
+                t.Literal('current'),
+                t.Literal('sign_in_required'),
+                t.Literal('unavailable'),
+                t.Literal('not_applicable'),
+              ]),
+              media: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+              comments: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+    ),
+  );
+}
+function SubjectThreadEntrySchema() {
+  return memoizedValue(SubjectThreadEntrySchema, () =>
+    t.Unsafe<SubjectThreadCardEntry>(
+      t.Object(
+        {
+          ...metadata,
+          ...references,
+          authorId: ContentIdSchema,
+          kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+          title: t.Union([t.String(), t.Null()]),
+          availability,
+          firstPost: PostEntrySchema(),
+          reviewContext: t.Optional(FeedReviewContextSchema),
+          ...viewerReaction(),
+          ...reactions,
+          card: SubjectThreadCardSchema(),
+        },
+        closed,
+      ),
+    ),
+  );
+}
+export function SubjectThreadsResponseSchema() {
+  return memoizedValue(SubjectThreadsResponseSchema, () =>
+    t.Object(
+      {
+        entry: t.Unsafe<SubjectThreadEntry>(
+          t.Union([
+            t.Object(
               {
-                subject: t.Object(
+                state: t.Literal('not_selected'),
+                request: t.Object(
+                  {
+                    subjectId: ContentIdSchema,
+                    placeId: ContentIdSchema,
+                    kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                    selectedBoardId: t.Optional(ContentIdSchema),
+                  },
+                  closed,
+                ),
+              },
+              closed,
+            ),
+            ...(['concealed', 'unavailable'] as const).map((state) =>
+              t.Object(
+                {
+                  state: t.Literal(state),
+                  request: t.Object(
+                    {
+                      subjectId: ContentIdSchema,
+                      placeId: ContentIdSchema,
+                      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                      selectedBoardId: ContentIdSchema,
+                    },
+                    closed,
+                  ),
+                },
+                closed,
+              ),
+            ),
+            t.Object(
+              {
+                state: t.Literal('current'),
+                request: t.Object(
+                  {
+                    subjectId: ContentIdSchema,
+                    placeId: ContentIdSchema,
+                    kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                    selectedBoardId: ContentIdSchema,
+                  },
+                  closed,
+                ),
+                board: BoardViewSchema(),
+                actions: t.Object({ createThread: boardAdvice }, closed),
+                observations: t.Object(
+                  {
+                    subject: t.Object(
+                      {
+                        partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                        epoch: t.Integer({ minimum: 1 }),
+                        position: t.String({ pattern: '^[0-9]+$' }),
+                      },
+                      closed,
+                    ),
+                    place: t.Union([
+                      t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+                      t.Object(
+                        {
+                          kind: t.Literal('realm'),
+                          id: ContentIdSchema,
+                          title: t.String(),
+                          spaceId: ContentIdSchema,
+                          headRevisionId: ContentIdSchema,
+                        },
+                        closed,
+                      ),
+                    ]),
+                    board: t.Object(
+                      {
+                        initial: t.Object(
+                          {
+                            partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                            epoch: t.Integer({ minimum: 1 }),
+                            position: t.String({ pattern: '^[0-9]+$' }),
+                          },
+                          closed,
+                        ),
+                        final: t.Object(
+                          {
+                            partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                            epoch: t.Integer({ minimum: 1 }),
+                            position: t.String({ pattern: '^[0-9]+$' }),
+                          },
+                          closed,
+                        ),
+                      },
+                      closed,
+                    ),
+                    access: t.Object(
+                      {
+                        initial: t.Array(
+                          t.Object(
+                            {
+                              partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                              epoch: t.Integer({ minimum: 1 }),
+                              position: t.String({ pattern: '^[0-9]+$' }),
+                            },
+                            closed,
+                          ),
+                          { maxItems: 1 },
+                        ),
+                        final: t.Array(
+                          t.Object(
+                            {
+                              partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                              epoch: t.Integer({ minimum: 1 }),
+                              position: t.String({ pattern: '^[0-9]+$' }),
+                            },
+                            closed,
+                          ),
+                          { maxItems: 1 },
+                        ),
+                      },
+                      closed,
+                    ),
+                  },
+                  closed,
+                ),
+              },
+              closed,
+            ),
+          ]),
+        ),
+        threads: t.Array(SubjectThreadEntrySchema(), { maxItems: 20 }),
+        next: t.Union([t.String(), t.Null()]),
+        reactionsAsOf: reactionFreshness,
+        context: t.Object(
+          {
+            subject: t.Object(
+              {
+                id: ContentIdSchema,
+                label: t.Union([t.Object({ value: t.String(), language: t.String() }, closed), t.Null()]),
+                source: t.Object(
                   {
                     partition: t.Integer({ minimum: 0, maximum: 4095 }),
                     epoch: t.Integer({ minimum: 1 }),
@@ -1342,115 +1595,31 @@ export const SubjectThreadsResponseSchema = t.Object(
                   },
                   closed,
                 ),
-                place: t.Union([
-                  t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
-                  t.Object(
-                    {
-                      kind: t.Literal('realm'),
-                      id: ContentIdSchema,
-                      title: t.String(),
-                      spaceId: ContentIdSchema,
-                      headRevisionId: ContentIdSchema,
-                    },
-                    closed,
-                  ),
-                ]),
-                board: t.Object(
-                  {
-                    initial: t.Object(
-                      {
-                        partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                        epoch: t.Integer({ minimum: 1 }),
-                        position: t.String({ pattern: '^[0-9]+$' }),
-                      },
-                      closed,
-                    ),
-                    final: t.Object(
-                      {
-                        partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                        epoch: t.Integer({ minimum: 1 }),
-                        position: t.String({ pattern: '^[0-9]+$' }),
-                      },
-                      closed,
-                    ),
-                  },
-                  closed,
-                ),
-                access: t.Object(
-                  {
-                    initial: t.Array(
-                      t.Object(
-                        {
-                          partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                          epoch: t.Integer({ minimum: 1 }),
-                          position: t.String({ pattern: '^[0-9]+$' }),
-                        },
-                        closed,
-                      ),
-                      { maxItems: 1 },
-                    ),
-                    final: t.Array(
-                      t.Object(
-                        {
-                          partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                          epoch: t.Integer({ minimum: 1 }),
-                          position: t.String({ pattern: '^[0-9]+$' }),
-                        },
-                        closed,
-                      ),
-                      { maxItems: 1 },
-                    ),
-                  },
-                  closed,
-                ),
               },
               closed,
             ),
+            place: t.Union([
+              t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+              t.Object(
+                {
+                  kind: t.Literal('realm'),
+                  id: ContentIdSchema,
+                  title: t.String(),
+                  spaceId: ContentIdSchema,
+                  headRevisionId: ContentIdSchema,
+                },
+                closed,
+              ),
+            ]),
+            kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
           },
           closed,
         ),
-      ]),
-    ),
-    threads: t.Array(SubjectThreadEntrySchema, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-    reactionsAsOf: reactionFreshness,
-    context: t.Object(
-      {
-        subject: t.Object(
-          {
-            id: ContentIdSchema,
-            label: t.Union([t.Object({ value: t.String(), language: t.String() }, closed), t.Null()]),
-            source: t.Object(
-              {
-                partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                epoch: t.Integer({ minimum: 1 }),
-                position: t.String({ pattern: '^[0-9]+$' }),
-              },
-              closed,
-            ),
-          },
-          closed,
-        ),
-        place: t.Union([
-          t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
-          t.Object(
-            {
-              kind: t.Literal('realm'),
-              id: ContentIdSchema,
-              title: t.String(),
-              spaceId: ContentIdSchema,
-              headRevisionId: ContentIdSchema,
-            },
-            closed,
-          ),
-        ]),
-        kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
       },
       closed,
     ),
-  },
-  closed,
-);
+  );
+}
 
 export const AuthorPostsQuerySchema = t.Object(
   {
@@ -1466,57 +1635,65 @@ export const AuthorThreadsQuerySchema = t.Object(
   },
   closed,
 );
-export const AuthorThreadsResponseSchema = t.Object(
-  {
-    actionSelection: t.Optional(AuthorContributionSelectionSchema),
-    threads: t.Array(
-      t.Unsafe<AuthorThreadEntry>(
-        t.Object(
-          {
-            ...metadata,
-            ...references,
-            authorId: ContentIdSchema,
-            kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-            title: t.Union([t.String(), t.Null()]),
-            availability,
-            firstPost: PostEntrySchema,
-            reviewContext: t.Optional(FeedReviewContextSchema),
-            conversationActivity: t.Optional(AuthorConversationActivitySchema),
-            ...viewerReaction,
-            ...reactions,
-          },
-          closed,
+export function AuthorThreadsResponseSchema() {
+  return memoizedValue(AuthorThreadsResponseSchema, () =>
+    t.Object(
+      {
+        actionSelection: t.Optional(AuthorContributionSelectionSchema),
+        threads: t.Array(
+          t.Unsafe<AuthorThreadEntry>(
+            t.Object(
+              {
+                ...metadata,
+                ...references,
+                authorId: ContentIdSchema,
+                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                title: t.Union([t.String(), t.Null()]),
+                availability,
+                firstPost: PostEntrySchema(),
+                reviewContext: t.Optional(FeedReviewContextSchema),
+                conversationActivity: t.Optional(AuthorConversationActivitySchema),
+                ...viewerReaction(),
+                ...reactions,
+              },
+              closed,
+            ),
+          ),
+          { maxItems: 20 },
         ),
-      ),
-      { maxItems: 20 },
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
     ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
-export const AuthorPostsResponseSchema = t.Object(
-  {
-    actionSelection: t.Optional(AuthorContributionSelectionSchema),
-    posts: t.Array(
-      t.Unsafe<AuthorPostEntry>(
-        t.Object(
-          {
-            ...item,
-            availability: t.Literal('available'),
-            body: document,
-            thread: t.Object({ id: ContentIdSchema, title: t.Union([t.String(), t.Null()]) }, closed),
-            parentContext: t.Optional(FeedParentContextSchema),
-            conversationActivity: t.Optional(AuthorConversationActivitySchema),
-          },
-          closed,
+  );
+}
+export function AuthorPostsResponseSchema() {
+  return memoizedValue(AuthorPostsResponseSchema, () =>
+    t.Object(
+      {
+        actionSelection: t.Optional(AuthorContributionSelectionSchema),
+        posts: t.Array(
+          t.Unsafe<AuthorPostEntry>(
+            t.Object(
+              {
+                ...item(),
+                availability: t.Literal('available'),
+                body: document(),
+                thread: t.Object({ id: ContentIdSchema, title: t.Union([t.String(), t.Null()]) }, closed),
+                parentContext: t.Optional(FeedParentContextSchema),
+                conversationActivity: t.Optional(AuthorConversationActivitySchema),
+              },
+              closed,
+            ),
+          ),
+          { maxItems: 20 },
         ),
-      ),
-      { maxItems: 20 },
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
     ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
+  );
+}
 
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
 export const DocumentMediaInputSchema = t.Object(
@@ -1529,58 +1706,66 @@ export const DocumentMediaInputSchema = t.Object(
   },
   closed,
 );
-export const DocumentImagePresentationSchema = t.Unsafe<DocumentMediaPage['images'][number]>(
-  t.Object(
-    {
-      id: ContentIdSchema,
-      containerId: ContentIdSchema,
-      digest: mediaDigest,
-      width: imageDimension,
-      height: imageDimension,
-      variants: t.Array(
-        t.Object(
-          {
-            format: t.Union([t.Literal('avif'), t.Literal('webp')]),
-            width: t.Integer({ minimum: 1, maximum: 2560 }),
-            height: imageDimension,
-          },
-          closed,
-        ),
-        { minItems: 1, maxItems: 12 },
+export function DocumentImagePresentationSchema() {
+  return memoizedValue(DocumentImagePresentationSchema, () =>
+    t.Unsafe<DocumentMediaPage['images'][number]>(
+      t.Object(
+        {
+          id: ContentIdSchema,
+          containerId: ContentIdSchema,
+          digest: mediaDigest,
+          width: imageDimension,
+          height: imageDimension,
+          variants: t.Array(
+            t.Object(
+              {
+                format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+                width: t.Integer({ minimum: 1, maximum: 2560 }),
+                height: imageDimension,
+              },
+              closed,
+            ),
+            { minItems: 1, maxItems: 12 },
+          ),
+          placeholder: t.Union([
+            t.Object(
+              {
+                thumbhash: t.String({ minLength: 1, maxLength: 44 }),
+                color: t.String({ pattern: '^#[0-9a-f]{6}$' }),
+              },
+              closed,
+            ),
+            t.Null(),
+          ]),
+          focalPoint: t.Union([
+            t.Object(
+              {
+                x: t.Number({ minimum: 0, maximum: 1 }),
+                y: t.Number({ minimum: 0, maximum: 1 }),
+              },
+              closed,
+            ),
+            t.Null(),
+          ]),
+          credit: t.Union([CoverCreditSchema, t.Null()]),
+        },
+        closed,
       ),
-      placeholder: t.Union([
-        t.Object(
-          {
-            thumbhash: t.String({ minLength: 1, maxLength: 44 }),
-            color: t.String({ pattern: '^#[0-9a-f]{6}$' }),
-          },
-          closed,
-        ),
-        t.Null(),
-      ]),
-      focalPoint: t.Union([
-        t.Object(
-          {
-            x: t.Number({ minimum: 0, maximum: 1 }),
-            y: t.Number({ minimum: 0, maximum: 1 }),
-          },
-          closed,
-        ),
-        t.Null(),
-      ]),
-      credit: t.Union([CoverCreditSchema, t.Null()]),
-    },
-    closed,
-  ),
-);
-export const DocumentMediaPageSchema = t.Unsafe<DocumentMediaPage>(
-  t.Object(
-    {
-      images: t.Array(DocumentImagePresentationSchema, { maxItems: 32 }),
-    },
-    closed,
-  ),
-);
+    ),
+  );
+}
+export function DocumentMediaPageSchema() {
+  return memoizedValue(DocumentMediaPageSchema, () =>
+    t.Unsafe<DocumentMediaPage>(
+      t.Object(
+        {
+          images: t.Array(DocumentImagePresentationSchema(), { maxItems: 32 }),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 const reservationRequestId = t.String({ minLength: 1, maxLength: 255 });
 const mediaReservationFields = {
   mediaType: t.Union([
@@ -1930,16 +2115,20 @@ export const ContentEditionSchema = t.Object(
   },
   closed,
 );
-export const ContentEditionRevisionSchema = t.Object(
-  {
-    editionId: ContentIdSchema,
-    revisionId: ContentIdSchema,
-    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
-    licence: t.String(),
-    body: DocumentSnapshotSchema,
-  },
-  closed,
-);
+export function ContentEditionRevisionSchema() {
+  return memoizedValue(ContentEditionRevisionSchema, () =>
+    t.Object(
+      {
+        editionId: ContentIdSchema,
+        revisionId: ContentIdSchema,
+        sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+        licence: t.String(),
+        body: DocumentSnapshotSchema,
+      },
+      closed,
+    ),
+  );
+}
 export const ContentEditionCommandSchema = t.Object(
   {
     editionId: ContentIdSchema,

@@ -8,6 +8,40 @@ import { createCollectionListFactsFixture } from './support/collection-list-fact
 
 export const copyListScopes = ['subject:read', 'copy:create', 'copy:list', 'copy:update', 'copy:delete'];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function accessToken(value: unknown): string {
+  if (!isRecord(value) || typeof value.access_token !== 'string')
+    throw new Error('Native copy fixture token response is invalid');
+  return value.access_token;
+}
+
+function createdCopy(value: unknown) {
+  if (!isRecord(value) || !isRecord(value.copy)) throw new Error('Native copy fixture response is invalid');
+  const copy = value.copy;
+  if (
+    typeof copy.id !== 'string' ||
+    typeof copy.subjectId !== 'string' ||
+    typeof copy.kind !== 'string' ||
+    typeof copy.status !== 'string' ||
+    typeof copy.revision !== 'number' ||
+    typeof copy.acquiredOn !== 'string' ||
+    typeof copy.note !== 'string'
+  )
+    throw new Error('Native copy fixture response is invalid');
+  return {
+    id: copy.id,
+    subjectId: copy.subjectId,
+    kind: copy.kind,
+    status: copy.status,
+    revision: copy.revision,
+    acquiredOn: copy.acquiredOn,
+    note: copy.note,
+  };
+}
+
 export async function createCopyListContextFixture(options: { db?: GrowthDatabase } = {}) {
   const native = await createCollectionListFactsFixture(options);
   try {
@@ -25,7 +59,8 @@ export async function createCopyListContextFixture(options: { db?: GrowthDatabas
       expect(signed.status).toBe(200);
       const token = await native.auth.request('/token', {}, cookies(signed));
       expect(token.status).toBe(200);
-      return ((await token.json()) as { access_token: string }).access_token;
+      const body: unknown = await token.json();
+      return accessToken(body);
     }
 
     const ownerToken = await credential('editor');
@@ -53,15 +88,8 @@ export async function createCopyListContextFixture(options: { db?: GrowthDatabas
         note,
       });
       expect([201], `POST /v1/copies: ${response.status} ${await response.clone().text()}`).toContain(response.status);
-      return (await response.json()).copy as {
-        id: string;
-        subjectId: string;
-        kind: string;
-        status: string;
-        revision: number;
-        acquiredOn: string;
-        note: string;
-      };
+      const body: unknown = await response.json();
+      return createdCopy(body);
     }
     async function page(token: string | null, view = 'FULL', limit = 100) {
       return send(token, 'GET', `/v1/copies?limit=${limit}&view=${view}`);
@@ -69,12 +97,16 @@ export async function createCopyListContextFixture(options: { db?: GrowthDatabas
     async function suspend(accountId: string) {
       const operator = await native.deps('operator');
       if (operator.actor.kind !== 'account') throw new Error('Copy context fixture requires an account operator');
-      await createSuspensionCommands({ pool: native.pool, access: native.access }).suspend(
+      await createSuspensionCommands({
+        pool: native.pool,
+        access: native.auth.access,
+        clock: () => new Date(),
+      }).suspend(
         { pool: native.pool, actor: operator.actor, deadline: deadlineFor(30_000) },
         { accountId, key: randomUUID() },
       );
     }
-    return { ...native, ownerToken, otherToken, send, copy, page, suspend };
+    return { ...native, access: native.auth.access, ownerToken, otherToken, send, copy, page, suspend };
   } catch (error) {
     await native.close();
     throw error;

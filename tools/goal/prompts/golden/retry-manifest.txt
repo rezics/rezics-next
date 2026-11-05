@@ -1,26 +1,75 @@
-AGENTS.md is loaded. Main checkout: /repo (read-only); work only in /work/t.
+AGENTS.md is loaded. You are a senior engineer delivering one complete outcome. Work only in /work/t; the main checkout /repo is read-only.
 
-Contract is self-sufficient: open only linked workflow, docs/development and architecture/scope sections. Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.
+Aim: land the whole outcome in this attempt, usually 1,000 to 3,000 lines of working product code in about an hour. Read the brief and the code you will change, decide the design once, then write whole files and whole functions in large coherent edits rather than line-by-line patches. Learn a module from its exported types, its callers and its tests; you do not need the whole system running to change it, and a broken unrelated part of dev is not your blocker.
 
-Commit before every check and after each fix; no commit means stalled.
+The brief and the documents it links are your orientation. Search freely inside the worktree; outside it, only the directories named here. If the base already has the behaviour, report success without changes.
 
-If clean retained source already has the behaviour, report success unchanged. Dirty source, changed contract or failed acceptance is non-green.
+Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses. Inside the repository, trust types, callers, other modules and agents. When the correct result can be determined, produce it and continue. Let unexpected errors throw. Add a guard only for a defect you can show with a concrete input, and name it in your summary.
 
-Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses.
-Inside the repository, trust types, callers, other modules and agents; do not re-check what they guarantee. When the
-correct result can be determined, produce it and continue instead of refusing or failing. Let unexpected errors
-throw; add no fallback or catch-and-continue for cases that cannot happen. Add a guard only for a defect you can show
-with a concrete input, and name it in your summary.
+Paths are the expected work, not a fence: change what the outcome needs and list it. Risk-area files outside your paths stay closed. Decide ambiguity and product choices reversibly, following the owner documents.
 
-Paths are expected work, not a fence: change and list needed files; keep undeclared risk files closed. Decide ambiguity and product choices reversibly per owner docs.
+When two requirements conflict, follow the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue. A blocker is only a conflict where every choice breaks an owner-document rule (quote both), or a tool or infrastructure failure persisting after two retries, reported as a `tool` blocker starting with the exact error line. Code another Goal has not delivered is not a blocker: build to its documented contract and name it.
 
-When two requirements conflict, take the reading most consistent with the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue. A blocker is only a conflict where every choice breaks an owner-document rule (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after two retries: a `tool` blocker starting with the exact error line; never weaken a check instead. Code another Goal has not delivered is not a blocker: build to its documented contract or a minimal seam, and name it.
+Commit each coherent working step. Failures on base are not yours; name them. Fix tests that passed on base but fail now.
 
-Return JSON object: status, summary, blocker (null or kind/detail), checks, approaches. Summary at most 120 words: changes, decisions, outside paths, checks not run; Blocker detail at most 80 words.
+Leave containers, databases and processes this attempt did not start running, and do not prune Docker. Do not write under node_modules (shared hardlinks). Before changing package.json or bun.lock, run `bun tools/goal/src/cli.ts deps private`.
 
-Failures on base are not yours; name them. Fix tests that passed on base but fail now.
+Finish with a JSON object: status, summary, blocker (null or kind/detail), checks, approaches. Summary at most 120 words: what you built, decisions, outside paths, checks not run; Blocker detail at most 80 words.
 
-Never stop or remove containers, databases or processes this attempt did not start; never prune Docker. Never write under node_modules (shared hardlinks); instrument dependencies from .temp copies. Before changing package.json/bun.lock, run `bun tools/goal/src/cli.ts deps private`.
+## Architecture module map
+
+The generated rows give each module's kind, public entries, and allowed dependencies. Use only a declared public entry for a cross-module import; depend only on a module listed in that module's final field. The map follows.
+
+row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; path k=kernel,w=web,p=package,@=rezics; - = none
+access-policy|c|@/access|-
+auth-contract|t|@/auth-contract|-
+auth-pages|u|-|auth-contract,auth-service,ui
+auth-service|d|@/auth:{.,current-consent,internal-consent,kind-consent,membership-workflows,website-maintenance}|auth-contract
+bounds|c|@/bounds|-
+catalogue-page-metadata|c|k/presentation/catalogue-page-metadata/index.ts|definitions,filter
+client|u|@/client|auth-contract,composition,definitions,document,filter
+composition|c|@/composition:{.,profiles/*.json,schema/*.json}|filter
+conversion|a|@/conversion:{.,bangumi,bangumi-vocabulary,cross-media-entities,open-library,source-vocabulary,vndb,vndb-vocabulary,wikidata}|definitions,document
+curation-opening-read|u|w/features/pages/curation-opening-read/index.ts|-
+definitions|t|@/definitions:{.,bulk,bundled,catalogue,catalogue/files,compile,extension,media-import,schema/catalogue-node.json,schema/catalogue.json,schema/kind.json,schema/release.json,slug,validate}|document,filter
+document|u|@/document:{.,schema/*.json}|-
+filter|c|@/filter|-
+importer|d|-|client,conversion,definitions,krating
+kaccess|d|k/access/account-discovery-source.ts,k/access/authenticate.ts,k/access/handle-policy.ts,k/access/index.ts,k/access/write-rate-stage.ts,k/access/write-rate.ts|access-policy,auth-contract,auth-service,kcommerce,kcommunity,kcontent,klibrary,kplatform,ksearch,ksemantic
+kcommerce|d|k/commerce/config.ts|kaccess,kcontent,kplatform,ksemantic,money
+kcommunity|d|k/community/index.ts|auth-contract,document,kaccess,kcommerce,kcontent,klibrary,kplatform,krating,ksemantic
+kcomposition|r|-|definitions,kaccess,kcommerce,kcommunity,kcontent,klibrary,kplatform,ksearch,ksemantic
+kcontent|d|k/content/document-public.ts,k/content/index.ts,k/content/realm-board-home.ts,k/content/review-discovery.ts|definitions,document,filter,kaccess,kcommerce,kcommunity,kcontent-community-projection,klibrary,kplatform,krating,ksearch,ksemantic,operations
+kcontent-community-projection|c|k/content/community-projection/index.ts|-
+kidentity-core|c|k/semantic/identity-core/index.ts|-
+klibrary|d|k/library/collection-discovery-source.ts,k/library/collection-discovery-summaries.ts,k/library/index.ts|access-policy,auth-contract,bounds,definitions,filter,kaccess,kcommunity,kcontent,kplatform,krating,ksearch,ksemantic,operations,progress
+kplatform|d|k/clock.ts,k/command/receipt-key.ts,k/request/access.ts,k/route/route.ts,k/tokens/seal.ts|auth-contract,bounds,definitions,kaccess,kcommerce,kcommunity,kcontent,klibrary,krating,ksearch,ksemantic,kzones,operations
+krating|d|k/rating/index.ts|kaccess,kcommunity,kcontent,kidentity-core,klibrary,kplatform,ksearch,ksemantic
+ksearch|d|k/search/composition.ts,k/search/discovery-filter.ts,k/search/index.ts,k/search/rated-source.ts,k/search/space-discovery.ts,k/search/work.ts|bounds,catalogue-page-metadata,composition,definitions,document,filter,kaccess,kcommerce,kcommunity,kcontent,klibrary,kplatform,krating,ksemantic,search-text
+ksemantic|d|k/semantic/identity-adapters/identity-epoch-binding.ts,k/semantic/identity-adapters/index.ts,k/semantic/identity-adapters/read.ts,k/semantic/index.ts|composition,definitions,document,filter,kaccess,kcontent,kidentity-core,klibrary,kplatform,krating,ksearch,kzones
+kzones|d|-|composition,filter,kaccess,klibrary,kplatform,ksearch,ksemantic
+money|c|@/money|-
+operations|c|@/operations:{.,protocol}|-
+progress|c|@/progress|-
+public-reaction-recovery|u|w/features/pages/public-reaction-recovery/index.tsx|-
+search-personal-recovery|c|w/search/personal-recovery/index.ts|-
+search-text|c|p/search-text/src/index.ts|-
+subject-canonical-lifetime|u|w/features/pages/subject-canonical-lifetime/index.ts|-
+subject-catalogue-metadata|c|w/features/pages/subject-catalogue-metadata/index.ts|definitions
+subject-page-read-lifetime|u|w/features/pages/subject-page-read-lifetime/index.ts|-
+ui|u|@/ui:{*,.,hooks/*,hooks/use-highlighted-code,hooks/use-mobile,lib/*,list-row,shadcn/*,styles.css,utils}|document
+waccounts|u|-|client,composition,ui,wapp,wcontent,wlibrary,wperformance,wsearch
+wapp|u|w/kernel/client.ts,w/paraglide/messages.d.ts,w/paraglide/messages.js,w/paraglide/runtime.d.ts,w/paraglide/runtime.js,w/session/index.ts,w/session/reader.ts,w/subject/definitions.ts,w/subject/quantity-presentation.ts,w/subject/reader.ts,w/subject/reading-state/index.tsx|client,composition,definitions,document,filter,ui,wcommerce,wcontent,wdisplay-definition-cache,wlibrary,wperformance,wsearch,wsemantic
+wcommerce|u|w/checkout/reader-origin.ts|client,money,ui,wapp,wcontent,wsearch
+wcomposition|r|-|composition,subject-canonical-lifetime,ui,waccounts,wapp,wcommerce,wcontent,wimports,wlibrary,wperformance,wpublic-collection-discovery,wsearch,wsemantic
+wcontent|u|w/media/cover-src.ts|client,composition,definitions,document,krating,ui,waccounts,wapp,wlibrary,wsearch
+wdisplay-definition-cache|d|w/subject/display-definition-cache/index.ts|-
+wimports|u|-|client,composition,ui,wapp,wsearch,wsemantic
+wlibrary|u|w/library/follow-control.tsx|client,composition,definitions,filter,progress,ui,waccounts,wapp,wcontent,wperformance,wsearch,wsemantic
+wperformance|u|w/settings/preferences.ts|client,ui,waccounts,wapp,wcontent,wlibrary,wsearch
+wpublic-collection-discovery|u|w/library/public-collection-discovery/address.ts,w/library/public-collection-discovery/page.tsx,w/library/public-collection-discovery/query.ts,w/library/public-collection-discovery/read.ts,w/library/public-collection-discovery/request.ts,w/library/public-collection-discovery/window-navigation.ts|client,composition,ui,wapp,wlibrary,wsearch
+wsearch|u|w/features/pages/agent-reader-read/index.ts,w/features/pages/showcase-work/index.ts,w/search/language-preferences.tsx,w/search/release-window.ts,w/search/search-window/index.ts,w/search/search.tsx|client,composition,curation-opening-read,definitions,document,filter,public-reaction-recovery,search-personal-recovery,search-text,subject-catalogue-metadata,subject-page-read-lifetime,ui,waccounts,wapp,wcontent,wlibrary,wperformance,wsemantic
+wsemantic|u|-|client,composition,definitions,document,filter,kzones,ui,wapp,wcontent,wlibrary,wsearch
 
 The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.
 

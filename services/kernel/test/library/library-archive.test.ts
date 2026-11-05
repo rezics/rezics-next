@@ -264,15 +264,15 @@ test('native references and required shapes are validated without admitting stor
 });
 
 test('raw upload, nesting, rows and record bytes are bounded before native admission', () => {
-  expect(() => decodeLibraryArchive(new Uint8Array(LIBRARY_ARCHIVE_LIMITS.uploadBytes + 1))).toThrow(
+  expect(() => decodeLibraryArchive(new Uint8Array(LIBRARY_ARCHIVE_LIMITS().uploadBytes + 1))).toThrow(
     new ArchiveValidationError('bounds'),
   );
-  const nested = '['.repeat(LIBRARY_ARCHIVE_LIMITS.depth + 1) + '0' + ']'.repeat(LIBRARY_ARCHIVE_LIMITS.depth + 1);
+  const nested = '['.repeat(LIBRARY_ARCHIVE_LIMITS().depth + 1) + '0' + ']'.repeat(LIBRARY_ARCHIVE_LIMITS().depth + 1);
   expect(() => decodeLibraryArchive(Buffer.from(nested))).toThrow(new ArchiveValidationError('bounds'));
-  refuses(archive([{ ...entry(first), state: 'x'.repeat(LIBRARY_ARCHIVE_LIMITS.pageBytes) }]), 'bounds');
+  refuses(archive([{ ...entry(first), state: 'x'.repeat(LIBRARY_ARCHIVE_LIMITS().pageBytes) }]), 'bounds');
   const file = archive();
-  refuses({ ...file, manifest: { ...file.manifest, rows: LIBRARY_ARCHIVE_LIMITS.records + 1 } }, 'bounds');
-  refuses({ ...file, manifest: { ...file.manifest, recordBytes: LIBRARY_ARCHIVE_LIMITS.recordBytes + 1 } }, 'bounds');
+  refuses({ ...file, manifest: { ...file.manifest, rows: LIBRARY_ARCHIVE_LIMITS().records + 1 } }, 'bounds');
+  refuses({ ...file, manifest: { ...file.manifest, recordBytes: LIBRARY_ARCHIVE_LIMITS().recordBytes + 1 } }, 'bounds');
 });
 
 test('malformed, duplicate-key and non-Unicode inputs never reflect private source text in errors', () => {

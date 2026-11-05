@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import accountCommandState from '../access/account-command-state.sql';
@@ -297,22 +298,26 @@ const accountEpoch = '9223372036854775807';
 const maximumCursorBytes = 4096;
 export const PUBLISHED_LOG_RETENTION_PAGE_BOUND = 100;
 export const PUBLISHED_LOG_RETENTION_SEGMENT_BOUND = 100;
-const zero = declareBound({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 0,
-  engineRequests: 0,
-});
-const byteBound = (value: number): Bound => declareBound({ ...zero, bytes: value });
+function zero() {
+  return memoizedValue(zero, () =>
+    declareBound({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+      engineRequests: 0,
+    }),
+  );
+}
+const byteBound = (value: number): Bound => declareBound({ ...zero(), bytes: value });
 const jsonBytes = (value: unknown) => byteBound(Buffer.byteLength(JSON.stringify(value) ?? 'null'));
 const sqlOnly = (sql: string, input: object = {}) => leaf(sql, input, 0, 0, 0, {}, 0);
 function alternative(...branches: readonly Bound[]): Bound {
-  const values = branches.length ? branches : [zero];
+  const values = branches.length ? branches : [zero()];
   return declareBound(
     Object.fromEntries(BOUND_AXES.map((axis) => [axis, Math.max(...values.map((value) => value[axis]))])),
   );
@@ -524,7 +529,7 @@ function ownAccountCommandPlan(input: {
   });
   const accountAuthorization = input.hasAccountAuthorization
     ? sumBounds(accountShareBound(route, input.accountId), readAccountStateBound(route, input.accountId))
-    : zero;
+    : zero();
   const eventAndReceipt = eventFenceBound({
     accountId: input.accountId,
     commandKind: input.commandKind,
@@ -534,7 +539,7 @@ function ownAccountCommandPlan(input: {
     withBasis: true,
   });
   const commonAttempt = sumBounds(
-    commandControls(input.prepared !== zero, durationMs),
+    commandControls(input.prepared !== zero(), durationMs),
     accountAuthorization,
     commandReceiptReadBound(input.accountId, input.commandKind, input.receiptKeyCount, input.response),
     input.prepared,
@@ -544,7 +549,7 @@ function ownAccountCommandPlan(input: {
   // lookup. Only a fresh receipt runs the body, fence/outbox and response path.
   const perAttempt = sumBounds(
     commonAttempt,
-    alternative(zero, sumBounds(input.body, eventAndReceipt, jsonBytes(input.response))),
+    alternative(zero(), sumBounds(input.body, eventAndReceipt, jsonBytes(input.response))),
   );
   const partitionNo = Math.floor(route / 16);
   const recovery = repeatBound(writableRecoveryBound(partitionNo, durationMs), Math.ceil(durationMs / 25));
@@ -627,7 +632,7 @@ export function publishedLogRetractOperationPlan(input: {
     requestInput:
       input.revision === undefined ? { logId: input.logId } : { logId: input.logId, revision: input.revision },
     receiptKeyCount: input.receiptKeyCount,
-    prepared: zero,
+    prepared: zero(),
     body: sumBounds(lockBound.total, removeBound.total),
     response: publicLogReceipt,
     eventType: 'com.rezics.library.published_log.deleted.v1',
@@ -711,7 +716,7 @@ export function publishedLogPageReadOperationPlan(input: {
       readTransaction: readTransactionBound('REPEATABLE READ'),
       partitionEpoch: sessionPartitionWork(Math.floor(input.route / 16)),
       ownerStateAndFloor: readAccountStateBound(input.route, input.accountId),
-      firstAndNextPageStreams: alternative(zero, pageBound.total),
+      firstAndNextPageStreams: alternative(zero(), pageBound.total),
       originalAndTerminalDisclosure: repeatBound(sessionSourceWork(uuid, false), input.limit),
       signedCursorInput: byteBound(input.hasCursor ? maximumCursorBytes : 0),
       serializedResponse: serialized,
@@ -883,7 +888,7 @@ export function publishedLogRetentionSegmentOperationPlan(input: {
       workflowIDReusePolicy: 'return-existing',
       input: next,
     }),
-    declareBound({ ...zero, engineRequests: 1 }),
+    declareBound({ ...zero(), engineRequests: 1 }),
   );
   return operationPlan(
     'published-log.retention.segment',

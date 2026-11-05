@@ -72,7 +72,7 @@ test.serial(
     expect(result.response.status, result.text).toBe(200);
     expect(Object.keys(result.value!)).toEqual(['community']);
     const community = result.value!.community;
-    expect(Compile(CommunityPresentationSchema).Check(community)).toBe(true);
+    expect(Compile(CommunityPresentationSchema()).Check(community)).toBe(true);
     expect(community).toMatchObject({
       realmId: target.realmId,
       spaceId: target.realm.spaceId,

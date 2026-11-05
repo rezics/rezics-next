@@ -82,7 +82,7 @@ test('recipe instructions use the presentation selector and retain exact Japanes
   expect(excerpt).not.toHaveProperty('body');
   expect(excerpt).not.toHaveProperty('fragment');
   expect(requests).toHaveLength(2);
-  expect(requests[0]).toMatchObject({ maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument });
+  expect(requests[0]).toMatchObject({ maxSourceBytes: DOCUMENT_TEXT_COST().sourceBytesPerDocument });
 });
 
 test('missing producer, unsupported blocks and dependency failure are not complete empty results', async () => {
@@ -116,7 +116,9 @@ test('finite dispatch and UTF-8 prefix coverage preserve independent bodies and 
   };
   const projection = await projectDocumentText({ ...selection, references: [reference, second] }, source);
   expect(projection.coverage).toBe('partial');
-  expect(Buffer.byteLength(projection.documents[0]!.text)).toBeLessThanOrEqual(DOCUMENT_TEXT_COST.textBytesPerSubject);
+  expect(Buffer.byteLength(projection.documents[0]!.text)).toBeLessThanOrEqual(
+    DOCUMENT_TEXT_COST().textBytesPerSubject,
+  );
   expect(projection.documents[0]!.text).not.toContain('�');
   expect(projection.documents.map((document) => document.reference.language)).toEqual(['ja', 'en']);
   expect(projection.documents[1]!.text).toBe('s');

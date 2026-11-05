@@ -30,7 +30,7 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
   async function prepare(intent: IdentityIntent) {
     const actor = await f.actor();
     const key = randomUUID();
-    return identityEpochStore.prepareAdmission(
+    return identityEpochStore().prepareAdmission(
       f.pool,
       {
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -95,9 +95,9 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
           [routeOf(original)!, original],
         )
       ).rows[0]?.target ?? null,
-    readJob: (job: IdentityJobRef) => withConnection(f.pool, (tx) => identityEpochStore.readJob(tx, job)),
+    readJob: (job: IdentityJobRef) => withConnection(f.pool, (tx) => identityEpochStore().readJob(tx, job)),
     publish: (job: IdentityJobRef) =>
-      runCommand(f.pool, { partition: identityJobPartition(job) }, (tx) => identityEpochStore.publish(tx, job)),
+      runCommand(f.pool, { partition: identityJobPartition(job) }, (tx) => identityEpochStore().publish(tx, job)),
     operationBackendIds: () => new Set(backends),
     async nativeRows(job: IdentityJobRef) {
       const home = identityJobPartition(job);

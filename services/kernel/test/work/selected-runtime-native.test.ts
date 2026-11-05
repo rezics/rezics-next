@@ -32,7 +32,7 @@ type LifecycleScenario = {
 async function nativeScenario() {
   const db = await openGrowthDatabase();
   const work = await createWorkClient(db.url, db.pool);
-  bindExecutionContract(work, workExecutionPort, historyExecutionPort);
+  bindExecutionContract(work, workExecutionPort(), historyExecutionPort);
   const sdk = DBOS as typeof DBOS & {
     registerSelectedStep(
       body: (mode: string) => Promise<string>,

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { accessClock } from '../access/access-clock.ts';
 import { readAccount } from '../access/account-data.ts';
@@ -32,40 +33,44 @@ const adviceSchema = t.Union([
   t.Object({ state: t.Literal('unsupported'), reason: t.Literal('board') }, closed),
 ]);
 const nullableTitle = t.Union([t.String(), t.Null()]);
-export const DecisionPageSchema = t.Object(
-  {
-    ...ModerationDecisionSchema.properties,
-    viewer: t.Object(
+export function DecisionPageSchema() {
+  return memoizedValue(DecisionPageSchema, () =>
+    t.Object(
       {
-        affectedAuthor: t.Boolean(),
-        observedAt: t.String({ format: 'date-time' }),
-        appeal: adviceSchema,
+        ...ModerationDecisionSchema.properties,
+        viewer: t.Object(
+          {
+            affectedAuthor: t.Boolean(),
+            observedAt: t.String({ format: 'date-time' }),
+            appeal: adviceSchema,
+          },
+          closed,
+        ),
+        targetContext: t.Union([
+          t.Object(
+            { state: t.Literal('available'), kind: t.Literal('board'), boardId: t.String(), boardTitle: nullableTitle },
+            closed,
+          ),
+          t.Object(
+            {
+              state: t.Literal('available'),
+              kind: t.Literal('thread'),
+              threadId: t.String(),
+              postId: t.Union([t.String(), t.Null()]),
+              boardId: t.String(),
+              threadTitle: nullableTitle,
+              boardTitle: nullableTitle,
+            },
+            closed,
+          ),
+          t.Object({ state: t.Literal('concealed') }, closed),
+          t.Object({ state: t.Literal('unavailable') }, closed),
+        ]),
       },
       closed,
     ),
-    targetContext: t.Union([
-      t.Object(
-        { state: t.Literal('available'), kind: t.Literal('board'), boardId: t.String(), boardTitle: nullableTitle },
-        closed,
-      ),
-      t.Object(
-        {
-          state: t.Literal('available'),
-          kind: t.Literal('thread'),
-          threadId: t.String(),
-          postId: t.Union([t.String(), t.Null()]),
-          boardId: t.String(),
-          threadTitle: nullableTitle,
-          boardTitle: nullableTitle,
-        },
-        closed,
-      ),
-      t.Object({ state: t.Literal('concealed') }, closed),
-      t.Object({ state: t.Literal('unavailable') }, closed),
-    ]),
-  },
-  closed,
-);
+  );
+}
 
 type Advice =
   | { state: 'permitted' }

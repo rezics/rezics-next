@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
@@ -90,7 +91,9 @@ const UPDATED_EVENT = 'com.rezics.library.entry.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.entry.deleted.v1';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
-const MAX_STATE_HISTORY_PAGE_SIZE = ENTRY_STATE_HISTORY_PAGE_LIMIT;
+function MAX_STATE_HISTORY_PAGE_SIZE() {
+  return memoizedValue(MAX_STATE_HISTORY_PAGE_SIZE, () => ENTRY_STATE_HISTORY_PAGE_LIMIT);
+}
 
 export class LibraryEntryInvalidError extends TypeError {
   constructor(message = 'Unknown library entry state') {
@@ -102,18 +105,34 @@ export class LibraryEntryInvalidError extends TypeError {
 /** Unwinds the owner checkout before the independently committed preparation command. */
 class TypePreparationRequired extends Error {}
 
-export class LibraryEntryLifecycleConflictError extends LibraryConflictError {
-  constructor(readonly reason: 'stale' | 'occupied' | 'expired') {
-    super();
-  }
+export function LibraryEntryLifecycleConflictError() {
+  return memoizedValue(
+    LibraryEntryLifecycleConflictError,
+    () =>
+      class LibraryEntryLifecycleConflictError extends LibraryConflictError {
+        constructor(readonly reason: 'stale' | 'occupied' | 'expired') {
+          super();
+        }
+      },
+  );
 }
+export type LibraryEntryLifecycleConflictError = InstanceType<ReturnType<typeof LibraryEntryLifecycleConflictError>>;
 
-export class LibraryEntryStateRestoreConflictError extends LibraryConflictError {
-  constructor(readonly reason: 'stale' | 'unavailable' | 'unchanged') {
-    super();
-    this.name = 'LibraryEntryStateRestoreConflictError';
-  }
+export function LibraryEntryStateRestoreConflictError() {
+  return memoizedValue(
+    LibraryEntryStateRestoreConflictError,
+    () =>
+      class LibraryEntryStateRestoreConflictError extends LibraryConflictError {
+        constructor(readonly reason: 'stale' | 'unavailable' | 'unchanged') {
+          super();
+          this.name = 'LibraryEntryStateRestoreConflictError';
+        }
+      },
+  );
 }
+export type LibraryEntryStateRestoreConflictError = InstanceType<
+  ReturnType<typeof LibraryEntryStateRestoreConflictError>
+>;
 
 function account(actor: Actor, action: string): AccountActor {
   if (actor.kind !== 'account' || routeOf(actor.accountId) === null || !actor.scopes.includes(action))
@@ -274,7 +293,7 @@ export async function deleteLibraryEntryInTransaction(
     (current.incarnationId != null && guard === undefined) ||
     (guard !== undefined && current.incarnationId !== guard)
   )
-    throw new LibraryEntryLifecycleConflictError('stale');
+    throw new (LibraryEntryLifecycleConflictError())('stale');
   let incarnation = current.incarnationId;
   if (incarnation == null) {
     incarnation = newId(route);
@@ -286,7 +305,7 @@ export async function deleteLibraryEntryInTransaction(
       transaction_id: current.transactionId,
       incarnation_id: incarnation,
     });
-    if (stamped?.incarnationId !== incarnation) throw new LibraryEntryLifecycleConflictError('stale');
+    if (stamped?.incarnationId !== incarnation) throw new (LibraryEntryLifecycleConflictError())('stale');
   }
   await allocateOwnerWriteSeq(tx, owner.accountId);
   const removed = await retainEntryDeletion(
@@ -294,7 +313,7 @@ export async function deleteLibraryEntryInTransaction(
     { route, accountId: owner.accountId, subjectId, revision: expected, incarnationId: incarnation },
     { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
   );
-  if (!removed) throw new LibraryEntryLifecycleConflictError('stale');
+  if (!removed) throw new (LibraryEntryLifecycleConflictError())('stale');
   if (gate.ready && !removed.typeId) throw new Error('Complete shelf deletion is missing its type');
   await createShelfCounters().transition(
     write,
@@ -701,8 +720,8 @@ export function createEntryCommands(config: Dependencies) {
     if (Object.keys(options).some((key) => key !== 'cursor' && key !== 'limit'))
       throw new TypeError('Entry state history options contain an unknown field');
     const limit = options.limit ?? DEFAULT_PAGE_SIZE;
-    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_STATE_HISTORY_PAGE_SIZE)
-      throw new RangeError(`History page limit must be an integer from 1 to ${MAX_STATE_HISTORY_PAGE_SIZE}`);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_STATE_HISTORY_PAGE_SIZE())
+      throw new RangeError(`History page limit must be an integer from 1 to ${MAX_STATE_HISTORY_PAGE_SIZE()}`);
     if (options.cursor !== undefined && (typeof options.cursor !== 'string' || options.cursor.length > 4096))
       throw new ProblemError('invalid_cursor');
 
@@ -849,7 +868,7 @@ export function createEntryCommands(config: Dependencies) {
               }),
             );
             if (!change) throw new LibraryNotFoundError();
-            if (change.beforeState === null) throw new LibraryEntryStateRestoreConflictError('unavailable');
+            if (change.beforeState === null) throw new (LibraryEntryStateRestoreConflictError())('unavailable');
             const observation = await readLibraryProfileSourceObservation(
               { pool, access, actor: owner, at: attempt.time, deadline },
               subjectId,
@@ -861,7 +880,7 @@ export function createEntryCommands(config: Dependencies) {
               source.subjectId !== subjectId ||
               !hasEntryState(source.profile, change.beforeState)
             )
-              throw new LibraryEntryStateRestoreConflictError('unavailable');
+              throw new (LibraryEntryStateRestoreConflictError())('unavailable');
             return { change, source };
           } catch (error) {
             return { error };
@@ -882,7 +901,7 @@ export function createEntryCommands(config: Dependencies) {
         });
         if (!current) throw new LibraryNotFoundError();
         if (current.revision !== request.currentRevision || current.incarnationId !== request.incarnationId)
-          throw new LibraryEntryStateRestoreConflictError('stale');
+          throw new (LibraryEntryStateRestoreConflictError())('stale');
         const change = await readEntryStateChange(tx, {
           route,
           accountId: owner.accountId,
@@ -893,18 +912,18 @@ export function createEntryCommands(config: Dependencies) {
         });
         if (!change) throw new LibraryNotFoundError();
         if (change.beforeState === null || change.beforeState !== prepared.change.beforeState)
-          throw new LibraryEntryStateRestoreConflictError('unavailable');
+          throw new (LibraryEntryStateRestoreConflictError())('unavailable');
         if (
           prepared.source.subjectId !== subjectId ||
           prepared.source.kind !== 'supported' ||
           !hasEntryState(prepared.source.profile, change.beforeState)
         )
-          throw new LibraryEntryStateRestoreConflictError('unavailable');
+          throw new (LibraryEntryStateRestoreConflictError())('unavailable');
         if (
           current.state === change.beforeState &&
           canonicalize(current.libraryProfilePin) === canonicalize(prepared.source.pin)
         )
-          throw new LibraryEntryStateRestoreConflictError('unchanged');
+          throw new (LibraryEntryStateRestoreConflictError())('unchanged');
         const sequence = await allocateOwnerWriteSeq(tx, owner.accountId);
         const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
         const entry = await store.updateEntryState(
@@ -918,7 +937,7 @@ export function createEntryCommands(config: Dependencies) {
           prepared.source.pin,
           request.incarnationId,
         );
-        if (!entry) throw new LibraryEntryStateRestoreConflictError('stale');
+        if (!entry) throw new (LibraryEntryStateRestoreConflictError())('stale');
         const typeId = before?.typeId;
         if (gate.ready && !typeId) throw new Error('Complete shelf placement is missing a type');
         await counters.transition(
@@ -1034,8 +1053,8 @@ export function createEntryCommands(config: Dependencies) {
           canonicalize({ ...snapshot, libraryProfilePin: decodeLibraryProfilePin(snapshot.libraryProfilePin) }) !==
             canonicalize(prepared.deletion)
         )
-          throw new LibraryEntryLifecycleConflictError('stale');
-        if (expired) throw new LibraryEntryLifecycleConflictError('expired');
+          throw new (LibraryEntryLifecycleConflictError())('stale');
+        if (expired) throw new (LibraryEntryLifecycleConflictError())('expired');
         const restored = await restoreRetainedEntryDeletion(
           tx,
           { ...locator, deletedRevision: selected.revision },
@@ -1043,7 +1062,7 @@ export function createEntryCommands(config: Dependencies) {
         );
         if (!restored) {
           if (await store.readEntry(tx, route, owner.accountId, subjectId))
-            throw new LibraryEntryLifecycleConflictError('occupied');
+            throw new (LibraryEntryLifecycleConflictError())('occupied');
           throw new Error('Locked retained entry could not be restored');
         }
         if (gate.ready && !restored.typeId) throw new Error('Complete shelf restoration is missing its type');

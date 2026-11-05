@@ -72,7 +72,7 @@ test('another scheme or a malformed bearer token is refused before verification'
 });
 
 test('until the access module is installed, reads are allowed and every other action is denied', async () => {
-  const installed: Access = access;
+  const installed: Access = access();
   expect(typeof installed.authenticate).toBe('function');
   const client = {} as never;
   expect(await anonymousAccess.authorize(client, { kind: 'anonymous' }, 'subject:read', subject)).toBe(true);

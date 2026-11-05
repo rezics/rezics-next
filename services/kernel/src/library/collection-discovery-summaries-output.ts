@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { AccessClient } from '../request/access.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
 import outputHead from './collection-source-output-head.sql';
@@ -6,7 +7,10 @@ import outputHead from './collection-source-output-head.sql';
  * The selected head, complete generation, publication receipt, native XID, incarnation, source/member
  * fences and current Core commit must all agree. Neither a generation ID nor a COMPLETE flag is proof.
  */
-const selectedOutputSQL = `
+function selectedOutputSQL() {
+  return memoizedValue(
+    selectedOutputSQL,
+    () => `
 SELECT requested.id::text AS id, selected.*
 FROM unnest($1::integer[], $2::uuid[], $3::bigint[]) AS requested(route, id, source_generation)
 CROSS JOIN LATERAL (
@@ -17,14 +21,16 @@ ${outputHead.sql
     /\$([123])\b/g,
     (_, n: string) => ({ '1': 'requested.route', '2': 'requested.id', '3': 'requested.source_generation' })[n]!,
   )}
-) selected`;
+) selected`,
+  );
+}
 
 export async function readDiscoveryOutputs(
   client: AccessClient,
   keys: readonly { route: number; id: string; sourceGeneration: string }[],
 ): Promise<ReadonlyMap<string, CollectionOutputPublication>> {
   if (!keys.length) return new Map();
-  const result = await client.query<CollectionOutputPublication & { id: string }>(selectedOutputSQL, [
+  const result = await client.query<CollectionOutputPublication & { id: string }>(selectedOutputSQL(), [
     keys.map((key) => key.route),
     keys.map((key) => key.id),
     keys.map((key) => key.sourceGeneration),

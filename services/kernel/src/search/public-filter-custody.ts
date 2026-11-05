@@ -105,16 +105,16 @@ function drainSignal(observation: string) {
 }
 // A tagged canonical tree preserves bigint/undefined without collisions with user JSON objects.
 type Tree = [string, unknown?];
-function tree(value: unknown): Tree {
+function tree(value: unknown, scalarTag: 'scalar' | 'value' = 'scalar'): Tree {
   if (value === undefined) return ['undefined'];
   if (typeof value === 'bigint') return ['bigint', value.toString()];
-  if (Array.isArray(value)) return ['array', value.map(tree)];
+  if (Array.isArray(value)) return ['array', value.map((child) => tree(child, scalarTag))];
   if (value !== null && typeof value === 'object')
     return [
       'object',
       Object.keys(value)
         .sort()
-        .map((key) => [key, tree((value as Record<string, unknown>)[key])]),
+        .map((key) => [key, tree((value as Record<string, unknown>)[key], scalarTag)]),
     ];
   requireValue(
     value === null ||
@@ -122,7 +122,7 @@ function tree(value: unknown): Tree {
       typeof value === 'boolean' ||
       (typeof value === 'number' && Number.isFinite(value)),
   );
-  return ['scalar', value];
+  return [scalarTag, value];
 }
 function untree(value: Tree): unknown {
   switch (value[0]) {
@@ -1128,30 +1128,45 @@ export function createPublicFilterCustody(
     acquire(q, context) {
       const input = decode<typeof q>(encode(q));
       queried(input);
-      return run(context, async (meter) => {
-        const token = randomUUID();
-        const result = await sql(
-          pool,
-          meter,
-          `WITH locked AS (
+      return run(context, (meter) =>
+        transaction(meter, async (client) => {
+          // Serialize reader enrollment with the ordinary publication admission fence.
+          await sql(client, meter, 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [
+            input.consumer.physicalTarget,
+          ]);
+          const token = randomUUID();
+          const result = await sql(
+            client,
+            meter,
+            `WITH locked AS (
           SELECT o.partition_no,o.observation FROM search.public_filter_observation o
           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
           JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
-          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4 AND r.state='active' AND t.incarnation=$7 FOR UPDATE OF o FOR SHARE OF r,t)
+          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4
+            AND r.state='active' AND t.incarnation=$7
+            AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate g
+              WHERE g.partition_no=0 AND g.physical_target=r.physical_target AND g.publication_fence IS NOT NULL)
+            AND NOT EXISTS (SELECT 1 FROM search.public_filter_prepared p
+              WHERE (p.partition_no,p.registration,p.build,p.generation)=(r.partition_no,r.id,$8::text,$9::bigint)
+                AND p.state='erasing')
+          FOR UPDATE OF o FOR SHARE OF r,t)
           INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING token`,
-          [
-            partition(input.snapshot.observation),
-            input.snapshot.observation,
-            encode(input),
-            Date.now(),
-            token,
-            Math.min(context.deadline, Date.now() + 300_000),
-            input.consumer.incarnation,
-          ],
-        );
-        if (!result.rowCount) throw new Failure('observation_lost');
-        return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
-      });
+            [
+              partition(input.snapshot.observation),
+              input.snapshot.observation,
+              encode(input),
+              Date.now(),
+              token,
+              Math.min(context.deadline, Date.now() + 300_000),
+              input.consumer.incarnation,
+              input.snapshot.kind === 'prepared' ? input.snapshot.build : null,
+              input.snapshot.kind === 'prepared' ? input.snapshot.generation.toString() : null,
+            ],
+          );
+          if (!result.rowCount) throw new Failure('observation_lost');
+          return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
+        }),
+      );
     },
     appendExecution(request, context) {
       const input = decode<typeof request>(encode(request));
@@ -1843,24 +1858,75 @@ export async function readGenerationPublicationCustody(
   }
 }
 
-/** Native keyed custody probe used by the SAME writer gate after copy admission is fenced.
- * Erasing markers alone are insufficient: the independent prepared payload must actually be empty.
+/** Empty the original generation proof payload only after its actual readers release.
+ * Its immutable Source/dispatch metadata remains available for completion replay.
  */
+export async function drainGenerationPublicationProofCopy(
+  tx: Pick<import('pg').PoolClient, 'query'>,
+  partition: number,
+  physicalTarget: string,
+  job: string,
+): Promise<boolean> {
+  if (partition !== 0) return false;
+  const retained = await tx.query<{
+    observation: string;
+    registration: string;
+    bootstrap: string;
+    consumer_work: string;
+  }>(
+    `SELECT o.observation,o.registration,b.bootstrap::text,o.consumer_work
+     FROM semantic.public_filter_bootstrap b
+     JOIN search.public_filter_observation o
+       ON (o.partition_no,o.consumer_bootstrap,o.observation)=(0,'0:'||b.bootstrap::text,b.publication_observation)
+     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+     WHERE (b.partition_no,b.publication_job)=(0,$1::uuid) AND r.physical_target=$2
+       AND b.publication_execution IS NOT NULL AND o.state='open'
+       AND NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
+         WHERE (f.partition_no,f.observation)=(0,o.observation) AND f.expires_at>$3)
+     FOR UPDATE OF o`,
+    [job, physicalTarget, Date.now()],
+  );
+  if (!retained.rowCount) return false;
+  const row = retained.rows[0]!;
+  const work = decode<Record<string, unknown>>(row.consumer_work);
+  const proofWork = JSON.stringify(tree({ ...work, prepared: [], preparedRows: [], after: undefined }, 'value'));
+  const prepared = await tx.query(
+    `UPDATE search.public_filter_prepared SET rows=$3,state='erasing'
+     WHERE partition_no=0 AND registration=$1 AND build=$2 AND (state<>'erasing' OR rows<>$3)`,
+    [row.registration, '0:' + row.bootstrap, encode([])],
+  );
+  const observation = await tx.query(
+    `UPDATE search.public_filter_observation SET prepared_rows=$2,consumer_work=$3
+     WHERE partition_no=0 AND observation=$1
+       AND (prepared_rows IS DISTINCT FROM $2 OR consumer_work IS DISTINCT FROM $3)`,
+    [row.observation, encode([]), proofWork],
+  );
+  return !!(prepared.rowCount || observation.rowCount);
+}
+
+/** Every other observation, prepared payload and original reader must drain normally. */
 export async function hasRetainedWriterPublicationCopies(
   tx: Pick<import('pg').PoolClient, 'query'>,
   partition: number,
   physicalTarget: string,
+  publicationJob: string | null = null,
 ): Promise<boolean> {
   const retained = await tx.query(
     `SELECT 1 FROM search.public_filter_observation o
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
-    WHERE r.partition_no=$1 AND r.physical_target=$2
+    WHERE r.partition_no=$1 AND r.physical_target=$2 AND NOT (
+      o.prepared_rows=$3 AND EXISTS (
+        SELECT 1 FROM semantic.public_filter_bootstrap b
+        WHERE (b.partition_no,b.publication_job)=(0,$4::uuid)
+          AND (o.partition_no,o.observation,o.consumer_bootstrap)=(0,b.publication_observation,'0:'||b.bootstrap::text)
+      ) AND NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
+        WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation) AND f.expires_at>$5))
     UNION ALL
     SELECT 1 FROM search.public_filter_prepared p
     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)
     WHERE r.partition_no=$1 AND r.physical_target=$2 AND (p.state<>'erasing' OR p.rows<>$3)
     LIMIT 1`,
-    [partition, physicalTarget, encode([])],
+    [partition, physicalTarget, encode([]), publicationJob, Date.now()],
   );
   return retained.rowCount !== 0;
 }

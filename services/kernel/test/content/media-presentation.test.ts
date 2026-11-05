@@ -23,7 +23,7 @@ async function page(ids: readonly string[], bearer: string | null) {
 }
 
 function images(value: Record<string, unknown>): DocumentMediaPage['images'] {
-  expect(Compile(DocumentMediaPageSchema).Check(value)).toBe(true);
+  expect(Compile(DocumentMediaPageSchema()).Check(value)).toBe(true);
   return (value as DocumentMediaPage).images;
 }
 
@@ -96,7 +96,7 @@ test('presentation input and page are closed, bounded and reject transport field
   }
   const result = await page([id], null);
   const image = images(result.value)[0]!;
-  const pageSchema = Compile(DocumentMediaPageSchema);
+  const pageSchema = Compile(DocumentMediaPageSchema());
   expect(pageSchema.Check({ images: [{ ...image, key: `m/${id}/original` }] })).toBe(false);
   expect(pageSchema.Check({ images: [{ ...image, variants: [{ ...image.variants[0], url: '/guessed' }] }] })).toBe(
     false,

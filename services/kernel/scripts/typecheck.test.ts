@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { withCommandPhase } from './command-phases.ts';
-import { prepareReyloAnalysisCache, runKernelTypecheck } from './typecheck.ts';
+import { prepareReyloAnalysisCache } from './reylo-cache.ts';
+import { runKernelTypecheck } from './typecheck.ts';
 
 test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invalidation to changed inputs', async () => {
   const repository = mkdtempSync(join(tmpdir(), 'kernel-typecheck-cache-'));
@@ -23,6 +24,12 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
     '#!/bin/sh\n[ -n "$REYLO_CONFIG" ] || exit 9\n[ -z "$DATABASE_URL" ] || exit 9\nprintf \'%s\\n\' \'services/kernel/src/query.ts(12,3): error TS2345: same cold/warm diagnostic\' > "$DIAGNOSTIC_FILE"\nexit 2\n',
   );
   chmodSync(tsc, 0o755);
+  const emitter = join(bin, 'bun');
+  writeFileSync(
+    emitter,
+    '#!/bin/sh\n[ -n "$DATABASE_URL" ] || exit 9\n[ "$1" = scripts/client.ts ] || exit 9\nexit 0\n',
+  );
+  chmodSync(emitter, 0o755);
   let dumps = {
     'db/schema.sql': 'create table first (id integer);',
     'db/access/schema.sql': 'create table second (id integer);',
@@ -49,7 +56,7 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
       return { status: 0, stdout: '', stderr: '' };
     },
   };
-  const check = async () => {
+  const check = async (emitClient = false) => {
     const status = await runKernelTypecheck(
       {
         PATH: `${bin}:${process.env.PATH ?? ''}`,
@@ -65,12 +72,14 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
           scope: 'fixture.scope',
           supervisor: { pid: 1, started: '1', group: 1 },
         }),
+        outputTree: async (_root, command) => command(),
         prepareSqlAnalysis: async (env) => {
           const prepared = await prepareReyloAnalysisCache(env, options);
           analysisResults.push({ analyzed: prepared.analyzedFiles, total: prepared.totalFiles });
           return prepared;
         },
       },
+      emitClient ? ['--emit-client'] : [],
     );
     return { status, ...analysisResults.at(-1)!, diagnostics: [readFileSync(diagnosticsFile, 'utf8').trim()] };
   };
@@ -119,6 +128,8 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
         durations[phase!] = (durations[phase!] ?? 0) + (Number(timestamp) - started!);
       }
     }
+    // Emission keeps its database while the following tsc still uses database-free cached analysis.
+    expect((await check(true)).status).toBe(2);
     expect(open.size).toBe(0);
     for (const phase of ['database-image', 'migrations', 'sql-analysis', 'typecheck'])
       expect(durations[phase]).toBeGreaterThan(0);

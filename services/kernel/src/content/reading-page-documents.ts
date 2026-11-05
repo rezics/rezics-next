@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { DocumentNode } from '@rezics/document';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -30,39 +31,47 @@ export type ReadingPageDocumentMedia = Readonly<{
   documents: readonly ReadingPageDocument[];
 }>;
 
-const ReadingPageDocumentImageSchema = t.Union([
-  t.Object(
-    {
-      id: ContentIdSchema,
-      state: t.Literal('available'),
-      presentation: DocumentImagePresentationSchema,
-    },
-    closed,
-  ),
-  t.Object({ id: ContentIdSchema, state: t.Literal('unavailable') }, closed),
-]);
-export const ReadingPageDocumentMediaSchema = t.Unsafe<ReadingPageDocumentMedia>(
-  t.Object(
-    {
-      state: t.Union([t.Literal('available'), t.Literal('unavailable'), t.Literal('overflow')]),
-      documents: t.Array(
-        t.Object(
-          {
-            postId: ContentIdSchema,
-            threadId: ContentIdSchema,
-            revisionId: ContentIdSchema,
-            sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
-            state: t.Union([t.Literal('available'), t.Literal('unavailable'), t.Literal('overflow')]),
-            images: t.Array(ReadingPageDocumentImageSchema, { maxItems: READING_PAGE_DOCUMENT_MEDIA_LIMIT }),
-          },
-          closed,
-        ),
-        { maxItems: READING_PAGE_DOCUMENT_LIMIT },
+function ReadingPageDocumentImageSchema() {
+  return memoizedValue(ReadingPageDocumentImageSchema, () =>
+    t.Union([
+      t.Object(
+        {
+          id: ContentIdSchema,
+          state: t.Literal('available'),
+          presentation: DocumentImagePresentationSchema(),
+        },
+        closed,
       ),
-    },
-    closed,
-  ),
-);
+      t.Object({ id: ContentIdSchema, state: t.Literal('unavailable') }, closed),
+    ]),
+  );
+}
+export function ReadingPageDocumentMediaSchema() {
+  return memoizedValue(ReadingPageDocumentMediaSchema, () =>
+    t.Unsafe<ReadingPageDocumentMedia>(
+      t.Object(
+        {
+          state: t.Union([t.Literal('available'), t.Literal('unavailable'), t.Literal('overflow')]),
+          documents: t.Array(
+            t.Object(
+              {
+                postId: ContentIdSchema,
+                threadId: ContentIdSchema,
+                revisionId: ContentIdSchema,
+                sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+                state: t.Union([t.Literal('available'), t.Literal('unavailable'), t.Literal('overflow')]),
+                images: t.Array(ReadingPageDocumentImageSchema(), { maxItems: READING_PAGE_DOCUMENT_MEDIA_LIMIT }),
+              },
+              closed,
+            ),
+            { maxItems: READING_PAGE_DOCUMENT_LIMIT },
+          ),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 
 export type SelectedReadingPageDocument = Readonly<{
   postId: string;
@@ -189,4 +198,4 @@ export async function readReadingPageDocumentMedia(
   };
 }
 
-export type ReadingPageDocumentMediaResponse = Static<typeof ReadingPageDocumentMediaSchema>;
+export type ReadingPageDocumentMediaResponse = Static<ReturnType<typeof ReadingPageDocumentMediaSchema>>;

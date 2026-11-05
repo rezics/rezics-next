@@ -123,6 +123,12 @@
       "state": "open"
     },
     {
+      "path": "docs/research/architecture-paradigms-opus-5-5.md",
+      "topic": "architecture-paradigms",
+      "researcher": "claude-opus-5-5",
+      "state": "open"
+    },
+    {
       "path": "docs/research/backend-architecture-current.md",
       "topic": "backend-architecture",
       "researcher": "current",

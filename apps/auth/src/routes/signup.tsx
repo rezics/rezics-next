@@ -1,4 +1,4 @@
-import { createFileRoute, useBlocker, useRouter, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { flushSync } from 'react-dom';
 import { AuthButton as Button } from '../button';
 import { Field } from '@rezics/ui/shadcn/field';
@@ -188,24 +188,35 @@ function SignupDeparture({
 
 export const Route = createFileRoute('/signup')({
   head: () => ({ meta: [{ title: `${m.auth_signup_heading()} · REZICS` }] }),
-  loader: () => readRegistrationPage(),
   component: SignupPage,
 });
 
 function SignupPage() {
   const router = useRouter();
   const { history } = router;
-  const adviceReadState = useRouterState({
-    select: (state) => {
-      const match = state.matches.find((current) => current.routeId === '/signup');
-      return `${match?.status ?? ''}:${match?.isFetching ?? ''}:${match?.updatedAt ?? ''}`;
-    },
-  });
-  const page = Route.useLoaderData();
+  const [page, setPage] = useState<RegistrationPage | null>(null);
+  const pageRead = useRef<AbortController | null>(null);
+  const readPage = useCallback(async () => {
+    pageRead.current?.abort();
+    const request = new AbortController();
+    pageRead.current = request;
+    const result = await readRegistrationPage(request.signal);
+    if (request.signal.aborted || pageRead.current !== request) return null;
+    setPage(result);
+    return result;
+  }, []);
+  const cancelPageRead = useCallback(() => {
+    pageRead.current?.abort();
+    pageRead.current = null;
+  }, []);
+  useEffect(() => {
+    void readPage();
+    return cancelPageRead;
+  }, [cancelPageRead, readPage]);
   const pageKey =
-    page.kind === 'already-signed-in'
+    page?.kind === 'already-signed-in'
       ? `account:${page.viewer.account_id}`
-      : page.kind === 'registration'
+      : page?.kind === 'registration'
         ? 'registration'
         : null;
   const sequence = useRef(0);
@@ -218,36 +229,18 @@ function SignupPage() {
   returnControllerRef.current ??= new SignupReturnController();
   const returnController = returnControllerRef.current;
   const [returnState, setReturnState] = useState<SignupReturnState>(returnController.state);
-  const pendingAdviceRead = useRef<{
-    readId: number;
-    initialUpdatedAt: number | undefined;
-    observedFetch: boolean;
-    failed: boolean;
-  } | null>(null);
 
   const finishRead = useCallback(
-    (readId: number, failed: boolean) => {
-      if (history.location.pathname !== '/signup') return;
-      const changed = failed ? returnController.adviceUnavailable(readId) : returnController.adviceReturned(readId);
+    (readId: number, result: RegistrationPage | null) => {
+      if (history.location.pathname !== '/signup' || result === null) return;
+      const changed =
+        result.kind === 'unavailable'
+          ? returnController.adviceUnavailable(readId)
+          : returnController.adviceReturned(readId);
       if (changed) setReturnState(returnController.state);
     },
     [history, returnController],
   );
-
-  useLayoutEffect(() => {
-    const pending = pendingAdviceRead.current;
-    if (!pending) return;
-    const match = router.state.matches.find((current) => current.routeId === '/signup');
-    if (!match) return;
-    if (match.isFetching !== false) {
-      pending.observedFetch = true;
-      return;
-    }
-    if (pending.observedFetch || match.updatedAt !== pending.initialUpdatedAt || match.status === 'error') {
-      pendingAdviceRead.current = null;
-      finishRead(pending.readId, pending.failed || match.status === 'error');
-    }
-  }, [adviceReadState, finishRead, router]);
 
   useLayoutEffect(() => {
     const createJourney = (
@@ -277,7 +270,7 @@ function SignupPage() {
       currentJourney.current = null;
       clearSignupInputs();
       if (history.location.pathname !== '/signup') {
-        pendingAdviceRead.current = null;
+        cancelPageRead();
         returnController.clear();
         setReturnState(returnController.state);
         setJourney(null);
@@ -295,35 +288,19 @@ function SignupPage() {
     };
     replaceJourney.current = replace;
     const unsubscribe = history.subscribe(() => replace());
-    const invalidateForAdvice = (readId: number) => {
-      const match = router.state.matches.find((current) => current.routeId === '/signup');
-      const pending = {
-        readId,
-        initialUpdatedAt: match?.updatedAt,
-        observedFetch: false,
-        failed: false,
-      };
-      pendingAdviceRead.current = pending;
-      void router.invalidate().catch(() => {
-        if (pendingAdviceRead.current !== pending) return;
-        pending.failed = true;
-        const current = router.state.matches.find((item) => item.routeId === '/signup');
-        if (!current || current.isFetching === false) {
-          pendingAdviceRead.current = null;
-          finishRead(readId, true);
-        }
-      });
+    const refreshReturnedPage = (readId: number) => {
+      void readPage().then((result) => finishRead(readId, result));
     };
     const readCurrentAdvice = () => {
       const state = returnController.state;
       if (!state.summary && !state.restorationRequired) {
-        void router.invalidate();
+        void readPage();
         return;
       }
       const readId = returnController.beginRefresh();
       if (readId === null) return;
       setReturnState(returnController.state);
-      invalidateForAdvice(readId);
+      refreshReturnedPage(readId);
     };
     refreshAdvice.current = readCurrentAdvice;
     const restore = (event: PageTransitionEvent) => {
@@ -338,14 +315,14 @@ function SignupPage() {
       lastAuthority.current = null;
       setJourney(next);
       setReturnState(returnController.state);
-      invalidateForAdvice(readId);
+      refreshReturnedPage(readId);
     };
     const pagehide = (event: PageTransitionEvent) => {
       const current = currentJourney.current;
+      cancelPageRead();
       flushSync(() => {
         if (event.persisted && current?.attempt) returnController.retain(current.attempt.phase);
         returnController.suspend(event.persisted);
-        pendingAdviceRead.current = null;
         retireCurrent(current);
         currentJourney.current = null;
         lastAuthority.current = null;
@@ -361,7 +338,7 @@ function SignupPage() {
     return () => {
       retireCurrent(currentJourney.current);
       currentJourney.current = null;
-      pendingAdviceRead.current = null;
+      cancelPageRead();
       returnController.clear();
       replaceJourney.current = () => {};
       refreshAdvice.current = () => {};
@@ -370,7 +347,7 @@ function SignupPage() {
       window.removeEventListener('pageshow', restore);
       window.removeEventListener('focus', readCurrentAdvice);
     };
-  }, [finishRead, history, router, returnController]);
+  }, [cancelPageRead, finishRead, history, readPage, returnController]);
 
   useLayoutEffect(() => {
     if (pageKey === null) return;
@@ -385,7 +362,7 @@ function SignupPage() {
     const outcome = returnController.state.summary?.kind ?? null;
     if (!returnController.acknowledge()) return;
     setReturnState(returnController.state);
-    replaceJourney.current(page.kind === 'registration' && page.actions.register ? outcome : null);
+    replaceJourney.current(page?.kind === 'registration' && page.actions.register ? outcome : null);
   };
 
   return journey ? (
@@ -410,7 +387,7 @@ function SignupPageState({
   acknowledge,
 }: {
   journey: SignupJourney;
-  page: RegistrationPage;
+  page: RegistrationPage | null;
   router: ReturnType<typeof useRouter>;
   returnState: SignupReturnState;
   retryAdvice: () => void;
@@ -421,6 +398,14 @@ function SignupPageState({
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     history.push(event.currentTarget.getAttribute('href')!);
+  }
+
+  if (page === null) {
+    return (
+      <AuthPage heading={m.auth_signup_heading()}>
+        <p role="status">{m.auth_inventory_loading()}</p>
+      </AuthPage>
+    );
   }
 
   const returning =
@@ -440,17 +425,26 @@ function SignupPageState({
     );
   }
   if (!journey.attempt) return null;
-  return <SignupActivePageState journey={journey as ActiveSignupJourney} page={page} router={router} />;
+  return (
+    <SignupActivePageState
+      journey={journey as ActiveSignupJourney}
+      page={page}
+      router={router}
+      retryAdvice={retryAdvice}
+    />
+  );
 }
 
 function SignupActivePageState({
   journey,
   page,
   router,
+  retryAdvice,
 }: {
   journey: ActiveSignupJourney;
   page: RegistrationPage;
   router: ReturnType<typeof useRouter>;
+  retryAdvice: () => void;
 }) {
   const controller = journey.attempt;
   const [phase, setPhase] = useState(controller.phase);
@@ -557,7 +551,7 @@ function SignupActivePageState({
               </p>
             </ErrorAlert>
           )}
-          <Button type="button" onClick={() => void router.invalidate()}>
+          <Button type="button" onClick={retryAdvice}>
             {m.auth_signup_retry()}
           </Button>
           {phase.kind !== 'uncertain' && phase.kind !== 'dispatched' ? (

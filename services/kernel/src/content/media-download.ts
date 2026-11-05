@@ -289,7 +289,7 @@ async function authorizeDownload(
         ...(context.work === undefined ? {} : { work: context.work }),
       };
       if (context.work) {
-        if (!context.time) throw new AccessWorkUnavailableError(COVER_MEDIA_WORK_DEPENDENCY);
+        if (!context.time) throw new (AccessWorkUnavailableError())(COVER_MEDIA_WORK_DEPENDENCY);
         authoritativeTimeValue(context.time);
       }
       const subject = await accessCheck(dependencies.access, actor, 'subject:read', subjectResource, accessContext);

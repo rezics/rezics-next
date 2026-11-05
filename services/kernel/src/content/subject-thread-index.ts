@@ -50,7 +50,7 @@ function parse(event: CloudEvent): Change {
   if (!sourceTypes.includes(event.type as (typeof sourceTypes)[number]))
     throw new TypeError('Unsupported subject thread source event');
   const type = event.type as (typeof sourceTypes)[number];
-  if (!Value.Check(CONTENT_EVENTS[type], event.data)) throw new TypeError('Invalid subject thread source payload');
+  if (!Value.Check(CONTENT_EVENTS()[type], event.data)) throw new TypeError('Invalid subject thread source payload');
   const data = event.data as IndexEventData;
   const threadRoute = requiredRoute(data.threadId);
   const itemRoute = requiredRoute(data.itemId);

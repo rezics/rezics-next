@@ -157,7 +157,7 @@ for (const injected of [true, false]) {
         [revoked.partition, revoked.position.toString(), revoked.epoch],
       );
       expect(events.rows).toEqual([{ data: revoked.value }]);
-      const schema = ACCESS_EVENTS['com.rezics.access.assignment.revoke.v1'];
+      const schema = ACCESS_EVENTS()['com.rezics.access.assignment.revoke.v1'];
       expect(Value.Check(schema, events.rows[0].data)).toBe(true);
       expect(Value.Check(schema, { ...revoked.value, key: input.key })).toBe(false);
 

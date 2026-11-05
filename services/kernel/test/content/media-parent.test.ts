@@ -136,7 +136,7 @@ beforeAll(async () => {
 afterAll(() => db?.close());
 
 function nativeBoardTrace(records: readonly SqlExecution[], board: string) {
-  const probes = records.filter((r) => r.statement === boardStatement && r.parameters.includes(board));
+  const probes = records.filter((r) => r.statement === boardStatement() && r.parameters.includes(board));
   expect(probes.length).toBeGreaterThan(0);
   for (const probe of probes) {
     const index = records.indexOf(probe);
@@ -150,7 +150,7 @@ function nativeBoardTrace(records: readonly SqlExecution[], board: string) {
     ]);
     expect(
       transaction
-        .filter((r) => [parentStatement, boardStatement].includes(r.statement))
+        .filter((r) => [parentStatement(), boardStatement()].includes(r.statement))
         .every((r) => r.parameters.includes(boardRoute)),
     ).toBe(true);
     expect(records.slice(index + 1).find((r) => /^(?:COMMIT|ROLLBACK|BEGIN)/.test(r.statement))?.statement).toBe(
@@ -182,7 +182,7 @@ test('media reserve reads a remote board on its own native anchor and releases b
     for (const checkout of checkouts) {
       const records = trace.records.slice(checkout.start, checkout.end);
       const partitions = records.flatMap((r) => {
-        if ([parentStatement, boardStatement].includes(r.statement)) return [partitionOf(Number(r.parameters[0]))];
+        if ([parentStatement(), boardStatement()].includes(r.statement)) return [partitionOf(Number(r.parameters[0]))];
         if (r.statement === permission.sql)
           return [partitionOf(Number(r.parameters[permission.params.indexOf('route')]))];
         if (r.statement === anchor.sql) return [Number(r.parameters[0])];
@@ -194,7 +194,9 @@ test('media reserve reads a remote board on its own native anchor and releases b
     expect(result.partition).toBe(partitionOf(containerRoute));
     nativeBoardTrace(trace.records, board);
     expect(
-      trace.records.filter((r) => r.statement === parentStatement).every((r) => !r.statement.includes('content.board')),
+      trace.records
+        .filter((r) => r.statement === parentStatement())
+        .every((r) => !r.statement.includes('content.board')),
     ).toBe(true);
   } finally {
     db.pool.removeListener('acquire', acquire);
@@ -471,7 +473,7 @@ test('parent validation observes current security revisions and private authorit
       await grant(f.thread, 'thread:read');
     }
     const trace = observeSql(db.pool);
-    const barrier = trace.hold({ statement: parentStatement, occurrence: 2 }, 'before');
+    const barrier = trace.hold({ statement: parentStatement(), occurrence: 2 }, 'before');
     const before = await effects();
     const outcome = reserveMedia(dependencies(), actor, input(f.thread), request()).then(
       () => null,
@@ -505,7 +507,7 @@ test('serialization retries resolve native references again and preserve one med
       boundary: 'after',
       error: Object.assign(new Error('retry'), { code: '40001' }),
     });
-    const barrier = trace.hold({ statement: parentStatement, occurrence: 3 }, 'before');
+    const barrier = trace.hold({ statement: parentStatement(), occurrence: 3 }, 'before');
     const before = await effects();
     const outcome = reserveMedia(dependencies(), actor, input(f.thread), request()).then(
       (value) => ({ value }),
@@ -527,7 +529,7 @@ test('serialization retries resolve native references again and preserve one med
         nativeBoardTrace(trace.records, f.board);
         expect(
           trace.records.filter(
-            (r) => [parentStatement, boardStatement].includes(r.statement) && r.parameters.includes(f.board),
+            (r) => [parentStatement(), boardStatement()].includes(r.statement) && r.parameters.includes(f.board),
           ),
         ).toHaveLength(2);
       }
@@ -799,7 +801,7 @@ test('deadline during an anchored board read denies and releases its sole client
   const f = await fixture(),
     context = { ...request(), deadline: Date.now() + 1000 };
   const trace = observeSql(db.pool),
-    barrier = trace.hold({ statement: boardStatement }, 'before');
+    barrier = trace.hold({ statement: boardStatement() }, 'before');
   const before = await effects();
   const outcome = reserveMedia(dependencies(), actor, input(f.thread), context).then(
     () => null,

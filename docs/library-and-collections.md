@@ -115,20 +115,18 @@ bounded explicit installation and Content currentness prerequisite.
 
 ## Web personal-score availability
 
-Decision: retain an explicit `personalScore` address as an unavailable visit until the generated native score contract
-is published; a saved unsupported `rating` preference does not activate that order.
+Decision: Web requests the generated native `personalScore` order. Saved `rating` is an executable shelf sort. Content's
+owner-wide identity fence still independently refuses a page when repair is pending or standing is ineligible.
 
-At source head `ed91a343d2998cbacb1211c2a59abab8bd010bdd`, the installed
-`packages/client/src/kernel/library/personal-routes.d.ts` lacks the `personalScore` query literal, entry `personalScore`,
-page `scoreQuestion`, and `libraryShelfScorePreparation` method. The generated `shelf-contract.d.ts` also omits the
-score order and question descriptor. Native source alone does not activate Web. Content's owner-wide score currentness
-port remains independently required. Web sends no score request, preparation command, vote read or vote write while
-these declarations are absent. It shows unavailable, separately from native preparation, empty, final and expired
-cursor outcomes. Explicit score URLs retain direction, state/type, display choices and opaque cursor in navigation;
-restart drops the cursor and date-order recovery deliberately begins a new visit. Changing the native predicate
-retires the prior page through the existing personal-shelf address owner. No old rows decorate an unavailable order.
-Decision: sort forms submit the explicit unavailable score address until a date order is selected; replacing the
-supplied address or its filters/display resets pending edits in place, preserving the focused control.
+The generated client carries the `personalScore` query literal, entry `personalScore`, page `scoreQuestion` and
+`libraryShelfScorePreparation`. A successful FULL page shows native own units with the standard-question descriptor;
+Liked uses the independent viewer-facts overlay. `503 dependency_unavailable` whose detail names preparation shows the
+bounded score-installation step; identity-fence or voter-standing details show score-unavailable with date-order
+recovery. Empty, final and expired-cursor outcomes stay separate. Explicit score URLs retain direction, state/type,
+display choices and opaque cursor; restart drops the cursor. Changing the native predicate retires the prior page
+through the existing personal-shelf address owner. Sort forms submit the selected score address and direction; replacing
+the supplied address or its filters/display resets pending edits in place, preserving the focused control. Vote writes
+stay on Content's installed callable; a successful write invalidates Library, Liked and own-vote current reads.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;
@@ -143,7 +141,7 @@ Keyboard navigation may focus the admitted tracked heading unless failure or int
 Links retain ordinary GET and browser history meaning; no chain replay or automatic movement is added.
 Next, Previous and First replace that page. Continue retains six subjects,
 navigation requests eight pins and one existing owner-collection page, and opening the type chooser reads one bounded
-type page. Score selection adds zero requests and retains zero score rows/cursors in the rendered result. There is no
+type page. Score order uses the same FULL page of 20 entries. There is no
 per-row score fetch, browser aggregation or local page sort. The shelf address bounds each opaque cursor to 2048
 characters. The existing FULL reader has no independent response-byte ceiling; a row limit alone is not a byte or
 native indexed-growth proof. Generated publication, Content currentness and native cost acceptance retain their owners.

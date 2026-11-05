@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
@@ -55,9 +56,15 @@ const collectionProjection = {
   createdAt: escaped(64),
   updatedAt: escaped(64),
 };
-const collectionBytes = jsonBytes(collectionProjection) + 6 * RELEASE_LIMITS.bytes;
-const directoryBytes = collectionBytes + jsonBytes({ updatedAtExact: escaped(27) });
-const storedCollectionBytes = collectionBytes + jsonBytes({ state: 'deleted' });
+function collectionBytes() {
+  return memoizedValue(collectionBytes, () => jsonBytes(collectionProjection) + 6 * RELEASE_LIMITS.bytes);
+}
+function directoryBytes() {
+  return memoizedValue(directoryBytes, () => collectionBytes() + jsonBytes({ updatedAtExact: escaped(27) }));
+}
+function storedCollectionBytes() {
+  return memoizedValue(storedCollectionBytes, () => collectionBytes() + jsonBytes({ state: 'deleted' }));
+}
 
 function statement<Input extends object, Output>(
   query: Statement<Input, Output>,
@@ -96,8 +103,8 @@ export function collectionDirectoryPagePlan(
     emptySeeks: 2,
   };
   return policy.source === 'curator'
-    ? statement(curatorPage, input, shape, directoryBytes, input.limit)
-    : statement(publicPage, { ...input, ...policy.parameters }, shape, directoryBytes, input.limit);
+    ? statement(curatorPage, input, shape, directoryBytes(), input.limit)
+    : statement(publicPage, { ...input, ...policy.parameters }, shape, directoryBytes(), input.limit);
 }
 
 /** The same full-key original is used for initial and terminal Collection observations. */
@@ -106,7 +113,7 @@ export function collectionDirectoryRowPlan(input: Parameters<typeof collectionRe
     collectionRead,
     input,
     { candidateKeys: 1, nativeRows: 2, nativePoints: 1, emptySeeks: 1 },
-    storedCollectionBytes,
+    storedCollectionBytes(),
     1,
   );
 }

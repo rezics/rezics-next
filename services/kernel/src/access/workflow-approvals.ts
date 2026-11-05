@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
@@ -125,7 +126,9 @@ function requireAllowed(value: unknown): asserts value {
   if (!value) throw denied();
 }
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
-const handle = isClaimHandle;
+function handle() {
+  return memoizedValue(handle, () => isClaimHandle);
+}
 const id = (value: unknown): value is string => typeof value === 'string' && routeOf(value) !== null;
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
@@ -234,7 +237,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
         id(operation.operatorAccountId) &&
           typeof operation.registrationId === 'string' &&
           operation.registrationId.length <= 128 &&
-          handle(operation.handle) &&
+          handle()(operation.handle) &&
           text(operation.operationKey, 128),
       );
       fields = ['kind', 'registrationId', 'operatorAccountId', 'handle', 'operationKey', 'authorization'];
@@ -250,14 +253,14 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       descriptor = { action: 'account:manage', target: operation.operatorAccountId, targetKind: 'either' };
       break;
     case 'organization':
-      requireAllowed(handle(operation.handle));
+      requireAllowed(handle()(operation.handle));
       fields = ['kind', 'handle', 'authorization'];
       descriptor = { action: 'organization:create', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
       break;
     case 'rename':
       requireAllowed(
         id(operation.accountId) &&
-          handle(operation.handle) &&
+          handle()(operation.handle) &&
           (operation.expectedHandle === null ||
             (typeof operation.expectedHandle === 'string' && HANDLE_LOOKUP_PATTERN.test(operation.expectedHandle))),
       );

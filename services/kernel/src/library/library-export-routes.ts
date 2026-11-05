@@ -1,11 +1,13 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { problemSchema } from '../http/problem.ts';
 import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { createLibraryExport, exportAuthorityTypes, type LibraryExportDependencies } from './library-export.ts';
-import { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
+import { exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
@@ -33,17 +35,36 @@ const sectionV2 = t.Union([
   t.Literal('provenance'),
   t.Literal('journals'),
 ]);
-function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
-  return t.Tuple(
-    sections.map((section) => t.Literal(section)) as {
-      -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
-    },
-  );
-}
-const sectionsV1 = sectionTuple(exportSections);
-const sectionsV2 = sectionTuple(exportSectionsV2);
-const sectionsV3 = sectionTuple(exportSectionsV3);
-const sectionsV4 = sectionTuple(exportSectionsV4);
+const sectionsV1 = t.Tuple([
+  t.Literal('entries'),
+  t.Literal('labels'),
+  t.Literal('assignments'),
+  t.Literal('sessions'),
+  t.Literal('holdings'),
+  t.Literal('collections'),
+  t.Literal('collectionPins'),
+  t.Literal('bangumiUploads'),
+  t.Literal('bangumiEvidence'),
+  t.Literal('malImports'),
+  t.Literal('units'),
+  t.Literal('history'),
+  t.Literal('occurrences'),
+  t.Literal('malEvidence'),
+]);
+const sectionsV2 = t.Tuple([
+  ...sectionsV1.items,
+  t.Literal('annotations'),
+  t.Literal('provenance'),
+  t.Literal('journals'),
+]);
+const sectionsV3 = t.Tuple([...sectionsV2.items]);
+const sectionsV4 = t.Tuple([
+  ...sectionsV3.items,
+  t.Literal('vndbUploads'),
+  t.Literal('vndbEvidence'),
+  t.Literal('anilistUploads'),
+  t.Literal('anilistEvidence'),
+]);
 const manifestV1Fields = {
   format: t.Literal('https://rezics.com/formats/library-export'),
   version: t.Literal(1),
@@ -110,18 +131,21 @@ const statusSchema = t.Union([
   t.Object({ ...manifestV4Fields, state, first: nullable }, closed),
 ]);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
-const sectionTotalsV2 = t.Object(
-  Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])),
-  closed,
-);
-const sectionTotalsV3 = t.Object(
-  Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])),
-  closed,
-);
-const sectionTotalsV4 = t.Object(
-  Object.fromEntries(exportSectionsV4.map((section) => [section, sectionTotal])),
-  closed,
-);
+function sectionTotalsV2() {
+  return memoizedValue(sectionTotalsV2, () =>
+    t.Object(Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])), closed),
+  );
+}
+function sectionTotalsV3() {
+  return memoizedValue(sectionTotalsV3, () =>
+    t.Object(Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])), closed),
+  );
+}
+function sectionTotalsV4() {
+  return memoizedValue(sectionTotalsV4, () =>
+    t.Object(Object.fromEntries(exportSectionsV4.map((section) => [section, sectionTotal])), closed),
+  );
+}
 const year = t.Integer({ minimum: 1, maximum: 9999 });
 const month = t.Integer({ minimum: 1, maximum: 12 });
 const day = t.Integer({ minimum: 1, maximum: 31 });
@@ -247,78 +271,153 @@ const journalRecordV3 = t.Object(
   },
   closed,
 );
-const providerRecords = [
-  t.Object(
-    {
-      section: t.Literal('vndbUploads'),
-      upload_id: text,
-      state: t.Union([t.Literal('active'), t.Literal('cancelled')]),
-      expires_at: text,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      section: t.Literal('anilistUploads'),
-      upload_id: text,
-      cancelled: t.Union([t.Boolean(), t.Null()]),
-      score_format: nullable,
-      row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
-    },
-    closed,
-  ),
-  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) =>
+const vndbUploadRecord = t.Object(
+  {
+    section: t.Literal('vndbUploads'),
+    upload_id: text,
+    state: t.Union([t.Literal('active'), t.Literal('cancelled')]),
+    expires_at: text,
+  },
+  closed,
+);
+const anilistUploadRecord = t.Object(
+  {
+    section: t.Literal('anilistUploads'),
+    upload_id: text,
+    cancelled: t.Union([t.Boolean(), t.Null()]),
+    score_format: nullable,
+    row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
+  },
+  closed,
+);
+const vndbEvidenceRecord = t.Object(
+  { section: t.Literal('vndbEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+  closed,
+);
+const anilistEvidenceRecord = t.Object(
+  { section: t.Literal('anilistEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+  closed,
+);
+const exportRecord = t.Union([
+  legacyRecord,
+  annotationRecord,
+  provenanceRecord,
+  journalRecordV2,
+  journalRecordV3,
+  vndbUploadRecord,
+  anilistUploadRecord,
+  vndbEvidenceRecord,
+  anilistEvidenceRecord,
+]);
+function finalManifest() {
+  return memoizedValue(finalManifest, () =>
+    t.Union([
+      t.Object(
+        { ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) },
+        closed,
+      ),
+      t.Object(
+        {
+          ...manifestV2Fields,
+          rows: t.Integer({ minimum: 0 }),
+          recordBytes: t.Integer({ minimum: 0 }),
+          sectionTotals: sectionTotalsV2(),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...manifestV3Fields,
+          rows: t.Integer({ minimum: 0 }),
+          recordBytes: t.Integer({ minimum: 0 }),
+          sectionTotals: sectionTotalsV3(),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...manifestV4Fields,
+          rows: t.Integer({ minimum: 0 }),
+          recordBytes: t.Integer({ minimum: 0 }),
+          sectionTotals: sectionTotalsV4(),
+        },
+        closed,
+      ),
+    ]),
+  );
+}
+function pageSchema() {
+  return memoizedValue(pageSchema, () =>
     t.Object(
-      { section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+      {
+        exportId: text,
+        state,
+        records: t.Array(exportRecord, { maxItems: 16 }),
+        next: nullable,
+        manifest: t.Union([finalManifest(), t.Null()]),
+      },
       closed,
     ),
-  ),
-];
-const finalManifest = t.Union([
-  t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
-  t.Object(
-    {
-      ...manifestV2Fields,
-      rows: t.Integer({ minimum: 0 }),
-      recordBytes: t.Integer({ minimum: 0 }),
-      sectionTotals: sectionTotalsV2,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...manifestV3Fields,
-      rows: t.Integer({ minimum: 0 }),
-      recordBytes: t.Integer({ minimum: 0 }),
-      sectionTotals: sectionTotalsV3,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...manifestV4Fields,
-      rows: t.Integer({ minimum: 0 }),
-      recordBytes: t.Integer({ minimum: 0 }),
-      sectionTotals: sectionTotalsV4,
-    },
-    closed,
-  ),
-]);
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
+  );
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
+type ExportService = ReturnType<typeof createLibraryExport>;
+type StatusOutput = Awaited<ReturnType<ExportService['get']>>;
+type PageOutput = Awaited<ReturnType<ExportService['page']>>;
+
+function statusView(value: StatusOutput): Static<typeof statusSchema> {
+  const omissions = { ...value.omissions };
+  switch (value.version) {
+    case 1:
+      return { ...value, sections: [...value.sections], omissions };
+    case 2:
+      return { ...value, sections: [...value.sections], omissions };
+    case 3:
+      return { ...value, sections: [...value.sections], omissions };
+    case 4:
+      return { ...value, sections: [...value.sections], omissions };
+  }
+}
+
+function finalManifestView(value: NonNullable<PageOutput['manifest']>): Static<ReturnType<typeof finalManifest>> {
+  const omissions = { ...value.omissions };
+  switch (value.version) {
+    case 1:
+      return { ...value, sections: [...value.sections], omissions };
+    case 2:
+      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
+    case 3:
+      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
+    case 4:
+      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
+  }
+}
+
+function pageView(value: PageOutput): Static<ReturnType<typeof pageSchema>> {
+  return {
+    exportId: value.exportId,
+    state: value.state,
+    records: value.records.map((record) => ({ ...record })),
+    next: value.next,
+    manifest: value.manifest === null ? null : finalManifestView(value.manifest),
+  };
+}
 function requestSignal(request: Request, signal?: AbortSignal) {
   return signal ? AbortSignal.any([request.signal, signal]) : request.signal;
 }
@@ -328,7 +427,7 @@ function detail(operationId: string, write = false) {
     'x-action': 'library_entry:list',
     'x-exposure': 'gate:personal_library',
     'x-authority-anchor': 'own-account',
-    'x-authority-resource-types': exportAuthorityTypes,
+    'x-authority-resource-types': exportAuthorityTypes(),
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };
@@ -344,13 +443,19 @@ export function libraryExportRoutes(
       '/v1/libraryExports',
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: text }),
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema, ...failures() },
         detail: detail('library_export.create', true),
       },
       async ({ request, actor, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().create(actor, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), requestSignal(request, job.signal)),
+        return admission.run('normal', job, async () =>
+          statusView(
+            await service().create(
+              actor,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              requestSignal(request, job.signal),
+            ),
+          ),
         );
       },
     )
@@ -358,12 +463,14 @@ export function libraryExportRoutes(
       '/v1/libraryExports/:id',
       {
         params,
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema, ...failures() },
         detail: detail('library_export.get'),
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)));
+        return admission.run('normal', job, async () =>
+          statusView(await service().get(actor, params.id, requestSignal(request, job.signal))),
+        );
       },
     )
     .get(
@@ -371,37 +478,13 @@ export function libraryExportRoutes(
       {
         params,
         query: t.Object({ cursor: t.String({ minLength: 1, maxLength: 4096 }) }, closed),
-        response: {
-          200: t.Object(
-            {
-              exportId: text,
-              state,
-              records: t.Array(
-                t.Union([
-                  legacyRecord,
-                  annotationRecord,
-                  provenanceRecord,
-                  journalRecordV2,
-                  journalRecordV3,
-                  ...providerRecords,
-                ]),
-                {
-                  maxItems: 16,
-                },
-              ),
-              next: nullable,
-              manifest: t.Union([finalManifest, t.Null()]),
-            },
-            closed,
-          ),
-          ...failures,
-        },
+        response: { 200: pageSchema(), ...failures() },
         detail: detail('library_export.page'),
       },
       async ({ request, actor, params, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().page(actor, params.id, query.cursor, requestSignal(request, job.signal)),
+        return admission.run('normal', job, async () =>
+          pageView(await service().page(actor, params.id, query.cursor, requestSignal(request, job.signal))),
         );
       },
     )
@@ -409,13 +492,13 @@ export function libraryExportRoutes(
       '/v1/libraryExports/:id',
       {
         params,
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema, ...failures() },
         detail: detail('library_export.cancel', true),
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().cancel(actor, params.id, requestSignal(request, job.signal)),
+        return admission.run('normal', job, async () =>
+          statusView(await service().cancel(actor, params.id, requestSignal(request, job.signal))),
         );
       },
     );

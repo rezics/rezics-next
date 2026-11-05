@@ -12,8 +12,8 @@ type DeliveredRealmItem = NonNullable<
 const realmId = newId(0x4321);
 const spaceId = newId(0x4321);
 const lastModified = '2026-10-01T00:00:00.000Z';
-const realmPage = Compile(SitemapRealmPageSchema);
-const spacePage = Compile(SitemapSpacePageSchema);
+const realmPage = Compile(SitemapRealmPageSchema());
+const spacePage = Compile(SitemapSpacePageSchema());
 
 test('Community owns closed canonical Realm destinations without widening ordinary board items', () => {
   const native = { id: realmId, lastModified };

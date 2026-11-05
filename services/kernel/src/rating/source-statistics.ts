@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
@@ -47,8 +48,12 @@ export const SOURCE_STATISTIC_WRITE_ACTION = 'source_statistic:write';
 const SOURCE_STATISTIC_EVENT = 'com.rezics.rating.source_statistic.changed.v1';
 const SOURCE_STATISTIC_OPERATION = 'rating.source_statistic.write';
 const SOURCE_STATISTIC_CLEAR_OPERATION = 'rating.source_statistic.clear';
-const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
-const sourceAliasValidator = Compile(SourceFenceQuerySchema.properties.source);
+function root() {
+  return memoizedValue(root, () => Object.freeze({ route: 0, id: GLOBAL_CONTEXT }));
+}
+function sourceAliasValidator() {
+  return memoizedValue(sourceAliasValidator, () => Compile(SourceFenceQuerySchema.properties.source));
+}
 const sourceRecordControls = /[\u0000-\u001f\u007f-\u009f]/u;
 
 export type SourceStatistic = {
@@ -177,7 +182,7 @@ function effectiveAlias(source: string, value: { sourceAlias?: string }): string
 function validateAlias(value: { sourceAlias?: string }): void {
   const alias = value.sourceAlias;
   if (alias === undefined) return;
-  if (typeof alias !== 'string' || !sourceAliasValidator.Check(alias) || sourceRecordControls.test(alias))
+  if (typeof alias !== 'string' || !sourceAliasValidator().Check(alias) || sourceRecordControls.test(alias))
     throw new SourceStatisticInvalidError('sourceAlias');
 }
 
@@ -198,8 +203,8 @@ function authorizeWrite(source: string, subjectId: string, authorization: Comman
   if (route === null) throw new SourceStatisticNotFoundError();
   if (
     authorization.action !== SOURCE_STATISTIC_WRITE_ACTION ||
-    authorization.resource.route !== root.route ||
-    authorization.resource.id !== root.id
+    authorization.resource.route !== root().route ||
+    authorization.resource.id !== root().id
   )
     throw new GrantDeniedError();
   if (!sourceProvider(source)) throw new SourceStatisticInvalidError('source');
@@ -578,19 +583,23 @@ function publicReadDetail(operationId: string, action: string) {
   };
 }
 
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
 const id = t.String({ format: 'uuid' });
 const source = t.Union([t.Literal('vndb'), t.Literal('bangumi')]);
 const closed = { additionalProperties: false } as const;
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
 
 /** Source statistics have their own read/write routes and never enter native vote storage. */
 export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
@@ -622,7 +631,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/subjects/:id/source-statistics',
       {
         params: t.Object({ id }, closed),
-        response: { 200: SourceStatisticListResponseSchema, ...failures },
+        response: { 200: SourceStatisticListResponseSchema(), ...failures() },
         detail: publicReadDetail('rating.source_statistics_get', 'subject:read'),
       },
       async ({ actor, params, admission, job }) => {
@@ -661,18 +670,18 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/subjects/:id/source-statistics/:source',
       {
         params: t.Object({ id, source }, closed),
-        headers,
-        body: SourceStatisticInputSchema,
+        headers: headers(),
+        body: SourceStatisticInputSchema(),
         response: {
-          200: withHeaders(SourceStatisticResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          200: withHeaders(SourceStatisticResponseSchema(), { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures(),
         },
         detail: detail('rating.source_statistic_put', SOURCE_STATISTIC_WRITE_ACTION, true),
       },
       async ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]);
-        const authorization = await authorizeCommand(root, () => new GrantDeniedError());
+        const authorization = await authorizeCommand(root(), () => new GrantDeniedError());
         let committed = false;
         try {
           const subjectAvailable = await currentSubject(actor, params.id);
@@ -728,15 +737,15 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       customMethod('/v1/subjects/:id/source-statistics/:source', 'clear'),
       {
         params: t.Object({ id, source }, closed),
-        headers,
-        body: SourceStatisticClearInputSchema,
-        response: { 204: withHeaders(t.Void(), { [SESSION_HEADER]: t.String() }), ...failures },
+        headers: headers(),
+        body: SourceStatisticClearInputSchema(),
+        response: { 204: withHeaders(t.Void(), { [SESSION_HEADER]: t.String() }), ...failures() },
         detail: detail('rating.source_statistic_clear', SOURCE_STATISTIC_WRITE_ACTION, true),
       },
       async ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]);
-        const authorization = await authorizeCommand(root, () => new GrantDeniedError());
+        const authorization = await authorizeCommand(root(), () => new GrantDeniedError());
         let committed = false;
         try {
           const subjectAvailable = await currentSubject(actor, params.id);
@@ -778,15 +787,15 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: {
-          ...failures,
+          ...failures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
-          200: SourceObservationReadResponseSchema,
+          200: SourceObservationReadResponseSchema(),
         },
         detail: detail('rating.source_observations_get', SOURCE_STATISTIC_WRITE_ACTION),
       },
       async ({ actor, params, query, authorizeCommand, admission, job }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        await authorizeCommand(root, () => new GrantDeniedError());
+        await authorizeCommand(root(), () => new GrantDeniedError());
         if (query.digest !== undefined && (query.cursor !== undefined || query.history !== undefined))
           throw new ProblemError('invalid_request');
         return admission.run('normal', job, async () => {
@@ -802,7 +811,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
               ...(query.history === undefined ? {} : { history: true }),
               deadline: job.deadline,
             });
-            await authorizeCommand(root, () => new GrantDeniedError());
+            await authorizeCommand(root(), () => new GrantDeniedError());
             const finalSubject = await subjectResolution(actor, params.id);
             if (
               !finalSubject ||

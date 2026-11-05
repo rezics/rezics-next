@@ -18,8 +18,8 @@ test('the real missing Content producer has only a typed unavailable result', as
     kind: 'unavailable',
     reason: 'content-edition-sale-port-pending',
   });
-  await expect(captureCurrentContentEdition(newId(0x2200))).rejects.toBeInstanceOf(ContentEditionUnavailableError);
-  await expect(requireCurrentContentEdition(null)).rejects.toBeInstanceOf(ContentEditionUnavailableError);
+  await expect(captureCurrentContentEdition(newId(0x2200))).rejects.toBeInstanceOf(ContentEditionUnavailableError());
+  await expect(requireCurrentContentEdition(null)).rejects.toBeInstanceOf(ContentEditionUnavailableError());
 });
 
 test('historic mapping remains unknown and cannot be inferred from arbitrary bytes', () => {
@@ -103,18 +103,18 @@ test('native sale facts capture exact edition publication and version without co
 test('fresh sale refuses absent, retargeted or internally mismatched native source facts', () => {
   const authority = saleAuthority();
   const id = authority.benefit.resource.id;
-  expect(() => captureContentEditionSaleAuthority(id, null)).toThrow(ContentEditionUnavailableError);
+  expect(() => captureContentEditionSaleAuthority(id, null)).toThrow(ContentEditionUnavailableError());
   expect(() =>
     captureContentEditionSaleAuthority(id, {
       ...authority,
       source: { ...authority.source, revisionId: newId(0x2200) },
     }),
-  ).toThrow(ContentEditionUnavailableError);
+  ).toThrow(ContentEditionUnavailableError());
   const exact = { ...authority, source: { ...authority.source, revisionId: authority.benefit.version.revisionId } };
-  expect(() => captureContentEditionSaleAuthority(newId(0x2200), exact)).toThrow(ContentEditionUnavailableError);
+  expect(() => captureContentEditionSaleAuthority(newId(0x2200), exact)).toThrow(ContentEditionUnavailableError());
   expect(() =>
     captureContentEditionSaleAuthority(id, { ...exact, source: { ...exact.source, sha256: 'b'.repeat(64) } }),
-  ).toThrow(ContentEditionUnavailableError);
+  ).toThrow(ContentEditionUnavailableError());
 });
 
 test('current sale must match every immutable captured native binding', () => {

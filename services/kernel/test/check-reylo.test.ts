@@ -8,6 +8,18 @@ import { fileEnvironment, invokeTypecheck, writeReyloProject } from '../scripts/
 
 const KERNEL_ROOT = resolve(import.meta.dir, '..');
 
+/** Runs `load` with `project` as this process's Reylo project, then restores the caller's. */
+async function withReyloProject<T>(project: string, load: () => Promise<T>): Promise<T> {
+  const inherited = process.env.REYLO_CONFIG;
+  process.env.REYLO_CONFIG = project;
+  try {
+    return await load();
+  } finally {
+    if (inherited === undefined) delete process.env.REYLO_CONFIG;
+    else process.env.REYLO_CONFIG = inherited;
+  }
+}
+
 test("the compiler and each test file's processes use the check's explicit analysis project", () => {
   const temporaryRoot = resolve(KERNEL_ROOT, '.temp');
   mkdirSync(temporaryRoot, { recursive: true });
@@ -69,9 +81,14 @@ test('native Reylo analysis stays warm without losing diagnostics or runtime res
   if (!inheritedConfig || !runtimeUrl) throw new Error('Run through the kernel check with explicit database projects');
   const projectLine = readFileSync(inheritedConfig, 'utf8').match(/^direct_url:\s*(.+)$/m)?.[1];
   if (!projectLine) throw new Error(`Reylo analysis project has no direct_url: ${inheritedConfig}`);
-  const analysisUrl = JSON.parse(projectLine) as string;
-  expect(new URL(analysisUrl).pathname).toBe('/kernel_analysis');
-  expect(new URL(runtimeUrl).pathname).not.toBe(new URL(analysisUrl).pathname);
+  // The host's warm analysis is offline (`direct_url: ""`) and holds only statements the check already analysed, so this
+  // test then describes its own statement against its own database. A cold check names the separate analysis database.
+  const checkUrl = JSON.parse(projectLine) as string;
+  const analysisUrl = checkUrl === '' ? runtimeUrl : checkUrl;
+  if (checkUrl !== '') {
+    expect(new URL(checkUrl).pathname).toBe('/kernel_analysis');
+    expect(new URL(runtimeUrl).pathname).not.toBe(new URL(checkUrl).pathname);
+  }
 
   const temporaryRoot = resolve(KERNEL_ROOT, '.temp');
   mkdirSync(temporaryRoot, { recursive: true });
@@ -121,7 +138,10 @@ test('native Reylo analysis stays warm without losing diagnostics or runtime res
     const coldEntries = entryCount();
     expect(coldEntries).toBeGreaterThan(0);
 
-    const { default: query } = (await import(pathToFileURL(resolve(directory, 'consumer.ts')).href)) as {
+    // The runtime reads the statement in this process: it needs this test's project, which describes the statement, not the
+    // check's warm project, which holds only the statements the check already analysed.
+    const loaded = await withReyloProject(config, () => import(pathToFileURL(resolve(directory, 'consumer.ts')).href));
+    const { default: query } = loaded as {
       default: { run: (client: pg.Pool, parameters: Record<string, never>) => Promise<unknown> };
     };
     expect(await query.run(pool, {})).toEqual({ answer: 7 });

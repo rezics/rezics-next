@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -56,7 +57,9 @@ export type CopyArchiveDependencies = {
   routeKey: Uint8Array;
   clock?: KernelClock;
 };
-export const copyArchiveAuthorityTypes = Object.keys(bundledRelease.types);
+export function copyArchiveAuthorityTypes() {
+  return memoizedValue(copyArchiveAuthorityTypes, () => Object.keys(bundledRelease.types));
+}
 type Header = {
   upload_id: string;
   manifest: CopyArchiveManifest;

@@ -1,7 +1,8 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
+import { spawnSync } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
@@ -11,6 +12,15 @@ import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configura
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
+import type { StackSlot } from '../../../scripts/stack-lease.ts';
+import { walkStackRequired } from '../../../scripts/stack-run.ts';
+import {
+  admitWalkStack,
+  walkStackEnvironment,
+  walkStackNames,
+  walkStackPorts,
+  type WalkNames,
+} from '../../../scripts/walk-stack.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -760,6 +770,112 @@ async function start() {
     process.off('SIGTERM', stop);
   }
 }
+const SIGNAL_NUMBERS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
+
+function dockerOutput(args: string[]): string {
+  const result = spawnSync('docker', args, { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${result.stderr.trim()}`);
+  return result.stdout.trim();
+}
+
+/** Removes the task's containers and volumes that exist, so a partial start tears down completely. */
+function removeWalkStack(names: WalkNames): void {
+  for (const container of [names.database, names.search])
+    if (dockerOutput(['ps', '-aq', '--filter', `name=^${container}$`])) dockerOutput(['rm', '-f', '-v', container]);
+  for (const volume of [names.database, names.search])
+    if (dockerOutput(['volume', 'ls', '-q', '--filter', `name=^${volume}$`])) dockerOutput(['volume', 'rm', volume]);
+}
+
+/** Resolves when every URL answers; fails when the stack exits first or takes longer than ten minutes. */
+async function untilReady(urls: string[], starting: ReturnType<typeof Bun.spawn>): Promise<void> {
+  const answers = (url: string) =>
+    fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
+      (response) => response.status < 500,
+      () => false,
+    );
+  const deadline = Date.now() + 600_000;
+  while (!(await Promise.all(urls.map(answers))).every(Boolean)) {
+    if (starting.exitCode !== null || starting.signalCode !== null)
+      throw new Error(`walk: the local stack exited (${starting.exitCode ?? starting.signalCode}) before it was ready`);
+    if (Date.now() > deadline) throw new Error('walk: the local stack was not ready after ten minutes');
+    await Bun.sleep(500);
+  }
+}
+
+/**
+ * Runs `command` against one walk stack: admission, the stack `dev:infra` and `dev` start, then teardown when the
+ * command ends or the attempt is signalled. Only a worker whose brief lists native or browser acceptance may start one.
+ */
+async function walk(command: string[]): Promise<number> {
+  const task = process.env.GOAL_TASK_ID;
+  if (!task || !walkStackRequired(process.env))
+    throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
+  if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');
+  const names = walkStackNames(task);
+  const controller = new AbortController();
+  let current: ReturnType<typeof Bun.spawn> | undefined;
+  let interrupted: keyof typeof SIGNAL_NUMBERS | undefined;
+  const handlers = (Object.keys(SIGNAL_NUMBERS) as (keyof typeof SIGNAL_NUMBERS)[]).map((signal) => {
+    const handler = () => {
+      interrupted ??= signal;
+      controller.abort();
+      current?.kill(signal);
+    };
+    process.on(signal, handler);
+    return [signal, handler] as const;
+  });
+  let slot: StackSlot | undefined;
+  let code = 0;
+  try {
+    slot = await admitWalkStack(task, process.env, root, controller.signal);
+    const env = { ...process.env, ...walkStackEnvironment(task, slot.index!) } as Record<string, string>;
+    const ports = walkStackPorts(slot.index!);
+    let starting: ReturnType<typeof Bun.spawn> | undefined;
+    try {
+      removeWalkStack(names); // an interrupted attempt of this task may have left its stack behind
+      for (const script of [
+        ['services/kernel/scripts/database.ts', 'up'],
+        ['services/kernel/scripts/search.ts', 'up'],
+        ['services/auth/scripts/dev-stack.ts', 'setup'],
+      ]) {
+        current = Bun.spawn([process.execPath, ...script], {
+          cwd: root,
+          env,
+          stdin: 'ignore',
+          stdout: 'inherit',
+          stderr: 'inherit',
+        });
+        if ((await current.exited) !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
+      }
+      const log = join(root, '.temp', 'walk', task, 'stack.log');
+      await mkdir(dirname(log), { recursive: true });
+      starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
+        cwd: root,
+        env,
+        stdin: 'ignore',
+        stdout: Bun.file(log),
+        stderr: Bun.file(log),
+      });
+      await untilReady([`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`], starting);
+      current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+      code = await current.exited;
+    } finally {
+      if (starting && starting.exitCode === null) {
+        starting.kill('SIGTERM');
+        await starting.exited;
+      }
+      removeWalkStack(names);
+    }
+  } catch (error) {
+    if (interrupted === undefined) throw error;
+    console.error(error);
+  } finally {
+    for (const [signal, handler] of handlers) process.off(signal, handler);
+    await slot?.release();
+  }
+  return interrupted === undefined ? code : 128 + SIGNAL_NUMBERS[interrupted];
+}
+
 if (import.meta.main) {
   try {
     const action = process.argv[2];
@@ -784,7 +900,10 @@ if (import.meta.main) {
       }
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
     else if (action === 'start') await start();
-    else throw new Error('Use setup, start, host, pages, web or persona');
+    else if (action === 'walk') {
+      const rest = process.argv.slice(3);
+      process.exitCode = await walk(rest[0] === '--' ? rest.slice(1) : rest);
+    } else throw new Error('Use setup, start, host, pages, web, persona or walk');
   } catch (error) {
     console.error(error);
     process.exit(1);

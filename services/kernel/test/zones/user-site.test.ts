@@ -20,8 +20,8 @@ afterAll(async () => {
 });
 
 type Answer = Awaited<ReturnType<ResourceFixture['call']>>;
-const commonPage = Compile(ZonePageResponseSchema);
-const progress = Compile(ZonePageReadProgressSchema);
+const commonPage = Compile(ZonePageResponseSchema());
+const progress = Compile(ZonePageReadProgressSchema());
 const unavailable = Compile(
   problemSchema(
     'dependency_unavailable',

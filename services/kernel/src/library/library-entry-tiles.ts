@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { PoolClient } from 'pg';
 import type { Static } from 'typebox';
@@ -9,21 +10,25 @@ import entryTiles from './library-entry-tiles.sql';
 
 const uuid = t.String({ format: 'uuid' });
 const nullableText = t.Union([t.String(), t.Null()]);
-export const libraryEntryTileSchema = t.Object(
-  {
-    subjectId: uuid,
-    state: libraryStoredVocabularySchema,
-    revision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
-    createdAt: t.String(),
-    updatedAt: t.String(),
-    incarnationId: t.Union([uuid, t.Null()]),
-    lastActivityAt: t.String(),
-    finishedAt: nullableText,
-    activeProgressSession: t.Union([shelfSessionSchema, t.Null()]),
-  },
-  { additionalProperties: false },
-);
-export type LibraryEntryTile = Static<typeof libraryEntryTileSchema>;
+export function libraryEntryTileSchema() {
+  return memoizedValue(libraryEntryTileSchema, () =>
+    t.Object(
+      {
+        subjectId: uuid,
+        state: libraryStoredVocabularySchema,
+        revision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
+        createdAt: t.String(),
+        updatedAt: t.String(),
+        incarnationId: t.Union([uuid, t.Null()]),
+        lastActivityAt: t.String(),
+        finishedAt: nullableText,
+        activeProgressSession: t.Union([shelfSessionSchema(), t.Null()]),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+export type LibraryEntryTile = Static<ReturnType<typeof libraryEntryTileSchema>>;
 
 /** Requires the caller's already-admitted read-only owner RR snapshot. Grants no authority. */
 export async function readLibraryEntryTiles(

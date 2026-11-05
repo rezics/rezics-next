@@ -69,6 +69,7 @@ export function useSlowModeVisit(
   source?: SlowModeVisitOwner,
   selection?: SlowModeVisitOwner,
 ): SlowModeVisit | null {
+  const port = useSlowModePort();
   const client = useContext(QueryClientContext);
   const observation = client ? browserObservation(client) : undefined;
   const owner = useSyncExternalStore(
@@ -120,6 +121,7 @@ export function useSlowModeVisit(
   }, [
     boardId,
     client,
+    port,
     credentialMode,
     owner,
     ready,
@@ -208,5 +210,18 @@ export function rememberSlowModeRead(
   visit: SlowModeVisit,
   read: SlowModeRead,
 ) {
+  if (!visit.current()) return;
   client.setQueryData(slowModeQueryKey(visit), read);
+  // Each composer rereads its own current admission. The moderator's acknowledgement
+  // cannot supply another visit's exemption, reservation or next eligible instant.
+  void client.invalidateQueries({
+    queryKey: ['board-slow-mode'],
+    type: 'active',
+    predicate: ({ queryKey }) =>
+      queryKey[1] !== visit.id &&
+      queryKey[3] === visit.credentialMode &&
+      queryKey[4] === visit.boardId &&
+      queryKey[5] === visit.subject &&
+      queryKey[6] === visit.csrfToken,
+  });
 }

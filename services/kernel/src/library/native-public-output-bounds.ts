@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Immutable Library plans for the activated public Collection output original command.
  * One closed native descriptor serves composition and adapter execution. Values describe work only;
  * native SQL, evidence, custody and dispatch stay Library-owned. `engineRequests` is zero because
@@ -268,181 +269,281 @@ const transitionRow = Object.freeze({
   position: decimal,
 });
 
-const headerStatement = statement('header', header, headerBinds, headerRow, {
-  nativeRows: 4,
-  nativePoints: 1,
-  relationBytes: 2048,
-});
-const headStatement = statement('publication-head', head, publicationBinds, publicationRow, {
-  nativeRows: 48,
-  nativePoints: 7,
-  relationBytes: 1024,
-});
-const publicationStatement = statement('publication-lock', publication, publicationBinds, publicationRow, {
-  nativeRows: 48,
-  nativePoints: 7,
-  relationBytes: 1024,
-});
-const ownerStatement = statement('owner', owner, ownerBinds, ownerRow, {
-  nativeRows: 16,
-  nativePoints: 3,
-  relationBytes: 512,
-});
-const lifecycleStatement = statement(
-  'lifecycle',
-  lifecycle,
-  lifecycleBinds,
-  { present: 1 },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const partitionSizeStatement = statement(
-  'partition-size',
-  PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
-  partitionBinds,
-  { bytes: decimal },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 128 },
-);
-const referenceStatement = statement(
-  'reference',
-  PUBLIC_OUTPUT_REFERENCE_SQL,
-  referenceBinds,
-  { collection_id: id },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const xidStatement = statement(
-  'xid',
-  PUBLIC_OUTPUT_XID_SQL,
-  [],
-  { xid: decimal },
-  { nativeRows: 1, nativePoints: 0, emptySeeks: 1, relationBytes: 64 },
-);
-const partitionMetadataStatement = statement(
-  'partition-metadata',
-  PUBLIC_OUTPUT_PARTITION_METADATA_SQL,
-  partitionBinds,
-  partitionMetadataRow,
-  { nativeRows: 4, nativePoints: 1, relationBytes: 128 },
-);
-const bindingStatement = statement('binding', binding, captureBinds, bindingRow, {
-  nativeRows: 16,
-  nativePoints: 3,
-  relationBytes: 6144,
-});
-const bindingLockStatement = statement('binding-lock', bindingLock, captureBinds, bindingRow, {
-  nativeRows: 16,
-  nativePoints: 3,
-  relationBytes: 6144,
-});
-const identityStatement = statement(
-  'identity',
-  identity,
-  identityBinds,
-  { captureId: id },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const xminStatement = statement(
-  'xmin',
-  xmin,
-  captureBinds,
-  { xmin: decimal },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const provenanceStatement = statement(
-  'provenance',
-  provenance,
-  provenanceBinds,
-  { present: 1 },
-  { nativeRows: 16, nativePoints: 3, relationBytes: 64 },
-);
-const retainedStatement = statement(
-  'retained',
-  retained,
-  captureBinds,
-  { present: 1 },
-  { nativeRows: 24, nativePoints: 5, relationBytes: 64 },
-);
-const bindStatement = statement(
-  'bind',
-  bind,
-  bindInsertBinds,
-  { native_xid: decimal },
-  { nativeRows: 160, nativePoints: 32, statements: 3, relationBytes: 32768 },
-);
-const receivingStatement = statement(
-  'receiving',
-  receiving,
-  captureBinds,
-  { present: 1 },
-  { nativeRows: 12, nativePoints: 3, relationBytes: 128 },
-);
-const holdPredecessorStatement = statement(
-  'hold-predecessor',
-  hold,
-  holdBinds('predecessor'),
-  { present: 1 },
-  { nativeRows: 96, nativePoints: 20, statements: 2, relationBytes: 4096 },
-);
-const holdSuccessorStatement = statement(
-  'hold-successor',
-  hold,
-  holdBinds('successor'),
-  { present: 1 },
-  { nativeRows: 96, nativePoints: 20, statements: 4, relationBytes: 4096 },
-);
-const transitionReadStatement = statement('transition-read', transitionRead, [partitionBind, id], transitionRow, {
-  nativeRows: 4,
-  nativePoints: 1,
-  relationBytes: 9216,
-});
-const transitionStatement = statement(
-  'transition',
-  transition,
-  transitionBinds,
-  { present: 1 },
-  { nativeRows: 144, nativePoints: 29, statements: 3, relationBytes: 16384 },
-);
-const consumeStatement = statement(
-  'consume',
-  consume,
-  consumeBinds,
-  { present: 1 },
-  { nativeRows: 96, nativePoints: 22, statements: 2, relationBytes: 4096 },
-);
-const fenceStatement = statement(
-  'fence',
-  fence,
-  fenceBinds,
-  { present: 1 },
-  { nativeRows: 96, nativePoints: 22, statements: 2, relationBytes: 4096 },
-);
-const retentionOwnerStatement = statement(
-  'retention-owner',
-  nativePublicOutputRetentionSQL.owner,
-  ownerBinds,
-  { present: 1 },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const retentionPartitionStatement = statement(
-  'retention-partition',
-  nativePublicOutputRetentionSQL.partition,
-  partitionBinds,
-  { present: 1 },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const retentionCollectionStatement = statement(
-  'retention-collection',
-  nativePublicOutputRetentionSQL.collection,
-  ownerBinds,
-  { exists: true },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
-const retentionOutputStatement = statement(
-  'retention-output',
-  nativePublicOutputRetentionSQL.output,
-  retentionOutputBinds,
-  { exists: true },
-  { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
-);
+function headerStatement() {
+  return memoizedValue(headerStatement, () =>
+    statement('header', header, headerBinds, headerRow, {
+      nativeRows: 4,
+      nativePoints: 1,
+      relationBytes: 2048,
+    }),
+  );
+}
+function headStatement() {
+  return memoizedValue(headStatement, () =>
+    statement('publication-head', head, publicationBinds, publicationRow, {
+      nativeRows: 48,
+      nativePoints: 7,
+      relationBytes: 1024,
+    }),
+  );
+}
+function publicationStatement() {
+  return memoizedValue(publicationStatement, () =>
+    statement('publication-lock', publication, publicationBinds, publicationRow, {
+      nativeRows: 48,
+      nativePoints: 7,
+      relationBytes: 1024,
+    }),
+  );
+}
+function ownerStatement() {
+  return memoizedValue(ownerStatement, () =>
+    statement('owner', owner, ownerBinds, ownerRow, {
+      nativeRows: 16,
+      nativePoints: 3,
+      relationBytes: 512,
+    }),
+  );
+}
+function lifecycleStatement() {
+  return memoizedValue(lifecycleStatement, () =>
+    statement(
+      'lifecycle',
+      lifecycle,
+      lifecycleBinds,
+      { present: 1 },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
+function partitionSizeStatement() {
+  return memoizedValue(partitionSizeStatement, () =>
+    statement(
+      'partition-size',
+      PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
+      partitionBinds,
+      { bytes: decimal },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 128 },
+    ),
+  );
+}
+function referenceStatement() {
+  return memoizedValue(referenceStatement, () =>
+    statement(
+      'reference',
+      PUBLIC_OUTPUT_REFERENCE_SQL,
+      referenceBinds,
+      { collection_id: id },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
+function xidStatement() {
+  return memoizedValue(xidStatement, () =>
+    statement(
+      'xid',
+      PUBLIC_OUTPUT_XID_SQL,
+      [],
+      { xid: decimal },
+      { nativeRows: 1, nativePoints: 0, emptySeeks: 1, relationBytes: 64 },
+    ),
+  );
+}
+function partitionMetadataStatement() {
+  return memoizedValue(partitionMetadataStatement, () =>
+    statement('partition-metadata', PUBLIC_OUTPUT_PARTITION_METADATA_SQL, partitionBinds, partitionMetadataRow, {
+      nativeRows: 4,
+      nativePoints: 1,
+      relationBytes: 128,
+    }),
+  );
+}
+function bindingStatement() {
+  return memoizedValue(bindingStatement, () =>
+    statement('binding', binding, captureBinds, bindingRow, {
+      nativeRows: 16,
+      nativePoints: 3,
+      relationBytes: 6144,
+    }),
+  );
+}
+function bindingLockStatement() {
+  return memoizedValue(bindingLockStatement, () =>
+    statement('binding-lock', bindingLock, captureBinds, bindingRow, {
+      nativeRows: 16,
+      nativePoints: 3,
+      relationBytes: 6144,
+    }),
+  );
+}
+function identityStatement() {
+  return memoizedValue(identityStatement, () =>
+    statement(
+      'identity',
+      identity,
+      identityBinds,
+      { captureId: id },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
+function xminStatement() {
+  return memoizedValue(xminStatement, () =>
+    statement('xmin', xmin, captureBinds, { xmin: decimal }, { nativeRows: 4, nativePoints: 1, relationBytes: 64 }),
+  );
+}
+function provenanceStatement() {
+  return memoizedValue(provenanceStatement, () =>
+    statement(
+      'provenance',
+      provenance,
+      provenanceBinds,
+      { present: 1 },
+      { nativeRows: 16, nativePoints: 3, relationBytes: 64 },
+    ),
+  );
+}
+function retainedStatement() {
+  return memoizedValue(retainedStatement, () =>
+    statement(
+      'retained',
+      retained,
+      captureBinds,
+      { present: 1 },
+      { nativeRows: 24, nativePoints: 5, relationBytes: 64 },
+    ),
+  );
+}
+function bindStatement() {
+  return memoizedValue(bindStatement, () =>
+    statement(
+      'bind',
+      bind,
+      bindInsertBinds,
+      { native_xid: decimal },
+      { nativeRows: 160, nativePoints: 32, statements: 3, relationBytes: 32768 },
+    ),
+  );
+}
+function receivingStatement() {
+  return memoizedValue(receivingStatement, () =>
+    statement(
+      'receiving',
+      receiving,
+      captureBinds,
+      { present: 1 },
+      { nativeRows: 12, nativePoints: 3, relationBytes: 128 },
+    ),
+  );
+}
+function holdPredecessorStatement() {
+  return memoizedValue(holdPredecessorStatement, () =>
+    statement(
+      'hold-predecessor',
+      hold,
+      holdBinds('predecessor'),
+      { present: 1 },
+      { nativeRows: 96, nativePoints: 20, statements: 2, relationBytes: 4096 },
+    ),
+  );
+}
+function holdSuccessorStatement() {
+  return memoizedValue(holdSuccessorStatement, () =>
+    statement(
+      'hold-successor',
+      hold,
+      holdBinds('successor'),
+      { present: 1 },
+      { nativeRows: 96, nativePoints: 20, statements: 4, relationBytes: 4096 },
+    ),
+  );
+}
+function transitionReadStatement() {
+  return memoizedValue(transitionReadStatement, () =>
+    statement('transition-read', transitionRead, [partitionBind, id], transitionRow, {
+      nativeRows: 4,
+      nativePoints: 1,
+      relationBytes: 9216,
+    }),
+  );
+}
+function transitionStatement() {
+  return memoizedValue(transitionStatement, () =>
+    statement(
+      'transition',
+      transition,
+      transitionBinds,
+      { present: 1 },
+      { nativeRows: 144, nativePoints: 29, statements: 3, relationBytes: 16384 },
+    ),
+  );
+}
+function consumeStatement() {
+  return memoizedValue(consumeStatement, () =>
+    statement(
+      'consume',
+      consume,
+      consumeBinds,
+      { present: 1 },
+      { nativeRows: 96, nativePoints: 22, statements: 2, relationBytes: 4096 },
+    ),
+  );
+}
+function fenceStatement() {
+  return memoizedValue(fenceStatement, () =>
+    statement(
+      'fence',
+      fence,
+      fenceBinds,
+      { present: 1 },
+      { nativeRows: 96, nativePoints: 22, statements: 2, relationBytes: 4096 },
+    ),
+  );
+}
+function retentionOwnerStatement() {
+  return memoizedValue(retentionOwnerStatement, () =>
+    statement(
+      'retention-owner',
+      nativePublicOutputRetentionSQL.owner,
+      ownerBinds,
+      { present: 1 },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
+function retentionPartitionStatement() {
+  return memoizedValue(retentionPartitionStatement, () =>
+    statement(
+      'retention-partition',
+      nativePublicOutputRetentionSQL.partition,
+      partitionBinds,
+      { present: 1 },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
+function retentionCollectionStatement() {
+  return memoizedValue(retentionCollectionStatement, () =>
+    statement(
+      'retention-collection',
+      nativePublicOutputRetentionSQL.collection,
+      ownerBinds,
+      { exists: true },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
+function retentionOutputStatement() {
+  return memoizedValue(retentionOutputStatement, () =>
+    statement(
+      'retention-output',
+      nativePublicOutputRetentionSQL.output,
+      retentionOutputBinds,
+      { exists: true },
+      { nativeRows: 4, nativePoints: 1, relationBytes: 64 },
+    ),
+  );
+}
 
 const control = (name: string, sql: string): NativePublicOutputStatement =>
   Object.freeze({
@@ -464,29 +565,43 @@ const control = (name: string, sql: string): NativePublicOutputStatement =>
     }),
   });
 
-const beginStatement = control('begin', PUBLIC_OUTPUT_BEGIN_SQL);
-const commitStatement = control('commit', PUBLIC_OUTPUT_COMMIT_SQL);
-const rollbackStatement = control('rollback', PUBLIC_OUTPUT_ROLLBACK_SQL);
+function beginStatement() {
+  return memoizedValue(beginStatement, () => control('begin', PUBLIC_OUTPUT_BEGIN_SQL));
+}
+function commitStatement() {
+  return memoizedValue(commitStatement, () => control('commit', PUBLIC_OUTPUT_COMMIT_SQL));
+}
+function rollbackStatement() {
+  return memoizedValue(rollbackStatement, () => control('rollback', PUBLIC_OUTPUT_ROLLBACK_SQL));
+}
 
-const pageSql = sqlOf(page);
-const pageBindCount = bindCountOf(page);
-const pageRequestBytes = (limit: number) => sqlBytes(pageSql) + jsonBytes(pageBinds(limit));
+function pageSql() {
+  return memoizedValue(pageSql, () => sqlOf(page));
+}
+function pageBindCount() {
+  return memoizedValue(pageBindCount, () => bindCountOf(page));
+}
+const pageRequestBytes = (limit: number) => sqlBytes(pageSql()) + jsonBytes(pageBinds(limit));
 const pageResultBytes = (limit: number) => jsonBytes(Array.from({ length: limit }, () => pageRow));
-const pageKeyWork = sqlBound({
-  candidateKeys: 1,
-  nativeRows: 4,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: Math.max(256, jsonBytes(pageRow)),
-});
+function pageKeyWork() {
+  return memoizedValue(pageKeyWork, () =>
+    sqlBound({
+      candidateKeys: 1,
+      nativeRows: 4,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: Math.max(256, jsonBytes(pageRow)),
+    }),
+  );
+}
 const pagePlan = (limit: number): Bound => {
   const request = pageRequestBytes(limit);
   return sumBounds(
     leaf({ nativeRows: 4, nativePoints: 1, statements: 1, bytes: request }),
-    repeatBound(pageKeyWork, limit),
+    repeatBound(pageKeyWork(), limit),
   );
 };
 
@@ -494,8 +609,8 @@ export function nativePublicOutputPageStatement(limit: number): NativePublicOutp
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT) return undefined;
   return Object.freeze({
     name: 'page',
-    sql: pageSql,
-    bindCount: pageBindCount,
+    sql: pageSql(),
+    bindCount: pageBindCount(),
     requestBytes: pageRequestBytes(limit),
     resultBytes: pageResultBytes(limit),
     resultRows: limit,
@@ -505,12 +620,18 @@ export function nativePublicOutputPageStatement(limit: number): NativePublicOutp
 
 export function nativePublicOutputHoldStatement(role: unknown): NativePublicOutputStatement | undefined {
   if (role !== 'predecessor' && role !== 'successor') return undefined;
-  return role === 'successor' ? holdSuccessorStatement : holdPredecessorStatement;
+  return role === 'successor' ? holdSuccessorStatement() : holdPredecessorStatement();
 }
 
-const partitionSql = sqlOf(partition);
-const partitionBindCount = bindCountOf(partition);
-const partitionRequestBytes = sqlBytes(partitionSql) + jsonBytes(partitionBinds);
+function partitionSql() {
+  return memoizedValue(partitionSql, () => sqlOf(partition));
+}
+function partitionBindCount() {
+  return memoizedValue(partitionBindCount, () => bindCountOf(partition));
+}
+function partitionRequestBytes() {
+  return memoizedValue(partitionRequestBytes, () => sqlBytes(partitionSql()) + jsonBytes(partitionBinds));
+}
 
 /** Same-snapshot size admission for the current partition node/moved_to projection. No fixed guess. */
 export function nativePublicOutputPartitionStatement(bytes: number): NativePublicOutputStatement | undefined {
@@ -521,69 +642,81 @@ export function nativePublicOutputPartitionStatement(bytes: number): NativePubli
   );
   return Object.freeze({
     name: 'partition',
-    sql: partitionSql,
-    bindCount: partitionBindCount,
-    requestBytes: partitionRequestBytes,
+    sql: partitionSql(),
+    bindCount: partitionBindCount(),
+    requestBytes: partitionRequestBytes(),
     resultBytes,
     resultRows: 1,
     bound: leaf({
       nativeRows: 4,
       nativePoints: 1,
-      bytes: partitionRequestBytes + bytes,
+      bytes: partitionRequestBytes() + bytes,
     }),
   });
 }
 
-export const NATIVE_PUBLIC_OUTPUT_CHECKOUT = sqlBound({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 1,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 0,
-});
+export function NATIVE_PUBLIC_OUTPUT_CHECKOUT() {
+  return memoizedValue(NATIVE_PUBLIC_OUTPUT_CHECKOUT, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 1,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+    }),
+  );
+}
 
-const staticStatements = Object.freeze([
-  headerStatement,
-  headStatement,
-  publicationStatement,
-  ownerStatement,
-  lifecycleStatement,
-  partitionSizeStatement,
-  referenceStatement,
-  xidStatement,
-  partitionMetadataStatement,
-  bindingStatement,
-  bindingLockStatement,
-  identityStatement,
-  xminStatement,
-  provenanceStatement,
-  retainedStatement,
-  bindStatement,
-  receivingStatement,
-  holdPredecessorStatement,
-  holdSuccessorStatement,
-  transitionReadStatement,
-  transitionStatement,
-  consumeStatement,
-  fenceStatement,
-  retentionOwnerStatement,
-  retentionPartitionStatement,
-  retentionCollectionStatement,
-  retentionOutputStatement,
-  beginStatement,
-  commitStatement,
-  rollbackStatement,
-]);
+function staticStatements() {
+  return memoizedValue(staticStatements, () =>
+    Object.freeze([
+      headerStatement(),
+      headStatement(),
+      publicationStatement(),
+      ownerStatement(),
+      lifecycleStatement(),
+      partitionSizeStatement(),
+      referenceStatement(),
+      xidStatement(),
+      partitionMetadataStatement(),
+      bindingStatement(),
+      bindingLockStatement(),
+      identityStatement(),
+      xminStatement(),
+      provenanceStatement(),
+      retainedStatement(),
+      bindStatement(),
+      receivingStatement(),
+      holdPredecessorStatement(),
+      holdSuccessorStatement(),
+      transitionReadStatement(),
+      transitionStatement(),
+      consumeStatement(),
+      fenceStatement(),
+      retentionOwnerStatement(),
+      retentionPartitionStatement(),
+      retentionCollectionStatement(),
+      retentionOutputStatement(),
+      beginStatement(),
+      commitStatement(),
+      rollbackStatement(),
+    ]),
+  );
+}
 
-export const NATIVE_PUBLIC_OUTPUT_STATEMENTS = Object.freeze(
-  Object.fromEntries(staticStatements.map((entry) => [entry.name, entry])) as Record<
-    string,
-    NativePublicOutputStatement
-  >,
-);
+export function NATIVE_PUBLIC_OUTPUT_STATEMENTS() {
+  return memoizedValue(NATIVE_PUBLIC_OUTPUT_STATEMENTS, () =>
+    Object.freeze(
+      Object.fromEntries(staticStatements().map((entry) => [entry.name, entry])) as Record<
+        string,
+        NativePublicOutputStatement
+      >,
+    ),
+  );
+}
 
 const normal = (sql: string) =>
   sql
@@ -591,16 +724,29 @@ const normal = (sql: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const staticBySql = new Map<string, NativePublicOutputStatement>();
-for (const entry of staticStatements) {
-  const key = normal(entry.sql);
-  if (key === normal(sqlOf(hold))) continue;
-  staticBySql.set(key, entry);
+function staticBySql() {
+  return memoizedValue(staticBySql, () =>
+    (() => {
+      const result = new Map<string, NativePublicOutputStatement>();
+      for (const entry of staticStatements()) {
+        const key = normal(entry.sql);
+        if (key === normal(sqlOf(hold))) continue;
+        result.set(key, entry);
+      }
+      return result;
+    })(),
+  );
 }
 
-const pageKey = normal(pageSql);
-const holdKey = normal(sqlOf(hold));
-const partitionKey = normal(partitionSql);
+function pageKey() {
+  return memoizedValue(pageKey, () => normal(pageSql()));
+}
+function holdKey() {
+  return memoizedValue(holdKey, () => normal(sqlOf(hold)));
+}
+function partitionKey() {
+  return memoizedValue(partitionKey, () => normal(partitionSql()));
+}
 
 function requestFits(entry: NativePublicOutputStatement, sql: string, values: readonly unknown[]): boolean {
   if (values.length !== entry.bindCount) return false;
@@ -620,22 +766,22 @@ export function nativePublicOutputStatement(
   work?: PublicOutputSizeAdmission,
 ): NativePublicOutputStatement | undefined {
   const key = normal(sql);
-  if (key === pageKey) {
+  if (key === pageKey()) {
     const limit = values[4];
     const entry = typeof limit === 'number' ? nativePublicOutputPageStatement(limit) : undefined;
     return entry && requestFits(entry, sql, values) ? entry : undefined;
   }
-  if (key === holdKey) {
+  if (key === holdKey()) {
     const entry = nativePublicOutputHoldStatement(values[4]);
     return entry && requestFits(entry, sql, values) ? entry : undefined;
   }
-  if (key === partitionKey) {
+  if (key === partitionKey()) {
     const admitted = work?.resultByteBound(`partition:${values[0]}`);
     if (admitted === undefined) return undefined;
     const entry = nativePublicOutputPartitionStatement(admitted);
     return entry && requestFits(entry, sql, values) ? entry : undefined;
   }
-  const entry = staticBySql.get(key);
+  const entry = staticBySql().get(key);
   return entry && requestFits(entry, sql, values) ? entry : undefined;
 }
 
@@ -664,98 +810,114 @@ export function nativePublicOutputWorkDimensions(bound: Bound): WorkDimensions {
   });
 }
 
-const observeCurrent = sumBounds(headerStatement.bound, partitionMetadataStatement.bound, headStatement.bound);
-const committedProof = sumBounds(xminStatement.bound, provenanceStatement.bound);
+function observeCurrent() {
+  return memoizedValue(observeCurrent, () =>
+    sumBounds(headerStatement().bound, partitionMetadataStatement().bound, headStatement().bound),
+  );
+}
+function committedProof() {
+  return memoizedValue(committedProof, () => sumBounds(xminStatement().bound, provenanceStatement().bound));
+}
 const byIdentity = (locked: boolean) =>
-  sumBounds(identityStatement.bound, locked ? bindingLockStatement.bound : bindingStatement.bound);
+  sumBounds(identityStatement().bound, locked ? bindingLockStatement().bound : bindingStatement().bound);
 const currentTuple = (locked: boolean) =>
   locked
-    ? sumBounds(observeCurrent, lifecycleStatement.bound, publicationStatement.bound)
-    : sumBounds(observeCurrent, lifecycleStatement.bound);
-const controls = sumBounds(beginStatement.bound, commitStatement.bound, rollbackStatement.bound);
+    ? sumBounds(observeCurrent(), lifecycleStatement().bound, publicationStatement().bound)
+    : sumBounds(observeCurrent(), lifecycleStatement().bound);
+function controls() {
+  return memoizedValue(controls, () =>
+    sumBounds(beginStatement().bound, commitStatement().bound, rollbackStatement().bound),
+  );
+}
 
-export const NATIVE_PUBLIC_OUTPUT_JOURNEYS = Object.freeze({
-  observe: observeCurrent,
-  committed: committedProof,
-  read: sumBounds(
-    NATIVE_PUBLIC_OUTPUT_CHECKOUT,
-    controls,
-    byIdentity(false),
-    committedProof,
-    currentTuple(false),
-    pagePlan(NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT),
-  ),
-  lock: sumBounds(ownerStatement.bound, byIdentity(true), committedProof, currentTuple(true)),
-  bindExisting: sumBounds(
-    ownerStatement.bound,
-    bindingLockStatement.bound,
-    xidStatement.bound,
-    committedProof,
-    currentTuple(true),
-  ),
-  bindNew: sumBounds(
-    ownerStatement.bound,
-    bindingLockStatement.bound,
-    lifecycleStatement.bound,
-    observeCurrent,
-    publicationStatement.bound,
-    bindStatement.bound,
-    receivingStatement.bound,
-    holdPredecessorStatement.bound,
-  ),
-  revalidate: sumBounds(ownerStatement.bound, bindingLockStatement.bound, committedProof, currentTuple(true)),
-  transfer: sumBounds(
-    bindingStatement.bound,
-    ownerStatement.bound,
-    bindingLockStatement.bound,
-    committedProof,
-    transitionReadStatement.bound,
-    retainedStatement.bound,
-    transitionStatement.bound,
-    holdSuccessorStatement.bound,
-    consumeStatement.bound,
-    fenceStatement.bound,
-  ),
-  release: sumBounds(
-    bindingStatement.bound,
-    ownerStatement.bound,
-    bindingLockStatement.bound,
-    committedProof,
-    transitionReadStatement.bound,
-    retainedStatement.bound,
-    transitionStatement.bound,
-    consumeStatement.bound,
-    fenceStatement.bound,
-  ),
-  retention: sumBounds(
-    retentionOwnerStatement.bound,
-    retentionPartitionStatement.bound,
-    retentionCollectionStatement.bound,
-    retentionOutputStatement.bound,
-  ),
-});
+export function NATIVE_PUBLIC_OUTPUT_JOURNEYS() {
+  return memoizedValue(NATIVE_PUBLIC_OUTPUT_JOURNEYS, () =>
+    Object.freeze({
+      observe: observeCurrent(),
+      committed: committedProof(),
+      read: sumBounds(
+        NATIVE_PUBLIC_OUTPUT_CHECKOUT(),
+        controls(),
+        byIdentity(false),
+        committedProof(),
+        currentTuple(false),
+        pagePlan(NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT),
+      ),
+      lock: sumBounds(ownerStatement().bound, byIdentity(true), committedProof(), currentTuple(true)),
+      bindExisting: sumBounds(
+        ownerStatement().bound,
+        bindingLockStatement().bound,
+        xidStatement().bound,
+        committedProof(),
+        currentTuple(true),
+      ),
+      bindNew: sumBounds(
+        ownerStatement().bound,
+        bindingLockStatement().bound,
+        lifecycleStatement().bound,
+        observeCurrent(),
+        publicationStatement().bound,
+        bindStatement().bound,
+        receivingStatement().bound,
+        holdPredecessorStatement().bound,
+      ),
+      revalidate: sumBounds(ownerStatement().bound, bindingLockStatement().bound, committedProof(), currentTuple(true)),
+      transfer: sumBounds(
+        bindingStatement().bound,
+        ownerStatement().bound,
+        bindingLockStatement().bound,
+        committedProof(),
+        transitionReadStatement().bound,
+        retainedStatement().bound,
+        transitionStatement().bound,
+        holdSuccessorStatement().bound,
+        consumeStatement().bound,
+        fenceStatement().bound,
+      ),
+      release: sumBounds(
+        bindingStatement().bound,
+        ownerStatement().bound,
+        bindingLockStatement().bound,
+        committedProof(),
+        transitionReadStatement().bound,
+        retainedStatement().bound,
+        transitionStatement().bound,
+        consumeStatement().bound,
+        fenceStatement().bound,
+      ),
+      retention: sumBounds(
+        retentionOwnerStatement().bound,
+        retentionPartitionStatement().bound,
+        retentionCollectionStatement().bound,
+        retentionOutputStatement().bound,
+      ),
+    }),
+  );
+}
 
-export const NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING = sumBounds(
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.read,
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.lock,
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.bindNew,
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.revalidate,
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.transfer,
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.release,
-  NATIVE_PUBLIC_OUTPUT_JOURNEYS.retention,
-);
+export function NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING() {
+  return memoizedValue(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING, () =>
+    sumBounds(
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().read,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().lock,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().bindNew,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().revalidate,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().transfer,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().release,
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().retention,
+    ),
+  );
+}
 
-if (!withinCeiling(pagePlan(1), pagePlan(NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT)))
-  throw new TypeError('Public output page plan is not monotone in its admitted limit');
-for (const bound of Object.values(NATIVE_PUBLIC_OUTPUT_JOURNEYS))
-  if (!withinCeiling(bound, NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING))
-    throw new TypeError('Public output journey exceeds its static ceiling');
-
-export const NATIVE_PUBLIC_OUTPUT_DESCRIPTOR = Object.freeze({
-  pageLimit: NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT,
-  engineRequests: 0 as const,
-  statements: NATIVE_PUBLIC_OUTPUT_STATEMENTS,
-  journeys: NATIVE_PUBLIC_OUTPUT_JOURNEYS,
-  ceiling: NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING,
-  checkout: NATIVE_PUBLIC_OUTPUT_CHECKOUT,
-});
+export function NATIVE_PUBLIC_OUTPUT_DESCRIPTOR() {
+  return memoizedValue(NATIVE_PUBLIC_OUTPUT_DESCRIPTOR, () =>
+    Object.freeze({
+      pageLimit: NATIVE_PUBLIC_OUTPUT_PAGE_LIMIT,
+      engineRequests: 0 as const,
+      statements: NATIVE_PUBLIC_OUTPUT_STATEMENTS(),
+      journeys: NATIVE_PUBLIC_OUTPUT_JOURNEYS(),
+      ceiling: NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING(),
+      checkout: NATIVE_PUBLIC_OUTPUT_CHECKOUT(),
+    }),
+  );
+}

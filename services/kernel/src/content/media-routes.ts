@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { OwnMediaDependencies } from './own-media.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -42,38 +43,52 @@ import {
 
 type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const readFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const upload = defineRateLimit({ family: 'upload', units: 1 });
-const write = defineRateLimit({ family: 'write', units: 1 });
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function commandHeaders() {
+  return memoizedValue(commandHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+  );
+}
+function upload() {
+  return memoizedValue(upload, () => defineRateLimit({ family: 'upload', units: 1 }));
+}
+function write() {
+  return memoizedValue(write, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 const secured = [{ bearerAuth: [] }];
 const readSecurity = [...secured, {}];
 function context(request: Request, deadline: number) {
@@ -118,8 +133,8 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         query: strictContentSchema(OwnMediaInventoryQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(OwnMediaInventoryPageSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(OwnMediaInventoryPageSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.own',
@@ -139,8 +154,8 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         body: strictContentSchema(DocumentMediaInputSchema),
         response: {
-          200: withHeaders(strictContentSchema(DocumentMediaPageSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(DocumentMediaPageSchema()), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.presentations',
@@ -162,20 +177,20 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       '/v1/media',
       {
         body: strictContentSchema(MediaReservationInputSchema),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
           201: withHeaders(strictContentSchema(MediaReservationResponseSchema), {
-            ...sessionHeader,
+            ...sessionHeader(),
             location: t.String(),
           }),
-          ...writeFailures,
+          ...writeFailures(),
         },
         detail: {
           operationId: 'media.create',
           'x-exposure': 'public',
           'x-action': 'media:create',
           'x-resource-types': ['content.media'],
-          'x-rate-limit': upload,
+          'x-rate-limit': upload(),
           security: secured,
         },
       },
@@ -207,20 +222,20 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
         body: strictContentSchema(RealmMediaReservationInputSchema),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
           201: withHeaders(strictContentSchema(MediaReservationResponseSchema), {
-            ...sessionHeader,
+            ...sessionHeader(),
             location: t.String(),
           }),
-          ...writeFailures,
+          ...writeFailures(),
         },
         detail: {
           operationId: 'realm_media.create',
           'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-resource-types': ['content.media'],
-          'x-rate-limit': upload,
+          'x-rate-limit': upload(),
           security: secured,
         },
       },
@@ -250,8 +265,8 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         query: strictContentSchema(AvatarUploadAdviceQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(AvatarUploadAdviceResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(AvatarUploadAdviceResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.avatar_upload_advice',
@@ -272,8 +287,8 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         params,
         response: {
-          200: withHeaders(strictContentSchema(MediaReservationResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(MediaReservationResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.read_reservation',
@@ -299,16 +314,16 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         params,
         body: strictContentSchema(MediaCompletionInputSchema),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
-          200: withHeaders(strictContentSchema(MediaCompletionResponseSchema), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strictContentSchema(MediaCompletionResponseSchema), sessionHeader()),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'media.complete',
           'x-exposure': 'public',
           'x-action': 'media:complete',
-          'x-rate-limit': write,
+          'x-rate-limit': write(),
           security: secured,
         },
       },
@@ -330,16 +345,16 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       '/v1/media/:id',
       {
         params,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
-          204: withHeaders(t.Void(), sessionHeader),
-          ...writeFailures,
+          204: withHeaders(t.Void(), sessionHeader()),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'media.erase',
           'x-exposure': 'public',
           'x-action': 'media:erase',
-          'x-rate-limit': write,
+          'x-rate-limit': write(),
           security: secured,
         },
       },
@@ -366,8 +381,8 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         params,
         query: strictContentSchema(MediaDownloadQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(MediaDownloadResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(MediaDownloadResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.authorize_download',

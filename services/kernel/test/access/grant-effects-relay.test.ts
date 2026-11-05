@@ -202,7 +202,7 @@ test('native grant mutations and assignment creation conform to the registry and
       ['change', changed],
       ['revoke', revoked],
     ] as const)
-      expect(Value.Check(EVENT_TYPES[`com.rezics.access.grant.${operation}.v1`], result.value)).toBe(true);
+      expect(Value.Check(EVENT_TYPES()[`com.rezics.access.grant.${operation}.v1`], result.value)).toBe(true);
     if (recipient.subject) {
       const role = {
         resource: PLATFORM_RESOURCE,
@@ -224,7 +224,7 @@ test('native grant mutations and assignment creation conform to the registry and
         ['change', changedRole],
         ['revoke', revokedRole],
       ] as const)
-        expect(Value.Check(EVENT_TYPES[`com.rezics.access.role-grant.${operation}.v1`], result.value)).toBe(true);
+        expect(Value.Check(EVENT_TYPES()[`com.rezics.access.role-grant.${operation}.v1`], result.value)).toBe(true);
     }
   }
   // Only the independent principal's starting delegation permission is fixture SQL;
@@ -240,13 +240,13 @@ test('native grant mutations and assignment creation conform to the registry and
     key: key(),
   };
   const created = await assignments.create(context, input);
-  expect(Value.Check(EVENT_TYPES['com.rezics.access.assignment.create.v1'], created.value)).toBe(true);
+  expect(Value.Check(EVENT_TYPES()['com.rezics.access.assignment.create.v1'], created.value)).toBe(true);
   const revoked = await assignments.revoke(context, {
     principalId: input.principalId,
     requestId: input.requestId,
     key: key(),
   });
-  expect(Value.Check(EVENT_TYPES['com.rezics.access.assignment.revoke.v1'], revoked.value)).toBe(true);
+  expect(Value.Check(EVENT_TYPES()['com.rezics.access.assignment.revoke.v1'], revoked.value)).toBe(true);
   for (const partition of [0, partitionOf(routeOf(f.actor)!)]) {
     const envelopes: Envelope[] = [];
     await readBatch(f.pool, {

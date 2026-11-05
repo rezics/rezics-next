@@ -10,7 +10,7 @@ import { createReleasedDiscoveryFixture, discoveryKey } from '../support/release
 import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
 import { continuePageSchema } from '../../src/library/transport-contract.ts';
 
-type ContinuePage = Static<typeof continuePageSchema>;
+type ContinuePage = Static<ReturnType<typeof continuePageSchema>>;
 
 function queryText(value: unknown): string | null {
   if (typeof value === 'string') return value;
@@ -58,7 +58,7 @@ function status(response: HttpResponse, expected: number, code?: string) {
   if (code !== undefined) expect((response.body as Record<string, unknown>).code).toBe(code);
 }
 function page(response: HttpResponse): ContinuePage {
-  expect(Value.Check(continuePageSchema, response.body)).toBe(true);
+  expect(Value.Check(continuePageSchema(), response.body)).toBe(true);
   return response.body as ContinuePage;
 }
 

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -125,11 +125,210 @@ function hasLiveFixtureProcess(stateDirectory: string, token: string): boolean {
   );
 }
 
+const nativeSetTimeout = globalThis.setTimeout;
+const nativeClearTimeout = globalThis.clearTimeout;
+const nativeSetInterval = globalThis.setInterval;
+const nativeClearInterval = globalThis.clearInterval;
+const nativeDateNow = Date.now.bind(Date);
+
+function fixtureTempParent(): string {
+  const root = resolve(import.meta.dir, '../../../.temp/goal-tests');
+  const inherited = resolve(tmpdir());
+  return inherited.startsWith(`${root}/`) ? inherited : root;
+}
+
+const gitTemplates = new Map<string, string>();
+const checkScriptCache = new Map<string, { commit: string; files: Map<string, string> }>();
+const CHECK_SCRIPT_PATHS = [
+  'scripts/worker-check.ts',
+  'scripts/remote-check.ts',
+  'scripts/check-git.ts',
+  'scripts/check-ledger.ts',
+  'scripts/stack-run.ts',
+  'scripts/stack-lease.ts',
+  'scripts/check-custody.ts',
+  'scripts/check-artifacts.ts',
+  'scripts/check-memory.ts',
+  'scripts/check-host/docker',
+] as const;
+
+function cloneSharedGit(template: string, destination: string): void {
+  mkdirSync(destination, { recursive: true });
+  repositoryGit(destination, 'clone', '--quiet', '--shared', '--no-hardlinks', template, '.');
+  try {
+    repositoryGit(destination, 'remote', 'remove', 'origin');
+  } catch {
+    /* git clone always adds origin; keep init-like remotes. */
+  }
+}
+
+function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => void): string {
+  const existing = gitTemplates.get(kind);
+  if (existing) return existing;
+  const temporary = ownedTemporaryDirectory(fixtureTempParent(), `template-${kind}-`);
+  build(temporary.path);
+  gitTemplates.set(kind, temporary.path);
+  return temporary.path;
+}
+
+function repositoryGitTemplate(): string {
+  return gitTemplate('repository', (root) => {
+    repositoryGit(root, 'init', '-b', 'main');
+    repositoryGit(root, 'config', 'user.email', 'test@example.invalid');
+    repositoryGit(root, 'config', 'user.name', 'Test');
+    writeFileSync(join(root, 'base'), 'base\n');
+    repositoryGit(root, 'add', '.');
+    repositoryGit(root, 'commit', '-m', 'Initial');
+  });
+}
+
+function harnessGitTemplate(): string {
+  return gitTemplate('harness', (root) => {
+    git(root, ['init', '-b', 'main']);
+    git(root, ['config', 'user.name', 'Fixture']);
+    git(root, ['config', 'user.email', 'fixture@example.invalid']);
+    writeFileSync(join(root, '.gitignore'), '.temp/\n');
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'goal-fixture', private: true, workspaces: ['packages/*'] }),
+    );
+    mkdirSync(join(root, 'scripts'), { recursive: true });
+    writeFileSync(join(root, 'scripts/typecheck.ts'), 'process.exit(0);\n');
+    writeFileSync(
+      join(root, 'scripts/architecture.ts'),
+      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
+    );
+    mkdirSync(join(root, 'docs/architecture'), { recursive: true });
+    writeFileSync(
+      join(root, 'docs/architecture/modules.json'),
+      JSON.stringify({
+        version: 1,
+        sourceRoots: [{ path: 'packages/fixture', extensions: ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'] }],
+        modules: [
+          {
+            id: 'fixture',
+            kind: 'adapter',
+            owner: 'platform',
+            paths: ['packages/fixture/**'],
+            publicEntries: [],
+            allowedDependencies: [],
+            capabilities: [],
+          },
+        ],
+      }),
+    );
+    writeFileSync(join(root, 'docs/architecture/boundary-baseline.json'), JSON.stringify({ version: 1, modules: {} }));
+    mkdirSync(join(root, 'packages/definitions'), { recursive: true });
+    writeFileSync(
+      join(root, 'packages/definitions/package.json'),
+      JSON.stringify({ name: '@fixture/definitions', private: true, scripts: { release: 'true' } }),
+    );
+    writeFileSync(join(root, 'README.md'), 'Fixture\n');
+    writeFileSync(
+      join(root, 'fixture.test.ts'),
+      "import { expect, test } from 'bun:test';\ntest('fixture acceptance', () => expect(true).toBe(true));\n",
+    );
+    git(root, ['add', '.']);
+    git(root, ['commit', '-m', 'Initial fixture']);
+  });
+}
+
+/** Real waits for process or filesystem signals; not subject to an injected test clock. */
+export async function waitUntil(
+  predicate: () => boolean,
+  timeoutMs = 10_000,
+  description = 'condition',
+): Promise<void> {
+  const deadline = nativeDateNow() + timeoutMs;
+  while (nativeDateNow() < deadline) {
+    if (predicate()) return;
+    await new Promise<void>((resolve) => nativeSetTimeout(resolve, 5));
+  }
+  throw new Error(`timed out waiting for ${description}`);
+}
+
+export type TestClock = {
+  now(): number;
+  advance(ms: number): void;
+  restore(): void;
+};
+
+/** Replace Date.now and timer functions so a test can advance time instead of sleeping. */
+export function installTestClock(start = nativeDateNow()): TestClock {
+  let now = start;
+  let nextId = 1;
+  const timers = new Map<number, { at: number; interval: number | null; fn: () => void }>();
+  const run = (fn: TimerHandler, args: unknown[]) => {
+    if (typeof fn === 'function') (fn as (...values: unknown[]) => void)(...args);
+  };
+  const setTimer = ((fn: TimerHandler, ms = 0, ...args: unknown[]) => {
+    const id = nextId++;
+    timers.set(id, { at: now + Math.max(0, Number(ms) || 0), interval: null, fn: () => run(fn, args) });
+    return id as unknown as ReturnType<typeof setTimeout>;
+  }) as unknown as typeof setTimeout;
+  const setRepeating = ((fn: TimerHandler, ms = 0, ...args: unknown[]) => {
+    const id = nextId++;
+    const period = Math.max(1, Number(ms) || 0);
+    timers.set(id, { at: now + period, interval: period, fn: () => run(fn, args) });
+    return id as unknown as ReturnType<typeof setInterval>;
+  }) as unknown as typeof setInterval;
+  const clear = (id: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | undefined) => {
+    timers.delete(Number(id));
+  };
+  Date.now = () => now;
+  globalThis.setTimeout = setTimer;
+  globalThis.setInterval = setRepeating;
+  globalThis.clearTimeout = clear as typeof clearTimeout;
+  globalThis.clearInterval = clear as typeof clearInterval;
+  return {
+    now: () => now,
+    advance(ms: number) {
+      const target = now + Math.max(0, ms);
+      for (;;) {
+        let next: { id: number; at: number; interval: number | null; fn: () => void } | undefined;
+        for (const [id, timer] of timers) {
+          if (timer.at > target) continue;
+          if (!next || timer.at < next.at || (timer.at === next.at && id < next.id)) next = { id, ...timer };
+        }
+        if (!next) {
+          now = target;
+          return;
+        }
+        now = next.at;
+        if (next.interval === null) timers.delete(next.id);
+        else {
+          const timer = timers.get(next.id);
+          if (timer?.interval != null) timer.at += timer.interval;
+        }
+        next.fn();
+      }
+    },
+    restore() {
+      Date.now = nativeDateNow;
+      globalThis.setTimeout = nativeSetTimeout;
+      globalThis.setInterval = nativeSetInterval;
+      globalThis.clearTimeout = nativeClearTimeout;
+      globalThis.clearInterval = nativeClearInterval;
+      timers.clear();
+    },
+  };
+}
+
 /** Copy the actual worker-check runtime closure from one immutable development commit. */
 export function checkScriptFixture(ref = 'refs/heads/dev') {
   const repositoryRoot = resolve(import.meta.dir, '../../..');
-  const commit = repositoryGit(repositoryRoot, 'rev-parse', '--verify', `${ref}^{commit}`);
+  let cached = checkScriptCache.get(ref);
+  if (!cached) {
+    cached = {
+      commit: repositoryGit(repositoryRoot, 'rev-parse', '--verify', `${ref}^{commit}`),
+      files: new Map(),
+    };
+    checkScriptCache.set(ref, cached);
+  }
+  const { commit, files } = cached;
   function read(path: string): string {
+    const hit = files.get(path);
+    if (hit !== undefined) return hit;
     const result = spawnSync('git', ['show', `${commit}:${path}`], {
       cwd: repositoryRoot,
       encoding: 'utf8',
@@ -137,23 +336,13 @@ export function checkScriptFixture(ref = 'refs/heads/dev') {
     });
     if (result.status !== 0)
       throw new Error(result.stderr?.trim() || result.error?.message || `Could not read ${commit}:${path}`);
+    files.set(path, result.stdout);
     return result.stdout;
   }
   return {
     read,
     install(root: string, transform: (path: string, source: string) => string = (_path, source) => source) {
-      for (const path of [
-        'scripts/worker-check.ts',
-        'scripts/remote-check.ts',
-        'scripts/check-git.ts',
-        'scripts/check-ledger.ts',
-        'scripts/stack-run.ts',
-        'scripts/stack-lease.ts',
-        'scripts/check-custody.ts',
-        'scripts/check-artifacts.ts',
-        'scripts/check-memory.ts',
-        'scripts/check-host/docker',
-      ]) {
+      for (const path of CHECK_SCRIPT_PATHS) {
         const target = join(root, path);
         mkdirSync(dirname(target), { recursive: true });
         const source = read(path);
@@ -166,9 +355,7 @@ export function checkScriptFixture(ref = 'refs/heads/dev') {
 }
 
 export function temporaryDirectory(): { path: string; close(): void } {
-  const root = resolve(import.meta.dir, '../../../.temp/goal-tests');
-  const inherited = resolve(tmpdir());
-  const temporary = ownedTemporaryDirectory(inherited.startsWith(`${root}/`) ? inherited : root, 'case-');
+  const temporary = ownedTemporaryDirectory(fixtureTempParent(), 'case-');
   const close = () => {
     temporary.close();
     fixtureDisposals.delete(temporary.path);
@@ -179,13 +366,7 @@ export function temporaryDirectory(): { path: string; close(): void } {
 export function repository() {
   const temporary = temporaryDirectory();
   const main = join(temporary.path, 'main');
-  mkdirSync(main);
-  repositoryGit(main, 'init', '-b', 'main');
-  repositoryGit(main, 'config', 'user.email', 'test@example.invalid');
-  repositoryGit(main, 'config', 'user.name', 'Test');
-  writeFileSync(join(main, 'base'), 'base\n');
-  repositoryGit(main, 'add', '.');
-  repositoryGit(main, 'commit', '-m', 'Initial');
+  cloneSharedGit(repositoryGitTemplate(), main);
   return {
     ...temporary,
     main,
@@ -325,28 +506,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   disposeAsync(options?: { beforeRemove?: () => void | Promise<void> }): Promise<void>;
 } {
   const root = tempDirectory();
-  git(root, ['init', '-b', 'main']);
-  git(root, ['config', 'user.name', 'Fixture']);
-  git(root, ['config', 'user.email', 'fixture@example.invalid']);
-  writeFileSync(join(root, '.gitignore'), '.temp/\n');
-  writeFileSync(
-    join(root, 'package.json'),
-    JSON.stringify({ name: 'goal-fixture', private: true, workspaces: ['packages/*'] }),
-  );
-  mkdirSync(join(root, 'scripts'), { recursive: true });
-  writeFileSync(join(root, 'scripts/typecheck.ts'), 'process.exit(0);\n');
-  mkdirSync(join(root, 'packages/definitions'), { recursive: true });
-  writeFileSync(
-    join(root, 'packages/definitions/package.json'),
-    JSON.stringify({ name: '@fixture/definitions', private: true, scripts: { release: 'true' } }),
-  );
-  writeFileSync(join(root, 'README.md'), 'Fixture\n');
-  writeFileSync(
-    join(root, 'fixture.test.ts'),
-    "import { expect, test } from 'bun:test';\ntest('fixture acceptance', () => expect(true).toBe(true));\n",
-  );
-  git(root, ['add', '.']);
-  git(root, ['commit', '-m', 'Initial fixture']);
+  cloneSharedGit(harnessGitTemplate(), root);
   const state = join(root, '.temp/goal');
   mkdirSync(state, { recursive: true });
   const command = join(state, 'codex');

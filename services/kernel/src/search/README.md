@@ -1901,8 +1901,11 @@ the affected home, and physical recreation invalidates the entire old job.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
-barrier. Current Source evidence comes from an existing immutable custody observation, the selected native
-binding join and canonical all-native-homes Source observation. Missing custody, routing, Source or native
+barrier. Source evidence comes from `readNativePublicFilterPublicationCompletion` for the original persisted
+job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
+dispatch or adoption, and resumes the same repair after restart. Changed-since-start remains a disclosure fact;
+verified original repair, current ACK, independent settlement and no pending or unresolved homes still gate
+maintenance completion. Missing custody, routing, Source or native
 barrier evidence returns typed unready; no observation readiness is minted here. Old PIT/prepared observations
 remain bound to their own exact physical target and definition.
 
@@ -1929,11 +1932,25 @@ public-runtime acceptance pass is inferred from compilation.
 
 Decision: Search accepts generation-publication completion only from Semantic's delivered original native
 Source completion for the persisted job and cut. Consumer checkpoints, counts, Account-erasure barriers and
-elapsed time do not satisfy the fence; activation stays pending until that callable is delivered, joined and
-verified.
+elapsed time do not satisfy the fence. The ordinary writer resolves that actual reader before reporting drained
+or held. Its original prepared proof payload is emptied only after original readers release, while immutable
+proof metadata remains available for replay. Every other retained copy and dispatched writer still blocks the
+drain. Preparation retires its temporary materialization observation through the existing finite custody
+cleanup, retaining its locator until removal so a restart resumes child-before-parent retirement.
+The publication's prepared observation remains until explicit custody retirement, independently of serving
+lease expiry. Draining clears both prepared row stores and the consumer work's duplicate preparation arrays.
+The existing prepared `erasing` state prevents a new reader from enrolling on that drained proof even after
+the publication gate releases; original admitted readers drain before that transition.
+Reconciliation retries preserve the original Source tuple and the retained alias intent.
+Current Source changes during drain release the fence for ordinary repair. An interrupted alias intent
+first recovers that exact native admission fence before rollback; Source completion is still required for
+publication, while a pending Source cannot strand the safe abort behind its own completion check.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
-steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
+native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
+examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
+its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
+Steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
 only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
 engine pass without reusing an old frontier. New native outcomes cover incomplete population/barrier refusal, physical

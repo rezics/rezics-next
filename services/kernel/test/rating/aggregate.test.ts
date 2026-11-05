@@ -87,7 +87,7 @@ test('a newer vote subtracts the previous components, adds the new ones, and rep
       targetId,
     }),
   ).toEqual(afterUpdate);
-  expect(EVENT_TYPES[aggregateEvent]).toBeDefined();
+  expect(EVENT_TYPES()[aggregateEvent]).toBeDefined();
 });
 
 test('votes spread across sixteen shards and read back to exact totals', async () => {

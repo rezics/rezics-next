@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Same-client structural reads for the selected Source branch. Declarations constrain calls, never fund them. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -7,7 +8,9 @@ import { currentOperationalResources, hasLiveOperationalTransaction } from '../c
 import { deadlineClient } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
-import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
+// Search work context is loaded on use: a static import leaves COLLECTION_SOURCE_WORK_COST
+// uninitialized during Collection Source / Members declaration cycles.
+import type { ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
 import {
   CANONICAL_SOURCE_RECEIVING_COST,
@@ -24,7 +27,9 @@ import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } fr
 import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 
-export type CollectionSourceWorkDefinition = Awaited<ReturnType<typeof readScopeWorkDefinition>>;
+export type CollectionSourceWorkDefinition = Awaited<
+  ReturnType<(typeof import('../search/scope-work-context.ts'))['readScopeWorkDefinition']>
+>;
 export type CollectionSourceWorkState = Readonly<{
   metadata: NativeCollectionMetadata;
   basis: CanonicalBasis;
@@ -37,7 +42,9 @@ export type CollectionSourceWorkState = Readonly<{
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 
 /** Upper bounds follow the exact indexed statements in the canonical Source plan. */
-export const COLLECTION_SOURCE_WORK_COST = CANONICAL_SOURCE_RECEIVING_COST;
+export function COLLECTION_SOURCE_WORK_COST() {
+  return memoizedValue(COLLECTION_SOURCE_WORK_COST, () => CANONICAL_SOURCE_RECEIVING_COST());
+}
 
 const sourceReceipt = (bound: Bound): WorkReceipt =>
   Object.freeze({
@@ -83,6 +90,7 @@ export async function readCollectionSourceWorkState(
 ): Promise<CollectionSourceWorkState> {
   const current = frame(options.deadline);
   try {
+    const { readScopeWorkDefinition } = await import('../search/scope-work-context.ts');
     const native = await readScopeWorkDefinition(work, { pool, access: options.access, deadline: options.deadline });
     if (!hasLiveOperationalTransaction(work.tx)) throw new ProblemError('semantic_not_ready');
     const resources = currentOperationalResources(work.tx);
@@ -131,7 +139,7 @@ export async function readCollectionSourceWorkState(
     const [scope] = await query<{ identity: NativeSourceIdentity; capture: string | null; revision: string | null }>(
       work,
       current,
-      CANONICAL_SOURCE_STATEMENTS.scope,
+      CANONICAL_SOURCE_STATEMENTS().scope,
       [source.route, source.collectionId, fence],
     );
     if (!scope?.capture || scope.revision === null || !isDeepStrictEqual(scope.identity, source))
@@ -146,7 +154,7 @@ export async function readCollectionSourceWorkState(
         native.identityObservation.committedRevision !== BigInt(scope.revision))
     )
       throw new ProblemError('semantic_not_ready');
-    const [head] = await query<{ generation: string }>(work, current, CANONICAL_SOURCE_STATEMENTS.head, [
+    const [head] = await query<{ generation: string }>(work, current, CANONICAL_SOURCE_STATEMENTS().head, [
       source.route,
       source.collectionId,
     ]);
@@ -154,7 +162,7 @@ export async function readCollectionSourceWorkState(
     const [generation] = await query<{ basis: CanonicalBasis; state: string; source_exhausted: boolean }>(
       work,
       current,
-      CANONICAL_SOURCE_STATEMENTS.generation,
+      CANONICAL_SOURCE_STATEMENTS().generation,
       [source.route, source.collectionId, head.generation],
     );
     if (!generation || generation.state !== 'complete' || !generation.source_exhausted)
@@ -182,12 +190,12 @@ export async function readCollectionSourceWorkState(
       generation: head.generation,
       observation: native.observation,
       definition: structuredClone(native),
-      work: sourceReceipt(COLLECTION_SOURCE_WORK_COST.state),
+      work: sourceReceipt(COLLECTION_SOURCE_WORK_COST().state),
     });
   } catch (error) {
     if (error instanceof Error)
       Object.defineProperty(error, 'work', {
-        value: sourceReceipt(COLLECTION_SOURCE_WORK_COST.state),
+        value: sourceReceipt(COLLECTION_SOURCE_WORK_COST().state),
         configurable: true,
       });
     throw error;
@@ -203,17 +211,17 @@ export async function seekCollectionSourceWorkGroup(
 ) {
   const current = frame(options.deadline);
   try {
-    const [row] = await query<{ subject: string }>(work, current, CANONICAL_SOURCE_STATEMENTS.seek, [
+    const [row] = await query<{ subject: string }>(work, current, CANONICAL_SOURCE_STATEMENTS().seek, [
       state.metadata.route,
       state.metadata.collectionId,
       state.generation,
       after,
     ]);
-    return { subjectId: row?.subject ?? null, work: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek) };
+    return { subjectId: row?.subject ?? null, work: sourceReceipt(COLLECTION_SOURCE_WORK_COST().seek) };
   } catch (error) {
     if (error instanceof Error)
       Object.defineProperty(error, 'work', {
-        value: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek),
+        value: sourceReceipt(COLLECTION_SOURCE_WORK_COST().seek),
         configurable: true,
       });
     throw error;
@@ -228,7 +236,7 @@ export async function readCollectionSourceWorkGroup(
   limit: number,
   options: Readonly<{ deadline: number }>,
 ) {
-  const cost = COLLECTION_SOURCE_WORK_COST.group(limit);
+  const cost = COLLECTION_SOURCE_WORK_COST().group(limit);
   const current = frame(options.deadline);
   try {
     if (routeOf(subjectId) !== state.metadata.route) throw new ProblemError('invalid_cursor');

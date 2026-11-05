@@ -37,7 +37,7 @@ export async function resolveSubject(
   context?: AccessContext,
 ): Promise<ResolvedSubject | null> {
   if (routeOf(subjectId) === null) return null;
-  const mapping = await identityEpochStore.readMapping(deps.pool, subjectId);
+  const mapping = await identityEpochStore().readMapping(deps.pool, subjectId);
   return resolveMappedSubject(deps, actor, subjectId, mapping, at, context);
 }
 
@@ -101,7 +101,7 @@ export async function readableSubjects(
     throw new RangeError(`Subject page must contain at most ${MAX_SUBJECT_IDS} IDs`);
 
   const distinctIds = [...new Set(subjectIds)].filter((id) => routeOf(id) !== null);
-  const mappings = await identityEpochStore.readMappings(deps.pool, distinctIds);
+  const mappings = await identityEpochStore().readMappings(deps.pool, distinctIds);
   const resolved: (ResolvedSubject | null)[] = new Array(distinctIds.length);
   let nextIndex = 0;
   const outcomes = await Promise.allSettled(

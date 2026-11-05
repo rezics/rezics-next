@@ -24,7 +24,7 @@ export async function shelfTitleBinding(
        AND h.phase='ready' AND h.population=o.population`,
     [route, accountId, policy, sourceBasis],
   );
-  if (!rows[0]) throw new ShelfReadUnavailableError('complete current native title generation');
+  if (!rows[0]) throw new (ShelfReadUnavailableError())('complete current native title generation');
   return {
     titleGeneration: rows[0].generation,
     titlePopulation: rows[0].population,
@@ -102,7 +102,7 @@ export function createShelfTitleReader(): ShelfDateReader {
         args,
       );
       if (rows.some((row) => row.current !== true || row.lastActivityAt === null))
-        throw new ShelfReadUnavailableError('current complete title Entry basis');
+        throw new (ShelfReadUnavailableError())('current complete title Entry basis');
       const page = rows.slice(0, query.limit);
       const last = page.at(-1);
       const position: ShelfSeek | undefined = last

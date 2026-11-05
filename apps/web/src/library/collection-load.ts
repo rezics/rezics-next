@@ -525,8 +525,9 @@ export async function loadEditableCollectionPage(
       readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
     );
     const dynamicMembers = {
-      members: page.members.map((member) => ({
-        ...(editor && member.subject ? { subjectId: member.subjectId } : {}),
+      members: page.members.map((member, index) => ({
+        ...(member.subjectId ? { subjectId: member.subjectId } : {}),
+        viewerRowKey: String(index),
         subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
         ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
       })),
@@ -534,6 +535,7 @@ export async function loadEditableCollectionPage(
       preparing: false,
       retryAfterMs: 1000,
       unavailable: false,
+      ...(page.viewerFacts ? { viewerFacts: page.viewerFacts } : {}),
     };
     return {
       id: collection.id,

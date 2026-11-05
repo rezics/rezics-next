@@ -61,10 +61,10 @@ export function createVoterEligibilityEffect(pool: Pool): Effect {
       const type = event.type as EligibilityEvent;
       const schema =
         type === SUSPENDED
-          ? ACCESS_EVENTS[SUSPENDED]
+          ? ACCESS_EVENTS()[SUSPENDED]
           : type === REINSTATED
-            ? ACCESS_EVENTS[REINSTATED]
-            : ACCESS_EVENTS[TOMBSTONED];
+            ? ACCESS_EVENTS()[REINSTATED]
+            : ACCESS_EVENTS()[TOMBSTONED];
       if (!Value.Check(schema, event.data)) throw new TypeError('Invalid account eligibility event');
       const accountId = (event.data as { accountId: string }).accountId;
       const route = routeOf(accountId);

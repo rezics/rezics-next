@@ -214,9 +214,9 @@ describe('public review discovery adapter', () => {
     async function currentDocument(id: string): Promise<ReviewDiscoveryDocument | undefined> {
       let after: ReviewDiscoveryFrontier | null = null;
       let cut: bigint | undefined;
-      const maxPages = Math.ceil((initial.length + lateReviews.length) / REVIEW_DISCOVERY_PAGE_SIZE) + 1;
+      const maxPages = Math.ceil((initial.length + lateReviews.length) / REVIEW_DISCOVERY_PAGE_SIZE()) + 1;
       for (let pageNumber = 0; pageNumber < maxPages; pageNumber += 1) {
-        const page = await adapter.page(partition, after, REVIEW_DISCOVERY_PAGE_SIZE, cut);
+        const page = await adapter.page(partition, after, REVIEW_DISCOVERY_PAGE_SIZE(), cut);
         expect(page.status).toBe('ready');
         if (page.status !== 'ready') return undefined;
         cut ??= page.value.position;

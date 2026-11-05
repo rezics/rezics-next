@@ -205,7 +205,7 @@ async function createUnlabeledAgent(
     current_release: release,
   });
   await createRevision.run(tx, { route, subject_id: id, release, transaction_id: transactionId, source: null });
-  await identityEpochStore.initializeSubject(tx, id);
+  await identityEpochStore().initializeSubject(tx, id);
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
   await initializeSubjectPagePublication(tx, { route, id });
   return {

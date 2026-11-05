@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { t } from 'elysia';
@@ -37,30 +38,34 @@ export type ModerationHistoryQuery = {
   targetKind?: 'all' | 'board' | 'thread' | 'post';
 };
 
-export const ModerationHistoryPageSchema = t.Object(
-  {
-    entries: t.Array(
-      t.Object(
-        {
-          ...ModerationDecisionSchema.properties,
-          history: t.Object(
+export function ModerationHistoryPageSchema() {
+  return memoizedValue(ModerationHistoryPageSchema, () =>
+    t.Object(
+      {
+        entries: t.Array(
+          t.Object(
             {
-              reasonState: t.Union([t.Literal('retained'), t.Literal('retired')]),
-              decider: t.Union([t.Literal('withheld'), t.Literal('retired')]),
-              receipt: t.Union([t.Literal('permitted'), t.Literal('unavailable')]),
-              target: t.Literal('unavailable'),
+              ...ModerationDecisionSchema.properties,
+              history: t.Object(
+                {
+                  reasonState: t.Union([t.Literal('retained'), t.Literal('retired')]),
+                  decider: t.Union([t.Literal('withheld'), t.Literal('retired')]),
+                  receipt: t.Union([t.Literal('permitted'), t.Literal('unavailable')]),
+                  target: t.Literal('unavailable'),
+                },
+                { additionalProperties: false },
+              ),
             },
             { additionalProperties: false },
           ),
-        },
-        { additionalProperties: false },
-      ),
+        ),
+        nextCursor: t.Union([t.String(), t.Null()]),
+        viewer: t.Object({ kind: t.Literal('board-moderator') }, { additionalProperties: false }),
+      },
+      { additionalProperties: false },
     ),
-    nextCursor: t.Union([t.String(), t.Null()]),
-    viewer: t.Object({ kind: t.Literal('board-moderator') }, { additionalProperties: false }),
-  },
-  { additionalProperties: false },
-);
+  );
+}
 
 type HistoryContext = { actor: Actor; deadline: number; request?: Request };
 type Candidate = {

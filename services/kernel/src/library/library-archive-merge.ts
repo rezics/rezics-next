@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -60,15 +61,21 @@ import { readLibraryProfileAnchor, readLibraryProfileSourceObservation } from '.
 import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 
-export const LIBRARY_ARCHIVE_MERGE_LIMITS = {
-  ...LIBRARY_ARCHIVE_LIMITS,
-  page: 100,
-  reviewItems: 20,
-  applyItems: 20,
-  selectedJournalFields: 4,
-  cleanupItems: 100,
-  lifetimeDays: 7,
-} as const;
+export function LIBRARY_ARCHIVE_MERGE_LIMITS() {
+  return memoizedValue(
+    LIBRARY_ARCHIVE_MERGE_LIMITS,
+    () =>
+      ({
+        ...LIBRARY_ARCHIVE_LIMITS(),
+        page: 100,
+        reviewItems: 20,
+        applyItems: 20,
+        selectedJournalFields: 4,
+        cleanupItems: 100,
+        lifetimeDays: 7,
+      }) as const,
+  );
+}
 
 export type LibraryArchiveMergeDependencies = {
   pool: Pool;
@@ -410,7 +417,7 @@ function sourceFingerprint(item: Item) {
 function selectedFields(value: unknown, allowed: readonly string[]): Record<string, ArchiveFieldChoice> {
   const fields = object(value);
   const fieldLimit = allowed.includes('assessment')
-    ? LIBRARY_ARCHIVE_MERGE_LIMITS.selectedJournalFields
+    ? LIBRARY_ARCHIVE_MERGE_LIMITS().selectedJournalFields
     : allowed.length;
   if (
     !fields ||
@@ -630,7 +637,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         signal?.throwIfAborted();
         const uploadId = newId(route);
         const now = Date.parse(authoritativeTimeValue(command.time));
-        const expiresAt = new Date(now + LIBRARY_ARCHIVE_MERGE_LIMITS.lifetimeDays * 86_400_000).toISOString();
+        const expiresAt = new Date(now + LIBRARY_ARCHIVE_MERGE_LIMITS().lifetimeDays * 86_400_000).toISOString();
         const inserted = await tx.query(
           `INSERT INTO library.library_archive_merge_upload
             (route,account_id,upload_id,manifest,coverage,row_count,record_bytes,created_at,expires_at)
@@ -695,9 +702,9 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
   }
 
   async function page(actor: Actor, id: string, after = -1, limit = 50, signal?: AbortSignal) {
-    if (!Number.isInteger(after) || after < -1 || after >= LIBRARY_ARCHIVE_MERGE_LIMITS.records)
+    if (!Number.isInteger(after) || after < -1 || after >= LIBRARY_ARCHIVE_MERGE_LIMITS().records)
       throw new ProblemError('invalid_request');
-    if (!Number.isInteger(limit) || limit < 1 || limit > LIBRARY_ARCHIVE_MERGE_LIMITS.page)
+    if (!Number.isInteger(limit) || limit < 1 || limit > LIBRARY_ARCHIVE_MERGE_LIMITS().page)
       throw new ProblemError('invalid_request');
     return operation(actor, 'library_entry:read', signal, async (tx, route, accountId, now) => {
       const upload = await readUpload(tx, route, accountId, id);
@@ -730,9 +737,9 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
   }
 
   async function results(actor: Actor, id: string, after = -1, limit = 50, signal?: AbortSignal) {
-    if (!Number.isInteger(after) || after < -1 || after >= LIBRARY_ARCHIVE_MERGE_LIMITS.records)
+    if (!Number.isInteger(after) || after < -1 || after >= LIBRARY_ARCHIVE_MERGE_LIMITS().records)
       throw new ProblemError('invalid_request');
-    if (!Number.isInteger(limit) || limit < 1 || limit > LIBRARY_ARCHIVE_MERGE_LIMITS.page)
+    if (!Number.isInteger(limit) || limit < 1 || limit > LIBRARY_ARCHIVE_MERGE_LIMITS().page)
       throw new ProblemError('invalid_request');
     return operation(actor, 'library_entry:read', signal, async (tx, route, accountId, now) => {
       const upload = await readUpload(tx, route, accountId, id);
@@ -1342,7 +1349,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
   async function review(actor: Actor, id: string, decisions: readonly ArchiveMergeReviewInput[], signal?: AbortSignal) {
     if (
       decisions.length < 1 ||
-      decisions.length > LIBRARY_ARCHIVE_MERGE_LIMITS.reviewItems ||
+      decisions.length > LIBRARY_ARCHIVE_MERGE_LIMITS().reviewItems ||
       new Set(decisions.map((decision) => decision.ordinal)).size !== decisions.length
     )
       throw new ProblemError('invalid_request');
@@ -2029,13 +2036,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
   async function apply(actor: Actor, id: string, selected: readonly ArchiveMergeSelection[], signal?: AbortSignal) {
     if (
       selected.length < 1 ||
-      selected.length > LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems ||
+      selected.length > LIBRARY_ARCHIVE_MERGE_LIMITS().applyItems ||
       new Set(selected.map((item) => item.ordinal)).size !== selected.length ||
       selected.some(
         ({ ordinal, reviewRevision }) =>
           !Number.isInteger(ordinal) ||
           ordinal < 0 ||
-          ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records ||
+          ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS().records ||
           !Number.isSafeInteger(reviewRevision) ||
           reviewRevision < 1,
       )
@@ -2170,7 +2177,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         )
         DELETE FROM library.library_archive_merge_item item USING keys
         WHERE item.route=$1 AND item.account_id=$2 AND item.upload_id=$3 AND item.ordinal=keys.ordinal`,
-        [route, accountId, id, LIBRARY_ARCHIVE_MERGE_LIMITS.cleanupItems],
+        [route, accountId, id, LIBRARY_ARCHIVE_MERGE_LIMITS().cleanupItems],
       );
       const remaining = await tx.query(
         `SELECT 1 FROM library.library_archive_merge_item

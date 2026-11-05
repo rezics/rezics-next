@@ -49,7 +49,7 @@ test('The installed Accounts entry refuses manufactured, copied, missing and exp
         jobId: 'public-job',
         position: {},
         deadline,
-        native: IDENTITY_HISTORY_ACCOUNTS_DECLARATION.local.command,
+        native: IDENTITY_HISTORY_ACCOUNTS_DECLARATION().local.command,
         library: {},
       } as unknown as IdentityOriginalSourceContext;
       for (const parent of [publicParent, Object.freeze({ ...publicParent })])
@@ -90,7 +90,7 @@ test('A nested prepaid entry poisons the existing unit without native work or re
 });
 
 test('Known local SQL has all eight explicit axes; copied five-field bounds and unknown SQL cannot price a prepaid dispatch', () => {
-  const d = IDENTITY_HISTORY_ACCOUNTS_DECLARATION;
+  const d = IDENTITY_HISTORY_ACCOUNTS_DECLARATION();
   expect(d.axes).toHaveLength(8);
   expect(d.engineRequests).toBe(0);
   for (const [name, amount] of Object.entries(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK)) {
@@ -112,7 +112,7 @@ test('Known local SQL has all eight explicit axes; copied five-field bounds and 
 });
 
 test('The SDK declaration prices separate COMMIT and failure ROLLBACK slots without cancellation', () => {
-  const d = IDENTITY_HISTORY_ACCOUNTS_DECLARATION;
+  const d = IDENTITY_HISTORY_ACCOUNTS_DECLARATION();
   const names = ['rollback', 'begin', 'settings', 'lock', 'retire', 'commit'] as const;
   const sum = (axis: (typeof d.axes)[number]) => names.reduce((n, name) => n + d.sdk[name]![axis], 0);
   expect(sum('statements')).toBe(17);

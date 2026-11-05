@@ -248,7 +248,7 @@ async function open(path = '/signup', options: BrowserContextOptions = {}) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, urls };
@@ -282,7 +282,20 @@ async function form(page: Page) {
   const emailInput = page.getByLabel('Email', { exact: true });
   const passwordInput = page.getByLabel('Password', { exact: true });
   const confirmationInput = page.getByLabel('Confirm password', { exact: true });
-  expect(await handleInput.count(), 'sign-up has a labelled handle field').toBe(1);
+  await page.waitForFunction(
+    () => document.querySelector('#signup-handle') !== null || document.querySelector('[role="alert"]') !== null,
+    undefined,
+    { timeout: 30_000 },
+  );
+  if ((await handleInput.count()) !== 1)
+    throw new Error(
+      `sign-up form unavailable: ${JSON.stringify({
+        url: page.url(),
+        alerts: await page.getByRole('alert').allTextContents(),
+        status: await page.getByRole('status').allTextContents(),
+        requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+      })}`,
+    );
   expect(await emailInput.count(), 'sign-up has a labelled email field').toBe(1);
   expect(await passwordInput.count(), 'sign-up has a labelled password field').toBe(1);
   expect(await confirmationInput.count(), 'sign-up confirms the password locally').toBe(1);
@@ -347,17 +360,24 @@ test(
       expect(signupUrl.search).toBe(login.search);
       expect(signupUrl.searchParams.get('max_age')).toBe('600');
       expect(signupUrl.searchParams.has('prompt')).toBe(true);
+      const controls = await form(page);
+      const registrationRead = calls.find((call) => call.url === '/registration-page');
+      expect(registrationRead?.method).toBe('GET');
+      expect(registrationRead?.headers.origin).toBe(origin);
       const signInLink = page.getByRole('link', { name: 'Sign in', exact: true });
       expect(await signInLink.count()).toBe(1);
       const signInHref = new URL((await signInLink.getAttribute('href'))!, origin);
       expect(signInHref.pathname).toBe('/login');
       expect(signInHref.search).toBe(signupUrl.search);
 
-      const controls = await form(page);
       expect(await controls.email.getAttribute('autocomplete')).toBe('email');
       expect(await controls.password.getAttribute('autocomplete')).toBe('new-password');
       expect(await controls.password.getAttribute('type')).toBe('password');
-      await page.getByRole('button', { name: 'Show password', exact: true }).click();
+      await page
+        .getByRole('group')
+        .filter({ has: controls.password })
+        .getByRole('button', { name: 'Show password', exact: true })
+        .click();
       expect(await controls.password.getAttribute('type')).toBe('text');
       expect(await controls.password.getAttribute('autocomplete')).toBe('new-password');
       await page.getByRole('button', { name: 'Hide password', exact: true }).click();
@@ -504,7 +524,8 @@ test(
       await firstRequest;
       await page.waitForFunction(() => {
         const button = document.querySelector('button[type="submit"]');
-        return button instanceof HTMLButtonElement && button.disabled;
+        const password = document.querySelector('input[name="password"]');
+        return password instanceof HTMLInputElement && password.readOnly && button === null;
       });
       releaseFirstRequest();
       await page.waitForFunction(
@@ -530,6 +551,9 @@ test(
         ),
         retry.click(),
       ]);
+      await page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+      );
       expect(bodies).toHaveLength(2);
       const first = JSON.parse(bodies[0]!) as { key: string; turnstile_token: string; handle: string; email: string };
       const second = JSON.parse(bodies[1]!) as {
@@ -673,6 +697,9 @@ test(
         ),
         page.getByRole('button', { name: 'Create an account', exact: true }).click(),
       ]);
+      await page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+      );
       await page.getByRole('status').filter({ hasText: 'Your account was created' }).waitFor();
       const registrations = signupCalls();
       expect(registrations).toHaveLength(2);
@@ -771,7 +798,15 @@ test(
         (window as unknown as { __issueTurnstileToken: () => boolean }).__issueTurnstileToken(),
       );
       for (const value of ['short7', 'x'.repeat(129)]) {
-        await controls.password.fill(value);
+        if (value.length > 128) {
+          await controls.password.evaluate((input, next) => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            setter.call(input, next);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }, value);
+        } else {
+          await controls.password.fill(value);
+        }
         await waitEnabled(page);
         await controls.submit.click();
         await page.waitForFunction(() => {

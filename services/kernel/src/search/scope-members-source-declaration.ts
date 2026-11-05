@@ -1,9 +1,8 @@
+import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import {
-  COLLECTION_SOURCE_WORK_COST,
-  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
-} from '../library/collection-source-work-native.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
+import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../library/canonical-source-limits.ts';
 import {
   MEMBERS_PREPARATION_BRANCH_COST,
   MEMBERS_PREPARATION_STEP_CEILING,
@@ -11,7 +10,9 @@ import {
 import { SELECTED_COST } from '../work/selected-runtime-cost.ts';
 
 /** Selected Members Source declarations use the shared finite work dimensions. */
-export const MEMBERS_PREPARATION_SOURCE_AXES = BOUND_AXES;
+export function MEMBERS_PREPARATION_SOURCE_AXES() {
+  return memoizedValue(MEMBERS_PREPARATION_SOURCE_AXES, () => BOUND_AXES);
+}
 export type MembersPreparationSourceCost = Bound;
 
 const asBound = (work: Readonly<WorkDimensions>): Bound => declareBound({ ...work, engineRequests: 0 });
@@ -80,38 +81,58 @@ const sourceStatesPerInvocation = Math.max(
  * existing per-operation ceilings; the static Source declaration does not allocate or refund those ceilings.
  * A reached rollback is included alongside the ordinary transaction envelope.
  */
-const metadataPrefix = asBound(MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata);
-const searchBody = asBound(MEMBERS_PREPARATION_STEP_CEILING);
-const collectionState = repeatBound(COLLECTION_SOURCE_WORK_COST.state, sourceStatesPerInvocation);
-const collectionPrefix = repeatBound(
-  sumBounds(
-    COLLECTION_SOURCE_WORK_COST.seek,
-    COLLECTION_SOURCE_WORK_COST.group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
-  ),
-  MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
-);
-const sourceTransaction = sumBounds(SELECTED_COST.transaction, SELECTED_COST.rollback);
+function metadataPrefix() {
+  return memoizedValue(metadataPrefix, () => asBound(MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata));
+}
+function searchBody() {
+  return memoizedValue(searchBody, () => asBound(MEMBERS_PREPARATION_STEP_CEILING));
+}
+function collectionState() {
+  return memoizedValue(collectionState, () =>
+    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, sourceStatesPerInvocation),
+  );
+}
+function collectionPrefix() {
+  return memoizedValue(collectionPrefix, () =>
+    repeatBound(
+      sumBounds(
+        CANONICAL_SOURCE_RECEIVING_COST().seek,
+        CANONICAL_SOURCE_RECEIVING_COST().group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
+      ),
+      MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
+    ),
+  );
+}
+function sourceTransaction() {
+  return memoizedValue(sourceTransaction, () => sumBounds(SELECTED_COST().transaction, SELECTED_COST().rollback));
+}
 
-export const MEMBERS_PREPARATION_SOURCE_TERMS = Object.freeze({
-  metadataPrefix,
-  searchBody,
-  collectionState,
-  collectionPrefix,
-  sourceTransaction,
-});
+export function MEMBERS_PREPARATION_SOURCE_TERMS() {
+  return memoizedValue(MEMBERS_PREPARATION_SOURCE_TERMS, () =>
+    Object.freeze({
+      metadataPrefix: metadataPrefix(),
+      searchBody: searchBody(),
+      collectionState: collectionState(),
+      collectionPrefix: collectionPrefix(),
+      sourceTransaction: sourceTransaction(),
+    }),
+  );
+}
 
-export const MEMBERS_PREPARATION_SOURCE_COST = sumBounds(
-  metadataPrefix,
-  searchBody,
-  collectionState,
-  collectionPrefix,
-  sourceTransaction,
-);
+export function MEMBERS_PREPARATION_SOURCE_COST() {
+  return memoizedValue(MEMBERS_PREPARATION_SOURCE_COST, () =>
+    sumBounds(metadataPrefix(), searchBody(), collectionState(), collectionPrefix(), sourceTransaction()),
+  );
+}
 
-export const MEMBERS_PREPARATION_SOURCE_DECLARATION = Object.freeze({
-  status: 'complete' as const,
-  axes: MEMBERS_PREPARATION_SOURCE_AXES,
-  cost: MEMBERS_PREPARATION_SOURCE_COST,
-  terms: MEMBERS_PREPARATION_SOURCE_TERMS,
-  paths: MEMBERS_PREPARATION_SOURCE_PATHS,
-});
+export function MEMBERS_PREPARATION_SOURCE_DECLARATION() {
+  return memoizedValue(MEMBERS_PREPARATION_SOURCE_DECLARATION, () =>
+    Object.freeze({
+      status: 'complete' as const,
+      axes: MEMBERS_PREPARATION_SOURCE_AXES(),
+      cost: MEMBERS_PREPARATION_SOURCE_COST(),
+      terms: MEMBERS_PREPARATION_SOURCE_TERMS(),
+      paths: MEMBERS_PREPARATION_SOURCE_PATHS,
+    }),
+  );
+}

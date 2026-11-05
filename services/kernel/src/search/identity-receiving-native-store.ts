@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { QueryResultRow } from 'pg';
@@ -81,39 +82,45 @@ export type SearchNativeReceivingStatements = {
   readonly [K in SearchNativeReceivingSql]: { readonly sql: string };
 };
 
-export const searchNativeReceivingStatements: SearchNativeReceivingStatements = Object.freeze({
-  owner: ownerSql,
-  plan: planSql,
-  prepare: prepareSql,
-  document: documentSql,
-  lock: lockSql,
-  writer: writerSql,
-  action: actionSql,
-  receipt: receiptSql,
-  hold: holdSql,
-  peekHold: peekHoldSql,
-  accept: acceptSql,
-  accepted: acceptedSql,
-  bindAcceptance: bindAcceptanceSql,
-  operation: operationSql,
-  dispatch: dispatchSql,
-  visible: visibleSql,
-  apply: applySql,
-  applied: appliedSql,
-  copies: copiesSql,
-  insertCopies: insertCopiesSql,
-  copy: copySql,
-  copyLast: copyLastSql,
-  copyOwner: copyOwnerSql,
-  reconcile: reconcileSql,
-  pending: pendingSql,
-  control: controlSql,
-  release: releaseSql,
-  releaseProof: releaseProofSql,
-  drain: drainSql,
-  drainGate: drainGateSql,
-});
-const statements = searchNativeReceivingStatements;
+export function searchNativeReceivingStatements(): SearchNativeReceivingStatements {
+  return memoizedValue(searchNativeReceivingStatements, () =>
+    Object.freeze({
+      owner: ownerSql,
+      plan: planSql,
+      prepare: prepareSql,
+      document: documentSql,
+      lock: lockSql,
+      writer: writerSql,
+      action: actionSql,
+      receipt: receiptSql,
+      hold: holdSql,
+      peekHold: peekHoldSql,
+      accept: acceptSql,
+      accepted: acceptedSql,
+      bindAcceptance: bindAcceptanceSql,
+      operation: operationSql,
+      dispatch: dispatchSql,
+      visible: visibleSql,
+      apply: applySql,
+      applied: appliedSql,
+      copies: copiesSql,
+      insertCopies: insertCopiesSql,
+      copy: copySql,
+      copyLast: copyLastSql,
+      copyOwner: copyOwnerSql,
+      reconcile: reconcileSql,
+      pending: pendingSql,
+      control: controlSql,
+      release: releaseSql,
+      releaseProof: releaseProofSql,
+      drain: drainSql,
+      drainGate: drainGateSql,
+    }),
+  );
+}
+function statements() {
+  return memoizedValue(statements, () => searchNativeReceivingStatements());
+}
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const digest = /^[a-f0-9]{64}$/;
 const unsigned = /^(0|[1-9][0-9]*)$/;
@@ -188,7 +195,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
     args: readonly unknown[],
   ) {
     work.sql(name);
-    const result = await tx.query<R>(statements[name].sql, [...args]);
+    const result = await tx.query<R>(statements()[name].sql, [...args]);
     if ((name === 'copy' || name === 'copies') && result.rows.some((row) => row.proven !== true))
       work.fail('unavailable', 'Registered original copy has unavailable commit provenance');
     return result;

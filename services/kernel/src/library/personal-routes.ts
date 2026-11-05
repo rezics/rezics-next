@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createShelfTitlePreparation } from './shelf-title-maintenance.ts';
 import type { ShelfTitleSource } from './shelf-title-source.ts';
 import { createShelfScorePreparation } from './shelf-score.ts';
@@ -36,6 +37,9 @@ import { withLoanHttpWork, type LoanHttpOperation, type LoanHttpWorkOwner } from
 import { LoanConflictError, LoanInvalidError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
 import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
 import { attachCopyListContext } from './copy-list-context.ts';
+import type { CopyListContext } from './copy-list-context.ts';
+import type { CopyInventory } from './copy-inventory.ts';
+import type { CopyPresentation } from './copy-model.ts';
 import {
   createEntryCommands,
   LibraryConflictError,
@@ -111,95 +115,140 @@ type Dependencies = {
 const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
-const listFacts = t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }));
+function listFacts() {
+  return memoizedValue(listFacts, () =>
+    t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
+  );
+}
 // Request fields remain optional for exact historical receipts; fresh non-null
 // incarnations enforce the guard inside the authorized command after receipt lookup.
 const incarnationId = t.String({ format: 'uuid' });
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const personalRevision = t.Integer({ minimum: 0, maximum: 2_147_483_646 });
-const stateInput = libraryVocabularyIdSchema;
-const statusInput = libraryVocabularyIdSchema;
-const pageQuery = {
-  ...viewQuery,
-  cursor: t.Optional(t.String({ maxLength: 4096 })),
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
-};
-const copyInventoryChoiceSchema = t.Object(
-  {
-    id: libraryVocabularyIdSchema,
-    label: t.String({ maxLength: 256 }),
-    labelLanguage: t.Optional(t.String()),
-    meaning: t.Union([t.Literal('available'), t.Literal('unsupported'), t.Literal('unavailable')]),
-  },
-  closed,
-);
-const copyInventoryFacetSchema = t.Object(
-  {
-    state: t.Union([t.Literal('available'), t.Literal('unavailable')]),
-    choices: t.Array(copyInventoryChoiceSchema, { maxItems: 64 }),
-  },
-  closed,
-);
-const copyInventorySchema = t.Object({ kinds: copyInventoryFacetSchema, statuses: copyInventoryFacetSchema }, closed);
-const entrySchema = t.Object(
-  {
-    subjectId: id,
-    incarnationId: t.Optional(t.Union([incarnationId, t.Null()])),
-    state: libraryStoredVocabularySchema,
-    revision,
-    createdAt: id,
-    updatedAt: id,
-  },
-  closed,
-);
-const entryStateChangeSchema = t.Object(
-  {
-    revision,
-    priorRevision: t.Union([revision, t.Null()]),
-    beforeState: t.Union([libraryStoredVocabularySchema, t.Null()]),
-    afterState: libraryStoredVocabularySchema,
-    commandId: t.String({ format: 'uuid' }),
-    commandKind: t.Union([t.Literal('library.entry.put'), t.Literal('library.entry.state.restore')]),
-    changedAt: id,
-  },
-  closed,
-);
-const entryStateHistorySchema = t.Object(
-  {
-    incarnationId: t.Union([incarnationId, t.Null()]),
-    currentRevision: revision,
-    changes: t.Array(entryStateChangeSchema),
-    coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
-    next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
-  },
-  closed,
-);
-const entryStateReviewSchema = t.Object(
-  {
-    change: entryStateChangeSchema,
-    current: t.Object(
-      { incarnationId: t.Union([incarnationId, t.Null()]), revision, state: libraryStoredVocabularySchema },
+function stateInput() {
+  return memoizedValue(stateInput, () => libraryVocabularyIdSchema);
+}
+function statusInput() {
+  return memoizedValue(statusInput, () => libraryVocabularyIdSchema);
+}
+const copyConditionValueSchema = t.Union([
+  t.Literal('unknown'),
+  t.Literal('mint'),
+  t.Literal('near_mint'),
+  t.Literal('very_good_plus'),
+  t.Literal('very_good'),
+  t.Literal('good'),
+  t.Literal('fair'),
+  t.Literal('poor'),
+]);
+function pageQuery() {
+  return memoizedValue(pageQuery, () => ({
+    ...viewQuery,
+    cursor: t.Optional(t.String({ maxLength: 4096 })),
+    limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+  }));
+}
+function copyInventoryChoiceSchema() {
+  return memoizedValue(copyInventoryChoiceSchema, () =>
+    t.Object(
+      {
+        id: libraryVocabularyIdSchema,
+        label: t.String({ maxLength: 256 }),
+        labelLanguage: t.Optional(t.String()),
+        meaning: t.Union([t.Literal('available'), t.Literal('unsupported'), t.Literal('unavailable')]),
+      },
       closed,
     ),
-    availability: t.Union([t.Literal('available'), t.Literal('no_prior_state'), t.Literal('state_unavailable')]),
-  },
-  closed,
-);
-const copyFields = {
-  status: t.Optional(statusInput),
-  location: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
-  source: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
-  acquiredOn: t.Optional(nullable),
-  disposedOn: t.Optional(nullable),
-  note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
-  mediaCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
-  ),
-  packagingCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
-  ),
-};
-const copyConditionValueSchema = t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value)));
+  );
+}
+function copyInventoryFacetSchema() {
+  return memoizedValue(copyInventoryFacetSchema, () =>
+    t.Object(
+      {
+        state: t.Union([t.Literal('available'), t.Literal('unavailable')]),
+        choices: t.Array(copyInventoryChoiceSchema(), { maxItems: 64 }),
+      },
+      closed,
+    ),
+  );
+}
+function copyInventorySchema() {
+  return memoizedValue(copyInventorySchema, () =>
+    t.Object({ kinds: copyInventoryFacetSchema(), statuses: copyInventoryFacetSchema() }, closed),
+  );
+}
+function entrySchema() {
+  return memoizedValue(entrySchema, () =>
+    t.Object(
+      {
+        subjectId: id,
+        incarnationId: t.Optional(t.Union([incarnationId, t.Null()])),
+        state: libraryStoredVocabularySchema,
+        revision,
+        createdAt: id,
+        updatedAt: id,
+      },
+      closed,
+    ),
+  );
+}
+function entryStateChangeSchema() {
+  return memoizedValue(entryStateChangeSchema, () =>
+    t.Object(
+      {
+        revision,
+        priorRevision: t.Union([revision, t.Null()]),
+        beforeState: t.Union([libraryStoredVocabularySchema, t.Null()]),
+        afterState: libraryStoredVocabularySchema,
+        commandId: t.String({ format: 'uuid' }),
+        commandKind: t.Union([t.Literal('library.entry.put'), t.Literal('library.entry.state.restore')]),
+        changedAt: id,
+      },
+      closed,
+    ),
+  );
+}
+function entryStateHistorySchema() {
+  return memoizedValue(entryStateHistorySchema, () =>
+    t.Object(
+      {
+        incarnationId: t.Union([incarnationId, t.Null()]),
+        currentRevision: revision,
+        changes: t.Array(entryStateChangeSchema()),
+        coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
+        next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+function entryStateReviewSchema() {
+  return memoizedValue(entryStateReviewSchema, () =>
+    t.Object(
+      {
+        change: entryStateChangeSchema(),
+        current: t.Object(
+          { incarnationId: t.Union([incarnationId, t.Null()]), revision, state: libraryStoredVocabularySchema },
+          closed,
+        ),
+        availability: t.Union([t.Literal('available'), t.Literal('no_prior_state'), t.Literal('state_unavailable')]),
+      },
+      closed,
+    ),
+  );
+}
+function copyFields() {
+  return memoizedValue(copyFields, () => ({
+    status: t.Optional(statusInput()),
+    location: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
+    source: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
+    acquiredOn: t.Optional(nullable),
+    disposedOn: t.Optional(nullable),
+    note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
+    mediaCondition: t.Optional(t.Union([copyConditionValueSchema, t.Null()])),
+    packagingCondition: t.Optional(t.Union([copyConditionValueSchema, t.Null()])),
+  }));
+}
 const copyConditionDisplaySchema = t.Union([
   t.Object({ state: t.Literal('not_recorded') }, closed),
   t.Object({ state: t.Literal('unavailable') }, closed),
@@ -210,90 +259,107 @@ const copyConditionChoiceSchema = t.Object(
   { id: copyConditionValueSchema, label: t.String(), description: t.String() },
   closed,
 );
-const copyConditionEditingSchema = t.Union([
-  t.Object(
-    {
-      state: t.Literal('supported'),
-      currentness: t.Literal('current'),
-      choices: t.Array(copyConditionChoiceSchema, { minItems: COPY_CONDITION_CHOICES.length }),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      state: t.Literal('unavailable'),
-      currentness: t.Union([t.Literal('current'), t.Literal('retired'), t.Literal('unavailable')]),
-      reason: t.Union([
-        t.Literal('unsupported'),
-        t.Literal('unrecognized_vocabulary'),
-        t.Literal('retired'),
-        t.Literal('current_source_unavailable'),
-      ]),
-    },
-    closed,
-  ),
-]);
-const copySchema = t.Object(
-  {
-    id,
-    subjectId: id,
-    kind: t.Optional(t.Union([libraryStoredVocabularySchema, t.Null()])),
-    status: libraryStoredVocabularySchema,
-    revision,
-    location: nullable,
-    source: nullable,
-    acquiredOn: nullable,
-    disposedOn: nullable,
-    note: nullable,
-  },
-  closed,
-);
-const copyPresentationSchema = t.Object(
-  {
-    meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
-    kindLabel: t.Optional(t.String()),
-    kindLabelLanguage: t.Optional(t.String()),
-    statusLabel: t.Optional(t.String()),
-    statusLabelLanguage: t.Optional(t.String()),
-    statusEditing: t.Union([
+function copyConditionEditingSchema() {
+  return memoizedValue(copyConditionEditingSchema, () =>
+    t.Union([
       t.Object(
         {
           state: t.Literal('supported'),
-          statuses: t.Array(t.Object({ id: t.String(), label: t.String(), labelLanguage: t.String() }, closed), {
-            minItems: 1,
-          }),
+          currentness: t.Literal('current'),
+          choices: t.Array(copyConditionChoiceSchema, { minItems: COPY_CONDITION_CHOICES.length }),
         },
         closed,
       ),
-      t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
+      t.Object(
+        {
+          state: t.Literal('unavailable'),
+          currentness: t.Union([t.Literal('current'), t.Literal('retired'), t.Literal('unavailable')]),
+          reason: t.Union([
+            t.Literal('unsupported'),
+            t.Literal('unrecognized_vocabulary'),
+            t.Literal('retired'),
+            t.Literal('current_source_unavailable'),
+          ]),
+        },
+        closed,
+      ),
     ]),
-    mediaCondition: copyConditionDisplaySchema,
-    packagingCondition: copyConditionDisplaySchema,
-    conditionEditing: copyConditionEditingSchema,
-  },
-  closed,
-);
+  );
+}
+function copySchema() {
+  return memoizedValue(copySchema, () =>
+    t.Object(
+      {
+        id,
+        subjectId: id,
+        kind: t.Optional(t.Union([libraryStoredVocabularySchema, t.Null()])),
+        status: libraryStoredVocabularySchema,
+        revision,
+        location: nullable,
+        source: nullable,
+        acquiredOn: nullable,
+        disposedOn: nullable,
+        note: nullable,
+      },
+      closed,
+    ),
+  );
+}
+function copyPresentationSchema() {
+  return memoizedValue(copyPresentationSchema, () =>
+    t.Object(
+      {
+        meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
+        kindLabel: t.Optional(t.String()),
+        kindLabelLanguage: t.Optional(t.String()),
+        statusLabel: t.Optional(t.String()),
+        statusLabelLanguage: t.Optional(t.String()),
+        statusEditing: t.Union([
+          t.Object(
+            {
+              state: t.Literal('supported'),
+              statuses: t.Array(t.Object({ id: t.String(), label: t.String(), labelLanguage: t.String() }, closed), {
+                minItems: 1,
+              }),
+            },
+            closed,
+          ),
+          t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
+        ]),
+        mediaCondition: copyConditionDisplaySchema,
+        packagingCondition: copyConditionDisplaySchema,
+        conditionEditing: copyConditionEditingSchema(),
+      },
+      closed,
+    ),
+  );
+}
 const copyListContextIdentitySchema = t.Object({ id, labels: t.Record(t.String(), t.String()) }, closed);
-const copyListContextSchema = t.Union([
-  t.Object(
-    {
-      state: t.Literal('available'),
-      work: t.Array(copyListContextIdentitySchema, { maxItems: 3 }),
-      facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      state: t.Literal('unsupported'),
-      facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
-    },
-    closed,
-  ),
-  ...(['scope', 'withheld', 'missing', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, closed),
-  ),
-]);
+function copyListContextSchema() {
+  return memoizedValue(copyListContextSchema, () =>
+    t.Union([
+      t.Object(
+        {
+          state: t.Literal('available'),
+          work: t.Array(copyListContextIdentitySchema, { maxItems: 3 }),
+          facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          state: t.Literal('unsupported'),
+          facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
+        },
+        closed,
+      ),
+      t.Object({ state: t.Literal('scope') }, closed),
+      t.Object({ state: t.Literal('withheld') }, closed),
+      t.Object({ state: t.Literal('missing') }, closed),
+      t.Object({ state: t.Literal('unavailable') }, closed),
+    ]),
+  );
+}
 const followSchema = t.Object(
   {
     targetId: id,
@@ -304,56 +370,12 @@ const followSchema = t.Object(
   },
   closed,
 );
-const entryResponse = t.Object({ libraryEntry: entrySchema }, closed);
-const personalPrivacyValue = t.Union([
-  t.Object({ status: t.Literal('absent') }, closed),
-  t.Object(
-    {
-      status: t.Literal('unknown'),
-      sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })),
-    },
-    closed,
-  ),
-  t.Object(
-    { status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) },
-    closed,
-  ),
-]);
-const personalTimestampPrecision = t.Union([
-  t.Literal('year'),
-  t.Literal('month'),
-  t.Literal('day'),
-  t.Literal('minute'),
-  t.Literal('second'),
-  t.Literal('fraction'),
-]);
-const personalTimestampValue = t.Union([
-  t.Object({ status: t.Literal('absent') }, closed),
-  t.Object(
-    {
-      status: t.Literal('unknown'),
-      sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
-    },
-    closed,
-  ),
-  t.Object(
-    { status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }) },
-    closed,
-  ),
-]);
-function personalChange(value: TSchema) {
-  return t.Union([
-    t.Object({ op: t.Literal('unchanged') }, closed),
-    t.Object({ op: t.Literal('clear') }, closed),
-    t.Object({ op: t.Literal('set'), value }, closed),
-  ]);
+function entryResponse() {
+  return memoizedValue(entryResponse, () => t.Object({ libraryEntry: entrySchema() }, closed));
 }
-const personalObservationSchema = t.Object(
-  {
-    provider: t.String({ minLength: 1, maxLength: 64 }),
-    recordId: t.String({ minLength: 1, maxLength: 192 }),
-    revision,
-    privacy: t.Union([
+function personalPrivacyValue() {
+  return memoizedValue(personalPrivacyValue, () =>
+    t.Union([
       t.Object({ status: t.Literal('absent') }, closed),
       t.Object(
         {
@@ -362,13 +384,24 @@ const personalObservationSchema = t.Object(
         },
         closed,
       ),
-      t.Object({ status: t.Literal('cleared') }, closed),
       t.Object(
         { status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) },
         closed,
       ),
     ]),
-    sourceCreated: t.Union([
+  );
+}
+const personalTimestampPrecision = t.Union([
+  t.Literal('year'),
+  t.Literal('month'),
+  t.Literal('day'),
+  t.Literal('minute'),
+  t.Literal('second'),
+  t.Literal('fraction'),
+]);
+function personalTimestampValue() {
+  return memoizedValue(personalTimestampValue, () =>
+    t.Union([
       t.Object({ status: t.Literal('absent') }, closed),
       t.Object(
         {
@@ -377,121 +410,208 @@ const personalObservationSchema = t.Object(
         },
         closed,
       ),
-      t.Object({ status: t.Literal('cleared') }, closed),
       t.Object(
-        {
-          status: t.Literal('known'),
-          value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
-          precision: personalTimestampPrecision,
-          zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
-        },
+        { status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }) },
         closed,
       ),
     ]),
-    sourceUpdated: t.Union([
-      t.Object({ status: t.Literal('absent') }, closed),
-      t.Object(
-        {
-          status: t.Literal('unknown'),
-          sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
-        },
-        closed,
-      ),
-      t.Object({ status: t.Literal('cleared') }, closed),
-      t.Object(
-        {
-          status: t.Literal('known'),
-          value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
-          precision: personalTimestampPrecision,
-          zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
-        },
-        closed,
-      ),
+  );
+}
+function personalChange(value: TSchema) {
+  return t.Union([
+    t.Object({ op: t.Literal('unchanged') }, closed),
+    t.Object({ op: t.Literal('clear') }, closed),
+    t.Object({ op: t.Literal('set'), value }, closed),
+  ]);
+}
+function personalObservationSchema() {
+  return memoizedValue(personalObservationSchema, () =>
+    t.Object(
+      {
+        provider: t.String({ minLength: 1, maxLength: 64 }),
+        recordId: t.String({ minLength: 1, maxLength: 192 }),
+        revision,
+        privacy: t.Union([
+          t.Object({ status: t.Literal('absent') }, closed),
+          t.Object(
+            {
+              status: t.Literal('unknown'),
+              sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })),
+            },
+            closed,
+          ),
+          t.Object({ status: t.Literal('cleared') }, closed),
+          t.Object(
+            { status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) },
+            closed,
+          ),
+        ]),
+        sourceCreated: t.Union([
+          t.Object({ status: t.Literal('absent') }, closed),
+          t.Object(
+            {
+              status: t.Literal('unknown'),
+              sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
+            },
+            closed,
+          ),
+          t.Object({ status: t.Literal('cleared') }, closed),
+          t.Object(
+            {
+              status: t.Literal('known'),
+              value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
+              precision: personalTimestampPrecision,
+              zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
+            },
+            closed,
+          ),
+        ]),
+        sourceUpdated: t.Union([
+          t.Object({ status: t.Literal('absent') }, closed),
+          t.Object(
+            {
+              status: t.Literal('unknown'),
+              sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
+            },
+            closed,
+          ),
+          t.Object({ status: t.Literal('cleared') }, closed),
+          t.Object(
+            {
+              status: t.Literal('known'),
+              value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
+              precision: personalTimestampPrecision,
+              zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
+            },
+            closed,
+          ),
+        ]),
+        recordedAt: id,
+      },
+      closed,
+    ),
+  );
+}
+function personalEntrySchema() {
+  return memoizedValue(personalEntrySchema, () =>
+    t.Object(
+      {
+        subjectId: id,
+        annotationRevision: personalRevision,
+        note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
+        priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
+        annotationUpdatedAt: nullable,
+        sourceObservations: t.Array(personalObservationSchema(), { maxItems: MAX_SOURCE_OBSERVATIONS }),
+      },
+      closed,
+    ),
+  );
+}
+function personalEntryResponse() {
+  return memoizedValue(personalEntryResponse, () => t.Object({ personalEntry: personalEntrySchema() }, closed));
+}
+function personalObservationResponse() {
+  return memoizedValue(personalObservationResponse, () =>
+    t.Object({ sourceObservation: personalObservationSchema() }, closed),
+  );
+}
+function correctionNoteOperation() {
+  return memoizedValue(correctionNoteOperation, () =>
+    t.Union([
+      t.Object({ op: t.Literal('preserve') }, closed),
+      t.Object({ op: t.Literal('clear') }, closed),
+      t.Object({ op: t.Literal('set'), value: t.String({ minLength: 1, maxLength: MAX_PERSONAL_NOTE_BYTES }) }, closed),
     ]),
-    recordedAt: id,
-  },
-  closed,
-);
-const personalEntrySchema = t.Object(
-  {
-    subjectId: id,
-    annotationRevision: personalRevision,
-    note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
-    priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
-    annotationUpdatedAt: nullable,
-    sourceObservations: t.Array(personalObservationSchema, { maxItems: MAX_SOURCE_OBSERVATIONS }),
-  },
-  closed,
-);
-const personalEntryResponse = t.Object({ personalEntry: personalEntrySchema }, closed);
-const personalObservationResponse = t.Object({ sourceObservation: personalObservationSchema }, closed);
-const correctionNoteOperation = t.Union([
-  t.Object({ op: t.Literal('preserve') }, closed),
-  t.Object({ op: t.Literal('clear') }, closed),
-  t.Object({ op: t.Literal('set'), value: t.String({ minLength: 1, maxLength: MAX_PERSONAL_NOTE_BYTES }) }, closed),
-]);
-const correctionPriorityOperation = t.Union([
-  t.Object({ op: t.Literal('preserve') }, closed),
-  t.Object({ op: t.Literal('clear') }, closed),
-  t.Object({ op: t.Literal('set'), value: t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }) }, closed),
-]);
-const correctionSelectionSchema = t.Object(
-  {
-    subjectId: id,
-    incarnationId,
-    currentRevision: revision,
-    note: correctionNoteOperation,
-    priority: correctionPriorityOperation,
-  },
-  closed,
-);
-const correctionCurrentSchema = t.Union([
-  t.Object(
-    {
-      annotationRevision: personalRevision,
-      note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
-      priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
-    },
-    closed,
-  ),
-  t.Null(),
-]);
-const correctionItemSchema = t.Object(
-  {
-    selected: t.Object({ subjectId: id, incarnationId, currentRevision: revision }, closed),
-    eligibility: t.Union([t.Literal('ready'), t.Literal('stale'), t.Literal('unavailable')]),
-    current: correctionCurrentSchema,
-    operation: t.Union([
-      t.Object({ note: correctionNoteOperation, priority: correctionPriorityOperation }, closed),
+  );
+}
+function correctionPriorityOperation() {
+  return memoizedValue(correctionPriorityOperation, () =>
+    t.Union([
+      t.Object({ op: t.Literal('preserve') }, closed),
+      t.Object({ op: t.Literal('clear') }, closed),
+      t.Object({ op: t.Literal('set'), value: t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }) }, closed),
+    ]),
+  );
+}
+function correctionSelectionSchema() {
+  return memoizedValue(correctionSelectionSchema, () =>
+    t.Object(
+      {
+        subjectId: id,
+        incarnationId,
+        currentRevision: revision,
+        note: correctionNoteOperation(),
+        priority: correctionPriorityOperation(),
+      },
+      closed,
+    ),
+  );
+}
+function correctionCurrentSchema() {
+  return memoizedValue(correctionCurrentSchema, () =>
+    t.Union([
+      t.Object(
+        {
+          annotationRevision: personalRevision,
+          note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
+          priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
+        },
+        closed,
+      ),
       t.Null(),
     ]),
-    outcome: t.Union([
-      t.Literal('accepted'),
-      t.Literal('unchanged'),
-      t.Literal('stale'),
-      t.Literal('unavailable'),
-      t.Literal('not-started'),
-    ]),
-  },
-  closed,
-);
-const correctionPageSchema = t.Object(
-  {
-    reviewId: id,
-    epoch: id,
-    state: t.Union([t.Literal('open'), t.Literal('confirmed'), t.Literal('cancelled'), t.Literal('expired')]),
-    createdAt: id,
-    expiresAt: id,
-    total: t.Integer({ minimum: 1, maximum: ENTRY_ANNOTATION_CORRECTION_LIMITS.selection }),
-    page: t.Integer({ minimum: 0, maximum: 3 }),
-    pageCount: t.Integer({ minimum: 1, maximum: 4 }),
-    nextPage: t.Union([t.Integer({ minimum: 1, maximum: 3 }), t.Null()]),
-    items: t.Array(correctionItemSchema, { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
-  },
-  closed,
-);
-const correctionPageResponse = t.Object({ review: correctionPageSchema }, closed);
-const copyResponse = t.Object({ copy: copySchema }, closed);
+  );
+}
+function correctionItemSchema() {
+  return memoizedValue(correctionItemSchema, () =>
+    t.Object(
+      {
+        selected: t.Object({ subjectId: id, incarnationId, currentRevision: revision }, closed),
+        eligibility: t.Union([t.Literal('ready'), t.Literal('stale'), t.Literal('unavailable')]),
+        current: correctionCurrentSchema(),
+        operation: t.Union([
+          t.Object({ note: correctionNoteOperation(), priority: correctionPriorityOperation() }, closed),
+          t.Null(),
+        ]),
+        outcome: t.Union([
+          t.Literal('accepted'),
+          t.Literal('unchanged'),
+          t.Literal('stale'),
+          t.Literal('unavailable'),
+          t.Literal('not-started'),
+        ]),
+      },
+      closed,
+    ),
+  );
+}
+function correctionPageSchema() {
+  return memoizedValue(correctionPageSchema, () =>
+    t.Object(
+      {
+        reviewId: id,
+        epoch: id,
+        state: t.Union([t.Literal('open'), t.Literal('confirmed'), t.Literal('cancelled'), t.Literal('expired')]),
+        createdAt: id,
+        expiresAt: id,
+        total: t.Integer({ minimum: 1, maximum: ENTRY_ANNOTATION_CORRECTION_LIMITS.selection }),
+        page: t.Integer({ minimum: 0, maximum: 3 }),
+        pageCount: t.Integer({ minimum: 1, maximum: 4 }),
+        nextPage: t.Union([t.Integer({ minimum: 1, maximum: 3 }), t.Null()]),
+        items: t.Unsafe<readonly Static<ReturnType<typeof correctionItemSchema>>[]>(
+          t.Array(correctionItemSchema(), { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
+        ),
+      },
+      closed,
+    ),
+  );
+}
+function correctionPageResponse() {
+  return memoizedValue(correctionPageResponse, () => t.Object({ review: correctionPageSchema() }, closed));
+}
+function copyResponse() {
+  return memoizedValue(copyResponse, () => t.Object({ copy: copySchema() }, closed));
+}
 const loanPartyResponse = t.Union([
   t.Object({ kind: t.Literal('name'), name: t.String({ maxLength: 600 }) }, closed),
   t.Object({ kind: t.Literal('person'), state: t.Literal('available'), personId: id, displayName: t.String() }, closed),
@@ -518,31 +638,40 @@ const loanResponse = t.Object(
   },
   closed,
 );
-const loanCopyResponse = t.Object(
-  {
-    state: t.Union([t.Literal('available'), t.Literal('deleted'), t.Literal('missing')]),
-    id,
-    revision: t.Union([revision, t.Null()]),
-    kind: nullable,
-    status: nullable,
-    context: copyListContextSchema,
-  },
-  closed,
-);
+type LoanResponse = Static<typeof loanResponse>;
+function loanCopyResponse() {
+  return memoizedValue(loanCopyResponse, () =>
+    t.Object(
+      {
+        state: t.Union([t.Literal('available'), t.Literal('deleted'), t.Literal('missing')]),
+        id,
+        revision: t.Union([revision, t.Null()]),
+        kind: nullable,
+        status: nullable,
+        context: copyListContextSchema(),
+      },
+      closed,
+    ),
+  );
+}
 const loanBoundaryResponse = t.Object(
   { calendar: t.Literal('gregorian'), zone: t.Literal('UTC'), today: t.String() },
   closed,
 );
-const loanListResponse = t.Object(
-  {
-    filter: t.Union([t.Literal('open'), t.Literal('history')]),
-    boundary: loanBoundaryResponse,
-    generation: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-    items: t.Array(t.Object({ loan: loanResponse, copy: loanCopyResponse }, closed), { maxItems: 100 }),
-    nextCursor: nullable,
-  },
-  closed,
-);
+function loanListResponse() {
+  return memoizedValue(loanListResponse, () =>
+    t.Object(
+      {
+        filter: t.Union([t.Literal('open'), t.Literal('history')]),
+        boundary: loanBoundaryResponse,
+        generation: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+        items: t.Array(t.Object({ loan: loanResponse, copy: loanCopyResponse() }, closed), { maxItems: 100 }),
+        nextCursor: nullable,
+      },
+      closed,
+    ),
+  );
+}
 const loanWriteBody = t.Object(
   {
     copyId: id,
@@ -577,45 +706,55 @@ const followActionsSchema = t.Union([
   ),
   t.Object({ status: t.Literal('unavailable') }, closed),
 ]);
-const fullFollowFields = {
-  ...targetFields,
-  destination: t.Optional(followDestinationSchema),
-  actions: t.Optional(followActionsSchema),
-};
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict', 'stale_cursor'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
-const loanWriteFailures = {
-  ...failures,
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  409: problemSchema('conflict', 'stale_cursor'),
-  422: problemSchema('idempotency_conflict', 'unsupported_library_profile'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
-const shelfFailures = {
-  ...failures,
-  400: problemSchema('invalid_request', 'invalid_cursor', 'invalid_argument'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
+function fullFollowFields() {
+  return memoizedValue(fullFollowFields, () => ({
+    ...targetFields(),
+    destination: t.Optional(followDestinationSchema),
+    actions: t.Optional(followActionsSchema),
+  }));
+}
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict', 'stale_cursor'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
+function loanWriteFailures() {
+  return memoizedValue(loanWriteFailures, () => ({
+    ...failures(),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    409: problemSchema('conflict', 'stale_cursor'),
+    422: problemSchema('idempotency_conflict', 'unsupported_library_profile'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
+function shelfFailures() {
+  return memoizedValue(shelfFailures, () => ({
+    ...failures(),
+    400: problemSchema('invalid_request', 'invalid_cursor', 'invalid_argument'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
 function detail(operationId: string, action: string, write = false) {
   return {
     operationId,
@@ -741,15 +880,59 @@ function copyView({ id, subjectId, kind, status, revision, location, source, acq
     note,
   };
 }
+function copyInventoryView(filterOptions: CopyInventory) {
+  return {
+    kinds: { ...filterOptions.kinds, choices: [...filterOptions.kinds.choices] },
+    statuses: { ...filterOptions.statuses, choices: [...filterOptions.statuses.choices] },
+  };
+}
+function copyListContextView(context: CopyListContext): Static<ReturnType<typeof copyListContextSchema>> {
+  switch (context.state) {
+    case 'available':
+      return {
+        state: 'available',
+        work: context.work.map((item) => ({ ...item, labels: { ...item.labels } })),
+        facts: { ...context.facts },
+      };
+    case 'unsupported':
+      return { state: 'unsupported', facts: { ...context.facts } };
+    case 'scope':
+      return { state: 'scope' };
+    case 'withheld':
+      return { state: 'withheld' };
+    case 'missing':
+      return { state: 'missing' };
+    case 'unavailable':
+      return { state: 'unavailable' };
+  }
+}
+function copyPresentationView(presentation: CopyPresentation): Static<ReturnType<typeof copyPresentationSchema>> {
+  return {
+    ...presentation,
+    statusEditing:
+      presentation.statusEditing.state === 'supported'
+        ? { ...presentation.statusEditing, statuses: [...presentation.statusEditing.statuses] }
+        : presentation.statusEditing,
+    conditionEditing:
+      presentation.conditionEditing.state === 'supported'
+        ? {
+            state: 'supported',
+            currentness: 'current',
+            choices: COPY_CONDITION_CHOICES.map((choice) => ({ ...choice })),
+          }
+        : presentation.conditionEditing,
+  };
+}
 function loanView(
   loan: Loan,
   boundary: LoanDueBoundary,
   people: ReadonlyMap<string, string | null>,
   copyAvailable = true,
-) {
+): LoanResponse {
   const state = loanState(loan, boundary);
-  const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
-  const action = { allowed: reason === null, reason };
+  const reason: LoanResponse['actions']['extend']['reason'] =
+    state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
+  const action: LoanResponse['actions']['extend'] = { allowed: reason === null, reason };
   const counterparty =
     loan.counterparty.kind === 'name'
       ? { kind: 'name' as const, name: loan.counterparty.name }
@@ -832,16 +1015,19 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     languages: readonly string[] | undefined,
     revalidate: () => Promise<void>,
   ) {
-    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { languages, revalidate });
+    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, {
+      ...(languages === undefined ? {} : { languages }),
+      revalidate,
+    });
   }
   return app
     .post(
       '/v1/libraryEntryAnnotationCorrections',
       {
-        body: t.Object({ items: t.Array(correctionSelectionSchema, { minItems: 1, maxItems: 16 }) }, closed),
+        body: t.Object({ items: t.Array(correctionSelectionSchema(), { minItems: 1, maxItems: 16 }) }, closed),
         response: {
-          201: correctionPageResponse,
-          ...failures,
+          201: correctionPageResponse(),
+          ...failures(),
           409: problemSchema('library_entry_annotation_correction_limit'),
         },
         detail: personalDetail('library_entry_annotation_correction.create', 'library_entry:update'),
@@ -854,7 +1040,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().create(actor, body)),
         );
         set.status = 201;
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<
+          ReturnType<typeof correctionPageResponse>
+        >;
       },
     )
     .get(
@@ -862,7 +1050,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ reviewId: id }, closed),
         query: t.Object({ page: t.Optional(t.Integer({ minimum: 0, maximum: 3, default: 0 })) }, closed),
-        response: { 200: correctionPageResponse, ...failures },
+        response: { 200: correctionPageResponse(), ...failures() },
         detail: detail('library_entry_annotation_correction.read', 'library_entry:read'),
       },
       async ({ actor, params, query, admission, job, set }) => {
@@ -872,7 +1060,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const review = await admission.run('normal', job, () =>
           correctionCommand(() => corrections().readPage(actor, params.reviewId, query.page)),
         );
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<
+          ReturnType<typeof correctionPageResponse>
+        >;
       },
     )
     .post(
@@ -881,8 +1071,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ reviewId: id }, closed),
         body: t.Object({ epoch: incarnationId, position: t.Integer({ minimum: 0, maximum: 15 }) }, closed),
         response: {
-          200: correctionPageResponse,
-          ...failures,
+          200: correctionPageResponse(),
+          ...failures(),
           409: problemSchema(
             'conflict',
             'library_entry_annotation_correction_epoch',
@@ -899,7 +1089,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
         );
         if (result.commandOutcome) session.record(result.commandOutcome);
-        return { review: result.page } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<
+          ReturnType<typeof correctionPageResponse>
+        >;
       },
     )
     .post(
@@ -917,7 +1109,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
           409: problemSchema(
             'library_entry_annotation_correction_epoch',
             'library_entry_annotation_correction_expired',
@@ -938,8 +1130,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .post(
       '/v1/libraryShelfTitlePreparation',
       {
-        headers,
-        response: { 200: shelfTitlePreparationSchema, ...shelfFailures },
+        headers: headers(),
+        response: { 200: shelfTitlePreparationSchema, ...shelfFailures() },
         detail: detail('library_shelf_title.prepare', 'library_entry:list', true),
       },
       async ({ actor, headers: requestHeaders, admission, job, set, request }) => {
@@ -959,15 +1151,17 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .post(
       '/v1/libraryShelfScorePreparation',
       {
-        headers,
-        response: { 200: shelfScorePreparationSchema, ...shelfFailures },
+        headers: headers(),
+        response: { 200: shelfScorePreparationSchema, ...shelfFailures() },
         detail: detail('library_shelf_score.prepare', 'library_entry:list', true),
       },
       async ({ actor, headers: requestHeaders, admission, job, set }) => {
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
-          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders))),
+          command(() =>
+            createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER])),
+          ),
         );
       },
     )
@@ -976,9 +1170,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(
           {
-            ...shelfListQuerySchema.properties,
-            state: t.Optional(stateInput),
-            orderBy: t.Optional(shelfListQuerySchema.properties.orderBy),
+            ...shelfListQuerySchema().properties,
+            state: t.Optional(stateInput()),
+            orderBy: t.Optional(shelfListQuerySchema().properties.orderBy),
           },
           closed,
         ),
@@ -986,7 +1180,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           200: t.Object(
             {
               libraryEntries: t.Array(
-                t.Union([shelfEntrySchema, embedded(entrySchema, { ...subjectFields, facts: listFacts })]),
+                t.Union([shelfEntrySchema(), embedded(entrySchema(), { ...subjectFields(), facts: listFacts() })]),
               ),
               scoreQuestion: t.Optional(shelfScoreQuestionSchema),
               next: nullable,
@@ -994,7 +1188,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
             closed,
           ),
-          ...shelfFailures,
+          ...shelfFailures(),
         },
         detail: detail('library_entry.list', 'library_entry:list'),
       },
@@ -1053,7 +1247,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryShelfSummary',
       {
         query: shelfSummaryQuerySchema,
-        response: { 200: shelfSummarySchema, ...shelfFailures },
+        response: { 200: shelfSummarySchema, ...shelfFailures() },
         detail: detail('library_shelf.summary', 'library_entry:list'),
       },
       async ({ actor, query, admission, job }) => {
@@ -1065,7 +1259,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryShelfTypes',
       {
         query: shelfTypesQuerySchema,
-        response: { 200: shelfTypesSchema, ...shelfFailures },
+        response: { 200: shelfTypesSchema, ...shelfFailures() },
         detail: detail('library_shelf.types', 'library_entry:list'),
       },
       async ({ actor, query, admission, job }) => {
@@ -1078,7 +1272,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(viewQuery, closed),
         params: t.Object({ subjectId: id }),
-        response: { 200: t.Object({ libraryEntry: embedded(entrySchema, subjectFields) }, closed), ...failures },
+        response: { 200: t.Object({ libraryEntry: embedded(entrySchema(), subjectFields()) }, closed), ...failures() },
         detail: detail('library_entry.get', 'library_entry:read'),
       },
       async ({ actor, params, query, admission, job }) => {
@@ -1103,7 +1297,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           },
           closed,
         ),
-        response: { 200: entryStateHistorySchema, ...failures },
+        response: { 200: entryStateHistorySchema(), ...failures() },
         detail: detail('library_entry_state_history.list', 'library_entry:read'),
       },
       async ({ actor, params, query, admission, job }) => {
@@ -1117,7 +1311,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryEntries/:subjectId/state-history/:changeRevision',
       {
         params: t.Object({ subjectId: id, changeRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_646 }) }),
-        response: { 200: entryStateReviewSchema, ...failures },
+        response: { 200: entryStateReviewSchema(), ...failures() },
         detail: detail('library_entry_state_history.review', 'library_entry:read'),
       },
       async ({ actor, params, admission, job }) => {
@@ -1131,11 +1325,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       customMethod('/v1/libraryEntries/:subjectId/state-history/:changeRevision', 'restore'),
       {
         params: t.Object({ subjectId: id, changeRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_646 }) }),
-        headers,
+        headers: headers(),
         body: t.Object({ incarnationId, currentRevision: revision }, closed),
         response: {
-          200: entryResponse,
-          ...failures,
+          200: entryResponse(),
+          ...failures(),
           409: problemSchema(
             'library_entry_state_restore_stale',
             'library_entry_state_restore_unavailable',
@@ -1153,7 +1347,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             try {
               return await entries().restoreEntryState(actor, params.subjectId, params.changeRevision, body, key);
             } catch (error) {
-              if (error instanceof LibraryEntryStateRestoreConflictError) {
+              if (error instanceof LibraryEntryStateRestoreConflictError()) {
                 const codes = {
                   stale: 'library_entry_state_restore_stale',
                   unavailable: 'library_entry_state_restore_unavailable',
@@ -1173,7 +1367,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryEntries/:subjectId/personal',
       {
         params: t.Object({ subjectId: id }, closed),
-        response: { 200: personalEntryResponse, ...failures },
+        response: { 200: personalEntryResponse(), ...failures() },
         detail: detail('library_entry_personal.get', 'library_entry:read'),
       },
       async ({ actor, params, admission, job, set }) => {
@@ -1187,14 +1381,14 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ...personalEntry,
             sourceObservations: personalEntry.sourceObservations.map((observation) => ({ ...observation })),
           },
-        } satisfies Static<typeof personalEntryResponse>;
+        } satisfies Static<ReturnType<typeof personalEntryResponse>>;
       },
     )
     .put(
       '/v1/libraryEntries/:subjectId/annotations',
       {
         params: t.Object({ subjectId: id }, closed),
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             revision: personalRevision,
@@ -1205,8 +1399,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: {
-          200: personalEntryResponse,
-          ...failures,
+          200: personalEntryResponse(),
+          ...failures(),
           409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict'),
         },
@@ -1226,28 +1420,28 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ...result.value,
             sourceObservations: result.value.sourceObservations.map((observation) => ({ ...observation })),
           },
-        } satisfies Static<typeof personalEntryResponse>;
+        } satisfies Static<ReturnType<typeof personalEntryResponse>>;
       },
     )
     .post(
       '/v1/libraryEntries/:subjectId/sourceObservations',
       {
         params: t.Object({ subjectId: id }, closed),
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             provider: t.String({ minLength: 1, maxLength: 64 }),
             recordId: t.String({ minLength: 1, maxLength: 192 }),
             confirmReviewed: t.Literal(true),
-            privacy: personalPrivacyValue,
-            sourceCreated: personalTimestampValue,
-            sourceUpdated: personalTimestampValue,
+            privacy: personalPrivacyValue(),
+            sourceCreated: personalTimestampValue(),
+            sourceUpdated: personalTimestampValue(),
           },
           closed,
         ),
         response: {
-          201: personalObservationResponse,
-          ...failures,
+          201: personalObservationResponse(),
+          ...failures(),
           409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict'),
         },
@@ -1270,29 +1464,29 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         set.headers['cache-control'] = 'private, no-store';
         return {
           sourceObservation: { ...result.value.sourceObservation },
-        } satisfies Static<typeof personalObservationResponse>;
+        } satisfies Static<ReturnType<typeof personalObservationResponse>>;
       },
     )
     .patch(
       '/v1/libraryEntries/:subjectId/sourceObservations',
       {
         params: t.Object({ subjectId: id }, closed),
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             provider: t.String({ minLength: 1, maxLength: 64 }),
             recordId: t.String({ minLength: 1, maxLength: 192 }),
             revision,
             confirmReviewed: t.Literal(true),
-            privacy: personalChange(personalPrivacyValue),
-            sourceCreated: personalChange(personalTimestampValue),
-            sourceUpdated: personalChange(personalTimestampValue),
+            privacy: personalChange(personalPrivacyValue()),
+            sourceCreated: personalChange(personalTimestampValue()),
+            sourceUpdated: personalChange(personalTimestampValue()),
           },
           closed,
         ),
         response: {
-          200: personalObservationResponse,
-          ...failures,
+          200: personalObservationResponse(),
+          ...failures(),
           409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict'),
         },
@@ -1314,22 +1508,22 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         set.headers['cache-control'] = 'private, no-store';
         return {
           sourceObservation: { ...result.value.sourceObservation },
-        } satisfies Static<typeof personalObservationResponse>;
+        } satisfies Static<ReturnType<typeof personalObservationResponse>>;
       },
     )
     .put(
       '/v1/libraryEntries/:subjectId',
       {
         params: t.Object({ subjectId: id }),
-        headers,
+        headers: headers(),
         body: t.Object(
-          { state: stateInput, revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) },
+          { state: stateInput(), revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) },
           closed,
         ),
         response: {
-          200: entryResponse,
-          201: entryResponse,
-          ...failures,
+          200: entryResponse(),
+          201: entryResponse(),
+          ...failures(),
           422: problemSchema('idempotency_conflict', 'unsupported_library_profile'),
           503: problemSchema(
             'semantic_not_ready',
@@ -1357,9 +1551,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryEntries/:subjectId',
       {
         params: t.Object({ subjectId: id }),
-        headers,
+        headers: headers(),
         query: t.Object({ revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) }, closed),
-        response: { 204: t.Void(), ...failures },
+        response: { 204: t.Void(), ...failures() },
         detail: {
           ...personalDetail('library_entry.delete', 'library_entry:delete'),
           responses: {
@@ -1394,11 +1588,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       customMethod('/v1/libraryEntries/:subjectId', 'restore'),
       {
         params: t.Object({ subjectId: id }),
-        headers,
+        headers: headers(),
         body: t.Object({ deletionId: t.String({ format: 'uuid' }), revision }, closed),
         response: {
-          200: entryResponse,
-          ...failures,
+          200: entryResponse(),
+          ...failures(),
           409: problemSchema(
             'library_entry_restore_occupied',
             'library_entry_restore_stale',
@@ -1415,7 +1609,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             try {
               return await entries().restoreEntry(actor, params.subjectId, body, key);
             } catch (error) {
-              if (error instanceof LibraryEntryLifecycleConflictError) {
+              if (error instanceof LibraryEntryLifecycleConflictError()) {
                 const codes = {
                   occupied: 'library_entry_restore_occupied',
                   stale: 'library_entry_restore_stale',
@@ -1434,10 +1628,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .post(
       '/v1/copies',
       {
-        headers,
+        headers: headers(),
         body: t.Object(
           {
-            ...copyFields,
+            ...copyFields(),
             subjectId: id,
             kind: t.Optional(
               t.String({
@@ -1447,14 +1641,14 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ),
             status: t.Optional(
               t.String({
-                ...statusInput,
+                ...statusInput(),
                 description: 'Declared status required for a fresh create; optional only for replay of an old receipt.',
               }),
             ),
           },
           closed,
         ),
-        response: { 201: copyResponse, ...failures },
+        response: { 201: copyResponse(), ...failures() },
         detail: detail('copy.create', 'copy:create', true),
       },
       async ({ actor, body, headers, admission, job, session, set }) => {
@@ -1472,7 +1666,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(
           {
-            ...pageQuery,
+            ...pageQuery(),
             subjectId: t.Optional(t.String({ format: 'uuid' })),
             kind: t.Optional(libraryVocabularyIdSchema),
             status: t.Optional(libraryVocabularyIdSchema),
@@ -1482,14 +1676,16 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         response: {
           200: t.Object(
             {
-              copies: t.Array(embedded(copySchema, { ...subjectFields, context: t.Optional(copyListContextSchema) })),
+              copies: t.Array(
+                embedded(copySchema(), { ...subjectFields(), context: t.Optional(copyListContextSchema()) }),
+              ),
               next: nullable,
-              filterOptions: copyInventorySchema,
+              filterOptions: copyInventorySchema(),
             },
             closed,
           ),
           413: problemSchema('content_too_large'),
-          ...failures,
+          ...failures(),
         },
         detail: detail('copy.list', 'copy:list'),
       },
@@ -1506,7 +1702,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           return fullView(config(), actor, query.view, {
             copies: result.copies.map(copyView),
             next: result.next,
-            filterOptions: result.filterOptions,
+            filterOptions: copyInventoryView(result.filterOptions),
           });
 
         const copiesPage = await attachCopyListContext(
@@ -1526,7 +1722,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
           },
         );
-        return { copies: copiesPage, next: result.next, filterOptions: result.filterOptions };
+        return {
+          copies: copiesPage.map((copy) => ({ ...copy, context: copyListContextView(copy.context) })),
+          next: result.next,
+          filterOptions: copyInventoryView(result.filterOptions),
+        };
       },
     )
     .get(
@@ -1536,10 +1736,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ copyId: id }),
         response: {
           200: t.Object(
-            { copy: embedded(copySchema, { ...subjectFields, presentation: t.Optional(copyPresentationSchema) }) },
+            {
+              copy: embedded(copySchema(), { ...subjectFields(), presentation: t.Optional(copyPresentationSchema()) }),
+            },
             closed,
           ),
-          ...failures,
+          ...failures(),
           503: problemSchema(
             'semantic_not_ready',
             'dependency_unavailable',
@@ -1570,15 +1772,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                     const editing = presentation.statusEditing;
                     const value = {
                       ...copyView(copy),
-                      presentation: {
-                        ...presentation,
-                        statusEditing:
-                          editing.state === 'supported' ? { ...editing, statuses: [...editing.statuses] } : editing,
-                        conditionEditing:
-                          presentation.conditionEditing.state === 'supported'
-                            ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
-                            : presentation.conditionEditing,
-                      },
+                      presentation: copyPresentationView(presentation),
                     };
                     if (query.view !== 'FULL') return { copy: value };
                     const subject = disclosure.subject
@@ -1605,9 +1799,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copies/:copyId',
       {
         params: t.Object({ copyId: id }),
-        headers,
-        body: t.Object({ ...copyFields, revision: t.Optional(revision) }, closed),
-        response: { 200: copyResponse, ...failures },
+        headers: headers(),
+        body: t.Object({ ...copyFields(), revision: t.Optional(revision) }, closed),
+        response: { 200: copyResponse(), ...failures() },
         detail: detail('copy.update', 'copy:update', true),
       },
       async ({ actor, params, body, headers, admission, job, session }) => {
@@ -1631,8 +1825,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ copyId: id }),
         query: t.Object({ revision: t.Optional(revision) }, closed),
-        headers,
-        response: { 204: t.Void(), ...failures },
+        headers: headers(),
+        response: { 204: t.Void(), ...failures() },
         detail: {
           ...detail('copy.delete', 'copy:delete', true),
           responses: {
@@ -1663,11 +1857,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       customMethod('/v1/copies/:copyId', 'restore'),
       {
         params: t.Object({ copyId: id }),
-        headers,
+        headers: headers(),
         body: t.Object({ deletionId: incarnationId, revision }, closed),
         response: {
-          200: copyResponse,
-          ...failures,
+          200: copyResponse(),
+          ...failures(),
           409: problemSchema('copy_restore_stale', 'copy_restore_occupied', 'copy_restore_expired'),
         },
         detail: detail('copy.restore', 'copy:update', true),
@@ -1694,7 +1888,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           },
           closed,
         ),
-        response: { 200: loanListResponse, ...loanWriteFailures },
+        response: { 200: loanListResponse(), ...loanWriteFailures() },
         detail: detail('copy_loan.list', 'copy:list'),
       },
       async ({ actor, query, admission, job, request, set }) => {
@@ -1751,9 +1945,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 revision: item.copy.revision,
                 kind: item.copy.kind,
                 status: item.copy.status,
-                context: context?.context ?? {
-                  state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
-                },
+                context: context
+                  ? copyListContextView(context.context)
+                  : {
+                      state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
+                    },
               };
               return {
                 loan: loanView(item.loan, page.boundary, people, item.actions.extend.allowed),
@@ -1767,11 +1963,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .post(
       '/v1/copy-loans',
       {
-        headers,
+        headers: headers(),
         body: loanWriteBody,
         response: {
           201: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
-          ...loanWriteFailures,
+          ...loanWriteFailures(),
         },
         detail: detail('copy_loan.create', 'copy:create', true),
       },
@@ -1804,11 +2000,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copy-loans/:loanId',
       {
         params: t.Object({ loanId: id }),
-        headers,
+        headers: headers(),
         body: loanExtendBody,
         response: {
           200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
-          ...loanWriteFailures,
+          ...loanWriteFailures(),
         },
         detail: detail('copy_loan.extend', 'copy:update', true),
       },
@@ -1840,11 +2036,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copy-loans/:loanId/return',
       {
         params: t.Object({ loanId: id }),
-        headers,
+        headers: headers(),
         body: loanReturnBody,
         response: {
           200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
-          ...loanWriteFailures,
+          ...loanWriteFailures(),
         },
         detail: detail('copy_loan.return', 'copy:update', true),
       },
@@ -1878,7 +2074,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object({}, closed),
         response: {
           200: t.Object({ followingCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
-          ...failures,
+          ...failures(),
           503: problemSchema('dependency_unavailable'),
         },
         detail: detail('follow_count.outgoing', 'follow:list'),
@@ -1908,7 +2104,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
           503: problemSchema('dependency_unavailable'),
         },
         detail: detail('follow_count.target', 'follow:list'),
@@ -1925,9 +2121,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/follows/:targetId',
       {
         params: t.Object({ targetId: id }),
-        headers,
+        headers: headers(),
         body: t.Optional(t.Never()),
-        response: { 200: followResponse, ...failures },
+        response: { 200: followResponse, ...failures() },
         detail: personalDetail('follow.put', 'follow:create'),
       },
       async ({ actor, params, headers, admission, job, session, set }) => {
@@ -1947,8 +2143,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/follows/:targetId',
       {
         params: t.Object({ targetId: id }),
-        headers,
-        response: { 200: followResponse, ...failures },
+        headers: headers(),
+        response: { 200: followResponse, ...failures() },
         detail: personalDetail('follow.delete', 'follow:delete'),
       },
       async ({ actor, params, headers, admission, job, session, set }) => {
@@ -1969,7 +2165,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(viewQuery, closed),
         params: t.Object({ targetId: id }),
-        response: { 200: t.Object({ follow: embedded(followSchema, fullFollowFields) }, closed), ...failures },
+        response: { 200: t.Object({ follow: embedded(followSchema, fullFollowFields()) }, closed), ...failures() },
         detail: detail('follow.get', 'follow:read'),
       },
       async ({ actor, params, query, admission, job, set }) => {
@@ -2003,14 +2199,14 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(
           {
-            ...pageQuery,
+            ...pageQuery(),
             targetType: t.Optional(t.Enum({ subject: 'subject', collection: 'collection', space: 'space' } as const)),
           },
           closed,
         ),
         response: {
-          200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowFields)), next: nullable }, closed),
-          ...failures,
+          200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowFields())), next: nullable }, closed),
+          ...failures(),
         },
         detail: detail('follow.list', 'follow:list'),
       },

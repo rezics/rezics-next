@@ -59,7 +59,7 @@ async function inventory(actor: Account) {
   const result = await client.me.realms.get();
   expect(result.status).toBe(200);
   if (!result.data) throw new Error(`Inventory failed: ${JSON.stringify(result.error)}`);
-  if (!Compile(ownRealmsResponseSchema).Check(result.data))
+  if (!Compile(ownRealmsResponseSchema()).Check(result.data))
     throw new Error('Inventory does not match its closed schema');
   return result.data;
 }

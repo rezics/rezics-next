@@ -41,11 +41,14 @@ test('the static Members equation includes constant History bounds and refuses a
   const declared = declareMembersPreparationParent(declarations());
   expect(declared.children.historyRegistration.statements).toBe(464);
   expect(declared.children.receivingReadback.statements).toBe(429);
+  expect(declared.total.engineRequests).toBe(0);
   expect(declared.children.members.statements).toBeLessThanOrEqual(16);
-  expect(declareMembersPreparationRequest(declarations()).children.history).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
+  expect(declareMembersPreparationRequest(declarations()).children.history).toEqual(
+    OPERATIONAL_WORK_LOCAL_DECLARATION(),
+  );
   expect(MEMBERS_PREPARATION_STEP_CEILING.statements).toBe(16);
-  expect(OPERATIONAL_WORK_REGISTRATION.statements).toBe(464);
-  expect(MEMBERS_PREPARATION_RESERVATION_SUBTOTAL.statements).toBeGreaterThan(464 + 429);
+  expect(OPERATIONAL_WORK_REGISTRATION().statements).toBe(464);
+  expect(MEMBERS_PREPARATION_RESERVATION_SUBTOTAL().statements).toBeGreaterThan(464 + 429);
   expect(() => declareMembersPreparationParent({ ...declarations(), sourceResolve: null })).toThrow(ProblemError);
   expect(() => declareMembersPreparationParent({ ...declarations(), members: cost(17) })).toThrow(
     'Members preparation body exceeds 16 statements',

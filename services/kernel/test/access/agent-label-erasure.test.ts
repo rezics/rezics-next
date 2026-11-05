@@ -77,7 +77,7 @@ async function lastEvent(accountId: string, type: string): Promise<CloudEvent> {
   );
   const row = rows[0];
   if (!row) throw new Error(`Missing event ${type}`);
-  expect(Value.Check(EVENT_TYPES[type]!, row.data)).toBe(true);
+  expect(Value.Check(EVENT_TYPES()[type]!, row.data)).toBe(true);
   return {
     ...activation(accountId),
     id: row.id,

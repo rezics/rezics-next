@@ -851,5 +851,18 @@
   "auth_members_page_count": "このページのアカウント数：{count}",
   "auth_members_previous_boundary": "保持されている履歴の先頭に達したため、前に戻れません。最初のページへ明示的に戻ることができます。",
   "auth_members_previous_page": "前のページ",
-  "auth_members_reload_current": "現在のページを再読み込み"
+  "auth_members_reload_current": "現在のページを再読み込み",
+  "auth_security_passkey_rename": "名前を変更",
+  "auth_security_passkey_rename_label": "パスキー名",
+  "auth_security_passkey_rename_save": "名前を保存",
+  "auth_security_passkey_rename_cancel": "名前の変更をキャンセル",
+  "auth_security_passkey_rename_invalid": "1〜128文字の名前を入力してください。",
+  "auth_security_passkey_rename_saved": "パスキー名を保存しました。",
+  "auth_security_passkey_rename_step_up": "名前を変更するには再度ログインしてください。",
+  "auth_security_passkey_rename_failed": "名前は変更されませんでした。再試行の前にセッションを確認してください。",
+  "auth_security_passkey_rename_unknown": "名前の変更を確認できませんでした。次の操作の前に現在の名前を確認してください。",
+  "auth_security_passkey_rename_review": "現在の名前を確認",
+  "auth_security_passkey_rename_review_failed": "現在の名前を取得できません。先ほどの変更は未確認のままです。",
+  "auth_security_passkey_rename_observed": "現在の名前：{name}。これは先ほどの変更を確認するものではありません。",
+  "auth_security_passkey_rename_history": "先ほどの名前の変更が完了している可能性があります。現在の名前を確認しても、その変更は確定しません。"
 }

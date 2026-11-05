@@ -28,7 +28,7 @@ afterAll(async () => {
 const path = (id: string) => `/v1/zones/${id}`;
 const complete = (answer: Awaited<ReturnType<ResourceFixture['call']>>) => {
   expect(answer.status, JSON.stringify(answer.body)).toBe(200);
-  expect(Compile(ZonePageResponseSchema).Check(answer.body)).toBe(true);
+  expect(Compile(ZonePageResponseSchema()).Check(answer.body)).toBe(true);
   expect(Object.keys(answer.body).sort()).toEqual(['document', 'profile', 'reads', 'template', 'zone']);
   expect(answer.headers.get('cache-control')).toBe('private, no-store');
   return answer.body;
@@ -365,7 +365,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
       let answer = await request(target, cursor);
       const seen = new Set<string>();
       while (answer.status === 202) {
-        expect(Compile(ZonePageReadProgressSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+        expect(Compile(ZonePageReadProgressSchema()).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
         expect(answer.headers.get('cache-control')).toBe('private, no-store');
         const next = answer.body.next as string;
         expect(seen.has(next)).toBe(false);
@@ -377,7 +377,7 @@ test('The one mounted Zone source runtime composes actual saved catalogue and co
     const direct = async (subject: string) => {
       const answer = await resolve({ subject });
       expect(answer.status, JSON.stringify(answer.body)).toBe(200);
-      expect(Compile(ZonePageResponseSchema).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
+      expect(Compile(ZonePageResponseSchema()).Check(answer.body), JSON.stringify(answer.body)).toBe(true);
       expect(answer.headers.get('cache-control')).toBe('private, no-store');
       expect(answer.body.subject).toBe(subject);
       expect(answer.body.views).toContain('overview');

@@ -2,10 +2,10 @@ import { expect, test } from 'bun:test';
 import { feedDiscoveryItem } from '../../src/content/feed-discovery.ts';
 import type { DiscoveryUnionHit } from '../../src/search/discovery.ts';
 
-const subjectId = '00000000-0000-4000-8000-000000000001';
-const collectionId = '00000000-0000-4000-8000-000000000002';
-const reviewId = '00000000-0000-4000-8000-000000000003';
-const spaceId = '00000000-0000-4000-8000-000000000004';
+const subjectId = '00000000-0000-7000-8000-000000000001';
+const collectionId = '00000000-0000-7000-8000-000000000002';
+const reviewId = '00000000-0000-7000-8000-000000000003';
+const spaceId = '00000000-0000-7000-8000-000000000004';
 const subject: DiscoveryUnionHit = {
   key: { owner: 'semantic', kind: 'schema:Book', route: 0, id: subjectId },
   summary: {
@@ -91,7 +91,7 @@ const space: DiscoveryUnionHit = {
       title: 'Quiet room',
       address: 'quiet-room',
       summary: 'A quiet reading room.',
-      realm: { id: '00000000-0000-4000-8000-000000000005', title: 'Atlas Realm' },
+      realm: { id: '00000000-0000-7000-8000-000000000005', title: 'Atlas Realm' },
     },
   },
 };

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
@@ -549,16 +550,20 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
 }
 
 /** Work-owned adapter installed on each native WorkClient by the Kernel composition roots. */
-export const workExecutionPort: WorkExecutionPort = Object.freeze({
-  openOriginal: openWorkExecutionOriginal,
-  claimOriginal: claimWorkExecutionOriginal,
-  debitAttempt: debitWorkExecutionAttempt,
-  bindOriginal: bindWorkExecutionOriginal,
-  assertOriginal: assertWorkExecutionOriginal,
-  finishTransaction: finishWorkExecutionTransaction,
-  openSelectedPhase(pool: Pool, options: unknown) {
-    return openSelectedOperationalPhase(pool, options as OperationalOptions) as SelectedExecutionPhase | undefined;
-  },
-  selectedEnqueue: selectedOperationalEnqueue,
-  enqueue: enqueueWorkIntent,
-});
+export function workExecutionPort(): WorkExecutionPort {
+  return memoizedValue(workExecutionPort, () =>
+    Object.freeze({
+      openOriginal: openWorkExecutionOriginal,
+      claimOriginal: claimWorkExecutionOriginal,
+      debitAttempt: debitWorkExecutionAttempt,
+      bindOriginal: bindWorkExecutionOriginal,
+      assertOriginal: assertWorkExecutionOriginal,
+      finishTransaction: finishWorkExecutionTransaction,
+      openSelectedPhase(pool: Pool, options: unknown) {
+        return openSelectedOperationalPhase(pool, options as OperationalOptions) as SelectedExecutionPhase | undefined;
+      },
+      selectedEnqueue: selectedOperationalEnqueue,
+      enqueue: enqueueWorkIntent,
+    }),
+  );
+}

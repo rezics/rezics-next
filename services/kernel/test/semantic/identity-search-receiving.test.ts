@@ -515,7 +515,7 @@ test('Search receiving uses exact native plan and held original provenance throu
     await guard.write(subjectPartition(original), [original], 0n);
     const actor = await f.actor();
     const key = crypto.randomUUID();
-    const job = await identityEpochStore.prepareAdmission(
+    const job = await identityEpochStore().prepareAdmission(
       f.pool,
       {
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -568,7 +568,7 @@ test('Search receiving uses exact native plan and held original provenance throu
       expect(r.custody_transaction).toBeTruthy();
       expect(r.released).toBe('released');
     }
-    expect((await identityEpochStore.readJob(f.pool, job))?.participants['library-private-follow-counts']).toBeNull();
+    expect((await identityEpochStore().readJob(f.pool, job))?.participants['library-private-follow-counts']).toBeNull();
   } finally {
     try {
       if (created) await search.request('DELETE', `/${index}`);
@@ -588,8 +588,8 @@ test('owned native copy pages fund their explicit raw limit and retain configure
       bytes: entry.work.bytes + 32,
     },
   }));
-  const declaration = receivingWorkDeclaration({ ...costs(), statements }, searchReceivingOwnedPageStatements);
-  const sql = searchNativeReceivingStatements.copies.sql;
+  const declaration = receivingWorkDeclaration({ ...costs(), statements }, searchReceivingOwnedPageStatements());
+  const sql = searchNativeReceivingStatements().copies.sql;
   expect(declaration.footprint(sql, [0, 'plan', -1, 1])).toEqual({
     ...zero(),
     nativeRows: 10,
@@ -607,7 +607,7 @@ test('owned native copy pages fund their explicit raw limit and retain configure
   expect(declaration.footprint(sql)).toEqual(declaration.footprint(sql, [0, 'plan', -1, 100]));
   for (const limit of [-1, 101, NaN, 0.5, '1', undefined])
     expect(declaration.footprint(sql, [0, 'plan', -1, limit])).toBeUndefined();
-  const insert = searchNativeReceivingStatements.insertCopies.sql;
+  const insert = searchNativeReceivingStatements().insertCopies.sql;
   expect(declaration.footprint(insert, [0, 'plan', JSON.stringify([{}, {}]), 0, 'tx'])).toEqual({
     ...zero(),
     nativeRows: 9,
@@ -621,11 +621,11 @@ test('owned native copy pages fund their explicit raw limit and retain configure
 
 test('a raw-page declaration cannot underfund the owned maximum before any SQL dispatch', () => {
   const statements = searchReceivingOwnedStatementCosts().map((entry) =>
-    entry.sql === searchNativeReceivingStatements.copies.sql
+    entry.sql === searchNativeReceivingStatements().copies.sql
       ? { ...entry, work: { ...entry.work, nativePoints: 200 } }
       : entry,
   );
-  expect(() => receivingWorkDeclaration({ ...costs(), statements }, searchReceivingOwnedPageStatements)).toThrow(
+  expect(() => receivingWorkDeclaration({ ...costs(), statements }, searchReceivingOwnedPageStatements())).toThrow(
     'Invalid receiving raw-page declaration',
   );
 });
@@ -791,12 +791,12 @@ import {
 test('a local SQL subtotal cannot admit the unresolved deferred Source capture graph as zero work', async () => {
   const { pool, calls } = driver();
   const statements = searchReceivingOwnedStatementCosts();
-  const declaration = receivingWorkDeclaration({ ...costs(), statements }, searchReceivingOwnedPageStatements);
-  for (const sql of searchReceivingDeferredCaptureStatements) expect(declaration.footprint(sql)).toBeUndefined();
+  const declaration = receivingWorkDeclaration({ ...costs(), statements }, searchReceivingOwnedPageStatements());
+  for (const sql of searchReceivingDeferredCaptureStatements()) expect(declaration.footprint(sql)).toBeUndefined();
   await funded(pool, async (context) => {
     let entered = false;
     await expect(
-      withSearchReceivingWork(pool, context, declaration, commonSearchReceivingStatements, async () => {
+      withSearchReceivingWork(pool, context, declaration, commonSearchReceivingStatements(), async () => {
         entered = true;
       }),
     ).rejects.toThrow('exact native/common SQL cost composition is not installed');

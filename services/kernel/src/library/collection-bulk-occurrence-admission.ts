@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -23,13 +24,15 @@ export type ExplicitCollectionOccurrenceRemoval = Extract<BulkAdmission, { actio
 type CapturedOccurrenceTarget = Omit<Extract<OccurrenceTarget, { expected: unknown }>, 'operationId' | 'ordinal'>;
 
 type OccurrenceAdmissionDependencies = { pool: Pool; access: Access };
-const validator = Compile(bulkAdmissionSchema);
+function validator() {
+  return memoizedValue(validator, () => Compile(bulkAdmissionSchema));
+}
 
 /** Validate and canonicalize the only Collection removal selection installed on the preview route. */
 export function explicitCollectionOccurrenceRemoval(input: BulkAdmission): ExplicitCollectionOccurrenceRemoval {
   if (Buffer.byteLength(JSON.stringify(input)) > BULK_ADMISSION_BODY_BYTES)
     throw new RangeError('Bulk command exceeds 64 KiB');
-  if (!validator.Check(input)) throw new TypeError('Invalid bulk selection');
+  if (!validator().Check(input)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'remove_from_collection' || input.selection.kind !== 'occurrences')
     throw new ProblemError('dependency_unavailable');
   const collectionId = input.collectionId.toLowerCase();

@@ -393,7 +393,7 @@ export async function bindAndHoldNativePublicCollectionOutput(
         !isDeepStrictEqual(id.activation, ref.activation)
       )
         return refusal(work, 'changed');
-      const xid = (await client.query<{ xid: string }>(publicOutputXidSQL)).rows[0]!.xid;
+      const xid = (await client.query<{ xid: string }>(publicOutputXidSQL())).rows[0]!.xid;
       const stagedHere = b.accepted.transactionId === current.transactionId && existing.row.nativeXid === xid;
       if (!stagedHere && !(await committed(client, existing))) return refusal(work);
       if (!(await currentTuple(client, existing, work, true))) return refusal(work, 'changed');

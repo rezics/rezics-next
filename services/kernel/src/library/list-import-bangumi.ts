@@ -17,7 +17,14 @@ import {
   STANDARD_QUESTION_ID,
   VOTE_SCOPE,
 } from '../rating/votes.ts';
-import type { VoteReviewGuard, VoteReviewCurrentVote, createVoteCommands } from '../rating/votes.ts';
+import type {
+  PreparedPutVote,
+  VoteCommandAdmission,
+  VoteReviewGuard,
+  VoteReviewCurrentVote,
+  createVoteCommands,
+} from '../rating/votes.ts';
+import type { VoteObservation } from '../rating/vote-observation.ts';
 import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
@@ -70,7 +77,7 @@ import {
 
 type NativeVotes = Pick<
   ReturnType<typeof createVoteCommands>,
-  'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome'
+  'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome' | 'preparePutVote' | 'reconcilePutVote'
 >;
 type Dependencies = {
   pool: Pool;
@@ -86,19 +93,28 @@ type BangumiScorePlan = {
   consent: true;
   sourceState: BangumiScoreReview['source']['state'];
   sourceDigest: string;
-  question: BangumiScoreQuestion | null;
+  reviewDigest: string;
   target: BangumiReview['guard'];
-  baseline: NativeVoteGuard | null;
-  nativeGuard?: VoteReviewGuard | null;
-  commandKey: string;
-  attribution: { provider: 'bangumi'; uploadId: string; ordinal: number; reviewToken: string };
+  commandActor?: AccountActor;
+  command?: PreparedPutVote;
+  started?: boolean;
+};
+type BangumiScoreReceiptPlan = {
+  receiptOnly: true;
+  action: 'set' | 'clear';
+  started: true;
+  receipt: PreparedPutVote['receipt'];
 };
 type NativeVoteGuard =
   | { state: 'absent' }
   | { state: 'cleared'; revision: number }
   | { state: 'set'; units: number; revision: number };
-type StoredReview = BangumiReview & { scoreGuard: NativeVoteGuard | null; scoreNativeGuard?: VoteReviewGuard | null };
-type StoredChoice = BangumiChoice & { scorePlan?: BangumiScorePlan };
+type StoredReview = BangumiReview & {
+  scoreGuard: NativeVoteGuard | null;
+  scoreNativeGuard?: VoteReviewGuard | null;
+  scoreObservation?: VoteObservation | null;
+};
+type StoredChoice = BangumiChoice & { scorePlan?: BangumiScorePlan | BangumiScoreReceiptPlan };
 type StoredRow = Omit<BangumiRow, 'review'> & {
   review: StoredReview | null;
   choice: StoredChoice | null;
@@ -163,9 +179,16 @@ function currentScoreVote(vote: VoteReviewCurrentVote): BangumiScoreCurrentVote 
   return { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
 }
 
+function reviewView(review: StoredReview): BangumiReview;
+function reviewView(review: StoredReview | null): BangumiReview | null;
 function reviewView(review: StoredReview | null): BangumiReview | null {
   if (!review) return null;
-  const { scoreGuard: _scoreGuard, scoreNativeGuard: _scoreNativeGuard, ...visible } = review;
+  const {
+    scoreGuard: _scoreGuard,
+    scoreNativeGuard: _scoreNativeGuard,
+    scoreObservation: _scoreObservation,
+    ...visible
+  } = review;
   return visible;
 }
 
@@ -184,6 +207,33 @@ function choiceRequest(choice: StoredChoice): BangumiChoice {
 
 function choiceMatches(stored: StoredChoice | null, requested: BangumiChoice): boolean {
   return stored !== null && canonicalize(choiceRequest(stored)) === canonicalize(requested);
+}
+function scorePlanDigest(plan: BangumiScorePlan): string {
+  return entryImportMetadataDigest({
+    action: plan.action,
+    units: plan.units,
+    consent: plan.consent,
+    sourceState: plan.sourceState,
+    sourceDigest: plan.sourceDigest,
+    reviewDigest: plan.reviewDigest,
+    target: plan.target,
+  });
+}
+function scoreReviewDigest(review: StoredReview): string {
+  return entryImportMetadataDigest({
+    token: review.token,
+    match: review.match,
+    candidates: review.candidates,
+    target: review.target,
+    guard: review.guard,
+    proposedState: review.proposedState,
+    current: review.current,
+    conflict: review.conflict,
+    score: review.score,
+    scoreGuard: review.scoreGuard,
+    scoreNativeGuard: review.scoreNativeGuard,
+    scoreObservation: review.scoreObservation,
+  });
 }
 function scoreSelection(choice: BangumiScoreChoice): BangumiScoreSelection {
   if (choice.action === 'set') return { action: 'set', units: choice.units };
@@ -207,7 +257,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
             }
           : !noteRaw.isWellFormed() ||
               noteRaw.includes('\u0000') ||
-              Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+              Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS().noteBytes
             ? {
                 state: 'unsupported',
                 sourceField: noteField,
@@ -228,7 +278,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
           }
         : typeof privacyRaw === 'string' &&
             privacyRaw.length > 0 &&
-            Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes &&
+            Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS().privacyValueBytes &&
             !/[\u0000-\u001f\u007f]/.test(privacyRaw)
           ? {
               state: 'unknown',
@@ -267,7 +317,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
       return { state: 'value', sourceField: field, value: { status: 'known', value: raw }, sourceValue: raw };
     } catch {
       if (
-        Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+        Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS().timestampBytes &&
         !/[\u0000-\u001f\u007f]/.test(raw) &&
         !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw)
       )
@@ -307,16 +357,23 @@ export function createBangumiImport(deps: Dependencies) {
     requireRoute(actor.accountId);
     return actor;
   };
-  async function read<T>(actor: Actor, body: (tx: CommandTransaction, a: AccountActor, route: number) => Promise<T>) {
+  async function authorizedRead<T>(
+    actor: Actor,
+    actions: readonly ('library_entry:list' | 'library_entry:update')[],
+    body: (tx: CommandTransaction, a: AccountActor, route: number) => Promise<T>,
+  ) {
     const a = owner(actor),
       route = requireRoute(a.accountId),
       deadline = deadlineFor(5000);
-    const check = await accessCheck(access, a, 'library_entry:list', { route, id: a.accountId }, { pool, deadline });
+    const checks = await Promise.all(
+      actions.map((action) => accessCheck(access, a, action, { route, id: a.accountId }, { pool, deadline })),
+    );
     return withReadTransaction(
       pool,
       async (tx) => {
         const at = await mintReadTime(tx, deps.clock);
         const current = await readAccount(tx, route, a.accountId);
+        const admitted = (await Promise.all(checks.map((check) => check(tx, at)))).every(Boolean);
         if (
           !current ||
           current.kind !== 'actor' ||
@@ -325,8 +382,8 @@ export function createBangumiImport(deps: Dependencies) {
           !Number.isSafeInteger(a.authnEpoch) ||
           a.authnEpoch < 1 ||
           current.minimumAuthnEpoch > BigInt(a.authnEpoch) ||
-          !a.scopes.includes('library_entry:list') ||
-          !(await check(tx, at))
+          actions.some((action) => !a.scopes.includes(action)) ||
+          !admitted
         )
           throw new GrantDeniedError();
         return body(tx, a, route);
@@ -334,6 +391,10 @@ export function createBangumiImport(deps: Dependencies) {
       deadline,
     );
   }
+  const read = <T>(actor: Actor, body: (tx: CommandTransaction, a: AccountActor, route: number) => Promise<T>) =>
+    authorizedRead(actor, ['library_entry:list'], body);
+  const applyRead = <T>(actor: Actor, body: (tx: CommandTransaction, a: AccountActor, route: number) => Promise<T>) =>
+    authorizedRead(actor, ['library_entry:list', 'library_entry:update'], body);
   const args = (a: AccountActor, id: string) => [requireRoute(a.accountId), a.accountId, id];
   async function header(tx: CommandTransaction, a: AccountActor, id: string, lock = false) {
     if (routeOf(id) !== routeOf(a.accountId)) throw new LibraryNotFoundError();
@@ -365,6 +426,36 @@ export function createBangumiImport(deps: Dependencies) {
     ).rows[0];
     if (!r) throw new LibraryNotFoundError();
     return r;
+  }
+  async function recoveryRow(tx: CommandTransaction, a: AccountActor, id: string, ordinal: number): Promise<StoredRow> {
+    const r = (
+      await tx.query<StoredRow>(
+        `SELECT r.ordinal,r.evidence,r.review,r.choice,r.outcome,r.labels FROM library.bangumi_upload_row r
+      JOIN library.bangumi_upload u USING(route,account_id,upload_id)
+      WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=$4
+        AND u.recovery_until>clock_timestamp()`,
+        [...args(a, id), ordinal],
+      )
+    ).rows[0];
+    if (!r) throw new LibraryNotFoundError();
+    return r;
+  }
+  async function applicationRow(actor: Actor, id: string, ordinal: number) {
+    return applyRead(actor, async (tx, a) => {
+      const h = (
+        await tx.query<{ cancelled: boolean; active: boolean; recovering: boolean }>(
+          `SELECT cancelled,expires_at>clock_timestamp() AS active,
+             recovery_until>clock_timestamp() AS recovering
+           FROM library.bangumi_upload WHERE route=$1 AND account_id=$2 AND upload_id=$3
+             AND (expires_at>clock_timestamp() OR recovery_until>clock_timestamp())`,
+          args(a, id),
+        )
+      ).rows[0];
+      if (!h) throw new LibraryNotFoundError();
+      if (h.active) return { mode: 'active' as const, cancelled: h.cancelled, row: await row(tx, a, id, ordinal) };
+      if (h.recovering) return { mode: 'recovery' as const, row: await recoveryRow(tx, a, id, ordinal) };
+      throw new LibraryNotFoundError();
+    });
   }
   function change<T>(
     actor: Actor,
@@ -476,13 +567,13 @@ export function createBangumiImport(deps: Dependencies) {
     target: string | null,
     guard: BangumiReview['guard'],
     selection: BangumiScoreSelection,
-  ): Promise<{ score: BangumiScoreReview; guard: VoteReviewGuard | null }> {
+  ): Promise<{ score: BangumiScoreReview; guard: VoteReviewGuard | null; observation: VoteObservation | null }> {
     const source = scoreSource(evidence);
     const unavailable = (
       reason: Extract<BangumiScoreReview['native']['admission'], { status: 'unavailable' }>['reason'],
       question: BangumiScoreQuestion | null = null,
       currentVote: BangumiScoreCurrentVote | null = null,
-    ): { score: BangumiScoreReview; guard: VoteReviewGuard | null } => ({
+    ): { score: BangumiScoreReview; guard: VoteReviewGuard | null; observation: VoteObservation | null } => ({
       score: {
         source,
         native: {
@@ -494,6 +585,7 @@ export function createBangumiImport(deps: Dependencies) {
         },
       },
       guard: null,
+      observation: null,
     });
     if (!owner(actor).scopes.includes(VOTE_SCOPE)) return unavailable('native_vote_scope_required');
 
@@ -546,6 +638,92 @@ export function createBangumiImport(deps: Dependencies) {
         },
       },
       guard: native.guard,
+      observation: {
+        subjectId: native.guard.subject.canonicalId,
+        question: {
+          id: native.question.id,
+          revision: native.question.revision,
+          grain: native.question.grain,
+          meaning: native.question.meaning!,
+          scale: {
+            min: native.question.minimumUnits,
+            max: native.question.maximumUnits,
+            displayStep: native.question.stepUnits,
+          },
+        },
+      },
+    };
+  }
+
+  function scoreAdmission(
+    actor: AccountActor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+    plan: BangumiScorePlan,
+  ): VoteCommandAdmission {
+    const planDigest = scorePlanDigest(plan);
+    const input = {
+      provider: 'bangumi',
+      uploadId: id,
+      ordinal,
+      reviewToken,
+      sourceDigest: plan.sourceDigest,
+      reviewDigest: plan.reviewDigest,
+      planDigest,
+      match: plan.target,
+    };
+    return {
+      input,
+      async prepare() {
+        let sourceChanged = false;
+        try {
+          const retained = await read(actor, async (tx, a) => {
+            const h = await header(tx, a, id);
+            const r = await row(tx, a, id, ordinal);
+            return { cancelled: h.cancelled, row: r };
+          });
+          const storedPlan = retained.row.choice?.scorePlan;
+          sourceChanged =
+            retained.cancelled ||
+            retained.row.review?.token !== reviewToken ||
+            entryImportMetadataDigest(retained.row.evidence) !== plan.sourceDigest ||
+            !retained.row.review ||
+            scoreReviewDigest(retained.row.review) !== plan.reviewDigest ||
+            !storedPlan ||
+            'receiptOnly' in storedPlan ||
+            scorePlanDigest(storedPlan) !== planDigest;
+        } catch (error) {
+          if (!(error instanceof LibraryNotFoundError)) throw error;
+          sourceChanged = true;
+        }
+        if (!sourceChanged && plan.target?.claim) {
+          const currentClaim = await readClaim.run(pool, {
+            route: plan.target.claim.route,
+            source: 'bangumi',
+            external_id: plan.target.claim.externalId,
+          });
+          sourceChanged = (currentClaim?.subject_id ?? null) !== plan.target.claim.subjectId;
+        }
+        return async (tx) => {
+          if (sourceChanged) throw new LibraryConflictError();
+          const h = await header(tx, actor, id, true);
+          const r = await row(tx, actor, id, ordinal, true);
+          const storedPlan = r.choice?.scorePlan;
+          if (
+            h.cancelled ||
+            r.review?.token !== reviewToken ||
+            entryImportMetadataDigest(r.evidence) !== plan.sourceDigest ||
+            !r.review ||
+            scoreReviewDigest(r.review) !== plan.reviewDigest ||
+            !storedPlan ||
+            'receiptOnly' in storedPlan ||
+            scorePlanDigest(storedPlan) !== planDigest ||
+            storedPlan.started !== true
+          )
+            throw new LibraryConflictError();
+        };
+      },
     };
   }
 
@@ -649,6 +827,7 @@ export function createBangumiImport(deps: Dependencies) {
       score: score.score,
       scoreGuard: null,
       scoreNativeGuard: score.guard,
+      scoreObservation: score.observation,
       metadata: original.review?.metadata ?? [],
     };
     assertReviewBytes(review);
@@ -1094,6 +1273,40 @@ export function createBangumiImport(deps: Dependencies) {
       ...(signal === undefined ? {} : { signal }),
     });
   }
+  async function appliedScoreReadback(
+    actor: Actor,
+    action: 'set' | 'clear',
+    receipt: PreparedPutVote['receipt'],
+  ): Promise<NonNullable<BangumiOutcome['score']>> {
+    const review = await votes.readVoteReview(actor, receipt.questionId, receipt.targetId);
+    const current = currentScoreVote(review.currentVote);
+    return {
+      action,
+      status: 'applied',
+      ...(current.state === 'set'
+        ? { vote: { units: current.units, revision: current.revision, at: current.at } }
+        : {}),
+    };
+  }
+  async function receiptOnlyOutcome(actor: Actor, choice: BangumiChoice, row: StoredRow) {
+    const plan = row.choice?.scorePlan;
+    if (
+      row.review?.token !== choice.reviewToken ||
+      !choiceMatches(row.choice, choice) ||
+      !plan ||
+      !('receiptOnly' in plan)
+    )
+      throw new ProblemError('conflict');
+    const reconciled = await votes.reconcilePutVote(actor, plan.receipt);
+    if (!reconciled) return null;
+    return {
+      ordinal: choice.ordinal,
+      status: 'applied' as const,
+      applied: ['rate'],
+      retained: [],
+      score: await appliedScoreReadback(actor, plan.action, plan.receipt),
+    } satisfies BangumiOutcome;
+  }
   async function apply(actor: Actor, id: string, choices: BangumiChoice[], signal: AbortSignal, deadline: number) {
     if (new Set(choices.map((c) => c.ordinal)).size !== choices.length) throw new ProblemError('invalid_request');
     const outcomes: BangumiOutcome[] = [];
@@ -1108,13 +1321,21 @@ export function createBangumiImport(deps: Dependencies) {
         (choice.skip && scoreChoice.action !== 'preserve')
       )
         throw new ProblemError('invalid_request');
-      // The immutable submitted review and operands survive a crash between the native effect and acknowledgment.
-      const claim = await change(
-        actor,
-        'confirm',
-        `${id}:${ordinal}:${choice.reviewToken}`,
-        { id, choice },
-        async (tx, a) => {
+      let application = await applicationRow(actor, id, ordinal);
+      if (application.mode === 'recovery') {
+        const recovered = await receiptOnlyOutcome(actor, choice, application.row);
+        if (!recovered) break;
+        outcomes.push(recovered);
+        continue;
+      }
+      const existingPlan = application.row.choice?.scorePlan;
+      const startedBefore = !!existingPlan && !('receiptOnly' in existingPlan) && existingPlan.started === true;
+      if (startedBefore) {
+        if (application.row.review?.token !== choice.reviewToken || !choiceMatches(application.row.choice, choice))
+          throw new ProblemError('conflict');
+      } else {
+        // The immutable submitted review and prepared operands survive a crash between this checkpoint and delivery.
+        await change(actor, 'confirm', `${id}:${ordinal}:${choice.reviewToken}`, { id, choice }, async (tx, a) => {
           const h = await header(tx, a, id, true),
             r = await row(tx, a, id, ordinal, true);
           if (h.cancelled) throw new ProblemError('conflict');
@@ -1124,22 +1345,42 @@ export function createBangumiImport(deps: Dependencies) {
           if (canonicalize(scoreSelection(scoreChoice)) !== canonicalize(reviewedSelection))
             throw new ProblemError('conflict');
           if (r.choice && !choiceMatches(r.choice, choice)) throw new ProblemError('conflict');
-          const scorePlan: BangumiScorePlan | undefined =
-            scoreChoice.action === 'preserve'
-              ? undefined
-              : {
-                  action: scoreChoice.action,
-                  units: scoreChoice.action === 'set' ? scoreChoice.units : null,
-                  consent: true,
-                  sourceState: r.review.score!.source.state,
-                  sourceDigest: entryImportMetadataDigest(r.evidence),
-                  question: r.review.score!.native.question,
-                  target: r.review.guard,
-                  baseline: r.review.scoreGuard,
-                  nativeGuard: r.review.scoreNativeGuard ?? null,
-                  commandKey: `bangumi:${id}:${ordinal}:${choice.reviewToken}:rating`,
-                  attribution: { provider: 'bangumi', uploadId: id, ordinal, reviewToken: choice.reviewToken },
-                };
+          let scorePlan: BangumiScorePlan | undefined;
+          if (scoreChoice.action !== 'preserve') {
+            scorePlan = {
+              action: scoreChoice.action,
+              units: scoreChoice.action === 'set' ? scoreChoice.units : null,
+              consent: true,
+              sourceState: r.review!.score!.source.state,
+              sourceDigest: entryImportMetadataDigest(r.evidence),
+              reviewDigest: scoreReviewDigest(r.review!),
+              target: r.review!.guard,
+            };
+            if (
+              !(
+                scorePlan.action === 'set' &&
+                (scorePlan.sourceState === 'absent' || scorePlan.sourceState === 'unrated')
+              ) &&
+              scorePlan.target &&
+              r.review!.scoreNativeGuard &&
+              r.review!.scoreObservation
+            ) {
+              const commandActor = structuredClone(a);
+              const command = votes.preparePutVote(
+                commandActor,
+                {
+                  questionId: r.review!.score!.native.questionId,
+                  targetId: scorePlan.target.subjectId,
+                  units: scorePlan.units,
+                  guard: r.review!.scoreNativeGuard,
+                  observation: r.review!.scoreObservation,
+                },
+                `bangumi:${id}:${ordinal}:${choice.reviewToken}:rating`,
+                scoreAdmission(commandActor, id, ordinal, choice.reviewToken, scorePlan),
+              );
+              scorePlan = { ...scorePlan, commandActor, command };
+            }
+          }
           const storedChoice: StoredChoice = r.choice ?? {
             ...choice,
             ...(scorePlan === undefined ? {} : { scorePlan }),
@@ -1149,15 +1390,17 @@ export function createBangumiImport(deps: Dependencies) {
             `UPDATE library.bangumi_upload_row SET choice=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
             [...args(a, id), ordinal, JSON.stringify(storedChoice)],
           );
-          // Private evidence stays out of durable command receipts.
           return { confirmed: true };
-        },
-      );
-      void claim;
-      const r = await read(actor, async (tx, a) => {
-        if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
-        return row(tx, a, id, ordinal);
-      });
+        });
+      }
+      application = await applicationRow(actor, id, ordinal);
+      if (application.mode === 'recovery') {
+        const recovered = await receiptOnlyOutcome(actor, choice, application.row);
+        if (!recovered) break;
+        outcomes.push(recovered);
+        continue;
+      }
+      const r = application.row;
       // A receipt for an older confirmation cannot admit a subsequently refreshed review.
       if (r.review?.token !== choice.reviewToken) throw new ProblemError('conflict');
       if (r.outcome && scoreChoice.action === 'preserve') {
@@ -1175,6 +1418,10 @@ export function createBangumiImport(deps: Dependencies) {
       };
       if (r.outcome) {
         // Retry only the frozen score command; an acknowledged independent state effect stays settled.
+      } else if (application.cancelled && startedBefore) {
+        // A cancelled upload may settle a started receipt, but it admits no new Library effect.
+      } else if (application.cancelled) {
+        break;
       } else if (choice.skip) outcome.status = 'skipped';
       else if (choice.state === 'omit' || (v.current && choice.state === 'preserve')) outcome.status = 'skipped';
       else if (v.proposedState && v.guard && v.target) {
@@ -1209,9 +1456,14 @@ export function createBangumiImport(deps: Dependencies) {
       const plan = r.choice!.scorePlan;
       if (scoreChoice.action === 'preserve') {
         outcome.score = { action: 'preserve', status: 'skipped', reason: 'existing_native_vote_preserved' };
-      } else if (plan?.action === 'set' && (plan.sourceState === 'absent' || plan.sourceState === 'unrated')) {
+      } else if (
+        plan &&
+        !('receiptOnly' in plan) &&
+        plan.action === 'set' &&
+        (plan.sourceState === 'absent' || plan.sourceState === 'unrated')
+      ) {
         outcome.score = { action: 'set', status: 'unsupported', reason: `source_${plan.sourceState}` };
-      } else if (!plan?.nativeGuard || !plan.target) {
+      } else if (!plan || 'receiptOnly' in plan || !plan.command || !plan.commandActor || !plan.target) {
         outcome.score = {
           action: scoreChoice.action,
           status: 'unavailable',
@@ -1219,6 +1471,7 @@ export function createBangumiImport(deps: Dependencies) {
         };
       } else {
         if (signal.aborted || Date.now() >= deadline) break;
+        const retry = plan.started === true;
         await change(
           actor,
           'score_start',
@@ -1227,35 +1480,53 @@ export function createBangumiImport(deps: Dependencies) {
           async (tx, a) => {
             const h = await header(tx, a, id, true);
             const locked = await row(tx, a, id, ordinal, true);
-            if (h.cancelled || locked.review?.token !== choice.reviewToken || !choiceMatches(locked.choice, choice))
+            const storedPlan = locked.choice?.scorePlan;
+            if (
+              locked.review?.token !== choice.reviewToken ||
+              !choiceMatches(locked.choice, choice) ||
+              !storedPlan ||
+              'receiptOnly' in storedPlan ||
+              !storedPlan.command ||
+              !storedPlan.commandActor ||
+              (h.cancelled && storedPlan.started !== true)
+            )
               throw new ProblemError('conflict');
             // Even a retry of a definitive result becomes unsettled before another delivery attempt.
+            const startedChoice: StoredChoice = {
+              ...locked.choice!,
+              scorePlan: { ...storedPlan, started: true },
+            };
+            assertJsonBytes(startedChoice, BANGUMI_LIMITS.choiceBytes);
             await tx.query(
-              'UPDATE library.bangumi_upload_row SET outcome=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4',
-              [...args(a, id), ordinal],
+              'UPDATE library.bangumi_upload_row SET choice=$5::jsonb,outcome=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4',
+              [...args(a, id), ordinal, JSON.stringify(startedChoice)],
             );
             return { started: true };
           },
         );
+        let applied = false;
         try {
-          // The producer repeats current authorization/exposure before exact receipt replay,
-          // and atomically checks the complete native witness on a fresh effect attempt.
-          await votes.putVoteOutcome(
-            actor,
-            {
-              questionId: plan.question!.id,
-              targetId: plan.target.subjectId,
-              units: plan.units,
-              guard: plan.nativeGuard,
-            },
-            plan.commandKey,
-          );
-          outcome.score = { action: plan.action, status: 'applied' };
+          const reconciled = retry ? await votes.reconcilePutVote(actor, plan.command.receipt) : null;
+          if (reconciled) {
+            applied = true;
+          } else if (retry && application.cancelled) {
+            break;
+          } else {
+            await votes.putVoteOutcome(
+              plan.commandActor,
+              plan.command.input,
+              plan.command.receipt.requestKey,
+              scoreAdmission(plan.commandActor, id, ordinal, choice.reviewToken, plan),
+            );
+            applied = true;
+          }
         } catch (error) {
           if (error instanceof VoteReviewStaleError) {
             outcome.score = { action: plan.action, status: 'stale', reason: error.reason };
           } else if (error instanceof VoteReviewUnavailableError) {
             outcome.score = { action: plan.action, status: 'unavailable', reason: error.reason };
+          } else if (error instanceof LibraryConflictError) {
+            outcome.score = { action: plan.action, status: 'stale', reason: 'source_or_review_changed' };
           } else if (
             error instanceof RatingQuestionNotFoundError ||
             error instanceof LibraryNotFoundError ||
@@ -1267,12 +1538,17 @@ export function createBangumiImport(deps: Dependencies) {
             throw error;
           }
         }
+        if (applied) {
+          outcome.score = await appliedScoreReadback(actor, plan.action, plan.command.receipt);
+          if (!outcome.applied.includes('rate')) outcome.applied.push('rate');
+        }
       }
       if (outcome.status !== 'failed') {
-        if (outcome.score.status === 'stale') outcome.status = 'stale';
-        else if (outcome.score.status === 'unavailable' || outcome.score.status === 'unsupported')
-          outcome.status = 'unsupported';
-        else if (outcome.score.status === 'applied' && outcome.status !== 'stale') outcome.status = 'applied';
+        // Every score path above sets outcome.score before the row status is derived.
+        const score = outcome.score!;
+        if (score.status === 'stale') outcome.status = 'stale';
+        else if (score.status === 'unavailable' || score.status === 'unsupported') outcome.status = 'unsupported';
+        else if (score.status === 'applied' && outcome.status !== 'stale') outcome.status = 'applied';
       }
       assertJsonBytes(outcome, BANGUMI_LIMITS.outcomeBytes);
       // An acknowledged row can be refreshed under a new token; an uncertain command keeps its original choice.

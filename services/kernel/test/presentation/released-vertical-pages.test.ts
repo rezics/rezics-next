@@ -36,7 +36,7 @@ const launch = {
 };
 const sources = bundledSources();
 const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
-const digest = profileDigest(platformProfile);
+const digest = profileDigest(platformProfile());
 type Reader = {
   request(
     persona: 'anonymous' | 'editor',
@@ -92,16 +92,16 @@ function selection(type: string): Scope {
 }
 function selectedViews(selected: Scope) {
   if (selected.scope === 'type') {
-    const entry = platformProfile.types.find(({ type }) => type === selected.key);
+    const entry = platformProfile().types.find(({ type }) => type === selected.key);
     expect(entry, `bundled type template ${selected.key}`).toBeDefined();
     return templateViews(entry!);
   }
   if (selected.scope === 'base') {
-    const entry = platformProfile.bases.find(({ base }) => base === selected.key);
+    const entry = platformProfile().bases.find(({ base }) => base === selected.key);
     expect(entry, `bundled structural base template ${selected.key}`).toBeDefined();
     return templateViews(entry!);
   }
-  return templateViews(platformProfile.generic);
+  return templateViews(platformProfile().generic);
 }
 async function published(driver: Reader) {
   const active = await driver.request('anonymous', 'GET', '/v1/presentation/active');
@@ -111,7 +111,7 @@ async function published(driver: Reader) {
   status(stored, 200, 'read actual immutable bundled profile');
   expect(stored.headers.get('etag')).toBe(`"${digest}"`);
   expect(stored.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
-  expect(stored.body).toEqual({ digest, profile: platformProfile });
+  expect(stored.body).toEqual({ digest, profile: platformProfile() });
   return active.body as { digest: string; head: number };
 }
 
@@ -202,7 +202,7 @@ async function factualPage(
   const page = response.body as unknown as Page;
   const expected = selection(type);
   const own = selectedViews(expected);
-  const generic = templateViews(platformProfile.generic);
+  const generic = templateViews(platformProfile().generic);
   const document = own[view] ?? generic[view];
   const selected: Scope = own[view] ? expected : { scope: 'generic', key: null };
   expect(page.subject).toBe(id);
@@ -211,11 +211,11 @@ async function factualPage(
   expect(document).toBeDefined();
   expect(page.document).toEqual(document!);
   const chain = [
-    ...platformProfile.types.filter((entry) => entry.type === type),
+    ...platformProfile().types.filter((entry) => entry.type === type),
     ...bundledRelease.types[type]!.bases.flatMap((base) =>
-      platformProfile.bases.filter((entry) => entry.base === base),
+      platformProfile().bases.filter((entry) => entry.base === base),
     ),
-    platformProfile.generic,
+    platformProfile().generic,
   ].map(templateViews);
   expect(page.views).toEqual(VIEWS.filter((view) => chain.some((views) => views[view] !== undefined)));
   const plan = planReads(platformRegistry, document!, { subject: id });
@@ -309,7 +309,7 @@ test('released profile publication uses curator grants and current-head CAS whil
       'editor',
       'POST',
       '/v1/presentation/profiles',
-      { profile: platformProfile },
+      { profile: platformProfile() },
       key(),
     );
     status(denied, 403, 'editor lacks presentation publication grant');
@@ -317,7 +317,7 @@ test('released profile publication uses curator grants and current-head CAS whil
       'curator',
       'POST',
       '/v1/presentation/profiles',
-      { profile: platformProfile },
+      { profile: platformProfile() },
       key(),
     );
     status(publication, 200, 'curator republishes actual immutable bundle');
@@ -347,8 +347,8 @@ test('released profile publication uses curator grants and current-head CAS whil
         expect(result.body.template).toEqual(explicit ? { scope: 'route', key: '/' } : { scope: 'generic', key: null });
         expect(result.body.document).toEqual(
           explicit
-            ? templateViews(platformProfile.routes[0]!).overview
-            : templateViews(platformProfile.generic).overview,
+            ? templateViews(platformProfile().routes[0]!).overview
+            : templateViews(platformProfile().generic).overview,
         );
         expect(result.body).not.toHaveProperty('subject');
       }

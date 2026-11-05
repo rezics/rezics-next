@@ -50,8 +50,8 @@ export function declareMembersPreparationRequest(owners: MembersPreparationOwner
     | 'historyRetirement'
     | 'executor'
   >;
-  const children = Object.freeze({ ...ownerChildren, history: OPERATIONAL_WORK_LOCAL_DECLARATION });
-  return Object.freeze({ children, total: sumOperationalWork(...Object.values(children)) });
+  const children = Object.freeze({ ...ownerChildren, history: OPERATIONAL_WORK_LOCAL_DECLARATION() });
+  return Object.freeze({ children, total: sumOperationalWork()(...Object.values(children)) });
 }
 
 /** One exact native episode, committed before the Source callback can start.

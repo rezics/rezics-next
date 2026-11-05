@@ -69,6 +69,7 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
     withRetainedHistory(tasks.settings.stateDirectory, readings, {
       policy: policy.provider,
       spanMs: policy.pacing.burnSpanMs,
+      running: store.runningAttemptsByPool(),
     }),
   );
   const contract = readFileSync(join(directory, 'contract.md'), 'utf8');

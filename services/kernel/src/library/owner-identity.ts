@@ -46,7 +46,7 @@ export async function registerLibraryOwnerIdentityScope(
   )
     throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Library source directory needs same-home custody');
   await shareAccount(tx, record.owner);
-  await identityEpochStore.admitHomeEffect(tx, effect);
+  await identityEpochStore().admitHomeEffect(tx, effect);
   await tx.query(
     `INSERT INTO library.owner_identity_scope
       (partition_no,original,source_id,incarnation,role,owner_id,source_route)

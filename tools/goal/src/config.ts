@@ -42,6 +42,7 @@ import { SharedInboxQueries } from './inbox-shared.ts';
 import { deliverDueReminders } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
+import { readRiskOwnership } from './briefs.ts';
 import { readRouting } from './routing.ts';
 import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote } from './promotion.ts';
@@ -69,6 +70,7 @@ import {
 import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
 import { backlogDirectory, sweepBacklog } from './backlog.ts';
+import { chainRuntime } from './chain.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
 import type { BriefContinuation } from './types.ts';
 
@@ -136,6 +138,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     : undefined;
   const codeIsCurrent = () =>
     startedCodeVersion === undefined || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
+  // A host that retires for a newer revision starts no new attempt; see manager-host.ts.
+  const codeRetirement = { retiring: false };
   const databasePath = join(settings.stateDirectory, 'goal.sqlite');
   mkdirSync(settings.stateDirectory, { recursive: true });
   const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath, settings.policy?.storage);
@@ -191,7 +195,16 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
     return options.trainMode === 'detached' ? handOff() : pump();
   };
-  const job = new WorkerJob(tasks, queue, inbox, undefined, afterSettle);
+  const job = new WorkerJob(
+    tasks,
+    queue,
+    inbox,
+    undefined,
+    afterSettle,
+    undefined,
+    undefined,
+    () => !codeRetirement.retiring,
+  );
   const repairRouting = createRuntimeRepairRouting({ tasks, store, job, inbox, settings });
   const handOff = () =>
     new Promise<void>((resolve, reject) => {
@@ -327,6 +340,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     db,
     ...settings,
     settings,
+    ...(startedCodeVersion ? { loadedCodeVersion: startedCodeVersion } : {}),
+    codeRetirement,
     store,
     tasks,
     job,
@@ -435,6 +450,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           tasks.queueBacklogContinuation(task.id, goal, continuation.expectedAttempt, briefFile, actor);
         },
         cancel: (taskId) => tasks.cancel(taskId),
+        routing: {
+          table: readRouting(settings.routingFile, settings.policy?.routing),
+          ownership: readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
+          pools: settings.pools,
+          running: store.runningAttemptsByPool(),
+        },
+        chain: chainRuntime({ settings, store, tasks }),
       }),
     promote: () => promoteNow(),
     verify: () =>

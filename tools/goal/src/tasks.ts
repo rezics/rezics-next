@@ -267,6 +267,7 @@ export class WorkerTasks {
       now,
       spanMs,
       history: retainPoolReadings(this.settings.stateDirectory, readings, now, spanMs),
+      running: this.store.runningAttemptsByPool(),
     };
   }
   /**
@@ -1483,6 +1484,8 @@ export class WorkerTasks {
       ensureWorktree(this.settings, task);
       const pools = this.poolPolicies.read();
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
+      // A chained task's first attempt continues the landed session it was offered: route, pool and resume follow it.
+      const predecessor = old ?? (task.chain ? this.store.attempt(task.chain.from) : null);
       const previousConflict =
         options.escalation === 'rebase-conflict' && old
           ? priorRebaseConflict(this.store, taskId, old.attempt)
@@ -1517,8 +1520,12 @@ export class WorkerTasks {
           ...table.experiments.filter((e) => e.open && e.class === nextTaskClass).flatMap((e) => e.profiles),
         ].some((offered) => offered.cli === candidate.cli && offered.model === candidate.model);
       const route =
-        nextBrief.kind !== 'verification' && !pinned && old && routable(old.profile)
-          ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
+        nextBrief.kind !== 'verification' && !pinned && predecessor && routable(predecessor.profile)
+          ? {
+              profile: predecessor.profile,
+              tableVersion: predecessor.tableVersion,
+              experiment: predecessor.experiment,
+            }
           : routeTask(nextBrief, task.sequence, table);
       const readings = pools.map((pool) =>
         withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory),
@@ -1565,7 +1572,8 @@ export class WorkerTasks {
           readings,
           {
             policy: this.settings.policy?.provider,
-            ...(old && !switched ? { preferred: old.pool } : {}),
+            running: this.store.runningAttemptsByPool(),
+            ...(predecessor && !switched ? { preferred: predecessor.pool } : {}),
             ...(options.excludePools ? { exclude: options.excludePools } : {}),
           },
           this.settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs,
@@ -1581,20 +1589,32 @@ export class WorkerTasks {
                 : undefined;
             },
       );
-      const oldSession = old ? attemptSession(old, this.settings.policy?.records) : null;
+      const oldSession =
+        !old && task.chain
+          ? task.chain.session
+          : predecessor
+            ? attemptSession(predecessor, this.settings.policy?.records)
+            : null;
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
       const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
       // The flag lives on the task, so it survives capacity waits, dependency holds and restarts until used.
+      const resumeFrom =
+        !old && task.chain
+          ? { pool: task.chain.pool, cli: task.chain.cli, model: task.chain.model }
+          : predecessor
+            ? { pool: predecessor.pool, cli: predecessor.profile.cli, model: predecessor.profile.model }
+            : null;
       const resumeSession =
         !task.freshSession &&
         !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
+        resumeFrom &&
         agentAdapter(profile.cli).canResume &&
-        old!.pool === pool.name &&
-        old!.profile.cli === profile.cli &&
-        old!.profile.model === profile.model
+        resumeFrom.pool === pool.name &&
+        resumeFrom.cli === profile.cli &&
+        resumeFrom.model === profile.model
           ? oldSession
           : undefined;
       if (pageDataRepair && (!resumeSession || !old || old.pool !== pool.name))

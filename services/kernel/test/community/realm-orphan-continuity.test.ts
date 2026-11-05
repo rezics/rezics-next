@@ -230,7 +230,7 @@ test('a native decision committed after preparation is rechecked before receipt 
         return noEffect(null);
       },
     ),
-  ).rejects.toBeInstanceOf(RealmReadOnlyError);
+  ).rejects.toBeInstanceOf(RealmReadOnlyError());
   expect(executed).toBe(false);
   await expect(
     updateRealm(
@@ -239,7 +239,7 @@ test('a native decision committed after preparation is rechecked before receipt 
       { realmId: realm.realmId, expectedHead: realm.headRevisionId, title: 'Still refused' },
       context(),
     ),
-  ).rejects.toBeInstanceOf(RealmReadOnlyError);
+  ).rejects.toBeInstanceOf(RealmReadOnlyError());
 });
 
 test('pending requester custody uses the existing erasure obligation and event replay cannot restore it', async () => {

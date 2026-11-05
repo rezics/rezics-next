@@ -120,7 +120,7 @@ test('The exact native admitted prearm directory remains boundedly readable and 
     expect(registered).toBe(true);
     const actor = await f.actor();
     const commandKey = randomUUID();
-    const job = await identityEpochStore.prepareAdmission(
+    const job = await identityEpochStore().prepareAdmission(
       f.pool,
       {
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -184,7 +184,7 @@ test('The exact native admitted prearm directory remains boundedly readable and 
     await (
       await nativeCutoverCoordinator()
     )(f.pool, job);
-    expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('published');
+    expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('published');
     for (let step = 0; step < 100; step++) {
       await stepIdentityEpochAdmission(f.pool, job);
       const pending = await f.pool.query(
@@ -320,7 +320,7 @@ test('Cancelled native sealed empty inputs retain real final pages and release p
     const terminal = (await f.create('Empty cancelled survivor', 0x8940)).id;
     const actor = await f.actor(),
       key = randomUUID();
-    const job = await identityEpochStore.prepareAdmission(
+    const job = await identityEpochStore().prepareAdmission(
       f.pool,
       {
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -398,10 +398,10 @@ test('The native colocated empty seal is retained without treating an absent dir
         command: { actorAccountId: actor.accountId, kind: 'subject.merge' as const, key, digest: digest(key) },
       },
     };
-    const binding = await identityEpochStore.bindReceipt(f.pool, authority, input);
+    const binding = await identityEpochStore().bindReceipt(f.pool, authority, input);
     const job: IdentityJobRef = (
       await runCommand(f.pool, { ...authority, partition: partitionOf(routeOf(original)!) }, (tx) =>
-        identityEpochStore.admit(tx, { ...input, binding }),
+        identityEpochStore().admit(tx, { ...input, binding }),
       )
     ).value;
     await (
@@ -456,10 +456,10 @@ test('Retained custody refuses omitted original input coverage before issuing it
         command: { actorAccountId: actor.accountId, kind: 'subject.merge' as const, key, digest: digest(key) },
       },
     };
-    const binding = await identityEpochStore.bindReceipt(f.pool, authority, input);
+    const binding = await identityEpochStore().bindReceipt(f.pool, authority, input);
     const job = (
       await runCommand(f.pool, { ...authority, partition: partitionOf(routeOf(original)!) }, (tx) =>
-        identityEpochStore.admit(tx, { ...input, binding }),
+        identityEpochStore().admit(tx, { ...input, binding }),
       )
     ).value;
     await (

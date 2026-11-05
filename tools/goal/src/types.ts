@@ -39,6 +39,7 @@ export type PromptManifest = PromptBudgetManifest & {
   conditions: Record<string, string>;
   brief: string;
   policy: string;
+  architectureModules?: string;
   layers: { role: number; conditions: number; brief: number; total: number };
 };
 /** Original integrated acceptance identity; metadata alone never authorizes native execution. */
@@ -48,6 +49,17 @@ export type ProofMetadata = {
   sourceCommit: string;
 };
 export type BriefContinuation = { taskId: string; expectedAttempt: number };
+/** The landed attempt whose provider session a chained task resumes, with the session's identity at chain time. */
+export type ChainLink = {
+  from: { taskId: string; attempt: number };
+  session: string;
+  cli: Cli;
+  pool: string;
+  model: string;
+  effort: string;
+  /** Tasks in the chain including this one; the first task of a chain has depth 1. */
+  depth: number;
+};
 /** serviceTier is ignored at launch (the Codex tier is the codex.serviceTier setting); kept so older attempts still parse. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
@@ -66,6 +78,8 @@ export type Pool = {
     allowUnknown: boolean;
     maxAgeMs: number;
     maxBurnPerHour?: number;
+    /** Optional cap on this pool's current pending, running and waiting attempts. */
+    maxConcurrent?: number;
   };
 };
 export type AffectedTestCheck = { paths: string[]; command: string[] };
@@ -149,6 +163,7 @@ export type Settings = {
     devLandingChecks: boolean;
     devPrelandingTypecheck?: boolean;
     devLandingBootCheck?: boolean;
+    devKernelImport?: boolean;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;
@@ -251,6 +266,8 @@ export type Task = {
   pendingBriefChange?: { previousBriefHash: string; newBriefHash: string };
   /** `retry --fresh-session`: the next attempt starts a new provider session; cleared when that attempt is created. */
   freshSession?: boolean;
+  /** Set on a brief chained into the warm session of a landed task; its first attempt resumes that session. */
+  chain?: ChainLink;
   /** Checks the brief requires that this launch's conditions defer to the dev verifier. */
   deferredAcceptance?: AcceptanceRequirement[];
   integratedBase?: string;

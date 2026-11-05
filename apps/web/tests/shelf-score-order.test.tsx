@@ -23,7 +23,7 @@ test('saved score intent survives both directions, per-state defaults and explic
     layouts: { all: 'list' },
     gridSize: 'large',
   } as const;
-  expect(unsupportedShelfSorts(saved)).toEqual([{ tab: 'all', field: 'rating' }]);
+  expect(unsupportedShelfSorts(saved)).toEqual([]);
   expect(resolveShelfPresentation({}, saved).sort).toEqual({ orderBy: 'personalScore', direction: 'asc' });
   for (const direction of ['asc', 'desc'] as const) {
     for (const state of [undefined, 'in_progress', 'planned', 'completed', 'paused', 'dropped']) {
@@ -149,8 +149,8 @@ test('mounted sort form retains score addresses until date selection and replace
       const order = select('orderBy');
       order.focus();
       expect(order.value).toBe('personalScore');
-      expect(order.querySelector('option[value="personalScore"]')?.hasAttribute('disabled')).toBe(true);
-      expect(select('direction').disabled).toBe(true);
+      expect(order.querySelector('option[value="personalScore"]')?.hasAttribute('disabled')).toBe(false);
+      expect(select('direction').disabled).toBe(false);
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction });
       expect(new window.FormData(form()).getAll('orderBy')).toEqual(['personalScore']);
       await submit();
@@ -218,36 +218,78 @@ test('mounted sort form retains score addresses until date selection and replace
   }
 });
 
-test('missing generated score producer rejects both directions before any shelf or per-row vote request', async () => {
-  const fetch = mock(() => Promise.resolve(Response.json({ libraryEntries: [], next: null })));
-  const client = createKernelClient('https://api.test', { fetch });
-  for (const limit of [1, 10, 20]) {
-    for (const direction of ['asc', 'desc'] as const) {
-      await expect(
-        readEntryPage(
-          client,
-          'Bearer owner',
-          'obsolete',
-          'completed',
-          limit,
-          { orderBy: 'personalScore', direction },
-          'schema:Book',
-        ),
-      ).rejects.toMatchObject({ state: 'score-unavailable' });
-    }
-  }
-  expect(fetch).not.toHaveBeenCalled();
-  // Chronological reads still use one supplied page and its opaque continuation without local ordering.
-  fetch.mockResolvedValueOnce(
-    Response.json({ libraryEntries: [{ subjectId: 'z' }, { subjectId: 'a' }], next: 'native:next' }),
-  );
-  const page = await readEntryPage(client, 'Bearer owner', undefined, undefined, 20, {
-    orderBy: 'lastActivity',
-    direction: 'desc',
+test('score order requests one native FULL page and maps preparation versus currentness', async () => {
+  const fetch = mock(() => {
+    return Promise.resolve(
+      Response.json({
+        libraryEntries: [
+          { subjectId: 'z', personalScore: 0 },
+          { subjectId: 'a', personalScore: null },
+        ],
+        next: 'native:score-next',
+        scoreQuestion: {
+          id: '00000000-0000-7000-8000-000000000001',
+          meaning: 'Score',
+          revision: 1,
+          grain: 'count',
+          minimumUnits: 0,
+          maximumUnits: 20,
+          stepUnits: 1,
+          lifecycleState: 'active',
+          lifecycleRevision: 1,
+        },
+      }),
+    );
   });
-  expect(page.libraryEntries.map((row) => row.subjectId)).toEqual(['z', 'a']);
-  expect(page.next).toBe('native:next');
-  expect(fetch).toHaveBeenCalledTimes(1);
+  const client = createKernelClient('https://api.test', { fetch });
+  const page = await readEntryPage(
+    client,
+    'Bearer owner',
+    undefined,
+    'completed',
+    20,
+    { orderBy: 'personalScore', direction: 'asc' },
+    'schema:Book',
+  );
+  const requested = new URL(String(fetch.mock.calls[0]![0]));
+  expect(Object.fromEntries(requested.searchParams)).toMatchObject({
+    orderBy: 'personalScore',
+    direction: 'asc',
+    state: 'completed',
+    type: 'schema:Book',
+  });
+  expect(page.libraryEntries.map((row) => [row.subjectId, row.personalScore])).toEqual([
+    ['z', 0],
+    ['a', null],
+  ]);
+  expect(page.scoreQuestion?.id).toBe('00000000-0000-7000-8000-000000000001');
+  expect(page.next).toBe('native:score-next');
+  fetch.mockResolvedValueOnce(
+    Response.json(
+      {
+        type: 'https://rezics.com/problems/dependency_unavailable',
+        code: 'dependency_unavailable',
+        detail: 'personalScore: POST /v1/libraryShelfScorePreparation until ready=true',
+      },
+      { status: 503 },
+    ),
+  );
+  await expect(
+    readEntryPage(client, 'Bearer owner', undefined, undefined, 20, { orderBy: 'personalScore', direction: 'desc' }),
+  ).rejects.toMatchObject({ state: 'preparing' });
+  fetch.mockResolvedValueOnce(
+    Response.json(
+      {
+        type: 'https://rezics.com/problems/dependency_unavailable',
+        code: 'dependency_unavailable',
+        detail: 'Content native owner-wide score identity fence is not installed',
+      },
+      { status: 503 },
+    ),
+  );
+  await expect(
+    readEntryPage(client, 'Bearer owner', undefined, undefined, 20, { orderBy: 'personalScore', direction: 'asc' }),
+  ).rejects.toMatchObject({ state: 'score-unavailable' });
 });
 
 test('mounted unavailable recovery retains display and filters, retires the cursor, and keeps keyboard focus', async () => {
@@ -283,7 +325,7 @@ test('mounted unavailable recovery retains display and filters, retires the curs
           cursor: 'obsolete',
         } as const;
         await act(async () => root.render(createElement(ShelfScoreUnavailable, { locale: 'en', view })));
-        expect(host.querySelector('[role="alert"]')?.textContent).toContain('not available');
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('not current');
         expect(host.querySelector('[data-shelf-score-state]')?.getAttribute('data-shelf-score-state')).toBe(
           'unavailable',
         );

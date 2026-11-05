@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
 import {
   exportSections,
@@ -104,8 +105,12 @@ export type ExportSeek = {
   sectionTotals?: [number, number][];
 };
 const ZERO = '00000000-0000-0000-0000-000000000000';
-const FETCH_ROWS = LIBRARY_EXPORT_LIMITS.pageRows + 1;
-const v1DirectSections = new Set<string>(exportSections.slice(0, 10));
+function FETCH_ROWS() {
+  return memoizedValue(FETCH_ROWS, () => LIBRARY_EXPORT_LIMITS.pageRows + 1);
+}
+function v1DirectSections() {
+  return memoizedValue(v1DirectSections, () => new Set<string>(exportSections.slice(0, 10)));
+}
 
 export const initialExportSeek = (version: LibraryExportVersion = 1): ExportSeek => ({
   section: 0,
@@ -123,66 +128,67 @@ export type ExportSourcePage = {
 };
 
 /** Each indexed selection fetches P+1 bounded rows so a full page can seek without an empty follow-up page. */
-const queries: Partial<Record<LibraryExportSectionV4, string>> = {
-  entries: `SELECT subject_id::text AS key, subject_id, requested_subject_id, incarnation_id, state,
+function queries(): Partial<Record<LibraryExportSectionV4, string>> {
+  return memoizedValue(queries, () => ({
+    entries: `SELECT subject_id::text AS key, subject_id, requested_subject_id, incarnation_id, state,
     revision, library_profile_pin, created_at::text, updated_at::text, activity_at::text, finished_at::text
     FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id > $3::uuid
-    ORDER BY subject_id LIMIT ${FETCH_ROWS}`,
-  labels: `SELECT label_id::text AS key, label_id, normalized_name, revision, created_at::text, updated_at::text
+    ORDER BY subject_id LIMIT ${FETCH_ROWS()}`,
+    labels: `SELECT label_id::text AS key, label_id, normalized_name, revision, created_at::text, updated_at::text
     FROM library.personal_label WHERE route=$1 AND account_id=$2 AND deleted_at IS NULL AND label_id > $3::uuid
-    ORDER BY label_id LIMIT ${FETCH_ROWS}`,
-  assignments: `SELECT a.subject_id::text||'/'||a.label_id::text AS key,
+    ORDER BY label_id LIMIT ${FETCH_ROWS()}`,
+    assignments: `SELECT a.subject_id::text||'/'||a.label_id::text AS key,
     a.subject_id,a.label_id,a.assignment_id,a.revision,a.created_at::text,a.updated_at::text
     FROM library.label_assignment a WHERE a.route=$1 AND a.account_id=$2 AND a.deleted_at IS NULL
       AND (a.subject_id,a.label_id) > (split_part($3,'/',1)::uuid,split_part($3,'/',2)::uuid)
       AND EXISTS (SELECT 1 FROM library.personal_label l WHERE l.route=$1 AND l.account_id=$2
         AND l.label_id=a.label_id AND l.deleted_at IS NULL)
-    ORDER BY a.subject_id,a.label_id LIMIT ${FETCH_ROWS}`,
-  sessions: `SELECT session_id::text AS key, session_id,subject_id,version_subject_id,mode,unit,total::text,
+    ORDER BY a.subject_id,a.label_id LIMIT ${FETCH_ROWS()}`,
+    sessions: `SELECT session_id::text AS key, session_id,subject_id,version_subject_id,mode,unit,total::text,
     amount::text,additional_measures,locator,position::text,completed_unit_count,state,revision,library_profile_pin,
     started_at::text,completed_at::text,last_changed_at::text
     FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2 AND session_id > $3::uuid
-    ORDER BY session_id LIMIT ${FETCH_ROWS}`,
-  holdings: `SELECT copy_id::text AS key,copy_id,subject_id,kind,status,library_profile_pin,kind_profile_pin,
+    ORDER BY session_id LIMIT ${FETCH_ROWS()}`,
+    holdings: `SELECT copy_id::text AS key,copy_id,subject_id,kind,status,library_profile_pin,kind_profile_pin,
     status_profile_pin,location,source,acquired_on::text,disposed_on::text,note,revision,created_at::text,updated_at::text
     FROM library.copy WHERE route=$1 AND account_id=$2 AND deletion_id IS NULL AND copy_id > $3::uuid
-    ORDER BY copy_id LIMIT ${FETCH_ROWS}`,
-  collections: `SELECT c.collection_id::text AS key,c.collection_id,c.title,c.description,c.visibility,
+    ORDER BY copy_id LIMIT ${FETCH_ROWS()}`,
+    collections: `SELECT c.collection_id::text AS key,c.collection_id,c.title,c.description,c.visibility,
     c.revision,c.membership_kind,c.builtin_kind,c.builtin_release_digest,c.builtin_profile_id,c.builtin_state_set_id,
     c.builtin_state_id,c.presentation_kind,c.rule_filter,c.rule_sort,c.rule_release_digest,c.rule_revision::text,
     c.created_at::text,c.updated_at::text
     FROM library.collection c
     WHERE c.route=$1 AND c.curator_account_id=$2 AND c.state='active' AND c.collection_id > $3::uuid
-    ORDER BY c.collection_id LIMIT ${FETCH_ROWS}`,
-  collectionPins: `SELECT account_id::text AS key,collection_ids,revision::text FROM library.collection_pins
+    ORDER BY c.collection_id LIMIT ${FETCH_ROWS()}`,
+    collectionPins: `SELECT account_id::text AS key,collection_ids,revision::text FROM library.collection_pins
     WHERE route=$1 AND account_id=$2 AND account_id>$3::uuid ORDER BY account_id LIMIT 1`,
-  bangumiUploads: `SELECT upload_id::text AS key,upload_id,cancelled FROM library.bangumi_upload
+    bangumiUploads: `SELECT upload_id::text AS key,upload_id,cancelled FROM library.bangumi_upload
     WHERE route=$1 AND account_id=$2 AND expires_at>clock_timestamp() AND upload_id>$3::uuid
-    ORDER BY upload_id LIMIT ${FETCH_ROWS}`,
-  bangumiEvidence: `SELECT upload_id::text||'/'||ordinal::text AS key,upload_id,ordinal,evidence
+    ORDER BY upload_id LIMIT ${FETCH_ROWS()}`,
+    bangumiEvidence: `SELECT upload_id::text||'/'||ordinal::text AS key,upload_id,ordinal,evidence
     FROM library.bangumi_upload_row r WHERE r.route=$1 AND r.account_id=$2
       AND EXISTS (SELECT 1 FROM library.bangumi_upload u WHERE u.route=r.route AND u.account_id=r.account_id
         AND u.upload_id=r.upload_id AND u.expires_at>clock_timestamp())
       AND (r.upload_id,r.ordinal)>(split_part($3,'/',1)::uuid,split_part($3,'/',2)::integer)
-    ORDER BY r.upload_id,r.ordinal LIMIT ${FETCH_ROWS}`,
-  malImports: `SELECT id::text AS key,id AS upload_id,(document->>'canceled')::boolean AS cancelled,expires_at::text
+    ORDER BY r.upload_id,r.ordinal LIMIT ${FETCH_ROWS()}`,
+    malImports: `SELECT id::text AS key,id AS upload_id,(document->>'canceled')::boolean AS cancelled,expires_at::text
     FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
-      AND id>$3::uuid ORDER BY id LIMIT ${FETCH_ROWS}`,
-  vndbUploads: `SELECT upload_id::text AS key,upload_id,state,expires_at::text
+      AND id>$3::uuid ORDER BY id LIMIT ${FETCH_ROWS()}`,
+    vndbUploads: `SELECT upload_id::text AS key,upload_id,state,expires_at::text
     FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
-      AND upload_id>$3::uuid ORDER BY upload_id LIMIT ${FETCH_ROWS}`,
-  anilistUploads: `SELECT import_id::text AS key,import_id AS upload_id,export_score_format AS score_format,
+      AND upload_id>$3::uuid ORDER BY upload_id LIMIT ${FETCH_ROWS()}`,
+    anilistUploads: `SELECT import_id::text AS key,import_id AS upload_id,export_score_format AS score_format,
     export_cancelled AS cancelled,export_count AS row_count
     FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND ordinal=-1
-      AND import_id>$3::uuid ORDER BY import_id LIMIT ${FETCH_ROWS}`,
-  annotations: `SELECT f.subject_id::text AS key,f.account_id::text AS "accountId",f.subject_id::text AS "subjectId",
+      AND import_id>$3::uuid ORDER BY import_id LIMIT ${FETCH_ROWS()}`,
+    annotations: `SELECT f.subject_id::text AS key,f.account_id::text AS "accountId",f.subject_id::text AS "subjectId",
     f.annotation_revision AS "annotationRevision",f.note,f.priority,
     CASE WHEN f.annotation_updated_at IS NULL THEN NULL ELSE
       to_char(f.annotation_updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END AS "annotationUpdatedAt"
     FROM library.entry_personal_fact f
     WHERE f.route=$1 AND f.account_id=$2 AND f.annotation_revision>0 AND f.subject_id>$3::uuid
-    ORDER BY f.subject_id LIMIT ${FETCH_ROWS}`,
-  provenance: `SELECT jsonb_build_array(o.subject_id::text,o.provider,o.record_id)::text AS key,
+    ORDER BY f.subject_id LIMIT ${FETCH_ROWS()}`,
+    provenance: `SELECT jsonb_build_array(o.subject_id::text,o.provider,o.record_id)::text AS key,
     o.account_id::text AS "accountId",o.subject_id::text AS "subjectId",
     jsonb_build_object('provider',o.provider,'recordId',o.record_id,'revision',o.revision,
       'privacy',CASE o.privacy_status
@@ -206,8 +212,8 @@ const queries: Partial<Record<LibraryExportSectionV4, string>> = {
     FROM library.entry_source_observation o
     WHERE o.route=$1 AND o.account_id=$2
       AND (o.subject_id,o.provider,o.record_id)>((($3::jsonb)->>0)::uuid,($3::jsonb)->>1,($3::jsonb)->>2)
-    ORDER BY o.subject_id,o.provider,o.record_id LIMIT ${FETCH_ROWS}`,
-  journals: `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
+    ORDER BY o.subject_id,o.provider,o.record_id LIMIT ${FETCH_ROWS()}`,
+    journals: `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
     p.subject_id::text AS "subjectId",p.version_subject_id::text AS "versionSubjectId",p.state,
     p.revision AS "progressRevision",p.library_profile_pin AS "libraryProfilePin",
     p.started_at::text AS "startedAt",p.completed_at::text AS "completedAt",p.last_changed_at::text AS "lastChangedAt",
@@ -219,9 +225,13 @@ const queries: Partial<Record<LibraryExportSectionV4, string>> = {
       'reflection',p.journal_reflection) AS journal
     FROM library.progress_session p
     WHERE p.route=$1 AND p.account_id=$2 AND p.state<>'retired' AND p.journal_revision>0 AND p.session_id>$3::uuid
-    ORDER BY p.session_id LIMIT ${FETCH_ROWS}`,
-};
-const journalQueryV3 = `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
+    ORDER BY p.session_id LIMIT ${FETCH_ROWS()}`,
+  }));
+}
+function journalQueryV3() {
+  return memoizedValue(
+    journalQueryV3,
+    () => `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
     p.subject_id::text AS "subjectId",p.version_subject_id::text AS "versionSubjectId",p.state,
     p.revision AS "progressRevision",p.library_profile_pin AS "libraryProfilePin",
     p.started_at::text AS "startedAt",p.completed_at::text AS "completedAt",p.last_changed_at::text AS "lastChangedAt",
@@ -235,7 +245,9 @@ const journalQueryV3 = `SELECT p.session_id::text AS key,p.account_id::text AS "
         'units',p.journal_assessment_units)) AS journal
     FROM library.progress_session p
     WHERE p.route=$1 AND p.account_id=$2 AND p.state<>'retired' AND p.journal_revision>0 AND p.session_id>$3::uuid
-    ORDER BY p.session_id LIMIT ${FETCH_ROWS}`;
+    ORDER BY p.session_id LIMIT ${FETCH_ROWS()}`,
+  );
+}
 
 /** The database refuses a single unbounded row before it reaches the driver buffer. */
 async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unknown[], maxRecordBytes: number) {
@@ -249,7 +261,7 @@ async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unk
 }
 
 function v1Direct(section: LibraryExportSectionV4, version: LibraryExportVersion) {
-  return version === 1 ? v1DirectSections.has(section) : Object.hasOwn(queries, section);
+  return version === 1 ? v1DirectSections().has(section) : Object.hasOwn(queries(), section);
 }
 
 export async function readExportSourcePage(
@@ -269,18 +281,18 @@ export async function readExportSourcePage(
   const sections = sectionsForVersion(version);
   const section = sections[seek.section] as LibraryExportSectionV4 | undefined;
   if (!section) throw new TypeError('Invalid library export section cursor');
-  const fetchRows = version === 1 ? LIBRARY_EXPORT_LIMITS.pageRows : FETCH_ROWS;
+  const fetchRows = version === 1 ? LIBRARY_EXPORT_LIMITS.pageRows : FETCH_ROWS();
 
   let rows: { value: SourceRow | null }[];
   if (v1Direct(section, version)) {
     const sourceSql =
       version >= 3 && section === 'journals'
-        ? journalQueryV3
+        ? journalQueryV3()
         : version === 4 && section === 'malImports'
-          ? queries.malImports!.replace("(document->>'canceled')::boolean", 'export_cancelled')
-          : queries[section];
+          ? queries().malImports!.replace("(document->>'canceled')::boolean", 'export_cancelled')
+          : queries()[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
-    const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
+    const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS()}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
       seek.after ||
       (section === 'assignments'

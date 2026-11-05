@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -106,8 +107,12 @@ export type ZoneHistoryConsumerObservation =
       receivingHolds: 'released';
     }>;
 
-const ZONE_RECEIPT_KIND_SET = new Set<string>(ZONE_HISTORY_RECEIPT_KINDS);
-const ZONE_EVENT_TYPE_SET = new Set<string>(ZONE_HISTORY_EVENT_TYPES);
+function ZONE_RECEIPT_KIND_SET() {
+  return memoizedValue(ZONE_RECEIPT_KIND_SET, () => new Set<string>(ZONE_HISTORY_RECEIPT_KINDS));
+}
+function ZONE_EVENT_TYPE_SET() {
+  return memoizedValue(ZONE_EVENT_TYPE_SET, () => new Set<string>(ZONE_HISTORY_EVENT_TYPES));
+}
 
 function sameZoneBinding(a: ZoneHistoryCleanupBinding, b: ZoneHistoryCleanupBinding): boolean {
   return (
@@ -268,7 +273,7 @@ export async function observeZoneHistoryConsumerClosure(
       [artifact.partition, eventLocator.position.toString(), eventLocator.eventSeq],
     )
   ).rows[0];
-  if (!event || !ZONE_EVENT_TYPE_SET.has(event.type)) return pending('zone-history-event-inventory-unavailable');
+  if (!event || !ZONE_EVENT_TYPE_SET().has(event.type)) return pending('zone-history-event-inventory-unavailable');
   const classification = classifyEvent(event.type);
   if (classification.kind !== 'non-personal') throw new TypeError('Zone base event classification changed');
   if (
@@ -304,7 +309,7 @@ export async function observeZoneHistoryConsumerClosure(
 async function isZoneHistoryArtifact(tx: CommandTransaction, artifact: HistoryArtifact): Promise<boolean> {
   if (artifact.locator.artifactType === 'command-receipt/v1') {
     const kind = commandHistoryKind(artifact.locator.commandKindId);
-    return kind !== undefined && ZONE_RECEIPT_KIND_SET.has(kind);
+    return kind !== undefined && ZONE_RECEIPT_KIND_SET().has(kind);
   }
   if (artifact.locator.artifactType === 'outbox-event/v1') {
     const event = (
@@ -313,7 +318,7 @@ async function isZoneHistoryArtifact(tx: CommandTransaction, artifact: HistoryAr
         [artifact.partition, artifact.locator.position.toString(), artifact.locator.eventSeq],
       )
     ).rows[0];
-    return event !== undefined && ZONE_EVENT_TYPE_SET.has(event.type);
+    return event !== undefined && ZONE_EVENT_TYPE_SET().has(event.type);
   }
   return false;
 }
@@ -569,8 +574,12 @@ export async function historyReceivingGap(
     if (!artifact) return 'outbox-receiving-custody-unavailable';
     {
       const { reserveIdentityHistoryWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
-      const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-        await import('./agent-identity-sdk-fence.ts');
+      const {
+        AGENT_IDENTITY_HISTORY_GUARD_COST: AGENT_IDENTITY_HISTORY_GUARD_COSTGetter,
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST: AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter,
+      } = await import('./agent-identity-sdk-fence.ts');
+      const AGENT_IDENTITY_HISTORY_GUARD_COST = AGENT_IDENTITY_HISTORY_GUARD_COSTGetter();
+      const AGENT_IDENTITY_HISTORY_ABSENCE_COST = AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter();
       await reserveIdentityHistoryWork(
         resources.pool,
         addNativeWork(
@@ -720,8 +729,12 @@ export async function readHistoryReceivingReceipt(
   const fixedBarrier = Object.freeze({ ...barrier });
   const { reserveIdentityHistoryWork, nativeWork, addNativeWork, IDENTITY_HISTORY_COMMAND_CONTROL } =
     await import('./agent-identity-inventory-work.ts');
-  const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-    await import('./agent-identity-sdk-fence.ts');
+  const {
+    AGENT_IDENTITY_HISTORY_GUARD_COST: AGENT_IDENTITY_HISTORY_GUARD_COSTGetter,
+    AGENT_IDENTITY_HISTORY_ABSENCE_COST: AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter,
+  } = await import('./agent-identity-sdk-fence.ts');
+  const AGENT_IDENTITY_HISTORY_GUARD_COST = AGENT_IDENTITY_HISTORY_GUARD_COSTGetter();
+  const AGENT_IDENTITY_HISTORY_ABSENCE_COST = AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter();
   await reserveIdentityHistoryWork(
     deps.pool,
     addNativeWork(
@@ -777,8 +790,12 @@ export async function verifyHistoryReceivingReceipt(
   if (artifact.locator.artifactType === 'durable-work/v1') {
     const { pool, deadline } = currentCommandResources(tx);
     const { reserveIdentityHistoryWork, addNativeWork } = await import('./agent-identity-inventory-work.ts');
-    const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-      await import('./agent-identity-sdk-fence.ts');
+    const {
+      AGENT_IDENTITY_HISTORY_GUARD_COST: AGENT_IDENTITY_HISTORY_GUARD_COSTGetter,
+      AGENT_IDENTITY_HISTORY_ABSENCE_COST: AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter,
+    } = await import('./agent-identity-sdk-fence.ts');
+    const AGENT_IDENTITY_HISTORY_GUARD_COST = AGENT_IDENTITY_HISTORY_GUARD_COSTGetter();
+    const AGENT_IDENTITY_HISTORY_ABSENCE_COST = AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter();
     await reserveIdentityHistoryWork(
       pool,
       addNativeWork(
@@ -891,8 +908,13 @@ async function recordIdentityReceivingProof(
   const { currentAgentIdentityHistoryUnit, assertAgentIdentityHistoryUnit } =
     await import('./agent-identity-retirement.ts');
   const { currentCommandResources } = await import('../command/command.ts');
-  const { lockRecordedAgentIdentityHistory, AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-    await import('./agent-identity-sdk-fence.ts');
+  const {
+    lockRecordedAgentIdentityHistory,
+    AGENT_IDENTITY_HISTORY_GUARD_COST: AGENT_IDENTITY_HISTORY_GUARD_COSTGetter,
+    AGENT_IDENTITY_HISTORY_ABSENCE_COST: AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter,
+  } = await import('./agent-identity-sdk-fence.ts');
+  const AGENT_IDENTITY_HISTORY_GUARD_COST = AGENT_IDENTITY_HISTORY_GUARD_COSTGetter();
+  const AGENT_IDENTITY_HISTORY_ABSENCE_COST = AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter();
   const { reserveIdentityHistoryWork, addNativeWork, HISTORY_RECEIVING_INVALIDATION } =
     await import('./agent-identity-inventory-work.ts');
   const unit = currentAgentIdentityHistoryUnit();

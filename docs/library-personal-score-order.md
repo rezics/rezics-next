@@ -18,12 +18,14 @@ state/revision from `rating.question` and its lifecycle row. The question is sel
 must use this descriptor; no hardcoded display scale is introduced. This shared question reader is exported from
 `rating/personal-score.ts` for the independent viewer-facts consumer.
 
-The default public personal-score read currently returns `503 dependency_unavailable`: Content's exact owner-wide
-identity fence is not installed. No empty page, inferred currentness or viewer-facts response substitutes for it.
-The internal native page/index producer is implemented; this does not claim a usable public score journey yet.
-Web A05/A06 retain their existing interface owner and must show this unavailable state until native composition
-binds `KernelDependencies.shelves.scoreCurrentness`. The existing kernel declaration producer now describes the new query literal, entry score, question descriptor and preparation route. Declaration emission remains deferred because the unchanged base
-`community/member-page-select.sql` fails the compiler with duplicate Reylo parameters.
+Content binds `KernelDependencies.shelves.scoreCurrentness` through `readPersonalScoreCurrentness`. The fence reads
+`rating.identity_work_frame` and `rating.voter_state` in the caller's RR snapshot and never infers currentness from
+vote rows. An active identity-repair frame is pending; ineligible voter standing is unavailable; otherwise the version
+is the joined question, frame and standing identity. Pending or unavailable results remain `503`, never a successful
+page or a treated-as-success `atomic_guard_unavailable`. Installation status from
+`POST /v1/libraryShelfScorePreparation` describes the access path only. Web requests the native score order, maps 503
+preparation versus currentness separately, and shows own units from `personalScore` plus `scoreQuestion` or the
+independent viewer-facts overlay. Content remains the sole guarded vote writer.
 
 ## Stable keysets and currentness
 
@@ -115,3 +117,6 @@ Research inspected: `legacy-final:apps/web/features/library/state.ts`; pinned Bo
 `bookwyrm/views/shelf/shelf.py` (owner rating and server sorting); pinned Bangumi
 `internal/collections/infra/mysql_repo.go` (owner-specific collection rating). Preserve server ordering and the
 highest-score initial direction; do not import those architectures or their public/default privacy assumptions.
+
+Acceptance is the seeded native and browser walk in `apps/web/tests/native/library-personal-score.host.test.ts`.
+Bound declarations read canonical Source cost leaves so Kernel can boot through the Collection Source import cycle.

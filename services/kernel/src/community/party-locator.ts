@@ -39,7 +39,7 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
     types: [...PARTY_LOCATOR_TYPES],
     async run(event) {
       const type = event.type as (typeof PARTY_LOCATOR_TYPES)[number];
-      if (!PARTY_LOCATOR_TYPES.includes(type) || !Value.Check(COMMUNITY_EVENTS[type], event.data))
+      if (!PARTY_LOCATOR_TYPES.includes(type) || !Value.Check(COMMUNITY_EVENTS()[type], event.data))
         throw new TypeError('Invalid community party locator source');
       const data = event.data as {
         realmId?: string;

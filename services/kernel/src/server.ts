@@ -265,7 +265,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
-    maxRequestBodySize: MAX_HTTP_BODY_LIMIT,
+    maxRequestBodySize: MAX_HTTP_BODY_LIMIT(),
     async fetch(request, transport) {
       let finish!: () => void;
       const active = new Promise<void>((resolve) => (finish = resolve));

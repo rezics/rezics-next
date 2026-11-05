@@ -41,30 +41,37 @@ Unsupported source values may be paired with explicitly chosen Content units, wi
 Source `private`, upload confirmation and state adoption are not vote consent. Notes and provider aggregates are
 never published or imported.
 
-Decision: compose Content's complete `readVoteReview` observation and `putVoteOutcome` conditional writer with the
-existing Library row checkpoint. Review retains the exact version-1 native question/lifecycle, canonical identity,
-identity epochs and counted/original own-vote witness privately; it never constructs a partial guard. The additive
-`scoreNativeGuard` review field and `scorePlan.nativeGuard` choice field stay within the existing JSON caps. Older
-plans without the complete guard remain unavailable and require a deliberate new review. No persisted shape is
-reinterpreted or migrated.
+Decision: compose Content's complete `readVoteReview` result and `putVoteOutcome` conditional writer with the
+existing Library row checkpoint. Review privately retains the exact native guard and the `VoteObservation` captured
+from that same native read, including question revision/meaning/scale, canonical identity, identity epochs and the
+counted/original own-vote witness; it never constructs a partial guard. Confirmation calls `preparePutVote` once with
+the original admission and captured actor, then persists its normalized input, request key and bounded receipt within
+the existing JSON caps. Older plans without a complete prepared command remain unavailable and require a deliberate
+new review; no stored observation is synthesized or refreshed at dispatch.
 
 `score.native.admission = {status: "reviewed", reason: "native_review_observed"}` means complete native operands were
-observed, not that an effect was admitted. A redirect between Library target observation and native review
-returns identity-observation unavailable instead of silently adopting the new canonical target. Confirmed set/clear calls `putVoteOutcome(actor,
-{questionId, targetId, units, guard}, originalKey)`. Current native authorization and exposure precede receipt replay;
-fresh native execution owns all conditional fences. Typed native stale and unavailable reasons pass through the score
-outcome. A selected unperformed score makes the row stale or unsupported even when independent state was applied.
-Unexpected delivery errors propagate with the frozen choice and original key unsettled; review cannot replace it.
-Every new score attempt clears an earlier acknowledgment before delivery, so retry uncertainty cannot be overwritten
-by a refreshed review. Preserve makes no vote attempt. Native zero remains a selected unit.
+observed, not that an effect was admitted. If native review redirects the Library-selected Subject, retain no vote
+guard for that selection and return identity-observation unavailable. The owner must explicitly select the canonical
+Subject and review it again before applying a score. Confirmed set/clear prepares the normalized command once with
+the exact source, match, review, question and native guard operands. Current native authorization and exposure precede
+receipt replay; fresh native execution admits the current source row and checks all conditional fences. Typed native
+stale and unavailable reasons pass through the score outcome. A selected unperformed score makes the row stale or
+unsupported even when independent state was applied. Unexpected delivery errors propagate with the frozen choice,
+actor and key unsettled; review cannot replace them. Every new score attempt clears an earlier acknowledgment before
+an exact retry. Preserve makes no vote attempt. Native zero remains a selected unit.
 
-The installed base producer still returns `atomic_guard_unavailable` for guarded effects. This consumer now calls that
-producer rather than declaring every review unavailable. Supported guarded commits and their positive whole-list
-acceptance remain Content delivery and integration work; unavailable-only execution is not a completed score journey.
-Current readback uses the existing owner Entry and native Rating readers, never the command receipt or retained source.
-The mounted request contract is unchanged; Web must receive the additive reviewed admission and native stale/unavailable
-outcomes through its normal owner handoff. Source expiry, cancellation and evidence removal retain their existing bounds;
-a removed upload does not undo native effects.
+After the seven-day source deadline, a started score with no acknowledgment retains only its bounded native receipt
+for the existing 24-hour recovery window. Receipt reconciliation is read-only and checks current vote authority before
+lookup: no receipt admits no new effect, and a historical receipt is followed by a fresh current Rating readback.
+Source evidence and reviewed operands are not restored. Current readback uses the existing owner Entry and native
+Rating readers, addressed only by the receipt's question and target; receipt outcome values and retained source are
+never readback.
+The mounted request contract is unchanged; Web consumes the existing selected-review, confirmation and current-readback
+caller through its typed route. Source expiry, cancellation and evidence removal retain their existing bounds; a removed
+upload does not undo native effects.
+
+Decision: receipt-only score recovery denies a current actor without `rating:vote` before any historical receipt is
+read, and reads back only the receipt's question and target.
 
 ## Web HTTP contract
 
@@ -125,12 +132,6 @@ checks the current account/client/requester, exact original command identity and
 account erasure uses its existing owner phase to remove the same linkage and never removes acknowledged native facts.
 Examples above are constructed API guidance; focused native test execution is reported separately.
 
-Local verification attempted `bun run --cwd services/kernel typecheck`; it reported, among other diagnostics,
-`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` The focused command
-`bun run --cwd services/kernel check test/library/list-import-bangumi-http.test.ts test/library/library-export-http.test.ts test/library/erasure-owned-graph.test.ts`
-stopped before executing tests at `Schema dump differs from db/library/schema.sql.` The Content-owned schema
-derivation handoff is pending. Frozen acceptance, native64/512/4096 growth, browser and root checks were not run.
-
 ## Web journey
 
 The signed-in page is `/library/import-bangumi`, documented in
@@ -140,8 +141,8 @@ partial results, cancel and discard stay in the mounted visit. JSON, comments an
 or persistent browser storage. A replacement upload deletes the previous native document first. Viewer or CSRF
 replacement retires rendered private state and callbacks. Web binds the installed `libraryImports.bangumi` methods
 and carries the producer's native score review, exact choice, separate consent, outcome and supplied or deliberately
-read current point facts through the routed journey. The producer's `native_review_observed` value is only an observation; a positive
-score result still depends on Content's atomic vote guard and is not claimed by authored fixtures.
+read current point facts through the routed journey. The producer's `native_review_observed` value is only an observation;
+successful set and clear outcomes come from the native guarded writer and include a fresh current Rating readback.
 
 Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
 the explicit UUID submitted to `review.target` is identity. Apply defaults to preserving local facts. Ambiguous match
@@ -175,9 +176,8 @@ Decision: after the seven-day source deadline, keep only bounded Bangumi native 
   requested/canonical slots and published home epochs (at most two homes; witness at most 4096 bytes). The enclosing
   review remains at most 71,680 bytes and the confirmed choice at most 8,192 bytes. Native writer work includes repeated
   Account/scope, question, Subject/currentness and counting-identity admission, own-vote fencing, component/aggregate
-  work, normalized receipt digest and permitted result. Successful guarded write/replay and independent native current
-  readback costs remain unmeasured on this base because the producer's atomic path is unavailable; existing native
-  limits apply and no larger provider cap or scale claim follows from source review.
+  work, normalized receipt digest and permitted result. Each successful guarded write or receipt replay is followed by
+  one current Rating readback. These remain bounded native operations; no source-wide scan or refill is added.
 
 - Expiry/background: one due-index keyset read selects one source-scrub or final-delete stage. At most 100 addressed row
   keys take two account-fenced page commands per stage (99 rows then one row); the scrub stage also updates one root,

@@ -222,7 +222,7 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}, sto
     }
   }, storageFailure);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, urls, responseHeaders: response?.headers() ?? {} };
@@ -248,12 +248,14 @@ afterAll(async () => {
 
 async function startForm(page: Page) {
   const address = page.getByLabel(/email/i);
+  await address.waitFor({ state: 'visible' });
   expect(await address.count(), 'recovery start has a labelled email field').toBe(1);
   return { address, submit: page.getByRole('button', { name: 'Send recovery link', exact: true }) };
 }
 
 async function completeForm(page: Page) {
   const password = page.getByLabel(/new password/i);
+  await password.waitFor({ state: 'visible' });
   expect(await password.count(), 'recovery completion has a labelled new password field').toBe(1);
   return { password, submit: page.getByRole('button', { name: 'Update password', exact: true }) };
 }
@@ -300,7 +302,20 @@ test(
         const alert = page.getByRole('alert');
         await alert.waitFor({ state: 'visible' });
         expect(await alert.innerText()).toMatch(/invalid|expired/i);
-        expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
+        const focused = await page.evaluate(() => {
+          const active = document.activeElement;
+          return active instanceof HTMLElement
+            ? {
+                tag: active.tagName,
+                id: active.id,
+                role: active.getAttribute('role'),
+                text: active.textContent?.trim(),
+              }
+            : null;
+        });
+        expect(await alert.evaluate((element) => element === document.activeElement), JSON.stringify(focused)).toBe(
+          true,
+        );
         expect(await page.getByLabel(/new password/i).count()).toBe(0);
         expect(await page.getByRole('button', { name: 'Update password', exact: true }).count()).toBe(0);
         expect(recoveryCalls('start')).toHaveLength(0);
@@ -416,17 +431,14 @@ test(
         form.submit.click(),
       ]);
       await page.waitForURL(`${origin}/login`);
-      await page.getByRole('status').waitFor({ state: 'visible' });
+      const passwordChanged = page.getByRole('status').filter({ hasText: /password (?:has been )?changed|reset/i });
+      await passwordChanged.waitFor({ state: 'visible' });
 
       expect(
         await page.evaluate(() => (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest),
       ).toBe('');
       expect(page.url()).toBe(`${origin}/login`);
-      await page
-        .getByRole('status')
-        .filter({ hasText: /password (?:has been )?changed|reset/i })
-        .waitFor();
-      expect(await page.getByRole('status').innerText()).toMatch(/password (?:has been )?changed|reset/i);
+      expect(await passwordChanged.innerText()).toMatch(/password (?:has been )?changed|reset/i);
       expect(recoveryCalls('complete')).toHaveLength(1);
       const completion = recoveryCalls('complete')[0]!;
       expect(completion.method).toBe('POST');

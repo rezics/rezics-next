@@ -152,7 +152,8 @@
     },
     "termspacesCommand": "termspaces",
     "devPrelandingTypecheck": false,
-    "devLandingBootCheck": false
+    "devLandingBootCheck": false,
+    "devKernelImport": false
   },
   "codex": {
     "serviceTier": "default",
@@ -181,6 +182,7 @@
       "stoppedTaskLimitMs": 3600000,
       "stoppedTasksPerGoalPerRun": 20,
       "dispatchesPerSweep": 4,
+      "allowanceWaitingBound": 10,
       "settleMs": 10000,
       "refusalBriefs": 4,
       "refusalReasonCharacters": 160,
@@ -202,6 +204,12 @@
       "hourlyReportMaxTimeoutMs": 120000
     },
     "flowHistoryMs": 2592000000,
+    "chain": {
+      "maximumContextTokens": 150000,
+      "maximumTasks": 4,
+      "contextTailBytes": 1048576,
+      "offerWindowMs": 3600000
+    },
     "worker": {
       "capacityPauseMs": 10000,
       "usageLimitRetryPauseMs": 180000,
@@ -337,7 +345,9 @@
       "alertUnusedPercent": 20,
       "alertResetHours": 24,
       "alertEveryMs": 10800000,
-      "burnSpanMs": 5400000
+      "burnSpanMs": 5400000,
+      "nearCeilingPercent": 25,
+      "nearCeilingStarts": 2
     },
     "manager": {
       "sleepAlarmPerHour": 10,
@@ -571,17 +581,19 @@
       "systemdCommandTimeoutMs": 25000
     },
     "prompt": {
-      "workerRoleBytes": 3500,
+      "workerRoleBytes": 10000,
       "conditionBytes": 1500,
       "workerTotalBytes": 20000,
       "managerRoleBytes": 5000,
       "managerOpeningBytes": 30000,
-      "researchRoleBytes": 2500
+      "researchRoleBytes": 9000
     },
     "brief": {
       "bytes": 12288,
       "pathCharacters": 65536,
       "pathMatchStates": 1000000,
+      "minimumEstimateLines": 1200,
+      "maximumBodyCharacters": 4000,
       "sharedPaths": [
         "**/README.md",
         "docs/**",
@@ -687,7 +699,7 @@
       "failureLines": 30,
       "conflictPaths": 10,
       "changedPaths": 10,
-      "residentSamples": 10,
+      "residentSamples": 4,
       "residentSampleMs": 60000,
       "statColumns": 120
     },

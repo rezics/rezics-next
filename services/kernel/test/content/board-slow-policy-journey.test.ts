@@ -180,6 +180,14 @@ test('complete policy journey, fresh pending classification and bounded retained
   expect(ordinary.value.admissionState).toBe('interval');
   expect(ordinary.value.exempt).toBe(false);
   expect((await post('other', threads[1]!.id)).status).toBe(429);
+  const eligibleAt = Date.parse(ordinary.value.nextEligibleAt);
+  expect(Number.isFinite(eligibleAt)).toBe(true);
+  await f.system.clock.setCommandTime(new Date(eligibleAt - 1).toISOString());
+  expect((await post('other', threads[1]!.id)).status).toBe(429);
+  await f.system.clock.setCommandTime(new Date(eligibleAt).toISOString());
+  expect((await post('other', threads[1]!.id)).status).toBe(201);
+  const later = await read('other');
+  expect(Date.parse(later.value.nextEligibleAt)).toBe(eligibleAt + 300_000);
 
   const reservationKey = actorKey(f.system.actors.author.actor.accountId);
   await addActor(reservationKey);

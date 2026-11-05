@@ -8,6 +8,8 @@ import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { libraryCommandReceiptDigest, requireRoute } from './command-support.ts';
 import { entryPersonalAnnotationRequestInput, entryPersonalSourceObservationRequestInput } from './entry-personal.ts';
 import type { EntryImportMetadataConfirmation, EntryImportMetadataReview } from './list-import-entry-metadata.ts';
+import type { BangumiChoice } from './list-import-bangumi-model.ts';
+import type { PreparedPutVote } from '../rating/votes.ts';
 
 export const BANGUMI_RETENTION_SWEEP_WORKFLOW = 'library.bangumiRetentionSweep';
 export const BANGUMI_RETENTION_SCHEDULE = 'library.bangumiRetention.every-10-minutes';
@@ -51,6 +53,17 @@ export async function nextExpiredBangumiUpload(pool: Pool, after: BangumiExpiryC
 
 type MetadataReview = Omit<EntryImportMetadataReview, 'confirmation'> & {
   confirmation?: EntryImportMetadataConfirmation;
+};
+type ExpiringChoice = BangumiChoice & {
+  scorePlan?: { action: 'set' | 'clear'; started?: boolean; command?: PreparedPutVote };
+};
+type ReceiptOnlyChoice = BangumiChoice & {
+  scorePlan: {
+    receiptOnly: true;
+    action: 'set' | 'clear';
+    started: true;
+    receipt: PreparedPutVote['receipt'];
+  };
 };
 
 function minimizeReview(review: Record<string, unknown> | null, accountId: string): Record<string, unknown> | null {
@@ -148,6 +161,27 @@ function minimizeReview(review: Record<string, unknown> | null, accountId: strin
   return { token, metadata };
 }
 
+function minimizeChoice(
+  choice: ExpiringChoice | null,
+  outcome: Record<string, unknown> | null,
+): ReceiptOnlyChoice | null {
+  const plan = choice?.scorePlan;
+  if (!choice || outcome || !plan?.started || !plan.command) return null;
+  return {
+    ordinal: choice.ordinal,
+    reviewToken: choice.reviewToken,
+    state: choice.state,
+    skip: choice.skip,
+    ...(choice.score === undefined ? {} : { score: choice.score }),
+    scorePlan: {
+      receiptOnly: true,
+      action: plan.action,
+      started: true,
+      receipt: plan.command.receipt,
+    },
+  };
+}
+
 /** Scrubs source material at seven days and deletes its bounded receipt linkage one day later. */
 export async function purgeExpiredBangumiUploadPage(
   { pool, clock }: { pool: Pool; clock?: KernelClock },
@@ -188,8 +222,13 @@ export async function purgeExpiredBangumiUploadPage(
           );
           if (!root.rows.length) return { value: { removed: 0, complete: true }, events: [] };
           if (stage === 'source') {
-            const rows = await tx.query<{ ordinal: number; review: Record<string, unknown> | null }>(
-              `SELECT ordinal,review FROM library.bangumi_upload_row
+            const rows = await tx.query<{
+              ordinal: number;
+              review: Record<string, unknown> | null;
+              choice: ExpiringChoice | null;
+              outcome: Record<string, unknown> | null;
+            }>(
+              `SELECT ordinal,review,choice,outcome FROM library.bangumi_upload_row
                WHERE route=$1 AND account_id=$2 AND upload_id=$3 ORDER BY ordinal LIMIT ${PAGE_ROWS}`,
               [route, input.accountId, input.uploadId],
             );
@@ -198,9 +237,10 @@ export async function purgeExpiredBangumiUploadPage(
                 row.review ? { ...row.review, uploadId: input.uploadId, ordinal: row.ordinal } : null,
                 input.accountId,
               );
+              const minimizedChoice = minimizeChoice(row.choice, row.outcome);
               await tx.query(
                 `UPDATE library.bangumi_upload_row SET evidence='{}'::jsonb,review=$5::jsonb,
-                   choice=NULL,outcome=NULL,labels=NULL
+                   choice=$6::jsonb,outcome=NULL,labels=NULL
                  WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
                 [
                   route,
@@ -208,6 +248,7 @@ export async function purgeExpiredBangumiUploadPage(
                   input.uploadId,
                   row.ordinal,
                   minimized === null ? null : JSON.stringify(minimized),
+                  minimizedChoice === null ? null : JSON.stringify(minimizedChoice),
                 ],
               );
             }

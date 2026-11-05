@@ -137,21 +137,23 @@ test('configured reduction preserves unknown possible winners as unavailable wit
 });
 
 test('Kind raw-original input is one nine-axis plan shared by admission, composition and execution', () => {
-  const terms = COLLECTION_KIND_INPUT_TERMS;
-  expect(COLLECTION_KIND_INPUT_DECLARATION.status).toBe('complete');
-  expect([...COLLECTION_KIND_INPUT_DECLARATION.axes]).toEqual([...BOUND_AXES]);
-  expect(COLLECTION_KIND_INPUT_DECLARATION.cost).toEqual(
+  const terms = COLLECTION_KIND_INPUT_TERMS();
+  expect(COLLECTION_KIND_INPUT_DECLARATION().status).toBe('complete');
+  expect([...COLLECTION_KIND_INPUT_DECLARATION().axes]).toEqual([...BOUND_AXES]);
+  expect(COLLECTION_KIND_INPUT_DECLARATION().cost).toEqual(
     sumBounds(terms.admission, terms.state, terms.collisionReads, terms.source, terms.insert, terms.retire),
   );
   expect(terms.collisionReads).toEqual(repeatBound(terms.read, 2));
   expect(terms.source).toEqual(sumBounds(terms.sourceMetadata, terms.sourcePage));
   expect(terms.admission).toEqual(sumBounds(terms.admissionEpisode, terms.admissionSource, terms.custody));
-  expect(terms.custody).toBe(COLLECTION_KIND_PREPARATION_TERMS.custody);
-  expect(COLLECTION_KIND_PREPARATION_OBSERVATION).toEqual(
-    sumBounds(COLLECTION_KIND_PREPARATION_TERMS.scope, COLLECTION_KIND_PREPARATION_TERMS.custody),
+  expect(terms.custody).toBe(COLLECTION_KIND_PREPARATION_TERMS().custody);
+  expect(COLLECTION_KIND_PREPARATION_OBSERVATION()).toEqual(
+    sumBounds(COLLECTION_KIND_PREPARATION_TERMS().scope, COLLECTION_KIND_PREPARATION_TERMS().custody),
   );
-  expect(COLLECTION_KIND_INPUT_DECLARATION.cost.engineRequests).toBe(0);
-  expect(collectionKindInputWork()).toEqual(collectionKindInputWorkDimensions(COLLECTION_KIND_INPUT_DECLARATION.cost));
+  expect(COLLECTION_KIND_INPUT_DECLARATION().cost.engineRequests).toBe(0);
+  expect(collectionKindInputWork()).toEqual(
+    collectionKindInputWorkDimensions(COLLECTION_KIND_INPUT_DECLARATION().cost),
+  );
   expect(COLLECTION_KIND_INPUT_PATHS).toMatchObject({
     quantum: 1,
     rawCeiling: 100,
@@ -165,18 +167,18 @@ test('an exact-limit raw page is not EOF and engineRequests cannot hide SQL work
   expect(COLLECTION_KIND_INPUT_QUANTUM).toBe(1);
   expect(COLLECTION_KIND_INPUT_RAW_LIMIT).toBe(100);
   expect(COLLECTION_KIND_INPUT_BYTE_LIMIT).toBe(4096);
-  expect(COLLECTION_KIND_INPUT_TERMS.sourcePage.candidateKeys).toBe(1);
-  expect(COLLECTION_KIND_INPUT_TERMS.sourcePage.nativeRows).toBeGreaterThan(
-    COLLECTION_KIND_INPUT_TERMS.sourcePage.candidateKeys,
+  expect(COLLECTION_KIND_INPUT_TERMS().sourcePage.candidateKeys).toBe(1);
+  expect(COLLECTION_KIND_INPUT_TERMS().sourcePage.nativeRows).toBeGreaterThan(
+    COLLECTION_KIND_INPUT_TERMS().sourcePage.candidateKeys,
   );
   expect(() =>
-    collectionKindInputWorkDimensions({ ...COLLECTION_KIND_INPUT_DECLARATION.cost, engineRequests: 1 }),
+    collectionKindInputWorkDimensions({ ...COLLECTION_KIND_INPUT_DECLARATION().cost, engineRequests: 1 }),
   ).toThrow('Collection Kind input cannot map engine requests to the native SQL observer');
   const overflow = declareBound({
-    ...COLLECTION_KIND_INPUT_DECLARATION.cost,
+    ...COLLECTION_KIND_INPUT_DECLARATION().cost,
     bytes: Number.MAX_SAFE_INTEGER,
   });
-  expect(() => sumBounds(overflow, COLLECTION_KIND_INPUT_TERMS.state)).toThrow('Bound declaration overflow');
+  expect(() => sumBounds(overflow, COLLECTION_KIND_INPUT_TERMS().state)).toThrow('Bound declaration overflow');
 });
 
 test('a complete encoded envelope over 4096 bytes is refused before dispatch and Type stays unavailable', async () => {

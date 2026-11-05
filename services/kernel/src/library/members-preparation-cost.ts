@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { WorkDimensions } from './collection-source.ts';
 import { OPERATIONAL_WORK_REGISTRATION, OPERATIONAL_WORK_TRANSFER_COST } from '../history/operational-work.ts';
 
@@ -393,12 +394,16 @@ export const MEMBERS_PREPARATION_BRANCH_COST = Object.freeze({
 /** Documented static sum of the Members reservation body and History original/transfer bounds.
  * Core/Access, retries, executor and cleanup remain separate owner declarations. This is not a prepaid parent.
  */
-export const MEMBERS_PREPARATION_RESERVATION_SUBTOTAL = Object.freeze(
-  membersPreparationCost(
-    MEMBERS_PREPARATION_BRANCH_COST.newReservation,
-    OPERATIONAL_WORK_REGISTRATION,
-    OPERATIONAL_WORK_TRANSFER_COST.resolve,
-    OPERATIONAL_WORK_TRANSFER_COST.verify,
-    OPERATIONAL_WORK_TRANSFER_COST.receive,
-  ),
-);
+export function MEMBERS_PREPARATION_RESERVATION_SUBTOTAL() {
+  return memoizedValue(MEMBERS_PREPARATION_RESERVATION_SUBTOTAL, () =>
+    Object.freeze(
+      membersPreparationCost(
+        MEMBERS_PREPARATION_BRANCH_COST.newReservation,
+        OPERATIONAL_WORK_REGISTRATION(),
+        OPERATIONAL_WORK_TRANSFER_COST().resolve,
+        OPERATIONAL_WORK_TRANSFER_COST().verify,
+        OPERATIONAL_WORK_TRANSFER_COST().receive,
+      ),
+    ),
+  );
+}

@@ -1,6 +1,7 @@
+import { memoizedValue } from '../memoized.ts';
+import { declareBound, type Bound } from '@rezics/bounds';
 import { ProblemError } from '../http/problem.ts';
 import {
-  OPERATIONAL_WORK_AXES,
   OPERATIONAL_WORK_COST,
   OPERATIONAL_WORK_REGISTRATION,
   OPERATIONAL_WORK_RECEIVING,
@@ -34,36 +35,28 @@ export const MEMBERS_PREPARATION_CHILDREN = [
 export type MembersPreparationChild = (typeof MEMBERS_PREPARATION_CHILDREN)[number];
 export type MembersPreparationDeclarations = Readonly<Record<MembersPreparationChild, WorkDimensions | null>>;
 
-const history = Object.freeze({
-  historyRegistration: OPERATIONAL_WORK_REGISTRATION,
-  receivingReadback: OPERATIONAL_WORK_RECEIVING,
-  historyResolve: OPERATIONAL_WORK_TRANSFER_COST.resolve,
-  historyVerify: OPERATIONAL_WORK_TRANSFER_COST.verify,
-  historyReplay: OPERATIONAL_WORK_TRANSFER_COST.replay,
-  historyRetirement: OPERATIONAL_WORK_TRANSFER_COST.retirement,
-  executor: OPERATIONAL_WORK_COST.attempt,
-});
-export type MembersPreparationOwnerDeclarations = Omit<MembersPreparationDeclarations, keyof typeof history>;
+function history() {
+  return memoizedValue(history, () =>
+    Object.freeze({
+      historyRegistration: OPERATIONAL_WORK_REGISTRATION(),
+      receivingReadback: OPERATIONAL_WORK_RECEIVING(),
+      historyResolve: OPERATIONAL_WORK_TRANSFER_COST().resolve,
+      historyVerify: OPERATIONAL_WORK_TRANSFER_COST().verify,
+      historyReplay: OPERATIONAL_WORK_TRANSFER_COST().replay,
+      historyRetirement: OPERATIONAL_WORK_TRANSFER_COST().retirement,
+      executor: OPERATIONAL_WORK_COST().attempt,
+    }),
+  );
+}
+export type MembersPreparationOwnerDeclarations = Omit<
+  MembersPreparationDeclarations,
+  keyof ReturnType<typeof history>
+>;
 
-function snapshot(value: WorkDimensions | null): WorkDimensions {
+function snapshot(value: WorkDimensions | Bound | null): Bound {
   if (!value) throw new ProblemError('dependency_unavailable');
-  const declared = { ...value };
-  if (
-    OPERATIONAL_WORK_AXES.some(
-      (axis) => !Object.hasOwn(declared, axis) || !Number.isSafeInteger(declared[axis]) || declared[axis] < 0,
-    )
-  )
-    throw new TypeError('Incomplete Members preparation declaration');
-  return Object.freeze({
-    candidateKeys: declared.candidateKeys,
-    nativeRows: declared.nativeRows,
-    identityMetadataRows: declared.identityMetadataRows,
-    emptySeeks: declared.emptySeeks,
-    nativePoints: declared.nativePoints,
-    witnessKeys: declared.witnessKeys,
-    statements: declared.statements,
-    bytes: declared.bytes,
-  });
+  const engineRequests = 'engineRequests' in value ? value.engineRequests : 0;
+  return declareBound({ ...value, engineRequests });
 }
 
 /** Documented static equation for one complete original. Core/Access, released Source, selected-runtime
@@ -71,19 +64,19 @@ function snapshot(value: WorkDimensions | null): WorkDimensions {
  * repeated History bodies. This describes bounds; it does not allocate dispatch authority.
  */
 export function declareMembersPreparationParent(owners: MembersPreparationOwnerDeclarations): Readonly<{
-  children: Readonly<Record<MembersPreparationChild, WorkDimensions>>;
-  total: WorkDimensions;
+  children: Readonly<Record<MembersPreparationChild, Bound>>;
+  total: Bound;
 }> {
-  const children = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
+  const children = Object.create(null) as Record<MembersPreparationChild, Bound>;
   for (const name of MEMBERS_PREPARATION_CHILDREN) {
-    const declaration = Object.hasOwn(history, name)
-      ? history[name as keyof typeof history]
+    const declaration = Object.hasOwn(history(), name)
+      ? history()[name as keyof ReturnType<typeof history>]
       : Object.hasOwn(owners, name)
         ? owners[name as keyof typeof owners]
         : null;
     children[name] = snapshot(declaration);
   }
   if (children.members.statements > 16) throw new TypeError('Members preparation body exceeds 16 statements');
-  const total = snapshot(sumOperationalWork(...Object.values(children)));
+  const total = snapshot(sumOperationalWork()(...Object.values(children)));
   return Object.freeze({ children: Object.freeze(children), total });
 }

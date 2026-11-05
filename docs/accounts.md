@@ -238,6 +238,11 @@ human's own account, and [better-auth.ts][better-auth] installs no TOTP/backup-c
 `rp.id = rezics.com` with verified user presence/verification; operational details are in
 [Passkeys and credential freshness][auth-passkeys].
 
+Passkey label rename binds the reviewed human account and exact credential ID, changes only the label, and preserves
+sessions and the authentication floor. Its bounded acknowledgement confirms only the submitted label; a deliberate
+current-label read after an uncertain response cannot settle the earlier operation. Human credential retirement must
+retain a password or passkey; an account-owned signing key is not an interactive replacement.
+
 Sensitive operations require fresh authentication from verified session evidence, never caller-provided time.
 The standard step-up contract is `x-step-up` beside `x-action`, with maximum authentication age and acceptable
 methods; failure is HTTP 401 with a Bearer `insufficient_user_authentication` challenge and `max_age`.
@@ -559,6 +564,8 @@ same ID, then activate the account and claim. Credentialless automation skips cr
 pending reservations release their handle, and orphan credentials cannot authenticate without an active Access
 account. See [registration-proof.ts][registration-proof], [lifecycle.ts][lifecycle] and
 [workflows.ts][workflows]; [Durable account workflow host][auth-workflows] explains evidence and retry ordering.
+Auth reads signup requirements and the current viewer after the page mounts through its same-origin POST BFF, so
+the issuer receives the browser Origin and cookie under the existing private-read boundary.
 
 Auth owns its bounded session, verification, key and consent-erasure maintenance in its own process and DBOS
 system schema. Kernel modules share the kernel worker; they do not receive Auth database credentials or a new

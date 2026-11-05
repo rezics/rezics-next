@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { t } from 'elysia';
@@ -40,29 +41,45 @@ export const RealmClaimRequestSchema = t.Object(
   closed,
 );
 
-export const SitemapCanonicalDestinationSchema = t.Union([
-  t.Object({ kind: t.Literal('space'), spaceId: ContentIdSchema, address: t.String() }, closed),
-  t.Object({ kind: t.Literal('realm'), realmId: ContentIdSchema }, closed),
-]);
+export function SitemapCanonicalDestinationSchema() {
+  return memoizedValue(SitemapCanonicalDestinationSchema, () =>
+    t.Union([
+      t.Object({ kind: t.Literal('space'), spaceId: ContentIdSchema, address: t.String() }, closed),
+      t.Object({ kind: t.Literal('realm'), realmId: ContentIdSchema }, closed),
+    ]),
+  );
+}
 
-export const SitemapRealmItemSchema = t.Object(
-  {
-    id: ContentIdSchema,
-    lastModified: t.String({ format: 'date-time' }),
-    canonicalDestination: SitemapCanonicalDestinationSchema,
-  },
-  closed,
-);
-export const SitemapSpaceItemSchema = t.Object(
-  {
-    id: ContentIdSchema,
-    address: t.String(),
-    lastModified: t.String({ format: 'date-time' }),
-  },
-  closed,
-);
-export const SitemapRealmPageSchema = sitemapPageSchema(SitemapRealmItemSchema);
-export const SitemapSpacePageSchema = sitemapPageSchema(SitemapSpaceItemSchema);
+export function SitemapRealmItemSchema() {
+  return memoizedValue(SitemapRealmItemSchema, () =>
+    t.Object(
+      {
+        id: ContentIdSchema,
+        lastModified: t.String({ format: 'date-time' }),
+        canonicalDestination: SitemapCanonicalDestinationSchema(),
+      },
+      closed,
+    ),
+  );
+}
+export function SitemapSpaceItemSchema() {
+  return memoizedValue(SitemapSpaceItemSchema, () =>
+    t.Object(
+      {
+        id: ContentIdSchema,
+        address: t.String(),
+        lastModified: t.String({ format: 'date-time' }),
+      },
+      closed,
+    ),
+  );
+}
+export function SitemapRealmPageSchema() {
+  return memoizedValue(SitemapRealmPageSchema, () => sitemapPageSchema(SitemapRealmItemSchema()));
+}
+export function SitemapSpacePageSchema() {
+  return memoizedValue(SitemapSpacePageSchema, () => sitemapPageSchema(SitemapSpaceItemSchema()));
+}
 
 export const discoveryQuerySchema = t.Object(
   {
@@ -73,25 +90,29 @@ export const discoveryQuerySchema = t.Object(
   closed,
 );
 
-export const discoveryResponseSchema = t.Object(
-  {
-    realms: t.Array(
-      t.Object(
-        {
-          realmId: id,
-          spaceId: id,
-          name: t.String({ minLength: 1, maxLength: 1024 }),
-          description: t.String({ maxLength: 160 }),
-          avatar: t.Union([RealmPresentationImageSchema, t.Null()]),
-        },
-        closed,
-      ),
-      { maxItems: 20 },
+export function discoveryResponseSchema() {
+  return memoizedValue(discoveryResponseSchema, () =>
+    t.Object(
+      {
+        realms: t.Array(
+          t.Object(
+            {
+              realmId: id,
+              spaceId: id,
+              name: t.String({ minLength: 1, maxLength: 1024 }),
+              description: t.String({ maxLength: 160 }),
+              avatar: t.Union([RealmPresentationImageSchema(), t.Null()]),
+            },
+            closed,
+          ),
+          { maxItems: 20 },
+        ),
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
     ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
+  );
+}
 
 export const ownRealmsQuerySchema = t.Object({ cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed);
 
@@ -137,80 +158,84 @@ export const realmViewerActionsSchema = t.Object(
   closed,
 );
 
-export const ownRealmsResponseSchema = t.Object(
-  {
-    items: t.Array(
-      t.Object(
-        {
-          realmId: id,
-          name: t.String({ minLength: 1, maxLength: 1024 }),
-          role: t.Literal('member'),
-          current: t.Object(
+export function ownRealmsResponseSchema() {
+  return memoizedValue(ownRealmsResponseSchema, () =>
+    t.Object(
+      {
+        items: t.Array(
+          t.Object(
             {
-              description: t.String({ maxLength: 4096 }),
-              avatar: t.Union([
-                t.Object(
-                  {
-                    state: t.Literal('available'),
-                    value: RealmPresentationImageSchema,
-                  },
-                  closed,
-                ),
-                t.Object(
-                  {
-                    state: t.Union([t.Literal('none'), t.Literal('unavailable')]),
-                    value: t.Null(),
-                  },
-                  closed,
-                ),
-              ]),
-              banner: t.Union([
-                t.Object(
-                  {
-                    state: t.Literal('available'),
-                    value: RealmPresentationImageSchema,
-                  },
-                  closed,
-                ),
-                t.Object(
-                  {
-                    state: t.Union([t.Literal('none'), t.Literal('unavailable')]),
-                    value: t.Null(),
-                  },
-                  closed,
-                ),
-              ]),
-              destination: t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
-              spaceId: id,
-              viewer: t.Object(
+              realmId: id,
+              name: t.String({ minLength: 1, maxLength: 1024 }),
+              role: t.Literal('member'),
+              current: t.Object(
                 {
-                  readability: t.Literal('allowed'),
-                  membership: t.Object(
+                  description: t.String({ maxLength: 4096 }),
+                  avatar: t.Union([
+                    t.Object(
+                      {
+                        state: t.Literal('available'),
+                        value: RealmPresentationImageSchema(),
+                      },
+                      closed,
+                    ),
+                    t.Object(
+                      {
+                        state: t.Union([t.Literal('none'), t.Literal('unavailable')]),
+                        value: t.Null(),
+                      },
+                      closed,
+                    ),
+                  ]),
+                  banner: t.Union([
+                    t.Object(
+                      {
+                        state: t.Literal('available'),
+                        value: RealmPresentationImageSchema(),
+                      },
+                      closed,
+                    ),
+                    t.Object(
+                      {
+                        state: t.Union([t.Literal('none'), t.Literal('unavailable')]),
+                        value: t.Null(),
+                      },
+                      closed,
+                    ),
+                  ]),
+                  destination: t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
+                  spaceId: id,
+                  viewer: t.Object(
                     {
-                      state: t.Literal('member'),
-                      since: t.String({ format: 'date-time' }),
-                      reservationId: id,
-                      transactionId: id,
+                      readability: t.Literal('allowed'),
+                      membership: t.Object(
+                        {
+                          state: t.Literal('member'),
+                          since: t.String({ format: 'date-time' }),
+                          reservationId: id,
+                          transactionId: id,
+                        },
+                        closed,
+                      ),
+                      participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
                     },
                     closed,
                   ),
-                  participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
+                  actions: realmViewerActionsSchema,
                 },
                 closed,
               ),
-              actions: realmViewerActionsSchema,
             },
             closed,
           ),
-        },
-        closed,
-      ),
-      { maxItems: 20 },
+          { maxItems: 20 },
+        ),
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
     ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
+  );
+}
 
 export const SpaceSchema = t.Object(
   {
@@ -248,28 +273,32 @@ export const RealmVotesSchema = t.Object(
   closed,
 );
 
-export const RealmSchema = t.Object(
-  {
-    realmId: id,
-    spaceId: id,
-    state: t.Literal('active'),
-    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
-    contextId: id,
-    boardSchemeId: t.Union([id, t.Null()]),
-    ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
-    orphanedAt: t.Union([instant, t.Null()]),
-    claimEligibleAt: t.Union([instant, t.Null()]),
-    governanceReadOnly: t.Boolean(),
-    headRevisionId: id,
-    createdAt: instant,
-    creator: id,
-    predecessor: t.Union([id, t.Null()]),
-    title,
-    summary,
-    revisionCreatedAt: instant,
-    author: id,
-    votes: RealmVotesSchema,
-    presentation: RealmPresentationSchema,
-  },
-  closed,
-);
+export function RealmSchema() {
+  return memoizedValue(RealmSchema, () =>
+    t.Object(
+      {
+        realmId: id,
+        spaceId: id,
+        state: t.Literal('active'),
+        visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
+        contextId: id,
+        boardSchemeId: t.Union([id, t.Null()]),
+        ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
+        orphanedAt: t.Union([instant, t.Null()]),
+        claimEligibleAt: t.Union([instant, t.Null()]),
+        governanceReadOnly: t.Boolean(),
+        headRevisionId: id,
+        createdAt: instant,
+        creator: id,
+        predecessor: t.Union([id, t.Null()]),
+        title,
+        summary,
+        revisionCreatedAt: instant,
+        author: id,
+        votes: RealmVotesSchema,
+        presentation: RealmPresentationSchema,
+      },
+      closed,
+    ),
+  );
+}

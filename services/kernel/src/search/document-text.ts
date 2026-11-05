@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { pageDocumentReferences, type PageDocumentReference } from '@rezics/composition';
 import { documentText, serializeDocument } from '@rezics/document';
@@ -5,13 +6,17 @@ import type { DocumentView } from '../content/document-read.ts';
 import { MAX_DOCUMENT_BYTES } from '../content/document.ts';
 
 /** Consumer bounds, chosen before dispatch. The producer must bound bytes before reading a body. */
-export const DOCUMENT_TEXT_COST = Object.freeze({
-  documents: 8,
-  sourceBytesPerDocument: MAX_DOCUMENT_BYTES,
-  textBytesPerSubject: 64 * 1024,
-  serializedBytesPerSubject: 96 * 1024,
-  excerptCodePoints: 240,
-});
+export function DOCUMENT_TEXT_COST() {
+  return memoizedValue(DOCUMENT_TEXT_COST, () =>
+    Object.freeze({
+      documents: 8,
+      sourceBytesPerDocument: MAX_DOCUMENT_BYTES,
+      textBytesPerSubject: 64 * 1024,
+      serializedBytesPerSubject: 96 * 1024,
+      excerptCodePoints: 240,
+    }),
+  );
+}
 export const DOCUMENT_TEXT_RECIPE = 'public-native-text-v1' as const;
 
 type Failure = 'unsupported' | 'preparing' | 'unavailable';
@@ -73,7 +78,7 @@ export function selectDocumentText(
 ): DocumentTextSelection {
   if (!language || language.length > 64 || properties.some((property) => !property || property.length > 256))
     throw new TypeError('Incomplete document text selection');
-  if (properties.length > DOCUMENT_TEXT_COST.documents || new Set(properties).size !== properties.length)
+  if (properties.length > DOCUMENT_TEXT_COST().documents || new Set(properties).size !== properties.length)
     throw new RangeError('Document text properties exceed their bound or repeat');
   const references = pageDocumentReferences(disclosedSubject, properties, language);
   // Freeze our own copies: a caller cannot replace a selected reference during hydration.
@@ -86,7 +91,7 @@ function boundedSelection(selection: DocumentTextSelection): void {
     !uuid.test(selection.subject) ||
     !selection.observation ||
     selection.observation.length > 2048 ||
-    selection.references.length > DOCUMENT_TEXT_COST.documents ||
+    selection.references.length > DOCUMENT_TEXT_COST().documents ||
     selection.references.some(
       (reference) =>
         !uuid.test(reference.candidate) ||
@@ -146,7 +151,7 @@ function extract(
   if (!matches(selection, reference, document) || document.availability !== 'available') return 'unavailable';
   // Blocks may contain media/opaque extensions. No new recipe is inferred from their fallback text.
   if (document.body.profile !== 'text') return 'unsupported';
-  if (Buffer.byteLength(serializeDocument(document.body)) > DOCUMENT_TEXT_COST.sourceBytesPerDocument)
+  if (Buffer.byteLength(serializeDocument(document.body)) > DOCUMENT_TEXT_COST().sourceBytesPerDocument)
     return 'unavailable';
   const value = prefix(documentText(document.body), remaining);
   return Object.freeze({
@@ -170,7 +175,7 @@ export async function projectDocumentText(
   const documents: IndexedDocumentText[] = [];
   const result = (coverage: DocumentTextCoverage): DocumentTextProjection => ({ selection, coverage, documents });
   if (!source) return result('unavailable');
-  let remaining = DOCUMENT_TEXT_COST.textBytesPerSubject;
+  let remaining = DOCUMENT_TEXT_COST().textBytesPerSubject;
   let coverage: DocumentTextCoverage = 'complete';
   const degrade = (status: DocumentTextCoverage) => {
     const rank = { complete: 0, partial: 1, unsupported: 2, preparing: 3, unavailable: 4 };
@@ -186,7 +191,7 @@ export async function projectDocumentText(
       const read = await source.read({
         subject: selection.subject,
         reference,
-        maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument,
+        maxSourceBytes: DOCUMENT_TEXT_COST().sourceBytesPerDocument,
       });
       if (read.status === 'absent') continue;
       if (read.status !== 'public') {
@@ -203,7 +208,7 @@ export async function projectDocumentText(
       if (!extracted.complete) degrade('partial');
     }
     if (!(await source.current(selection))) return { selection, coverage: 'unavailable', documents: [] };
-    if (Buffer.byteLength(JSON.stringify(documents)) > DOCUMENT_TEXT_COST.serializedBytesPerSubject)
+    if (Buffer.byteLength(JSON.stringify(documents)) > DOCUMENT_TEXT_COST().serializedBytesPerSubject)
       return { selection, coverage: 'unavailable', documents: [] };
     return result(coverage);
   } catch {
@@ -228,8 +233,8 @@ export type VerifiedDocumentExcerpt =
 
 function windowValid(text: string, window: DocumentTextWindow): boolean {
   if (
-    text.length > DOCUMENT_TEXT_COST.textBytesPerSubject ||
-    window.text.length > DOCUMENT_TEXT_COST.excerptCodePoints * 2
+    text.length > DOCUMENT_TEXT_COST().textBytesPerSubject ||
+    window.text.length > DOCUMENT_TEXT_COST().excerptCodePoints * 2
   )
     return false;
   const { start, end } = window;
@@ -245,7 +250,7 @@ function windowValid(text: string, window: DocumentTextWindow): boolean {
     !splitsPair(start) &&
     !splitsPair(end) &&
     text.slice(start, end) === window.text &&
-    [...window.text].length <= DOCUMENT_TEXT_COST.excerptCodePoints
+    [...window.text].length <= DOCUMENT_TEXT_COST().excerptCodePoints
   );
 }
 
@@ -273,7 +278,7 @@ export async function verifyDocumentTextWindow(
     const read = await source.read({
       subject: selection.subject,
       reference,
-      maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument,
+      maxSourceBytes: DOCUMENT_TEXT_COST().sourceBytesPerDocument,
     });
     if (read.status !== 'public') return { status: read.status === 'absent' ? 'restart' : 'unavailable' };
     // Reproduce this reference's original prefix budget, not the whole Subject's allowance.

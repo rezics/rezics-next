@@ -137,7 +137,7 @@ export async function readQuestionManagementSource(input: {
   try {
     const body = await boundedBody(response);
     const source: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
-    if (!Value.Check(QuestionManagementResponseSchema, source)) return { state: 'unavailable' };
+    if (!Value.Check(QuestionManagementResponseSchema(), source)) return { state: 'unavailable' };
     const page = source as QuestionManagementPageData;
     if (
       page.realmId !== input.address.realmId ||
@@ -262,7 +262,14 @@ export async function createQuestionManagementClient(input: {
           data.labelRevision === 1 &&
           data.revision === 1 &&
           data.grain === intent.body.grain &&
-          JSON.stringify(data.scale) === JSON.stringify(intent.body.scale) &&
+          data.scale !== null &&
+          typeof data.scale === 'object' &&
+          'min' in data.scale &&
+          data.scale.min === intent.body.scale.min &&
+          'max' in data.scale &&
+          data.scale.max === intent.body.scale.max &&
+          'displayStep' in data.scale &&
+          data.scale.displayStep === intent.body.scale.displayStep &&
           data.lifecycle !== null &&
           typeof data.lifecycle === 'object' &&
           'state' in data.lifecycle &&

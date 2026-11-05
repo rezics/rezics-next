@@ -123,7 +123,7 @@ export function createBoardEffect(pool: Pool): Effect {
       if (!sourceTypes.includes(event.type as (typeof sourceTypes)[number]))
         throw new TypeError('Unsupported board projection source event');
       const type = event.type as (typeof sourceTypes)[number];
-      if (!Value.Check(CONTENT_EVENTS[type], event.data)) throw new TypeError('Invalid content source payload');
+      if (!Value.Check(CONTENT_EVENTS()[type], event.data)) throw new TypeError('Invalid content source payload');
       const data = event.data as ContentEventData<typeof type>;
       const sourceRoute = route(data.threadId);
       const source = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { ProgressPresentation } from './progress-model.ts';
 import { MAX_PROGRESS_MEASURES } from './progress.ts';
@@ -56,58 +57,66 @@ export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
   ),
 );
 
-export const sessionSchema = t.Object(
-  {
-    id,
-    subjectId: id,
-    versionSubjectId: t.Union([id, t.Null()]),
-    mode,
-    unit: libraryStoredVocabularySchema,
-    total: nullableString,
-    amount: nullableString,
-    locator: nullableString,
-    position: nullableString,
-    completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
-    state: t.Union([state, t.Literal('retired')]),
-    revision,
-    startedAt: t.String(),
-    completedAt: nullableString,
-    measures: t.Optional(
-      t.Array(
-        t.Object(
-          {
-            unit: libraryStoredVocabularySchema,
-            amount: nullableString,
-            total: nullableString,
-            presentation: t.Optional(progressPresentationSchema),
-          },
-          closed,
+export function sessionSchema() {
+  return memoizedValue(sessionSchema, () =>
+    t.Object(
+      {
+        id,
+        subjectId: id,
+        versionSubjectId: t.Union([id, t.Null()]),
+        mode,
+        unit: libraryStoredVocabularySchema,
+        total: nullableString,
+        amount: nullableString,
+        locator: nullableString,
+        position: nullableString,
+        completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
+        state: t.Union([state, t.Literal('retired')]),
+        revision,
+        startedAt: t.String(),
+        completedAt: nullableString,
+        measures: t.Optional(
+          t.Array(
+            t.Object(
+              {
+                unit: libraryStoredVocabularySchema,
+                amount: nullableString,
+                total: nullableString,
+                presentation: t.Optional(progressPresentationSchema),
+              },
+              closed,
+            ),
+            { minItems: 2, maxItems: MAX_PROGRESS_MEASURES },
+          ),
         ),
-        { minItems: 2, maxItems: MAX_PROGRESS_MEASURES },
-      ),
+      },
+      closed,
     ),
-  },
-  closed,
-);
+  );
+}
 
 const continueClosed = { additionalProperties: false } as const;
 const continueNullable = t.Union([t.String(), t.Null()]);
 
-export const continuePageSchema = t.Object(
-  {
-    subjects: t.Array(
-      t.Object(
-        {
-          subjectId: t.String({ format: 'uuid' }),
-          state: continueNullable,
-          lastActivityAt: t.String(),
-          activeProgressSession: t.Union([sessionSchema, t.Null()]),
-          subject: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
-        },
-        continueClosed,
-      ),
+export function continuePageSchema() {
+  return memoizedValue(continuePageSchema, () =>
+    t.Object(
+      {
+        subjects: t.Array(
+          t.Object(
+            {
+              subjectId: t.String({ format: 'uuid' }),
+              state: continueNullable,
+              lastActivityAt: t.String(),
+              activeProgressSession: t.Union([sessionSchema(), t.Null()]),
+              subject: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
+            },
+            continueClosed,
+          ),
+        ),
+        next: continueNullable,
+      },
+      continueClosed,
     ),
-    next: continueNullable,
-  },
-  continueClosed,
-);
+  );
+}

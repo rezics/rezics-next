@@ -66,6 +66,8 @@ test('plugin overflow and invalid configured fields never publish partial option
   const options = await nativeOptions();
   for (const override of [
     { timeout: 0 },
+    { rp: { id: 'evil.test', name: 'REZICS' } },
+    { rp: { id: 'rezics.com', name: 'Other' } },
     { user: { id: 'id', name: 'x'.repeat(1025), displayName: 'a' } },
     { authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' } },
     { extensions: { credProps: true, unknown: true } },

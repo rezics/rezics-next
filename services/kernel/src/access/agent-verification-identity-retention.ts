@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { WorkContext } from '../work/registry.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -358,7 +359,9 @@ export async function verifyTechnicalSource(
 
 export type { AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 export type AgentIdentitySourceRole = 'account_id' | 'requested_by' | 'decided_by';
-export const MAX_AGENT_IDENTITY_RETENTION_KEYS = MAX_AGENT_IDENTITY_SOURCE_KEYS;
+export function MAX_AGENT_IDENTITY_RETENTION_KEYS() {
+  return memoizedValue(MAX_AGENT_IDENTITY_RETENTION_KEYS, () => MAX_AGENT_IDENTITY_SOURCE_KEYS);
+}
 
 /** A pending consumer branch, never a declaration that the installed owner is a stub.
  * Only the original Source read and same-command verifier can settle this dependency.
@@ -431,7 +434,7 @@ function validateInput(input: AgentIdentityRetentionInput): number {
     !Number.isFinite(Date.parse(barrier.at)) ||
     !['account_id', 'requested_by', 'decided_by'].includes(role) ||
     keys.length < 1 ||
-    keys.length > MAX_AGENT_IDENTITY_RETENTION_KEYS
+    keys.length > MAX_AGENT_IDENTITY_RETENTION_KEYS()
   )
     throw new TypeError('Invalid native identity retention request');
   const partition = partitionOf(keys[0]!.route);
@@ -608,8 +611,8 @@ async function prepareNativeRetention(
               await reserveIdentityHistoryWork(
                 pool,
                 copy.recoveryInventory.state === 'sealed'
-                  ? AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST
-                  : AGENT_IDENTITY_ROLE_TRANSITION_COST,
+                  ? AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST()
+                  : AGENT_IDENTITY_ROLE_TRANSITION_COST(),
               );
               if (copy.recoveryInventory.state === 'sealed') {
                 const recoveryChanged = await tx.query(
@@ -724,18 +727,28 @@ async function consumerReference(
 // three-copy sentinel, and two successful locator/proof pairs of at most 65+1 rows each.
 // Its 12 SQL statements are the six fixed reads, consumer/copy scans and two locator/proof
 // pairs. Search enrollment is intentionally absent: no current Search owner seam is installed.
-export const AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST = nativeWork(174, 174, 12, 65536);
-export const AGENT_IDENTITY_ROLE_TRANSITION_COST = addNativeWork(
-  nativeWork(460, 460, 50, 180224),
-  AGENT_IDENTITY_HISTORY_GUARD_COST,
-  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-);
-export const AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST = addNativeWork(
-  AGENT_IDENTITY_ROLE_TRANSITION_COST,
-  AGENT_IDENTITY_ROLE_TRANSITION_COST,
-  AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST,
-  AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST,
-);
+export function AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST() {
+  return memoizedValue(AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST, () => nativeWork(174, 174, 12, 65536));
+}
+export function AGENT_IDENTITY_ROLE_TRANSITION_COST() {
+  return memoizedValue(AGENT_IDENTITY_ROLE_TRANSITION_COST, () =>
+    addNativeWork(
+      nativeWork(460, 460, 50, 180224),
+      AGENT_IDENTITY_HISTORY_GUARD_COST(),
+      AGENT_IDENTITY_HISTORY_ABSENCE_COST(),
+    ),
+  );
+}
+export function AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST() {
+  return memoizedValue(AGENT_IDENTITY_ROLE_TRANSITION_RECOVERY_COST, () =>
+    addNativeWork(
+      AGENT_IDENTITY_ROLE_TRANSITION_COST(),
+      AGENT_IDENTITY_ROLE_TRANSITION_COST(),
+      AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST(),
+      AGENT_IDENTITY_RECOVERY_RETENTION_CHECK_COST(),
+    ),
+  );
+}
 
 /** Bounded native role minimizer. Foreign probes release before the final home
  * command. The original Source frame remains live through the guarded COMMIT. */

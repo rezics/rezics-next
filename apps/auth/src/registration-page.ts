@@ -140,7 +140,7 @@ export function parseRegistrationPage(body: unknown, turnstile: TurnstilePageCon
   };
 }
 
-const registrationPageRead = createServerFn({ method: 'GET' }).handler(async (): Promise<RegistrationPage> => {
+const registrationPageRead = createServerFn({ method: 'POST' }).handler(async (): Promise<RegistrationPage> => {
   let turnstile: TurnstilePageConfig = { siteKey: '', scriptUrl: '' };
   try {
     turnstile = await readTurnstileConfig();

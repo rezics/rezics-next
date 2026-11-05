@@ -1,3 +1,2 @@
-// Literal-only leaf: bound declarations read this during module initialization, inside import cycles through
-// command-support.ts.
+// Literal-only leaf shared by command execution and its bound declarations.
 export const WORK_STEP_DEADLINE_MS = 5_000;

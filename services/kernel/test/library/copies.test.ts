@@ -565,8 +565,8 @@ test("a subject filter lists only the account's copies of that subject in creati
 });
 
 test('events are closed, ID-only, and use the account as their subject in its partition', async () => {
-  const updated = EVENT_TYPES[updatedEvent];
-  const deleted = EVENT_TYPES[deletedEvent];
+  const updated = EVENT_TYPES()[updatedEvent];
+  const deleted = EVENT_TYPES()[deletedEvent];
   expect(Value.Check(updated, { copyId: newId(route) })).toBe(true);
   expect(Value.Check(deleted, { copyId: newId(route) })).toBe(true);
   expect(Value.Check(updated, { copyId: newId(route), note: 'Shelf' })).toBe(false);

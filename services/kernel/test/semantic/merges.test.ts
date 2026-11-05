@@ -12,6 +12,7 @@ import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -54,6 +55,7 @@ const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
 });
@@ -348,7 +350,7 @@ test('the kernel contract documents merges and redirects', () => {
   const operation = paths['/v1/subjects:merge']!.post!;
   expect(operation.operationId).toBe('subject.merge');
   expect(Object.keys(operation.responses!).sort()).toEqual(['202', '400', '401', '403', '404', '409', '422', '503']);
-  expect(paths['/v1/subjectIdentityOperations/{id}']!.get!.operationId).toBe('subjectIdentityOperation.get');
+  expect(paths['/v1/subjectIdentityOperations/{id}']!.get!.operationId).toBe('subject_identity_operation.get');
   for (const path of ['/v1/subjects/{id}', '/v1/subjects/{id}/links']) {
     expect([path, Object.keys(paths[path]!.get!.responses!)]).toEqual([path, expect.arrayContaining(['308'])]);
   }

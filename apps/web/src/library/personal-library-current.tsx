@@ -14,11 +14,13 @@ import {
   personalLibraryAddress,
   samePersonalLibraryAddress,
   preparePersonalLibraryTitle,
+  preparePersonalLibraryScore,
   readPersonalLibraryCurrent,
   readPersonalLibraryContinue,
   type PersonalLibraryCurrentRead,
   type PersonalLibraryAddress,
   type ShelfTitlePreparationReceipt,
+  type ShelfScorePreparationReceipt,
 } from './personal-library-server';
 import type { ShelfDisplay, ShelfSearch } from './shelf-params';
 import type { ShelfPresentationResolution } from './shelf-preferences';
@@ -481,6 +483,16 @@ function PersonalLibraryRead({
     },
     [address, input, isCurrent, subject],
   );
+  const prepareScore = useCallback(
+    async (key: string): Promise<ShelfScorePreparationReceipt> => {
+      if (!isCurrent()) throw new CancelledError({ silent: true, revert: true });
+      const result = await preparePersonalLibraryScore({ data: { search: input, key } });
+      if (!isCurrent() || result.sessionSubject !== subject || !samePersonalLibraryAddress(result.requested, address))
+        throw new CancelledError({ silent: true, revert: true });
+      return result.preparation;
+    },
+    [address, input, isCurrent, subject],
+  );
   const refreshTitle = useCallback(async () => {
     if (isCurrent()) await query.refetch();
   }, [isCurrent, query.refetch]);
@@ -533,6 +545,7 @@ function PersonalLibraryRead({
           continueScope={JSON.stringify([address, continueEpoch, readGeneration])}
           isCurrent={isCurrent}
           titlePreparation={{ prepare: prepareTitle, refresh: refreshTitle }}
+          scorePreparation={{ prepare: prepareScore, refresh: refreshTitle }}
           originatingLease={mutationLease}
         />
       </PersonalShelfOrigin.Provider>

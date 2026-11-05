@@ -149,7 +149,7 @@ function draftFrom(shelf: ShelfPreferences): ShelfDraft {
       const order = libraryOrderFromShelf(stored);
       return [
         tab,
-        order && order.orderBy !== 'personalScore'
+        order
           ? `${shelfOrderFromLibrary(order).field}:${order.direction}`
           : stored
             ? `unsupported:${stored.field}`
@@ -355,7 +355,9 @@ function shelfReadSummary(shelf: ShelfPreferences) {
 }
 
 function executableSorts(supported: ShelfAdvice['supported'] | undefined) {
-  return (['last_activity', 'added', 'finished'] as const).filter((field) => supported?.sortFields.includes(field));
+  return (['last_activity', 'added', 'finished', 'rating'] as const).filter((field) =>
+    supported?.sortFields.includes(field),
+  );
 }
 
 function choiceAdmitted(
@@ -462,7 +464,6 @@ export class ShelfPreferenceDraftRecovery {
     this.owner.canWrite() &&
     this.state.phase === 'uncertain' &&
     this.state.pending !== null &&
-    this.state.current &&
     this.owner.version() <= this.state.known.version &&
     ownerMayChangeShelf(this.state.advice) &&
     !this.state.readBusy &&
@@ -569,12 +570,7 @@ export class ShelfPreferenceDraftRecovery {
         writeResponse: shelfResponse(reason, result.failure),
         writeBusy: false,
         current: false,
-        advice:
-          result.reason === 'forbidden'
-            ? deniedShelfUpdate(this.state.advice)
-            : result.reason === 'conflict'
-              ? undefined
-              : this.state.advice,
+        advice: result.reason === 'forbidden' ? deniedShelfUpdate(this.state.advice) : this.state.advice,
       });
       return;
     }
@@ -665,7 +661,6 @@ export class ShelfPreferenceDraftRecovery {
       this.update({
         phase: 'conflict',
         current: false,
-        advice: undefined,
       });
       return;
     }
@@ -896,6 +891,8 @@ function tabLabel(tab: ShelfPreferenceTab): string {
 }
 
 function sortLabel(field: string, direction: 'asc' | 'desc') {
+  if (field === 'rating')
+    return `${m.library_score_order()} · ${direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`;
   const fieldLabel =
     field === 'last_activity'
       ? m.library_sort_activity()

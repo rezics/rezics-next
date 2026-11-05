@@ -1754,14 +1754,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               await connection.query(
                 `SELECT
               EXISTS(SELECT 1 FROM account WHERE "userId"=$1 AND "providerId"='credential' AND password IS NOT NULL AND $2 <> 'remove-password')
-              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND $2 <> 'remove-passkey' AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1)
-              OR EXISTS(SELECT 1 FROM passkey WHERE "userId"=$1 AND ($2 <> 'remove-passkey' OR id<>$4) LIMIT 1) AS allowed`,
-                [
-                  subject.accountId,
-                  b.purpose,
-                  stage.credential.kind === 'key' ? stage.credential.kid : '',
-                  stage.credential.kind === 'passkey' ? stage.credential.id : '',
-                ],
+              OR EXISTS(SELECT 1 FROM passkey WHERE "userId"=$1 AND ($2 <> 'remove-passkey' OR id<>$3) LIMIT 1) AS allowed`,
+                [subject.accountId, b.purpose, stage.credential.kind === 'passkey' ? stage.credential.id : ''],
               )
             ).rows[0];
             if (!remaining.allowed) throw new Denied(409);
@@ -2109,13 +2103,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     async handler(request) {
       const url = new URL(request.url);
       const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
+      const consentRead = request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname);
       const identityRead = url.pathname === '/account-identity';
       const signInPageRead = url.pathname === '/signin/page';
       const recoveryPageRead = url.pathname === '/recovery/page';
       const securityRead = url.pathname === '/security-page';
       const respond = (data: unknown, status = 200) => {
         const response = json(data, status);
-        if (inventoryRead || identityRead || signInPageRead || recoveryPageRead || securityRead)
+        if (inventoryRead || consentRead || identityRead || signInPageRead || recoveryPageRead || securityRead)
           response.headers.set('cache-control', 'private, no-store');
         return response;
       };
@@ -2123,7 +2118,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       try {
         const protocol = await website.handler(request);
         if (protocol) return protocol;
-        if (url.origin !== options.issuer || (url.search && !inventoryRead)) throw new Denied(400);
+        if (url.origin !== options.issuer || (url.search && !inventoryRead && !consentRead)) throw new Denied(400);
         if (identityRead) {
           if (
             request.method !== 'POST' ||
@@ -2219,7 +2214,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           );
           return json({ passkeys: result.rows.map(securityPasskey) });
         }
-        if (request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname)) {
+        if (consentRead) {
           const human = await humanProof(request.headers);
           let clientId: string;
           try {
@@ -2316,6 +2311,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             '/passkeys/register/options',
             '/passkeys/register',
             '/passkeys/remove',
+            '/passkeys/rename',
             '/recovery/start',
             '/recovery/complete',
             '/token',
@@ -2340,6 +2336,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           '/passkeys/register/options': '/sign-in/email',
           '/passkeys/register': '/sign-in/email',
           '/passkeys/remove': '/sign-in/email',
+          '/passkeys/rename': '/sign-in/email',
           '/recovery/start': '/request-password-reset',
           '/recovery/complete': '/reset-password',
         }[url.pathname];
@@ -2619,6 +2616,23 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             ),
           );
           return await replacePreviousSession(previous, response);
+        }
+        if (url.pathname === '/passkeys/rename') {
+          fields(body, ['id', 'name', 'reviewed_account_id']);
+          const id = text(body.id);
+          const name = text(body.name).trim();
+          if (!name || name.length > securityResponseLimits.passkeyName) throw new Denied(400);
+          const human = await humanProof(request.headers);
+          if (human.account_id !== text(body.reviewed_account_id)) throw new Denied(409);
+          freshCredentialProof(human, human.account_id);
+          // A label is not a new credential: retain its key material and epoch.
+          // The row CAS still invalidates any older prepared credential change.
+          const updated = await database.query(
+            'UPDATE passkey SET name=$3 WHERE id=$1 AND "userId"=$2 RETURNING id,name',
+            [id, human.account_id, name],
+          );
+          if (!updated.rowCount) throw new Denied(404);
+          return json({ id, name });
         }
         if (url.pathname === '/passkeys/register' || url.pathname === '/passkeys/remove') {
           const registering = url.pathname === '/passkeys/register';
@@ -2929,8 +2943,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               outcome.accountId,
               clientId,
               outcome.sessionId,
+              outcome.revision,
+              outcome.previousScopes,
+              outcome.pendingReference,
               granted,
             ])}`;
+            let staleReview = false;
             const changed = await kindConsent.writer.change({
               transitionKey,
               kind: 'consent',
@@ -2952,9 +2970,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 if (
                   (current?.revision ?? '0') !== outcome.revision ||
                   JSON.stringify(current?.scopes ?? []) !== JSON.stringify(outcome.previousScopes) ||
-                  current?.pending_reference !== outcome.pendingReference
-                )
+                  (current?.pending_reference ?? null) !== outcome.pendingReference
+                ) {
+                  staleReview = true;
                   return;
+                }
                 await connection.query(
                   `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
                    ON CONFLICT (account_id,client_id) DO UPDATE
@@ -2964,11 +2984,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               },
             });
             if (changed.status !== 'applied') throw new Denied(503);
+            if (staleReview) throw new Denied(409);
           }
           if (outcome?.kind === 'reduction') {
             // Both issuance context and every Auth connection/client lock have
             // ended. Access's verifier may borrow the very same max=1 pool.
             const { proof } = outcome;
+            let staleReview = false;
             const changed = await kindConsent.writer.change({
               transitionKey: `kind-consent:reduction:${proof.operationKey}`,
               kind: 'consent',
@@ -2991,8 +3013,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   current.revision !== outcome.revision ||
                   JSON.stringify(current.scopes) !== JSON.stringify(outcome.previousScopes) ||
                   (current.pending_reference !== null && current.pending_reference !== proof.reference)
-                )
+                ) {
+                  staleReview = true;
                   return;
+                }
                 await connection.query(
                   'UPDATE auth_consent SET pending_scopes=$3,pending_reference=$4 WHERE account_id=$1 AND client_id=$2',
                   [proof.accountId, clientId, granted, proof.reference],
@@ -3000,6 +3024,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               },
             });
             if (changed.status !== 'applied') throw new Denied(503);
+            if (staleReview) throw new Denied(409);
             if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
             const receipt = await trustedAccess.invalidateAccount!({
               accountId: proof.accountId,

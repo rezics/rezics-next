@@ -236,6 +236,17 @@ function aggregateBucket(
   return summary;
 }
 
+function backlogReturnsLine(db: Database, bucket: UtcHour, available: boolean): string {
+  if (!available) return 'Backlog returns in bucket: unknown (flow history unavailable).';
+  const row = db
+    .query(
+      `SELECT count(*) AS count FROM flow_events INDEXED BY flow_events_launch_window
+       WHERE stage='dispatch' AND action='returned' AND at >= ? AND at < ?`,
+    )
+    .get(bucket.start, bucket.end) as { count: number };
+  return `Backlog returns in bucket: ${row.count}.`;
+}
+
 function latestUsefulLanding(db: Database, end: string, available: boolean, policy: ReportPolicy): string {
   if (!available) return 'Last useful landing: unknown (timestamped integration history unavailable).';
   const row = db
@@ -526,6 +537,7 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
     `Hourly operations report — ${bucket.start} to ${bucket.end} UTC`,
     ...landed,
     latestUsefulLanding(db, bucket.end, flowAvailable, policy),
+    backlogReturnsLine(db, bucket, flowAvailable),
     flowAvailable
       ? `Worker starts / finishes in bucket: ${bucketSummary.starts} starts (including resumes) / ${bucketSummary.finishes} finished attempts.`
       : 'Worker starts / finishes in bucket: unknown (flow history unavailable).',

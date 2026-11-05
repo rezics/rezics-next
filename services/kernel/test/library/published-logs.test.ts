@@ -242,8 +242,8 @@ test('an owner publishes an immutable snapshot that anyone, including anonymous,
     next: null,
   });
 
-  const updated = EVENT_TYPES[updatedEvent];
-  const deleted = EVENT_TYPES[deletedEvent];
+  const updated = EVENT_TYPES()[updatedEvent];
+  const deleted = EVENT_TYPES()[deletedEvent];
   expect(Value.Check(updated, { logId: published.value.id })).toBe(true);
   expect(Value.Check(updated, { logId: published.value.id, subjectId })).toBe(false);
   expect(Value.Check(deleted, { logId: published.value.id, sessionId: session.id })).toBe(false);

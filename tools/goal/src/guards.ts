@@ -90,6 +90,14 @@ export const GUARDS = {
     repair:
       'Return the first Bun diagnostic and retained log to the original worker session; repair in place and transpile the recomposed candidate before landing. Cost target: <1000ms per typical landing. Measured disposable fixture: 7ms for 7 changed files, 4 executable TypeScript entries and 180 source bytes.',
   },
+  'dev-landing-architecture': {
+    defect:
+      'A final dev candidate introduces a module-boundary violation beyond its captured base, allowing new architecture drift to land.',
+    owner: 'control-plane',
+    since: '2026-11-06',
+    repair:
+      'Return the added architecture violation lines and retained log to the original worker session; repair in place and recheck the recomposed candidate before landing. Cost target: <15000ms per candidate. Measured full base-delta check: 14.6s for 7,433 production files in this worktree; original full check: 10.5s for 6,876 files, no database.',
+  },
   'dev-landing-schema': {
     defect:
       'A changed Kernel migration reached dev without its regenerated schema dump, so the schema preflight rejects the candidate.',
@@ -203,6 +211,7 @@ export type GuardId = keyof typeof GUARDS;
 /** Guards recorded when a dev landing returns a repair to its source owner's session. */
 export const DEV_LANDING_REPAIR_GUARDS = [
   'dev-landing-transpile',
+  'dev-landing-architecture',
   'dev-landing-schema',
   'dev-landing-kernel-import',
 ] as const;

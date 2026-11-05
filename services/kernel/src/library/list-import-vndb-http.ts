@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { VNDB_LIMITS } from './list-import-vndb-parser.ts';
 
@@ -169,36 +170,50 @@ const row = object({
   consumptionDateOutcome: nullable(t.Unknown()),
   fieldsTreatment: object({ state: t.String(), score: t.String(), other: t.String() }),
 });
-export const vndbPreviewSchema = object({
-  uploadId: uuid,
-  rows: count,
-  limits: object(Object.fromEntries(Object.entries(VNDB_LIMITS).map(([key, value]) => [key, t.Literal(value)]))),
-});
-export const vndbPageSchema = object({
-  uploadId: uuid,
-  state: strings('active', 'cancelled'),
-  expiresAt: t.String(),
-  total: count,
-  next: nullable(count),
-  rows: t.Array(row, { maxItems: VNDB_LIMITS.page }),
-});
-export const vndbApplySchema = object({
-  uploadId: uuid,
-  outcomes: t.Array(
-    t.Union([
-      object({ ordinal: count, reviewId: uuid, status: disposition, progress: nullable(progressResult) }),
-      object({
-        ordinal: count,
-        scoreReviewId: uuid,
-        status: strings('applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable'),
-        currentVote: t.Optional(nativeVoteObservation),
-      }),
-    ]),
-    {
-      maxItems: VNDB_LIMITS.page,
-    },
-  ),
-  stopped: nullable(strings('deadline', 'cancelled')),
-});
-export const vndbSourceSchema = object({ xml: t.String({ maxLength: VNDB_LIMITS.bytes }) });
+export function vndbPreviewSchema() {
+  return memoizedValue(vndbPreviewSchema, () =>
+    object({
+      uploadId: uuid,
+      rows: count,
+      limits: object(Object.fromEntries(Object.entries(VNDB_LIMITS).map(([key, value]) => [key, t.Literal(value)]))),
+    }),
+  );
+}
+export function vndbPageSchema() {
+  return memoizedValue(vndbPageSchema, () =>
+    object({
+      uploadId: uuid,
+      state: strings('active', 'cancelled'),
+      expiresAt: t.String(),
+      total: count,
+      next: nullable(count),
+      rows: t.Array(row, { maxItems: VNDB_LIMITS.page }),
+    }),
+  );
+}
+export function vndbApplySchema() {
+  return memoizedValue(vndbApplySchema, () =>
+    object({
+      uploadId: uuid,
+      outcomes: t.Array(
+        t.Union([
+          object({ ordinal: count, reviewId: uuid, status: disposition, progress: nullable(progressResult) }),
+          object({
+            ordinal: count,
+            scoreReviewId: uuid,
+            status: strings('applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable'),
+            currentVote: t.Optional(nativeVoteObservation),
+          }),
+        ]),
+        {
+          maxItems: VNDB_LIMITS.page,
+        },
+      ),
+      stopped: nullable(strings('deadline', 'cancelled')),
+    }),
+  );
+}
+export function vndbSourceSchema() {
+  return memoizedValue(vndbSourceSchema, () => object({ xml: t.String({ maxLength: VNDB_LIMITS.bytes }) }));
+}
 export const vndbRemovalSchema = object({ uploadId: uuid, state: strings('cancelled', 'deleted') });

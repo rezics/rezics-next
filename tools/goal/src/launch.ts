@@ -10,7 +10,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statS
 import { basename, dirname, join } from 'node:path';
 import { retainPoolReadings } from './pacing.ts';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
-import { temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
+import { removeTemporaryDirectory, temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
 import {
   processIdentity,
   terminateProcessGroup,
@@ -28,7 +28,7 @@ import { agentAdapter, cleanAgentEnvironment, type McpServer } from './agents.ts
 import { type LaunchContext } from './launch-context.ts';
 import { storybookServers } from './storybook.ts';
 import { branchHead } from './attempt-progress.ts';
-import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
+import { prepareOwnerDecisionPrompt, writeOwnerDecisionFile } from './owner-decisions.ts';
 import {
   applyRenderedPrompt,
   minimalVerification as promptMinimalVerification,
@@ -79,11 +79,23 @@ export function launchCommand(
   const { resumeSession: _session, ...fresh } = options;
   return adapter.start(fresh);
 }
+/**
+ * Chromium's profile socket lives under the temporary directory, and a Unix socket path is limited to 108 bytes, which a
+ * directory under the worktree exceeds. A worker's temporary directory is therefore short and outside the worktree.
+ */
+export function workerTemporaryDirectory(taskId: string): string {
+  return join('/tmp', `rz-${taskId.slice(0, 8)}`);
+}
+/** The attempt's settlement removes its worker temporary directory; the next launch recreates it. */
+export function releaseWorkerTemporaryDirectory(taskId: string): void {
+  removeTemporaryDirectory(workerTemporaryDirectory(taskId));
+}
 export function workerEnvironment(
   pool: Pool,
   extra: NodeJS.ProcessEnv = {},
   parent: NodeJS.ProcessEnv = process.env,
   worktree?: string,
+  temporaryDirectory?: string,
 ): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
@@ -91,7 +103,7 @@ export function workerEnvironment(
     ...cleanAgentEnvironment(env),
     ...NO_COMPILE_CACHE,
     ...extra,
-    ...(worktree ? temporaryEnvironment(join(worktree, '.temp/worker-tmp')) : {}),
+    ...(temporaryDirectory ? temporaryEnvironment(temporaryDirectory) : {}),
   });
   const wrapperDirectory = worktree && join(worktree, 'scripts', 'check-host');
   if (wrapperDirectory && existsSync(join(wrapperDirectory, 'docker')))
@@ -137,13 +149,16 @@ export function workerPrompt(
 }
 /** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
 export function attemptEnvironment(
-  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun'>>,
+  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun' | 'brief'>>,
   attempt: Pick<Attempt, 'attempt'>,
   stateDirectory?: string,
 ): Record<string, string> {
+  const requires = task.brief?.acceptance.requires ?? [];
   return {
     GOAL_TASK_ID: task.id,
     GOAL_ATTEMPT: String(attempt.attempt),
+    // The brief's acceptance requirements; native or browser admits one bounded local walk stack.
+    ...(requires.length > 0 ? { GOAL_ACCEPTANCE_REQUIRES: requires.join(',') } : {}),
     ...(task.proofRun?.native && task.proofRun.binding.attempt === attempt.attempt
       ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry }
       : {}),
@@ -295,6 +310,7 @@ export async function launch(
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
   const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt, policy);
+  if (ownerDecisionPrompt.file) writeOwnerDecisionFile(task.worktree, ownerDecisionPrompt.file);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
@@ -316,6 +332,7 @@ export async function launch(
     attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))),
     process.env,
     task.worktree,
+    workerTemporaryDirectory(task.id),
   );
   let unrecordedWorker: ProcessIdentity | null = null;
   try {

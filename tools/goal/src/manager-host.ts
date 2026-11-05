@@ -12,6 +12,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { ManagerSessions } from './managers.ts';
 import { defaultPolicy } from './policy.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
+import { currentCodeVersion } from './runtime-version.ts';
 import { startHostHeartbeat } from './service.ts';
 
 /** Socket server, registry, shutdown and periodic host scheduling; CLI dispatch stays in `integration-cli.ts`. */
@@ -220,11 +221,35 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   let stopHeartbeat: (() => void) | undefined;
   let stateTimer: ReturnType<typeof setInterval> | undefined;
   let recoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let codePoll: ReturnType<typeof setInterval> | undefined;
   const recoverOrphans = () => {
     if (!runtime.recoverOrphans) return Promise.resolve();
     // A sweep may wait for adopted workers. Let later timer ticks start their own sweep so
     // newly orphaned tasks and retry intents are considered while those workers are running.
     return runtime.recoverOrphans();
+  };
+  // A host keeps the tools/goal it loaded. Once main publishes another revision it starts no new attempt and stops
+  // after its active requests, and systemd starts it on the published code. Retirement waits until this host has run
+  // for restartIntervalMs, so a burst of releases cannot restart it in a loop. cp-sync restarts the host regardless.
+  const loadedCode = runtime.loadedCodeVersion;
+  const hostStartedAt = Date.now();
+  let checkingCode = false;
+  const retireForPublishedCode = async () => {
+    if (checkingCode || stopRequested || loadedCode === undefined) return;
+    if (Date.now() - hostStartedAt < policy.host.restartIntervalMs) return;
+    checkingCode = true;
+    try {
+      const published = await currentCodeVersion(runtime.mainCheckout);
+      // An unreadable main is not a new revision: only a readable, different tools/goal retires this host.
+      if (published === undefined || published === loadedCode || stopRequested) return;
+      if (runtime.codeRetirement) runtime.codeRetirement.retiring = true;
+      console.log(
+        `tools/goal is published as ${published}; this host stops after its active requests so systemd restarts it.`,
+      );
+      stop();
+    } finally {
+      checkingCode = false;
+    }
   };
   try {
     await stopRecordedAppServers(registryPath, policy.appServer);
@@ -352,11 +377,16 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         }
       }, stateSweepIntervalMs);
       stateTimer.unref();
+      codePoll = setInterval(() => {
+        void retireForPublishedCode().catch((error) => console.error('tools/goal revision check failed:', error));
+      }, policy.host.codePollMs);
+      codePoll.unref();
     });
   } finally {
     stopHeartbeat?.();
     if (recoveryTimer) clearInterval(recoveryTimer);
     if (stateTimer) clearInterval(stateTimer);
+    if (codePoll) clearInterval(codePoll);
     closeServer();
     if (managers) await managers.close();
     rmSync(runtime.managerSocket, { force: true });

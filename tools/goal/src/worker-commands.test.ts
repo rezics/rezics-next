@@ -85,6 +85,7 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
     },
     attempts: () => [],
     records: () => [],
+    runningAttemptsByPool: () => ({}),
   } as unknown as WorkerStore;
   const settings = {
     stateDirectory: temporary.path,

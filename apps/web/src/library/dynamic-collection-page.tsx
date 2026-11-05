@@ -16,6 +16,7 @@ import { LibraryNavigation } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
+import { collectionViewerProjection } from './collection-viewer/model';
 import { CollectionPresentationSummary } from './showcase-collection/presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
@@ -456,6 +457,13 @@ function DynamicCollectionPageLifetime({
             listPresentations={current.listPresentations}
             comparisonDefinitions={current.comparisonDefinitions}
             currentHref={resultsHref}
+            collection={{ ...(current.builtinKind ? { builtinKind: current.builtinKind } : {}) }}
+            viewerProjection={collectionViewerProjection(
+              current.viewerFacts,
+              current.provenance,
+              viewerId,
+              Boolean(viewerId && active.current),
+            )}
             onCopy={({ subject }) => {
               if (!subject) return;
               const title = displayLibraryTitle(subject.label, locale).text;

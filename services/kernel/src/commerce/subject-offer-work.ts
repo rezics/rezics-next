@@ -184,9 +184,9 @@ export function registerSubjectOfferWork(context: WorkContext): void {
       const job: IdentityJobRef = { jobId, epoch: BigInt(epoch) };
       return withConnection(context.pool, async (tx) => {
         await available(tx, identityJobPartition(job));
-        const native = await identityEpochStore.readJob(tx, job);
+        const native = await identityEpochStore().readJob(tx, job);
         if (native?.state !== 'published') throw new CommandUnavailableError('fenced', identityJobPartition(job));
-        return identityEpochStore.pageChanges(tx, job, after);
+        return identityEpochStore().pageChanges(tx, job, after);
       });
     },
     { name: 'commerce.subjectOffers.identityPage', ...retries },
@@ -230,7 +230,7 @@ export function registerSubjectOfferWork(context: WorkContext): void {
       async run(event) {
         const { jobId, epoch } = event.data as { jobId: string; epoch: string };
         const job = { jobId, epoch: BigInt(epoch) };
-        const native = await withConnection(context.pool, (tx) => identityEpochStore.readJob(tx, job));
+        const native = await withConnection(context.pool, (tx) => identityEpochStore().readJob(tx, job));
         // Admission also emits this event. Only the producer's published event can start moves.
         if (native?.state !== 'published') return;
         const handle = await context.client.enqueue(

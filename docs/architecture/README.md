@@ -14,12 +14,15 @@ The check uses Bun's transpiler import scan for value dependencies and a code-aw
 
 The full graph is cached under `.temp/architecture/graph.json`. `--changed <files...>` hashes the production roots, reparses only the listed changed files, and checks those edges against the complete cached graph. If the changed list is incomplete or the manifest or resolution configuration changed, the command asks for a fresh full scan.
 
+`--changed <base>` is the dev landing mode. If the manifest, baseline, resolution files, and production source tree match the captured commit, the diff proves there are no new architecture violations. Otherwise it audits the final candidate once, reconstructs the graph at the captured Git commit from unchanged source edges plus the changed source blobs and base resolution files, and reports only errors newly present in the candidate. Existing violations do not block a candidate that adds none. The boundary baseline still cannot grow.
+
 ## Commands and exit codes
 
-| Command                                            | Purpose                                                                      |
-| -------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `bun scripts/architecture.ts`                      | Validate the manifest, current graph, and baseline; refresh the graph cache. |
-| `bun scripts/architecture.ts --changed <files...>` | Recheck changed source edges against the cached complete graph.              |
-| `bun scripts/architecture.ts --map`                | Print the compact worker module map (maximum 2,000 characters).              |
+| Command                                            | Purpose                                                                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `bun scripts/architecture.ts`                      | Validate the manifest, current graph, and baseline; refresh the graph cache.                                       |
+| `bun scripts/architecture.ts --changed <files...>` | Recheck changed source edges against the cached complete graph.                                                    |
+| `bun scripts/architecture.ts --changed <base>`     | Compare one candidate graph with the captured commit and report only new violations.                               |
+| `bun scripts/architecture.ts --map`                | Print the compact worker module map (maximum 7,000 characters), including public entries and allowed dependencies. |
 
-Exit code `0` means the check passed, `1` means an architecture or manifest violation, and `2` means invalid CLI input, unavailable cache, or a tool/configuration failure. The full graph build and initial ratchet seeding took 14.7 seconds for 6,876 production files on this worktree. The full check is budgeted at under 30 seconds; cached changed checks at under 5 seconds. Landing acceptance will record command timings.
+Exit code `0` means the check passed, `1` means an architecture or manifest violation, and `2` means invalid CLI input, unavailable cache, or a tool/configuration failure. The full graph build and initial ratchet seeding took 14.7 seconds for 6,876 production files on this worktree. The full base-delta path took 14.6 seconds for 7,433 production files in this worktree. The full check is budgeted at under 30 seconds; cached changed checks at under 5 seconds.

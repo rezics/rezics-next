@@ -91,9 +91,9 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
       revision: 1,
       populations: [realmId],
     };
-    expect(Value.Check(RATING_EVENTS[voteEventType], legacyEnvelope)).toBe(true);
-    expect(Value.Check(RATING_EVENTS[voteEventType], { ...legacyEnvelope, units: 4096 })).toBe(true);
-    expect(Value.Check(RATING_EVENTS[voteEventType], { ...legacyEnvelope, units: 4097 })).toBe(false);
+    expect(Value.Check(RATING_EVENTS()[voteEventType], legacyEnvelope)).toBe(true);
+    expect(Value.Check(RATING_EVENTS()[voteEventType], { ...legacyEnvelope, units: 4096 })).toBe(true);
+    expect(Value.Check(RATING_EVENTS()[voteEventType], { ...legacyEnvelope, units: 4097 })).toBe(false);
 
     const first = await body(await requestVote(4096));
     expect(first).toMatchObject({ units: 4096, revision: 1 });
