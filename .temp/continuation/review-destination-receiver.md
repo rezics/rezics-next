@@ -23,6 +23,6 @@ Board inspection, sparse continuation, exact-cursor retry, denial/expiry and per
 replacement and A-B-A. No selected label or installed type admits creation.
 
 Commit before checks. Run Web workspace typing and the focused landing command:
-`bun apps/web/scripts/focused.ts --private-network -- bun test apps/web/tests/review-destination-journey.test.tsx`.
+`bun apps/web/scripts/focused.ts --private-network -- bun test tests/review-destination-journey.test.tsx`.
 Native execution, browser presentation, broader end-to-end/growth and root acceptance remain controller checks after
 integration. Read only the linked contract and relevant mounted/public declarations; no history reconstruction.
