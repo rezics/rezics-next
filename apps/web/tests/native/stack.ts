@@ -135,6 +135,33 @@ function ownedPostgresUrl(port: number, database: string, socketDirectory?: stri
   return socketDirectory ? `${url}&host=${encodeURIComponent(socketDirectory)}` : url;
 }
 
+function postgresUnixSocketDirectory(databaseUrl: string): string | undefined {
+  try {
+    const socket = new URL(databaseUrl).searchParams.get('host');
+    if (socket !== null && socket.startsWith('/') && socket.length > 1 && !/[:\n\r,]/.test(socket)) return socket;
+  } catch {
+    return undefined;
+  }
+}
+
+/** postgres.js (Reylo) ignores libpq's `host` query and uses URL hostname or PGHOST. */
+function reyloAnalysisUrl(databaseUrl: string): string {
+  const url = new URL(databaseUrl);
+  if (!postgresUnixSocketDirectory(databaseUrl)) return url.href;
+  url.searchParams.delete('host');
+  const query = url.searchParams.toString();
+  return `postgres://${url.pathname}${query ? `?${query}` : ''}`;
+}
+
+function bindReyloUnixSocket(databaseUrl: string): void {
+  const url = new URL(databaseUrl);
+  const socket = postgresUnixSocketDirectory(databaseUrl);
+  if (!socket) return;
+  process.env.PGHOST = socket;
+  process.env.PGUSER = decodeURIComponent(url.username);
+  process.env.PGPASSWORD = decodeURIComponent(url.password);
+}
+
 async function postgresConnectionWorks(url: string): Promise<Error | undefined> {
   const probe = new Pool({
     connectionString: url,
@@ -510,6 +537,11 @@ async function startStack(): Promise<
   let search: OpenSearch | undefined;
   const searchPrefix = `native-web-${randomBytes(12).toString('hex')}-`;
   const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalPostgresEnv = {
+    PGHOST: process.env.PGHOST,
+    PGUSER: process.env.PGUSER,
+    PGPASSWORD: process.env.PGPASSWORD,
+  };
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
   const testIssuer = nativeAuthTestIssuer;
@@ -640,6 +672,11 @@ async function startStack(): Promise<
       }
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
+      for (const name of ['PGHOST', 'PGUSER', 'PGPASSWORD'] as const) {
+        const original = originalPostgresEnv[name];
+        if (original === undefined) delete process.env[name];
+        else process.env[name] = original;
+      }
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
       console.info('Native web stack cleanup: complete');
     })());
@@ -689,7 +726,8 @@ async function startStack(): Promise<
     }
     reportStackProgress('Native web stack startup: SQL analysis database cloned');
     source.pathname = `/${analysisDatabase}`;
-    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, source.href);
+    bindReyloUnixSocket(source.href);
+    process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, reyloAnalysisUrl(source.href));
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');
