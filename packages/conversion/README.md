@@ -16,9 +16,9 @@ The public subpaths are defined in [package.json](package.json).
 | @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                         |
 | @rezics/conversion/open-library         | Open Library converter, revision and result                                                   |
 | @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                               |
-| @rezics/conversion/cross-media-entities | Cross-source entity converter, revision and source-enumeration mapper                         |
+| @rezics/conversion/cross-media-entities | Cross-source entity converter, revision, source-enumeration mapper and Person-name projection |
 
-The source files export the current revisions: Bangumi is bangumi@15, VNDB is vndb@8, Open Library is open-library@5, Wikidata is wikidata-6, cross-media entities is cross-media-entities@14, Bangumi vocabulary is bangumi-vocabulary@3, VNDB vocabulary is vndb-vocabulary@4, and shared source vocabulary is source-vocabulary@3. Registration imports these values; a source record cannot choose its converter revision. The selected Bangumi entity registration composes the current cross-media and Bangumi exports, currently cross-media-entities@14+bangumi@15.
+The source files export current revisions: Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4, and shared source vocabulary source-vocabulary@3. Registration imports these values; source records cannot choose a revision. Selected Bangumi entities compose cross-media-entities@15+bangumi@15.
 
 ConversionInput carries the provider-native external_id, record_revision and record. Revisions are never inferred from dump dates, checksums, row order or converter versions. A missing native revision remains null where permitted; Wikidata uses literal unversioned only when the entity has no lastrevid. Other required provider revisions must match their native record.
 
@@ -37,7 +37,7 @@ Results contain normalized source data, its digest, diagnostics and portable com
 
 Provider allowlists never traverse unknown/private subtrees or truncate values. Malformed/unadmitted input becomes bounded diagnostics or omissions, not substitutes. IDs, revisions, labels, citations and languages retain provider meaning; locale uses explicit fields/tags, not spelling or order.
 
-Bangumi name locales follow pinned fields; TVAnime work links are cited descriptive wdt:P973, separate from unfetched schema:url sites. Game website/work-link stay distinct with exact URL bytes. Source profile selects Book/BookSeries; ISBN, publisher, volume and edition facts never assert on the work. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
+Bangumi locales follow pinned fields. A type-1 Person's `name` is `und`; `name_cn` or the exact parsed PersonDetail `简体中文名` entry is `zh`. Conflicting, malformed or over-bound Chinese evidence withholds only that name; exact text enters the digest, while ETag and Last-Modified are cache metadata. TVAnime work links are cited descriptive wdt:P973, separate from unfetched schema:url sites. Game website/work-link keep exact URL bytes. Source profile selects Book/BookSeries; ISBN, publisher, volume and edition facts never assert on the work. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
 
 Game uses the pinned template: Chinese name→zh, aliases→und; cited dates preserve admitted precision and unsupported forms omit. Genres remain unsplit source literals; player counts require complete admitted forms. TVAnime run facts, Copyright notices, official sites and descriptive links retain separate properties/citations; malformed fields do not suppress valid siblings.
 
@@ -45,7 +45,7 @@ Only a Work may use optional top-level Open Library first_publish_date. The exac
 
 ### Bangumi Person careers
 
-The cross-media converter retains at most seven authentic career strings only for an actual type-1 Person and emits no P106. The separate mapper requires the actual Person, exact Person source key, source-owned careers Scheme, exact current bound Concept, released P106 and exact career citation; see [Registered source vocabulary mapping](../../services/importer/README.md#registered-source-vocabulary-mapping). A malformed item cannot erase a valid neighbor; empty, unknown, malformed or Organization cases produce no unsupported occupation. Identifier, biography, credits and careers keep independent citations and refresh behavior.
+The cross-media converter retains at most seven authentic career strings only for an actual type-1 Person and emits no P106. The separate mapper requires that Person, exact source key, source-owned careers Scheme, exact current bound Concept, released P106 and career citation; see [Registered source vocabulary mapping](../../services/importer/README.md#registered-source-vocabulary-mapping). Source Concepts assert no canonical occupation or cross-provider equivalence. Malformed items cannot erase valid neighbors; empty, unknown, malformed or Organization cases produce no unsupported occupation. Identifier, biography, credits and careers keep independent citations and refresh behavior.
 
 The reviewed career feature range retains its original revision identities: cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3. These identify that reviewed range, not the current combined registration shown above. The showcase-only fallback is documented under [Explicit local showcase publication](../../services/importer/README.md#explicit-local-showcase-publication).
 
@@ -95,6 +95,10 @@ Identity and type dispatch are constant work. Unsupported source types retain id
 
 At most one cited day-precision birthDate from the three admitted date integers on one actual Person. Conversion performs no source fetch.
 
+### Project a Bangumi Person Chinese name
+
+At most two `schema:name` facts from one actual Person; record ≤65,536 bytes, infobox ≤64 entries, names ≤4,096 UTF-8 bytes/500 codepoints and ≤16 diagnostics. No fetch or identity lookup.
+
 ### Project a Bangumi television original run
 
 One bounded TVAnime infobox; at most three cited date, end-date or episode-count facts. Episode, schedule and broadcaster discovery remain outside conversion.
@@ -115,4 +119,4 @@ At most 64 infobox fields, 16 platform occurrences, 8 engine occurrences and 16 
 
 One optional Work scalar, at most 1,500 characters, in the 2 MiB projection; one cited schema:datePublished proposal, no Edition lookup or extra read, within the 100-command ceiling.
 
-Pure converter behavior is described by the existing [Bangumi outcome tests](tests/bangumi-outcomes.test.ts) and [career mapping tests](tests/bangumi-person-careers.test.ts). Provider tests assert mapping, rights references, diagnostics, identity and limits; native API acceptance and growth evidence remain separate importer and Kernel obligations.
+Pure converter behavior is described by [Bangumi outcomes](tests/bangumi-outcomes.test.ts), [career mapping](tests/bangumi-person-careers.test.ts) and [Person-name projection](tests/bangumi-person-names.test.ts). Provider tests pin mapping, rights references, diagnostics, identity and limits; native API acceptance and growth evidence remain separate importer and Kernel obligations.

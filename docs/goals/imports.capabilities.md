@@ -12,7 +12,7 @@ A maintainer can import licensed provider records, inspect omissions, recover sa
 
 The four launch sources are Bangumi, VNDB, Open Library and Wikidata. Exact grains, formats, revisions, rights, citations and exclusions are defined in the module contracts. Acceptance uses pinned, legally usable fixtures; live provider availability is not required.
 
-- **Bangumi:** native JSONL identity and supported subject types, attributed summaries, independent cover rights, type-specific omissions, refresh and source fences.
+- **Bangumi:** native JSONL and PersonDetail identity, Person Chinese names, supported subject types, attributed summaries, independent cover rights, type-specific omissions, refresh and source fences.
 - **VNDB:** real COPY headers and grouped native keys, source revisions, permitted metadata and bounded associations; no creative prose or images.
 - **Open Library:** five-column TSV and separate Work/Edition grains, including Work `first_publish_date` and Edition-only page-count/ISBN behavior; no unlicensed prose or covers.
 - **Wikidata:** native item JSONL/revision and exact released type, property, qualifier and reference mappings; unresolved relations stay unresolved.
@@ -33,9 +33,9 @@ A configured alias and exact provider external ID remain one tuple across genera
 
 ### Bangumi people and careers
 
-Keep Person identity, biography, credits and careers independent. Ordinary P106 requires the actual source-bound Person, exact Person source key, source-owned careers Scheme, current bound Concept, released property and exact career citation. The pure converter emits no P106 and no cross-provider equivalence is implied. Only local showcase may fetch PersonDetail; archive data wins, selected-only fallback receipts replay immutably. See [career acquisition](../../services/importer/README.md#bangumi-person-career-acquisition).
+Keep Person identity, biography, credits, names and careers independent. Type-1 `name` is `und`; `name_cn` or exact parsed PersonDetail `简体中文名` is `zh`; ambiguous Chinese evidence withholds only that name. Ordinary P106 requires the actual source-bound Person, exact source key, source-owned careers Scheme, current Concept, released property and exact career citation. The pure converter emits no P106; source Concepts assert no canonical occupation or cross-provider equivalence. Only local showcase may fetch missing selected PersonDetail fields; immutable receipts replay. See [career acquisition](../../services/importer/README.md#bangumi-person-career-acquisition).
 
-The existing [conversion](../../packages/conversion/tests/bangumi-person-careers.test.ts), [showcase](../../services/importer/tests/showcase-bangumi-person-careers.test.ts) and [native](../../services/kernel/test/imports/bangumi-person-careers.test.ts) cases cover mapping, acquisition/replay and review/current reads.
+Career [conversion](../../packages/conversion/tests/bangumi-person-careers.test.ts), [showcase](../../services/importer/tests/showcase-bangumi-person-careers.test.ts) and [native](../../services/kernel/test/imports/bangumi-person-careers.test.ts) cases cover mapping, replay and current reads. Person-name [projection](../../packages/conversion/tests/bangumi-person-names.test.ts), [ordinary TSV](../../services/importer/tests/bangumi-person-names.test.ts), [shared acquisition](../../services/importer/tests/showcase-bangumi-person-names.test.ts) and [native acceptance](../../services/kernel/test/imports/bangumi-person-names.test.ts) cases state their authored coverage; native execution remains integration-owned.
 
 ### Bangumi work, Book, Game and Character outcomes
 
@@ -49,7 +49,7 @@ Only optional Work `first_publish_date` creates its independently cited `schema:
 
 ### VNDB, Wikidata and media outcomes
 
-Preserve VNDB table/key, release, staff, producer, Character, tag, language, date, identifier and website meanings, including direction, qualifiers and unknown/absent distinctions. Wikidata uses exact released property/qualifier mappings. Source metadata, prose, cover intent and bytes have separate permissions; a pending reservation is not an available media identity. Replay uses the original request, and only available media may enter a separately accepted/adopted candidate. Rights withdrawal and takedown fences prevent refresh from restoring removed material; see [Content](../../services/kernel/src/content/README.md) and the [deletion policy](../deletion.md).
+Preserve VNDB table/key, release, staff, producer, Character, tag, language, date, identifier and website meanings, including direction, qualifiers and unknown/absent distinctions. Statistic PUT/current GET requires seven-scope Auth/Access and current Global Context authorization before receipt evaluation. The six [pinned source cases](../../specs/imports-vndb-statistics.test.ts) plus [native wrapper](../../services/kernel/test/imports/vndb-statistics-outcomes.test.ts) retain changed-update/reopen, exact unknown-delivery replay, zero-vote omission, reduced-scope/revoked denial and failed-acquisition/disappearance baseline protection; no `c_rating` or native votes. `source_statistic:write` stays in the VNDB credential; catalogue setup uses its separate credential. Wikidata uses exact released property/qualifier mappings. Source metadata, prose, cover intent and bytes have separate permissions; pending reservation is not available media. Replay uses the original request; only available media enters separately accepted/adopted candidates. Rights withdrawal and takedown fences prevent refresh restoring removed material; see [Content](../../services/kernel/src/content/README.md) and the [deletion policy](../deletion.md).
 
 ## Receiving and growth acceptance
 
