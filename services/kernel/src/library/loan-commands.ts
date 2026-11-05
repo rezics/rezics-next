@@ -376,11 +376,12 @@ export function createLoanCommands(config: Dependencies) {
   const { pool, access, routeKey, tokens, clock = systemClock } = config;
   const runner = createLibraryCommandRunner({ pool, clock });
 
-  async function createLoan(actor: Actor, input: unknown, requestKey: string) {
+  async function createLoan(actor: Actor, input: unknown, requestKey: string, deadline?: number) {
     const owner = requireActor(actor, 'copy:create');
     const parsed = parseLoanCreate(input);
     const route = sameAccountRoute(owner.accountId, parsed.copyId);
-    return withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () =>
+    const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(operationDeadline, () =>
       runner.ownAccountPrepared<PreparedCreate, Loan>(
         owner,
         {
@@ -388,6 +389,7 @@ export function createLoanCommands(config: Dependencies) {
           kind: 'library.copy-loan.create',
           requestKey,
           input: parsed,
+          deadline: operationDeadline,
           async prepare(attempt: CommandAttempt) {
             const deadline = commandAttemptDeadline(attempt);
             await admitEntryAttempt(config, owner, 'copy:create', attempt, deadline);
@@ -442,11 +444,12 @@ export function createLoanCommands(config: Dependencies) {
     );
   }
 
-  async function extendLoan(actor: Actor, loanId: string, input: unknown, requestKey: string) {
+  async function extendLoan(actor: Actor, loanId: string, input: unknown, requestKey: string, deadline?: number) {
     const owner = requireActor(actor, 'copy:update');
     const parsed = parseLoanExtend(input);
     const route = sameAccountRoute(owner.accountId, loanId);
-    return withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () =>
+    const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(operationDeadline, () =>
       runner.ownAccountPrepared(
         owner,
         {
@@ -454,6 +457,7 @@ export function createLoanCommands(config: Dependencies) {
           kind: 'library.copy-loan.extend',
           requestKey,
           input: { loanId, ...parsed },
+          deadline: operationDeadline,
           prepare: (attempt) =>
             admitEntryAttempt(config, owner, 'copy:update', attempt, commandAttemptDeadline(attempt)),
         },
@@ -471,12 +475,13 @@ export function createLoanCommands(config: Dependencies) {
     );
   }
 
-  async function returnLoan(actor: Actor, loanId: string, input: unknown, requestKey: string) {
+  async function returnLoan(actor: Actor, loanId: string, input: unknown, requestKey: string, deadline?: number) {
     const owner = requireActor(actor, 'copy:update');
     const parsed = parseLoanReturn(input);
     const route = sameAccountRoute(owner.accountId, loanId);
     const boundary = loanDueBoundary(clock());
-    return withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () =>
+    const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(operationDeadline, () =>
       runner.ownAccountPrepared(
         owner,
         {
@@ -484,6 +489,7 @@ export function createLoanCommands(config: Dependencies) {
           kind: 'library.copy-loan.return',
           requestKey,
           input: { loanId, ...parsed },
+          deadline: operationDeadline,
           prepare: (attempt) =>
             admitEntryAttempt(config, owner, 'copy:update', attempt, commandAttemptDeadline(attempt)),
         },
@@ -504,6 +510,7 @@ export function createLoanCommands(config: Dependencies) {
   async function listLoans(
     actor: Actor,
     input: { filter: LoanFilter; cursor?: string; limit: number },
+    deadline?: number,
   ): Promise<LoanPage> {
     const owner = requireActor(actor, 'copy:list');
     const route = routeOf(owner.accountId)!;
@@ -513,56 +520,59 @@ export function createLoanCommands(config: Dependencies) {
     const binding = cursorBinding(owner.accountId, filter);
     const boundary = loanDueBoundary(clock());
     const cursor = input.cursor;
-    return readOnly(pool, owner, async (client) => {
-      const generationRow = await executeLoanNative(client, loanGenerationPlan({ route, accountId: owner.accountId }));
-      const generation = Number(generationRow.rows[0]?.generation ?? 1);
-      let after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
-      if (after?.undated === null) {
-        const cursorRow = await executeLoanNative(
+    const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(operationDeadline, () =>
+      readOnly(pool, owner, async (client) => {
+        const generationRow = await executeLoanNative(client, loanGenerationPlan({ route, accountId: owner.accountId }));
+        const generation = Number(generationRow.rows[0]?.generation ?? 1);
+        let after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
+        if (after?.undated === null) {
+          const cursorRow = await executeLoanNative(
+            client,
+            loanCursorDuePlan({ route, accountId: owner.accountId, id: after.id }),
+          );
+          const dueOn = cursorRow.rows[0]?.dueOn;
+          if (dueOn === undefined) throw new Error('A generation-current legacy loan cursor has no retained loan');
+          after = { ...after, undated: dueOn === null };
+        }
+        const rows = await executeLoanNative(
           client,
-          loanCursorDuePlan({ route, accountId: owner.accountId, id: after.id }),
+          loanPagePlan({
+            route,
+            accountId: owner.accountId,
+            filter,
+            after: after
+              ? {
+                  day: after.day,
+                  id: after.id,
+                  undated: after.undated ?? false,
+                }
+              : null,
+            limit: size + 1,
+          }),
         );
-        const dueOn = cursorRow.rows[0]?.dueOn;
-        if (dueOn === undefined) throw new Error('A generation-current legacy loan cursor has no retained loan');
-        after = { ...after, undated: dueOn === null };
-      }
-      const rows = await executeLoanNative(
-        client,
-        loanPagePlan({
-          route,
-          accountId: owner.accountId,
+        const visible = rows.rows.slice(0, size);
+        const last = visible.at(-1);
+        const nextCursor =
+          rows.rows.length > size && last
+            ? encodeCursor(tokens, binding, {
+                epoch: generation,
+                after: [
+                  filter === 'open' ? (dateText(last.dueOn) ?? UNDATED_SORT_DAY) : dateText(last.returnedOn)!,
+                  last.loanId,
+                  ...(filter === 'open' ? [last.dueOn === null ? 'undated' : 'dated'] : []),
+                ],
+              })
+            : null;
+        return Object.freeze({
           filter,
-          after: after
-            ? {
-                day: after.day,
-                id: after.id,
-                undated: after.undated ?? false,
-              }
-            : null,
-          limit: size + 1,
-        }),
-      );
-      const visible = rows.rows.slice(0, size);
-      const last = visible.at(-1);
-      const nextCursor =
-        rows.rows.length > size && last
-          ? encodeCursor(tokens, binding, {
-              epoch: generation,
-              after: [
-                filter === 'open' ? (dateText(last.dueOn) ?? UNDATED_SORT_DAY) : dateText(last.returnedOn)!,
-                last.loanId,
-                ...(filter === 'open' ? [last.dueOn === null ? 'undated' : 'dated'] : []),
-              ],
-            })
-          : null;
-      return Object.freeze({
-        filter,
-        boundary,
-        generation,
-        items: Object.freeze(visible.map((row) => rowItem(row, boundary))),
-        nextCursor,
-      });
-    });
+          boundary,
+          generation,
+          items: Object.freeze(visible.map((row) => rowItem(row, boundary))),
+          nextCursor,
+        });
+      }),
+    );
   }
 
   return { createLoan, extendLoan, returnLoan, listLoans };

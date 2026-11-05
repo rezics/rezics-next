@@ -164,6 +164,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   shelfTypeDigest?: ShelfTypeDigest;
   /** Optional entry preparation observation, after release of the source snapshots. */
   typeSourceObserved?: import('../library/type-preparation-contract.ts').TypePreparationSourceObserved;
+  /** Trusted owner for the original funded frame around each complete private loan HTTP operation. */
+  loanHttpWork?: import('../library/loan-operation-bounds.ts').LoanHttpWorkOwner;
 
   discovery?: import('../search/discovery-service.ts').DiscoverySearch;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
@@ -700,6 +702,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     : dependencies.shelves?.titleSource;
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
     ...(dependencies.typeSourceObserved ? { typeSourceObserved: dependencies.typeSourceObserved } : {}),
+    ...(dependencies.loanHttpWork === undefined ? {} : { loanHttpWork: dependencies.loanHttpWork }),
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
