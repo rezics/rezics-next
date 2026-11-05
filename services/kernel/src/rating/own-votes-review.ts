@@ -1,5 +1,6 @@
 import { partitionOf, routeOf, PARTITIONS } from '../route/route.ts';
 import type { CommandTransaction } from '../command/command.ts';
+import type { IdentityRatingReviewOperand } from '../semantic/index.ts';
 import reviewSlots from './own-votes-review.sql';
 
 export const VOTE_SCOPE = 'rating:vote';
@@ -15,7 +16,12 @@ export type VoteReviewEpoch = Readonly<{ partition: number; epoch: string }>;
 export type VoteReviewGuard = Readonly<{
   version: 1;
   question: Readonly<{ revision: number; lifecycleRevision: number }>;
-  subject: Readonly<{ canonicalId: string; epochs: readonly VoteReviewEpoch[] }>;
+  subject: Readonly<{
+    canonicalId: string;
+    epochs: readonly VoteReviewEpoch[];
+    /** Absent on historical reviews, which can replay but cannot admit a fresh effect. */
+    identity?: IdentityRatingReviewOperand;
+  }>;
   ownVote: Readonly<{ state: 'absent' | 'present'; observation: string }>;
 }>;
 
@@ -176,7 +182,7 @@ export function normalizeVoteReviewGuard(value: unknown, requestedTargetId: stri
   )
     return invalid();
   if (
-    !object(subject, ['canonicalId', 'epochs']) ||
+    !(object(subject, ['canonicalId', 'epochs']) || object(subject, ['canonicalId', 'epochs', 'identity'])) ||
     !id(subject.canonicalId) ||
     !Array.isArray(subject.epochs) ||
     !id(requestedTargetId)
@@ -229,7 +235,21 @@ export function normalizeVoteReviewGuard(value: unknown, requestedTargetId: stri
     subject: Object.freeze({
       canonicalId: subject.canonicalId,
       epochs: Object.freeze(epochs.map((epoch) => Object.freeze(epoch))),
+      // Semantic owns operand validation at the command boundary. Internal producers
+      // already supply its reviewed type; retain every byte without resampling.
+      ...(subject.identity === undefined
+        ? {}
+        : { identity: freezeIdentityOperand(subject.identity as IdentityRatingReviewOperand) }),
     }),
     ownVote: Object.freeze({ state: ownVote.state, observation: ownVote.observation }),
+  });
+}
+
+function freezeIdentityOperand(operand: IdentityRatingReviewOperand): IdentityRatingReviewOperand {
+  return Object.freeze({
+    ...operand,
+    sourceIdentities: Object.freeze([...operand.sourceIdentities]),
+    sourceHomes: Object.freeze([...operand.sourceHomes]),
+    controlLocators: Object.freeze(operand.controlLocators.map((locator) => Object.freeze({ ...locator }))),
   });
 }

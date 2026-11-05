@@ -6,6 +6,7 @@ import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } fro
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from '../semantic/read.ts';
+import { createIdentityRatingCommitParticipant, readIdentityRatingReview } from '../semantic/index.ts';
 import {
   LibraryNotFoundError,
   createLibraryCommandRunner,
@@ -44,6 +45,7 @@ import {
   type VoteReviewEpoch,
 } from './own-votes-review.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
+import { createQuestionVoteAdmission } from './question-vote-admission.ts';
 export { STANDARD_QUESTION_ID } from './standard-question.ts';
 export { VOTE_SCOPE, VoteInvalidError, VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
 export type { VoteReviewGuard } from './own-votes-review.ts';
@@ -298,6 +300,15 @@ function normalizePutVoteInput(input: PutVoteInput): PutVoteInput {
   let guard: VoteReviewGuard | undefined;
   if (input.guard !== undefined) {
     try {
+      const identity = input.guard.subject.identity;
+      if (identity !== undefined) {
+        createIdentityRatingCommitParticipant().prepare(identity);
+        if (
+          identity.requestedOriginalId !== input.targetId ||
+          identity.canonicalTerminalId !== input.guard.subject.canonicalId
+        )
+          throw new TypeError('Identity review does not describe the requested vote');
+      }
       guard = normalizeVoteReviewGuard(input.guard, input.targetId);
     } catch {
       throw new VoteInvalidError('guard');
@@ -325,6 +336,8 @@ export function createVoteCommands(config: Dependencies) {
     ...(clock === undefined ? {} : { clock }),
   });
   const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access });
+  const questionAdmission = createQuestionVoteAdmission();
+  const identityParticipant = createIdentityRatingCommitParticipant();
 
   /** Prepare once before starting a command; only receipt needs bounded retention after scrubbing. */
   function preparePutVote(
@@ -419,7 +432,16 @@ export function createVoteCommands(config: Dependencies) {
               }
             }
             const admit = await admission?.prepare();
-            return { ...current, epochs, error, admit };
+            return {
+              ...current,
+              epochs,
+              error,
+              admit,
+              questionAdmission: guard
+                ? questionAdmission.prepare({ questionId: input.questionId, question: guard.question })
+                : null,
+              identityAdmission: guard?.subject.identity ? identityParticipant.prepare(guard.subject.identity) : null,
+            };
           },
         },
         async (tx, command, prepared) => {
@@ -468,10 +490,22 @@ export function createVoteCommands(config: Dependencies) {
               throw new VoteReviewStaleError('own_vote_changed');
             if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
             validateUnits(question, input.units);
-            // The native question lifecycle writer locks only its question home, and identity
-            // publication has no released participant hold for this voter command. Account/shelf
-            // admission and local vote locks cannot fence either foreign authority through commit.
-            throw new VoteReviewUnavailableError('atomic_guard_unavailable');
+            // Historical guards keep their exact digest for receipt replay, but a
+            // fresh effect requires the explicitly reviewed Semantic operand.
+            if (!prepared.identityAdmission) throw new VoteReviewUnavailableError('atomic_guard_unavailable');
+            await questionAdmission.admit(tx, prepared.questionAdmission!);
+            await identityParticipant.admit(tx, prepared.identityAdmission);
+            // Recompare the legacy published-home witness under the same owner
+            // fence, including a matching no-op. Preparation alone cannot fence it.
+            const identity = await admitIdentityRatingEffect(tx, {
+              requestedTargetId: input.targetId,
+              resolvedTargetId: resolved.subjectId,
+              expectedEpochs: guard.subject.epochs,
+            });
+            if (identity.status === 'pending')
+              throw new VoteReviewUnavailableError(
+                identity.reason === 'epoch-pending' ? 'identity_pending' : 'identity_observation_unavailable',
+              );
           }
           const previous = previousRow ? asVote(previousRow) : null;
           const isAlreadyCurrent = previousRow?.countedTarget === resolved.subjectId;
@@ -481,12 +515,14 @@ export function createVoteCommands(config: Dependencies) {
           )
             throw new VoteUnchanged(previous);
 
-          const admission = await admitIdentityRatingEffect(tx, {
-            requestedTargetId: input.targetId,
-            resolvedTargetId: resolved.subjectId,
-          });
-          if (admission.status === 'pending')
-            throw new IdentityRatingAdmissionPendingError(input.targetId, admission.reason);
+          if (!guard) {
+            const admission = await admitIdentityRatingEffect(tx, {
+              requestedTargetId: input.targetId,
+              resolvedTargetId: resolved.subjectId,
+            });
+            if (admission.status === 'pending')
+              throw new IdentityRatingAdmissionPendingError(input.targetId, admission.reason);
+          }
 
           const time = authoritativeTimeValue(command.time);
           let nextRow: Awaited<ReturnType<typeof voteRead.run>>;
@@ -669,7 +705,19 @@ export function createVoteCommands(config: Dependencies) {
       );
     const observation = current.observations[0]!;
     if (observation.state === 'unavailable') throw new VoteReviewUnavailableError('identity_observation_unavailable');
-    const guard = normalizeVoteReviewGuard(observation.review, targetId);
+    const identity = await readIdentityRatingReview(pool, {
+      requestedOriginalId: targetId,
+      canonicalTerminalId: observation.countingTargetId,
+      deadline,
+    });
+    if (identity.state !== 'reviewed')
+      throw new VoteReviewUnavailableError(
+        identity.state === 'pending' ? 'identity_pending' : 'identity_observation_unavailable',
+      );
+    const guard = normalizeVoteReviewGuard(
+      { ...observation.review, subject: { ...observation.review.subject, identity: identity.operand } },
+      targetId,
+    );
     const currentVote = Object.freeze({ ...observation, review: guard });
     return Object.freeze({ question, currentVote, guard });
   }
