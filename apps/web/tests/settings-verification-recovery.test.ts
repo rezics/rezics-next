@@ -9,6 +9,7 @@ import { personalRead } from '../src/kernel/query';
 import { m } from '../src/paraglide/messages.js';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
 import { readVerification, unwrapVerificationRead, VerificationReadError } from '../src/settings/verification-core';
+import type { AgentVerificationRequest } from '../src/settings/verification-core';
 import {
   canRequestVerification,
   observeVerificationRead,
@@ -33,6 +34,22 @@ const empty: VerificationSnapshot = {
   viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
   subjectTitle: null,
 };
+const requestRecord = (id: string, createdAt: string, statement: string): AgentVerificationRequest => ({
+  id,
+  accountId: 'alice',
+  accountKind: 'actor',
+  requestedBy: 'alice',
+  catalogueSubjectId: 'subject-1',
+  statement,
+  links: [],
+  state: 'pending',
+  reason: null,
+  problem: null,
+  decisionReceiptId: null,
+  decidedBy: null,
+  createdAt,
+  updatedAt: createdAt,
+});
 const noCommand = async (): Promise<never> => {
   throw new Error('Unexpected verification command');
 };
@@ -225,11 +242,14 @@ test('readable status with no admitted command never unlocks Request', async () 
   controller.deactivate();
 });
 
-test('empty and failed reads never settle an unknown original command, and retired readers cannot publish a late result', async () => {
+test('an unacknowledged lookalike stays uncertain and retired readers cannot publish a late result', async () => {
   let reads = 0;
   let finish!: (value: VerificationSnapshot) => void;
   const sent: unknown[] = [];
-  const denied: VerificationSnapshot = { ...empty, viewerActions: [] };
+  const lookalike: VerificationSnapshot = {
+    ...empty,
+    verificationRequest: requestRecord('lookalike', '2026-10-30T08:00:00.000Z', 'Original statement'),
+  };
   const controller = new VerificationRecovery('alice', {
     read: async () => {
       reads++;
@@ -238,7 +258,7 @@ test('empty and failed reads never settle an unknown original command, and retir
         return new Promise<VerificationSnapshot>((resolve) => {
           finish = resolve;
         });
-      return reads === 3 ? denied : empty;
+      return reads === 3 ? lookalike : empty;
     },
     request: async (_, input) => {
       sent.push(input);
@@ -257,11 +277,12 @@ test('empty and failed reads never settle an unknown original command, and retir
   expect(controller.snapshot()).toMatchObject({ readStatus: 'error', phase: 'uncertain', current: null });
   expect(controller.snapshot().attempt).toBe(original);
   await controller.reload();
-  expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: denied });
+  expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: lookalike });
   expect(controller.snapshot().attempt).toBe(original);
   await controller.retry();
   await capturedRetry();
-  expect(sent).toEqual([originalInput]);
+  expect(sent).toEqual([originalInput, originalInput]);
+  expect(sent[1]).toBe(sent[0]);
   expect(original!.input).toBe(originalInput);
   expect(JSON.stringify(original!.input)).toBe(originalEvidence);
   const html = renderToStaticMarkup(
@@ -292,7 +313,6 @@ test('empty and failed reads never settle an unknown original command, and retir
   expect(controller.snapshot().attempt).toBe(original);
   await capturedRetry();
   expect(sent).toEqual([originalInput, originalInput]);
-  expect(sent[1]).toBe(sent[0]);
   const late = controller.reload();
   const retired = controller.snapshot();
   controller.deactivate();
@@ -301,6 +321,64 @@ test('empty and failed reads never settle an unknown original command, and retir
   await controller.reload();
   expect(controller.snapshot()).toBe(retired);
   expect(reads).toBe(5);
+});
+
+test('a validated receipt survives a failed read, then yields to the newer current request', async () => {
+  const receipt = requestRecord('old-request', '2026-10-30T08:00:00.000Z', 'Original statement');
+  const newer = requestRecord('new-request', '2026-10-30T09:00:00.000Z', 'Current request statement');
+  const current: VerificationSnapshot = {
+    ...empty,
+    verificationRequest: newer,
+    viewerActions: [{ action: 'account:update', operations: ['account.request_verification', 'account.withdraw_verification'] }],
+  };
+  const sent: unknown[] = [];
+  let reads = 0;
+  let controller!: VerificationRecovery;
+  let withdrawalTarget: string | null = null;
+  controller = new VerificationRecovery('alice', {
+    read: async () => {
+      if (++reads === 1) return empty;
+      if (reads === 2) throw new Error('Read after receipt failed');
+      return current;
+    },
+    request: async (_accountId, input) => {
+      sent.push(input);
+      return { ok: true, verificationRequest: receipt };
+    },
+    withdraw: async () => {
+      withdrawalTarget = controller.snapshot().attempt?.requestId ?? null;
+      return { ok: false, outcome: 'refused', status: 403, message: 'Not admitted' };
+    },
+  });
+  await controller.reload();
+  await controller.submit({ subject: 'subject-1', statement: 'Original statement', links: [] });
+  expect(controller.snapshot()).toMatchObject({ phase: 'uncertain', readStatus: 'error', attempt: { receipt } });
+  await controller.retry();
+  const received = renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(VerificationCard, {
+        controller,
+        csrfToken: 'current-csrf',
+        initialDraft: {
+          selected: { id: 'later-subject', title: 'Later subject', type: 'agent' },
+          statement: 'Later draft',
+          links: [{ label: 'Later link', url: 'https://example.test/later' }],
+        },
+      }),
+    ),
+  );
+  expect(sent).toHaveLength(1);
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ phase: 'review', readStatus: 'success', current, attempt: null });
+  expect(received).not.toContain(m.settings_verification_uncertain_request());
+  expect(received).toContain(m.settings_verification_request_received());
+  expect(received).not.toContain(m.settings_verification_retry_original());
+  expect(received).toContain('Later draft');
+  expect(canRequestVerification(controller.snapshot().current)).toBe(true);
+  await controller.withdraw(true);
+  expect(withdrawalTarget).toBe(newer.id);
 });
 
 test('read-only Verification recovery cannot mint request or withdrawal attempts', async () => {
