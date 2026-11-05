@@ -67,7 +67,7 @@ The converter may return a deferred cover intent without a container when no bou
 
 ## Cost derivation and verification
 
-For one accepted bounded record M, conversion work and serialized result size are O(M). Input projection, hashing, validation, citations and commands operate on that record; work does not grow with unrelated catalogue or history size. These are logical work and output bounds, not machine heap or elapsed-time measurements.
+For bounded record M, conversion and serialized output are O(M); projection, hashing, validation, citations and commands touch only that record, not catalogue/history. These are logical work/output bounds, not heap or elapsed-time measurements.
 
 | Converter         | Static input and output envelope                                                                                                                               |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
