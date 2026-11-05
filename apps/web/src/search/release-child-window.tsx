@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { addressLease, readLease, type ReaderOrigin } from '../session/reader';
+import { addressLease, readLease } from '../session';
+import type { ReaderOrigin } from '../session/reader';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { discoveryMessage } from './discovery-results';
