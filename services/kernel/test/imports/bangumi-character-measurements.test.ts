@@ -143,7 +143,7 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
     expect(heightCandidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
       external_id: characterId,
-      converter_revision: 'cross-media-entities@13+bangumi@15',
+      converter_revision: 'cross-media-entities@14+bangumi@15',
     });
     expect(heightCandidate.statement.references).toContainEqual(
       expect.objectContaining({
