@@ -423,6 +423,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(reads.at(-1)!.cursor).toBeUndefined();
     await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
     expect(writes).toHaveLength(2);
+    expect(host.textContent).not.toContain(m.library_follow_conflict_recovery_review());
     await remove();
     const uncertain = writes.at(-1)!;
     expect(uncertain.input.targetId).toBe(rejected.input.targetId);
