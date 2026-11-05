@@ -287,6 +287,7 @@ function PopulationOwner({
   enabled?: boolean;
 }) {
   const { data } = useQuery({ ...sessionQuery, enabled: false });
+  useQuery({ ...subjectRatingQuery(id, 'en', 'question'), enabled: false });
   return (
     <SubjectRatingPopulations
       subjectId={id}

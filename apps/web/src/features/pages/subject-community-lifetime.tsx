@@ -3,7 +3,8 @@ import { useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternal
 import { browserObservation, type BrowserObservationSnapshot } from '../../session';
 
 const noSubscribe = () => () => {};
-const unknownSnapshot = (): BrowserObservationSnapshot => ({ state: 'unknown' });
+const UNKNOWN_SNAPSHOT: BrowserObservationSnapshot = { state: 'unknown' };
+const unknownSnapshot = () => UNKNOWN_SNAPSHOT;
 
 /** Consume the shared browser authority without preparing another request. */
 function observeCommunityEnvironment(client: QueryClient | undefined) {
