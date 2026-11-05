@@ -203,32 +203,15 @@ describe('architecture boundaries', () => {
     const root = process.cwd();
     const committed = loadManifest(root);
     const baseline = loadBaseline(root);
-    const sourceFiles = `
-      packages/access/package.json packages/access/src/index.ts
-      packages/bounds/package.json packages/bounds/src/index.ts
-      packages/operations/package.json packages/operations/src/index.ts packages/operations/src/protocol.ts
-      services/kernel/src/access/gates/admission.ts services/kernel/src/access/gates/catalogue.ts
-      services/kernel/src/access/gates/declaration.ts services/kernel/src/access/gates/management-read.ts
-      services/kernel/src/access/gates/visibility.ts services/kernel/src/access/permission.ts
-      services/kernel/src/access/policy-core.ts services/kernel/src/access/policy-filter.ts
-      services/kernel/src/history/operational-work-axes.ts services/kernel/src/history/operational-work-budget.ts
-      services/kernel/src/library/collection-list-policy.ts services/kernel/src/library/collection-source-work-native.ts
-      services/kernel/src/search/scope-members-source-declaration.ts
-      services/kernel/src/work/selected-runtime-cost.ts services/kernel/src/work/selected-runtime.ts
-      services/kernel/src/http/headers.ts services/kernel/src/http/kernel.ts
-      services/kernel/src/http/operation-adapter.ts services/kernel/src/library/continue-routes.ts
-      services/kernel/src/library/operation-declarations.ts services/kernel/src/library/progress-routes.ts
-      services/kernel/src/content/feed-operation-declarations.ts services/kernel/src/content/feed-routes.ts
-      services/kernel/src/content/community-projection/index.ts services/kernel/src/content/board-page.ts
-      services/kernel/src/content/conversation-activity.ts services/kernel/src/content/feed-conversation-activity.ts
-      services/kernel/src/content/realm-community.ts services/kernel/src/content/subject-threads-cards.ts
-      apps/web/src/routes/editions/$id.tsx apps/web/src/routes/search.tsx
-      apps/web/src/checkout/reader-origin.ts apps/web/src/search/search.tsx apps/web/src/kernel/client.ts
-      apps/web/src/inbox/inbox-read.ts apps/web/src/settings/account-rename-actions.ts
-      apps/web/src/settings/actions.server.ts apps/web/src/settings/actions.ts
-      apps/web/src/settings/managed-account-actions-read.ts apps/web/src/settings/managed-account-detail-read.ts
-      apps/web/src/settings/shelf-preferences-current.tsx apps/web/src/settings/verification-actions.ts`;
-    copySources(root, sourceFiles.trim().split(/\s+/));
+    const sourceGroups = [
+      'packages/access/package.json packages/access/src/index.ts packages/bounds/package.json packages/bounds/src/index.ts packages/operations/package.json packages/operations/src/index.ts packages/operations/src/protocol.ts',
+      'services/kernel/src/access/gates/admission.ts services/kernel/src/access/gates/catalogue.ts services/kernel/src/access/gates/declaration.ts services/kernel/src/access/gates/management-read.ts services/kernel/src/access/gates/visibility.ts services/kernel/src/access/permission.ts services/kernel/src/access/policy-core.ts services/kernel/src/access/policy-filter.ts services/kernel/src/library/collection-list-policy.ts',
+      'services/kernel/src/history/operational-work-axes.ts services/kernel/src/history/operational-work-budget.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/work/selected-runtime-cost.ts services/kernel/src/work/selected-runtime.ts',
+      'services/kernel/src/http/headers.ts services/kernel/src/http/kernel.ts services/kernel/src/http/operation-adapter.ts services/kernel/src/library/continue-routes.ts services/kernel/src/library/operation-declarations.ts services/kernel/src/library/progress-routes.ts services/kernel/src/content/feed-operation-declarations.ts services/kernel/src/content/feed-routes.ts',
+      'services/kernel/src/content/community-projection/index.ts services/kernel/src/content/board-page.ts services/kernel/src/content/conversation-activity.ts services/kernel/src/content/feed-conversation-activity.ts services/kernel/src/content/realm-community.ts services/kernel/src/content/subject-threads-cards.ts',
+      'apps/web/src/routes/editions/$id.tsx apps/web/src/routes/search.tsx apps/web/src/checkout/reader-origin.ts apps/web/src/search/search.tsx apps/web/src/kernel/client.ts apps/web/src/inbox/inbox-read.ts apps/web/src/settings/account-rename-actions.ts apps/web/src/settings/actions.server.ts apps/web/src/settings/actions.ts apps/web/src/settings/managed-account-actions-read.ts apps/web/src/settings/managed-account-detail-read.ts apps/web/src/settings/shelf-preferences-current.tsx apps/web/src/settings/verification-actions.ts',
+    ];
+    copySources(root, sourceGroups.flatMap((group) => group.split(/\s+/)));
     const graphManifest: ArchitectureManifest = {
       version: 1,
       sourceRoots: ['services/kernel/src', 'apps/web/src', 'packages/access/src', 'packages/bounds/src', 'packages/operations/src']
@@ -252,19 +235,14 @@ describe('architecture boundaries', () => {
       expectTargets(target, sources);
     };
 
-    expect(committed.sourceRoots.map(({ path }) => path)).toEqual(
-      expect.arrayContaining(['packages/access/src', 'packages/bounds/src', 'packages/operations/src']),
-    );
-    expect(module('access-policy')).toMatchObject({
-      kind: 'core', owner: 'accounts', publicEntries: ['@rezics/access'], allowedDependencies: [],
-    });
-    expect(module('bounds')).toMatchObject({
-      kind: 'core', owner: 'performance', publicEntries: ['@rezics/bounds'], allowedDependencies: [],
-    });
-    expect(module('operations')).toMatchObject({
-      kind: 'core', owner: 'performance',
-      publicEntries: ['@rezics/operations', '@rezics/operations/protocol'], allowedDependencies: [],
-    });
+    expect(committed.sourceRoots.map(({ path }) => path)).toEqual(expect.arrayContaining([
+      'packages/access/src', 'packages/bounds/src', 'packages/operations/src',
+    ]));
+    for (const [id, config] of Object.entries({
+      'access-policy': { kind: 'core', owner: 'accounts', publicEntries: ['@rezics/access'], allowedDependencies: [] },
+      bounds: { kind: 'core', owner: 'performance', publicEntries: ['@rezics/bounds'], allowedDependencies: [] },
+      operations: { kind: 'core', owner: 'performance', publicEntries: ['@rezics/operations', '@rezics/operations/protocol'], allowedDependencies: [] },
+    })) expect(module(id)).toMatchObject(config);
     for (const [id, dependencies] of Object.entries({
       'kernel-access': ['access-policy'],
       'kernel-content': ['operations'],
