@@ -41,6 +41,9 @@ export async function signInForAccountOperation(
 }
 
 // `/signin` and `/signin/passkey` answer alike, so both reduce to the same result.
+export function signInResult(result: Extract<AuthPostResult, { ok: true }>): Extract<SignInResult, { ok: true }>;
+export function signInResult(result: Extract<AuthPostResult, { ok: false }>): Exclude<SignInResult, { ok: true }>;
+export function signInResult(result: AuthPostResult): SignInResult;
 export function signInResult(result: AuthPostResult): SignInResult {
   if (result.ok) return { ok: true };
   if (result.status === 401 && result.code === 'authentication_denied') return { ok: false, reason: 'credentials' };
