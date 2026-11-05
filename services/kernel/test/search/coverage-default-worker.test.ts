@@ -331,9 +331,14 @@ test('real default worker reconciles a native replacement across interruption an
     expect((await retainedJob())!.consumer.incarnation).toBe(originalJob!.consumer.incarnation);
     expect(client.ledger().resources.filter((resource) => resource.kind === 'worker_process')).toHaveLength(2);
     let rebuilding = true;
-    const pending = driver.rebuild().finally(() => {
-      rebuilding = false;
-    });
+    const pending = eventually(
+      () => physical(search, target.name),
+      (value) => value?.generation === requested.generation,
+    )
+      .then((value) => ({ generation: value!.generation }))
+      .finally(() => {
+        rebuilding = false;
+      });
     const observing = (async () => {
       do {
         const active = (await subjectGenerations(search, target.name)).active;

@@ -71,28 +71,35 @@ export async function assertNativeGenerationCoverage(options: {
     }
   }
   const actual = new Set<string>();
-  let after: string[] | undefined;
-  for (;;) {
-    const response = await search.request<{
-      timed_out: boolean;
-      _shards: { failed: number };
-      hits: { hits: { _id: string; sort: string[] }[] };
-    }>(
+  type EnginePage = {
+    _scroll_id: string;
+    timed_out: boolean;
+    _shards: { failed: number };
+    hits: { hits: { _id: string }[] };
+  };
+  let scroll: string | undefined;
+  try {
+    let response = await search.request<EnginePage>(
       'POST',
       `/${index}/_search`,
-      { size: 100, sort: [{ id: 'asc' }], ...(after ? { search_after: after } : {}) },
-      { query: { allow_partial_search_results: false } },
+      { size: 100, sort: ['_doc'] },
+      { query: { scroll: '1m', allow_partial_search_results: false } },
     );
-    assert.equal(response.status, 200);
-    assert.equal(response.body.timed_out, false);
-    assert.equal(response.body._shards.failed, 0);
-    const rows = response.body.hits.hits;
-    if (!rows.length) break;
-    for (const row of rows) {
-      assert(!actual.has(row._id));
-      actual.add(row._id);
+    for (;;) {
+      scroll = response.body._scroll_id;
+      assert.equal(response.status, 200);
+      assert.equal(response.body.timed_out, false);
+      assert.equal(response.body._shards.failed, 0);
+      const rows = response.body.hits.hits;
+      if (!rows.length) break;
+      for (const row of rows) {
+        assert(!actual.has(row._id));
+        actual.add(row._id);
+      }
+      response = await search.request<EnginePage>('POST', '/_search/scroll', { scroll: '1m', scroll_id: scroll });
     }
-    after = rows.at(-1)!.sort;
+  } finally {
+    if (scroll) await search.request('DELETE', '/_search/scroll', { scroll_id: [scroll] });
   }
   assert.deepEqual(actual, expected);
   assert.deepEqual(await readSearchWriterPhysicalTarget(search, index), physical);
