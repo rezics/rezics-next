@@ -129,7 +129,7 @@ Do not interpret conditional review as delivered guarded effects or relax native
 ## Caller cost and cleanup
 
 For a page of `p <= 8` source rows, the existing private upload read and owner checks are repeated as before. Score
-context adds at most one Content question read and one current-own-vote read for each addressed VN target. Matching
+context adds one initial Content question read and one complete counted question/own-vote review for each addressed VN target. Matching
 still addresses only each selected provider tuple and at most two disclosed candidates; a chosen target adds its
 existing Library profile/source observation. A score review repeats the bounded upload/owner read, one tuple match,
 the chosen target observation, one Content counted question/current-vote review, and one Library review receipt plus the locked
