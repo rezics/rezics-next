@@ -4,8 +4,6 @@ import { act, Fragment, StrictMode, type ReactNode } from 'react';
 import type { ProgressDetailOrigin } from '../src/library/progress-session';
 import type { ProgressChange, ProgressSessionPage as Page } from '../src/library/progress-reads';
 
-// UNRUN: focused reader outcomes over supplied DTOs. Native, browser, Storybook and full acceptance
-// remain deferred; existing current-viewer/current-origin security suites are unchanged.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -57,6 +55,7 @@ mock.module('@tanstack/react-start/server', () => import('../.storybook/react-st
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => admitted.has(operation),
+  operationIsAdmitted: (operation: string) => admitted.has(operation),
   Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
     admitted.has(operation) ? <Fragment>{children}</Fragment> : null,
 }));
