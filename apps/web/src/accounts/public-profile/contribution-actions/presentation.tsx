@@ -123,9 +123,9 @@ export function ContributionWatch({
     lease.reader === reader &&
     lease.operation === 'watch' &&
     lease.current();
-  const [admitted, setAdmitted] = useState(ready);
-  if (ready && !admitted) setAdmitted(true);
-  const retaining = (ready || admitted) && isCurrent() && !!lease && lease.current();
+  const [admitted, setAdmitted] = useState(ready ? lease : undefined);
+  if (ready && admitted !== lease) setAdmitted(lease);
+  const retaining = (ready || admitted === lease) && isCurrent() && !!lease && lease.current();
   const target = reference ? contributionCommandTarget(reference, 'watch') : undefined;
   return (
     <ContributionAdvicePresentation

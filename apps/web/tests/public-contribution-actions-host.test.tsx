@@ -779,6 +779,17 @@ test('prepared current advice keeps native watch custody through uncertain readb
     expect(commands).toHaveLength(3);
     expect(node.textContent).not.toContain('Retry the same action');
     expect(node.textContent).not.toContain('Stop watching');
+    const replacementLease = { ...watchLease };
+    await render(
+      <ContributionWatch
+        presentation={{ ...scope, source: denied, operation: () => replacementLease }}
+        watching={false}
+        returnTo="/en/accounts/author/discussion"
+        native={uncertainNative}
+      />,
+    );
+    expect(node.querySelector('button')).toBeNull();
+    expect(commands).toHaveLength(3);
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -830,6 +841,12 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
         references: [{ type: reference.type, id, sourceRevisionId: id, state: 'current', operations }],
       },
     };
+    const reactionLease = {
+      reader: id,
+      operation: 'reaction' as const,
+      current: () => true,
+      credential: () => 'original-credential',
+    };
     const scope = {
       input,
       row: view === 'posts' ? { ...publicState, id, authorId: id, revisionId: id, threadId: id, thread } : thread,
@@ -837,12 +854,7 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       reader: id,
       locale: 'en' as const,
       isCurrent: () => true,
-      operation: () => ({
-        reader: id,
-        operation: 'reaction' as const,
-        current: () => true,
-        credential: () => 'original-credential',
-      }),
+      operation: () => reactionLease,
     };
     type Transport = NonNullable<import('../src/threads/thread-reactions').ThreadReactionsProps['preparedTransport']>;
     const commands: Parameters<Transport['change']>[0][] = [];
@@ -857,12 +869,12 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
         return { ok: true, value: 'like', counts: { like: 2 } };
       },
     };
-    const paint = async (advice = source, count = 1) =>
+    const paint = async (advice = source, count = 1, lease = reactionLease) =>
       act(async () => {
         root.render(
           <QueryClientProvider client={client}>
             <ContributionReaction
-              presentation={{ ...scope, source: advice }}
+              presentation={{ ...scope, source: advice, operation: () => lease }}
               counts={{ like: count }}
               value={null}
               returnTo="/en/accounts/author/posts?cursor=original%2B%2F%3D#reply"
@@ -921,6 +933,24 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       await paint();
       expect(commands).toHaveLength(2);
       expect(node.querySelector('[role="status"]')).toBeNull();
+      await paint(
+        {
+          ...source,
+          actions: {
+            ...source.actions,
+            references: [
+              {
+                ...source.actions.references[0]!,
+                operations: operations.map((operation) => ({ ...operation, state: 'denied' as const })),
+              },
+            ],
+          },
+        },
+        3,
+        { ...reactionLease },
+      );
+      expect(node.querySelector('button')).toBeNull();
+      expect(commands).toHaveLength(2);
     } finally {
       await act(async () => root.unmount());
       client.clear();

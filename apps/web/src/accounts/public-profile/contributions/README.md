@@ -172,5 +172,8 @@ changes. Denial disables new commands; unresolved native commands retain deliber
 readback never acknowledges them. Watch baseline changes and reaction watermarks cannot retire unresolved commands.
 The advice wrapper keeps native children in the same React slot when a denial notice appears, so showing current
 advice cannot recreate an admitted command owner.
+Admission is retained by the original operation lease, never by a boolean that a replacement lease can inherit.
+The prepared reaction fixture uses the host's stable lease contract; replacing that lease under denial exposes no
+native control and adopts no earlier command.
 Only the official installed row adapter may supply production advice; the public callable and anonymous selection
 must both be installed before replacing the unavailable wire.

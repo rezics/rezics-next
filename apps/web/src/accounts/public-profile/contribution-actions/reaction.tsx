@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { ThreadReactions, type ThreadReactionsProps } from '../../../threads/thread-reactions';
+import { contributionOperationLeaseId } from './current';
 import { contributionOperationAdvice, originalContributionReference } from './advice';
 import { ContributionAdvicePresentation, type ContributionPresentation } from './presentation';
 
@@ -52,9 +53,9 @@ export function ContributionReaction({
     lease.reader === reader &&
     lease.operation === 'reaction' &&
     lease.current();
-  const [admitted, setAdmitted] = useState(ready);
-  if (ready && !admitted) setAdmitted(true);
-  const retaining = (ready || admitted) && isCurrent() && !!lease && lease.current();
+  const [admitted, setAdmitted] = useState(ready ? lease : undefined);
+  if (ready && admitted !== lease) setAdmitted(lease);
+  const retaining = (ready || admitted === lease) && isCurrent() && !!lease && lease.current();
   // The mounted aggregate may advance while the original native command is unresolved.
   const [discardedVisit, setDiscardedVisit] = useState(0);
   return (
@@ -67,7 +68,7 @@ export function ContributionReaction({
     >
       {retaining && reference && lease ? (
         <ThreadReactions
-          key={discardedVisit}
+          key={`${contributionOperationLeaseId(lease)}:${discardedVisit}`}
           onDiscard={() => setDiscardedVisit((value) => value + 1)}
           target={{ kind, id: reference.id }}
           counts={counts}
