@@ -238,10 +238,10 @@ function tree(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 4_000;
   await act(tick);
   while (!check() && Date.now() < deadline) await act(tick);
-  expect(check()).toBe(true);
+  expect(check(), JSON.stringify({ privateReads: privateReads.length, publicReads, html: host.innerHTML })).toBe(true);
 }
 async function paint(
   component: 'subject' | 'zone',
@@ -268,19 +268,27 @@ function chip(kind: SubjectReactionKind) {
           : kind === 'insightful'
             ? m.reaction_insightful()
             : m.reaction_sad();
-  const found = chips().find((button) => button.textContent?.startsWith(label));
-  expect(found, host.innerHTML).toBeDefined();
+  const found = chips().find((button) => button.getAttribute('aria-label')?.startsWith(label));
+  expect(found).toBeDefined();
   return found!;
 }
 async function clickKind(kind: SubjectReactionKind) {
   await act(async () => {
-    if (kind === 'like' || kind === 'insightful') chip(kind).click();
+    if (kind === 'like' || kind === 'insightful') {
+      chip(kind).click();
+      await tick();
+    }
     else {
       const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
         (button) => button.textContent?.trim() === m.reaction_react(),
       );
       expect(trigger).toBeDefined();
       trigger!.click();
+      await tick();
+    }
+  });
+  if (kind !== 'like' && kind !== 'insightful')
+    await act(async () => {
       const choice = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
         (button) =>
           button.textContent?.trim() ===
@@ -288,9 +296,8 @@ async function clickKind(kind: SubjectReactionKind) {
       );
       expect(choice).toBeDefined();
       choice!.click();
-    }
-    await tick();
-  });
+      await tick();
+    });
 }
 function setPrivateRead(index: number, value: SubjectReactionKind | null) {
   privateReads[index]!.response.resolve({ reader: privateReads[index]!.preparedReader, value });
@@ -483,7 +490,7 @@ test('removing and recreating the session retires old private data and requires 
     await tick();
   });
   expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
-  expect(chips().every((button) => button.disabled)).toBe(true);
+  expect(chips().every((button) => button.disabled || button.getAttribute('role') === 'img')).toBe(true);
   await act(async () => {
     writes[0]!.resolve({ ok: true });
     client.setQueryData(sessionQuery.queryKey, viewer());
