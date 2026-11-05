@@ -496,7 +496,8 @@ export function RealmShelf({
       return;
     delivered.current.add(completed.intent);
     const outcome = currentControl.current?.outcome;
-    const receiptCurrent = () => completed.current() && currentControl.current?.outcome === outcome && receipt.current();
+    const receiptCurrent = () =>
+      completed.current() && currentControl.current?.outcome === outcome && receipt.current();
     const result: RealmPublicationCompletion = {
       realmId: realm.id,
       subjectId: completed.input.subjectId,
