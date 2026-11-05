@@ -2013,45 +2013,19 @@ session system or grant engine exists.
 Registration is a trusted, in-process deployment operation. There is no dynamic
 or HTTP client registration:
 
-```ts
-import { registerWebsiteDeployment } from './scripts/website-composition.ts';
-import { actionCatalogue } from '../kernel/src/http/request.ts';
+Decision: derive website scopes from every mounted action, including anonymous-capable private branches,
+plus Auth's `organization:create`, `account:manage`, `account:delete`. Never use a hand list or wildcard.
+`mountedWebsiteConfiguration(actionCatalogue(kernel))` deduplicates/sorts actions with OpenID
+scopes. Local setup, host and launch share this composition. Auth's Access-supplied `siteActions` refuses
+unmounted names.
 
-await registerWebsiteDeployment(
-  auth,
-  kernel,
-  {
-    publicJwks: { keys: [websitePublicJwk] }, // public P-256 ES256 keys only
-    redirectUris: ['https://rezics.com/auth/callback'],
-    postLogoutRedirectUris: ['https://rezics.com/'],
-  },
-  websiteConfigurationFile,
-);
-```
+Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, websiteConfigurationFile)`
+registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
+composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.
 
-Decision: derive website registration and configuration from all actual mounted operation/action declarations,
-including private branches of anonymous-capable actions, plus the existing Auth `organization:create`,
-`account:manage` and `account:delete` operations; never filter by `anonymous` or maintain a scope hand list.
-`mountedWebsiteConfiguration(actionCatalogue(kernel))` uses resolved mounted route actions, deduplicates and
-sorts them with OpenID scopes. Use the same trusted mounted catalogue in Auth's `siteActions`; Auth refuses
-unmounted names. Operation IDs and exposure groups are not action names. Registration grants no resource,
-platform opening, ownership or lifecycle permission.
-
-`registerWebsiteDeployment` invokes the ordinary trusted registration and only then emits the public
-`WEBSITE_SCOPES` JSON configuration artifact. The deployment owner supplies the actual Auth/Kernel composition,
-public JWK, exact callbacks and output file; Web builds consume that file via `WEBSITE_CONFIGURATION_FILE`.
-A supplied `WEBSITE_SCOPES` override must match. No deployed registry or secret environment is implied by this
-source configuration. The production audience, Kernel `AUTH_AUDIENCE` and website `resource` are exactly
-`https://api.rezics.com`, without a trailing slash; isolated tests use `https://api.rezics.test`.
-
-Local setup, host and Web launch derive the same deterministic set from the real mounted Kernel, once per
-lifecycle entry. Setup writes it to Web's generated bindings and launch passes it directly. Importer credentials
-and grants remain separate. No browser service import or request-time catalogue rebuild participates.
-After updating registration and configuration together, deliberately sign out of Web, sign in again and complete
-the ordinary Auth authorization/renewed-consent flow. Existing sessions, access tokens and refresh tokens retain
-their previous scope ceilings. Preserve an original session separately for a negative control; do not patch
-consent/token rows or reset the shared database. Source composition alone establishes no populated journey:
-ordinary native scope/resource checks, exposure, ownership, lifecycle and fixture/preparation receiving still apply.
+Update registration/configuration together, then deliberately sign out, sign in and complete renewed consent.
+Old sessions/access/refresh ceilings remain unchanged. Registration supplies no resource, exposure, ownership
+or lifecycle grant; populated journeys still require native receiving and prepared fixtures.
 
 - The website generates its private P-256 JWK and keeps it as a Worker secret.
   Deployment passes only `{ keys: [public JWK] }`. Each key needs a unique `kid`,

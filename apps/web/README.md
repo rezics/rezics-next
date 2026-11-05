@@ -487,7 +487,7 @@ import { actionCatalogue } from '../../services/kernel/src/http/request.ts';
 
 await registerWebsiteDeployment(
   auth,
-  kernel,
+  actionCatalogue(kernel),
   {
     publicJwks: { keys: [websitePublicJwk] },
     redirectUris: ['https://rezics.com/auth/callback'],
