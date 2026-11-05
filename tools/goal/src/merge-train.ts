@@ -3205,6 +3205,7 @@ export class MergeTrain {
             sourceCommit,
             frozen,
             outcome.logPath,
+            true,
           );
         } catch (error) {
           failure = String(error);
