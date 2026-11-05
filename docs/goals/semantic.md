@@ -23,8 +23,8 @@ Semantic owns Definitions, shared filters, native Semantic and Zones, their curr
 Decision: Kernel typecheck repairs update fixtures and call forms to current contracts while preserving assertions;
 production changes are limited to code that violates those contracts.
 
-Decision: publish Character document reads through the generated installed client contract; preserve native preview
-bounds and exact Content bindings, with typed anonymous and signed-in readback coverage.
+Decision: the installed Character read contract admits includeDocuments and reuses Content's public document type;
+preserve native preview bounds and exact bindings, with typed anonymous and signed-in readback coverage.
 
 ## Ownership
 
