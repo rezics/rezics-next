@@ -406,7 +406,7 @@ function MineFollowingPageState({
           variant="outline"
           disabled={!!status}
           onClick={() => {
-            if (!origin.isCurrent()) return;
+            if (page.forbidden ? !origin.isCurrent() : !reading.returnCurrent()) return;
             reading.close(false);
             onRefresh();
           }}
