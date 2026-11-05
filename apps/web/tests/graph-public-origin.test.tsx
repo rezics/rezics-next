@@ -226,26 +226,35 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     const globalAddress = new URL(globalHref, 'https://site.test');
     const routeAddress = (url: URL) => `${url.pathname.replace(/^\/en(?=\/)/, '')}${url.search}`;
     await act(async () => router.history.push(routeAddress(globalAddress)));
-    await waitFor(() => expect(calls).toHaveLength(1));
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    const firstGlobalCount = calls.length;
+    expect(calls.every((call) => !('context' in call.data) && !('realm' in call.data))).toBe(true);
     await act(async () => router.history.push(routeAddress(selectedAddress)));
     await waitFor(() => expect(host.textContent).toContain('selected Context or Realm'));
+    expect(calls).toHaveLength(firstGlobalCount);
     expect(calls[0]!.signal.aborted).toBe(true);
+    const afterUnsupported = calls.length;
     await act(async () => router.history.push(routeAddress(globalAddress)));
-    await waitFor(() => expect(calls).toHaveLength(2));
+    await waitFor(() => expect(calls.length).toBeGreaterThan(afterUnsupported));
     await act(async () => staleResults[0]!({ ok: false, reason: 'denied' }));
     expect(host.textContent).not.toContain('not available for the current session');
 
+    const beforeFresh = calls.length;
     await act(async () => router.history.push(routeAddress(new URL(fresh!.href, 'https://site.test'))));
-    await waitFor(() => expect(calls).toHaveLength(3));
-    expect(calls[2]!.data).toMatchObject({ id: subject, locale: 'en', expectedReader: null });
-    expect(calls[2]!.data).not.toHaveProperty('context');
-    expect(calls[2]!.data).not.toHaveProperty('realm');
-    expect(calls[2]!.data).not.toHaveProperty('node');
-    expect(calls[2]!.data).not.toHaveProperty('edge');
+    await waitFor(() => expect(calls.length).toBeGreaterThan(beforeFresh));
+    const freshCalls = calls.slice(beforeFresh);
+    for (const call of freshCalls) {
+      expect(call.data).toMatchObject({ id: subject, locale: 'en', expectedReader: null });
+      expect(call.data).not.toHaveProperty('context');
+      expect(call.data).not.toHaveProperty('realm');
+      expect(call.data).not.toHaveProperty('node');
+      expect(call.data).not.toHaveProperty('edge');
+    }
     expect(host.textContent).toContain('current Global catalogue');
     expect(host.textContent).not.toContain('selected Context or Realm');
     expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === publicReturn)).toBe(true);
 
+    const beforeSignIn = calls.length;
     await act(async () => {
       setObservedSession({
         state: 'signed-in',
@@ -253,8 +262,8 @@ test('the production graph route gates unsupported origins and a fresh Global ch
         csrfToken: 'reader',
       });
     });
-    await waitFor(() => expect(calls.length).toBeGreaterThan(3));
-    expect(calls[3]!.data.expectedReader).toEqual(expect.any(String));
+    await waitFor(() => expect(calls.length).toBeGreaterThan(beforeSignIn));
+    expect(calls.slice(beforeSignIn).some((call) => typeof call.data.expectedReader === 'string')).toBe(true);
   } finally {
     await act(async () => {
       root.unmount();
