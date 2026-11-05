@@ -91,6 +91,8 @@ refresh cannot replace a started unresolved score, including when labels are ref
 resumable. Independent effects cannot turn a selected unsuccessful vote into overall success.
 
 The consumer adapts the native flat question scale fields into the existing nested review scale.
+Definitive score outcomes persist independently before remaining labels or Progress; retries retain that original
+result and read current native state. A label refresh cannot erase an unresolved started vote.
 The consumer now calls the actual installed producer. On this source base the producer still throws
 `atomic_guard_unavailable` for guarded effects; this remains genuine unavailability, not positive acceptance.
 Content owns its original serial atomic-producer repair. No local vote writer, resolver or permission mechanism is
@@ -126,7 +128,8 @@ Integration decision: MAL and Bangumi retain their separate native review guards
 Native rating cost: at most 20 selected rows per page/review/apply batch use one complete native `readVoteReview`
 per row (question directory/current account, bounded counted-reader prepare/read/finish, original/canonical slots and
 identity epoch fences). Unstarted apply and page repeat these observations. Each effect persists one started checkpoint,
-invokes one conditional native command with its original key/guard, then reads current own vote. An uncertain retry
+invokes one conditional native command with its original key/guard, reads current own vote, and persists one
+independent definitive score checkpoint before other selected effects. An uncertain retry
 repeats that exact command's authorization, exposure and receipt lookup before disclosure; it does not refresh review
 operands. Include the producer's question/lifecycle, identity and own-vote fences, receipt digest, native vote,
 component/aggregate work and transaction commit/rollback in the same caller cost. Guard bytes, checkpoints and outcomes
