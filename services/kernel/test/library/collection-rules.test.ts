@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
+import { createPool } from '../../src/database/pool.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
 import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
 import { discoveryKey, discoveryStatement } from '../support/released-discovery.ts';
@@ -83,7 +85,12 @@ test('a catalogue source is retained and executes through current Search members
 }, 120_000);
 
 test('catalogue selected publication uses pinned Search membership and activates only the explicitly selected current result', async () => {
-  const population = await createReleasedLibraryPopulation({ version: 1, search: 'native' });
+  let runtimePool: ReturnType<typeof createPool> | undefined;
+  const population = await createReleasedLibraryPopulation({
+    version: 1,
+    search: 'native',
+    kernelPool: (url) => (runtimePool = createPool(url)),
+  });
   try {
     const { base, request } = population;
     const books = await base.books();
@@ -209,6 +216,92 @@ test('catalogue selected publication uses pinned Search membership and activates
     expect(
       (publicAfterActivation.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
     ).toEqual([libraryOnlyBeforeMatch.id]);
+
+    const keys = [routeOf(collection.id), collection.id];
+    const beforeRaceHead = (
+      await base.inspect<{ generation: string; sourceGeneration: string }>(
+        `SELECT generation::text,source_generation::text AS "sourceGeneration"
+         FROM library.collection_source_output_head WHERE route=$1 AND collection_id=$2`,
+        keys,
+      )
+    ).rows[0];
+    expect(beforeRaceHead).toBeDefined();
+    const beforeRaceMembers = (
+      await base.inspect<{ subjectId: string }>(
+        `SELECT subject_id::text AS "subjectId" FROM library.collection_source_output_member
+         WHERE route=$1 AND collection_id=$2 AND generation=$3 ORDER BY subject_id`,
+        [...keys, beforeRaceHead!.generation],
+      )
+    ).rows.map(({ subjectId }) => subjectId);
+    const client = await runtimePool!.connect();
+    const restorers: (() => void)[] = [];
+    let reached!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const onAcquire = (connection: PoolClient) => {
+      const original = connection.query;
+      connection.query = function (...args: unknown[]) {
+        const query = args[0] as string | { text: string };
+        const sql = typeof query === 'string' ? query : query.text;
+        if (sql.includes('curator_account_id=$3') && sql.includes('FOR UPDATE')) reached();
+        return (original as (...values: unknown[]) => unknown).apply(connection, args);
+      } as PoolClient['query'];
+      restorers.push(() => {
+        connection.query = original;
+      });
+    };
+    let late: Promise<Awaited<ReturnType<typeof request>>> | undefined;
+    try {
+      await client.query('BEGIN');
+      // The prepared catalogue observation is valid until this uncommitted fence lands at the final parent lock.
+      await client.query(
+        'UPDATE library.collection SET source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2',
+        keys,
+      );
+      runtimePool!.on('acquire', onAcquire);
+      late = request(
+        'alice',
+        'POST',
+        `/v1/collections/${collection.id}:publishSelected`,
+        {
+          revision: (activated.body as { collection: { revision: number } }).collection.revision,
+          subjectIds: [libraryOnlyBeforeMatch.id],
+        },
+        discoveryKey(),
+      );
+      await Promise.race([
+        waiting,
+        late.then(() => {
+          throw new Error('Catalogue publication did not reach its final source-fence compare');
+        }),
+      ]);
+      await client.query('COMMIT');
+      const refused = await late;
+      expect(refused.status).toBe(409);
+      const afterRaceHead = (
+        await base.inspect<{ generation: string; sourceGeneration: string }>(
+          `SELECT generation::text,source_generation::text AS "sourceGeneration"
+           FROM library.collection_source_output_head WHERE route=$1 AND collection_id=$2`,
+          keys,
+        )
+      ).rows[0];
+      const afterRaceMembers = (
+        await base.inspect<{ subjectId: string }>(
+          `SELECT subject_id::text AS "subjectId" FROM library.collection_source_output_member
+           WHERE route=$1 AND collection_id=$2 AND generation=$3 ORDER BY subject_id`,
+          [...keys, afterRaceHead!.generation],
+        )
+      ).rows.map(({ subjectId }) => subjectId);
+      expect(afterRaceHead).toEqual(beforeRaceHead);
+      expect(afterRaceMembers).toEqual(beforeRaceMembers);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+      if (late) await late;
+      runtimePool!.off('acquire', onAcquire);
+      for (const restore of restorers.reverse()) restore();
+    }
   } finally {
     await population.close();
   }
