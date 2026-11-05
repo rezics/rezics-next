@@ -140,7 +140,7 @@ test('native Book edition disclosure returns selected work labels and exact empt
       { identities: [assemblyEdition], languages: ['en'] },
     );
     const duringState = during.results.get(assemblyEdition);
-    expect(['withheld', 'unavailable']).toContain(duringState?.state);
+    expect(['withheld', 'unavailable']).toContain(duringState!.state);
     expect(JSON.stringify(duringState ?? null)).not.toContain(assemblyWork);
 
     const mergeWork = await f.create('schema:Book', {}, { en: 'Redirected work' });
@@ -152,7 +152,7 @@ test('native Book edition disclosure returns selected work labels and exact empt
     const merged = await readCopyWorkDisclosure(deps, { identities: [mergeEdition] });
     const mergedState = merged.results.get(mergeEdition);
     expect(JSON.stringify(mergedState ?? null)).not.toContain(redirected);
-    expect(['available', 'unavailable']).toContain(mergedState?.state);
+    expect(['available', 'unavailable']).toContain(mergedState!.state);
 
     await f.hide(work);
     expect(await observed.current()).toBe(false);

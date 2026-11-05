@@ -147,7 +147,7 @@ async function candidates(editor: Awaited<ReturnType<typeof openApiObserver>>, i
     } | null;
     statement: {
       value: { content: unknown };
-      references?: { parts: { property: { id: string }; value: { type: string; content: unknown } }[] }[];
+      references?: Proposal['references'];
     };
   }[];
 }
@@ -209,7 +209,8 @@ function importerTransport(port: CrossMediaPort): ImportTransport {
   return {
     batchWrite: (request) => port.batch(request),
     setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
-    readFence: (tuple) => port.fence({source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group}),
+    readFence: (tuple) =>
+      port.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
     writeSourceStatistic: (request, signal) => port.writeSourceStatistic(request, signal),
     clearSourceStatistic: (request, signal) => port.clearSourceStatistic(request, signal),
   };
@@ -427,7 +428,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         fieldGroup: source.field_group,
         kind: 'value',
         statement: candidate.statement as unknown as Statement,
-        references: (candidate.statement.references ?? []).map(reference => ({parts: reference.parts.map(part => ({property: part.property, value: {...part.value, type: 'value' as const}}))})),
+        references: candidate.statement.references ?? [],
       };
       expect(proposal.references[0]?.parts).toContainEqual({
         property: { id: 'schema:url' },

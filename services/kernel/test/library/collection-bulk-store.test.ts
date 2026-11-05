@@ -39,8 +39,20 @@ const preview = (targets: CollectionBulkTarget[]) => {
       action: 'set_status' as const,
       state: 'completed' as const,
       selection: {
-        kind: 'query' as const, sourceId: targets[0]?.subjectId ?? newId(route), filter: '{"state":"planned"}',
-        capture: { id: targets[0]?.subjectId ?? newId(route), revision: 1, membershipKind: 'curated' as const, exposure: 'private' as const, sourceDigest: 'c'.repeat(64), filter: '{"state":"planned"}', sort: null, scannedCandidates: targets.length, selectedSubjects: targets.length },
+        kind: 'query' as const,
+        sourceId: targets[0]?.subjectId ?? newId(route),
+        filter: '{"state":"planned"}',
+        capture: {
+          id: targets[0]?.subjectId ?? newId(route),
+          revision: 1,
+          membershipKind: 'curated' as const,
+          exposure: 'private' as const,
+          sourceDigest: 'c'.repeat(64),
+          filter: '{"state":"planned"}',
+          sort: null,
+          scannedCandidates: targets.length,
+          selectedSubjects: targets.length,
+        },
       },
     },
     // This test exercises the internal storage seam, not initiator capture or authorization.
@@ -170,7 +182,7 @@ test('explicit subjects and duplicate-subject occurrences retain their exact ide
       request: {
         action: 'set_status',
         state: 'completed',
-        selection: { kind: 'explicit', targets: [{ subjectId: subject.subjectId }] },
+        selection: { kind: 'explicit' },
       },
     });
     expect((await readCollectionBulk(tx, input))?.request.selection).toEqual({ kind: 'explicit' });
@@ -179,7 +191,7 @@ test('explicit subjects and duplicate-subject occurrences retain their exact ide
     const occurrences = preview([]);
     await previewCollectionBulk(tx, {
       ...occurrences,
-      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences', memberIds } },
+      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences' } },
       targets: memberIds.map((memberId) => ({
         kind: 'occurrence',
         subjectId: subject.subjectId,

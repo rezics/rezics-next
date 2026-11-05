@@ -127,7 +127,7 @@ test('synthetic selected Person and Organization images use the common authorize
         statusReads += 1;
         return runtime.importTransport.mediaStatus(id, requestSignal);
       },
-    } as unknown as CrossMediaPort;
+    } satisfies CrossMediaPort;
     const firstPort = captureShowcaseCommands(mediaPort, journal);
     const initial = await seedCrossMedia(
       sourcePlan,
@@ -349,7 +349,7 @@ test('default finite Bangumi selection imports a direct Character image through 
     await runtime.mediaBoundary.source(characterWorkCoverSourceUrl, undefined, bytes);
     await runtime.mediaBoundary.source(characterSourceUrl, undefined, bytes);
     const apiReads: string[] = [];
-    const sourceFetch: typeof fetch = async (input) => {
+    const sourceFetch = fixtureFetch(async (input) => {
       const endpoint = String(input);
       apiReads.push(endpoint);
       if (endpoint === 'https://api.bgm.tv/v0/characters/11546')
@@ -383,7 +383,7 @@ test('default finite Bangumi selection imports a direct Character image through 
         status: 200,
         headers: { etag: `"native-subject-${subjectId}"` },
       });
-    };
+    });
     const sourcePlan = await acquireBangumiCoverSources(rawPlan, {
       journal,
       sleep: async () => {},
@@ -422,7 +422,7 @@ test('default finite Bangumi selection imports a direct Character image through 
         statusReads += 1;
         return runtime.importTransport.mediaStatus(id, requestSignal);
       },
-    } as unknown as CrossMediaPort;
+    } satisfies CrossMediaPort;
     const firstPort = captureShowcaseCommands(mediaPort, journal);
     await expect(
       seedCrossMedia(

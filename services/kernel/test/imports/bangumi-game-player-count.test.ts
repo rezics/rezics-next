@@ -114,7 +114,12 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    expect(retainedCandidates(missing.candidates).filter((candidate) => candidate.source?.external_id === gameId)).toEqual([]);
+    expect(
+      retainedCandidates(missing.candidates).filter(
+        (candidate) =>
+          (candidate.source && 'external_id' in candidate.source ? candidate.source.external_id : undefined) === gameId,
+      ),
+    ).toEqual([]);
     expect(playerStatement(await publicClient.readSubject(first.id))).toBeUndefined();
 
     const corrected = await importSelected(rangeInfobox);
@@ -124,7 +129,9 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    const candidate = retainedCandidates(listing.candidates).find((item) => item.source?.external_id === gameId);
+    const candidate = retainedCandidates(listing.candidates).find(
+      (item) => (item.source && 'external_id' in item.source ? item.source.external_id : undefined) === gameId,
+    );
     if (!candidate) throw new Error('Corrected player-count candidate is missing');
     expect(candidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
@@ -134,7 +141,7 @@ test('selected Game player-count range is independently adopted and current, and
     expect(candidate.statement.value).toEqual({ type: 'value', content: { amount: '+4', unit: '1' } });
     expect(candidate.statement.qualifiers).toEqual([
       {
-        property: { id: 'schema:minValue' },
+        property: { id: 'schema:minValue', data_type: 'quantity' },
         value: { type: 'value', content: { amount: '+1', unit: '1' } },
       },
     ]);

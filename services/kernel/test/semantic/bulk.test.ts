@@ -1,3 +1,4 @@
+import { fixtureFetch } from '../imports/native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -105,10 +106,10 @@ async function stableBatch(commands: BatchCommand[]) {
   const port = createImportTransport({
     origin: 'http://kernel.test',
     tokenProvider: async () => realAccess.bearer('importer'),
-    fetch: async (input, init) => {
+    fetch: fixtureFetch(async (input, init) => {
       response = await kernel.handle(input instanceof Request ? input : new Request(input, init));
       return response;
-    },
+    }),
   });
   const body = await port.batch({ commands });
   return { response: response!, body };
@@ -140,7 +141,9 @@ test('native sourced batch create, proposal and replay retain command history an
   const first = await stableBatch(commands);
   expect(first.response.status).toBe(200);
   expect(first.response.headers.get('rezics-session-token')).toBeString();
-  const id = first.body.results[0].value.id as string;
+  const created = first.body.results[0]!;
+  if (!('value' in created) || !('id' in created.value)) throw new Error('Expected created subject');
+  const id = created.value.id;
   expect(routeOf(id)).toBe(anchorRoute(routeKey, `openlibrary\n${externalId}`));
   expect(results(first.body)).toEqual([
     { key: 'create-facts', status: 201, value: { id, revision: 1 } },

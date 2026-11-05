@@ -102,7 +102,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   await fence('102');
   const recordStart = observer.records.length;
   const first = await page(id);
-  expect(first.head.digest).toBe(latest);
+  expect(first.head.digest).toBe(latest!);
   expect(first.history!.items.map((item) => item.digest)).toEqual([latest!]);
   expect(first.history!.nextCursor).toBeString();
   const withheld = await page(id, first.history!.nextCursor!);
@@ -119,7 +119,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   expect(JSON.stringify(fetched.map((row) => row.parameters))).not.toContain(middle!);
   await json(await inspect(id, `?digest=${middle}`), 404);
   const exact = await json(await inspect(id, `?digest=${old}`));
-  expect(exact.head.digest).toBe(latest);
+  expect(exact.head.digest).toBe(latest!);
   expect(exact.selectedObservation.digest).toBe(old);
   await json(await inspect(id, `?digest=${'0'.repeat(64)}`), 404);
   await json(await fixture.request('GET', `${path(id)}/observations`, { actor: null }), 401);

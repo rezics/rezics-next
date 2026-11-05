@@ -1,10 +1,14 @@
 /** Keep the native fetch callable's Bun connection API on deterministic HTTP fixtures. */
-export function fixtureFetch(implementation: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>): typeof fetch {
+export function fixtureFetch(
+  implementation: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>,
+): typeof fetch {
   return Object.assign(implementation, { preconnect: fetch.preconnect });
 }
 
 /** These publication fixtures expect complete retained candidates, never deletion tombstones. */
-export function retainedCandidates<C extends { id: string }>(candidates: readonly C[]): Exclude<C, { deleted: true }>[] {
+export function retainedCandidates<C extends { id: string }>(
+  candidates: readonly C[],
+): Exclude<C, { deleted: true }>[] {
   return candidates.map((candidate) => {
     assertRetained(candidate);
     return candidate;
@@ -16,8 +20,11 @@ function assertRetained<C extends { id: string }>(candidate: C): asserts candida
 }
 
 /** Candidate ranks are the native read projection of the current adoption selection. */
-export function adoptedCandidates<C extends { id: string; rank: string | null }>(page: { adoption?: {mode: string; head: number}; candidates: readonly (C | { id: string; deleted: true })[] }) {
-  if (page.adoption === undefined) return undefined;
+export function adoptedCandidates<C extends { id: string; rank: string | null }>(page: {
+  adoption: { mode: string; head: number } | null;
+  candidates: readonly (C | { id: string; deleted: true })[];
+}) {
+  if (page.adoption === null) return undefined;
   return retainedCandidates(page.candidates).flatMap((candidate) =>
     candidate.rank === null ? [] : [{ candidate: candidate.id, rank: candidate.rank }],
   );

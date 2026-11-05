@@ -1,4 +1,4 @@
-import { fixtureFetch, retainedCandidates } from './native-observations.ts';
+import { fixtureFetch, retainedCandidates, valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -47,11 +47,15 @@ function titleValues(statements: readonly BatchStatement[] | undefined) {
     .sort((left, right) => `${left.language}\u0000${left.text}`.localeCompare(`${right.language}\u0000${right.text}`));
 }
 
-function hasTitleCandidate(candidates: readonly { statement: BatchStatement }[], language: string, text: string) {
+function hasTitleCandidate(
+  candidates: readonly { statement: { value: BatchStatement['value'] } }[],
+  language: string,
+  text: string,
+) {
   return candidates.some(
     (candidate) =>
       candidate.statement.value.type === 'value' &&
-      JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language, text }),
+      JSON.stringify(valueContent(candidate.statement.value)) === JSON.stringify({ language, text }),
   );
 }
 
@@ -91,13 +95,15 @@ test('Book names move through explicit publication and same-UUID refresh without
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(retainedCandidates(firstPage.candidates).map((candidate) => candidate.statement.value.content)).toContainEqual({
+    expect(
+      retainedCandidates(firstPage.candidates).map((candidate) => valueContent(candidate.statement.value)),
+    ).toContainEqual({
       language: 'zh',
       text: 'Source Chinese title',
     });
     expect(
       retainedCandidates(firstPage.candidates).some((candidate) =>
-        JSON.stringify(candidate.statement.value.content).includes('Must not leak'),
+        JSON.stringify(valueContent(candidate.statement.value)).includes('Must not leak'),
       ),
     ).toBe(false);
     expect(
@@ -174,7 +180,7 @@ test('Book names move through explicit publication and same-UUID refresh without
     });
     expect(
       retainedCandidates(afterFence.candidates).some((candidate) =>
-        JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
+        JSON.stringify(valueContent(candidate.statement.value)).includes('Fenced alias'),
       ),
     ).toBe(false);
     expect(

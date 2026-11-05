@@ -49,7 +49,10 @@ test('local publication accepts only its acknowledged plan after authorization a
       context: globalContext,
       limit: 100,
     });
-    const selectedName = retainedCandidates(selectedPage.candidates).find((candidate) => candidate.source?.external_id === '101');
+    const selectedName = retainedCandidates(selectedPage.candidates).find(
+      (candidate) =>
+        (candidate.source && 'external_id' in candidate.source ? candidate.source.external_id : undefined) === '101',
+    );
     if (!selectedName) throw new Error('Selected source name candidate is missing');
     const unrelated = await editor.http(`/v1/subjects/${workId}/candidates`, {
       statement: {

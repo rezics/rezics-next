@@ -52,6 +52,7 @@ const collection: DiscoveryUnionHit = {
         description: 'Short novels.',
         visibility: 'public',
         revision: 1,
+        sourceGeneration: 'fixture-generation',
         presentationKind: null,
         presentationKindSource: 'owner',
         cover: null,
