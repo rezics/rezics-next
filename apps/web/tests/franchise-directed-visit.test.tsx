@@ -407,6 +407,8 @@ test('mounted VN to anime to book uses one immediate window opener, inverse mean
     browser.location.href = `https://site.test${via}`;
     await mount(id(1));
     expect(document.activeElement?.closest('[data-work-statement]')?.getAttribute('data-work-statement')).toBe(id(10));
+    // A new current visit has no stale exact-return locator requiring an explicit restart.
+    browser.location.href = `https://site.test/en/subjects/${id(1)}/source#connections`;
     const sameSource = pageFor();
     await mount(id(1), undefined, sameSource);
     const before = reads;
