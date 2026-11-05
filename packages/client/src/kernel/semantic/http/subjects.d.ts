@@ -463,7 +463,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 subject: string;
                                 revision: number;
                                 securityRevision: string;
-                                source: "bangumi" | "vndb";
+                                source: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
                                 externalId: string;
                                 claimTransactionId: string;
                                 property: "wdt:P3180" | "wdt:P6298";
@@ -472,7 +472,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 subject: string;
                                 revision: number;
                                 securityRevision: string;
-                                source: "bangumi" | "vndb";
+                                source: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
                                 externalId: string;
                                 claimTransactionId: string;
                                 property: "wdt:P3180" | "wdt:P6298";
@@ -589,7 +589,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         includeViewerActions?: boolean;
                         includeDocuments?: boolean;
                         selectedSynopsis?: string;
-                        reviewIdentitySource?: "bangumi" | "vndb";
+                        reviewIdentitySource?: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
                         reviewIdentityExternalId?: string;
                     };
                     headers: unknown;
@@ -731,7 +731,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 subject: string;
                                 revision: number;
                                 securityRevision: string;
-                                source: "bangumi" | "vndb";
+                                source: "bangumi" | "vndb" | "bangumi_cross_media" | "vndb_cross_media";
                                 externalId: string;
                                 claimTransactionId: string;
                                 property: "wdt:P3180" | "wdt:P6298";
