@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -386,6 +386,11 @@ test('An unavailable read is one honest error with a same-address retry and no p
 
 test('Recovery presentation retains the original uncertain create through refresh and rejects its retired late completion', async () => {
   await withDocument(async (window) => {
+    const actions = await import('../src/library/labels-actions');
+    const write = spyOn(actions, 'manageLabel').mockImplementation((input) => {
+      writes.push(structuredClone(input));
+      return send(input.data);
+    });
     const { LabelsPageView } = await import('../src/library/labels-page');
     const { createRoot } = await import('react-dom/client');
     const host = document.createElement('div');
@@ -452,6 +457,7 @@ test('Recovery presentation retains the original uncertain create through refres
       expect(writes).toHaveLength(before + 2);
     } finally {
       await act(async () => root.unmount());
+      write.mockRestore();
       host.remove();
     }
   });
