@@ -1470,6 +1470,7 @@ export function SearchPage({
           onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
           metadata={data?.conditionMetadata}
           conceptLookup={conceptLookup}
+          preventImplicitSubmit={composition.preventImplicitSubmit}
           locale={locale}
           entityLookup={conditionEntityLookupContext(data, locale, session)}
           issues={issues}

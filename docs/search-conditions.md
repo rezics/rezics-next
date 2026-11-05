@@ -70,6 +70,8 @@ one leaf represents one concept so each selection can toggle descendants indepen
 
 Decision: represent each concept as a one-value statement plus selected-scheme metadata; `includeChildren:true` selects the complete retained descendant closure while Boolean composition and same-statement qualifiers stay in the existing grammar.
 
+Decision: the Web Concept reader retries only after an explicit action for the unchanged query or exact selected identity. Preparing and unavailable reads preserve the selected UUID, requested scheme and match mode; refusal, unsupported metadata and release restart remain distinct.
+
 The mounted Concept visit uses the existing locale-prefixed `/subjects/:id/:slug/concepts` route. Its bounded query
 state keeps the selected property, source scheme, work type, descendant choice, spoiler threshold, additional
 condition and opaque continuation together with the fixed Concept. Changing a selection, condition or page creates

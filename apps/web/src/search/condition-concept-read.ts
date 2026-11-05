@@ -3,7 +3,11 @@ import { pickText } from '@rezics/composition';
 import { requestLocale } from '../kernel/client.ts';
 import { viewerCredential } from '../session/request.ts';
 import { readRelease } from '../subject/definitions.ts';
-import { conditionTypeExtends, type ConditionConceptReference } from './condition-concept-model';
+import {
+  conditionConceptRetryAdvice,
+  conditionTypeExtends,
+  type ConditionConceptReference,
+} from './condition-concept-model';
 
 const CONCEPT = 'skos:Concept';
 const SCHEME = 'skos:ConceptScheme';
@@ -13,9 +17,21 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 function statusForFailure(status: number, code: unknown): Exclude<ConditionConceptReference['status'], 'ready'> {
   if (status === 202 || code === 'index_not_ready') return 'preparing';
   if (status === 409 || code === 'search_restart_required') return 'restart';
-  if (status === 403 || code === 'platform_closed' || code === 'forbidden') return 'refused';
+  if (status === 401 || status === 403 || code === 'platform_closed' || code === 'forbidden') return 'refused';
   if (status === 404 || status === 422 || code === 'unsupported_query') return 'unsupported';
   return 'unavailable';
+}
+
+function failureReference(
+  status: number,
+  code: unknown,
+  id: string,
+  headers: HeadersInit,
+): ConditionConceptReference {
+  const result = statusForFailure(status, code);
+  if (result !== 'preparing' && result !== 'unavailable') return { status: result, id };
+  const retryAfter = conditionConceptRetryAdvice(new Headers(headers).get('retry-after'));
+  return { status: result, id, ...(retryAfter ? { retryAfter } : {}) };
 }
 
 function typeExtends(release: Awaited<ReturnType<typeof readRelease>>, type: string, base: string): boolean {
@@ -75,9 +91,11 @@ export async function readConditionConcept(
       fetch: { signal: request.signal, redirect: 'manual', cache: 'no-store' },
     });
     if (request.signal.aborted) return unavailable;
+    // The native subject route returns its preparation outcome as HTTP 202, which is still ok to fetch.
+    if (result.status === 202) return failureReference(result.status, undefined, id, result.headers);
     if (result.error) {
       const body = result.error.value as { code?: unknown };
-      return { status: statusForFailure(result.status, body?.code), id };
+      return failureReference(result.status, body?.code, id, result.headers);
     }
     const data = result.data;
     if (!data || data.subject.id !== id) return unavailable;
@@ -96,6 +114,7 @@ export async function readConditionConcept(
     return { status: 'ready', id, ...(label ? { label } : {}), schemes: [...schemes.values()] };
   } catch (error) {
     if (request.signal.aborted) throw error;
-    return unavailable;
+    if (error instanceof TypeError || error instanceof SyntaxError) return unavailable;
+    throw error;
   }
 }

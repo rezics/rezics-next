@@ -16,6 +16,11 @@ export function useConditionComposition(owner: string) {
 
   return {
     isComposing,
+    preventImplicitSubmit(event: KeyboardEvent<HTMLElement>) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      if (isComposing(event)) event.stopPropagation();
+    },
     handlers: {
       onCompositionStartCapture(event: CompositionEvent<HTMLElement>) {
         current.current.target = event.target;
