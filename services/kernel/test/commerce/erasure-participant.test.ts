@@ -194,12 +194,12 @@ beforeAll(async () => {
     commerce: { stripe, ...urls, webhookSecrets: [provider.fake.webhookSecret], work: createCommerceWork(client) },
   });
   personas = await createPersonas(kernel, { version: 1, pool, auth });
-  for (const group of ['purchases', 'selling'])
-    await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
   const seller = personas.orgOwner;
   await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
   await grant(seller, PLATFORM_RESOURCE, ['offer:create', 'board:create', 'subject:create']);
+  for (const group of ['purchases', 'selling'])
+    await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) =>
     kernel.handle(
       new Request(`http://kernel.test${path}`, {
