@@ -14,6 +14,7 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -509,7 +510,7 @@ async function startDriver(
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId = GLOBAL_CONTEXT,
+      resourceId = PLATFORM_RESOURCE.id,
       grantor: Account = governor,
     ) {
       const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
