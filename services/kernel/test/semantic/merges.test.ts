@@ -38,6 +38,7 @@ const actions = [
   'context:accept',
   'context:adopt',
   'subject:merge',
+  'gate:subject_identity',
 ];
 const realAccess = await createRealAccess(admin, accounts, actions);
 beforeAll(async () => {
@@ -47,6 +48,7 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'gate:subject_identity');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
 
@@ -392,7 +394,7 @@ test('reviewed original Person GET and native merge preserve ordered evidence, s
         subject: {
           type: 'schema:Person',
           labels: { en: 'Reviewed Person' },
-          statements: { [properties[index]!]: [statement(properties[index]!, values[index])] },
+          statements: { [properties[index]!]: [{ ...statement(properties[index]!, values[index]), references: [reference] }] },
         },
       })),
     },
@@ -555,7 +557,7 @@ test('reviewed Person evidence admits all four exact source keys and keeps same 
         subject: {
           type: 'schema:Person',
           labels: { en: `Reviewed ${claim.source}` },
-          statements: { [claim.property]: [statement(claim.property, claim.value)] },
+          statements: { [claim.property]: [{ ...statement(claim.property, claim.value), references: [reference] }] },
         },
       })),
     },
