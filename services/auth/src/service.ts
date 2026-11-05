@@ -25,7 +25,8 @@ import {
   passkeyPlugin,
   passkeyCeremonies,
   registrationInput,
-  receiveRegistrationOptions, receiveAuthenticationOptions,
+  receiveRegistrationOptions,
+  receiveAuthenticationOptions,
   type PasskeyAssertion,
 } from './passkeys.ts';
 import { credentialEffects } from './credential-effects.ts';
@@ -2551,7 +2552,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               });
           if (response.status >= 500) throw new APIError('SERVICE_UNAVAILABLE');
           if (!response.ok) throw new Denied();
-          const result = registering ? await receiveRegistrationOptions(response) : await receiveAuthenticationOptions(response);
+          const result = registering
+            ? await receiveRegistrationOptions(response)
+            : await receiveAuthenticationOptions(response);
           return json(result, 200, response.headers.getSetCookie());
         }
         if (url.pathname === '/signin/passkey') {

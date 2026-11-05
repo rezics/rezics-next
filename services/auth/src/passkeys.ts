@@ -139,8 +139,7 @@ export async function receiveAuthenticationOptions(response: Response) {
     }
     const bytes = Buffer.concat(chunks, size);
     const options = parseSignInOptions(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), true);
-    if (!options)
-      throw new APIError('SERVICE_UNAVAILABLE');
+    if (!options) throw new APIError('SERVICE_UNAVAILABLE');
     return options;
   } catch {
     throw new APIError('SERVICE_UNAVAILABLE');
