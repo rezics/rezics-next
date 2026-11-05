@@ -6,8 +6,8 @@ The [adopted architecture](../../../../docs/architecture.md) places the pure cat
 bounded explanations/conformance and residual specialization behind `packages/access/src/index.ts`. Imports go
 inward through that public entry only, with no reverse or private edges. Kernel retains native facts, qualified
 completeness, opaque proofs, authoritative time, floors/fences, command admission, audit and execution. Exposure
-is a distinct consumer. First-core and Collection residual specialization remain pending, not admitted behavior.
-Extraction supplies no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
+is a distinct consumer. The first core and Collection directory residual use are integrated; this list migration
+adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
@@ -39,8 +39,50 @@ the existing concealed/not-found mapping and never receive operand explanations.
 This cutover adds no query or per-row acquisition. The real Collection read cost remains preparation and current
 membership/assignment reads, one bounded final formula statement, native validity checks and Collection's existing
 `readEligibility`, `disclose` and `grantCapable` gates. `packages/access/README.md` documents the public API and limits.
-The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry) and
-`services/kernel/src/access/permission.ts -> ./policy-core.ts` (same Kernel Access adapter).
+The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry),
+`services/kernel/src/access/policy-core.ts -> ./resource-roles.ts` (existing native role association),
+`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/library/collection-reads.ts ->
+../access/policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
+`services/kernel/src/library/collection-list-policy.ts -> @rezics/access` (public entry),
+`services/kernel/src/library/collection-list-policy.ts -> ../access/policy-filter.ts`, and
+`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only).
+
+## Collection directory residual
+
+`policy-core.ts` retains the catalogue already compiled from this Access instance's mounted action and resolved
+resource-role registrations. The directory consumes that same catalogue; it does not compile a parallel action list
+or repeat the Collection policy formula. The library adapter binds native qualifications through
+`specializePolicy` and lowers only the resulting constant or `public.floor` residual through
+`policy-filter.ts`'s closed mapping.
+
+The curator route binds `fullView` only after the existing owner/account check confirms matching account and route,
+active unfenced standing, a current token floor and `collection:read`. This yields the existing all-active-curated
+predicate and keeps `ownerManagement` advice independent. The account public face never binds `fullView`, including
+when its owner calls it. It retains `public.floor`, whose trusted field mapping is the fixed Collection
+`visibility` column with the bound parameter `policy_visibility = 'public'`. The existing static public visibility
+predicate stays in the SQL for its partial index. Hidden account views still withhold the face from other readers;
+the existing owner exception still returns only public directory entries. Management grants do not affect another
+curator's private Collections.
+
+Only constant allow and the single mapped public-floor operand are accepted by the current query plan. Missing or
+invalid catalogues, unknown required facts, unsupported residual nodes, malformed field mappings or lossy values
+return `dependency_unavailable` before a successful page is formed. No residual string or caller-selected SQL
+identifier is interpolated. SQL `NULL` never means a complete empty grant set; absent and unknown Access facts retain
+their separate pure outcomes. Query values are parameters, while field names, indexes, joins and ordering are fixed
+owner-authored mappings.
+
+For a page of at most 100 rows, the existing older-time and equal-time-smaller-ID branches each examine at most
+`remaining + 1` indexed candidates. The raw source ceiling is therefore 202 candidates at the maximum page size;
+the merged result is capped at 101 before final disclosure. The cursor still binds the curator, full-view and
+management mode, partition epoch and exact microsecond timestamp, preserving `updated_at DESC, collection_id DESC`
+ties across the builtin-to-curated transition. There is no denied-row refill or access scan.
+
+Whole-call cost remains the existing public-view qualification, plus the owner account/capability read where its
+exception applies, the partition epoch check and the bounded two-branch list query. Returned rows still pass through
+existing presentation and cover qualification; requested previews keep their existing preparation, deadline,
+currentness and final retain checks. Builtin discovery stays owner-only and ordered ahead of stored Collections.
+The residual adds no per-row Access call and does not change command authority, time, account fences or cursor
+sealing.
 
 ## Fixed Global viewer-action bindings
 

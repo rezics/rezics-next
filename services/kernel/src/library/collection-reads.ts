@@ -11,6 +11,7 @@ import {
 } from '../command/command.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { readPublicViews } from '../access/index.ts';
+import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -67,6 +68,7 @@ import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './viewer-personal-actions.ts';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
+import { specializeCollectionListPolicy } from './collection-list-policy.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -783,6 +785,8 @@ export function createCollectionReads(
       throw invalidCursor();
     const after = builtinCursor ? null : listPosition(cursor, route);
     if (!visible && !curator) return { collections: [], next: null };
+    const listFilter = specializeCollectionListPolicy(nativePolicyCatalogueForAccess(access), fullView);
+    if (listFilter.status !== 'ready') throw new ProblemError('dependency_unavailable');
     const logical =
       fullView && (cursor === null || builtinCursor)
         ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null, page.limit + 1)
@@ -795,7 +799,7 @@ export function createCollectionReads(
         if (!partition) throw new ProblemError('partition_unavailable');
         throw new ProblemError('stale_cursor');
       }
-      const statement = fullView ? curatorPage : curatorPublicPage;
+      const statement = listFilter.source === 'curator' ? curatorPage : curatorPublicPage;
       const rows = await statement.run(queryOf(client), {
         route,
         curator_account_id: curatorAccountId,
@@ -803,6 +807,7 @@ export function createCollectionReads(
         after_id: after?.id ?? ABSENT_ID,
         has_cursor: after !== null,
         limit: remaining + 1,
+        ...(listFilter.source === 'public' ? listFilter.parameters : {}),
       });
       const hasMore = rows.length > remaining;
       const shown = rows.slice(0, remaining);

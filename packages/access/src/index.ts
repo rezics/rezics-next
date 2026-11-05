@@ -9,6 +9,7 @@ export { decideExposure, type ExposureDecision, type ExposureDecisionInput } fro
 export { compileExposureCatalogue, type ExposureCatalogue, type ExposureOperation } from './exposure-catalogue.ts';
 export { compilePolicyCatalogue } from './policy-catalogue.ts';
 export { decidePolicy, describeRequiredOperands, qualifyTemporalEvidence } from './policy-evaluate.ts';
+export { evaluatePolicyResidual, specializePolicy } from './policy-residual.ts';
 export {
   MAX_POLICY_ACTIONS,
   MAX_POLICY_ACTIONS_PER_RESOURCE_TYPE,
@@ -16,6 +17,8 @@ export {
   MAX_POLICY_CATALOGUE_BYTES,
   MAX_POLICY_EXPLANATION_BYTES,
   MAX_POLICY_EXPLANATION_NODES,
+  MAX_POLICY_RESIDUAL_BYTES,
+  MAX_POLICY_RESIDUAL_NODES,
   MAX_POLICY_RESOURCE_TYPES,
   MAX_POLICY_ROLE_REFERENCES_PER_ACTION,
   MAX_POLICY_TEMPORAL_INTERVALS,
@@ -35,11 +38,16 @@ export {
   type PolicyOperand,
   type PolicyOperandName,
   type PolicyRequest,
+  type PolicyResourceOperandName,
+  type PolicyResidual,
+  type PolicyResidualDecision,
+  type PolicyResidualNode,
   type PolicyResourceType,
   type PolicyResourceTypeDeclaration,
   type PolicyRole,
   type PolicyRoleDeclaration,
   type PolicySubjectFacts,
+  type PolicySpecializationResult,
   type RequiredPolicyOperand,
   type TemporalEvidence,
   type TemporalInterval,

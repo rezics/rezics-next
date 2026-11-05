@@ -7,9 +7,11 @@ import {
   type PolicyMode,
   type PolicySubjectFacts,
 } from '@rezics/access';
-import type { ActionCatalogue } from '../request/access.ts';
+import type { Access, ActionCatalogue } from '../request/access.ts';
 import { isGlobalReachAction } from './governance-reach.ts';
-import type { ResolvedResourceRoles } from './resource-roles.ts';
+import { resourceRoleCatalogue, type ResolvedResourceRoles } from './resource-roles.ts';
+
+const nativePolicyCatalogues = new WeakMap<ResolvedResourceRoles, PolicyCatalogue>();
 
 /** Primitive projection returned by the existing bounded permission statement. */
 export type NativePermissionProjection = Readonly<{
@@ -106,7 +108,14 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
     throw new TypeError(
       `Invalid native Access policy catalogue: ${result.errors.map((error) => error.code).join(',')}`,
     );
+  nativePolicyCatalogues.set(roles, result.catalogue);
   return result.catalogue;
+}
+
+/** Return the already compiled native catalogue without rebuilding or copying its registrations. */
+export function nativePolicyCatalogueForAccess(access: Access): PolicyCatalogue | undefined {
+  const roles = resourceRoleCatalogue(access);
+  return roles ? nativePolicyCatalogues.get(roles) : undefined;
 }
 
 /** Evaluate ordinary and explicit forms from distinct SQL branches. `allowed` is intentionally absent. */

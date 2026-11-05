@@ -156,6 +156,39 @@ export type RequiredPolicyOperand = Readonly<{
   name: PolicyOperandName;
   required: boolean;
   independentOfScope?: boolean;
+  /** The only resource operand currently admitted to a portable residual. */
+  residualizable?: boolean;
+}>;
+
+/** A resource value that may remain symbolic after request facts are bound. */
+export type PolicyResourceOperandName = 'public.floor';
+
+/** Closed, serializable residual grammar. It contains no callbacks or SQL text. */
+export type PolicyResidualNode =
+  | Readonly<{ op: 'constant'; value: boolean }>
+  | Readonly<{ op: 'operand'; name: PolicyResourceOperandName }>
+  | Readonly<{ op: 'not'; value: PolicyResidualNode }>
+  | Readonly<{ op: 'and' | 'or'; values: readonly PolicyResidualNode[] }>;
+
+export type PolicyResidual = Readonly<{
+  format: 'rezics-access-residual/1';
+  root: PolicyResidualNode;
+}>;
+
+export type PolicySpecializationResult =
+  | Readonly<{ status: 'ready'; residual: PolicyResidual }>
+  | Readonly<{
+      status: 'unavailable';
+      reason: 'missing-evidence' | 'unknown-evidence' | 'malformed-evidence' | 'residual-too-large';
+      operand: PolicyOperandName;
+    }>
+  | Readonly<{ status: 'invalid'; reason: 'invalid-request' | 'unsupported-resource-operand' }>;
+
+/** Residual outcomes preserve the scalar explanation's private operand shape. */
+export type PolicyResidualDecision = Readonly<{
+  decision: 'allow' | 'deny' | 'unavailable' | 'invalid';
+  reason: 'residual' | 'missing-evidence' | 'unknown-evidence' | 'malformed-evidence' | 'malformed-residual';
+  explanation: readonly PolicyOperand[];
 }>;
 
 export type TemporalInterval = Readonly<{
@@ -179,3 +212,5 @@ export const MAX_POLICY_TEMPORAL_INTERVALS = 2_000;
 export const MAX_POLICY_TEMPORAL_INTEGER_CHARS = 32;
 export const MAX_POLICY_EXPLANATION_NODES = 32;
 export const MAX_POLICY_EXPLANATION_BYTES = 4_096;
+export const MAX_POLICY_RESIDUAL_NODES = 64;
+export const MAX_POLICY_RESIDUAL_BYTES = 4_096;
