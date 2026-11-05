@@ -10,7 +10,7 @@ export interface PreparationSourceExecution {
   transaction<T>(read: () => Promise<T>): Promise<T>;
   read<T>(client: import('pg').PoolClient, subjectId: string, full: boolean, read: () => Promise<T>): Promise<T>;
 }
-type PreparationSourceContext = { pool: Pool; deadline?: number; execution?: PreparationSourceExecution };
+type PreparationSourceContext = { pool: Pool; deadline?: number | undefined; execution?: PreparationSourceExecution };
 
 async function observe({ pool, deadline, execution }: PreparationSourceContext, subjectId: string, full: boolean) {
   const route = routeOf(subjectId);

@@ -1,6 +1,6 @@
 /** Library-owned declarations. A declaration prices dispatch; it is never run authority. */
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import { receiptKeyCandidates, receiptKeysFor } from '../command/receipt-key.ts';
 import type { LegacyCommandOptions, PrincipalCommandOptions } from '../command/command.ts';
 import commandTime from '../command/time.sql';
@@ -396,10 +396,10 @@ export function shelfMaintenanceQuery<Client, Input extends object, Result>(quer
       if (query.sql === retireReservations.sql) {
         const sizes = await shelfMaintenanceQuery(retirementSize).run(
           client as PoolClient,
-          original as Parameters<typeof retirementSize.run>[1],
+          original as unknown as Parameters<typeof retirementSize.run>[1],
         );
         // Native octet lengths, not result counts, bind the exact old-generation deletion bytes.
-        valueBytes = Number(sizes.bytes);
+        valueBytes = Number(sizes[0]!.bytes);
       }
       const declaration = shelfMaintenanceStatementPlan(query.sql, values, valueBytes)!;
       return consumeShelfMaintenance('sql', declaration.total, () => query.run(client, original));
@@ -464,7 +464,8 @@ export async function withShelfMaintenanceAllocator<T>(
       const result = await consumeShelfMaintenance('allocator', declaration.total, () =>
         Reflect.apply(query, client, args),
       );
-      if (normalize(sql) === normalize(typeReservation.sql)) inputBytes = Number(result.rows[0]?.length ?? 0);
+      if (normalize(sql) === normalize(typeReservation.sql))
+        inputBytes = Number((result as QueryResult<{ length: bigint }>).rows[0]?.length ?? 0);
       return result;
     },
   });

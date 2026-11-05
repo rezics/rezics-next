@@ -1258,7 +1258,7 @@ export async function registerShelfMaintenanceWork(
         n < SHELF_MAINTENANCE_OPERATIONS.segment.pages && binding && binding.segment === original.segment;
         n++
       ) {
-        const locator = binding;
+        const locator: ShelfMaintenanceBinding = binding;
         binding = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(locator, () => page(locator))).next;
       }
       if (binding) {
