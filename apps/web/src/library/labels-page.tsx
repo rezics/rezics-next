@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEventHandler,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -158,7 +167,11 @@ export function LabelsPageView({
   const locked = useRef<{ current: () => boolean; sending: boolean } | null>(null);
   const mounted = useRef(false);
   const attempts = useRef(new Map<string, Attempt>());
-  const ownedToast = useRef<{ id: string; owner: string } | null>(null);
+  const ownedToast = useRef<{
+    id: string;
+    owner: string;
+    onClick: MouseEventHandler<HTMLButtonElement>;
+  } | null>(null);
   const pageRef = useRef<HTMLElement>(null);
   const keyboardIntent = useRef<LabelsWindowDirection | null>(null);
   const onWindowMoveRef = useRef(onWindowMove);
@@ -173,7 +186,7 @@ export function LabelsPageView({
     if (!owned) return;
     // UndoToast uses a shared replaceable ID. A functional update scrubs only our installed entry.
     toast.update(owned.id, (previous) =>
-      previous.data?.labelsOwner === owned.owner
+      previous.data?.labelsOwner === owned.owner && previous.actionProps?.onClick === owned.onClick
         ? {
             title: '',
             description: '',
@@ -456,8 +469,15 @@ export function LabelsPageView({
           },
           { undo: m.library_label_undo() },
         );
-        ownedToast.current = { id, owner };
-        toast.update(id, { data: { labelsOwner: owner } });
+        toast.update(id, (previous) => {
+          const undo = previous.actionProps!.onClick!;
+          const onClick: MouseEventHandler<HTMLButtonElement> = (event) => undo(event);
+          ownedToast.current = { id, owner, onClick };
+          return {
+            data: { labelsOwner: owner },
+            actionProps: { ...previous.actionProps, onClick },
+          };
+        });
       }
     } catch {
       if (!admitted(input)) return;
