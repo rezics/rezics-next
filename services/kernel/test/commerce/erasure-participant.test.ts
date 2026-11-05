@@ -218,7 +218,7 @@ beforeAll(async () => {
     if (method === 'POST' && path === '/v1/boards' && response.status !== 201) {
       const title = (body as { title: string }).title;
       const diagnostic = await pool.query(
-        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.availability,
+        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,
           (SELECT json_agg(json_build_object('role',grant_role,'valid',valid::text,'current',valid @> clock_timestamp()))
            FROM access.resource_role_grant r
            WHERE r.route=b.route AND r.resource_id=b.board_id AND r.subject_id=$2) AS roles,
