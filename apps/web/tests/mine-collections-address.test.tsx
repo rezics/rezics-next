@@ -43,10 +43,10 @@ const startWithServerFunctions = {
 mock.module('@tanstack/react-start', () => startWithServerFunctions);
 mock.module('@tanstack/react-start/server', () => ({ ...startWithServerFunctions, getRequest: request, setResponseHeader() {} }));
 mock.module('cloudflare:workers', () => ({ env }));
-const { setLocale } = await import('../src/paraglide/runtime.js');
-await setLocale('fr', { reload: false });
-afterAll(async () => {
-  await setLocale('en', { reload: false });
+const runtime = await import('../src/paraglide/runtime.js');
+const currentLocale = spyOn(runtime, 'getLocale').mockReturnValue('fr');
+afterAll(() => {
+  currentLocale.mockRestore();
   mock.restore();
 });
 
@@ -105,30 +105,26 @@ test('router and both server reads admit the same address and malformed input ne
 
 test('saved-address recovery escapes bounded context and offers localized explicit GET correction at the right boundary', async () => {
   const { MineCollectionsAddressRecovery: Recovery } = await import('../src/library/mine-collections-address-recovery');
-  try {
-    const cursor = 'opaque+/page==&return_to=https://example.test';
-    for (const layout of ['rows', 'previews'] as const) {
-      const html = renderToStaticMarkup(
-        <Recovery address={admit({ cursor: '<script>alert(1)</script>' + 'x'.repeat(4096), layout })} />,
-      );
-      expect(html).toContain('data-collections-state="invalid-address"');
-      expect(html).toContain('role="alert"');
-      expect(html).toContain('&lt;script&gt;');
-      expect(html).not.toContain('<script>');
-      expect(html).not.toContain('x'.repeat(161));
-      expect(html).toContain('action="/fr/library/collections" method="get"');
-      expect(html).toContain(`name="layout" value="${layout}"`);
-      expect(html).toContain('name="cursor"');
-      expect(html).toContain(`href="/fr/library/collections?layout=${layout}"`);
-    }
-    const html = renderToStaticMarkup(<Recovery address={admit({ cursor, layout: 'bad-layout' })} />);
-    expect(html).toContain('<select name="layout"');
-    expect(html).toContain('bad-layout');
-    expect(html).not.toContain('name="cursor"');
-    expect(html).not.toContain(cursor);
-    expect(html).toContain('href="/fr/library/collections?layout=rows"');
-    expect(admit({ cursor, layout: 'previews' }).cursor).toBe(cursor);
-  } finally {
-    await setLocale('fr', { reload: false });
+  const cursor = 'opaque+/page==&return_to=https://example.test';
+  for (const layout of ['rows', 'previews'] as const) {
+    const html = renderToStaticMarkup(
+      <Recovery address={admit({ cursor: '<script>alert(1)</script>' + 'x'.repeat(4096), layout })} />,
+    );
+    expect(html).toContain('data-collections-state="invalid-address"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('x'.repeat(161));
+    expect(html).toContain('action="/fr/library/collections" method="get"');
+    expect(html).toContain(`name="layout" value="${layout}"`);
+    expect(html).toContain('name="cursor"');
+    expect(html).toContain(`href="/fr/library/collections?layout=${layout}"`);
   }
+  const html = renderToStaticMarkup(<Recovery address={admit({ cursor, layout: 'bad-layout' })} />);
+  expect(html).toContain('<select name="layout"');
+  expect(html).toContain('bad-layout');
+  expect(html).not.toContain('name="cursor"');
+  expect(html).not.toContain(cursor);
+  expect(html).toContain('href="/fr/library/collections?layout=rows"');
+  expect(admit({ cursor, layout: 'previews' }).cursor).toBe(cursor);
 });
