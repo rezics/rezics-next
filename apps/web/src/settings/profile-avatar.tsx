@@ -31,10 +31,11 @@ export function useProfileAvatarUpload(
   resume: AvatarResume | undefined = upload === uploadAvatar ? resumeReplyImageUpload : undefined,
 ) {
   const controller = useMemo(() => {
-    const guardedUpload: AvatarUpload = (accountId, file, signal, intent, onStage) =>
-      upload(accountId, file, signal, intent, onStage);
+    const guardedUpload: AvatarUpload = (accountId, file, signal, intent, onStage, onResponseWait) =>
+      upload(accountId, file, signal, intent, onStage, onResponseWait);
     const guardedResume: AvatarResume | undefined =
-      resume && ((mediaId, file, signal) => resume(mediaId, file, signal));
+      resume && ((mediaId, file, signal, onStage, intent, onResponseWait) =>
+        resume(mediaId, file, signal, onStage, intent, onResponseWait));
     const readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice;
     return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume, readAdvice);
   }, [editor, upload, resume]);
@@ -87,7 +88,14 @@ function avatarStatus(
   if (state.phase === 'original-only') return m.settings_profile_crop_original_only();
   if (state.phase === 'crop') return m.settings_profile_crop_ready();
   if (state.phase === 'ready') return m.settings_profile_avatar_ready();
-  if (state.phase === 'error') return avatarFailure(state.failure?.reason);
+  if (state.phase === 'error') {
+    if (!state.failure || state.failure.reason === 'unavailable') {
+      if (state.stage === 'reservation') return m.settings_profile_avatar_uncertain_reservation();
+      if (state.stage === 'transfer') return m.settings_profile_avatar_uncertain_transfer();
+      if (state.stage === 'processing') return m.settings_profile_avatar_uncertain_processing();
+    }
+    return avatarFailure(state.failure?.reason);
+  }
   if (changed) return avatar ? m.settings_profile_avatar_draft() : m.settings_profile_avatar_removal();
   return avatar ? m.settings_profile_avatar_saved() : m.settings_profile_avatar_empty();
 }
@@ -129,7 +137,7 @@ export function ProfileAvatar({
   const adviceWaiting = usePreferenceRetry(undefined, state.adviceRetryAt ?? 0);
   const local = !!state.url;
   const selected = local || state.phase === 'preparing' || state.phase === 'original-only';
-  const localPreview = local && state.phase !== 'preparing' && state.phase !== 'original-only';
+  const localPreview = local && state.phase !== 'preparing';
   const changed = avatarMedia(avatar) !== avatarMedia(known);
   const status = avatarStatus(state, avatar, changed, saving);
   const chooseDisabled = disabled || !upload.canUpload();

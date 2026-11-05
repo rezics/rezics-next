@@ -2,13 +2,15 @@ import { avatarCropSourceSupported, type AvatarCropSource } from './profile-avat
 
 const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 const supportedJpegFrames = new Set([0xc0, 0xc1, 0xc2]);
+const avatarCropHeaderLimit = 256 * 1024;
 
-/** Read the one bounded encoded header pass used to decide whether local crop decoding is safe. */
+/** Read only a bounded encoded prefix to decide whether local crop decoding is safe. */
 export async function readAvatarCropSource(file: File): Promise<AvatarCropSource | null> {
   if (file.type !== 'image/png' && file.type !== 'image/jpeg') return null;
   try {
-    const buffer = await file.arrayBuffer();
-    if (buffer.byteLength !== file.size) return null;
+    const expectedBytes = Math.min(file.size, avatarCropHeaderLimit);
+    const buffer = await file.slice(0, avatarCropHeaderLimit).arrayBuffer();
+    if (buffer.byteLength !== expectedBytes) return null;
     const bytes = new Uint8Array(buffer);
     const source = file.type === 'image/png' ? readPngSource(bytes) : readJpegSource(bytes);
     return source && avatarCropSourceSupported(source) ? source : null;
