@@ -88,8 +88,8 @@ test('a selected Context and exact dated Organization assertion survive target, 
   const page = new URL(subjectHref({ id: peopleOrganizationId, label: 'Paper Lantern Studio' }, 'en').href, 'https://site.test');
   page.searchParams.set('realm', realm);
   window.history.replaceState(window.history.state, '', `${page.pathname}${page.search}`);
-  const render = async (key: string, current = organization, source: object = {}) =>
-    act(async () =>
+  const render = async (key: string, current = organization, source: object = {}, navigate = false) =>
+    act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <OrganizationReader
@@ -101,8 +101,9 @@ test('a selected Context and exact dated Organization assertion survive target, 
             currentHref={`${page.pathname}${page.search}`}
           />
         </QueryClientProvider>,
-      ),
-    );
+      );
+      if (navigate) window.dispatchEvent(new window.PopStateEvent('popstate'));
+    });
   try {
     await render('initial');
     const opener = host.querySelector<HTMLButtonElement>(
@@ -140,9 +141,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
     });
 
     window.history.replaceState(window.history.state, '', via);
-    await render('returned', structuredClone(organization), {});
-    await act(async () => window.dispatchEvent(new window.PopStateEvent('popstate')));
-    console.log('organization-history-return-debug', window.location.href, organizationHistoryVisitReturn(window.location.hash), host.textContent);
+    await render('initial', structuredClone(organization), {}, true);
     const returned = host.querySelector('[role="region"]')!;
     expect(returned.textContent).toContain(second.id);
     expect(window.document.activeElement).toBe(returned);
@@ -152,7 +151,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
       property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
       value: { type: 'value', content: { amount: '+2', unit: '1' } },
     });
-    await render('concealed', hidden, {});
+    await render('initial', hidden, {});
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());
     expect([...host.querySelectorAll('a')].some((link) => link.href.includes(parent))).toBe(false);
@@ -160,7 +159,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
 
     const replaced = structuredClone(organization);
     replaced.subject.statements['wdt:P749']![1] = { ...second, id: '00000000-0000-4000-8000-00000000d816' };
-    await render('replaced', replaced, {});
+    await render('initial', replaced, {});
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());
     expect(window.document.activeElement).toBe(host.querySelector('h3'));

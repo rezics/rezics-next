@@ -148,21 +148,16 @@ export function OrganizationReader({
     reader,
     source,
   );
-  if (typeof window !== 'undefined' && organizationHistoryVisitReturn(window.location.hash))
-    console.log('organization-episode-return-debug', {
-      key: episode.key,
-      available,
-      retired: episode.retired,
-      active: episode.active,
-      context: read.public.subject.context,
-      locale,
-      realm,
-    });
   const [selected, setSelected] = useState<Selection>();
   const [changed, setChanged] = useState(false);
+  const navigationHash = useRef<string | undefined>(undefined);
+  const preservingReturn =
+    typeof window !== 'undefined' &&
+    navigationHash.current === window.location.hash &&
+    !!organizationHistoryVisitReturn(window.location.hash);
   if (selected && (selected.episode !== episode.key || !available)) {
     setSelected(undefined);
-    setChanged(true);
+    if (!preservingReturn) setChanged(true);
   }
   const heading = useRef<HTMLHeadingElement>(null);
   const o = { locale: locale as never };
@@ -182,6 +177,7 @@ export function OrganizationReader({
   useEffect(() => {
     const update = () => setReturnHash(window.location.hash);
     const navigate = () => {
+      navigationHash.current = organizationHistoryVisitReturn(window.location.hash) ? window.location.hash : undefined;
       update();
       setNavigationRevision((value) => value + 1);
     };
@@ -204,9 +200,11 @@ export function OrganizationReader({
       return;
     }
     if (episodeChanged && !navigated && organizationHistoryVisitReturn(window.location.hash)) {
+      if (navigationHash.current === window.location.hash) return;
       const address = organizationHistoryAddress(href, fallbackHref, locale, read.public.subject.id, read.public.subject.context, realm);
       const hash = replaceOrganizationHistoryAddress(address);
       if (hash) setReturnHash(hash);
+      navigationHash.current = undefined;
     }
   }, [episode.key, href, navigationRevision, fallbackHref, locale, read.public.subject.id, read.public.subject.context, realm]);
   const persistVisit = (fact?: OrganizationFact, keyboard = false) => {
@@ -279,6 +277,9 @@ export function OrganizationReader({
             currentHref={href}
             returnHash={returnHash}
             persistVisit={persistVisit}
+            finishNavigation={() => {
+              navigationHash.current = undefined;
+            }}
             focusHeader={() => heading.current?.focus()}
             reportChanged={() => setChanged(true)}
           />
@@ -383,6 +384,7 @@ function OrganizationFacts({
   currentHref,
   returnHash,
   persistVisit,
+  finishNavigation,
   focusHeader,
   reportChanged,
 }: {
@@ -399,6 +401,7 @@ function OrganizationFacts({
   currentHref: string;
   returnHash: string;
   persistVisit: (fact?: OrganizationFact, keyboard?: boolean) => void;
+  finishNavigation: () => void;
   focusHeader: () => void;
   reportChanged: () => void;
 }) {
@@ -449,7 +452,12 @@ function OrganizationFacts({
     if (handledReturn.current === returnHash) return;
     const intent = organizationHistoryVisitReturn(returnHash);
     handledReturn.current = returnHash;
-    if (!intent || selected?.episode === episode.key || !episode.current()) return;
+    if (!intent || !episode.current()) return;
+    if (selected?.episode === episode.key) {
+      if (selected.id === intent.candidate && selected.property === intent.property) finishNavigation();
+      return;
+    }
+    finishNavigation();
     const field = model?.fields.find((item) => item.id === intent.property);
     const fact = field?.facts.find((item) => item.id === intent.candidate);
     const exact =
@@ -484,7 +492,7 @@ function OrganizationFacts({
       opener,
       keyboard: intent.focus === 'keyboard',
     });
-  }, [returnHash, selected, episode, model, subject.id, subject.context, preferences.spoilerLevel, select, reportChanged, focusHeader]);
+  }, [returnHash, selected, episode, model, subject.id, subject.context, preferences.spoilerLevel, select, reportChanged, focusHeader, finishNavigation]);
   if (!model) return <p role="status">{m.organization_reader_unavailable({}, o)}</p>;
   const open = (fact: OrganizationFact, event: MouseEvent<HTMLButtonElement>) => {
     if (episode.current()) {
