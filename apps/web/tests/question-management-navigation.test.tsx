@@ -86,6 +86,8 @@ mock.module('../src/ratings/question-management/actions', () => ({
     return { kind: 'uncertain' };
   },
 }));
+mock.module('../src/shell/head-context', () => ({ pageHeadContext: () => ({}) }));
+mock.module('../src/shell/head', () => ({ pageHead: () => ({}) }));
 const { Route } = await import('../src/routes/realms/$id_.questions');
 function button(host: ParentNode, text: string) {
   const node = [...host.querySelectorAll('button')].find((node) => node.textContent === text);
