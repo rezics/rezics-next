@@ -15,7 +15,7 @@ import { mintReadTime, releaseOperationalTime, authoritativeTimeValue } from '..
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
-import { accountDiscoverySource } from '../../src/access/index.ts';
+import { accountDiscoverySource } from '../../src/access/account-discovery-source.ts';
 import {
   createCollectionRulesFixture,
   type CollectionRulesFixture,

@@ -1,4 +1,4 @@
-import { readAccountDiscoverySummaries } from '../access/index.ts';
+import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { prepareSearchReviewContexts } from './review-context.ts';
 import { boundWorkContexts } from './work-context.ts';
 import { readFollowDiscovery } from '../library/follow-discovery.ts';

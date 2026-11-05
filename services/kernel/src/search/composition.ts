@@ -7,7 +7,11 @@ import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapt
 import { createReviewDiscoveryAdapter } from './review-discovery.ts';
 import type { SpaceDiscoveryAdapter } from './space-discovery.ts';
 import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
-import type { IndexedReview, ReviewDiscoverySource } from '../content/review-discovery.ts';
+import {
+  REVIEW_DISCOVERY_PAGE_LIMIT,
+  type IndexedReview,
+  type ReviewDiscoverySource,
+} from '../content/review-discovery.ts';
 import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../library/collection-discovery-source.ts';
 import type {
   DiscoveryOwnerAdapterSlots,

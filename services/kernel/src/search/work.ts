@@ -64,10 +64,10 @@ type SearchDiscoveryComposer = (input: {
   subjects: SubjectSource;
 }) => DiscoveryProducerEntry;
 
-type SearchRuntimeDefaults = Pick<
+type SearchRuntimeDefaults = Required<Pick<
   Parameters<typeof createKernel>[0],
   'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
->;
+>>;
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
 
 export function createSearchWorkModule(

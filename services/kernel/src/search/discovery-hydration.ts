@@ -119,7 +119,7 @@ function validOwnerSummary(
     );
   }
   return (
-    Object.keys(value).length === 9 &&
+    Object.keys(value).length === 8 &&
     ['id', 'title', 'summary', 'revision', 'sourcePosition', 'address', 'realmId', 'realmTitle'].every((key) =>
       Object.hasOwn(value, key),
     ) &&
