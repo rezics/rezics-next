@@ -2658,6 +2658,8 @@ documents remain successful reads. Unavailable references, missing bodies and fa
 description remains labeled as a separate fallback. Candidate qualifiers and references render only from the selected
 assertion; no page-level source record is attributed to synopsis text. Spoiler disclosure covers both text and evidence.
 
+Decision: each Summary Retry attempt owns an AbortSignal; replacing its selected target or visit and unmounting retire that signal. A fresh attempt has a new lifetime, and currentness plus the exact document binding still govern settlement.
+
 General Sources and the existing authored-field correction route receive a bounded `via` descriptor for the current
 candidate, document digest, language, Subject context, Realm, locale and release when present. It retains only selection,
 expansion and a safe focus target; it contains no prose, body, credentials or editor state. Return restores only an exact

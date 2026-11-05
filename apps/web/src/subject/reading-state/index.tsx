@@ -1,12 +1,12 @@
 import type { MouseEventHandler } from 'react';
 import { m } from '../../paraglide/messages.js';
 
-export type SubjectTextRetryToken<Target extends object> = { target: Target };
+export type SubjectTextRetryToken<Target extends object> = { target: Target; signal: AbortSignal };
 
-/** Tracks one retry for the current page visit and invalidates results after its target changes. */
+/** Tracks one retry for the current visit and retires its lifetime when that target is replaced. */
 export function createSubjectTextRetryController<Target extends object>() {
   let selected: Target | null = null;
-  let pending: SubjectTextRetryToken<Target> | null = null;
+  let pending: (SubjectTextRetryToken<Target> & { controller: AbortController }) | null = null;
 
   return {
     select(target: Target | null) {
@@ -14,13 +14,19 @@ export function createSubjectTextRetryController<Target extends object>() {
     },
     begin(target: Target): SubjectTextRetryToken<Target> | null {
       if (selected !== target || pending) return null;
-      return (pending = { target });
+      const controller = new AbortController();
+      return (pending = { target, signal: controller.signal, controller });
     },
     isCurrent(token: SubjectTextRetryToken<Target>) {
-      return selected === token.target && pending === token;
+      return selected === token.target && pending === token && !token.signal.aborted;
     },
     finish(token: SubjectTextRetryToken<Target>) {
       if (pending === token) pending = null;
+    },
+    retire(target?: Target) {
+      if (!pending || (target !== undefined && pending.target !== target)) return;
+      pending.controller.abort();
+      pending = null;
     },
   };
 }

@@ -118,9 +118,16 @@ export const readPublicSubjectDocument = createServerFn({ method: 'GET', strict:
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    request.signal.throwIfAborted();
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    request.signal.throwIfAborted();
     const response = await client.documents({ id: data.documentId }).get({
-      fetch: { cache: 'no-store', ...(authorization ? { headers: { authorization } } : {}) },
+      fetch: {
+        cache: 'no-store',
+        signal: request.signal,
+        ...(authorization ? { headers: { authorization } } : {}),
+      },
     });
     const document = response.data?.document;
     if (response.status !== 200 || response.error || document?.availability !== 'available')
