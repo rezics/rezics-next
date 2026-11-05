@@ -496,7 +496,7 @@
       "kind": "UI/transport library",
       "owner": "search",
       "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/search/search.tsx"],
       "allowedDependencies": [
         "client",
         "composition",

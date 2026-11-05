@@ -1,4 +1,7 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { searchLoaderDeps } from '../src/search/search-params';
+import { discoveryRequest } from '../src/search/search-request';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { QuerySharePreview } from '../src/search/query-share-preview';
@@ -41,72 +44,214 @@ const click = async (text: string) => {
   });
 };
 
-test('preview distinguishes the executed query, announces copy, and focuses selectable fallback and deliberate close', async () => {
-  let copied = '';
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: {
-      writeText: async (text: string) => {
-        copied = text;
-      },
-    },
+const client = new QueryClient();
+const session = { state: 'signed-in', subject: 'reader', csrfToken: null };
+const mount = (prepare: (signal: AbortSignal) => Promise<QueryShare>, key = 'visit', locale = 'en', changed = true) =>
+  act(() =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <QuerySharePreview key={key} locale={locale} changed={changed} prepare={prepare} />
+      </QueryClientProvider>,
+    ),
+  );
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
   });
-  await act(() => root.render(<QuerySharePreview locale="en" changed prepare={async () => share} />));
+  return { promise, resolve, reject };
+};
+const clipboard = (writeText: (url: string) => Promise<void>) =>
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+const elsewhere = document.createElement('button');
+document.body.append(elsewhere);
+beforeEach(async () => {
+  await act(() => root.render(null));
+  client.setQueryData(['session'], session);
+});
+
+test('complete executed preview visit keeps draft edits separate, copies and reopens, then deliberately selects refused copy', async () => {
+  let copied = '';
+  let preparations = 0;
+  const prepare = async () => {
+    preparations++;
+    return share;
+  };
+  clipboard(async (url) => {
+    copied = url;
+  });
+  await mount(prepare);
   await click('Share executed query');
   expect(host.textContent).toContain('Unapplied edits are excluded');
   expect(host.textContent).toContain('"complete text"');
   expect(document.activeElement?.getAttribute('role')).toBe('region');
+  await mount(prepare, 'visit', 'en', false);
+  expect(preparations).toBe(1);
+  expect(host.textContent).toContain('Recipients use their current permissions');
   await click('Copy link');
   expect(copied).toBe('https://site.test/en/search?' + share.parameters);
   expect(host.textContent).toContain('Link copied.');
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: {
-      writeText: async () => {
-        throw new Error('refused');
-      },
-    },
+  const url = new URL(copied);
+  const request = discoveryRequest(
+    searchLoaderDeps({ q: url.searchParams.get('q'), language: url.searchParams.getAll('language') }),
+    ['fr'],
+  );
+  expect(request.text).toBe(share.document!.text);
+  expect(request.languages).toEqual(['ja', 'en']);
+  expect(request.cursor).toBeUndefined();
+  clipboard(async () => {
+    throw new Error('refused');
   });
   await click('Copy link');
   expect(host.textContent).toContain('Copy was refused');
+  expect(document.activeElement).toBe(button('Copy link'));
+  await click('Select link');
   const fallback = host.querySelector('textarea')!;
   expect(document.activeElement).toBe(fallback);
   expect(fallback.value).toBe(copied);
-  await click('Close preview');
-  expect(host.querySelector('textarea')).toBeNull();
+  expect(fallback.selectionEnd).toBe(copied.length);
+  await act(() => fallback.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(host.querySelector('[role=region]')).toBeNull();
   expect(document.activeElement).toBe(button('Share executed query'));
 });
 
-test('oversized state preserves the editor; replacing the reader retires pending preparation', async () => {
-  let resolve!: (value: QueryShare) => void;
-  await act(() =>
-    root.render(
-      <QuerySharePreview
-        key="old-reader"
-        locale="en"
-        changed={false}
-        prepare={() =>
-          new Promise((done) => {
-            resolve = done;
-          })
-        }
-      />,
-    ),
-  );
+test('synchronous duplicate commands dispatch once; retry preserves context and close aborts preparation', async () => {
+  const preparation = deferred<QueryShare>();
+  let calls = 0;
+  let signal!: AbortSignal;
+  await mount((value) => {
+    signal = value;
+    calls++;
+    return calls === 1 ? Promise.resolve(share) : preparation.promise;
+  });
+  await act(async () => {
+    button('Share executed query').click();
+    button('Share executed query').click();
+  });
+  expect(calls).toBe(1);
+  const writing = deferred<void>();
+  let writes = 0;
+  clipboard(() => {
+    writes++;
+    return writing.promise;
+  });
+  await act(() => {
+    button('Copy link').click();
+    button('Copy link').click();
+    button('Prepare again').click();
+  });
+  expect(writes).toBe(1);
+  expect(calls).toBe(1);
+  expect(host.textContent).toContain('Copying link');
+  await act(() => writing.resolve());
+  await act(() => {
+    button('Prepare again').click();
+    button('Prepare again').click();
+  });
+  expect(calls).toBe(2);
+  expect(host.textContent).toContain('"complete text"');
+  expect(button('Copy link').disabled).toBe(true);
+  await click('Close preview');
+  expect(signal.aborted).toBe(true);
   await click('Share executed query');
-  await act(() =>
-    root.render(
-      <QuerySharePreview
-        key="new-reader"
-        locale="en"
-        changed={false}
-        prepare={async () => ({ ...share, action: 'disabled', reason: 'oversized', document: null, parameters: null })}
-      />,
-    ),
-  );
-  await act(() => resolve(share));
-  expect(host.querySelector('[role=region]')).toBeNull();
-  await click('Share executed query');
-  expect(host.textContent).toContain('too large for a link');
-  expect(host.querySelector('textarea')).toBeNull();
+  await act(() => preparation.resolve(share));
+  expect(calls).toBe(3);
+  expect(host.textContent).toContain('"complete text"');
+});
+
+for (const replacement of ['reader', 'request', 'locale', 'unmount', 'close'] as const) {
+  test(`${replacement} retirement rejects late preparation and clipboard work without focus recovery`, async () => {
+    const replace = async (prepare: () => Promise<QueryShare>) => {
+      if (replacement === 'reader') await act(() => client.setQueryData(['session'], { ...session }));
+      else if (replacement === 'close') await click('Close preview');
+      else if (replacement === 'unmount') await act(() => root.render(null));
+      else
+        await mount(
+          prepare,
+          replacement === 'request' ? 'replacement' : 'visit',
+          replacement === 'locale' ? 'fr' : 'en',
+        );
+    };
+    const preparation = deferred<QueryShare>();
+    let signal!: AbortSignal;
+    const prepare = (value: AbortSignal) => {
+      signal = value;
+      return preparation.promise;
+    };
+    await mount(prepare);
+    await click('Share executed query');
+    await replace(async () => share);
+    expect(signal.aborted).toBe(true);
+    elsewhere.focus();
+    await act(() => preparation.resolve(share));
+    expect(host.querySelector('[role=region]')).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
+    // A new visit can issue one write; neither successful nor refused late completion revives it.
+    for (const refused of [false, true]) {
+      await act(() => root.render(null));
+      await mount(async () => share);
+      await click('Share executed query');
+      const writing = deferred<void>();
+      let writes = 0;
+      clipboard(() => {
+        writes++;
+        return writing.promise;
+      });
+      await click('Copy link');
+      await replace(async () => share);
+      elsewhere.focus();
+      await act(() => (refused ? writing.reject(new Error('refused')) : writing.resolve()));
+      expect(writes).toBe(1);
+      expect(host.querySelector('[role=region]')).toBeNull();
+      expect(document.activeElement).toBe(elsewhere);
+    }
+  });
+}
+
+test('pending refusal and queued opening or closing never take unrelated focus', async () => {
+  await mount(async () => share);
+  await act(() => {
+    button('Share executed query').focus();
+    button('Share executed query').click();
+    elsewhere.focus();
+  });
+  expect(document.activeElement).toBe(elsewhere);
+  const writing = deferred<void>();
+  clipboard(() => writing.promise);
+  await click('Copy link');
+  elsewhere.focus();
+  await act(() => writing.reject(new Error('refused')));
+  expect(host.querySelector('textarea')).not.toBeNull();
+  expect(document.activeElement).toBe(elsewhere);
+  await act(() => button('Close preview').click());
+  expect(document.activeElement).toBe(elsewhere);
+});
+
+test('native private, unsupported, oversized and unavailable advice remains distinct and retryable', async () => {
+  const explanations = {
+    private_context: 'private conditions',
+    unsupported: 'cannot be shared in a link',
+    oversized: 'too large for a link',
+    unavailable: 'Sharing is unavailable',
+  };
+  for (const [reason, explanation] of Object.entries(explanations)) {
+    await mount(
+      async () => ({
+        ...share,
+        reason: reason as QueryShare['reason'],
+        action: reason === 'unavailable' ? 'unavailable' : 'disabled',
+        parameters: null,
+      }),
+      reason,
+    );
+    await click('Share executed query');
+    expect(host.textContent).toContain(explanation);
+    expect(host.textContent).toContain('"complete text"');
+    expect(host.querySelector('textarea')).toBeNull();
+    expect(button('Copy link')).toBeUndefined();
+    await click('Prepare again');
+    expect(host.textContent).toContain(explanation);
+  }
 });

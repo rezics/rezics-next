@@ -251,3 +251,16 @@ registry or replacement detector. An owner change hides old windows during rende
 rejects late completions even if cancellation is ignored. Equivalent renders retain expansion and independent work
 state. Focus intent belongs only to an activated current action: completion keeps the surviving action or named
 work region, while closing, replacement, disposal or moving focus cancels recovery.
+Query sharing prepares the last executed request through the installed native portable-query projection. Draft
+edits are explained separately and never disable an otherwise allowed executed link. Native advice keeps private,
+unsupported, oversized and unavailable states distinct; filter detail is the bounded native document, not a second
+predicate presenter. Links use only the same-origin Search route and its current recipient admission and repair.
+
+The share visit retains Search's request/locale/session key and consumes Web's public retiring reader observation,
+including equal-principal replacement. Preparation and clipboard dispatch each capture synchronous ownership;
+preparation receives an AbortSignal, and close or replacement rejects completions even if cancellation is ignored.
+Decision: retry retains the current preview while preparing, and clipboard refusal offers deliberate link selection
+without automatic focus movement. Preparation waits for an issued clipboard command to settle. Copy captures the
+current allowed URL immediately before writing; an issued external write cannot be recalled. Opening focuses the
+panel only while its activation still owns focus; close/Escape restores the surviving trigger only from that panel.
+Prepared documents, labels and links remain in the mounted visit and never enter browser storage.
