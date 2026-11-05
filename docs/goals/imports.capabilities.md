@@ -63,7 +63,7 @@ Import selected Work/Edition/Release facts, accept/adopt through Semantic, then 
 
 Use released controls and actual mappings. Bangumi tag/form and VNDB name/link do not establish platform/form; Open Library/Wikidata do not establish cross-surface populations. Imports owns mapping/transport; Semantic owns fixtures, releases, receipts, selection/adoption, identity and Zone routing; Search owns indexing/facets/queries; Commerce owns Collections/owner queries; Content owns disclosure; Web owns publication. [Discovery cases](../../services/kernel/test/imports/discovery-user-cases.test.ts) remain acceptance, not completion evidence.
 
-Retain original native scenarios for connected CLI recovery, media recovery, import-to-discovery, statistics and source-only refresh. Fixtures claim only authored fields, not native execution. Retained-metadata cases stay integrated; pure-core cases do not replace them.
+Retain native scenarios for connected source/CLI and media recovery, discovery, statistics and source-only refresh. Fixtures do not claim native execution. Retained-metadata cases remain integrated; pure-core checks do not replace native acceptance.
 
 Three-scale growth covers conversion and API writes with existing statement, row, byte, page, fan-out and command bounds. Pure-core checks do not replace native receiving/growth. Do not claim completion until all outcomes are promoted with acceptance.
 
