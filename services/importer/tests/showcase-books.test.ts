@@ -95,7 +95,8 @@ function tables(
     name_cn: '空之境界',
     platform: 1002,
     series: true,
-    infobox: '{{Infobox animanga/Novel\r\n|中文名= 空之境界\r\n|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n}}',
+    infobox:
+      '{{Infobox animanga/Novel\r\n|中文名= 空之境界\r\n|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n}}',
   };
   const karaVolumes = [
     {
@@ -514,18 +515,16 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       illustrators: ['person:1467'],
       publishers: ['person:128'],
     });
-    for (const [key, type] of ([
+    for (const [key, type] of [
       ['2815', 'schema:BookSeries'],
       ['5329', 'schema:Book'],
       ['10862', 'schema:Book'],
       ['person:1466', 'schema:Person'],
       ['person:1467', 'schema:Person'],
       ['person:128', 'schema:Organization'],
-    ] as const))
+    ] as const)
       expect(first.identities[key]?.type).toBe(type);
-    expect(first.identities['233']?.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
-    );
+    expect(first.identities['233']?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
     const publisherId = first.identities['person:128']!.id;
     const publication = await publishShowcase({
       plan: showcaseBooksToCrossMediaPlan(first.planned),
@@ -568,8 +567,7 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
           command.subject === first.identities['2815']?.id &&
           valueContent(command.statement) === first.identities['person:128']?.id &&
           command.statement.qualifiers?.some(
-            (qualifier) =>
-              qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === publisherRole.conceptId,
+            (qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === publisherRole.conceptId,
           ),
       ),
     ).toBe(true);
@@ -584,11 +582,21 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
     });
     expect(reopened.selected).toEqual(first.selected);
     for (const key of [
-      '499', '26', '2815', '5329', '10862', '233',
-      'person:6023', 'person:1466', 'person:1467', 'person:128',
+      '499',
+      '26',
+      '2815',
+      '5329',
+      '10862',
+      '233',
+      'person:6023',
+      'person:1466',
+      'person:1467',
+      'person:128',
     ])
       expect(reopened.identities[key]?.id).toBe(first.identities[key]?.id);
-    expect(reopened.planned.edges.find((edge) => edge.property === 'rezics:crossMediaCounterpart')?.relation).toMatchObject({
+    expect(
+      reopened.planned.edges.find((edge) => edge.property === 'rezics:crossMediaCounterpart')?.relation,
+    ).toMatchObject({
       sourceSubject: '2815',
       sourceEndpoint: '233',
       code: 1,

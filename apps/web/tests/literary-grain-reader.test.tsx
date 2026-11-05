@@ -146,9 +146,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     );
     expect([...memberRows].map((row) => row.textContent)).toEqual([expect.stringContaining('上巻・02a')]);
     expect(host.querySelector('[data-stream-node="edition-forward"] [data-state="ready"]')).not.toBeNull();
-    const animeCounterpart = host.querySelector<HTMLAnchorElement>(
-      '[data-property="rezics:crossMediaCounterpart"] a',
-    )!;
+    const animeCounterpart = host.querySelector<HTMLAnchorElement>('[data-property="rezics:crossMediaCounterpart"] a')!;
     expect(animeCounterpart.textContent).toBe('First viewpoint');
     const animeUrl = new URL(animeCounterpart.href);
     expect(animeUrl.pathname).toContain(literaryIds.anime);
@@ -192,10 +190,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     const selectedAnimeLink = host.querySelector<HTMLAnchorElement>(
       '[data-property="rezics:crossMediaCounterpart"] a',
     )!;
-    const selectedAnimeReturn = new URL(
-      new URL(selectedAnimeLink.href).searchParams.get('via')!,
-      'https://site.test',
-    );
+    const selectedAnimeReturn = new URL(new URL(selectedAnimeLink.href).searchParams.get('via')!, 'https://site.test');
     expect(selectedAnimeReturn.searchParams.get('realm')).toBe(literaryIds.author);
     expect(selectedAnimeReturn.searchParams.get('node')).toBe('members-second');
     expect(selectedAnimeReturn.searchParams.get('streamProperty')).toBe('wdt:P179');

@@ -265,15 +265,15 @@ export async function deliverBangumiCreatorCredits(input: {
         identities[key] = identity;
         continue;
       }
-      const organizationTupleIdentity =
-        /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Organization';
-      const identityProperty = /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Person'
-        ? 'wdt:P6298'
-        : /^character:[1-9][0-9]*$/u.test(key)
-          ? 'wdt:P6296'
-          : /^[1-9][0-9]*$/u.test(key)
-            ? 'wdt:P5732'
-            : undefined;
+      const organizationTupleIdentity = /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Organization';
+      const identityProperty =
+        /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Person'
+          ? 'wdt:P6298'
+          : /^character:[1-9][0-9]*$/u.test(key)
+            ? 'wdt:P6296'
+            : /^[1-9][0-9]*$/u.test(key)
+              ? 'wdt:P5732'
+              : undefined;
       const sourceId =
         key.startsWith('person:') || key.startsWith('character:') ? key.slice(key.indexOf(':') + 1) : key;
       const hasIdentity =

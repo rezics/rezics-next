@@ -35,11 +35,7 @@ import {
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
 import type { ShowcaseJournal, ShowcaseReviewPort } from './showcase-publication.ts';
-import {
-  showcaseBookFamilies,
-  showcaseBookFamily,
-  type ShowcaseBookFamily,
-} from './showcase-book-series.ts';
+import { showcaseBookFamilies, showcaseBookFamily, type ShowcaseBookFamily } from './showcase-book-series.ts';
 
 type Row = Record<string, unknown>;
 const SERIES_RELATION = 1002;
@@ -236,9 +232,7 @@ export async function planShowcaseBooks(input: {
   const seedVolumes = new Map<number, Set<number>>(
     showcaseBookFamilies.map((family) => [Number(family.seriesId), new Set(family.seedVolumeIds.map(Number))]),
   );
-  const acceptedVolumes = new Map(
-    [...seedVolumes].map(([seriesId, volumeIds]) => [seriesId, new Set(volumeIds)]),
-  );
+  const acceptedVolumes = new Map([...seedVolumes].map(([seriesId, volumeIds]) => [seriesId, new Set(volumeIds)]));
   const wanted = new Set(seeds);
   const membership: Row[] = [];
   const selectedRelations: Row[] = [];
@@ -251,7 +245,11 @@ export async function planShowcaseBooks(input: {
       family.anime ? [`${family.anime.seriesId}:${family.anime.subjectId}`] : [],
     ),
   );
-  for await (const row of input.tables.rows('bangumi', 'subject-relations', BOOK_TABLE_SCAN_LIMITS['subject-relations'])) {
+  for await (const row of input.tables.rows(
+    'bangumi',
+    'subject-relations',
+    BOOK_TABLE_SCAN_LIMITS['subject-relations'],
+  )) {
     const sid = asId(row.subject_id);
     const rid = asId(row.related_subject_id);
     const code = row.relation_type;
@@ -265,9 +263,11 @@ export async function planShowcaseBooks(input: {
         if (!selected.has(volumeId) && selected.size >= VOLUME_CAP) {
           if (!overflowedFamilies.has(seriesId)) {
             overflowedFamilies.add(seriesId);
-            gaps.push(gap('subject-relations', row, 'Selected novel volumes exceed the bounded family cap', {
-              code: family.id,
-            }));
+            gaps.push(
+              gap('subject-relations', row, 'Selected novel volumes exceed the bounded family cap', {
+                code: family.id,
+              }),
+            );
           }
           continue;
         }
@@ -281,18 +281,17 @@ export async function planShowcaseBooks(input: {
           relationRowCounts.set(pairKey, count + 1);
         } else if (!duplicateRelationRows.has(pairKey)) {
           duplicateRelationRows.add(pairKey);
-          gaps.push(gap('subject-relations', row, 'Selected membership has excess duplicate source rows', {
-            code: family.id,
-            endpoint: String(volumeId),
-            property: 'wdt:P179',
-          }));
+          gaps.push(
+            gap('subject-relations', row, 'Selected membership has excess duplicate source rows', {
+              code: family.id,
+              endpoint: String(volumeId),
+              property: 'wdt:P179',
+            }),
+          );
         }
       }
     }
-    if (
-      code === ANIME_RELATION &&
-      (animePairs.has(`${sid}:${rid}`) || animePairs.has(`${rid}:${sid}`))
-    ) {
+    if (code === ANIME_RELATION && (animePairs.has(`${sid}:${rid}`) || animePairs.has(`${rid}:${sid}`))) {
       const relationKey = `anime:${Math.min(sid, rid)}:${Math.max(sid, rid)}:${sid}:${rid}`;
       const count = relationRowCounts.get(relationKey) ?? 0;
       if (count < 2) {
@@ -302,11 +301,13 @@ export async function planShowcaseBooks(input: {
         wanted.add(rid);
       } else if (!duplicateRelationRows.has(relationKey)) {
         duplicateRelationRows.add(relationKey);
-        gaps.push(gap('subject-relations', row, 'Selected anime relation has excess duplicate source rows', {
-          code: String(ANIME_RELATION),
-          endpoint: String(Math.max(sid, rid)),
-          property: 'rezics:crossMediaCounterpart',
-        }));
+        gaps.push(
+          gap('subject-relations', row, 'Selected anime relation has excess duplicate source rows', {
+            code: String(ANIME_RELATION),
+            endpoint: String(Math.max(sid, rid)),
+            property: 'rezics:crossMediaCounterpart',
+          }),
+        );
       }
     }
   }
@@ -395,29 +396,37 @@ export async function planShowcaseBooks(input: {
         continue;
       }
       const orderRows = sourceRows.filter(
-        (row) => row.subject_id === seriesId && row.related_subject_id === volumeId && row.relation_type === OFFPRINT_RELATION,
+        (row) =>
+          row.subject_id === seriesId && row.related_subject_id === volumeId && row.relation_type === OFFPRINT_RELATION,
       );
       let ordinal: number | undefined;
       if (orderRows.length === 1) {
         const value = orderRows[0]!.order;
         if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) ordinal = value;
-        else gaps.push(gap('subject-relations', orderRows[0]!, 'Source volume ordinal is invalid', {
-          code: family.id,
-          endpoint: String(volumeId),
-          property: 'schema:position',
-        }));
+        else
+          gaps.push(
+            gap('subject-relations', orderRows[0]!, 'Source volume ordinal is invalid', {
+              code: family.id,
+              endpoint: String(volumeId),
+              property: 'schema:position',
+            }),
+          );
       } else if (orderRows.length > 1) {
-        gaps.push(gap('subject-relations', orderRows[0]!, 'Source volume ordinal is ambiguous', {
-          code: family.id,
-          endpoint: String(volumeId),
-          property: 'schema:position',
-        }));
+        gaps.push(
+          gap('subject-relations', orderRows[0]!, 'Source volume ordinal is ambiguous', {
+            code: family.id,
+            endpoint: String(volumeId),
+            property: 'schema:position',
+          }),
+        );
       } else {
-        gaps.push(gap('subject-relations', sourceRows[0]!, 'Source volume ordinal is unknown', {
-          code: family.id,
-          endpoint: String(volumeId),
-          property: 'schema:position',
-        }));
+        gaps.push(
+          gap('subject-relations', sourceRows[0]!, 'Source volume ordinal is unknown', {
+            code: family.id,
+            endpoint: String(volumeId),
+            property: 'schema:position',
+          }),
+        );
       }
       familyVolumes.push({ family, row: volume, sourceRows, ...(ordinal === undefined ? {} : { ordinal }) });
     }
@@ -426,11 +435,13 @@ export async function planShowcaseBooks(input: {
       if (volume.ordinal !== undefined) ordinalCounts.set(volume.ordinal, (ordinalCounts.get(volume.ordinal) ?? 0) + 1);
     for (const volume of familyVolumes) {
       if (volume.ordinal !== undefined && ordinalCounts.get(volume.ordinal)! > 1) {
-        gaps.push(gap('subject-relations', volume.sourceRows[0]!, 'Source volume ordinal is ambiguous across volumes', {
-          code: family.id,
-          endpoint: String(asId(volume.row.id)),
-          property: 'schema:position',
-        }));
+        gaps.push(
+          gap('subject-relations', volume.sourceRows[0]!, 'Source volume ordinal is ambiguous across volumes', {
+            code: family.id,
+            endpoint: String(asId(volume.row.id)),
+            property: 'schema:position',
+          }),
+        );
         delete volume.ordinal;
       }
       volumes.push(volume);
@@ -455,7 +466,13 @@ export async function planShowcaseBooks(input: {
       asId(left.row.id)! - asId(right.row.id)!,
   );
 
-  const creatorAssociations: { family: ShowcaseBookFamily; row: Row; role: CreatorRole; personId: number; expectedType: 1 | 2 }[] = [];
+  const creatorAssociations: {
+    family: ShowcaseBookFamily;
+    row: Row;
+    role: CreatorRole;
+    personId: number;
+    expectedType: 1 | 2;
+  }[] = [];
   const creatorIds = new Set<number>();
   const credits: BangumiCreatorCreditDraft[] = [];
   let selectedCreditRows = 0;
@@ -470,42 +487,52 @@ export async function planShowcaseBooks(input: {
     if (selectedCreditRows > CREDIT_CAP) {
       if (!creditOverflowFamilies.has(family.id)) {
         creditOverflowFamilies.add(family.id);
-        gaps.push(gap('subject-persons', row, 'Selected book creator credits exceed the bounded family cap', {
-          code: family.id,
-        }));
+        gaps.push(
+          gap('subject-persons', row, 'Selected book creator credits exceed the bounded family cap', {
+            code: family.id,
+          }),
+        );
       }
       continue;
     }
     const role = typeof row.position === 'number' ? creatorRoles[row.position] : undefined;
     if (!role) {
-      gaps.push(gap('subject-persons', row, 'Unsupported creator role on selected book record', {
-        code: String(row.position ?? 'unknown'),
-        property: 'staff.1',
-      }));
+      gaps.push(
+        gap('subject-persons', row, 'Unsupported creator role on selected book record', {
+          code: String(row.position ?? 'unknown'),
+          property: 'staff.1',
+        }),
+      );
       continue;
     }
     if (personId === undefined) {
-      const property = role.role === 'author' ? 'schema:author' : role.role === 'illustrator' ? 'schema:illustrator' : 'schema:publisher';
-      gaps.push(gap('subject-persons', row, 'Creator identity key is invalid on selected book record', {
-        code: String(row.position),
-        property,
-      }));
+      const property =
+        role.role === 'author'
+          ? 'schema:author'
+          : role.role === 'illustrator'
+            ? 'schema:illustrator'
+            : 'schema:publisher';
+      gaps.push(
+        gap('subject-persons', row, 'Creator identity key is invalid on selected book record', {
+          code: String(row.position),
+          property,
+        }),
+      );
       continue;
     }
     if (!creatorIds.has(personId) && creatorIds.size >= CREATOR_CAP) {
-      gaps.push(gap('subject-persons', row, 'Selected book creators exceed the bounded family cap', {
-        code: family.id,
-        endpoint: String(personId),
-      }));
+      gaps.push(
+        gap('subject-persons', row, 'Selected book creators exceed the bounded family cap', {
+          code: family.id,
+          endpoint: String(personId),
+        }),
+      );
       continue;
     }
     creatorIds.add(personId);
     creatorAssociations.push({ family, row, role: role.role, personId, expectedType: role.expectedType });
     credits.push(
-      bangumiStaffDraft(
-        { subject_id: subjectId, person_id: personId, position: row.position as number },
-        1,
-      ),
+      bangumiStaffDraft({ subject_id: subjectId, person_id: personId, position: row.position as number }, 1),
     );
   }
 
@@ -519,22 +546,31 @@ export async function planShowcaseBooks(input: {
   for (const association of creatorAssociations) {
     const person = creatorRows.get(association.personId);
     const expectedLabel = association.expectedType === 1 ? 'individual person' : 'Organization';
-    const property = association.role === 'author' ? 'schema:author' : association.role === 'illustrator' ? 'schema:illustrator' : 'schema:publisher';
+    const property =
+      association.role === 'author'
+        ? 'schema:author'
+        : association.role === 'illustrator'
+          ? 'schema:illustrator'
+          : 'schema:publisher';
     if (!person) {
-      gaps.push(gap('person', { id: association.personId }, `${association.role} identity is missing from the dump`, {
-        code: String(association.row.position),
-        endpoint: String(association.personId),
-        property,
-      }));
+      gaps.push(
+        gap('person', { id: association.personId }, `${association.role} identity is missing from the dump`, {
+          code: String(association.row.position),
+          endpoint: String(association.personId),
+          property,
+        }),
+      );
       continue;
     }
     if (person.type !== association.expectedType) {
-      gaps.push(gap('person', person, `${association.role} identity is not an ${expectedLabel}`, {
-        code: String(association.row.position),
-        endpoint: String(association.personId),
-        property,
-        requiredProfile: association.expectedType === 1 ? 'schema:Person' : 'schema:Organization',
-      }));
+      gaps.push(
+        gap('person', person, `${association.role} identity is not an ${expectedLabel}`, {
+          code: String(association.row.position),
+          endpoint: String(association.personId),
+          property,
+          requiredProfile: association.expectedType === 1 ? 'schema:Person' : 'schema:Organization',
+        }),
+      );
       continue;
     }
     acceptedCreatorRows.add(person);
@@ -551,9 +587,7 @@ export async function planShowcaseBooks(input: {
     revision: null,
     payload,
   }));
-  const admittedPersonKeys = new Set(
-    [...acceptedCreatorRows].map((person) => `person:${asId(person.id)}`),
-  );
+  const admittedPersonKeys = new Set([...acceptedCreatorRows].map((person) => `person:${asId(person.id)}`));
   const admittedCredits = credits.filter((draft) => admittedPersonKeys.has(draft.person));
 
   const records: SourceRecord[] = [];
@@ -585,30 +619,41 @@ export async function planShowcaseBooks(input: {
           (Number(row.subject_id) === animeId && Number(row.related_subject_id) === seriesId)),
     );
     if (!evidenceRows.length) {
-      gaps.push(gap('subject-relations', { subject_id: seriesId, related_subject_id: animeId }, 'Selected anime relation evidence is absent', {
-        code: String(ANIME_RELATION),
-        endpoint: String(animeId),
-        property: 'rezics:crossMediaCounterpart',
-      }));
+      gaps.push(
+        gap(
+          'subject-relations',
+          { subject_id: seriesId, related_subject_id: animeId },
+          'Selected anime relation evidence is absent',
+          {
+            code: String(ANIME_RELATION),
+            endpoint: String(animeId),
+            property: 'rezics:crossMediaCounterpart',
+          },
+        ),
+      );
       continue;
     }
     const anime = subjects.get(animeId);
     if (!anime) {
-      gaps.push(gap('subject', { id: animeId }, 'Selected anime relation endpoint is missing from the dump', {
-        code: String(ANIME_RELATION),
-        endpoint: String(animeId),
-        property: 'rezics:crossMediaCounterpart',
-        requiredProfile: 'Bangumi anime subject',
-      }));
+      gaps.push(
+        gap('subject', { id: animeId }, 'Selected anime relation endpoint is missing from the dump', {
+          code: String(ANIME_RELATION),
+          endpoint: String(animeId),
+          property: 'rezics:crossMediaCounterpart',
+          requiredProfile: 'Bangumi anime subject',
+        }),
+      );
       continue;
     }
     if (anime.type !== 2) {
-      gaps.push(gap('subject', anime, 'Selected relation endpoint is not an anime subject', {
-        code: String(ANIME_RELATION),
-        endpoint: String(animeId),
-        property: 'rezics:crossMediaCounterpart',
-        requiredProfile: 'Bangumi anime subject',
-      }));
+      gaps.push(
+        gap('subject', anime, 'Selected relation endpoint is not an anime subject', {
+          code: String(ANIME_RELATION),
+          endpoint: String(animeId),
+          property: 'rezics:crossMediaCounterpart',
+          requiredProfile: 'Bangumi anime subject',
+        }),
+      );
       continue;
     }
     animeIds.push(String(animeId));
@@ -622,11 +667,13 @@ export async function planShowcaseBooks(input: {
     );
     const mapped = relationDraft({ row: primary, reciprocalRows });
     if (!mapped) {
-      gaps.push(gap('subject-relations', primary, 'Selected anime relation has ambiguous or unsupported source evidence', {
-        code: String(ANIME_RELATION),
-        endpoint: String(animeId),
-        property: 'rezics:crossMediaCounterpart',
-      }));
+      gaps.push(
+        gap('subject-relations', primary, 'Selected anime relation has ambiguous or unsupported source evidence', {
+          code: String(ANIME_RELATION),
+          endpoint: String(animeId),
+          property: 'rezics:crossMediaCounterpart',
+        }),
+      );
       continue;
     }
     edges.push(mapped);
@@ -636,21 +683,33 @@ export async function planShowcaseBooks(input: {
     const volumeId = asId(volume.row.id)!;
     const seriesId = Number(volume.family.seriesId);
     const volumeRows = volume.sourceRows.filter(
-      (row) => Number(row.subject_id) === volumeId && Number(row.related_subject_id) === seriesId && row.relation_type === SERIES_RELATION,
+      (row) =>
+        Number(row.subject_id) === volumeId &&
+        Number(row.related_subject_id) === seriesId &&
+        row.relation_type === SERIES_RELATION,
     );
     const seriesSideRows = volume.sourceRows.filter(
-      (row) => Number(row.subject_id) === seriesId && Number(row.related_subject_id) === volumeId && row.relation_type === OFFPRINT_RELATION,
+      (row) =>
+        Number(row.subject_id) === seriesId &&
+        Number(row.related_subject_id) === volumeId &&
+        row.relation_type === OFFPRINT_RELATION,
     );
     const primary = volumeRows[0] ?? seriesSideRows[0];
     if (!primary) continue;
     const reciprocalRows = volumeRows.length ? seriesSideRows : volumeRows;
-    const mapped = relationDraft({ row: primary, reciprocalRows, ...(volume.ordinal === undefined ? {} : { order: volume.ordinal }) });
+    const mapped = relationDraft({
+      row: primary,
+      reciprocalRows,
+      ...(volume.ordinal === undefined ? {} : { order: volume.ordinal }),
+    });
     if (!mapped) {
-      gaps.push(gap('subject-relations', primary, 'Selected series membership has ambiguous or unsupported source evidence', {
-        code: volume.family.id,
-        endpoint: String(volumeId),
-        property: 'wdt:P179',
-      }));
+      gaps.push(
+        gap('subject-relations', primary, 'Selected series membership has ambiguous or unsupported source evidence', {
+          code: volume.family.id,
+          endpoint: String(volumeId),
+          property: 'wdt:P179',
+        }),
+      );
       continue;
     }
     edges.push(mapped);
@@ -668,9 +727,27 @@ export async function planShowcaseBooks(input: {
       series: [...seriesRows.keys()].map(String),
       volumes: volumes.map((entry) => String(asId(entry.row.id))),
       editions: [],
-      authors: [...new Set(acceptedCreatorAssociations.filter((entry) => entry.role === 'author').map((entry) => `person:${entry.personId}`))],
-      illustrators: [...new Set(acceptedCreatorAssociations.filter((entry) => entry.role === 'illustrator').map((entry) => `person:${entry.personId}`))],
-      publishers: [...new Set(acceptedCreatorAssociations.filter((entry) => entry.role === 'publisher').map((entry) => `person:${entry.personId}`))],
+      authors: [
+        ...new Set(
+          acceptedCreatorAssociations
+            .filter((entry) => entry.role === 'author')
+            .map((entry) => `person:${entry.personId}`),
+        ),
+      ],
+      illustrators: [
+        ...new Set(
+          acceptedCreatorAssociations
+            .filter((entry) => entry.role === 'illustrator')
+            .map((entry) => `person:${entry.personId}`),
+        ),
+      ],
+      publishers: [
+        ...new Set(
+          acceptedCreatorAssociations
+            .filter((entry) => entry.role === 'publisher')
+            .map((entry) => `person:${entry.personId}`),
+        ),
+      ],
       anime: animeIds,
     },
     gaps,
@@ -885,10 +962,7 @@ export async function importShowcaseBooks(input: {
     conversions: planned.conversions,
     identities,
     planned,
-    status:
-      planned.gaps.length && seeded.status === 'imported'
-        ? 'imported-with-gaps'
-        : seeded.status,
+    status: planned.gaps.length && seeded.status === 'imported' ? 'imported-with-gaps' : seeded.status,
     gaps: [...planned.gaps, ...seeded.gaps],
   };
 }

@@ -26,33 +26,46 @@ const bookGirlVolumes = [
   [852, '“文学少女”と神に臨む作家 下', '“文学少女”与迈向神境的作家 下'],
 ] as const;
 
-function sourceTables(options: {
-  karaOrdinals?: readonly [number | undefined, number | undefined];
-  includePublisher?: boolean;
-  includeAnime?: boolean;
-  unsupportedRole?: boolean;
-  invalidCreatorIdentity?: boolean;
-} = {}): CrossMediaTables {
+function sourceTables(
+  options: {
+    karaOrdinals?: readonly [number | undefined, number | undefined];
+    includePublisher?: boolean;
+    includeAnime?: boolean;
+    unsupportedRole?: boolean;
+    invalidCreatorIdentity?: boolean;
+  } = {},
+): CrossMediaTables {
   const subjects: Row[] = [
     book(499, '文学少女', '文学少女', true, '|作者= 野村美月\r\n|插图= 竹岡美穂\r\n|出版社= エンターブレイン\r\n'),
     ...bookGirlVolumes.map(([id, name, nameCn]) => book(id, name, nameCn, false)),
     book(2815, '空の境界', '空之境界', true, '|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|册数= 2册\r\n'),
-    book(5329, '空の境界 (上)', '空之境界 (上)', false, '|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|页数= 448\r\n|ISBN= 9784061823617\r\n'),
-    book(10862, '空の境界 (下)', '空之境界 (下)', false, '|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|页数= 538\r\n|ISBN= 9784061823624\r\n'),
-    ...
-      (options.includeAnime === false
-        ? []
-        : [
-            {
-              id: 233,
-              type: 2,
-              name: '劇場版 空の境界 第一章 俯瞰風景',
-              name_cn: '剧场版 空之境界 第一章 俯瞰风景',
-              platform: 3,
-              series: false,
-              infobox: '{{Infobox animanga/Movie}}',
-            },
-          ]),
+    book(
+      5329,
+      '空の境界 (上)',
+      '空之境界 (上)',
+      false,
+      '|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|页数= 448\r\n|ISBN= 9784061823617\r\n',
+    ),
+    book(
+      10862,
+      '空の境界 (下)',
+      '空之境界 (下)',
+      false,
+      '|作者= 奈須きのこ\r\n|插图= 武内崇\r\n|出版社= 講談社\r\n|页数= 538\r\n|ISBN= 9784061823624\r\n',
+    ),
+    ...(options.includeAnime === false
+      ? []
+      : [
+          {
+            id: 233,
+            type: 2,
+            name: '劇場版 空の境界 第一章 俯瞰風景',
+            name_cn: '剧场版 空之境界 第一章 俯瞰风景',
+            platform: 3,
+            series: false,
+            infobox: '{{Infobox animanga/Movie}}',
+          },
+        ]),
   ];
   const relations: Row[] = [
     ...bookGirlVolumes.flatMap(([id], index) => [
@@ -77,13 +90,29 @@ function sourceTables(options: {
   const subjectPersons: Row[] = [
     { subject_id: 2815, person_id: 1466, position: 2001, appear_eps: '' },
     { subject_id: 2815, person_id: 1467, position: 2003, appear_eps: '' },
-    ...(options.includePublisher === false ? [] : [{ subject_id: 2815, person_id: 128, position: 2004, appear_eps: '' }]),
+    ...(options.includePublisher === false
+      ? []
+      : [{ subject_id: 2815, person_id: 128, position: 2004, appear_eps: '' }]),
     ...(options.unsupportedRole ? [{ subject_id: 2815, person_id: 9999, position: 2006, appear_eps: '' }] : []),
     ...(options.invalidCreatorIdentity ? [{ subject_id: 2815, person_id: 0, position: 2001, appear_eps: '' }] : []),
   ];
   const persons: Row[] = [
-    { id: 1466, type: 1, name: '奈須きのこ', name_cn: null, career: [], infobox: '{{Infobox Crt\r\n|简体中文名= 奈须蘑菇\r\n}}' },
-    { id: 1467, type: 1, name: '武内崇', name_cn: null, career: [], infobox: '{{Infobox Crt\r\n|简体中文名= 武内崇\r\n}}' },
+    {
+      id: 1466,
+      type: 1,
+      name: '奈須きのこ',
+      name_cn: null,
+      career: [],
+      infobox: '{{Infobox Crt\r\n|简体中文名= 奈须蘑菇\r\n}}',
+    },
+    {
+      id: 1467,
+      type: 1,
+      name: '武内崇',
+      name_cn: null,
+      career: [],
+      infobox: '{{Infobox Crt\r\n|简体中文名= 武内崇\r\n}}',
+    },
     { id: 128, type: 2, name: '講談社', name_cn: null, infobox: '{{Infobox Crt\r\n|简体中文名= 讲谈社\r\n}}' },
   ];
   const data: Record<string, Row[]> = {
@@ -113,8 +142,19 @@ test('keeps both pinned book families, supported credits and only the selected a
   expect(planned.selected.publishers).toEqual(['person:128']);
   expect(planned.selected.anime).toEqual(['233']);
   expect(planned.records.map((record) => record.key)).toEqual([
-    '499', '26', '27', '78', '79', '80', '81', '82', '852',
-    '2815', '5329', '10862', '233',
+    '499',
+    '26',
+    '27',
+    '78',
+    '79',
+    '80',
+    '81',
+    '82',
+    '852',
+    '2815',
+    '5329',
+    '10862',
+    '233',
   ]);
   expect(planned.records.find((record) => record.key === '2815')?.payload).toMatchObject({
     name: '空の境界',
@@ -204,8 +244,12 @@ test('keeps unknown or ambiguous ordinals and missing evidence distinct without 
   expect(unknown.edges.find((edge) => edge.property === 'wdt:P179' && edge.holder === '10862')?.relation?.order).toBe(
     undefined,
   );
-  expect(unknown.gaps).toContainEqual(expect.objectContaining({ reason: 'Source volume ordinal is unknown', endpoint: '10862' }));
-  expect(unknown.gaps).toContainEqual(expect.objectContaining({ reason: 'Unsupported creator role on selected book record', code: '2006' }));
+  expect(unknown.gaps).toContainEqual(
+    expect.objectContaining({ reason: 'Source volume ordinal is unknown', endpoint: '10862' }),
+  );
+  expect(unknown.gaps).toContainEqual(
+    expect.objectContaining({ reason: 'Unsupported creator role on selected book record', code: '2006' }),
+  );
   expect(unknown.selected.publishers).toEqual([]);
   expect(unknown.creators.some((record) => record.key === 'person:128')).toBe(false);
   expect(unknown.credits.some((draft) => draft.roleCode === 2004)).toBe(false);
@@ -213,7 +257,9 @@ test('keeps unknown or ambiguous ordinals and missing evidence distinct without 
   expect(unknown.conversions.every((conversion) => conversion.grain !== 'bf:Instance')).toBe(true);
 
   const ambiguous = await planShowcaseBooks({ tables: sourceTables({ karaOrdinals: [1, 1] }) });
-  expect(ambiguous.gaps.filter((item) => item.reason === 'Source volume ordinal is ambiguous across volumes')).toHaveLength(2);
+  expect(
+    ambiguous.gaps.filter((item) => item.reason === 'Source volume ordinal is ambiguous across volumes'),
+  ).toHaveLength(2);
   expect(
     ambiguous.edges
       .filter((edge) => edge.property === 'wdt:P179' && ['5329', '10862'].includes(edge.holder))
