@@ -204,14 +204,22 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                       <AnnotationMappingForm
                         key={`${row.ordinal}:${state.upload!.id}`}
                         row={row}
-                        disabled={busy || locked || (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))}
+                        disabled={
+                          busy ||
+                          locked ||
+                          (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))
+                        }
                         onChoose={(choice) => journey!.choose(choice)}
                       />
                     ) : row.section === 'journals' ? (
                       <JournalMappingForm
                         key={`${row.ordinal}:${state.upload!.id}`}
                         row={row}
-                        disabled={busy || locked || (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))}
+                        disabled={
+                          busy ||
+                          locked ||
+                          (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))
+                        }
                         onChoose={(choice) => journey!.choose(choice)}
                       />
                     ) : row.section === 'provenance' ? (
@@ -223,7 +231,8 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                         disabled={
                           busy ||
                           locked ||
-                          (state.choices.length >= 20 && !state.choices.some((choice) => choice.ordinal === row.ordinal))
+                          (state.choices.length >= 20 &&
+                            !state.choices.some((choice) => choice.ordinal === row.ordinal))
                         }
                         onChoose={(choice) => journey!.choose(choice)}
                       />
@@ -601,12 +610,38 @@ function AnnotationMappingForm({
     >
       <fieldset disabled={disabled} className="space-y-3">
         <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
-        <input id={`${prefix}-subject`} className={`${control} block w-full`} name="subjectId" required pattern={uuidPattern} autoComplete="off" />
+        <input
+          id={`${prefix}-subject`}
+          className={`${control} block w-full`}
+          name="subjectId"
+          required
+          pattern={uuidPattern}
+          autoComplete="off"
+        />
         <label htmlFor={`${prefix}-incarnation`}>{m.library_archive_personal_incarnation()}</label>
-        <input id={`${prefix}-incarnation`} className={`${control} block w-full`} name="incarnationId" required pattern={uuidPattern} autoComplete="off" />
-        <FieldChoiceSelect id={`${prefix}-note`} name="note" label={m.library_archive_personal_note()} disabled={disabled} />
-        <FieldChoiceSelect id={`${prefix}-priority`} name="priority" label={m.library_archive_personal_priority()} disabled={disabled} />
-        <button type="submit" className={control}>{m.library_archive_entry_select({ ordinal: row.ordinal })}</button>
+        <input
+          id={`${prefix}-incarnation`}
+          className={`${control} block w-full`}
+          name="incarnationId"
+          required
+          pattern={uuidPattern}
+          autoComplete="off"
+        />
+        <FieldChoiceSelect
+          id={`${prefix}-note`}
+          name="note"
+          label={m.library_archive_personal_note()}
+          disabled={disabled}
+        />
+        <FieldChoiceSelect
+          id={`${prefix}-priority`}
+          name="priority"
+          label={m.library_archive_personal_priority()}
+          disabled={disabled}
+        />
+        <button type="submit" className={control}>
+          {m.library_archive_entry_select({ ordinal: row.ordinal })}
+        </button>
       </fieldset>
     </form>
   );
@@ -643,13 +678,44 @@ function JournalMappingForm({
     >
       <fieldset disabled={disabled} className="space-y-3">
         <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
-        <input id={`${prefix}-subject`} className={`${control} block w-full`} name="subjectId" required pattern={uuidPattern} autoComplete="off" />
+        <input
+          id={`${prefix}-subject`}
+          className={`${control} block w-full`}
+          name="subjectId"
+          required
+          pattern={uuidPattern}
+          autoComplete="off"
+        />
         <label htmlFor={`${prefix}-session`}>{m.library_archive_personal_session()}</label>
-        <input id={`${prefix}-session`} className={`${control} block w-full`} name="sessionId" required pattern={uuidPattern} autoComplete="off" />
-        <FieldChoiceSelect id={`${prefix}-start`} name="startDate" label={m.library_archive_personal_start_date()} disabled={disabled} />
-        <FieldChoiceSelect id={`${prefix}-finish`} name="finishDate" label={m.library_archive_personal_finish_date()} disabled={disabled} />
-        <FieldChoiceSelect id={`${prefix}-reflection`} name="reflection" label={m.library_archive_personal_reflection()} disabled={disabled} />
-        <button type="submit" className={control}>{m.library_archive_entry_select({ ordinal: row.ordinal })}</button>
+        <input
+          id={`${prefix}-session`}
+          className={`${control} block w-full`}
+          name="sessionId"
+          required
+          pattern={uuidPattern}
+          autoComplete="off"
+        />
+        <FieldChoiceSelect
+          id={`${prefix}-start`}
+          name="startDate"
+          label={m.library_archive_personal_start_date()}
+          disabled={disabled}
+        />
+        <FieldChoiceSelect
+          id={`${prefix}-finish`}
+          name="finishDate"
+          label={m.library_archive_personal_finish_date()}
+          disabled={disabled}
+        />
+        <FieldChoiceSelect
+          id={`${prefix}-reflection`}
+          name="reflection"
+          label={m.library_archive_personal_reflection()}
+          disabled={disabled}
+        />
+        <button type="submit" className={control}>
+          {m.library_archive_entry_select({ ordinal: row.ordinal })}
+        </button>
       </fieldset>
     </form>
   );

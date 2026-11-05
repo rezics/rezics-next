@@ -318,10 +318,12 @@ export class ArchiveEntryRecoveryJourney {
           await accept(this.#port.personal(row.subjectId!), (value) => value.personalEntry);
           break;
         case 'provenance':
-          await accept(this.#port.personal(row.subjectId!), (value) =>
-            value.personalEntry.sourceObservations.find(
-              (observation) => observation.provider === row.provider && observation.recordId === row.recordId,
-            ) ?? null,
+          await accept(
+            this.#port.personal(row.subjectId!),
+            (value) =>
+              value.personalEntry.sourceObservations.find(
+                (observation) => observation.provider === row.provider && observation.recordId === row.recordId,
+              ) ?? null,
           );
           break;
         case 'journals':

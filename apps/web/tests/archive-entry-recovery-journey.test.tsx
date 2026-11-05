@@ -67,7 +67,12 @@ function fixture() {
     {
       ordinal: 2,
       section: 'journals',
-      evidence: { subject_id: subjectId, session_id: '019a1b2c-3d4e-7f00-8a00-000000000004', start_date: { year: 2004 }, reflection: 'private' },
+      evidence: {
+        subject_id: subjectId,
+        session_id: '019a1b2c-3d4e-7f00-8a00-000000000004',
+        start_date: { year: 2004 },
+        reflection: 'private',
+      },
       status: 'unresolved',
       review: null,
       reviewRevision: 0,
@@ -75,7 +80,12 @@ function fixture() {
     {
       ordinal: 3,
       section: 'annotations',
-      evidence: { subject_id: subjectId, incarnation_id: '019a1b2c-3d4e-7f00-8a00-000000000005', note: 'Archived note', priority: 4 },
+      evidence: {
+        subject_id: subjectId,
+        incarnation_id: '019a1b2c-3d4e-7f00-8a00-000000000005',
+        note: 'Archived note',
+        priority: 4,
+      },
       status: 'unresolved',
       review: null,
       reviewRevision: 0,
@@ -83,7 +93,13 @@ function fixture() {
     {
       ordinal: 4,
       section: 'journals',
-      evidence: { subject_id: subjectId, session_id: '019a1b2c-3d4e-7f00-8a00-000000000006', start_date: { year: 2005 }, finish_date: { year: 2006, month: 2 }, reflection: 'Exact archived reflection' },
+      evidence: {
+        subject_id: subjectId,
+        session_id: '019a1b2c-3d4e-7f00-8a00-000000000006',
+        start_date: { year: 2005 },
+        finish_date: { year: 2006, month: 2 },
+        reflection: 'Exact archived reflection',
+      },
       status: 'unresolved',
       review: null,
       reviewRevision: 0,
@@ -351,8 +367,20 @@ test('Annotation and one combined journal row review current facts and read actu
     expect(reviewHtml).toContain('Current reflection');
     const review = JSON.parse(f.calls.find((call) => call.path.endsWith('/review'))!.body);
     expect(review.items).toEqual([
-      { ordinal: 3, kind: 'annotation', subjectId, incarnationId: '019a1b2c-3d4e-7f00-8a00-000000000005', fields: { note: 'set', priority: 'preserve' } },
-      { ordinal: 4, kind: 'journal', subjectId, sessionId, fields: { startDate: 'set', finishDate: 'set', reflection: 'set' } },
+      {
+        ordinal: 3,
+        kind: 'annotation',
+        subjectId,
+        incarnationId: '019a1b2c-3d4e-7f00-8a00-000000000005',
+        fields: { note: 'set', priority: 'preserve' },
+      },
+      {
+        ordinal: 4,
+        kind: 'journal',
+        subjectId,
+        sessionId,
+        fields: { startDate: 'set', finishDate: 'set', reflection: 'set' },
+      },
     ]);
     f.acknowledge();
     await f.journey.apply();
@@ -361,9 +389,17 @@ test('Annotation and one combined journal row review current facts and read actu
       { ordinal: 4, section: 'journals', status: 'acknowledged', subjectId, sessionId },
     ]);
     await f.journey.readCurrent(3);
-    expect(f.journey.snapshot().readback?.value).toMatchObject({ note: 'Current note', priority: 0, annotationRevision: 9 });
+    expect(f.journey.snapshot().readback?.value).toMatchObject({
+      note: 'Current note',
+      priority: 0,
+      annotationRevision: 9,
+    });
     await f.journey.readCurrent(4);
-    expect(f.journey.snapshot().readback?.value).toMatchObject({ sessionId, revision: 4, reflection: 'Exact archived reflection' });
+    expect(f.journey.snapshot().readback?.value).toMatchObject({
+      sessionId,
+      revision: 4,
+      reflection: 'Exact archived reflection',
+    });
     expect(f.calls.some((call) => call.path.endsWith('/personal'))).toBe(true);
     expect(f.calls.some((call) => call.path.endsWith('/journal'))).toBe(true);
   } finally {
