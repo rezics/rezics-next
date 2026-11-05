@@ -66,9 +66,21 @@ erasure and growth suites, including their independent receiving obligations.
   same-Character projection and unrelated-history case through the actual native lookup, charging database statements,
   examined rows, blocks and response bytes. It complements the controller-owned installed receiving and actual imported
   graph tests; it does not prove those outcomes.
-- `bun run --cwd services/kernel typecheck` was run after the earlier document-boundary commit and failed on diagnostics
-  in untouched importer/kernel files. The recorded output was truncated; rerun final workspace typechecks after this
-  continuation is integrated. Required native/web tests and browser captures are deferred to controller verification.
+- `bun run --cwd packages/client typecheck` passed. Kernel typecheck completed with 440 repository diagnostics; after
+  fixing the changed-file cursor/property diagnostics, a final path-filtered pass reported no diagnostics in the
+  changed Semantic reader, HTTP subject route, Content document boundary, or changed native tests. The workspace still
+  fails on unrelated base diagnostics, including the duplicate `ImportTransportError` in
+  `services/importer/src/cross-media-seed.ts`, Content route type errors, and unrelated Semantic/other test errors.
+- Web typecheck completed after retry but the root workspace still reports 656 diagnostics. None name the changed
+  Character visit, Subject connection bridge, or public document entry; existing checkout/community/editor errors and
+  absent SQL modules imported by untouched Kernel files remain. Both workspace checks are non-green at repository
+  scope.
+- Kernel focused tests were attempted after the final reader change. The check stops before tests on the base schema
+  dump mismatch (`identity_receiving_capture_pending` expected, `identity_rating_repair_journal` actual); it also
+  reports ref cleanup SIGTERM. The schema is unchanged by this attempt. Web focused tests remain held by the existing
+  check-custody descriptor: reconciliation twice returned code 75 with custody `occupied` and result `unknown`, so no
+  duplicate test invocation was started. The native receiving, imported-graph, mounted, browser, document HTTP and
+  root acceptance checks remain deferred to controller verification.
 
 ## Contract-named sources read
 
@@ -99,4 +111,8 @@ erasure and growth suites, including their independent receiving obligations.
 - `docs/architecture/modules.json`
 - `services/kernel/src/content/README.md`
 - `services/kernel/src/semantic/README.md`
+- `services/kernel/src/semantic/current-relations.ts`
+- `services/kernel/src/semantic/link-changes.ts`
 - `docs/subject-pages.md`
+- `services/kernel/test/semantic/links-projection.test.ts`
+- `services/kernel/test/semantic/growth-reads.test.ts`
