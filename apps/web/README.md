@@ -1303,6 +1303,8 @@ language through the client's `accept-language`.
   also adds 1 D. Boards and publications are single pages, never walked.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
 
+Decision: when the Realm is unavailable, the page shows its own unavailable state and never substitutes Global boards or publications.
+
 ### Realm claim review
 
 The existing Space/Realm home mounts `community/realm-claim-controls.tsx` in its management area. The native Realm
