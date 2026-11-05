@@ -1,4 +1,4 @@
-import { copiesAddress, type CopiesAddress } from '../copies-query';
+import type { CopiesAddress } from '../copies-query';
 import type { CopiesPageData } from '../copies-read';
 
 export type CopiesWindowMove = 'previous' | 'first' | 'more';
@@ -103,7 +103,6 @@ export function stageCopiesWindowMove(
   if (move === 'first' && (target !== null || state.current === null)) return state;
   if (move === 'more' && (typeof target !== 'string' || !target)) return state;
   if (target === address.cursor) return state;
-  if (target !== null && copiesAddress({ ...address, cursor: target }, address.locale).issue) return state;
   return {
     ...state,
     pending: {
