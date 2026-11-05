@@ -1,7 +1,8 @@
 # Library archive recovery
 
 `/library/recover-archive` is the Library destination for recovering selected Entries, private labels, assignments,
-annotations, occurrence journals and source observations from a completed local archive. The native owner is
+annotations and occurrence journals from a completed local archive. Source observations and journal assessments
+remain retained unsupported evidence until the shared client publishes their review operands. The native owner is
 [Library archive review and merge](../../../../docs/library-archive-merge.md);
 the artifact format is owned by [Library export](../../../../docs/library-export.md). This guide owns the mounted Web visit.
 
@@ -19,20 +20,24 @@ it only with the mounted visit; an uncertain command never swaps to a newly capt
 
 The file control admits an original file up to 34 MiB before reading its text. The generated upload sends that text
 unchanged. Only the native decoder interprets JSON, with depth 32, 100,000 records, 32 MiB compact record bytes and
-120,000 bytes per record. Completed V1/V2/V3 artifacts follow current native support; V4 remains refused, even though
+120,000 bytes per record. Completed V1/V2/V3 artifacts follow current native support when the installed review client
+has an operand; V4 remains refused, even though
 new exports emit it. Malformed, incomplete, unsupported and inconsistent files retain their native outcomes.
 
 One upload identity and one preview page of at most 100 records are retained. Inventory shows native computed
 section counts, capture and treatment alongside validated overall manifest rows and compact bytes. It explains empty
 captures, retained unsupported evidence and manifest omissions. An empty page never substitutes for inventory. One
 upload, page size, selected-row limit and immutable review lifecycle cover every activated branch. V4 provider sections
-and rows without a producer-published review operand remain retained unsupported evidence.
+and rows without a producer-published review operand remain retained unsupported evidence. The installed client
+currently lacks `journal.fields.assessment` and the source-observation review variant; Content owns those generated
+route operands.
 
 ## Deliberate selection and immutable review
 
 A person explicitly enters the current canonical Subject, a supported current state and create/update/preserve choice,
-or chooses a current private label ID or validated creation using its archived name. Personal rows require a current
-Subject plus the exact existing Entry incarnation, non-retired Session or provider/record address. Equal names,
+or chooses a current private label ID or validated creation using its archived name. Annotation rows require a current
+Subject and exact existing Entry incarnation; journal rows require a current Subject and one explicit existing
+non-retired Session. Equal names,
 archived IDs, titles and dates never supply mappings. Native review compares current values with archived evidence.
 Personal fields start as preserve; set and clear are deliberate field-level choices. Label mappings must be reviewed
 before assignments; a created label must be acknowledged before reviewing its assignments. The shared selection is
@@ -56,7 +61,7 @@ partial results; it cannot release a started command before matching native ackn
 
 Only acknowledged matching effects supply canonical destinations. One selected result page is shown, retaining
 acknowledged rows for the current selection when a later native page omits them. Explicit readback uses the actual
-current Entry, private annotation/source-observation reader, occurrence journal reader or addressed FULL
+current Entry, private annotation reader, occurrence journal reader or addressed FULL
 label-assignment reader, never historical archive values. Removal and seven-day expiry of private evidence do not
 undo admitted Library changes.
 Expiry clears private upload/replay state and retains accepted results until replacement or session retirement.

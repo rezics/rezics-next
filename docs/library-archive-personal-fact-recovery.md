@@ -150,7 +150,10 @@ measurements run after integration.
 
 The route/schema producer is implemented in this source. The [generated confirmation journey](library-archive-merge.md#current-native-journey)
 requires raw JSON text or `{manifest, records}` upload and the exact `reviewRevision` returned by review when applying
-selected personal facts. The retained client snapshot still lacks assessment, reflection and immutable review-revision
-confirmation, so generated handoff remains pending the existing Kernel compiler errors; declarations must come from
-the producer and never be handwritten. The [assessment client continuation](../.temp/continuation/archive-assessment-client.md)
-tracks this remaining delivery alongside the existing archive client installation work.
+selected personal facts. The installed client snapshot now includes annotation and journal date/reflection operands,
+original-text upload, and immutable review-revision confirmation. It still lacks `journal.fields.assessment` and the
+source-observation review variant, including the exact current revision needed for correction. Content owns the
+generated route operands; they must come from the producer and never be handwritten. The
+[assessment client continuation](../.temp/continuation/archive-assessment-client.md) tracks prior client installation
+work; the [Web assessment and observation continuation](../.temp/continuation/archive-assessment-observation-client.md)
+tracks receiving work that depends on the missing operands.
