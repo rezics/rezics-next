@@ -47,7 +47,6 @@ type SearchCall = {
 const observed: SearchCall[] = [];
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
-  async releaseGroups() { throw new Error('Unexpected grouped release search'); },
   async search(principal, request, _time, _active, context) {
     observed.push({ principal, request, context });
     await context?.complete(page);

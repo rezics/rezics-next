@@ -435,7 +435,11 @@ test('review transport keeps original source observations, decimal security revi
   expect(requests[0]!.url.searchParams.get('reviewIdentitySource')).toBe('bangumi');
   expect(requests[0]!.url.searchParams.get('reviewIdentityExternalId')).toBe('person:8');
   await expect(transport.mergeReviewedPersons(body, 'review-intent')).rejects.toBeInstanceOf(ImportTransportError);
-  expect(await transport.mergeReviewedPersons(body, 'review-intent')).toEqual({ survivor: original, redirected: other, revision: 10 });
+  expect(await transport.mergeReviewedPersons(body, 'review-intent')).toEqual({
+    survivor: original,
+    redirected: other,
+    revision: 10,
+  });
   expect(requests[1]!.url.pathname).toBe('/v1/subjects:merge');
   expect(requests[2]!.body).toBe(requests[1]!.body);
   expect(JSON.parse(requests[2]!.body)).toEqual(body);

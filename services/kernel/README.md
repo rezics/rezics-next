@@ -44,7 +44,10 @@ retains its explicit state. Focused publication tests exercise installed public-
 engine-request accounting; broader native/browser/root acceptance remains with integration.
 Publication fixture assertions use native retained-candidate discriminants and current candidate ranks for adoption,
 complete native references, and fetch callables with their connection API. The command-capture adapter preserves
-the supplied port type so review commands remain available to the existing native journeys.
+the supplied port type so review commands remain available to the existing native journeys. Archive result readback
+retains each confirmed choice across later edits; private-entry callers retain native authorization and idempotency
+headers through the generated command signatures. Ordinary Search evidence remains required; only grouped release
+evidence is optional.
 
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.

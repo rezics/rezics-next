@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { BatchStatement } from '@rezics/definitions/bulk';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
@@ -45,11 +46,7 @@ async function create(id: string, type: string, label: string, digest: string) {
   });
 }
 
-function statementRows(
-  subject: string,
-  type: string,
-  statements: NonNullable<Parameters<typeof itemFacts>[1]['statements']>,
-) {
+function statementRows(subject: string, type: string, statements: Record<string, BatchStatement[]>) {
   return itemFacts(subject, { statements }, type, bundledRelease).filter((fact) => fact.kind === 'statement');
 }
 

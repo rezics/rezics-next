@@ -414,7 +414,7 @@ describe('connected native Collection reader journey', () => {
         [routeOf(collection.id), collection.id],
       )
     ).rows[0]!.micros;
-    expect(current?.operands.recency).toEqual([micros, routeOf(collection.id), collection.id]);
+    expect(current?.operands.recency).toEqual([micros, routeOf(collection.id)!, collection.id]);
   }, 120000);
 });
 

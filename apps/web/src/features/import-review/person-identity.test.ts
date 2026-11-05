@@ -85,7 +85,9 @@ test('mounted caller preserves paired observations and retries while rejecting m
   const command = { body: comparison.merge, key: uuid(99) };
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'stale' });
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'denied' });
-  await expect(mergePersonComparison(client, 'Bearer reviewer', command)).rejects.toThrow('Invalid native identity admission');
+  await expect(mergePersonComparison(client, 'Bearer reviewer', command)).rejects.toThrow(
+    'Invalid native identity admission',
+  );
   expect(sent[2]!.url).toBe('https://kernel.test/v1/subjects:merge');
   expect(await sent[2]!.clone().text()).toBe(await sent[3]!.clone().text());
   expect(await sent[2]!.clone().text()).toBe(await sent[4]!.clone().text());
@@ -110,7 +112,6 @@ test('a current Person page reflects withdrawn and conflicting identifiers even 
   ] as ReviewedPersonRead['subject']['statements'][string];
   expect(personCrossSourceIdentity(read)).toBe('conflicting');
 });
-
 
 test('the mounted Person merge returns the native receipt and an absent identity stays readable', async () => {
   const native = reads();

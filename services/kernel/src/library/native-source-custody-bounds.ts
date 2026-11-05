@@ -199,16 +199,16 @@ export const nativeSourceCustodyQueries: Readonly<{
   raw: typeof rawQueries;
   rawExplicitOutput: typeof rawExplicitOutput;
   retirement: Readonly<{
-  partition: typeof partitionQuery;
-  source: typeof retireSource;
-  receipt: typeof retireReceipt;
-  active: typeof retireActive;
-  holds: typeof retireHolds;
-  children: typeof retireChildren;
-  proof: typeof retireProof;
-  capture: typeof retireCapture;
-  identityRetention: typeof identityRetention;
-  nextCapture: typeof nextCapture;
+    partition: typeof partitionQuery;
+    source: typeof retireSource;
+    receipt: typeof retireReceipt;
+    active: typeof retireActive;
+    holds: typeof retireHolds;
+    children: typeof retireChildren;
+    proof: typeof retireProof;
+    capture: typeof retireCapture;
+    identityRetention: typeof identityRetention;
+    nextCapture: typeof nextCapture;
   }>;
 }> = Object.freeze({
   partition: nativeIdentityPartitionQuery,

@@ -350,13 +350,15 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: concepts.requirements,
     });
 
-    const stableCandidates = retainedCandidates((
-      await runtime.importTransport.reviewedCandidates(personId, {
-        property: 'wdt:P106',
-        context: GLOBAL_CONTEXT,
-        limit: 100,
-      })
-    ).candidates);
+    const stableCandidates = retainedCandidates(
+      (
+        await runtime.importTransport.reviewedCandidates(personId, {
+          property: 'wdt:P106',
+          context: GLOBAL_CONTEXT,
+          limit: 100,
+        })
+      ).candidates,
+    );
     const restarted = await seedCrossMedia(
       plan,
       importPath,
@@ -366,13 +368,15 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     );
     expect(idOf(restarted, 'person:8101')).toBe(personId);
     expect(
-      retainedCandidates((
-        await runtime.importTransport.reviewedCandidates(personId, {
-          property: 'wdt:P106',
-          context: GLOBAL_CONTEXT,
-          limit: 100,
-        })
-      ).candidates).map(({ id }) => id),
+      retainedCandidates(
+        (
+          await runtime.importTransport.reviewedCandidates(personId, {
+            property: 'wdt:P106',
+            context: GLOBAL_CONTEXT,
+            limit: 100,
+          })
+        ).candidates,
+      ).map(({ id }) => id),
     ).toEqual(stableCandidates.map(({ id }) => id));
 
     const changedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });

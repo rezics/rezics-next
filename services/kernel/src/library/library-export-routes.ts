@@ -38,9 +38,11 @@ function sectionTuple<const Sections extends readonly string[]>(sections: Sectio
   return t.Tuple<{
     -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
   }>(
-    sections.map((section) => t.Literal(section)) as [...{
-      -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
-    }],
+    sections.map((section) => t.Literal(section)) as [
+      ...{
+        -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
+      },
+    ],
   );
 }
 const sectionsV1 = sectionTuple(exportSections);
@@ -275,7 +277,12 @@ const providerRecords = [
     closed,
   ),
   t.Object(
-    { section: t.Literal('anilistEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+    {
+      section: t.Literal('anilistEvidence'),
+      upload_id: text,
+      ordinal: t.Integer({ minimum: 0 }),
+      evidence: t.Unknown(),
+    },
     closed,
   ),
 ] as const;
@@ -368,7 +375,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return (await admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)))) satisfies Static<typeof statusSchema>;
+        return (await admission.run('normal', job, () =>
+          service().get(actor, params.id, requestSignal(request, job.signal)),
+        )) satisfies Static<typeof statusSchema>;
       },
     )
     .get(

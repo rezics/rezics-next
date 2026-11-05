@@ -28,7 +28,11 @@ test('installed public root exposes the mounted reading, review, rating and shel
       return Response.json({});
     }) as typeof fetch,
   });
-  const headers = { authorization: 'Bearer viewer', 'idempotency-key': '"original-intent"', 'Accept-Language': 'ar-EG' };
+  const headers = {
+    authorization: 'Bearer viewer',
+    'idempotency-key': '"original-intent"',
+    'Accept-Language': 'ar-EG',
+  };
   await client.boards({ id }).page.get();
   await client.boards({ id })['pin-advice'].post({ selected: [], pinRevision: '0' }, { headers });
   await client.subjects({ id }).threads.get({ query: { place: id, kind: 'discussion', board: id } });

@@ -37,7 +37,7 @@ let path: string;
 let port: ReturnType<typeof createImportTransport>;
 
 function resolvedReferences(resolution: ImportIdentifierResolution): Readonly<Record<string, string>> {
-  if ('preserveProperties' in resolution && typeof resolution.preserveProperties !== 'string') {
+  if (isUnavailableIdentifierResolution(resolution)) {
     if (!resolution.resolvedReferences) throw new Error('Missing resolved references for reviewed catalogue seed');
     return resolution.resolvedReferences;
   }

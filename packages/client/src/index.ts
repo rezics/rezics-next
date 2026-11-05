@@ -7,7 +7,6 @@ import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/reques
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 
-
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
 export type { ZoneCollectionsCall, ZoneCollectionsClient, ZoneCollectionsPage, ZoneCollectionsQuery } from './zones.ts';
@@ -68,7 +67,8 @@ export type RealmPublicationPreparation = Static<typeof PublicationPreparationSc
 export type PublicationCommand = RealmPublicationPreparation['commands']['publish'];
 type AnnotationCorrectionRoute = Routes['libraryEntryAnnotationCorrections'];
 export type EntryAnnotationCorrectionInput = AnnotationCorrectionRoute['post']['body'];
-export type EntryAnnotationCorrectionCancelResult = AnnotationCorrectionRoute[':reviewId']['cancel']['post']['response'][200];
+export type EntryAnnotationCorrectionCancelResult =
+  AnnotationCorrectionRoute[':reviewId']['cancel']['post']['response'][200];
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];

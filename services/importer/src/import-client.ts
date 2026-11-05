@@ -748,9 +748,12 @@ export function createImportTransport(options: ImportTransportOptions) {
     );
     const result = reply.body as ReviewedPersonAdmission;
     ensure(
-      typeof result?.survivor === 'string' && uuid.test(result.survivor) &&
-      typeof result.redirected === 'string' && uuid.test(result.redirected) &&
-      Number.isSafeInteger(result.revision) && result.revision >= 2,
+      typeof result?.survivor === 'string' &&
+        uuid.test(result.survivor) &&
+        typeof result.redirected === 'string' &&
+        uuid.test(result.redirected) &&
+        Number.isSafeInteger(result.revision) &&
+        result.revision >= 2,
     );
     return result;
   }

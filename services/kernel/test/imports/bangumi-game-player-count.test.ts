@@ -116,7 +116,10 @@ test('selected Game player-count range is independently adopted and current, and
       limit: 100,
     });
     expect(
-      currentCandidates(missing.candidates).filter((candidate) => candidate.source?.external_id === gameId),
+      currentCandidates(missing.candidates).filter(
+        (candidate) =>
+          candidate.source !== null && 'external_id' in candidate.source && candidate.source.external_id === gameId,
+      ),
     ).toEqual([]);
     expect(playerStatement(await publicClient.readSubject(first.id))).toBeUndefined();
 
@@ -127,7 +130,9 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    const candidate = currentCandidates(listing.candidates).find((item) => item.source?.external_id === gameId);
+    const candidate = currentCandidates(listing.candidates).find(
+      (item) => item.source !== null && 'external_id' in item.source && item.source.external_id === gameId,
+    );
     if (!candidate) throw new Error('Corrected player-count candidate is missing');
     expect(candidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,

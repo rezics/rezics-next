@@ -291,7 +291,12 @@ const voteCitation = t.Object(
 );
 const licence = t.String({ minLength: 1, maxLength: 128 });
 const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
-const visibility = t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected'), t.Literal('taken_down')]);
+const visibility = t.Union([
+  t.Literal('published'),
+  t.Literal('draft'),
+  t.Literal('protected'),
+  t.Literal('taken_down'),
+]);
 const reactionKind = t.Unsafe<ViewerReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 const subjectReactionKind = t.Unsafe<(typeof subjectReactionKinds)[number]>(

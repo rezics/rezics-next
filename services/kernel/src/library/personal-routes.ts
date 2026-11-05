@@ -189,12 +189,8 @@ const copyFields = {
   acquiredOn: t.Optional(nullable),
   disposedOn: t.Optional(nullable),
   note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
-  mediaCondition: t.Optional(
-    t.Union([t.Enum(COPY_CONDITION_CHOICES.map(({ id }) => id)), t.Null()]),
-  ),
-  packagingCondition: t.Optional(
-    t.Union([t.Enum(COPY_CONDITION_CHOICES.map(({ id }) => id)), t.Null()]),
-  ),
+  mediaCondition: t.Optional(t.Union([t.Enum(COPY_CONDITION_CHOICES.map(({ id }) => id)), t.Null()])),
+  packagingCondition: t.Optional(t.Union([t.Enum(COPY_CONDITION_CHOICES.map(({ id }) => id)), t.Null()])),
 };
 const copyConditionValueSchema = t.Enum(COPY_CONDITION_CHOICES.map(({ id }) => id));
 const copyConditionDisplaySchema = t.Union([
@@ -826,7 +822,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     languages: readonly string[] | undefined,
     revalidate: () => Promise<void>,
   ) {
-    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { ...(languages === undefined ? {} : { languages }), revalidate });
+    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, {
+      ...(languages === undefined ? {} : { languages }),
+      revalidate,
+    });
   }
   return app
     .post(
@@ -893,7 +892,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
         );
         if (result.commandOutcome) session.record(result.commandOutcome);
-        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<
+          typeof correctionPageResponse
+        >;
       },
     )
     .post(
@@ -961,7 +962,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
-          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]))),
+          command(() =>
+            createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER])),
+          ),
         );
       },
     )
@@ -1748,9 +1751,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               revision: item.copy.revision,
               kind: item.copy.kind,
               status: item.copy.status,
-              context: context ? copyContextView(context.context) : {
-                state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
-              },
+              context: context
+                ? copyContextView(context.context)
+                : {
+                    state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
+                  },
             };
             return {
               loan: loanView(item.loan, page.boundary, people, item.actions.extend.allowed),

@@ -364,7 +364,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
         );
       },
       observe() {
-        const source = importer!.session.store.source(registration.source);
+        const source = importer!.session.store.source(createSourceRegistration('vndb').source);
         // The port's fingerprint reports the maintained generation pointer, not a content hash.
         return capture.observe({ fingerprint: source.generation, records: source.count });
       },

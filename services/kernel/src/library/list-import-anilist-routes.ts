@@ -79,7 +79,13 @@ export function aniListImportRoutes(
           {
             upload: t.String({ maxLength: 1048576 }),
             scoreFormat: t.Optional(
-              t.Union([t.Literal('POINT_100'), t.Literal('POINT_10'), t.Literal('POINT_10_DECIMAL'), t.Literal('POINT_5'), t.Literal('POINT_3')]),
+              t.Union([
+                t.Literal('POINT_100'),
+                t.Literal('POINT_10'),
+                t.Literal('POINT_10_DECIMAL'),
+                t.Literal('POINT_5'),
+                t.Literal('POINT_3'),
+              ]),
             ),
           },
           closed,
@@ -344,7 +350,13 @@ export function aniListImportRoutes(
             fields: t.Array(
               t.Object(
                 {
-                  field: t.Union([t.Literal('note'), t.Literal('priority'), t.Literal('privacy'), t.Literal('sourceCreated'), t.Literal('sourceUpdated')]),
+                  field: t.Union([
+                    t.Literal('note'),
+                    t.Literal('priority'),
+                    t.Literal('privacy'),
+                    t.Literal('sourceCreated'),
+                    t.Literal('sourceUpdated'),
+                  ]),
                   action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
                   mapping: t.Optional(t.String({ maxLength: 64 })),
                 },

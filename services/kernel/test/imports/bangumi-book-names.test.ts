@@ -97,12 +97,14 @@ test('Book names move through explicit publication and same-UUID refresh without
       limit: 100,
     });
     const firstCandidates = currentCandidates(firstPage.candidates);
-    expect(firstCandidates.map((candidate) => candidate.statement.value.content)).toContainEqual({
+    expect(firstCandidates.map((candidate) => valueContent(candidate.statement.value))).toContainEqual({
       language: 'zh',
       text: 'Source Chinese title',
     });
     expect(
-      firstCandidates.some((candidate) => JSON.stringify(candidate.statement.value.content).includes('Must not leak')),
+      firstCandidates.some((candidate) =>
+        JSON.stringify(valueContent(candidate.statement.value)).includes('Must not leak'),
+      ),
     ).toBe(false);
     expect(
       await runtime.importTransport
@@ -178,7 +180,7 @@ test('Book names move through explicit publication and same-UUID refresh without
     });
     expect(
       currentCandidates(afterFence.candidates).some((candidate) =>
-        JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
+        JSON.stringify(valueContent(candidate.statement.value)).includes('Fenced alias'),
       ),
     ).toBe(false);
     expect(

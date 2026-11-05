@@ -219,10 +219,7 @@ test('one page authorizes all cuts and distinct work/character/threshold keys be
   ]);
   const page = await prepareCharacterPersonPage(probes, f.prepare);
   expect(f.dispatched).toEqual([]);
-  expect(page.bounds).toEqual([
-    { partition: 10, probeBatchBound: 3 },
-    { partition: 11, probeBatchBound: 2 },
-  ]);
+  expect(page.bounds).toEqual(plan.touchedPools);
   const preparedCount = f.prepared.length;
   f.onDispatch(() => expect(f.prepared).toHaveLength(preparedCount));
   probes.length = 0;

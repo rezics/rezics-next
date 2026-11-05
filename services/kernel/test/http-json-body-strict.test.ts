@@ -17,7 +17,6 @@ let authentications = 0;
 const searches: unknown[] = [];
 const suggestions: unknown[] = [];
 const search: SearchService = {
-  async releaseGroups() { throw new Error('Unexpected grouped release search'); },
   async search(_principal, request) {
     searches.push(request);
     return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };

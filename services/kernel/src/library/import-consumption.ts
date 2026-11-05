@@ -291,7 +291,9 @@ function terminalFieldOutcomes(
   );
 }
 
-export async function executeImportConsumptionDateIntent<Outcome extends { value: ProgressSessionJournalWrite }>(input: {
+export async function executeImportConsumptionDateIntent<
+  Outcome extends { value: ProgressSessionJournalWrite },
+>(input: {
   review: ImportConsumptionDateReview;
   fields: ImportDateField[];
   existing?: ImportConsumptionDateIntent;

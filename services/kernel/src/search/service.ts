@@ -110,7 +110,12 @@ import { ownSubjectRequest } from './service-request.ts';
 import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
 import { executeScopedSuggestions } from './scoped-suggestion.ts';
-import { boundMatchEvidencePage, compileMatchEvidence, projectMatchEvidence, type MatchEvidence } from './match-evidence.ts';
+import {
+  boundMatchEvidencePage,
+  compileMatchEvidence,
+  projectMatchEvidence,
+  type MatchEvidence,
+} from './match-evidence.ts';
 import {
   completeSuggestionWorkContext,
   type SuggestionWorkContext,

@@ -124,12 +124,13 @@ export type CollectionResourceView =
     });
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
-export function collectionReadView(
-  value: CollectionResourceView,
-) {
+export function collectionReadView(value: CollectionResourceView) {
   if ('membershipKind' in value && value.membershipKind === 'dynamic') {
     const { allowedVisibilityActions, ...view } = value;
-    return { ...view, ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }) };
+    return {
+      ...view,
+      ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
+    };
   }
   if (
     value.membershipKind !== 'curated' ||
@@ -139,7 +140,12 @@ export function collectionReadView(
   )
     throw new ProblemError('dependency_unavailable');
   const { allowedVisibilityActions, ...view } = value;
-  return { ...view, ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }), membershipKind: 'curated' as const, orderEpoch: value.orderEpoch };
+  return {
+    ...view,
+    ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
+    membershipKind: 'curated' as const,
+    orderEpoch: value.orderEpoch,
+  };
 }
 
 export type MemberView = {

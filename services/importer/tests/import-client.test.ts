@@ -361,7 +361,11 @@ test('review transport retains coherent query, nullable evidence, exact admissio
     query.get('reviewIdentityExternalId'),
     query.get('includeViewerActions'),
   ]).toEqual(['bangumi', 'person:123', 'true']);
-  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({ survivor: first, redirected: second, revision: 3 });
+  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({
+    survivor: first,
+    redirected: second,
+    revision: 3,
+  });
   expect(await requests[1]!.json()).toEqual(body);
   expect(requests[1]!.headers.get('authorization')).toBe('Bearer review-token');
   expect(requests[1]!.headers.get('idempotency-key')).toBe('"review-key"');

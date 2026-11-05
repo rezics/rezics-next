@@ -116,7 +116,12 @@ export async function mergePersonComparison(
   });
   if (response.status !== 200 || !response.data) return providerFailure(response.status, response.headers);
   const admission = response.data;
-  if (!uuid.test(admission.survivor) || !uuid.test(admission.redirected) || !Number.isSafeInteger(admission.revision) || admission.revision < 2)
+  if (
+    !uuid.test(admission.survivor) ||
+    !uuid.test(admission.redirected) ||
+    !Number.isSafeInteger(admission.revision) ||
+    admission.revision < 2
+  )
     throw new TypeError('Invalid native identity admission');
   return { ok: true, admission };
 }
