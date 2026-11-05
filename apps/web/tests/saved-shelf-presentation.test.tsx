@@ -452,6 +452,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await click(m.settings_shelf_reload());
       expect(host.textContent).toContain(m.settings_shelf_review());
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
+      await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(host.querySelector('[role="status"]')?.textContent).toBe(m.settings_saved());
       expect(patches[0]?.body).toEqual({ expectedVersion: 4, shelf: { layouts: { all: 'table' } } });
@@ -510,6 +511,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(host.textContent).toContain(m.settings_shelf_review());
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('list');
       expect(confirmedVersion).toBe(7);
+      await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(patches[4]?.body).toEqual({ expectedVersion: 7, shelf: { layouts: { all: 'list' } } });
       expect(confirmedVersion).toBe(8);
@@ -619,6 +621,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
       expect((host.querySelectorAll('select')[1] as HTMLSelectElement).value).toBe('large');
       expect((host.querySelectorAll('select')[9] as HTMLSelectElement).value).toBe('grid');
+      await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(patches[8]?.body).toEqual({ expectedVersion: 11, shelf: { layouts: { [movie]: 'grid' } } });
       await select(8, absent);
