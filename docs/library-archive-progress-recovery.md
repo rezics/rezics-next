@@ -1,8 +1,9 @@
 # Native archive progress recovery
 
 This extends the existing private Library archive owner. It accepts completed Library export V1/V2/V3 artifacts;
-it is not another importer or a general progress engine. Each reviewed archive occurrence creates one fresh native
-Session. Existing Sessions, Entry state, entitlement, repeat history, publication and ownership are untouched.
+Web projects a completed V4 capture to that installed envelope at upload. It is not another importer or a general
+progress engine. Each reviewed archive occurrence creates one fresh native Session. Existing Sessions, Entry state,
+entitlement, repeat history, publication and ownership are untouched.
 
 Decision: recovery is per occurrence: the owner maps the source Subject to its current canonical Subject, and each
 review creates a distinct fresh Session. A new review ID is a new review epoch; a previous apply key cannot be reused

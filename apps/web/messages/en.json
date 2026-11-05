@@ -7434,7 +7434,7 @@
   "library_export_independent_facts": "Entries, labels, sessions, copies and permitted Collection metadata are independent facts.",
   "library_export_timestamps": "Source timestamps, audit time and consumption time stay distinct.",
   "library_export_privacy": "Source privacy never publishes this Library.",
-  "library_export_no_reimport": "Archive recovery accepts versions 1 and 2 only. Version 3 assessments and version 4 provider evidence cannot be recovered. Downloaded evidence does not set votes, journals, labels or progress.",
+  "library_export_no_reimport": "Collection recovery uses the installed version 1 envelope; Entry and progress recovery use versions 1 through 3. Version 4 provider evidence is omitted at upload. Downloaded evidence does not set votes.",
   "library_export_no_finance": "Orders and financial evidence are omitted.",
   "library_export_expiry": "A capture lasts {minutes} minutes from native capture time. Retry does not extend it.",
   "library_export_capture": "Create this export",

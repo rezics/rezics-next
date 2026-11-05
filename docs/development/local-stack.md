@@ -241,16 +241,19 @@ brief lists native or browser acceptance.
 
 ## Seeded journey walks
 
-One area outcome shares one admitted current-revision stack session and one supported `seed:dev` result. Obtain the
+One area outcome shares one admitted current-revision stack session and one supported seed result. Start that session
+with `bun services/auth/scripts/dev-stack.ts walk -- <command...>`. The slot lock is the admission: the environment
+names the slot, and the command inherits that stack's container names, loopback ports and origins. Obtain the
 controller-owned stack, browser and persona handles, then record the source revision, completed `result.json` and
 actual native identities. Missing credentials, private exports or required seeded roles are setup inputs for the
 controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
 
-The supported setup is `bun services/auth/scripts/dev-stack.ts` with the documented setup, start and persona actions
-and the existing seed pipeline. Follow current command help and this document's syntax. Ordinary member personas use
-actual signup; privileged roles come from native admission. Browser launch uses a short temporary root outside a
-deeply nested worktree so Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is
-unavailable.
+Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
+`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Do not run
+`task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
+stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
+admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
+Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
 
 Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
 defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona
