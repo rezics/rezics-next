@@ -94,8 +94,63 @@ function registry(): DiscoveryRegistry {
       labels: { en: 'Accounts' },
       icon: 'account',
     },
+    ownerAdapters: {
+      collection: {
+        readiness: 'ready',
+        adapter: {
+          owner: 'commerce',
+          kind: 'collection',
+          metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'collection' },
+          readCurrent: unused,
+        },
+      },
+      review: { readiness: 'unavailable' },
+      space: { readiness: 'unavailable' },
+    },
   });
 }
+
+test('Collection directory selection is canonical and bound to its native cursor', () => {
+  const selection = {
+    presentationKind: 'mixed',
+    curator: id,
+    subject: id,
+    order: 'popular' as const,
+  };
+  const admitted = admitDiscoveryRequest(
+    {
+      representation: 'discovery-v1',
+      filter: { and: [{ kind: { in: ['collection'] } }] },
+      collectionDirectory: selection,
+      limit: 24,
+    },
+    registry(),
+    bundledRelease,
+  );
+  expect(admitted.collectionDirectory).toEqual(selection);
+  expect(admitted.bindingRequest.collectionDirectory).toEqual(selection);
+});
+
+test('Collection directory admission rejects mutable curator labels', () => {
+  const error = () =>
+    admitDiscoveryRequest(
+      {
+        representation: 'discovery-v1',
+        filter: { and: [{ kind: { in: ['collection'] } }] },
+        collectionDirectory: { curator: '@mutable-name', order: 'recent' } as never,
+      },
+      registry(),
+      bundledRelease,
+    );
+  expect(error).toThrow(ProblemError);
+  try {
+    error();
+  } catch (caught) {
+    expect((caught as ProblemError).errors).toEqual([
+      { pointer: '/collectionDirectory/curator', code: 'invalid_format' },
+    ]);
+  }
+});
 
 function liveRequest(): MixedDiscoveryRequest & {
   filter: { kind: { in: string[] } };

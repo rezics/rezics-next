@@ -37,13 +37,13 @@ not a producer, and a resource point read does not establish search enumeration.
 Decision: Search owns the public Collection directory request, indexed predicates and ordering, continuation, and mounted consumer. Commerce remains authoritative for Collection disclosure, curator identity, current membership and selected public output, and native recency and follow-count popularity. The directory extends the existing mixed discovery path rather than adding a parallel listing authority.
 
 The [second-scope plan](research/search-second-scope-plan.md) sequences implementation; it adds no native
-readiness or grant. Public Collection metadata initially supports text and kind only, using the existing
-`collection` primary identity. Public review discovery preserves the `thread` primary identity with a review
-discriminator; ordinary discussion discovery is outside that slice. Space metadata uses one Space identity,
-with its carried Realm enriching the same hit under current disclosure rather than creating a duplicate.
-These kinds initially support text and kind only; Subject resource/membership predicates remain inapplicable.
-Searchable fields are limited to each owner's approved public metadata or disclosed review opening text.
-Their owners must supply complete populations, revisions, reductions and current disclosure before activation.
+readiness or grant. The public Collection directory is a narrow named extension of the existing `collection`
+identity: explicit presentation kind (including `mixed` for unset), canonical curator, canonical contained Subject,
+and native recent or follow-count popular order. Subject matching uses current disclosed curated membership or the
+selected last-complete public dynamic output, not previews or working rules. Other second-scope kinds remain
+text-and-kind only; Subject resource/membership predicates remain inapplicable to them. Searchable fields are
+limited to each owner's approved public metadata or disclosed review opening text. Their owners must supply complete
+populations, revisions, reductions and current disclosure before activation.
 
 Selected Realm rating order uses the standard question and that Realm population's own frozen prior. Keep all
 Realm ordering native, including public Realms; no Realm rating fields enter the public index. Existing Global

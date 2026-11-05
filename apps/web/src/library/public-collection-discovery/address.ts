@@ -11,7 +11,7 @@ export type PublicCollectionDirectoryAddressResult =
   | { state: 'invalid'; field: keyof PublicCollectionDirectoryAddress };
 
 export const publicCollectionCursorLimit = 4864;
-const canonicalIdentity = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const canonicalIdentity = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 /** This parser is for the browser boundary; native callers use the typed selection directly. */
 export function parsePublicCollectionDirectoryAddress(

@@ -1,4 +1,7 @@
-import { parsePublicCollectionCursor } from '../../library/public-collection-discovery/address';
+import {
+  parsePublicCollectionDirectoryAddress,
+  publicCollectionDirectoryHref,
+} from '../../library/public-collection-discovery/address';
 import { type MouseEvent, useLayoutEffect, useRef } from 'react';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,8 +20,10 @@ import {
 } from '../../library/public-collection-discovery/window-navigation';
 
 function validateCollectionSearch(search: Record<string, unknown>) {
-  const parsed = parsePublicCollectionCursor(search.cursor);
-  return parsed.state === 'invalid' ? { invalidCursor: true } : { cursor: parsed.cursor };
+  const parsed = parsePublicCollectionDirectoryAddress(search);
+  if (parsed.state === 'invalid')
+    return parsed.field === 'cursor' ? { invalidCursor: true } : { invalidSelection: true };
+  return parsed.address;
 }
 
 export const Route = createFileRoute('/collections/')({
@@ -26,9 +31,9 @@ export const Route = createFileRoute('/collections/')({
   validateSearch: validateCollectionSearch,
   loaderDeps: ({ search }) => search,
   loader: ({ deps, context }) => {
-    if (deps.invalidCursor) return undefined;
+    if (deps.invalidCursor || deps.invalidSelection) return undefined;
     const locale = getLocale();
-    return context.queryClient.ensureQueryData(publicCollectionDiscoveryQueryOptions(locale, deps.cursor));
+    return context.queryClient.ensureQueryData(publicCollectionDiscoveryQueryOptions(locale, deps));
   },
   head: ({ match }) =>
     pageHead(
@@ -47,9 +52,16 @@ export const Route = createFileRoute('/collections/')({
     const heading = useRef<HTMLHeadingElement>(null);
     const retrying = useRef(false);
     const invalidCursor = address.invalidCursor === true;
+    const invalidSelection = address.invalidSelection === true;
+    const selection = {
+      ...(address.presentationKind === undefined ? {} : { presentationKind: address.presentationKind }),
+      ...(address.curator === undefined ? {} : { curator: address.curator }),
+      ...(address.subject === undefined ? {} : { subject: address.subject }),
+      ...(address.order === undefined ? {} : { order: address.order }),
+    };
     const query = useQuery({
-      ...publicCollectionDiscoveryQueryOptions(locale, address.cursor),
-      enabled: !invalidCursor,
+      ...publicCollectionDiscoveryQueryOptions(locale, { ...selection, cursor: address.cursor }),
+      enabled: !invalidCursor && !invalidSelection,
     });
     const source = query.data;
     const binding =
@@ -69,6 +81,8 @@ export const Route = createFileRoute('/collections/')({
     }, [source, transfer, visit]);
     const state: PublicCollectionDiscoveryState = invalidCursor
       ? { status: 'restart' }
+      : invalidSelection
+        ? { status: 'invalid-selection' }
       : (query.data ?? { status: 'loading' });
     const { pathname, search, hash } = router.history.location;
     const href = (coordinate: Coordinate) => collectionWindowHref(pathname, search, hash, coordinate);
@@ -101,6 +115,8 @@ export const Route = createFileRoute('/collections/')({
       <PublicCollectionDiscoveryPage
         state={state}
         locale={locale}
+        selection={selection}
+        onSelect={(next) => router.history.push(publicCollectionDirectoryHref(locale, next))}
         headingRef={heading}
         {...(address.cursor ? { cursor: address.cursor } : {})}
         continuation={invalidCursor || address.cursor !== undefined}

@@ -9,7 +9,7 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
-import type { DiscoveryOwnerRegistry, DiscoveryRegistry } from './discovery.ts';
+import type { CollectionDirectorySelection, DiscoveryOwnerRegistry, DiscoveryRegistry } from './discovery.ts';
 import type { DiscoveryRequest } from './discovery-api.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
@@ -33,7 +33,49 @@ const OWNED_FIELDS = [
   'kindPage',
   'kindCountLeaf',
   'spaceId',
+  'collectionDirectory',
 ] as const satisfies readonly (keyof MixedDiscoveryRequest)[];
+
+function collectionDirectorySelection(value: unknown): CollectionDirectorySelection {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !['presentationKind', 'curator', 'subject', 'order'].includes(key))
+  )
+    return invalid('/collectionDirectory');
+  const selection = value as Record<string, unknown>;
+  if (
+    selection.presentationKind !== undefined &&
+    (typeof selection.presentationKind !== 'string' ||
+      !selection.presentationKind.length ||
+      selection.presentationKind.length > 256 ||
+      !selection.presentationKind.isWellFormed())
+  )
+    return invalid('/collectionDirectory/presentationKind');
+  for (const field of ['curator', 'subject'] as const) {
+    const identity = selection[field];
+    if (
+      identity !== undefined &&
+      (typeof identity !== 'string' || identity !== identity.toLowerCase() || routeOf(identity) === null)
+    )
+      return invalid(`/collectionDirectory/${field}`);
+  }
+  if (selection.order !== 'recent' && selection.order !== 'popular')
+    return invalid('/collectionDirectory/order');
+  return {
+    ...(selection.presentationKind === undefined ? {} : { presentationKind: selection.presentationKind as string }),
+    ...(selection.curator === undefined ? {} : { curator: selection.curator as string }),
+    ...(selection.subject === undefined ? {} : { subject: selection.subject as string }),
+    order: selection.order,
+  };
+}
+
+function onlyCollectionKind(filter: DiscoveryFilterDocument | undefined): boolean {
+  if (!filter || !('and' in filter) || filter.and.length !== 1) return false;
+  const leaf = filter.and[0];
+  return !!leaf && 'kind' in leaf && leaf.kind.in.length === 1 && leaf.kind.in[0] === 'collection';
+}
 
 function invalid(pointer: string): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
@@ -109,6 +151,14 @@ export function admitDiscoveryRequest(
       });
     throw error;
   }
+  const collectionDirectory =
+    request.collectionDirectory === undefined ? undefined : collectionDirectorySelection(request.collectionDirectory);
+  if (
+    collectionDirectory &&
+    (text !== undefined || request.sort !== undefined || request.spaceId !== undefined ||
+      request.kindPage !== undefined || request.kindCountLeaf !== undefined || !onlyCollectionKind(filter))
+  )
+    unsupported('/collectionDirectory');
   const sort = request.sort ?? (text ? 'relevance' : 'name');
   if (sort !== 'id' && sort !== 'name' && sort !== 'relevance') unsupported('/sort');
   if (sort === 'relevance' && !text) unsupported('/sort');
@@ -138,6 +188,7 @@ export function admitDiscoveryRequest(
     kindLimit,
     kindCountLeaf: request.kindCountLeaf ?? null,
     spaceId: request.spaceId ?? null,
+    ...(collectionDirectory ? { collectionDirectory } : {}),
   };
   return {
     text,
@@ -148,6 +199,7 @@ export function admitDiscoveryRequest(
     kindLimit,
     options,
     languages: options.languages ?? [],
+    ...(collectionDirectory ? { collectionDirectory } : {}),
     bindingRequest,
   };
 }

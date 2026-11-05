@@ -538,10 +538,27 @@
       "capabilities": ["imports"]
     },
     {
+      "id": "web-public-collection-discovery",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/library/public-collection-discovery/**"],
+      "publicEntries": [
+        "apps/web/src/library/public-collection-discovery/address.ts",
+        "apps/web/src/library/public-collection-discovery/page.tsx",
+        "apps/web/src/library/public-collection-discovery/query.ts",
+        "apps/web/src/library/public-collection-discovery/read.ts",
+        "apps/web/src/library/public-collection-discovery/request.ts",
+        "apps/web/src/library/public-collection-discovery/window-navigation.ts"
+      ],
+      "allowedDependencies": ["client", "composition", "ui", "web-app", "web-library", "web-search"],
+      "capabilities": ["public-collection-directory"]
+    },
+    {
       "id": "web-library",
       "kind": "UI/transport library",
       "owner": "commerce",
       "paths": ["apps/web/src/library/**"],
+      "excludes": ["apps/web/src/library/public-collection-discovery/**"],
       "publicEntries": ["apps/web/src/library/follow-control.tsx"],
       "allowedDependencies": [
         "client",
@@ -769,6 +786,7 @@
         "web-imports",
         "web-library",
         "web-performance",
+        "web-public-collection-discovery",
         "web-search",
         "subject-canonical-lifetime",
         "web-semantic"

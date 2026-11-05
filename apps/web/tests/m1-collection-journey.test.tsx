@@ -105,7 +105,7 @@ test('native public discovery leads to ordered/mixed and grid reading, with exac
     for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
       overwriteGetLocale(() => locale);
       let cursor: string | undefined;
-      const result = await readPublicCollectionPage(locale, 'opaque+/=', async (request) => {
+      const result = await readPublicCollectionPage(locale, { cursor: 'opaque+/=' }, async (request) => {
         cursor = request.cursor;
         return {
           status: 200,
@@ -127,7 +127,12 @@ test('native public discovery leads to ordered/mixed and grid reading, with exac
       expect(cursor).toBe('opaque+/=');
       expect(result.status).toBe('ready');
       const discovery = renderToStaticMarkup(
-        <PublicCollectionDiscoveryPage locale={locale} state={result} onRetry={() => {}} />,
+        <PublicCollectionDiscoveryPage
+          locale={locale}
+          state={result}
+          onRetry={() => {}}
+          onSelect={() => {}}
+        />,
       );
       expect(discovery).toContain(`href="/${locale}/collections/${card.id}"`);
       expect(discovery).toContain('native-next%2B%2F%3D');

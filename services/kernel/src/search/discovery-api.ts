@@ -24,6 +24,12 @@ export type DiscoveryOwnerKey =
   | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
 export type DiscoveryUnionKey = DiscoveryKey | DiscoveryOwnerKey;
 export type DiscoveryOwnerKind = 'collection' | 'review' | 'space';
+export type CollectionDirectorySelection = Readonly<{
+  presentationKind?: string;
+  curator?: string;
+  subject?: string;
+  order: 'recent' | 'popular';
+}>;
 /** Public owner labels are stable DTO values; execution keys retain the native producer owner. */
 export type DiscoveryPublicOwnerKey =
   | { owner: 'library'; kind: 'collection'; route: number; id: string }
@@ -177,6 +183,7 @@ export type DiscoveryRequest = SearchRequest & {
   representation: 'discovery-v1';
   kindCursor?: string;
   spaceId?: string;
+  collectionDirectory?: CollectionDirectorySelection;
 };
 export type MixedDiscoveryRequest = DiscoveryRequest & {
   kindPage?: { limit: number; cursor?: string };
@@ -250,7 +257,9 @@ export type DiscoveryOwnerAdapterSlots = Readonly<{
   space: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'space', 'content'>>;
 }>;
 export type DiscoveryOwnerRegistration =
-  | (DiscoveryOwnerAdapter<'collection', 'commerce'> & { domains: readonly ['text', 'kind'] })
+  | (DiscoveryOwnerAdapter<'collection', 'commerce'> & {
+      domains: readonly ('text' | 'kind' | 'collectionDirectory')[];
+    })
   | (DiscoveryOwnerAdapter<'review', 'content'> & { domains: readonly ['text', 'kind'] })
   | (DiscoveryOwnerAdapter<'space', 'content'> & { domains: readonly ['text', 'kind'] });
 
