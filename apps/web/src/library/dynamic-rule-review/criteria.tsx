@@ -28,6 +28,7 @@ export type DynamicRuleReviewProps = {
   profileState?: RuleReviewRelease['state'];
   basis?: SavedRule | undefined;
   basisKind?: 'loaded' | 'original' | undefined;
+  basisExpanded?: boolean | undefined;
   collectionId?: string | undefined;
   returnedId?: string | undefined;
   locale?: string | undefined;
@@ -68,17 +69,19 @@ function stageMessage(stage: RuleReviewStage) {
 function Basis({
   basis,
   kind,
+  expanded,
   collectionId,
   ownerCurrent,
 }: {
   basis: SavedRule | undefined;
   kind: 'loaded' | 'original' | undefined;
+  expanded: boolean;
   collectionId: string | undefined;
   ownerCurrent: boolean;
 }) {
   if (!basis) return null;
   return (
-    <details className="min-w-0 rounded-md border border-border p-3" open={kind === 'original'}>
+    <details className="min-w-0 rounded-md border border-border p-3" open={expanded || kind === 'original'}>
       <summary className="min-h-11 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
         {m.library_rule_review_saved_basis()}
       </summary>
@@ -336,6 +339,7 @@ export const DynamicRuleReview = memo(function DynamicRuleReview({
   profileState,
   basis,
   basisKind,
+  basisExpanded = false,
   collectionId,
   returnedId,
   locale: requestedLocale,
@@ -382,7 +386,13 @@ export const DynamicRuleReview = memo(function DynamicRuleReview({
       {acceptedIssue ? <p role="status">{acceptedIssue}</p> : null}
       {currentIssue ? <p role="status">{currentIssue}</p> : null}
       <p className="text-sm text-muted-foreground">{m.library_rule_review_release_scope()}</p>
-      <Basis basis={basis} kind={basisKind} collectionId={collectionId} ownerCurrent={ownerCurrent} />
+      <Basis
+        basis={basis}
+        kind={basisKind}
+        expanded={basisExpanded}
+        collectionId={collectionId}
+        ownerCurrent={ownerCurrent}
+      />
       <div className="min-w-0 space-y-2">
         <h3 className="font-semibold">{m.saved_filter_review_operands()}</h3>
         <ul className="min-w-0 space-y-3">

@@ -10351,5 +10351,15 @@
   "library_rule_review_bounds": "准许范围：",
   "library_rule_review_mode_amount": "计数数量",
   "library_rule_review_mode_cursor": "到达位置",
-  "library_rule_review_mode_completed": "已完成单元"
+  "library_rule_review_mode_completed": "已完成单元",
+  "library_rule_results_heading": "已保存规则与当前结果",
+  "library_rule_results_review": "查看已保存规则",
+  "library_rule_results_close": "返回结果",
+  "library_rule_results_loading": "正在读取已保存规则…",
+  "library_rule_results_response_heading": "当前结果响应",
+  "library_rule_results_ready": "原生读取器返回此页 {count} 个成员。",
+  "library_rule_results_empty": "规则已就绪。第一页已读完且没有成员。",
+  "library_rule_results_page_empty": "规则已就绪。此页没有成员；可能还有后续页。",
+  "library_rule_results_incomplete": "部分条件未应用，因此此响应不能证明结果为空。",
+  "library_rule_results_retry": "重新读取已保存规则"
 }

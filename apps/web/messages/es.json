@@ -10344,5 +10344,15 @@
   "library_rule_review_bounds": "Límites admitidos:",
   "library_rule_review_mode_amount": "Cantidad contada",
   "library_rule_review_mode_cursor": "Posición alcanzada",
-  "library_rule_review_mode_completed": "Unidades completadas"
+  "library_rule_review_mode_completed": "Unidades completadas",
+  "library_rule_results_heading": "Regla guardada y resultados actuales",
+  "library_rule_results_review": "Revisar la regla guardada",
+  "library_rule_results_close": "Volver a los resultados",
+  "library_rule_results_loading": "Leyendo la regla guardada…",
+  "library_rule_results_response_heading": "Respuesta actual de resultados",
+  "library_rule_results_ready": "El lector nativo devolvió {count} miembros en esta página.",
+  "library_rule_results_empty": "La regla está lista. La primera página está agotada y no tiene miembros.",
+  "library_rule_results_page_empty": "La regla está lista. Esta página no tiene miembros; puede haber más páginas.",
+  "library_rule_results_incomplete": "No se aplicaron algunas condiciones, por lo que esta respuesta no confirma un resultado vacío.",
+  "library_rule_results_retry": "Volver a leer la regla guardada"
 }

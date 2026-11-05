@@ -10394,5 +10394,15 @@
   "library_rule_review_bounds": "受理される範囲：",
   "library_rule_review_mode_amount": "カウントする量",
   "library_rule_review_mode_cursor": "到達位置",
-  "library_rule_review_mode_completed": "完了した単位"
+  "library_rule_review_mode_completed": "完了した単位",
+  "library_rule_results_heading": "保存済みルールと現在の結果",
+  "library_rule_results_review": "保存済みルールを確認",
+  "library_rule_results_close": "結果に戻る",
+  "library_rule_results_loading": "保存済みルールを読み込んでいます…",
+  "library_rule_results_response_heading": "現在の結果応答",
+  "library_rule_results_ready": "ネイティブリーダーはこのページに {count} 件のメンバーを返しました。",
+  "library_rule_results_empty": "ルールの読み込みは完了しました。最初のページは終了しており、メンバーはありません。",
+  "library_rule_results_page_empty": "ルールの読み込みは完了しました。このページにメンバーはありません。続きのページがある場合があります。",
+  "library_rule_results_incomplete": "一部の条件が適用されていないため、この応答から結果が空だとは判断できません。",
+  "library_rule_results_retry": "保存済みルールを再読み込み"
 }

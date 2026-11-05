@@ -10487,5 +10487,15 @@
   "library_rule_review_bounds": "Accepted bounds:",
   "library_rule_review_mode_amount": "Amount counted",
   "library_rule_review_mode_cursor": "Position reached",
-  "library_rule_review_mode_completed": "Completed units"
+  "library_rule_review_mode_completed": "Completed units",
+  "library_rule_results_heading": "Saved rule and current results",
+  "library_rule_results_review": "Review saved rule",
+  "library_rule_results_close": "Return to results",
+  "library_rule_results_loading": "Reading the saved rule…",
+  "library_rule_results_response_heading": "Current results response",
+  "library_rule_results_ready": "The native reader returned {count} members on this page.",
+  "library_rule_results_empty": "The rule is ready. The exhausted first page has no members.",
+  "library_rule_results_page_empty": "The rule is ready. This page has no members; more pages may remain.",
+  "library_rule_results_incomplete": "Some conditions were not applied, so this response cannot establish an empty result.",
+  "library_rule_results_retry": "Retry reading the saved rule"
 }

@@ -10344,5 +10344,15 @@
   "library_rule_review_bounds": "Zugelassene Grenzen:",
   "library_rule_review_mode_amount": "Gezählte Menge",
   "library_rule_review_mode_cursor": "Erreichte Position",
-  "library_rule_review_mode_completed": "Abgeschlossene Einheiten"
+  "library_rule_review_mode_completed": "Abgeschlossene Einheiten",
+  "library_rule_results_heading": "Gespeicherte Regel und aktuelle Ergebnisse",
+  "library_rule_results_review": "Gespeicherte Regel prüfen",
+  "library_rule_results_close": "Zurück zu den Ergebnissen",
+  "library_rule_results_loading": "Gespeicherte Regel wird gelesen…",
+  "library_rule_results_response_heading": "Aktuelle Ergebnismeldung",
+  "library_rule_results_ready": "Der native Leser hat {count} Mitglieder auf dieser Seite zurückgegeben.",
+  "library_rule_results_empty": "Die Regel ist bereit. Die erste Seite ist ausgeschöpft und enthält keine Mitglieder.",
+  "library_rule_results_page_empty": "Die Regel ist bereit. Diese Seite enthält keine Mitglieder; weitere Seiten können folgen.",
+  "library_rule_results_incomplete": "Einige Bedingungen wurden nicht angewendet. Diese Antwort kann daher kein leeres Ergebnis belegen.",
+  "library_rule_results_retry": "Gespeicherte Regel erneut lesen"
 }

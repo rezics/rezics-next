@@ -10344,5 +10344,15 @@
   "library_rule_review_bounds": "Limites admises :",
   "library_rule_review_mode_amount": "Quantité comptée",
   "library_rule_review_mode_cursor": "Position atteinte",
-  "library_rule_review_mode_completed": "Unités terminées"
+  "library_rule_review_mode_completed": "Unités terminées",
+  "library_rule_results_heading": "Règle enregistrée et résultats actuels",
+  "library_rule_results_review": "Examiner la règle enregistrée",
+  "library_rule_results_close": "Retour aux résultats",
+  "library_rule_results_loading": "Lecture de la règle enregistrée…",
+  "library_rule_results_response_heading": "Réponse actuelle des résultats",
+  "library_rule_results_ready": "Le lecteur natif a renvoyé {count} membres sur cette page.",
+  "library_rule_results_empty": "La règle est prête. La première page est épuisée et ne contient aucun membre.",
+  "library_rule_results_page_empty": "La règle est prête. Cette page ne contient aucun membre ; d’autres pages peuvent suivre.",
+  "library_rule_results_incomplete": "Certaines conditions n’ont pas été appliquées ; cette réponse ne peut donc pas établir un résultat vide.",
+  "library_rule_results_retry": "Relire la règle enregistrée"
 }
