@@ -4,14 +4,14 @@ The importer owns source acquisition, run and record state, candidate journals a
 
 ## Sources, grain and rights
 
-| Source       | Accepted input and identity                                                                                                                                                       | Source terms and exclusions                                                                                                          |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Bangumi      | JSON-lines subject records with native subject IDs. Supported subject kinds retain their source grain; an unsupported type remains a source member and is counted as skipped.     | Metadata and attributed summary text use CC-BY-SA-3.0. This grants no cover-image rights.                                            |
-| VNDB         | Public COPY tables with their real headers, grouped by native visual-novel, release, staff, producer and character keys; supported API tables retain their own response revision. | Permitted metadata uses ODbL-1.0 database terms and LicenseRef-DbCL-1.0 contents terms. Descriptions, posts and images are excluded. |
-| Open Library | Native five-column TSV rows containing Work or Edition records. Work and Edition IDs remain distinct.                                                                             | CC0-1.0 applies to permitted bibliographic metadata, not unknown-licensed prose or cover images.                                     |
-| Wikidata     | JSONL Q-item records with native entity revisions and exact property claims.                                                                                                      | CC0-1.0 applies to structured data. User text, unsupported claims and Commons images are excluded.                                   |
+| Source       | Accepted input and identity                                                                       | Terms and exclusions                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Bangumi      | JSONL native subject IDs/grain; unsupported types remain source members and count as skipped.     | Metadata and attributed summaries use CC-BY-SA-3.0; no cover rights.            |
+| VNDB         | Public COPY with real headers/grouped native keys; supported API tables retain response revision. | Metadata uses ODbL-1.0 + LicenseRef-DbCL-1.0; no descriptions, posts or images. |
+| Open Library | Five-column TSV Work/Edition rows with distinct IDs.                                              | CC0-1.0 for bibliographic metadata only; no unknown-licensed prose or covers.   |
+| Wikidata     | JSONL Q-items with native revisions and exact claims.                                             | CC0-1.0 structured data; no user text, unsupported claims or Commons images.    |
 
-Licences and attribution are fixed by reviewed source registration, never taken from a dump field or caller-supplied descriptor. An alias cannot admit a new source or create a default licence. A metadata licence does not grant summary, image or other creative-content rights.
+Reviewed source registration fixes licences and attribution; dump fields and caller descriptors cannot. An alias cannot admit a source or default licence. Metadata terms do not grant summary, image or other creative-content rights.
 
 ## Registration, identity and ordinary writes
 
@@ -58,15 +58,15 @@ Bangumi and VNDB vocabulary rows are capped at 128 per call; the mapper uses onl
 
 ### Bangumi TVAnime websites and work evidence
 
-For the exact type-2 TVAnime profile, one literal HTTP(S) 官方网站 occurrence produces schema:url; exact duplicates coalesce while distinct URLs remain separate candidates. Ordinary 链接 values produce cited descriptive wdt:P973 facts. Copyright text is a separate cited schema:copyrightNotice, not a reuse licence. URL and notice text cite only the exact Bangumi subject; neither is a source URL, identity claim or fetch instruction. The selected TVSeries profile caps each value at 1,500 characters; one conversion visits at most 64 fields, emits at most 16 descriptive links and 16 notices, and retains at most 16 diagnostics. A malformed occurrence does not withhold an independent valid value.
+Exact type-2 TVAnime: literal HTTP(S) 官方网站 → schema:url (duplicates coalesce; distinct URLs stay separate); ordinary 链接 → cited descriptive wdt:P973; Copyright → cited schema:copyrightNotice, not a licence. All cite only the exact Bangumi subject, never a source URL, identity or fetch instruction. TVSeries values cap at 1,500 characters; conversion visits ≤64 fields and emits ≤16 links, 16 notices and 16 diagnostics. A malformed occurrence cannot withhold an independent valid one.
 
 ### Bangumi Book and Character mapping
 
-Book template names require the selected schema:Book profile and exact pinned {{Infobox animanga/Book}} header. Novel, Manga, PhotoBook and BookSeries headers are not admitted by this title mapping. Chinese title 中文名 and aliases map to additional schema:name facts; TVAnime aliases remain schema:alternateName. Book versus BookSeries follows the existing source-profile mapping, while manga remains Book. ISBN, publisher, pages and volume counts do not create Edition facts on the work. The bounded parser visits at most 64 fields, admits at most 24 distinct names and 16 omissions, and retains exact source-field citations. Character identity, kind, appearance, source names and explicitly unit-bearing physical measurements stay under their own mapping contracts; no missing unit or unbound blood-type Concept is guessed.
+Book titles require schema:Book and exact {{Infobox animanga/Book}}; Novel, Manga, PhotoBook and BookSeries headers are excluded. 中文名 and aliases add schema:name; TVAnime aliases remain schema:alternateName. Source profile selects Book/BookSeries; manga remains Book. ISBN, publisher, pages and volumes do not create work Edition facts. Parser: ≤64 fields, 24 names, 16 omissions; exact field citations. Character identity, kind, appearance, names and explicit-unit measurements stay on Character; never guess units or blood-type Concepts.
 
 ### Bangumi Game names, dates, environment and genres
 
-Only the exact type-4 {{Infobox Game}} template supplies Game infobox fields. Scalar 中文名 is zh; scalar or single-level bullet 别名 remains und. Platform and engine values require exact current Concept bindings. A complete scalar 游戏类型 occurrence remains one exact literal and is never split or translated; a binding is usable only for the exact Concept in https://rezics.com/schemes/bangumi/genres after current public verification. One Game contributes at most 16 genre occurrences and 16 omissions; each literal is at most 200 characters and 1,024 UTF-8 bytes. Player counts accept only the complete admitted positive integer or range form. Game 发行日期 accepts one unqualified strict Gregorian YYYY, YYYY-MM or YYYY-MM-DD value for schema:datePublished; type-4 top-level date, qualified, duplicate, malformed and unsupported occurrences remain unavailable. Values keep source precision and exact Bangumi subject citation. Game website proposes schema:url while 链接 proposes descriptive wdt:P973; both preserve exact URL bytes including query/fragment and remain separate even when equal. Unsafe schemes, credentials, controls, labels and malformed mixed structures are omitted independently. The shared parser visits at most 64 fields within the 65,536-byte infobox; destination projection admits at most 16 candidates across both fields, each selected field is at most 4,096 bytes, and omissions are bounded. Names, date, genres, environment, player count, websites and cast remain independent fields.
+Only type-4 {{Infobox Game}} supplies fields. Scalar 中文名→zh; scalar or single-level bullet 别名→und. Platforms/engines need exact current Concept bindings. Scalar 游戏类型 stays one exact, unsplit, untranslated literal; only the exact Concept in https://rezics.com/schemes/bangumi/genres after current public verification binds. Per Game: ≤16 genre occurrences/omissions; each literal ≤200 chars/1,024 UTF-8 bytes. Player count accepts only a complete positive integer/range. 发行日期 accepts one unqualified strict Gregorian YYYY, YYYY-MM or YYYY-MM-DD for schema:datePublished; type-4 top-level, qualified, duplicate, malformed and unsupported dates omit. Preserve precision and exact subject citation. Game website→schema:url; 链接→descriptive wdt:P973; keep exact URL bytes including query/fragment and keep the fields separate even when equal. Unsafe schemes, credentials, controls, labels and mixed structures omit independently. Shared parser: ≤64 fields/65,536 bytes; projection: ≤16 website/link candidates, each selected field ≤4,096 bytes, bounded omissions. Names, date, genres, environment, player count, websites and cast remain independent.
 
 The Game destination revision preserves the previously reviewed bangumi@14 source-genre and publication-date mappings within the actual current bangumi@15 export. This states the reviewed mapping history without assigning a new revision.
 
@@ -76,7 +76,7 @@ Selected type-2 anime and type-4 Game subject-person rows provide finite creator
 
 ### Bangumi Character identity and appearance
 
-Selected type-2 work-character rows define appearance; actual Character records define identity, kind and source names. Character kind and appearance role use distinct exact source schemes and Concepts. The pinned Crt mapping keeps name as und, name_cn as zh, 简体中文名 as zh-Hans, 第二中文名 as zh, 英文名 as en, 日文名 and 纯假名 as ja, 罗马字 as und-Latn, and 昵称 as und; only a full-width comma separates nickname entries. A malformed optional order does not erase a valid role-qualified appearance. Name parsing retains at most 64 aliases and 4 KiB/500 codepoints per value, within the 32 KiB infobox, 64-field, 16-diagnostic and 85-command bounds. Physical profile parsing remains bounded to a 65,536-byte infobox, depth two, 64 fields, 128 retained scalar code units, 64 quantity characters, at most two explicitly unit-bearing quantity facts and 16 diagnostics. Character mappings do not broaden provider selection or create a second identity.
+Selected type-2 work-character rows define appearance; actual Character records define identity, kind and source names. Kind and appearance role use distinct exact schemes/Concepts. Pinned Crt names: name=und, name_cn=zh, 简体中文名=zh-Hans, 第二中文名=zh, 英文名=en, 日文名/纯假名=ja, 罗马字=und-Latn, 昵称=und; split nicknames only on full-width comma. Malformed optional order does not erase valid role appearance. Name bounds: 64 aliases, 4 KiB/500 codepoints each, 32 KiB infobox, 64 fields, 16 diagnostics, 85 commands. Physical bounds: 65,536-byte infobox, depth 2, 64 fields, 128 scalar code units, 64 quantity characters, ≤2 explicit-unit quantities, 16 diagnostics. No broader selection or second identity.
 
 ### Bangumi Game cast
 
@@ -84,13 +84,13 @@ A Game cast association requires a selected acknowledged type-4 Game, its actual
 
 ### Bangumi source publication mapping
 
-Source dates are assertions about the source entity, never dump or import timestamps. Admitted Book, Game, music and live-action dates remain cited facts on the exact source subject and obey its selected profile. TVAnime original-run dates use 放送開始, 播放结束 and 话数; top-level dates do not silently become a more specific run fact. Missing, unknown, malformed, duplicate and unsupported precision remain distinct omissions.
+Source dates cite the exact subject, follow its selected Book, Game, music or live-action profile, and never use dump/import time. TVAnime run facts use 放送開始, 播放结束 and 话数; top-level dates do not imply them. Missing, unknown, malformed, duplicate and unsupported precision remain distinct omissions.
 
 ### Bangumi Person biographies and careers
 
 Selected person rows keep person:<id> identity. A nonempty source summary becomes an attributed schema:abstract. Birth-date facts use only the supported PersonDetail integers. Career strings are normalized only for an actual type-1 Person, at most seven values, and do not themselves create an occupation.
 
-The vocabulary mapper may emit P106 only for the actual Person bound to the exact person:<id> source key, with the source-owned careers Scheme, the exact current Concept for that career code, the released P106 property and the exact Person record citation qualified by #/career. No pure converter emits P106. Bangumi career Concepts are source-owned; their presence does not establish canonical equivalence with other providers. A valid career item survives an independently malformed neighbor. Empty, unknown, malformed and Organization cases emit no unsupported occupation.
+Only the vocabulary mapper may emit P106, for the actual Person at exact person:<id>, with the source-owned careers Scheme, exact current career Concept, released P106 and Person record citation #/career. The pure converter emits no P106. Bangumi career Concepts are source-owned, not evidence of cross-provider canonical equivalence. A valid item survives a malformed neighbor; empty, unknown, malformed or Organization cases emit no unsupported occupation.
 
 The career feature review retains its original identities cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 as history. The current source registration uses the checked-in exports above. When the archive omits career data, only the separately authorized local showcase may use the fallback described under [Explicit local showcase publication](#explicit-local-showcase-publication).
 
@@ -114,7 +114,7 @@ Bangumi cover bytes keep the rights-holder credit, “via Bangumi” source attr
 
 ## Deletion
 
-Imports owns only its source-backed candidates and retained local acquisition state. Vanished provider fields retract only matching owned candidates through ordinary APIs. Subjects, independent adoption and unrelated statements survive. A takedown or rights withdrawal fence prevents later refresh or replay from restoring removed material. See the [shared deletion contract](../../docs/deletion.md).
+Imports owns its source-backed candidates and retained local acquisition state. Vanished fields retract only matching owned candidates through ordinary APIs; subjects, independent adoption and unrelated statements survive. Shared takedown/withdrawal fences prevent refresh or replay from restoring removed material; see the [deletion contract](../../docs/deletion.md).
 
 ## Cost
 
