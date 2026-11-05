@@ -483,7 +483,7 @@ function consentErrorCode(error: ConsentDecisionErrorResponse): string {
   return 'code' in error ? error.code : error.error;
 }
 
-function isKnownConsentRefusal(status: number, error: ConsentDecisionErrorResponse): boolean {
+export function isKnownConsentRefusal(status: number, error: ConsentDecisionErrorResponse): boolean {
   if (status === 409 && error.error === 'authentication_denied' && 'code' in error)
     return error.code === 'stale_review';
   if (status === 401 && error.error === 'step_up_required') return error.effect_status === 'not_applied';
@@ -494,7 +494,7 @@ function isKnownConsentRefusal(status: number, error: ConsentDecisionErrorRespon
   return [400, 403, 413, 415, 429].includes(status) && error.error === 'authentication_denied' && !('code' in error);
 }
 
-function parseConsentDecisionError(status: number, value: unknown): ConsentDecisionErrorResponse | null {
+export function parseConsentDecisionError(status: number, value: unknown): ConsentDecisionErrorResponse | null {
   if (!record(value)) return null;
   if (value.error === 'authentication_denied') {
     if (keys(value) === 'error') return { error: 'authentication_denied' };

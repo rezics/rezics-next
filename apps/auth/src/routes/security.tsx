@@ -249,6 +249,7 @@ function SecurityPageView({
   const targetReturnStatus = useRef<HTMLDivElement>(null);
   const consentHistoryRef = useRef<HTMLDivElement>(null);
   const consentHistoryAttempt = useRef(0);
+  const firstUnknownConsent = useRef(false);
   const consentHistoryValue = useRef<ConsentReviewHistory>('none');
   const focusConsentHistory = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
@@ -509,6 +510,7 @@ function SecurityPageView({
 
   function recordConsentHistory(attempt: number, history: Exclude<ConsentReviewHistory, 'none' | 'unsent'>) {
     if (attempt !== consentHistoryAttempt.current) return;
+    if (history === 'unknown') firstUnknownConsent.current = true;
     setConsentHistoryValue(history);
   }
 
@@ -521,8 +523,9 @@ function SecurityPageView({
     updateOperation(held);
     const isCurrent = () => authorityGeneration.current === generation && activeOperation.current === held;
     return {
+      signal: lifetime.current.signal,
       isCurrent,
-      record: (history) => recordConsentHistory(attempt, history),
+      record: (history) => { if (isCurrent()) recordConsentHistory(attempt, history); },
       finish: () => {
         // A disposed review cannot release a later page authority's operation.
         if (isCurrent()) updateOperation(null);
@@ -1133,7 +1136,7 @@ function SecurityPageView({
             check={() => {}}
             finish={() => {}}
           />
-          <ConnectedApplicationHistory history={consentHistory} reference={consentHistoryRef} />
+          <ConnectedApplicationHistory history={consentHistory} priorUnknown={firstUnknownConsent.current} reference={consentHistoryRef} />
           {!passwordReturnHistory ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
         </div>
       </AuthPage>
@@ -1157,7 +1160,7 @@ function SecurityPageView({
           ) : null}
           {passwordReturnView}
           <ErrorAlert>{loadMessage}</ErrorAlert>
-          <ConnectedApplicationHistory history={consentHistory} reference={consentHistoryRef} />
+          <ConnectedApplicationHistory history={consentHistory} priorUnknown={firstUnknownConsent.current} reference={consentHistoryRef} />
           <PasskeyEnrollmentView
             state={enrollment}
             reading={false}
@@ -1213,7 +1216,7 @@ function SecurityPageView({
           aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}
         >
           {passwordReturnView}
-          <ConnectedApplicationHistory history={consentHistory} reference={consentHistoryRef} />
+          <ConnectedApplicationHistory history={consentHistory} priorUnknown={firstUnknownConsent.current} reference={consentHistoryRef} />
           {loadState === 'loading' ? (
             <p role="status">{m.auth_inventory_loading()}</p>
           ) : (

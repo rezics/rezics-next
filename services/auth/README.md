@@ -811,8 +811,8 @@ and `private, no-store` responses. POSTs retain issuer Origin and closed JSON
 body rules. Allow compares the reviewed account, request and exact reviewed union under the native consent lock before
 mutation; it rereads and refuses `stale_review` if same-account grants were added after review. For reviewed browser
 submissions, the native seam also refuses a current union above the fixed 1,000-scope acknowledgement ceiling before
-any grant or reduction-barrier effect. This affects only the reviewed page contract; unreviewed native replacement
-and Security reduction callers retain their existing scope behavior. Nonempty Security reductions likewise bind their
+any grant or reduction-barrier effect. The same pre-effect count admission applies to reviewed_scopes reduction requests. Unreviewed native replacement
+retains its existing scope behavior; remove-all submits an empty scope array. Nonempty Security reductions likewise bind their
 reviewed grant set before any reduction barrier; explicit remove-all remains unchanged.
 Decision: Reviewed Allow success requires a finite exact account/client/request/submitted-union acknowledgement;
 every ambiguous post-dispatch reply keeps its account/client/request marker unresolved. The fixed consent review
@@ -833,6 +833,14 @@ including JSON punctuation. The POST error allowance is
 `Retry-After` adds no body bytes. Unreviewed native callers still
 receive only `{ client_id, scope }`. `pages-consent-sessions.test.ts` exercises the producer and legacy compatibility;
 native/browser qualification remains outstanding at the manager's integration gate.
+Decision: connected-application reduction admits the native `{client_id,scope}` acknowledgement within
+`JSON.stringify({client_id:'',scope:[]}).length + 6*1024 + (1000*(128+3)-1)` UTF-8 bytes.
+The ID is already admitted by native request text; scope syntax/length is native OAuth admission and reviewed
+replacement counts are admitted before effects. No response validation after commit invents noncompletion.
+Errors reuse the Allow envelope allowance above. Generic 401/404/5xx can follow barrier progress and stay unknown;
+closed stale-review 409, step-up 401, suspension 403 and generic pre-effect 400/403/413/415/429 are known refusals.
+The attempt wrapper does not wrap `/consent`; its normalized 429/503 envelopes confer no additional certainty.
+Locks, operated/human checks, pending reduction, invalidation, floors, epochs and session deletion remain native.
 The Cost table derives consent/session reads and single-session revocation,
 including their complete handler growth citations. `pages-consent-sessions.test.ts`
 exercises the real handlers and database.

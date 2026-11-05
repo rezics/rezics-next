@@ -124,7 +124,7 @@ test.each([200, 401, 403, 503])('consent review serializes security writes and p
   expect(writes().every((item) => item.disabled)).toBe(true);
   await flush(() =>
     response.resolve(
-      Response.json(status === 200 ? { client_id: 'third-party', scope: [] } : { error: 'unavailable' }, { status }),
+      Response.json(status === 200 ? { client_id: 'third-party', scope: [] } : status === 401 ? { error: 'step_up_required', effect_status: 'not_applied' } : status === 403 ? { error: 'authentication_denied' } : { error: 'unavailable' }, { status }),
     ),
   );
   if (status === 200 || status === 401) {

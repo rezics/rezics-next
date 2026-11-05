@@ -1,7 +1,8 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { securityFixedResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
-import { authPost } from './api';
-import { readConsent } from './consent';
+import { AUTH_POST_TIMEOUT_MS } from './api';
+import { readConsent, parseConsentDecisionError, isKnownConsentRefusal } from './consent';
+import { CONSENT_REDUCTION_MAX_RESPONSE_BYTES, CONSENT_REDUCTION_MAX_ERROR_BYTES, CONSENT_PAGE_MAX_SCOPES } from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
 import { readJsonBounded } from './private-auth-json';
 import { serverSecurityInventoryResponseByteBudget } from './security-response-config';
@@ -314,6 +315,7 @@ export type ConsentReviewHistory = 'none' | 'unsent' | 'dispatched' | 'acknowled
  * An uncertain write keeps the lease and must never be automatically replayed.
  */
 export type ConsentReviewOperation = {
+  signal?: AbortSignal;
   isCurrent: () => boolean;
   record: (history: Exclude<ConsentReviewHistory, 'none' | 'unsent'>) => void;
   finish: () => void;
@@ -343,6 +345,7 @@ export function createConsentReduction(consent: GrantedConsent, retained: readon
     consent.status !== 'current' ||
     !scopeSet(consent.granted) ||
     !scopeSet(retained) ||
+    (retained.length > 0 && consent.granted.length > CONSENT_PAGE_MAX_SCOPES) ||
     retained.length >= consent.granted.length ||
     retained.some((scope) => !consent.granted.includes(scope))
   )
@@ -361,6 +364,7 @@ export async function reduceConsent(
   consent: GrantedConsent,
   retained: readonly string[],
   operation?: ConsentReviewOperation,
+  signal = operation?.signal,
 ): Promise<ConsentReductionResult> {
   // Snapshot before the first await: caller edits cannot retarget an in-flight write.
   const target = createConsentReduction(consent, retained);
@@ -371,7 +375,7 @@ export async function reduceConsent(
   // A nonempty replacement also checks the exact native granted set so it cannot
   // restore a permission removed since the selection was made.
   if (target.retained.length > 0) {
-    const current = await readConsent(target.clientId);
+    const current = await readConsent(target.clientId, signal);
     // The mounted route may have retired while native review was outstanding.
     // That read authorizes no browser dispatch by itself.
     if (operation && !operation.isCurrent()) return { kind: 'retired' };
@@ -398,42 +402,59 @@ export async function reduceConsent(
   // Check once after every awaited preflight and again immediately before the
   // existing native send. Retiring the page never cancels an already sent write.
   if (operation && !operation.isCurrent()) return { kind: 'retired' };
-  operation?.record('dispatched');
-  if (operation && !operation.isCurrent()) return { kind: 'retired' };
-  const response = await authPost<unknown>('/consent', {
-    client_id: target.clientId,
-    scope: target.retained,
-    ...(target.retained.length > 0 ? { reviewed_scopes: [...target.current] } : {}),
-  });
-  if (!response.ok) {
-    if (response.status === 401) {
-      operation?.record('refused');
-      return { kind: 'signed-out' };
+  const controller = new AbortController();
+  let dispatched = false;
+  let stop!: (result: ConsentReductionResult) => void;
+  const stopped = new Promise<ConsentReductionResult>((resolve) => { stop = resolve; });
+  const onAbort = () => stop({ kind: dispatched ? 'unknown' : 'retired' });
+  const retire = () => controller.abort();
+  controller.signal.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) retire();
+  else signal?.addEventListener('abort', retire, { once: true });
+  const timer = setTimeout(retire, AUTH_POST_TIMEOUT_MS);
+  const send = async (): Promise<ConsentReductionResult> => {
+    if (controller.signal.aborted || (operation && !operation.isCurrent())) return { kind: 'retired' };
+    const body = JSON.stringify({
+      client_id: target.clientId,
+      scope: target.retained,
+      ...(target.retained.length > 0 ? { reviewed_scopes: [...target.current] } : {}),
+    });
+    try {
+      // No await separates final currentness, dispatch recording and fetch.
+      dispatched = true;
+      const receiving = fetch('/consent', {
+        method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal,
+      });
+      operation?.record('dispatched');
+      const response = await receiving;
+      const value = await readJsonBounded(response,
+        response.status === 200 ? CONSENT_REDUCTION_MAX_RESPONSE_BYTES : CONSENT_REDUCTION_MAX_ERROR_BYTES,
+        controller.signal);
+      if (response.status === 200) {
+        return { kind: record(value) && Object.keys(value).sort().join(',') === 'client_id,scope' &&
+          value.client_id === target.clientId && scopeSet(value.scope) && sameScopes(value.scope, target.retained)
+          ? 'accepted' : 'unknown' };
+      }
+      const refusal = parseConsentDecisionError(response.status, value);
+      if (!refusal || !isKnownConsentRefusal(response.status, refusal)) return { kind: 'unknown' };
+      return { kind: response.status === 409 ? 'stale-review' : response.status === 401 ? 'signed-out' : 'denied' };
+    } catch {
+      return { kind: 'unknown' };
     }
-    if (response.status === 409 && response.code === 'stale_review') {
-      operation?.record('refused');
-      return { kind: 'stale-review' };
-    }
-    if (response.status === 403 || response.status === 409) {
-      operation?.record('refused');
-      return { kind: 'denied' };
-    }
-    // Once sent, an outage/ambiguous acknowledgement may have applied the barrier.
-    operation?.record('unknown');
-    return { kind: 'unknown' };
+  };
+  try {
+    const result = await Promise.race([send(), stopped]);
+    // Retired receivers retain uncertainty; they cannot acknowledge a replacement.
+    if (dispatched && (signal?.aborted || (operation && !operation.isCurrent()))) return { kind: 'unknown' };
+    if (result.kind !== 'retired') operation?.record(result.kind === 'accepted' ? 'acknowledged' :
+      result.kind === 'unknown' ? 'unknown' : 'refused');
+    return result;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', retire);
+    controller.signal.removeEventListener('abort', onAbort);
   }
-  if (
-    !record(response.body) ||
-    Object.keys(response.body).sort().join(',') !== 'client_id,scope' ||
-    response.body.client_id !== target.clientId ||
-    !scopeSet(response.body.scope) ||
-    !sameScopes(response.body.scope, target.retained)
-  ) {
-    operation?.record('unknown');
-    return { kind: 'unknown' };
-  }
-  operation?.record('acknowledged');
-  return { kind: 'accepted' };
 }
 
 // Backwards-compatible remove-all entry point, using the identical native barrier.

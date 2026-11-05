@@ -577,6 +577,14 @@ Consent pages replace the previous bounded observation. The visible count descri
 
 Decision: keep the accepted consent cursor separate from a failed target, commit Next/Previous history only after success, retain at most 32 opaque previous targets, and expose distinct current reload, failed-target retry and explicit first-page actions.
 
+Decision: connected-application reduction uses the shared native client/scope acknowledgement bound:
+`JSON.stringify({client_id:'',scope:[]}).length + 6*1024 + (1000*(128+3)-1)` bytes, independent of catalogue C.
+Reviewed counts are admitted before native effects; unreviewed native callers retain compatibility. Remove-all
+keeps its empty scope body. The narrow POST admits streamed bytes before fatal UTF-8 and JSON within one five-second
+headers/body deadline, including abort-ignoring transports. Retry-After cannot enlarge the error allowance.
+Closed status-matched native refusals release the current lease; bare/malformed 4xx, generic 401/404, overflow,
+timeout and mismatched success remain unknown. Retirement before send is unsent; after send it cannot cancel native
+work or accept a late acknowledgement. The original authority signal follows preflight and receiving.
 Connected-application history uses the mounted first-unknown plus latest-review limit. New deliberate review does
 not settle an earlier unknown, and retired callbacks cannot replace current review or history.
 

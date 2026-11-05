@@ -2771,8 +2771,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             (body.reviewed_requested !== undefined && !reviewedRequested) ||
             (reviewedAccountId !== undefined && (reviewedScopes === undefined || reviewedRequested === undefined)) ||
             (reviewedAccountId === undefined && reviewedRequested !== undefined) ||
-            (reviewedAccountId !== undefined &&
-              (granted.length > CONSENT_PAGE_MAX_SCOPES || reviewedScopes!.length > CONSENT_PAGE_MAX_SCOPES))
+            (reviewedScopes !== undefined &&
+              (granted.length > CONSENT_PAGE_MAX_SCOPES || reviewedScopes.length > CONSENT_PAGE_MAX_SCOPES))
           )
             throw new Denied(400);
           const outcome = await withIssuance(clientId, async () => {

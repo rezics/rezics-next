@@ -16,8 +16,10 @@ import type { InventoryPage } from './security-inventory';
 export function ConnectedApplicationHistory({
   history,
   reference,
+  priorUnknown = false,
 }: {
   history: ConsentReviewHistory;
+  priorUnknown?: boolean;
   reference?: Ref<HTMLDivElement>;
 }) {
   if (history === 'none') return null;
@@ -42,6 +44,7 @@ export function ConnectedApplicationHistory({
       <h2 id="connected-operation-history-heading" className="font-semibold">
         {m.auth_connected_operation_heading()}
       </h2>
+      {priorUnknown && history !== 'unknown' ? <p>{m.auth_connected_operation_unknown()}</p> : null}
       <p>{message}</p>
     </div>
   );

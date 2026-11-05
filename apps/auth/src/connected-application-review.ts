@@ -240,7 +240,7 @@ export function useConnectedApplicationReview({
     setReducing(true);
     setError('');
     const current = generation.current;
-    const fresh = await source('consents', acceptedCursorRef.current);
+    const fresh = await source('consents', acceptedCursorRef.current, lifetime);
     if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
 
     if (fresh.kind === 'expired') {
@@ -266,7 +266,7 @@ export function useConnectedApplicationReview({
     let result: ConsentReductionResult;
     if (row?.pending_reduction) result = { kind: 'pending' };
     else if (!matches) result = { kind: 'denied' };
-    else result = await reduceConsent(consent, target.retained, held ?? undefined);
+    else result = await reduceConsent(consent, target.retained, held ?? undefined, lifetime);
 
     if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
     if (result.kind === 'retired') return;
@@ -274,7 +274,7 @@ export function useConnectedApplicationReview({
     if (result.kind === 'stale-review') {
       pendingRef.current = true;
       setPending(true);
-      const updated = await source('consents', acceptedCursorRef.current);
+      const updated = await source('consents', acceptedCursorRef.current, lifetime);
       if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
       pendingRef.current = false;
       setPending(false);

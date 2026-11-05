@@ -82,3 +82,11 @@ const decisionErrors: readonly ConsentDecisionErrorResponse[] = [
   { error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' },
 ];
 export const CONSENT_DECISION_MAX_ERROR_BYTES = Math.max(...decisionErrors.map((body) => JSON.stringify(body).length));
+
+/** Native-compatible reduction acknowledgement; reviewed Allow has its own DTO. */
+export type ConsentReductionResponse = Readonly<{ client_id: string; scope: string[] }>;
+export type ConsentReductionErrorResponse = ConsentDecisionErrorResponse;
+// Empty keys/punctuation + one maximally escaped ID + one OAuth scope array.
+export const CONSENT_REDUCTION_MAX_RESPONSE_BYTES =
+  JSON.stringify({ client_id: '', scope: [] }).length + 6 * CONSENT_PAGE_MAX_ID_LENGTH + scopeArrayBytes;
+export const CONSENT_REDUCTION_MAX_ERROR_BYTES = CONSENT_DECISION_MAX_ERROR_BYTES;
