@@ -18,35 +18,12 @@ import {
   type PublicCollectionDiscoveryOperand,
 } from '../library/collection-discovery-summaries.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import type {
-  CollectionDirectorySelection,
-  DiscoveryOwnerAdapter,
-  DiscoveryOwnerMetadataSummary,
-  DiscoveryReadContext,
-} from './discovery.ts';
+import type { DiscoveryOwnerAdapter, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
 
 export const COLLECTION_DISCOVERY_BATCH_SIZE = 100;
 export type CollectionDiscoveryPageKey = CollectionDiscoveryKey;
 export type PublicCollectionDiscoverySource = CollectionDiscoverySource;
 export type { PublicCollectionDiscoveryContext, PublicCollectionDiscoveryResult, PublicCollectionDiscoverySummary };
-
-/** Translate the admitted directory selection into the existing native owner's operands. */
-export function collectionDiscoveryQuery(selection: CollectionDirectorySelection): CollectionDiscoveryQuery {
-  return {
-    ...(selection.presentationKind === undefined
-      ? {}
-      : {
-          presentationKind:
-            selection.presentationKind === 'mixed'
-              ? { kind: 'mixed' as const }
-              : { kind: 'owner' as const, id: selection.presentationKind },
-        }),
-    ...(selection.curator === undefined ? {} : { curatorAccountId: selection.curator }),
-    ...(selection.subject === undefined ? {} : { subjectId: selection.subject }),
-    popularity: selection.order === 'popular',
-    order: selection.order === 'popular' ? 'popularity' : 'recency',
-  };
-}
 
 /** Search consumes only current native eligibility operands. Withheld identities never match a filter. */
 export function collectionDiscoveryOperandMatches(

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Release } from '@rezics/definitions';
 import release from '../../../../packages/definitions/release/rezics.json';
 import type { PublicCollectionDiscoverySummary } from '../../src/library/index.ts';
-import { collectionDiscoveryQuery } from '../../src/search/collection-discovery.ts';
+import { collectionDiscoveryQuery } from '../../src/search/discovery-request.ts';
 import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from '../../src/search/discovery-hydration.ts';
 import {
   createDiscoveryRegistry,

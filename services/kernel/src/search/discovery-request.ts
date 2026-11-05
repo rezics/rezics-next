@@ -6,6 +6,7 @@ import {
   type DiscoveryFilterDocument,
   type FilterRelease,
 } from '@rezics/filter';
+import type { CollectionDiscoveryQuery } from '../library/collection-discovery-source.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
@@ -35,6 +36,24 @@ const OWNED_FIELDS = [
   'spaceId',
   'collectionDirectory',
 ] as const satisfies readonly (keyof MixedDiscoveryRequest)[];
+
+/** Translate the admitted directory selection into the existing native owner's operands. */
+export function collectionDiscoveryQuery(selection: CollectionDirectorySelection): CollectionDiscoveryQuery {
+  return {
+    ...(selection.presentationKind === undefined
+      ? {}
+      : {
+          presentationKind:
+            selection.presentationKind === 'mixed'
+              ? { kind: 'mixed' as const }
+              : { kind: 'owner' as const, id: selection.presentationKind },
+        }),
+    ...(selection.curator === undefined ? {} : { curatorAccountId: selection.curator }),
+    ...(selection.subject === undefined ? {} : { subjectId: selection.subject }),
+    popularity: selection.order === 'popular',
+    order: selection.order === 'popular' ? 'popularity' : 'recency',
+  };
+}
 
 function collectionDirectorySelection(value: unknown): CollectionDirectorySelection {
   if (
