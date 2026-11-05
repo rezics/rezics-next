@@ -59,6 +59,8 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
   setLocale('en', { reload: false });
   const testing = createRequire(require.resolve('storybook/test'));
   const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
   const fixture = gameProfileFixture('ready', 'en', true);
   const concept = '00000000-0000-4000-8000-00000000f105';
   const firstAssertion = '00000000-0000-4000-8000-00000000f111';
@@ -182,13 +184,16 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     const currentInspection = within(host).getByRole('heading', { name: m.game_visit_inspection_title() });
     expect(currentInspection.parentElement!.parentElement!.querySelector(`a[href="${secondEvidence}"]`)).not.toBeNull();
     expect(currentInspection.parentElement!.parentElement!.querySelector(`a[href="${firstEvidence}"]`)).toBeNull();
-    await act(async () => {
-      within(host).getByRole('button', { name: m.game_visit_close_inspection() }).click();
+    const admittedInspectors = within(host).getAllByRole('button', {
+      name: m.game_visit_inspect_assertion({ property: 'genre' }),
     });
-    expect(within(host).queryByRole('heading', { name: m.game_visit_inspection_title() })).toBeNull();
-    await act(async () => {
-      within(host).getByRole('button', { name: m.game_profile_refresh() }).click();
-    });
+    await act(async () => user.click(admittedInspectors[0]!));
+    const chosenFirst = within(host).getByRole('heading', { name: m.game_visit_inspection_title() });
+    expect(chosenFirst.parentElement!.parentElement!.querySelector(`a[href="${firstEvidence}"]`)).not.toBeNull();
+    expect(chosenFirst.parentElement!.parentElement!.querySelector(`a[href="${secondEvidence}"]`)).toBeNull();
+    await act(async () => user.click(within(host).getByRole('button', { name: m.game_visit_close_inspection() })));
+    await waitFor(() => expect(within(host).queryByRole('heading', { name: m.game_visit_inspection_title() })).toBeNull());
+    await act(async () => user.click(within(host).getByRole('button', { name: m.game_profile_refresh() })));
     await waitFor(() => expect(host.textContent).toContain(m.game_profile_current()));
     expect(within(host).queryByRole('heading', { name: m.game_visit_inspection_title() })).toBeNull();
     const inspectors = within(host).getAllByRole('button', {
@@ -373,4 +378,4 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
       else Reflect.deleteProperty(globalThis, key);
     window.happyDOM.abort();
   }
-});
+}, 25_000);
