@@ -2,13 +2,11 @@
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
-import {
-  runCommand,
-  withCommandAttemptWork,
-  type CommandResult,
-  type CommandTransaction,
-  type LegacyCommandOptions,
-  type PrincipalCommandOptions,
+import type {
+  CommandResult,
+  CommandTransaction,
+  LegacyCommandOptions,
+  PrincipalCommandOptions,
 } from '../command/command.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { nativeWorkDimensions } from './native-work-dimensions.ts';
@@ -463,6 +461,7 @@ export async function runMemberRetentionCommand<T>(
     context: { transactionId: string; time: import('../command/command.ts').AuthoritativeTime },
   ) => Promise<CommandResult<T>>,
 ): Promise<import('../command/command.ts').CommandOutcome<T>> {
+  const { runCommand, withCommandAttemptWork } = await import('../command/command.ts');
   const original = episode.getStore();
   const dispatch = () => ('principal' in options ? runCommand(pool, options, body) : runCommand(pool, options, body));
   if (!original) return dispatch();
