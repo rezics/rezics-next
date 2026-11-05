@@ -91,10 +91,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/identifiers')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => {
     if (
-      Object.keys(input).some((key) => !['originContext', 'originRealm', 'reviewProperty', 'candidate'].includes(key))
+      Object.keys(input).some((key) => !['originContext', 'originRealm', 'reviewProperty', 'candidate', 'inspectProperty', 'inspectStatement'].includes(key))
     )
       throw notFound();
     return {
+      inspectProperty: typeof input.inspectProperty === 'string' ? input.inspectProperty : undefined,
+      inspectStatement: typeof input.inspectStatement === 'string' ? input.inspectStatement : undefined,
       originContext: typeof input.originContext === 'string' ? input.originContext : undefined,
       originRealm: typeof input.originRealm === 'string' ? input.originRealm : undefined,
       reviewProperty:
@@ -125,10 +127,11 @@ function IdentifiersRoute() {
   const editorHref = identifierRouteHref(locale, id, slug, visit);
   return (
     <IdentifiersProfileSession
-      key={`${id}:${locale}:${origin?.context ?? ''}:${origin?.realm ?? ''}:${origin?.realmTitle ?? ''}:${origin?.state ?? ''}:${visit.initialReview?.property ?? ''}:${visit.initialReview?.candidate ?? ''}`}
+      key={JSON.stringify([id, locale, visit])}
       id={id}
       locale={locale}
       initialReview={visit.initialReview}
+      initialInspection={visit.initialInspection}
       origin={origin}
       editorHref={editorHref}
       originHref={originHref}

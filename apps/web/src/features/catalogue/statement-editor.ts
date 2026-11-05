@@ -131,7 +131,7 @@ const terms = new Set(['schema:name', 'schema:description', 'schema:alternateNam
 export function editableScalar(definition: PropertyDefinition | undefined): definition is PropertyDefinition {
   return !!definition && !definition.relation && scalarTypes.has(definition.datatype);
 }
-export function correctionProperty(release: Release, type: string, property: string): boolean {
+export function correctionProperty(release: Pick<Release, 'types' | 'properties'>, type: string, property: string): boolean {
   return (
     !terms.has(property) &&
     !!release.types[type]?.properties.includes(property) &&

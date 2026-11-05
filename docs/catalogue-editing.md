@@ -579,13 +579,20 @@ Choosing Global starts `readCorrection` with only its existing Subject address a
 review remains its existing independent controller. Review links preserve the bounded origin, so revisiting a
 non-Global URL requires the deliberate Global choice again.
 
-The combined route search, including an existing review pair, is capped at 2,048 characters and 2,048 UTF-8 bytes;
+The combined route search, including one inspection property/statement pair and an existing review pair, is capped at 2,048 characters and 2,048 UTF-8 bytes;
 duplicate or contradictory selectors are refused before the editor mounts. A direct Global visit performs one route
 canonical Subject read and then the existing correction read: one public Subject request, one active Definition
 request, one immutable release request, and at most one authorized viewer-actions request. A Realm visit adds one
 bounded public page read before the explicit Global choice; the page reader's existing optional Terms advice remains
 its owner. The installed visit makes no per-identifier read, source lookup or write. Exact selected-assertion
-inspection, current evidence return and focus settlement remain the receiving work for this visit.
+inspection and return share one public origin pane, separate from Global correction and candidate review. Inspection
+uses only the admitted Type properties and exact disclosed statement ID, with ordinary rank and spoiler gates;
+values, holder, property, rank, qualifiers and reference groups stay distinct even for equal literals.
+The pane reads on explicit inspection (or a bounded inspection locator), and return performs one fresh public
+page read in the original Realm. During reads it hides the previous evidence. Focus returns only to a surviving
+exact assertion with unchanged Type, releases and Context, otherwise to the current reader heading. Interaction
+or visit retirement cancels pending focus. Session observations, source replacement and new review intent retire
+the visit. No per-occurrence request, source resolution or identity inference follows.
 
 Changed included fields seal separate native candidate requests and keys. Partial success, denial, invalid values,
 stale metadata, uncertainty and unavailability retain the existing per-field behavior. Session preparation hides

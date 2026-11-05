@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
@@ -8,42 +8,49 @@ import { readCorrection } from './statement-editor-actions';
 import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
 import { IdentifiersProfile, type IdentifiersProfileProps } from './identifiers-profile-view';
-import { IdentifierOriginChoice } from './identifier-current-visit-view';
+import { IdentifierCurrentVisit, IdentifierOriginChoice } from './identifier-current-visit-view';
+
+import { readIdentifierOrigin } from './identifier-current-visit-actions';
 
 function IdentifiersProfileSessionLive({
   id,
   locale,
   initialReview,
+  initialInspection,
   origin,
   editorHref,
   originHref,
   globalHref,
 }: Pick<
   IdentifiersProfileProps,
-  'id' | 'locale' | 'initialReview' | 'origin' | 'editorHref' | 'originHref' | 'globalHref'
+  'id' | 'locale' | 'initialReview' | 'initialInspection' | 'origin' | 'editorHref' | 'originHref' | 'globalHref'
 >) {
   const [globalChoice, setGlobalChoice] = useState(!origin || origin.kind === 'global');
-  if (!globalChoice && origin) {
-    return (
-      <IdentifierOriginChoice
-        locale={locale}
-        origin={origin}
-        originHref={origin.kind === 'realm' ? originHref : undefined}
-        globalHref={globalHref}
-        onChooseGlobal={() => setGlobalChoice(true)}
-      />
-    );
-  }
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const publicWork = useCatalogueLifetime('identifier-public-origin');
+  const publicTransport = useMemo(() => ({
+    read: () => readIdentifierOrigin({
+      data: {
+        id, locale, expectedReader: publicWork.reader || null,
+        search: editorHref ? new URL(editorHref, 'https://rezics.invalid').search : '',
+      },
+      headers: csrfHeaders(),
+    }),
+  }), [id, locale, editorHref, publicWork]);
   return (
-    <IdentifiersProfileCorrectionSession
-      id={id}
-      locale={locale}
-      initialReview={initialReview}
-      origin={origin}
-      editorHref={editorHref}
-      originHref={originHref}
-      globalHref={globalHref}
-    />
+    <>
+      {editorHref && <IdentifierCurrentVisit key={reviewRevision} id={id} locale={locale} origin={origin}
+        initialInspection={reviewRevision === 0 ? initialInspection : undefined} initialReview={initialReview}
+        editorHref={editorHref} transport={publicTransport} />}
+      {!globalChoice && origin ? (
+        <IdentifierOriginChoice locale={locale} origin={origin}
+          originHref={origin.kind === 'realm' ? originHref : undefined}
+          globalHref={globalHref} onChooseGlobal={() => setGlobalChoice(true)} />
+      ) : (
+        <IdentifiersProfileCorrectionSession onReviewIntent={() => setReviewRevision((value) => value + 1)} id={id} locale={locale} initialReview={initialReview}
+          origin={origin} editorHref={editorHref} originHref={originHref} globalHref={globalHref} />
+      )}
+    </>
   );
 }
 
@@ -51,13 +58,14 @@ function IdentifiersProfileCorrectionSession({
   id,
   locale,
   initialReview,
+  onReviewIntent,
   origin,
   editorHref,
   originHref,
   globalHref,
 }: Pick<
   IdentifiersProfileProps,
-  'id' | 'locale' | 'initialReview' | 'origin' | 'editorHref' | 'originHref' | 'globalHref'
+  'id' | 'locale' | 'initialReview' | 'onReviewIntent' | 'origin' | 'editorHref' | 'originHref' | 'globalHref'
 >) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
@@ -68,6 +76,7 @@ function IdentifiersProfileCorrectionSession({
       locale={locale}
       session={state}
       initialReview={initialReview}
+      onReviewIntent={onReviewIntent}
       origin={origin}
       editorHref={editorHref}
       originHref={originHref}

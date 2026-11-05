@@ -10810,5 +10810,14 @@
   "character_visit_unsupported": "This Character reading is admitted, but correction and candidate review are available only in Global.",
   "character_visit_global": "Open a separate Global Character correction",
   "work_franchise_stream_absent": "This stream was not requested on this page. Start again to read it.",
-  "work_franchise_stream_historical": "This stream has not caught up. These entries do not establish a complete current reading."
+  "work_franchise_stream_historical": "This stream has not caught up. These entries do not establish a complete current reading.",
+  "identifiers_public_heading": "Public identifier evidence",
+  "identifiers_inspect_open": "Inspect the current public reading",
+  "identifiers_inspect_exact": "Inspect this exact assertion",
+  "identifiers_inspect_link": "Link to this assertion",
+  "identifiers_inspect_return": "Return to the refreshed public reading",
+  "identifiers_inspect_holder": "Subject",
+  "identifiers_inspect_property": "Property",
+  "identifiers_inspect_rank": "Rank",
+  "identifiers_inspect_continue": "Continue the public read"
 }
