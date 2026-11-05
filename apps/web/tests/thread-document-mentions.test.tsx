@@ -1,8 +1,12 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { installPostReadingDom } from './post-reading-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseDocument, withDocumentIds } from '@rezics/document';
-import { DocumentBody } from '@rezics/ui/document-body';
-import { projectPostReading } from '../src/threads/post-reference-list';
+
+const dom = installPostReadingDom();
+const { DocumentBody } = await import('@rezics/ui/document-body');
+const { projectPostReading } = await import('../src/threads/post-reference-list');
+afterAll(() => dom.restore());
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const document = parseDocument({

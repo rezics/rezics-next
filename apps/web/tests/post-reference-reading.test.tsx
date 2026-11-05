@@ -1,10 +1,9 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { createRequire } from 'node:module';
+import { installPostReadingDom } from './post-reading-dom';
 import { act, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import * as start from '../.storybook/react-start';
-import { projectPostReading } from '../src/threads/post-reference-list';
 import { preparedPostReading } from '../src/stories/post-reading-fixtures';
 import { m } from '../src/paraglide/messages.js';
 
@@ -12,59 +11,13 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-// Base UI selects its browser effects at import time, before a reader is mounted.
-const require = createRequire(import.meta.url);
-const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
-const window = new Window({ url: 'https://site.test/en/#post-retained', width: 1280, height: 900 });
-Object.defineProperty(window, 'matchMedia', {
-  configurable: true,
-  value: (media: string) => ({
-    media,
-    matches: false,
-    onchange: null,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return false;
-    },
-  }),
-});
-window.HTMLElement.prototype.scrollIntoView = function () {};
-window.scrollTo = () => {};
-const values: Record<string, unknown> = {
-  window,
-  document: window.document,
-  navigator: window.navigator,
-  location: window.location,
-  HTMLElement: window.HTMLElement,
-  HTMLButtonElement: window.HTMLButtonElement,
-  Element: window.Element,
-  Node: window.Node,
-  Document: window.Document,
-  DocumentFragment: window.DocumentFragment,
-  ShadowRoot: window.ShadowRoot,
-  MutationObserver: window.MutationObserver,
-  ResizeObserver: window.ResizeObserver,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-  IS_REACT_ACT_ENVIRONMENT: true,
-};
-const prior = new Map<string, PropertyDescriptor | undefined>();
-for (const [key, value] of Object.entries(values)) {
-  prior.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-}
+const dom = installPostReadingDom();
+const { window } = dom;
+const { projectPostReading } = await import('../src/threads/post-reference-list');
 const { createRoot } = await import('react-dom/client');
 const { PostReadingBody, ThreadPostReadingBody } = await import('../src/threads/post-reading-body');
 afterAll(async () => {
-  for (const [key, descriptor] of prior) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await window.happyDOM.abort();
+  await dom.restore();
   mock.restore();
 });
 
