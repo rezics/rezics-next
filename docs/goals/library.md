@@ -70,6 +70,8 @@ Decision: Review the exact Entry first; confirmation uses the existing clear, an
 
 Decision: Personal Shelf removal classifies native and recognized thrown refusals; definite refusals keep the row, show its failure and rotate the next explicit key, while uncertain retries retain their exact command and captured credentials only for the same viewer.
 
+Decision: Continue preserves exact native `platform_closed` and recognized `PlatformClosedError` refusals as a closed region, separate from permission denial and unavailability; closure clears retained rows and does not retry.
+
 ## Dependencies
 
 Requires release-pinned profiles, references and redirects; ordinary Access/resource grants and durable kernel work;

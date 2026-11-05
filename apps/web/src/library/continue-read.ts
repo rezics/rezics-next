@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { KernelClient } from '@rezics/client';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { personalRead } from '../kernel/query';
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
@@ -73,8 +74,9 @@ export async function loadContinueState(
     return result.state === 'loaded' ? { ...result, entries: result.entries.slice(0, CONTINUE_LIMIT) } : result;
   } catch (error) {
     if (error instanceof ContinueReadError) return error.failure;
+    if (isPlatformClosedError(error)) return { state: 'closed' };
     if (error instanceof MediaProblem)
-      return continueFailure(error.problem.status, new Headers(error.headers).get('retry-after'));
+      return continueFailure(error.problem.status, new Headers(error.headers).get('retry-after'), error.problem);
     return { state: 'unavailable' };
   }
 }

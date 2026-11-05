@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient, SESSION_HEADER } from '@rezics/client';
+import { withPlatformClosedRecognition } from '../src/kernel/platform-closed';
 import { nativeContinueSource, type NativeContinuePage } from '../src/library/continue-adapter';
 import { continueFailure } from '../src/library/continue-source';
 
@@ -119,5 +120,38 @@ test('Continue keeps native preparation, credential, cursor and readiness failur
     expect(await nativeContinueSource(client, 'Bearer owner', { limit: 6 })).toEqual(continueFailure(status, '2'));
     expect(calls).toHaveLength(1);
     expect(calls[0]!.headers.get('authorization')).toBe('Bearer owner');
+  }
+
+  const transport = createKernelClient('https://kernel.example.test', {
+    async fetch() {
+      throw new Error('transport unavailable');
+    },
+  });
+  expect(await nativeContinueSource(transport, 'Bearer owner', { limit: 6 })).toEqual({ state: 'unavailable' });
+});
+
+test('native and recognized wrapped platform closure share the closed result and one bounded FULL read', async () => {
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      calls.push(new Request(input, init));
+      return Response.json({ code: 'platform_closed' }, { status: 403 });
+    }) as typeof fetch,
+  });
+
+  const native = await nativeContinueSource(client, 'Bearer owner', { limit: 6 });
+  const wrapped = await nativeContinueSource(withPlatformClosedRecognition(client), 'Bearer owner', { limit: 6 });
+  expect(native).toEqual({ state: 'closed' });
+  expect(wrapped).toEqual(native);
+  expect(calls).toHaveLength(2);
+  for (const request of calls) {
+    expect(request.method).toBe('GET');
+    expect(new URL(request.url).pathname).toBe('/v1/libraryContinue');
+    expect([...new URL(request.url).searchParams]).toEqual([
+      ['limit', '6'],
+      ['view', 'FULL'],
+    ]);
+    expect(request.headers.get('authorization')).toBe('Bearer owner');
+    expect(request.cache).toBe('no-store');
   }
 });
