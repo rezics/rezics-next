@@ -287,6 +287,26 @@ function component(kind: string, bound: Bound): LabelOperationComponent {
   return Object.freeze({ kind, bound });
 }
 
+/** Name a bound supplied by the owner that executes the corresponding branch. */
+export function labelOperationComponent(kind: string, bound: Bound): LabelOperationComponent {
+  return component(kind, declareBound(bound));
+}
+
+/** Compose owner declarations without changing the operation's immutable SQL operands. */
+export function composeLabelOperation(
+  base: LabelOperationPlan,
+  owners: readonly LabelOperationComponent[],
+  complete: boolean,
+): LabelOperationPlan {
+  const components = Object.freeze([...base.components, ...owners]);
+  return Object.freeze({
+    ...base,
+    components,
+    complete,
+    total: sumBounds(...components.map((item) => item.bound)),
+  });
+}
+
 /** Reserve one closed operation once, then execute its leaves on the caller's existing native resources. */
 export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: () => Promise<T>): Promise<T> {
   if (activeLabelOperation.getStore()) return body();
