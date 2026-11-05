@@ -183,7 +183,9 @@ async function mount() {
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+  let currentAddressKind: CreatorOfferAddress['kind'] = 'list';
   const show = async (mode: 'list' | 'editor' = 'list', cursor?: string) => {
+    currentAddressKind = mode;
     await act(async () =>
       root.render(
         <StrictMode>
@@ -254,7 +256,11 @@ async function mount() {
     const query = client
       .getQueryCache()
       .findAll({ queryKey: ['creator-offers-current'] })
-      .find((candidate) => candidate.getObserversCount() > 0);
+      .find(
+        (candidate) =>
+          candidate.getObserversCount() > 0 &&
+          (candidate.queryKey[3] as CreatorOfferAddress | undefined)?.kind === currentAddressKind,
+      );
     if (!query) throw new Error('Expected the mounted seller read');
     await act(async () => {
       void query.fetch();
