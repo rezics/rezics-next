@@ -3221,6 +3221,8 @@ bounded page and lookahead without repeating FULL fact attachment.
 
 ### Native identity scope planning and current seals
 
+Decision: one immutable Library-owned nine-axis operation set prices exact SQL, original binds and native result projections for both dispatch and original composition; SQL work declares `engineRequests=0`, while custody adapters and Source/History/Core controls retain their owners.
+
 `createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
 same-command `verifySeal` ports. The exact key is `{job, sourceIdentity, scope: 'collection-source'}`.
 This is an explicitly funded native maintenance entry point; ordinary Source capture does not gain an
