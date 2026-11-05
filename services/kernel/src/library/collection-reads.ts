@@ -743,12 +743,14 @@ export function createCollectionReads(
     };
   }
 
-  async function seesAll(viewer: Actor, curatorAccountId: string): Promise<boolean> {
+  async function seesAll(viewer: Actor, curatorAccountId: string, deadline: number): Promise<boolean> {
     if (!actor(viewer) || viewer.accountId !== curatorAccountId || !viewer.scopes.includes('collection:read'))
       return false;
     const route = routeOf(viewer.accountId);
     if (route === null) return false;
-    const account = await withConnection(pool, (client) => readAccount(client, route, viewer.accountId));
+    const account = await withConnection(pool, (client) =>
+      readAccount(deadlineClient(client, deadline), route, viewer.accountId),
+    );
     return account !== null && grantCapable(account, viewer);
   }
 
@@ -810,9 +812,11 @@ export function createCollectionReads(
     if (route === null) throw notFound();
     // Presentation visibility is read before opening the page transaction. A visible account path
     // needs no private account read; only a hidden view needs the existing curator exception.
-    const publicViews = await readPublicViews(pool, [curatorAccountId]);
+    const publicViews = await withConnection(pool, (client) =>
+      readPublicViews(deadlineClient(client, deadline), [curatorAccountId]),
+    );
     const visible = publicViews.get(curatorAccountId)?.collections === true;
-    const curator = (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId));
+    const curator = (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId, deadline));
     const fullView = !publicOnly && curator;
     const ownerManagement = options.ownerManagement === true;
     if (ownerManagement && !fullView) throw notFound();
@@ -913,8 +917,10 @@ export function createCollectionReads(
       ...(ownerManagement ? { ownerManagement: 'owner' as const, ownerAccountId: curatorAccountId } : {}),
     };
     const presented = presentation ? await presentation.present(body) : body;
-    const currentViews = await readPublicViews(pool, [curatorAccountId]);
-    if (curator && !(await seesAll(viewer, curatorAccountId))) throw notFound();
+    const currentViews = await withConnection(pool, (client) =>
+      readPublicViews(deadlineClient(client, deadline), [curatorAccountId]),
+    );
+    if (curator && !(await seesAll(viewer, curatorAccountId, deadline))) throw notFound();
     if (!curator && currentViews.get(curatorAccountId)?.collections !== true)
       throw new ProblemError('dependency_unavailable');
     // No owner checkout spans presentation. Reauthorize the original parents
@@ -1252,12 +1258,13 @@ export function createCollectionReads(
     const shown: PublicCollectionView[] = [];
     const observations: { row: StoredCollection; visible: boolean }[] = [];
     if (considered.length > 0) {
-      await readOnly(pool, async (client) => {
+      await readOnly(pool, async (connection) => {
+        const client = deadlineClient(connection, deadline);
         for (const pair of considered) {
           const row = await collectionDirectoryRowPlan({
             route: pair.collectionRoute,
             id: pair.collectionId,
-          }).run(queryOf(deadlineClient(client, deadline)));
+          }).run(queryOf(client));
           // Publication is eventual. A detected withdrawn positive cannot certify an exact count.
           if (!row || row.state !== 'active' || row.visibility !== 'public')
             throw new ProblemError('dependency_unavailable');
