@@ -60,12 +60,31 @@ test('outer route input rejects malformed, duplicate, mismatched and over-budget
   const encoded = encodeURIComponent(via);
   expect(parseStoryArcProfileSearch(`via=${encoded}%`, subjectId, 'en')).toBeUndefined();
   expect(parseStoryArcProfileSearch(`via=${encoded}&via=${encoded}`, subjectId, 'en')).toBeUndefined();
-  expect(parseStoryArcProfileSearch(`via=${encodeURIComponent(`/${'en'}/subjects/${otherSubjectId}/arc#connections`)}`, subjectId, 'en')).toBeUndefined();
-  expect(parseStoryArcProfileSearch(`via=${encodeURIComponent(`/ja/subjects/${subjectId}/arc#connections`)}`, subjectId, 'en')).toBeUndefined();
-  expect(parseStoryArcProfileSearch(`via=${encodeURIComponent(`${origin}/relations#connections`)}`, subjectId, 'en')).toBeUndefined();
+  expect(
+    parseStoryArcProfileSearch(
+      `via=${encodeURIComponent(`/${'en'}/subjects/${otherSubjectId}/arc#connections`)}`,
+      subjectId,
+      'en',
+    ),
+  ).toBeUndefined();
+  expect(
+    parseStoryArcProfileSearch(
+      `via=${encodeURIComponent(`/ja/subjects/${subjectId}/arc#connections`)}`,
+      subjectId,
+      'en',
+    ),
+  ).toBeUndefined();
+  expect(
+    parseStoryArcProfileSearch(`via=${encodeURIComponent(`${origin}/relations#connections`)}`, subjectId, 'en'),
+  ).toBeUndefined();
   expect(parseStoryArcProfileSearch(`via=${'😀'.repeat(600)}`, subjectId, 'en')).toBeUndefined();
 
-  const realmVia = storyArcPublicOrigin({ currentHref: `${origin}?realm=${realmId}`, id: subjectId, locale: 'en', realm: realmId })!;
+  const realmVia = storyArcPublicOrigin({
+    currentHref: `${origin}?realm=${realmId}`,
+    id: subjectId,
+    locale: 'en',
+    realm: realmId,
+  })!;
   const choice = storyArcGlobalChoiceHref({ id: subjectId, slug: 'a-named-arc', locale: 'en', via: realmVia });
   const choiceUrl = new URL(choice, 'https://site.test');
   expect([...choiceUrl.searchParams.keys()]).toEqual(['via']);
@@ -102,7 +121,10 @@ test('the mounted Subject, canonical route, correction session and existing read
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: `https://site.test/en/subjects/${storyArcProfileId}/the-journey-arc/story-arc`, width: 390 });
+  const window = new Window({
+    url: `https://site.test/en/subjects/${storyArcProfileId}/the-journey-arc/story-arc`,
+    width: 390,
+  });
   const globalNames =
     'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement HTMLFormElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame scrollTo matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
       ' ',
@@ -194,9 +216,7 @@ test('the mounted Subject, canonical route, correction session and existing read
       digest: fixture.arc.subject.release,
       definitions: { types: fixture.release.types, properties: fixture.release.properties },
     };
-    page.context = realm
-      ? { id: context, population: { kind: 'realm', id: realm, title: 'Readers' } }
-      : undefined;
+    page.context = realm ? { id: context, population: { kind: 'realm', id: realm, title: 'Readers' } } : undefined;
     page.requestedRealm = realm;
     const publicRead = structuredClone(fixture.arc);
     publicRead.subject.context = context;
@@ -291,7 +311,11 @@ test('the mounted Subject, canonical route, correction session and existing read
       definition: fixture.arc.subject.release,
       via: realmVia,
     }).href;
-    const realmVisit = parseStoryArcProfileSearch(new URL(realmEntry, window.location.origin).search, storyArcProfileId, 'en')!;
+    const realmVisit = parseStoryArcProfileSearch(
+      new URL(realmEntry, window.location.origin).search,
+      storyArcProfileId,
+      'en',
+    )!;
     expect(realmVisit).toMatchObject({ context: selectedContext, realm: realmId, via: originHref(realmId) });
     const realmRoute = await loadRoute(realmEntry!);
     await render(sessionFor((realmRoute as { id: string }).id, realmVisit));
@@ -339,8 +363,9 @@ test('the mounted Subject, canonical route, correction session and existing read
     const validateSearch = Route.options.validateSearch;
     if (typeof validateSearch !== 'function') throw new Error('Expected the installed StoryArc search validator.');
     expect(validateSearch(Object.fromEntries(globalRoute.searchParams))).toMatchObject(globalVisit);
-    await expect(loadRoute(`${globalRoute.pathname}?realm=${realmId}&via=${encodeURIComponent(originHref(realmId))}`, 'old-label'))
-      .rejects.toMatchObject({ options: { statusCode: 301 } });
+    await expect(
+      loadRoute(`${globalRoute.pathname}?realm=${realmId}&via=${encodeURIComponent(originHref(realmId))}`, 'old-label'),
+    ).rejects.toMatchObject({ options: { statusCode: 301 } });
     const originalId = fixture.arc.subject.id;
     fixture.arc.subject.id = otherSubjectId;
     expect(await loadRoute(`${globalRoute.pathname}?${globalRoute.search.slice(1)}`, 'old-label')).toEqual({

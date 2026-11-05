@@ -14,14 +14,7 @@ export type StoryArcProfileVisit = {
   classificationHandoff?: string;
 };
 
-const profileSearchKeys = new Set([
-  'work',
-  'realm',
-  'context',
-  'definition',
-  'via',
-  'classificationHandoff',
-]);
+const profileSearchKeys = new Set(['work', 'realm', 'context', 'definition', 'via', 'classificationHandoff']);
 
 /** Canonicalize only a label change on the same identity; a redirect identity stays stale. */
 export function storyArcCanonicalSlugTarget(input: {
@@ -37,7 +30,9 @@ export function storyArcCanonicalSlugTarget(input: {
 }
 
 function boundedSearch(value: string): boolean {
-  return value.length <= storyArcOuterSearchLimit && new TextEncoder().encode(value).byteLength <= storyArcOuterSearchLimit;
+  return (
+    value.length <= storyArcOuterSearchLimit && new TextEncoder().encode(value).byteLength <= storyArcOuterSearchLimit
+  );
 }
 
 function immediateOrigin(
@@ -50,9 +45,7 @@ function immediateOrigin(
   const accepted = subjectVisitReturn(value, locale);
   if (!accepted) return;
   const url = new URL(accepted, 'https://rezics.invalid');
-  const subject = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+$/iu.exec(
-    url.pathname,
-  );
+  const subject = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+$/iu.exec(url.pathname);
   if (
     url.origin !== 'https://rezics.invalid' ||
     !subject ||
@@ -86,9 +79,7 @@ export function storyArcPublicOrigin(input: {
   const accepted = subjectVisitReturn(currentHref, locale);
   if (!accepted) return;
   const source = new URL(accepted, 'https://rezics.invalid');
-  const subject = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+$/iu.exec(
-    source.pathname,
-  );
+  const subject = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+$/iu.exec(source.pathname);
   const sourceRealms = source.searchParams.getAll('realm');
   if (
     source.origin !== 'https://rezics.invalid' ||
@@ -134,9 +125,7 @@ export function storyArcProfileSearch(
       : id
         ? immediateOrigin(via, id, locale, realm, realm !== undefined)
         : subjectVisitReturn(via, locale);
-  const originRealm = acceptedVia
-    ? new URL(acceptedVia, 'https://rezics.invalid').searchParams.get('realm')
-    : null;
+  const originRealm = acceptedVia ? new URL(acceptedVia, 'https://rezics.invalid').searchParams.get('realm') : null;
   if (
     (work !== undefined && !storyArcUuid.test(work)) ||
     (realm !== undefined && !storyArcUuid.test(realm)) ||
@@ -195,20 +184,13 @@ export function parseStoryArcProfileSearch(
 }
 
 /** A deliberate Global choice preserves only the immediate public return and the current identity route. */
-export function storyArcGlobalChoiceHref(input: {
-  id: string;
-  slug: string;
-  locale: string;
-  via?: string;
-}): string {
+export function storyArcGlobalChoiceHref(input: { id: string; slug: string; locale: string; via?: string }): string {
   const { id, slug, locale, via } = input;
   const path = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${encodeURIComponent(slug)}/story-arc`;
   const candidate = via && subjectVisitReturn(via, locale);
   const originRealm = candidate ? new URL(candidate, 'https://rezics.invalid').searchParams.getAll('realm') : [];
   const acceptedVia =
-    candidate &&
-    originRealm.length <= 1 &&
-    immediateOrigin(candidate, id, locale, originRealm[0] ?? undefined);
+    candidate && originRealm.length <= 1 && immediateOrigin(candidate, id, locale, originRealm[0] ?? undefined);
   const query = acceptedVia ? new URLSearchParams({ via: acceptedVia }).toString() : '';
   if (query && !boundedSearch(query)) throw new Error('StoryArc public return exceeds its outer address limit');
   return `${path}${query ? `?${query}` : ''}`;

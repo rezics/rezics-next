@@ -153,7 +153,17 @@ function StoryArcProfileLive({
     refetchOnReconnect: false,
   });
   const observedDefinition = query.data?.ok ? query.data.release.digest : undefined;
-  const selection = JSON.stringify([id, work, locale, context, realm, definition, via, outerAddress, observedDefinition]);
+  const selection = JSON.stringify([
+    id,
+    work,
+    locale,
+    context,
+    realm,
+    definition,
+    via,
+    outerAddress,
+    observedDefinition,
+  ]);
   const [reloadAttempt, setReloadAttempt] = useState<{ selection: string; sequence: number }>();
   const reloadSequence = useRef(0);
   const reloading = reloadAttempt?.selection === selection;
