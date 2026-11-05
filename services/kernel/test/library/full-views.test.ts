@@ -77,7 +77,7 @@ async function json(response: Response, status = 200) {
   return response.json();
 }
 const viewPath = (path: string, view: string) => `${path}${path.includes('?') ? '&' : '?'}view=${view}`;
-async function subject(label = 'Embedded book') {
+async function subject(label = 'Embedded book', language = 'en') {
   const key = randomUUID();
   return (
     await createSubject(db.pool, {
@@ -85,7 +85,7 @@ async function subject(label = 'Embedded book') {
       target: subjectTarget(routeKey, actor.accountId, key),
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
-      item: { type: 'schema:Book', labels: { en: label } },
+      item: { type: 'schema:Book', labels: { [language]: label } },
       release: { digest: bundledDigest, release: bundledRelease },
       authorize: async () => true,
     })
@@ -601,4 +601,8 @@ test('FULL follows read only the bounded display projection and keep the raw pri
   expect(body.follow).toEqual({ ...basic.follow, target: summary(subjectId, 'Following summary') });
   expect(full.capture.statements.filter((sql) => sql.includes('COALESCE(labels.body'))).toHaveLength(1);
   expect(full.capture.statements).not.toContain(fullSubjectRead.sql);
+  const french = await subject('Résumé', 'fr');
+  await json(await request('PUT', `/v1/follows/${french}`));
+  const fallback = await json(await request('GET', `/v1/follows/${french}?view=FULL`));
+  expect(fallback.follow.target.label).toEqual({ value: 'Résumé', language: 'fr' });
 });

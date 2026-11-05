@@ -17,8 +17,8 @@ negative/discarded work, and preserve native 100-key/262,144-row ceilings. Never
 
 ## Follow operation composition
 
-Decision: retain the native journey; bind immutable original SQL operands at dispatch. Entry consumes the same
-nested mutation declaration on its original transaction/client/time, without another runner or admission.
+Decision: bind immutable original SQL operands at native dispatch. Entry consumes the same nested mutation
+on its original transaction/client/time, without another runner or admission.
 
 `follow-operation-bounds.ts` retains all nine axes and native adapter bind order. Mutation includes the installed
 source hook's account probe, owner insert/lock, previous-source lock, replacement upsert and signed owner delta,
@@ -37,8 +37,9 @@ Membership preserves trusted original account/space/step and implied intent. Exp
 
 Private reads retain mounted Authentication admission. First fetch is `min(100,size+1)` with a separate one-row probe
 at size 100. Both indexed cursor arms charge discarded occurrences. Seals retain operation, owner, kind/all, following
-state and native epoch; frontiers retain raw updatedAt/targetId. BASIC adds no disclosure. FULL keeps current Semantic
-summaries and Community destination/actions. Final serialization cannot refund hidden or coalesced native work.
+state and native epoch; frontiers retain raw updatedAt/targetId. BASIC adds no disclosure. FULL composes native
+summaries, indexed active-label fallback and Community actions; repeated original/current disclosure withholds a
+changed source. Serialization never refunds hidden work.
 
 ## Whole-query publication
 

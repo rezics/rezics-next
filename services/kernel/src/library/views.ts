@@ -21,6 +21,7 @@ import { routeOf } from '../route/route.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { readSubject } from '../semantic/subject.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -113,10 +114,17 @@ class ViewReader {
           ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
         },
         [resolved.subjectId],
+        { displayFallback: true },
       );
       // An independently changed source cannot authorize disclosure of the older
       // projection. This is the Semantic owner's native currentness observation.
-      if (!(await observed.current())) throw new ProblemError('dependency_unavailable');
+      const current = await resolveSubject(this.deps, actor, id, undefined, {
+        pool,
+        deadline: this.deadline,
+        ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
+      });
+      if (!(await observed.current()) || current?.subjectId !== resolved.subjectId)
+        throw new ProblemError('dependency_unavailable');
       return observed.summaries.get(resolved.subjectId) ?? null;
     }
     const deadline = this.deadline;
@@ -214,8 +222,9 @@ class ViewReader {
     );
     return withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, this.deadline);
-      if (!(await check(client))) return null;
-      const value = await readSpace(client, id);
+      const time = await mintReadTime(client, this.deps.clock);
+      if (!(await check(client, time))) return null;
+      const value = await readSpace(client, id, authoritativeTimeValue(time));
       return value ? { id, type, label: value.title ?? '' } : null;
     });
   }

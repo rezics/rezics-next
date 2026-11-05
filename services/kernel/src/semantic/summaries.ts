@@ -146,7 +146,7 @@ export async function readSubjectSummaries(
 export async function readSubjectSummaryObservation(
   deps: SummaryReaderDependencies,
   ids: readonly string[],
-  { languages = [] }: { languages?: readonly string[] } = {},
+  { languages = [], displayFallback = false }: { languages?: readonly string[]; displayFallback?: boolean } = {},
 ): Promise<SubjectSummaryObservation> {
   let sources: SummarySources = [];
   let batches: Batches = [];
@@ -163,6 +163,7 @@ export async function readSubjectSummaryObservation(
       covers = states;
     },
     boundedLabelLanguages(languages),
+    displayFallback,
   );
   return {
     summaries,
@@ -223,6 +224,7 @@ async function readSummaryBatch(
   languages: readonly string[],
   observe?: ObserveSummaries,
   labelLanguages?: readonly string[],
+  displayFallback = false,
 ): Promise<Map<string, SubjectSummary | null>> {
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
     throw new TypeError('Subject summaries require the server route key');
@@ -283,6 +285,7 @@ async function readSummaryBatch(
             'access' in deps,
             observe,
             labelLanguages,
+            displayFallback,
           );
         },
         deadline,
@@ -321,6 +324,7 @@ async function projectSummaries(
   releaseHome: boolean,
   observe?: ObserveSummaries,
   labelLanguages?: readonly string[],
+  displayFallback = false,
 ): Promise<Map<string, SubjectSummary | null>> {
   const deps = storage;
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
@@ -357,6 +361,7 @@ async function projectSummaries(
         ...summaryParameters,
         bounded_labels: labelLanguages !== undefined,
         label_languages: [...(labelLanguages ?? [])],
+        display_fallback: displayFallback,
       })) as Row[];
       for (const row of found) if (await storage.authorize(storage.client, row.id, batch)) rows.set(row.id, row);
     }

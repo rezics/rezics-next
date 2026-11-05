@@ -49,7 +49,7 @@ const recordValues = (value: unknown): readonly unknown[] =>
   typeof value === 'string' ? (JSON.parse(value) as unknown[]) : (value as readonly unknown[]);
 const uuid = 'f'.repeat(36);
 const int8 = '-9223372036854775808';
-const timestamp = '\u0001'.repeat(64);
+const timestamp = 'x'.repeat(64);
 const size = (value: unknown) =>
   Buffer.byteLength(JSON.stringify(value, (_, entry) => (typeof entry === 'bigint' ? entry.toString() : entry)));
 
@@ -479,12 +479,13 @@ function viewStatement(sql: string, operands: readonly unknown[]): Bound | undef
     // slots. Each selected candidate probes hidden/lifecycle/disclosure/retraction.
     const slots = 2 * count + selected.length;
     const candidates = 32 * slots;
-    const labels = (languages.length + 1) * count;
+    const fallback = values(summaries, 'display_fallback') === true ? count : 0;
+    const labels = (languages.length + 1) * count + fallback;
     return sqlWork(sql, operands, {
-      keys: count + candidates + labels,
-      rows: 5 * count + 6 * labels + 9 * slots + 12 * candidates,
-      points: count + labels + 3 * slots + 5 * candidates,
-      seeks: count + labels + 3 * slots + 5 * candidates,
+      keys: count + candidates + labels + fallback,
+      rows: 5 * count + 6 * labels + 9 * slots + 12 * candidates + 3 * fallback,
+      points: count + labels + 3 * slots + 5 * candidates + fallback,
+      seeks: count + labels + 3 * slots + 5 * candidates + fallback,
       output: count,
       // The projection contains unconstrained stored JSONB statement bodies and
       // term bodies. PostgreSQL's per-field maximum covers those fields only;
