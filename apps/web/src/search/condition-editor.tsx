@@ -1002,7 +1002,6 @@ function NodeEditor({
               {definition?.datatype === 'quantity' && range.type !== 'time' && (
                 <p className="text-sm text-muted-foreground">{m.search_quantity_range_help({}, options)}</p>
               )}
-              )}
               {definition?.datatype === 'time' && range.type !== 'time' && (
                 <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>
               )}
