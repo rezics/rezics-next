@@ -132,8 +132,14 @@ const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
 const oldLocale = getLocale();
 setLocale('en', { reload: false });
 function OwnerAdmissionProbe() {
-  const owner = useCollectionOwnerCurrent('rule-admission-probe');
-  return <output data-owner-admission={owner.admissionState}>{owner.subject}</output>;
+  const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', 'alpha', undefined]), true);
+  return (
+    <output
+      data-owner-admission={owner.admissionState}
+      data-owner-subject={owner.subject}
+      data-owner-current={String(owner.isCurrent())}
+    />
+  );
 }
 afterAll(async () => {
   setLocale(oldLocale, { reload: false });
@@ -303,6 +309,7 @@ describe('Complete saved rule and selected Publication owner authority preserves
       expect(h.host.querySelector('form')).toBeNull();
       await h.expose();
       expect(h.host.querySelector('output[data-owner-admission="available"]')).not.toBeNull();
+      expect(h.host.querySelector('output[data-owner-subject="alice"][data-owner-current="true"]')).not.toBeNull();
       const oldSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
       const oldReload = handler(h.button(m.library_collection_reload()), 'onClick');
       const oldLabels = handler(h.button(m.search_apply()), 'onClick');
