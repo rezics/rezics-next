@@ -58,6 +58,7 @@ import {
   type VndbCreditVocabularyReferences,
   type VndbCreditVocabularyRequirement,
 } from './showcase-vndb-credits.ts';
+import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
 import type { VndbCreditVocabularyReadFailure } from './vndb-staff-credits.ts';
 import {
   parseVndbCharacterProfileReferences,
@@ -2187,6 +2188,7 @@ export async function seedCrossMedia(
   const vndbCredits = providers.includes('vndb')
     ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences, extras?.readPublicSubject)
     : undefined;
+  const vndbCreditCandidateKeys = new Set<string>();
   const characterProfile = providers.includes('vndb') ? planVndbCharacterProfile(plan) : undefined;
   const characterProfileAdmission =
     characterProfile === undefined
@@ -2270,7 +2272,19 @@ export async function seedCrossMedia(
         ? {}
         : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
-    ...(extras?.onConversionOutput === undefined ? {} : { onConversionOutput: extras.onConversionOutput }),
+    ...((vndbCredits || extras?.onConversionOutput)
+      ? {
+          onConversionOutput(output) {
+            for (const proposal of output.proposals)
+              if (
+                proposal.op === 'propose' &&
+                proposal.source.converter_revision === vndbStaffCreditConverterRevision
+              )
+                vndbCreditCandidateKeys.add(proposal.key);
+            extras?.onConversionOutput?.(output);
+          },
+        }
+      : {}),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -2732,7 +2746,7 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       vndbCreditVocabularyUnavailable: vndbCredits?.vocabularyUnavailable ?? [],
-      ...(vndbCredits ? { vndbCreditCandidateKeys: [...vndbCredits.candidateKeys].sort() } : {}),
+      ...(vndbCredits ? { vndbCreditCandidateKeys: [...vndbCreditCandidateKeys].sort() } : {}),
       vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
       vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
