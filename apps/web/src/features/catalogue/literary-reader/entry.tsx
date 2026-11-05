@@ -228,7 +228,8 @@ export function LiteraryReaderEntry({
   const recoveryHref = selectionLost ? freshAddress : contextMismatch ? freshAddress : returnTo;
   const activeFor = (kind: 'members' | 'editions') => {
     if (selectionLost) return undefined;
-    if (requestedStream && definitions && literaryWindowKind(requestedStream, definitions) === kind) return requestedStream;
+    if (requestedStream && definitions && literaryWindowKind(requestedStream, definitions) === kind)
+      return requestedStream;
     return supplied.find((native) => definitions && literaryWindowKind(native, definitions) === kind);
   };
   const activeMembers = activeFor('members');
@@ -400,7 +401,9 @@ export function LiteraryReaderEntry({
           ) : (
             <div className="space-y-6">
               {(['members', 'editions'] as const).map((kind) => {
-                const candidates = supplied.filter((native) => definitions && literaryWindowKind(native, definitions) === kind);
+                const candidates = supplied.filter(
+                  (native) => definitions && literaryWindowKind(native, definitions) === kind,
+                );
                 const active = kind === 'members' ? activeMembers : activeEditions;
                 const heading = kind === 'members' ? m.literary_grain_members({}, o) : m.literary_grain_editions({}, o);
                 const streamView = kind === 'editions' ? 'editions' : 'contents';
@@ -416,7 +419,8 @@ export function LiteraryReaderEntry({
                           native,
                           rows: [],
                           withheld: false,
-                          state: direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const),
+                          state:
+                            direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const),
                         };
                   const stream = { node: native.node, property: native.property, direction: native.direction };
                   const current =
@@ -427,7 +431,8 @@ export function LiteraryReaderEntry({
                   const currentAddressStream =
                     view === 'overview'
                       ? native
-                      : requestedStream ?? (view === 'contents' ? activeMembers : view === 'editions' ? activeEditions : undefined);
+                      : (requestedStream ??
+                        (view === 'contents' ? activeMembers : view === 'editions' ? activeEditions : undefined));
                   const currentPage: import('../literary-visit/navigation').LiteraryPreviousAddress = {
                     view: view === 'overview' ? 'overview' : view === 'editions' ? 'editions' : 'contents',
                     ...(currentAddressStream
@@ -544,7 +549,12 @@ export function LiteraryReaderEntry({
                               active?.node === native.node &&
                               active.property === native.property &&
                               active.direction === native.direction;
-                            const href = addressFor(native, routeFor(native), current, current ? currentFocus : undefined);
+                            const href = addressFor(
+                              native,
+                              routeFor(native),
+                              current,
+                              current ? currentFocus : undefined,
+                            );
                             const state = windowState(native);
                             return (
                               <li

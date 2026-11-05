@@ -17,7 +17,15 @@ test('all admitted membership and Edition streams stay discoverable while one ex
   );
   const window = new Window({ url: 'https://site.test/en/subjects/series/title/contents' });
   const globals: Record<string, unknown> = { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true };
-  for (const key of ['navigator', 'HTMLElement', 'Element', 'Node', 'DocumentFragment', 'MutationObserver', 'ResizeObserver'])
+  for (const key of [
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+  ])
     globals[key] = Reflect.get(window, key);
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -91,10 +99,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
   const base = {
     ...memberInput,
     windows: [...memberWindows, ...editionWindows],
-    directions: [
-      ...memberInput.directions!,
-      literaryDirection('schema:exampleOfWork', 'forward'),
-    ],
+    directions: [...memberInput.directions!, literaryDirection('schema:exampleOfWork', 'forward')],
   };
   let input: ReturnType<typeof literaryGrainExample> & {
     continuation?: { node: string; cursor: string };
@@ -117,12 +122,9 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     );
   try {
     await render();
-    expect([...host.querySelectorAll<HTMLElement>('[data-stream-node]')].map((node) => node.dataset.streamNode)).toEqual([
-      'members-first',
-      'members-second',
-      'edition-inverse',
-      'edition-forward',
-    ]);
+    expect(
+      [...host.querySelectorAll<HTMLElement>('[data-stream-node]')].map((node) => node.dataset.streamNode),
+    ).toEqual(['members-first', 'members-second', 'edition-inverse', 'edition-forward']);
     expect(
       [...host.querySelectorAll<HTMLElement>('[data-stream-node]')].map((node) => {
         const url = new URL(node.querySelector('a')!.href);
@@ -156,10 +158,9 @@ test('all admitted membership and Edition streams stay discoverable while one ex
       continuation: { node: 'members-second', cursor: 'current-member-cursor' },
     };
     await render();
-    expect([...host.querySelectorAll<HTMLElement>('[data-slot="literary-window"]')].map((node) => node.dataset.node)).toEqual([
-      'members-second',
-      'edition-inverse',
-    ]);
+    expect(
+      [...host.querySelectorAll<HTMLElement>('[data-slot="literary-window"]')].map((node) => node.dataset.node),
+    ).toEqual(['members-second', 'edition-inverse']);
     const selectedRows = host.querySelectorAll<HTMLElement>(
       '[data-slot="literary-window"][data-node="members-second"] > ul > li[data-statement-id]',
     );
@@ -173,7 +174,9 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     expect(chosenUrl.searchParams.get('streamProperty')).toBe('wdt:P179');
     expect(chosenUrl.searchParams.get('streamDirection')).toBe('inverse');
     expect(chosenUrl.searchParams.get('cursor')).toBe('current-member-cursor');
-    const otherStream = new URL(host.querySelector<HTMLAnchorElement>('[data-stream-node="edition-inverse"] > a')!.href);
+    const otherStream = new URL(
+      host.querySelector<HTMLAnchorElement>('[data-stream-node="edition-inverse"] > a')!.href,
+    );
     expect(otherStream.searchParams.has('cursor')).toBe(false);
 
     const next = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => {

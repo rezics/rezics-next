@@ -84,14 +84,17 @@ export function listView(property: unknown): View | undefined {
 }
 
 /** Relation rows already disclosed by this composed read. No target hydration or follow-up read is implied. */
-export function profileRelationWindows(page: {
-  subject: string | null;
-  context?: SelectedContext | undefined;
-  continuation?: PageContinuation | undefined;
-  account?: { id: string; handle: string } | undefined;
-  document: unknown;
-  reads: Record<string, Read>;
-}, options: { includeAliases?: boolean } = {}): ProfileRelationWindow[] {
+export function profileRelationWindows(
+  page: {
+    subject: string | null;
+    context?: SelectedContext | undefined;
+    continuation?: PageContinuation | undefined;
+    account?: { id: string; handle: string } | undefined;
+    document: unknown;
+    reads: Record<string, Read>;
+  },
+  options: { includeAliases?: boolean } = {},
+): ProfileRelationWindow[] {
   const document = page.document as CompositionDocument;
   const plan = planReads(platformRegistry, document, {
     subject: page.subject,
@@ -116,7 +119,8 @@ export function profileRelationWindows(page: {
     const result = page.reads[key];
     if (!planned || (planned.kind !== 'links' && planned.kind !== 'relations')) continue;
     // Identical native reads may share a plan key. A cursor supplied for one node belongs only to that node.
-    const borrowedContinuation = page.continuation !== undefined && nodeId !== page.continuation.node && key === continuationRead;
+    const borrowedContinuation =
+      page.continuation !== undefined && nodeId !== page.continuation.node && key === continuationRead;
     const body = !borrowedContinuation && result?.status === 200 && isRecord(result.body) ? result.body : undefined;
     const direction = planned.kind === 'links' ? 'inverse' : planned.kind === 'relations' ? 'forward' : undefined;
     const rows = body ? (planned.kind === 'links' ? body.links : body.relations) : undefined;

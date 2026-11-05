@@ -36,7 +36,9 @@ function validLiteraryHistory(value: string): boolean {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
         const item = entry as Record<string, unknown>;
         return (
-          Object.keys(item).every((key) => ['view', 'node', 'cursor', 'streamProperty', 'streamDirection', 'focus'].includes(key)) &&
+          Object.keys(item).every((key) =>
+            ['view', 'node', 'cursor', 'streamProperty', 'streamDirection', 'focus'].includes(key),
+          ) &&
           (item.view === 'overview' || item.view === 'contents' || item.view === 'editions') &&
           (item.node === undefined || (typeof item.node === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(item.node))) &&
           (item.cursor === undefined ||
@@ -55,7 +57,9 @@ function validLiteraryHistory(value: string): boolean {
           (item.view !== 'overview' ||
             (item.cursor === undefined &&
               ((item.node === undefined && item.streamProperty === undefined && item.streamDirection === undefined) ||
-                (item.node !== undefined && item.streamProperty !== undefined && item.streamDirection !== undefined)))) &&
+                (item.node !== undefined &&
+                  item.streamProperty !== undefined &&
+                  item.streamDirection !== undefined)))) &&
           (item.focus === undefined ||
             (typeof item.focus === 'string' && /^[A-Za-z0-9:._~-]{1,256}$/u.test(item.focus)))
         );
@@ -794,9 +798,16 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (history !== null && (url.hash !== '#literary-reader' || !validLiteraryHistory(history))) ||
       (focus !== null && (url.hash !== '#literary-reader' || !/^[A-Za-z0-9:._~-]{1,256}$/u.test(focus))) ||
       (streamProperty !== null &&
-        (!(subject?.[2] || literaryOverviewStream) || node === null || !streamProperty.trim() || streamProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+        (!(subject?.[2] || literaryOverviewStream) ||
+          node === null ||
+          !streamProperty.trim() ||
+          streamProperty.length > 256 ||
+          /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
       (streamDirection !== null &&
-        (!(subject?.[2] || literaryOverviewStream) || node === null || streamProperty === null || !['forward', 'inverse'].includes(streamDirection))) ||
+        (!(subject?.[2] || literaryOverviewStream) ||
+          node === null ||
+          streamProperty === null ||
+          !['forward', 'inverse'].includes(streamDirection))) ||
       (streamProperty !== null && streamDirection === null) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||

@@ -42,14 +42,16 @@ test('destination return preserves the selected stream row address and never bor
   expect(address.searchParams.get('cursor')).toBe('native opaque cursor');
   expect(address.searchParams.get('focus')).toBe('members:assertion');
 
-  const history = [{
-    view: 'contents' as const,
-    node: selected.node,
-    cursor: 'older opaque cursor',
-    streamProperty: selected.property,
-    streamDirection: selected.direction,
-    focus: 'members:assertion',
-  }];
+  const history = [
+    {
+      view: 'contents' as const,
+      node: selected.node,
+      cursor: 'older opaque cursor',
+      streamProperty: selected.property,
+      streamDirection: selected.direction,
+      focus: 'members:assertion',
+    },
+  ];
   const withHistory = literaryAddress({
     id: literaryIds.series,
     label: 'Harbour stories',
@@ -61,7 +63,9 @@ test('destination return preserves the selected stream row address and never bor
   expect(subjectVisitReturn(withHistory, 'ja')).toBe(withHistory);
   expect(literaryVisitLocation(new URL(withHistory, 'https://site.test').search).previous).toEqual(history);
   expect(
-    literaryVisitLocation(`?history=${encodeURIComponent(JSON.stringify([{ view: 'contents', node: selected.node, streamProperty: selected.property }]))}`).invalid,
+    literaryVisitLocation(
+      `?history=${encodeURIComponent(JSON.stringify([{ view: 'contents', node: selected.node, streamProperty: selected.property }]))}`,
+    ).invalid,
   ).toBe(true);
 
   const changed = new URL(
@@ -78,10 +82,7 @@ test('destination return preserves the selected stream row address and never bor
   expect(changed.searchParams.get('node')).toBe('members-other');
   expect(changed.searchParams.has('cursor')).toBe(false);
   expect(
-    subjectVisitReturn(
-      `/ja/subjects/${literaryIds.series}/title/contents?cursor=unpaired#literary-reader`,
-      'ja',
-    ),
+    subjectVisitReturn(`/ja/subjects/${literaryIds.series}/title/contents?cursor=unpaired#literary-reader`, 'ja'),
   ).toBeUndefined();
   expect(
     subjectVisitReturn(
@@ -93,13 +94,15 @@ test('destination return preserves the selected stream row address and never bor
 
 test('overview preview destinations retain their selected native stream and bounded history', () => {
   const stream = { node: 'preview-members', property: 'wdt:P179', direction: 'inverse' as const };
-  const history = [{
-    view: 'overview' as const,
-    node: stream.node,
-    streamProperty: stream.property,
-    streamDirection: stream.direction,
-    focus: 'members:assertion',
-  }];
+  const history = [
+    {
+      view: 'overview' as const,
+      node: stream.node,
+      streamProperty: stream.property,
+      streamDirection: stream.direction,
+      focus: 'members:assertion',
+    },
+  ];
   const overview = literaryAddress({
     id: literaryIds.series,
     label: 'Harbour stories',
@@ -130,8 +133,14 @@ test('aliased native reads keep a continuation attached only to its supplied nod
   const document: CompositionDocument = {
     format: 'rezics.composition.v1',
     content: [
-      { type: 'SubjectList', props: { id: 'members-primary', title: 'Members', property: 'wdt:P179', limit: 12, paged: true } },
-      { type: 'SubjectList', props: { id: 'members-alias', title: 'Other members', property: 'wdt:P179', limit: 12, paged: true } },
+      {
+        type: 'SubjectList',
+        props: { id: 'members-primary', title: 'Members', property: 'wdt:P179', limit: 12, paged: true },
+      },
+      {
+        type: 'SubjectList',
+        props: { id: 'members-alias', title: 'Other members', property: 'wdt:P179', limit: 12, paged: true },
+      },
     ],
   };
   const shared = planReads(platformRegistry, document, {
@@ -146,11 +155,14 @@ test('aliased native reads keep a continuation attached only to its supplied nod
     next: 'next-native-cursor',
     freshness: { caught_up: true },
   };
-  const uncontinued = profileRelationWindows({
-    subject: literaryIds.series,
-    document,
-    reads: { [sharedKey]: { status: 200, body } },
-  }, { includeAliases: true });
+  const uncontinued = profileRelationWindows(
+    {
+      subject: literaryIds.series,
+      document,
+      reads: { [sharedKey]: { status: 200, body } },
+    },
+    { includeAliases: true },
+  );
   expect(uncontinued.map(({ node }) => node)).toEqual(['members-primary', 'members-alias']);
   expect(uncontinued.map(({ rows }) => rows)).toEqual([body.links, body.links]);
 
@@ -163,12 +175,15 @@ test('aliased native reads keep a continuation attached only to its supplied nod
   const primaryKey = continued.nodes['members-primary']!;
   const aliasKey = continued.nodes['members-alias']!;
   expect(aliasKey).not.toBe(primaryKey);
-  const cursorOwned = profileRelationWindows({
-    subject: literaryIds.series,
-    continuation,
-    document,
-    reads: { [primaryKey]: { status: 200, body } },
-  }, { includeAliases: true });
+  const cursorOwned = profileRelationWindows(
+    {
+      subject: literaryIds.series,
+      continuation,
+      document,
+      reads: { [primaryKey]: { status: 200, body } },
+    },
+    { includeAliases: true },
+  );
   expect(cursorOwned.map(({ node }) => node)).toEqual(['members-primary', 'members-alias']);
   expect(cursorOwned[0]).toMatchObject({ node: 'members-primary', status: 200, next: 'next-native-cursor' });
   expect(cursorOwned[1]).toMatchObject({ node: 'members-alias', rows: [], valid: false });
