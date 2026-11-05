@@ -7,6 +7,7 @@ import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import { ViewHeading } from '../view-heading';
+import { graphPublicIntentFits, graphPublicVisitSearch, type GraphPublicVisit } from './public-visit';
 import {
   GRAPH_LIMIT,
   type GraphBrowserTransport,
@@ -359,6 +360,7 @@ export function graphBrowserReturnHref(
   path: string,
   query: GraphSuccess['query'],
   selection?: GraphSelection | undefined,
+  visit?: GraphPublicVisit | undefined,
 ) {
   if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\') || /[?#\\]/.test(path)) return undefined;
   const params = new URLSearchParams({
@@ -373,7 +375,9 @@ export function graphBrowserReturnHref(
     params.set('to', selection.to);
     params.set('edgeProperty', selection.property);
   }
-  return `${path}?${params.toString()}`;
+  for (const [key, value] of Object.entries(graphPublicVisitSearch(visit))) params.set(key, value);
+  const href = `${path}?${params.toString()}`;
+  return graphPublicIntentFits(href) ? href : undefined;
 }
 
 function appendReturnTo(href: string, returnTo: string | undefined) {
@@ -392,6 +396,8 @@ export function GraphBrowserPage({
   from,
   to,
   edgeProperty,
+  visit,
+  publicReturnHref,
   transport,
   initial,
   reader,
@@ -408,6 +414,8 @@ export function GraphBrowserPage({
   from?: string | undefined;
   to?: string | undefined;
   edgeProperty?: string | undefined;
+  visit?: GraphPublicVisit | undefined;
+  publicReturnHref?: string | undefined;
   transport: GraphBrowserTransport;
   initial?: GraphRead | undefined;
   reader?: string | undefined;
@@ -439,6 +447,7 @@ export function GraphBrowserPage({
     token: initial?.ok ? initial.session : undefined,
   });
   const [current, setCurrent] = useState(() => initialPageState(source, route, initial));
+  const [addressLimit, setAddressLimit] = useState(false);
   const currentRef = useRef(current);
   function publish(next: GraphPageState) {
     currentRef.current = next;
@@ -570,7 +579,7 @@ export function GraphBrowserPage({
   const origin = subjectHref({ id, label: title.text }, locale);
   const returnTo =
     active?.status === 'success' && read && graphPath
-      ? graphBrowserReturnHref(graphPath, read.query, selection)
+      ? graphBrowserReturnHref(graphPath, read.query, selection, visit)
       : undefined;
   const error = active?.status === 'failure' ? active.failure : undefined;
   const failed =
@@ -589,6 +598,27 @@ export function GraphBrowserPage({
     const routeTarget = copyRoute(target);
     const targetKey = routeKey(routeTarget);
     const shouldNavigate = !!writeHistory && !!onNavigate && targetKey !== propsRouteKey;
+    if (shouldNavigate && graphPath) {
+      const nextAddress = graphBrowserReturnHref(
+        graphPath,
+        {
+          property: (routeTarget.property ?? '').split(',').filter(Boolean),
+          direction:
+            routeTarget.direction === 'out' || routeTarget.direction === 'in'
+              ? routeTarget.direction
+              : 'both',
+          depth: routeTarget.depth === 2 ? 2 : 1,
+        },
+        requestedSelection(routeTarget),
+        visit,
+      );
+      if (!nextAddress) {
+        setAddressLimit(true);
+        focusIntentRef.current = null;
+        return;
+      }
+    }
+    setAddressLimit(false);
     focusIntentRef.current =
       kind === 'selection' || kind === 'expansion'
         ? requestedSelection(routeTarget)
@@ -646,6 +676,14 @@ export function GraphBrowserPage({
       aria-busy={status === 'pending'}
     >
       <ViewHeading label={m.graph_explore_title({}, o)} headingClassName="font-sans" />
+      <p role="status" className="max-w-prose text-sm text-muted-foreground">
+        {m.graph_public_scope({}, o)}
+      </p>
+      {addressLimit && (
+        <p role="status" className="max-w-prose text-sm text-muted-foreground">
+          {m.graph_public_address_limit({}, o)}
+        </p>
+      )}
       <p className="max-w-prose text-muted-foreground">{m.graph_explore_intro({}, o)}</p>
       {status === 'pending' && (
         <p ref={statusRef} role="status" tabIndex={-1}>
@@ -852,10 +890,17 @@ export function GraphBrowserPage({
               </div>
             </section>
           )}
-          <a className={linkClass} href={origin.href}>
-            {m.graph_explore_return({}, o)}
-          </a>
+          {!publicReturnHref && (
+            <a className={linkClass} href={origin.href}>
+              {m.graph_explore_return({}, o)}
+            </a>
+          )}
         </div>
+      )}
+      {publicReturnHref && (
+        <a className={linkClass} href={publicReturnHref}>
+          {m.graph_public_return({}, o)}
+        </a>
       )}
     </article>
   );

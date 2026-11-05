@@ -6,6 +6,7 @@ import { m } from '../../../paraglide/messages.js';
 import { readSubjectGraphBrowser } from './actions';
 import { GraphBrowserPage } from './view';
 import type { GraphBrowserRouteState, GraphSelection, GraphTruncation } from './index';
+import type { GraphPublicVisit } from './public-visit';
 
 export const GraphBrowserSession = candidateSession(GraphBrowserSessionLive);
 
@@ -20,6 +21,8 @@ function GraphBrowserSessionLive({
   from,
   to,
   edgeProperty,
+  visit,
+  publicReturnHref,
   graphPath,
   onNavigate,
 }: {
@@ -33,6 +36,8 @@ function GraphBrowserSessionLive({
   from?: GraphBrowserRouteState['from'];
   to?: GraphBrowserRouteState['to'];
   edgeProperty?: GraphBrowserRouteState['edgeProperty'];
+  visit?: GraphPublicVisit | undefined;
+  publicReturnHref?: string | undefined;
   graphPath: string;
   onNavigate: (state: GraphBrowserRouteState) => void | Promise<unknown>;
 }) {
@@ -68,6 +73,8 @@ function GraphBrowserSessionLive({
       from={from}
       to={to}
       edgeProperty={edgeProperty}
+      visit={visit}
+      publicReturnHref={publicReturnHref}
       graphPath={graphPath}
       onNavigate={onNavigate}
       transport={transport}
