@@ -152,6 +152,7 @@ async function mounted(
       unlabelled: 'Unlabelled',
       spoilerShow: 'Reveal',
       relations: {},
+      relationNodes: [],
       sections: {},
       ...(context ? { context: { id: context, population: { kind: 'global' } } } : {}),
     } as any;

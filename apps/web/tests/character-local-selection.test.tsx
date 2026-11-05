@@ -158,7 +158,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await choose(m.character_choose_existing(), 'second-result');
     await click(m.thread_authoring_leave(), screen);
     await waitFor(() => expect(loads.at(-1)?.id).toBe(characterProfileId));
-    const loadCount = loads.length;
+    let loadCount = loads.length;
     await act(async () => {
       oldPicker([{ id: 'retired-choice' }]);
       oldScalar({ target: { value: 'https://example.org/retired-choice' } });
@@ -212,7 +212,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     const reload = canvas.getByRole('button', { name: m.correction_reload() });
     const pointerTarget = window.document.createElement('button');
     host.append(pointerTarget);
-    let loadCount = loads.length;
+    loadCount = loads.length;
     deferNextLoad = true;
     await act(async () => {
       reload.focus();

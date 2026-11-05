@@ -191,7 +191,9 @@ test('Character identity and credit editor uses actual released metadata native 
     key: crypto.randomUUID(),
   });
   expect(proposed.ok).toBe(true);
-  const creditWrite = fixture.work.calls.find((call) => call.method === 'POST');
+  const creditWrite = fixture.work.calls.find(
+    (call) => call.method === 'POST' && call.path.endsWith('/candidates'),
+  );
   expect(creditWrite?.path).toBe(`/v1/subjects/${fixture.work.id}/candidates`);
   expect(creditWrite?.body).toMatchObject({
     statement: {
