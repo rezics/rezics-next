@@ -220,8 +220,6 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   let stopHeartbeat: (() => void) | undefined;
   let stateTimer: ReturnType<typeof setInterval> | undefined;
   let recoveryTimer: ReturnType<typeof setInterval> | undefined;
-  // SIGTERM closes the socket; this handle keeps the process alive through registry and app-server cleanup.
-  const keepAlive = setInterval(() => {}, 1 << 30);
   const recoverOrphans = () => {
     if (!runtime.recoverOrphans) return Promise.resolve();
     // A sweep may wait for adopted workers. Let later timer ticks start their own sweep so
@@ -364,6 +362,5 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     rmSync(runtime.managerSocket, { force: true });
     if (registrySafe) rmSync(registryPath, { force: true });
     lease.release();
-    clearInterval(keepAlive);
   }
 }
