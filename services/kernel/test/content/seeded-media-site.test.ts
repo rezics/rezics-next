@@ -22,7 +22,7 @@ async function freePort(): Promise<number> {
 test('supported local stack starts the real site and serves media through native admission', async () => {
   const database = process.env.DATABASE_URL;
   if (!database) throw new Error('DATABASE_URL must name the owning check database');
-  const [web, issuer, native, kernel] = await Promise.all(Array.from({ length: 4 }, freePort));
+  const [web, issuer, native, kernel] = await Promise.all([freePort(), freePort(), freePort(), freePort()]);
   const origin = (port: number) => `http://127.0.0.1:${port}`;
   const env = {
     ...process.env,
