@@ -518,6 +518,7 @@ Decision: explicit non-Global release visits offer other release companions in t
 Sources and Changes visits are unavailable until those destination owners expose a compatible Context selector.
 Their Global visits use the existing Subject `via` return facility. File and Changes routes expose that validated
 single return link without changing their reader or command controllers. A missing target label is unavailable.
+Decision: the installed release entry and editorial menu share one address description; an observed Subject Context stays explicit in the release URL, and one same-locale, same-Subject public origin is attached through validated `via` only when its Context matches. Menu collection adds no reads or selection identity.
 Release relations retain their released property and direction; qualified duplicate occurrences remain separate.
 Work binding and exact association inspection include their supplied qualifier and reference parts and historical
 release pin. File associations inspect that current row locally and restore its evidence control without reading the
