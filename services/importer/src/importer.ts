@@ -417,16 +417,17 @@ export class Importer {
     const registered = staged.projection.sourceClassification;
     if (produced !== undefined && !isDeepStrictEqual(produced, registered))
       throw new Error('Persisted source classification differs from its registered projection');
-    const converted = produced === undefined && registered !== undefined
-      ? { ...result, sourceClassification: registered }
-      : result;
+    const converted =
+      produced === undefined && registered !== undefined ? { ...result, sourceClassification: registered } : result;
     // A sealed generation owns its observation date and body even when today's
     // caller has admitted a different archive or no longer supplies provenance.
     const { sourceStatistic: _write, sourceStatisticClear: _clear, ...semantic } = converted;
     return {
       ...semantic,
       ...(staged.projection.sourceStatistic ? { sourceStatistic: staged.projection.sourceStatistic } : {}),
-      ...(staged.projection.sourceStatisticClear ? { sourceStatisticClear: staged.projection.sourceStatisticClear } : {}),
+      ...(staged.projection.sourceStatisticClear
+        ? { sourceStatisticClear: staged.projection.sourceStatisticClear }
+        : {}),
     };
   }
 
@@ -1908,7 +1909,11 @@ export class Importer {
     const acknowledged = recordState.acknowledged;
     const previousProjection = recordState.acknowledgedProjection;
     const sameAdmission = isDeepStrictEqual(
-      [previousProjection?.sourceVocabulary, previousProjection?.sourceStatistic, previousProjection?.sourceStatisticClear],
+      [
+        previousProjection?.sourceVocabulary,
+        previousProjection?.sourceStatistic,
+        previousProjection?.sourceStatisticClear,
+      ],
       [staged.projection.sourceVocabulary, staged.projection.sourceStatistic, staged.projection.sourceStatisticClear],
     );
     const unsubmittedMedia = this.session.bindings.hasUnsubmittedMedia(owner, row.digest);
@@ -2169,7 +2174,11 @@ export class Importer {
         // replacing any acknowledged semantic candidate or its immutable journal.
         if (!store.key(run.source, row.recordKey, run).resolved) store.acknowledgeStatisticRefresh(run, row.recordKey);
       } else if (
-        (this.options.vocabularyAdmission || staged.projection.sourceVocabulary || this.options.identifierLookup || ownReferences || unavailableCover) &&
+        (this.options.vocabularyAdmission ||
+          staged.projection.sourceVocabulary ||
+          this.options.identifierLookup ||
+          ownReferences ||
+          unavailableCover) &&
         conversion &&
         retainedCandidates.size === candidates.length &&
         conversion.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))

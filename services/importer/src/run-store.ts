@@ -13,7 +13,13 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { checkBatch, checkResult } from './accepted-checks.ts';
-import type { ImportBatchRequest, ImportBatchResult, ImportSourceRecord, ImportSourceStatistic, ImportSourceStatisticClear } from './import-contract.ts';
+import type {
+  ImportBatchRequest,
+  ImportBatchResult,
+  ImportSourceRecord,
+  ImportSourceStatistic,
+  ImportSourceStatisticClear,
+} from './import-contract.ts';
 import {
   SOURCE_OBSERVATION_PAGE_MAX,
   type AggregateOperationStatus,
@@ -1285,9 +1291,13 @@ export class RunStore<Projection = BatchStatement[]> {
         sourceProjection.sourceVocabulary === undefined
           ? ''
           : `,"sourceVocabulary":${boundedJson(sourceProjection.sourceVocabulary, MAX_DUMP_RECORD_BYTES)}`;
-      const statistics = ['sourceStatistic', 'sourceStatisticClear'].map((field) =>
-        sourceProjection[field] === undefined ? '' : `,${JSON.stringify(field)}:${boundedJson(sourceProjection[field], 8192)}`,
-      ).join('');
+      const statistics = ['sourceStatistic', 'sourceStatisticClear']
+        .map((field) =>
+          sourceProjection[field] === undefined
+            ? ''
+            : `,${JSON.stringify(field)}:${boundedJson(sourceProjection[field], 8192)}`,
+        )
+        .join('');
       projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}${sourceVocabulary}${statistics}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();
@@ -1469,9 +1479,18 @@ export class RunStore<Projection = BatchStatement[]> {
    * outcome or an exact current candidate lookup can establish no owned effects.
    * This is neither a receipt nor fence evidence; every refresh must still check all tuple fences.
    */
-  acknowledgeNoEffects(run: Run, key: string, input: { reason: 'converter-ignored' | 'no-owned-candidates' | 'retained-candidates' }): void {
+  acknowledgeNoEffects(
+    run: Run,
+    key: string,
+    input: { reason: 'converter-ignored' | 'no-owned-candidates' | 'retained-candidates' },
+  ): void {
     exact(input, ['reason']);
-    if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates' && input.reason !== 'retained-candidates') fail();
+    if (
+      input.reason !== 'converter-ignored' &&
+      input.reason !== 'no-owned-candidates' &&
+      input.reason !== 'retained-candidates'
+    )
+      fail();
     this.acknowledgeEmpty(run, key, false);
   }
   /** Trusted coordinator proof: a confirmed VNDB statistic write/removal or source-specific omission, and exhaustive
