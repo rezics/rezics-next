@@ -9,7 +9,14 @@ import { mintReadTime, type CommandTransaction } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { ProblemError } from '../http/problem.ts';
-import { RatingQuestionNotFoundError, RatingQuestionRetiredError, VoteReviewStaleError, VoteReviewUnavailableError, STANDARD_QUESTION_ID, VOTE_SCOPE } from '../rating/votes.ts';
+import {
+  RatingQuestionNotFoundError,
+  RatingQuestionRetiredError,
+  VoteReviewStaleError,
+  VoteReviewUnavailableError,
+  STANDARD_QUESTION_ID,
+  VOTE_SCOPE,
+} from '../rating/votes.ts';
 import type { VoteReviewGuard, VoteReviewCurrentVote, createVoteCommands } from '../rating/votes.ts';
 import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -61,7 +68,10 @@ import {
   type BangumiGuard,
 } from './list-import-bangumi-model.ts';
 
-type NativeVotes = Pick<ReturnType<typeof createVoteCommands>, 'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome'>;
+type NativeVotes = Pick<
+  ReturnType<typeof createVoteCommands>,
+  'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome'
+>;
 type Dependencies = {
   pool: Pool;
   access: Access;
@@ -1209,31 +1219,48 @@ export function createBangumiImport(deps: Dependencies) {
         };
       } else {
         if (signal.aborted || Date.now() >= deadline) break;
-        await change(actor, 'score_start', randomUUID(), { id, ordinal, reviewToken: choice.reviewToken }, async (tx, a) => {
-          const h = await header(tx, a, id, true);
-          const locked = await row(tx, a, id, ordinal, true);
-          if (h.cancelled || locked.review?.token !== choice.reviewToken || !choiceMatches(locked.choice, choice))
-            throw new ProblemError('conflict');
-          // Even a retry of a definitive result becomes unsettled before another delivery attempt.
-          await tx.query('UPDATE library.bangumi_upload_row SET outcome=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4', [...args(a, id), ordinal]);
-          return { started: true };
-        });
+        await change(
+          actor,
+          'score_start',
+          randomUUID(),
+          { id, ordinal, reviewToken: choice.reviewToken },
+          async (tx, a) => {
+            const h = await header(tx, a, id, true);
+            const locked = await row(tx, a, id, ordinal, true);
+            if (h.cancelled || locked.review?.token !== choice.reviewToken || !choiceMatches(locked.choice, choice))
+              throw new ProblemError('conflict');
+            // Even a retry of a definitive result becomes unsettled before another delivery attempt.
+            await tx.query(
+              'UPDATE library.bangumi_upload_row SET outcome=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4',
+              [...args(a, id), ordinal],
+            );
+            return { started: true };
+          },
+        );
         try {
           // The producer repeats current authorization/exposure before exact receipt replay,
           // and atomically checks the complete native witness on a fresh effect attempt.
-          await votes.putVoteOutcome(actor, {
-            questionId: plan.question!.id,
-            targetId: plan.target.subjectId,
-            units: plan.units,
-            guard: plan.nativeGuard,
-          }, plan.commandKey);
+          await votes.putVoteOutcome(
+            actor,
+            {
+              questionId: plan.question!.id,
+              targetId: plan.target.subjectId,
+              units: plan.units,
+              guard: plan.nativeGuard,
+            },
+            plan.commandKey,
+          );
           outcome.score = { action: plan.action, status: 'applied' };
         } catch (error) {
           if (error instanceof VoteReviewStaleError) {
             outcome.score = { action: plan.action, status: 'stale', reason: error.reason };
           } else if (error instanceof VoteReviewUnavailableError) {
             outcome.score = { action: plan.action, status: 'unavailable', reason: error.reason };
-          } else if (error instanceof RatingQuestionNotFoundError || error instanceof LibraryNotFoundError || error instanceof RatingQuestionRetiredError) {
+          } else if (
+            error instanceof RatingQuestionNotFoundError ||
+            error instanceof LibraryNotFoundError ||
+            error instanceof RatingQuestionRetiredError
+          ) {
             outcome.score = { action: plan.action, status: 'stale', reason: 'native_target_or_question_unavailable' };
           } else {
             // An unknown delivery retains the original choice and key without an acknowledgment.

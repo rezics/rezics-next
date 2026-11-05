@@ -57,21 +57,23 @@ export type BangumiScoreReview = {
     question: BangumiScoreQuestion | null;
     currentVote: BangumiScoreCurrentVote | null;
     selection: BangumiScoreSelection;
-    admission: {
-      status: 'unavailable';
-      reason:
-        | 'native_vote_scope_required'
-        | 'target_not_selected'
-        | 'question_unavailable'
-        | 'question_revision_unsupported'
-        | 'question_scale_unsupported'
-        | 'conditional_admission_unavailable'
-        | 'question_observation_unavailable'
-        | 'identity_pending'
-        | 'identity_observation_unavailable'
-        | 'own_vote_observation_unavailable'
-        | 'atomic_guard_unavailable';
-    } | { status: 'reviewed'; reason: 'native_review_observed' };
+    admission:
+      | {
+          status: 'unavailable';
+          reason:
+            | 'native_vote_scope_required'
+            | 'target_not_selected'
+            | 'question_unavailable'
+            | 'question_revision_unsupported'
+            | 'question_scale_unsupported'
+            | 'conditional_admission_unavailable'
+            | 'question_observation_unavailable'
+            | 'identity_pending'
+            | 'identity_observation_unavailable'
+            | 'own_vote_observation_unavailable'
+            | 'atomic_guard_unavailable';
+        }
+      | { status: 'reviewed'; reason: 'native_review_observed' };
   };
 };
 export type BangumiReview = {
