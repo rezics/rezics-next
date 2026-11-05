@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import * as contract from '@rezics/auth-contract';
 import { authPost } from './api';
+import { privateAuthRead } from './private-auth-read';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
 import { membershipReservationMatches, sameMembershipCommand } from './membership-recovery';
 
@@ -260,9 +261,13 @@ export async function loadMembershipPage(
   organizationId: string,
   accountId: string,
   cursor?: string,
+  signal?: AbortSignal,
 ): Promise<MembershipPage> {
   try {
-    return await readPage({ data: { organizationId, accountId, ...(cursor ? { cursor } : {}) } });
+    return await privateAuthRead(
+      (readSignal) => readPage({ data: { organizationId, accountId, ...(cursor ? { cursor } : {}) }, signal: readSignal }),
+      signal,
+    );
   } catch {
     return { kind: 'unavailable' };
   }

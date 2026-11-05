@@ -723,6 +723,15 @@ target Previous is unavailable and First page remains deliberate. No cursors or 
 return history. Private retirement clears rows, disclosure and cursor history synchronously; navigation uses the
 existing lifetime to reject delayed replies. Disclosure is local and adds zero reads.
 
+Decision: the exported browser membership read uses `privateAuthRead` with one five-second allowance through
+BFF completion, forwarding its effective signal through the installed server-function options. An already-aborted
+caller makes zero calls; timeout, cancellation and transport rejection become the existing unavailable result.
+Native session and page service allowances remain five and eight seconds. The route aborts local read ownership
+on lifetime replacement, private retirement and unmount, retaining generation checks for transports that ignore
+abort. Timeout retains the exact organization, initiating account and failed opaque target for deliberate Retry;
+only an accepted replacement commits cursor history. This adds no requests, commands or automatic retry and
+makes no claim that a dispatched command was cancelled.
+
 The browser sends only the organization and cursor to Auth. Auth binds the fresh human management proof to the
 dedicated Kernel page source. The roster and its action advice are observations only. Before a selected change, the
 existing exact member read still supplies reservation/version metadata, then native approval, command authorization,

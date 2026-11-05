@@ -174,6 +174,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const [recoveryStatus, setRecoveryStatus] = useState('review');
   const roster = useRef(new MembershipRosterNavigation());
   const lifetime = useRef(0);
+  const pageRead = useRef(new AbortController());
   const pendingDeparture = useRef<{ promise: Promise<boolean>; resolve: (leave: boolean) => void } | null>(null);
   const work = useRef(false);
   const lock = useRef(false);
@@ -189,6 +190,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     renewActivity();
     return () => {
       lifetime.current++;
+      pageRead.current.abort();
       roster.current.clear();
       lock.current = false;
       pendingDeparture.current?.resolve(false);
@@ -225,6 +227,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
 
   work.current = isUnresolvedMembership(command, observed) || (!revoked && !observed && (!!command || selecting));
   function renewActivity() {
+    pageRead.current.abort();
+    pageRead.current = new AbortController();
     const version = ++lifetime.current;
     activity.current = () => version === lifetime.current;
     lock.current = false;
@@ -243,6 +247,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             : phase.current;
     // Close every old continuation before synchronously removing private DOM.
     lifetime.current++;
+    pageRead.current.abort();
     if (!keepNavigation) roster.current.clear();
     activity.current = () => false;
     lock.current = false;
@@ -389,6 +394,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   }
   async function reload(request = roster.current.request('retry')) {
     const isActive = activity.current;
+    const readSignal = pageRead.current.signal;
     if (!isActive() || lock.current) return;
     lock.current = true;
     setBusy(true);
@@ -418,7 +424,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       if (saved?.unresolved && !knownAcknowledgement) {
         retainUnknown(saved, 'review');
       }
-      const session = await loadAccountSession();
+      const session = await loadAccountSession(readSignal);
       if (!isActive()) return;
       const latest = readMembershipCommand();
       const unchanged = saved === null ? latest === null : sameMembershipCommand(latest, saved);
@@ -460,7 +466,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setReviewCurrent(true);
         setNotice('step-up');
       }
-      const result = await loadMembershipPage(organizationId, initiatingAccount, request.cursor);
+      const result = await loadMembershipPage(organizationId, initiatingAccount, request.cursor, readSignal);
       if (!isActive()) return;
       if (knownAcknowledgement && saved && result.kind === 'ready') {
         // A known native acknowledgement permits a separate current observation,
@@ -490,6 +496,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   }
   async function reviewRecovery(request = roster.current.request('retry')) {
     const isActive = activity.current;
+    const readSignal = pageRead.current.signal;
     const expected = command;
     if (!isActive() || lock.current || !expected || !isUnresolvedMembership(expected, observed)) return;
     if (!expected.reference) {
@@ -517,14 +524,14 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         return;
       }
       setRecoveryBlocked(false);
-      const session = await loadAccountSession();
+      const session = await loadAccountSession(readSignal);
       if (!isActive()) return;
       if (!membershipSessionMatches(session, expected.accountId)) {
         const kind = session.kind === 'signed-out' ? 'signed-out' : session.kind === 'ready' ? 'denied' : 'unavailable';
         installPage({ kind });
         return;
       }
-      const currentPage = await loadMembershipPage(organizationId, expected.accountId, request.cursor);
+      const currentPage = await loadMembershipPage(organizationId, expected.accountId, request.cursor, readSignal);
       if (!isActive()) return;
       if (currentPage.kind !== 'ready') {
         acceptRead(currentPage, request);
@@ -574,6 +581,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   }
   async function select(memberAccountId: string, desired: 'owner' | 'member' | null) {
     const isActive = activity.current;
+    const readSignal = pageRead.current.signal;
     if (!isActive() || lock.current || command || !membershipId(memberAccountId) || !accountId) return;
     if (page?.kind !== 'ready') return;
     if (desired === null) {
@@ -611,7 +619,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       }
       if (!current.membership || current.membership.role === desired) {
         setNotice('conflict');
-        const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor);
+        const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor, readSignal);
         if (isActive()) installPage(resultPage);
         return;
       }
@@ -644,6 +652,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const isActive = activity.current;
+    const readSignal = pageRead.current.signal;
     if (!isActive() || lock.current || !command || !confirmed) return;
     if (command.unresolved && (!reviewCurrent || revoked || !sameMembershipCommand(readMembershipCommand(), command))) {
       setRecoveryBlocked(true);
@@ -701,7 +710,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setPage({ kind: 'conflict' });
         return;
       }
-      const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor);
+      const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor, readSignal);
       if (isActive()) {
         if (!observedResult && command.unresolved && !membershipPageAllowsCommand(resultPage, command)) {
           retirePrivateAuthority('denied');
@@ -721,6 +730,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   async function authenticate(event: FormEvent) {
     event.preventDefault();
     const isActive = activity.current;
+    const readSignal = pageRead.current.signal;
     if (!isActive() || lock.current || !accountId || !email || !password) return;
     lock.current = true;
     setBusy(true);
@@ -750,7 +760,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       } else {
         setNotice('step-up');
         setPage(null);
-        const result = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor);
+        const result = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor, readSignal);
         if (isActive()) installPage(result);
       }
     } finally {

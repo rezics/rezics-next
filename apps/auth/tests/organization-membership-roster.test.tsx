@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import * as membership from '../src/organization-membership';
+import { privateAuthRead } from '../src/private-auth-read';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
@@ -124,12 +125,22 @@ test('failed Previous retries exactly and commits one pop; failed First preserve
   await mount();
   await click(m.auth_inventory_next());
   await click(m.auth_inventory_next());
-  list.mockResolvedValueOnce({ kind: 'conflict' });
-  await click(m.auth_members_previous_page());
-  expect(host.textContent).toContain(m.auth_members_conflict());
+  const timer = spyOn(globalThis, 'setTimeout');
+  const late = deferred();
+  list.mockImplementationOnce(async (_org, _account, _cursor, signal) => {
+    try { return await privateAuthRead(() => late.promise, signal); }
+    catch { return { kind: 'unavailable' }; }
+  });
+  try {
+    await click(m.auth_members_previous_page());
+    await flush(() => (timer.mock.calls.findLast((call) => call[1] === 5000)![0] as () => void)());
+  } finally { timer.mockRestore(); }
+  expect(host.textContent).toContain(m.auth_members_unavailable());
   await click(m.auth_members_recovery_retry());
   expect(targets().slice(-2)).toEqual(['first/+opaque=', 'first/+opaque=']);
   expect(button(m.auth_members_previous_page()).disabled).toBe(false);
+  await flush(() => late.resolve(page('late')));
+  expect(targets().at(-1)).toBe('first/+opaque=');
   list.mockResolvedValueOnce({ kind: 'unavailable' });
   await click(m.auth_members_first_page());
   expect(host.textContent).not.toContain(m.auth_members_empty_page());
@@ -234,9 +245,14 @@ test('replacement and synchronous retirement remove private rows, disclosure, cu
   const pending = deferred();
   list.mockImplementationOnce(() => pending.promise);
   await click(m.auth_members_previous_page());
+  const retiredSignal = list.mock.calls.at(-1)![3]!;
+  expect(retiredSignal.aborted).toBe(false);
   await flush(() => root.render(<OrganizationMembersPage organizationId={other} />));
+  expect(retiredSignal.aborted).toBe(true);
   const count = list.mock.calls.length;
+  const currentSignal = list.mock.calls.at(-1)![3]!;
   await flush(() => pending.resolve(page()));
+  expect(currentSignal.aborted).toBe(false);
   expect(list.mock.calls).toHaveLength(count);
   expect(host.textContent).not.toContain(org);
   await flush(() => {
@@ -250,7 +266,8 @@ test('replacement and synchronous retirement remove private rows, disclosure, cu
   });
   expect(list.mock.calls).toHaveLength(count);
   await click(m.auth_members_recovery_retry());
-  expect(list.mock.calls.at(-1)).toEqual([other, account, undefined]);
+  expect(list.mock.calls.at(-1)?.slice(0, 3)).toEqual([other, account, undefined]);
+  expect(list.mock.calls.at(-1)![3]!.aborted).toBe(false);
   expect(button(m.auth_members_previous_page()).disabled).toBe(true);
 });
 
