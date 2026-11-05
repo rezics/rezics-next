@@ -230,6 +230,7 @@ test('generation restart keeps the original Source proof through lost observatio
     expect(decodePublicFilterNativeState(proof[0].consumer_work)).toMatchObject({ prepared: [], preparedRows: [] });
     expect(proof[0].expires_at).toBe(String(Number.MAX_SAFE_INTEGER));
     expect((await subjectGenerations(search, prefix)).active).toBe(2);
+    expect((await custody.acquire(completed.publication.queried, readContext())).status).not.toBe('acquired');
     expect(lateChanged).toBe(true);
     const current = await search.request('GET', `/${target}/_doc/${book}`);
     const late = await search.bulk<{ items: { index: { status: number } }[] }>(lateBody!);
