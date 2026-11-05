@@ -31,15 +31,17 @@ const displayCurrencies = new Set([
 /** Exact signed recorded money. Intl chooses symbols, grouping and digits, never the unit or divisor. */
 export function formatMinorAmount(locale: string, currency: string, minor: number, unit?: unknown): string | null {
   if (!Number.isSafeInteger(minor) || typeof currency !== 'string' || !/^[a-z]{3}$/i.test(currency)) return null;
+  const messageOptions = { locale: locale as never };
   const code = currency.toUpperCase();
   const reading = decodeRecordedMoneyUnit(unit, stripeRecordedMoneyUnits);
-  if (reading.kind !== 'known') return m.money_raw_minor_unknown_unit({ amount: String(minor), currency: code });
+  if (reading.kind !== 'known')
+    return m.money_raw_minor_unknown_unit({ amount: String(minor), currency: code }, messageOptions);
   if (!displayCurrencies.has(currency.toLowerCase()))
     return m.money_raw_minor_recorded_unit({
       amount: String(minor),
       currency: code,
       exponent: String(reading.unit.exponent),
-    });
+    }, messageOptions);
   const parts = decimalParts(minor, reading.unit.exponent);
   if (!parts.ok) return null;
   try {
@@ -67,7 +69,7 @@ export function formatMinorAmount(locale: string, currency: string, minor: numbe
       amount: String(minor),
       currency: code,
       exponent: String(exponent),
-    });
+    }, messageOptions);
   } catch {
     return null;
   }
