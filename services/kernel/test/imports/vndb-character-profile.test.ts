@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planCrossMediaSeed, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
 import {
+  vndbCharacterBloodTypeConceptUri,
   parseVndbCharacterProfileReferences,
   readVndbCharacterProfileBindings,
 } from '../../../importer/src/vndb-character-profile.ts';
 import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
-import { vndbCharacterBloodTypeConceptUri, vndbCharacterBloodTypeSchemeUri } from '@rezics/conversion/vndb-vocabulary';
+import { vndbCharacterBloodTypeSchemeUri } from '../../../../packages/conversion/src/vndb-vocabulary.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';

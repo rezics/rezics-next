@@ -14,7 +14,7 @@ const physical = {
   labels: { en: 'Physical copy' },
   statuses: [],
   condition: 'physical-v1',
-};
+} satisfies LibraryCopyKindDescriptor;
 const pin: LibraryProfilePin = {
   provenance: 'profile',
   releaseDigest: 'accepted',
@@ -64,7 +64,7 @@ test('old command operands remain absent and exact retries retain clear versus u
 test('physical labels, digital kinds and missing publication cannot admit writes', () => {
   const unsupported: LibraryCopyKindDescriptor = { id: 'physical', labels: { en: 'Physical' }, statuses: [] };
   expect(copyConditionAdmission(unsupported)).toEqual({ state: 'unavailable', reason: 'unsupported' });
-  const future = { ...physical, condition: 'future' };
+  const future = JSON.parse(JSON.stringify({ ...physical, condition: 'future' }));
   expect(copyConditionAdmission(future)).toEqual({ state: 'unavailable', reason: 'unrecognized_vocabulary' });
   for (const kind of [unsupported, { ...unsupported, id: 'digital' }]) {
     expect(() => mergeCopyConditionFields({}, { mediaCondition: 'mint' }, { kind, pin })).toThrow(

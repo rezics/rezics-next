@@ -1,3 +1,5 @@
+import { isUnavailableIdentifierResolution } from '../../../importer/src/importer.ts';
+import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,7 +37,7 @@ let path: string;
 let port: ReturnType<typeof createImportTransport>;
 
 function resolvedReferences(resolution: ImportIdentifierResolution): Readonly<Record<string, string>> {
-  if ('preserveProperties' in resolution && typeof resolution.preserveProperties !== 'string') {
+  if (isUnavailableIdentifierResolution(resolution)) {
     if (!resolution.resolvedReferences) throw new Error('Missing resolved references for reviewed catalogue seed');
     return resolution.resolvedReferences;
   }
@@ -89,7 +91,7 @@ test('actual reviewed platform seed producer obtains native metadata ACK before 
   const denied = createImportTransport({
     origin: 'https://reviewed.discovery.test',
     tokenProvider: async () => f.personas.outsider.bearer,
-    fetch: (async (input, init) => {
+    fetch: fixtureFetch(async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
       const bytes = await request.text();
@@ -101,7 +103,7 @@ test('actual reviewed platform seed producer obtains native metadata ACK before 
         Object.fromEntries(request.headers),
       );
       return Response.json(response.body, { status: response.status, headers: response.headers });
-    }) as typeof fetch,
+    }),
   });
   await expect(
     seedReviewedCatalogue({

@@ -1,3 +1,4 @@
+import { retainedCandidates, valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -47,11 +48,15 @@ function titleValues(statements: readonly BatchStatement[] | undefined) {
     .sort((left, right) => `${left.language}\u0000${left.text}`.localeCompare(`${right.language}\u0000${right.text}`));
 }
 
-function hasTitleCandidate(candidates: readonly { statement: BatchStatement }[], language: string, text: string) {
+function hasTitleCandidate(
+  candidates: readonly { statement: { value: BatchStatement['value'] } }[],
+  language: string,
+  text: string,
+) {
   return candidates.some(
     (candidate) =>
       candidate.statement.value.type === 'value' &&
-      JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language, text }),
+      JSON.stringify(valueContent(candidate.statement.value)) === JSON.stringify({ language, text }),
   );
 }
 
@@ -92,17 +97,19 @@ test('Book names move through explicit publication and same-UUID refresh without
       limit: 100,
     });
     const firstCandidates = currentCandidates(firstPage.candidates);
-    expect(firstCandidates.map((candidate) => candidate.statement.value.content)).toContainEqual({
+    expect(firstCandidates.map((candidate) => valueContent(candidate.statement.value))).toContainEqual({
       language: 'zh',
       text: 'Source Chinese title',
     });
     expect(
-      firstCandidates.some((candidate) => JSON.stringify(candidate.statement.value.content).includes('Must not leak')),
+      firstCandidates.some((candidate) =>
+        JSON.stringify(valueContent(candidate.statement.value)).includes('Must not leak'),
+      ),
     ).toBe(false);
     expect(
       await runtime.importTransport
         .reviewedCandidates(id, { property: 'schema:alternateName', context: GLOBAL_CONTEXT, limit: 100 })
-        .then((page) => page.candidates),
+        .then((page) => retainedCandidates(page.candidates)),
     ).toEqual([]);
 
     const notAuthorized = await publishShowcase({
@@ -173,7 +180,7 @@ test('Book names move through explicit publication and same-UUID refresh without
     });
     expect(
       currentCandidates(afterFence.candidates).some((candidate) =>
-        JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
+        JSON.stringify(valueContent(candidate.statement.value)).includes('Fenced alias'),
       ),
     ).toBe(false);
     expect(

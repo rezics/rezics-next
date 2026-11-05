@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { problemSchema } from '../http/problem.ts';
 import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
@@ -34,10 +35,14 @@ const sectionV2 = t.Union([
   t.Literal('journals'),
 ]);
 function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
-  return t.Tuple(
-    sections.map((section) => t.Literal(section)) as {
-      -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
-    },
+  return t.Tuple<{
+    -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
+  }>(
+    sections.map((section) => t.Literal(section)) as [
+      ...{
+        -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
+      },
+    ],
   );
 }
 const sectionsV1 = sectionTuple(exportSections);
@@ -267,13 +272,20 @@ const providerRecords = [
     },
     closed,
   ),
-  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) =>
-    t.Object(
-      { section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
-      closed,
-    ),
+  t.Object(
+    { section: t.Literal('vndbEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+    closed,
   ),
-];
+  t.Object(
+    {
+      section: t.Literal('anilistEvidence'),
+      upload_id: text,
+      ordinal: t.Integer({ minimum: 0 }),
+      evidence: t.Unknown(),
+    },
+    closed,
+  ),
+] as const;
 const finalManifest = t.Union([
   t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
   t.Object(
@@ -349,9 +361,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
+        return (await admission.run('normal', job, () =>
           service().create(actor, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), requestSignal(request, job.signal)),
-        );
+        )) satisfies Static<typeof statusSchema>;
       },
     )
     .get(
@@ -363,7 +375,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)));
+        return (await admission.run('normal', job, () =>
+          service().get(actor, params.id, requestSignal(request, job.signal)),
+        )) satisfies Static<typeof statusSchema>;
       },
     )
     .get(
@@ -414,9 +428,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
+        return (await admission.run('normal', job, () =>
           service().cancel(actor, params.id, requestSignal(request, job.signal)),
-        );
+        )) satisfies Static<typeof statusSchema>;
       },
     );
 }

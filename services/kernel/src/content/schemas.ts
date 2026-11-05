@@ -291,7 +291,12 @@ const voteCitation = t.Object(
 );
 const licence = t.String({ minLength: 1, maxLength: 128 });
 const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
-const visibility = t.Union(['published', 'draft', 'protected', 'taken_down'].map((value) => t.Literal(value)));
+const visibility = t.Union([
+  t.Literal('published'),
+  t.Literal('draft'),
+  t.Literal('protected'),
+  t.Literal('taken_down'),
+]);
 const reactionKind = t.Unsafe<ViewerReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 const subjectReactionKind = t.Unsafe<(typeof subjectReactionKinds)[number]>(
@@ -1301,22 +1306,35 @@ export const SubjectThreadsResponseSchema = t.Object(
           },
           closed,
         ),
-        ...(['concealed', 'unavailable'] as const).map((state) =>
-          t.Object(
-            {
-              state: t.Literal(state),
-              request: t.Object(
-                {
-                  subjectId: ContentIdSchema,
-                  placeId: ContentIdSchema,
-                  kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-                  selectedBoardId: ContentIdSchema,
-                },
-                closed,
-              ),
-            },
-            closed,
-          ),
+        t.Object(
+          {
+            state: t.Literal('concealed'),
+            request: t.Object(
+              {
+                subjectId: ContentIdSchema,
+                placeId: ContentIdSchema,
+                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                selectedBoardId: ContentIdSchema,
+              },
+              closed,
+            ),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            state: t.Literal('unavailable'),
+            request: t.Object(
+              {
+                subjectId: ContentIdSchema,
+                placeId: ContentIdSchema,
+                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                selectedBoardId: ContentIdSchema,
+              },
+              closed,
+            ),
+          },
+          closed,
         ),
         t.Object(
           {

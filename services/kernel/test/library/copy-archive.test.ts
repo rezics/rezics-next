@@ -365,8 +365,8 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
     expect(parsed.coverage.reduce((n, section) => n + section.recordBytes, 0)).toBe(a.manifest.recordBytes);
     expect(parsed.holdings).toHaveLength(12);
     expect(parsed.progress).toHaveLength(6);
-    expect(parsed.manifest).toEqual(a.manifest);
-    expect(parsed.holdings[0]!.evidence).toEqual(a.records.find((row) => row.section === 'holdings'));
+    expect<unknown>(parsed.manifest).toEqual(a.manifest);
+    expect<unknown>(parsed.holdings[0]!.evidence).toEqual(a.records.find((row) => row.section === 'holdings'));
     if (version === 1) expect(parsed.coverage.some((row) => row.section === 'annotations')).toBe(false);
     if (version !== 1) {
       expect(parsed.coverage.find((row) => row.section === 'journals')).toMatchObject({

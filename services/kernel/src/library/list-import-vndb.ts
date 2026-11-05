@@ -1299,80 +1299,82 @@ export function createVndbImport(config: Config) {
               requestedBy: account.requestedBy ?? null,
             },
             nativeAdmission = await dateAdmission(actor, identity),
-            intent = await executeImportConsumptionDateIntent({
-              review: reviewed,
-              fields: item.fields,
-              ...(previous ? { existing: previous } : {}),
-              nativeRequestKey,
-              admissionIdentity: identity,
-              admission: nativeAdmission,
-              isCurrent: () => currentConsumptionDates(actor, id, item.ordinal, reviewed),
-              async persist(next) {
-                try {
-                  const saved = await mutation(
-                    actor,
-                    'consumption-dates-intent',
-                    `vndb:${id}:${item.ordinal}:dates:${item.version}:${entryImportMetadataDigest(next)}`,
-                    {
-                      id,
-                      ordinal: item.ordinal,
-                      version: item.version,
-                      fields: item.fields,
-                      digest: entryImportMetadataDigest(next),
-                    },
-                    async (tx, account) => {
-                      const locked = await tx.query<{
-                        row: VndbRow | null;
-                        decision: Decision | null;
-                        active: boolean;
-                      }>(
-                        `SELECT rows->$4::integer AS row,decisions->$4::text AS decision,
+            intent = await executeImportConsumptionDateIntent<Awaited<ReturnType<typeof sessions.patchSessionJournal>>>(
+              {
+                review: reviewed,
+                fields: item.fields,
+                ...(previous ? { existing: previous } : {}),
+                nativeRequestKey,
+                admissionIdentity: identity,
+                admission: nativeAdmission,
+                isCurrent: () => currentConsumptionDates(actor, id, item.ordinal, reviewed),
+                async persist(next) {
+                  try {
+                    const saved = await mutation(
+                      actor,
+                      'consumption-dates-intent',
+                      `vndb:${id}:${item.ordinal}:dates:${item.version}:${entryImportMetadataDigest(next)}`,
+                      {
+                        id,
+                        ordinal: item.ordinal,
+                        version: item.version,
+                        fields: item.fields,
+                        digest: entryImportMetadataDigest(next),
+                      },
+                      async (tx, account) => {
+                        const locked = await tx.query<{
+                          row: VndbRow | null;
+                          decision: Decision | null;
+                          active: boolean;
+                        }>(
+                          `SELECT rows->$4::integer AS row,decisions->$4::text AS decision,
                            state='active' AND expires_at>clock_timestamp() AS active
                          FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
-                        [requireRoute(account.accountId), account.accountId, id, item.ordinal],
-                      );
-                      const row = locked.rows[0]?.row,
-                        current = locked.rows[0]?.decision,
-                        original = current?.consumptionDateIntent;
-                      if (
-                        !row ||
-                        !current ||
-                        current.reviewId !== reviewed.sourceReviewToken ||
-                        current.consumptionDateReview?.version !== reviewed.version ||
-                        entryImportMetadataDigest(row) !== reviewed.sourceFingerprint ||
-                        (!locked.rows[0]?.active && !original?.patch) ||
-                        (original !== undefined &&
-                          (original.nativeRequestKey !== next.nativeRequestKey ||
-                            original.version !== next.version ||
-                            original.fields.join(',') !== next.fields.join(',') ||
-                            entryImportMetadataDigest(original.patch) !== entryImportMetadataDigest(next.patch) ||
-                            entryImportMetadataDigest(original.admissionIdentity) !==
-                              entryImportMetadataDigest(next.admissionIdentity)))
-                      )
-                        throw new LibraryConflictError();
-                      await save(tx, account, id, item.ordinal, { ...current, consumptionDateIntent: next });
-                      return { version: reviewed.version };
-                    },
-                  );
-                  record(saved);
-                  return true;
-                } catch (error) {
-                  if (error instanceof LibraryConflictError) return false;
-                  throw error;
-                }
+                          [requireRoute(account.accountId), account.accountId, id, item.ordinal],
+                        );
+                        const row = locked.rows[0]?.row,
+                          current = locked.rows[0]?.decision,
+                          original = current?.consumptionDateIntent;
+                        if (
+                          !row ||
+                          !current ||
+                          current.reviewId !== reviewed.sourceReviewToken ||
+                          current.consumptionDateReview?.version !== reviewed.version ||
+                          entryImportMetadataDigest(row) !== reviewed.sourceFingerprint ||
+                          (!locked.rows[0]?.active && !original?.patch) ||
+                          (original !== undefined &&
+                            (original.nativeRequestKey !== next.nativeRequestKey ||
+                              original.version !== next.version ||
+                              original.fields.join(',') !== next.fields.join(',') ||
+                              entryImportMetadataDigest(original.patch) !== entryImportMetadataDigest(next.patch) ||
+                              entryImportMetadataDigest(original.admissionIdentity) !==
+                                entryImportMetadataDigest(next.admissionIdentity)))
+                        )
+                          throw new LibraryConflictError();
+                        await save(tx, account, id, item.ordinal, { ...current, consumptionDateIntent: next });
+                        return { version: reviewed.version };
+                      },
+                    );
+                    record(saved);
+                    return true;
+                  } catch (error) {
+                    if (error instanceof LibraryConflictError) return false;
+                    throw error;
+                  }
+                },
+                patch: (sessionId, patch, requestKey, admission) =>
+                  sessions.patchSessionJournal(actor, sessionId, patch, requestKey, admission),
+                record: (outcome) => record(outcome as CommandOutcome<unknown>),
+                ...(signal ? { signal } : {}),
+                isStaleError: (error) =>
+                  error instanceof ProgressConflictError ||
+                  error instanceof LibraryConflictError ||
+                  error instanceof LibraryNotFoundError ||
+                  (error instanceof ProblemError &&
+                    ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
+                rethrowError: (error) => error instanceof GrantDeniedError,
               },
-              patch: (sessionId, patch, requestKey, admission) =>
-                sessions.patchSessionJournal(actor, sessionId, patch, requestKey, admission),
-              record: (outcome) => record(outcome as CommandOutcome<unknown>),
-              ...(signal ? { signal } : {}),
-              isStaleError: (error) =>
-                error instanceof ProgressConflictError ||
-                error instanceof LibraryConflictError ||
-                error instanceof LibraryNotFoundError ||
-                (error instanceof ProblemError &&
-                  ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
-              rethrowError: (error) => error instanceof GrantDeniedError,
-            });
+            );
           return (
             intent.outcome ?? {
               version: item.version,

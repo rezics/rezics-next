@@ -343,8 +343,8 @@ test('review transport retains coherent query, nullable evidence, exact admissio
   const requests: Request[] = [];
   const answers = [
     Response.json({ subject: { id: first, type: 'schema:Person' }, reviewedIdentity: null }),
-    Response.json({ operation: { id: first } }, { status: 202 }),
     Response.json({ survivor: first, redirected: second, revision: 3 }),
+    Response.json({ operation: { id: first } }, { status: 202 }),
   ];
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
@@ -361,9 +361,13 @@ test('review transport retains coherent query, nullable evidence, exact admissio
     query.get('reviewIdentityExternalId'),
     query.get('includeViewerActions'),
   ]).toEqual(['bangumi', 'person:123', 'true']);
-  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({ operation: { id: first } });
+  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({
+    survivor: first,
+    redirected: second,
+    revision: 3,
+  });
   expect(await requests[1]!.json()).toEqual(body);
   expect(requests[1]!.headers.get('authorization')).toBe('Bearer review-token');
   expect(requests[1]!.headers.get('idempotency-key')).toBe('"review-key"');
-  await expect(transport.mergeReviewedPersons(body, 'review-key')).rejects.toMatchObject({ status: 200 });
+  await expect(transport.mergeReviewedPersons(body, 'review-key')).rejects.toMatchObject({ status: 202 });
 });

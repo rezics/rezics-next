@@ -136,7 +136,10 @@ test('one History original registers the real native reservation and transfers c
   const fixture = await native.fixture();
   const deadline = Date.now() + 60_000;
   const history = openWorkExecutionOriginal(native.db.pool, deadline, native.workClient);
-  const result = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()], { history });
+  const result = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()], {
+    history,
+    deadline,
+  });
   expect(result.episodes[0]!.state).toBe('preparing');
   expect(result.history).toBeDefined();
   const transfers = result.history!;
@@ -344,7 +347,7 @@ test('the actual Members workflow fails closed before undeclared Source and rele
       'SELECT result FROM core.operational_work_selection WHERE partition_no=$1 AND workflow_id=$2',
       [episode.locator.route >> 4, episode.workflowId],
     );
-    expect(outcome.rows[0]!.result).toEqual(result.episodes[0]);
+    expect(outcome.rows[0]!.result).toEqual(result.episodes[0]!);
     expect(outcome.rows[0]!.result).toMatchObject({ kind: 'failure' });
   } finally {
     await worker.close();

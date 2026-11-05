@@ -133,7 +133,9 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
       },
       new Date().toISOString(),
     );
-    expect(page.records.map((row) => row.session_id)).toEqual(section === 'sessions' ? [repeat.id] : []);
+    expect(page.records.map((row) => ('session_id' in row ? row.session_id : undefined))).toEqual(
+      section === 'sessions' ? [repeat.id] : [],
+    );
   }
   expect((await send('GET', `/v1/publishedLogs/${publicLog.id}`)).publishedLog).toEqual(publicLog);
   const after = await native.inspect(owner.actor.accountId);

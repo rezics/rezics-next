@@ -12,7 +12,7 @@ import {
   OPERATIONAL_WORK_REGISTRATION,
 } from '../../src/history/operational-work-budget.ts';
 import { ProblemError } from '../../src/http/problem.ts';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import type { OperationalWorkCost } from '../../src/history/operational-work-budget.ts';
 import {
   MEMBERS_PREPARATION_CHILDREN,
   declareMembersPreparationParent,
@@ -24,13 +24,14 @@ import {
 } from '../../src/library/members-preparation-cost.ts';
 import { declareMembersPreparationRequest } from '../../src/library/members-preparation-request.ts';
 
-const cost = (amount: number): WorkDimensions => ({
+const cost = (amount: number): OperationalWorkCost => ({
   candidateKeys: amount,
   nativeRows: amount,
   identityMetadataRows: amount,
   emptySeeks: amount,
   nativePoints: amount,
   witnessKeys: amount,
+  engineRequests: amount,
   statements: amount,
   bytes: amount,
 });
@@ -41,6 +42,7 @@ test('the static Members equation includes constant History bounds and refuses a
   const declared = declareMembersPreparationParent(declarations());
   expect(declared.children.historyRegistration.statements).toBe(464);
   expect(declared.children.receivingReadback.statements).toBe(429);
+  expect(declared.children.members.engineRequests).toBe(2);
   expect(declared.children.members.statements).toBeLessThanOrEqual(16);
   expect(declareMembersPreparationRequest(declarations()).children.history).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
   expect(MEMBERS_PREPARATION_STEP_CEILING.statements).toBe(16);

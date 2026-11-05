@@ -346,7 +346,14 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
     }) as typeof fetch,
   });
   const open = async (month?: number | 'unallocated', cursor?: string) => {
-    const result = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor } });
+    const result = await client.libraryDiary.get({
+      query: {
+        year: 2020,
+        ...(month === undefined ? {} : { month }),
+        limit: 1,
+        ...(cursor === undefined ? {} : { cursor }),
+      },
+    });
     expect(result.error).toBeNull();
     return result.data!;
   };
@@ -357,8 +364,8 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
   for (const [month, expected] of [
     [undefined, dated.slice(0, 4)],
     [2, dated.slice(0, 2)],
-    [3, [dated[2]]],
-    ['unallocated', [dated[3]]],
+    [3, [dated[2]!]],
+    ['unallocated', [dated[3]!]],
     [1, []],
   ] as const) {
     let value = await open(month);
@@ -373,7 +380,9 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
     if (first.continuation) {
       expect(value.continuation).toBeString();
       expect((await client.libraryDiary.$cancel.post({ continuation: value.continuation! })).error).toBeNull();
-      const stale = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor: first.next! } });
+      const stale = await client.libraryDiary.get({
+        query: { year: 2020, ...(month === undefined ? {} : { month }), limit: 1, cursor: first.next! },
+      });
       expect(stale.error?.status).toBe(409);
     }
   }

@@ -200,7 +200,7 @@ test('native operands use explicit mixed presentation, exact curated time and in
 
   const source = publicCollectionDiscoverySource({ pool: f.database.pool });
   const result = available(
-    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: subjects[4] }),
+    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: subjects[4]! }),
   );
   expect(result.items[0]).toMatchObject({
     status: 'indexable',

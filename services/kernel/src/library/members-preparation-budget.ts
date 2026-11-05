@@ -6,8 +6,8 @@ import {
   OPERATIONAL_WORK_RECEIVING,
   OPERATIONAL_WORK_TRANSFER_COST,
   sumOperationalWork,
+  type OperationalWorkCost,
 } from '../history/operational-work-budget.ts';
-import type { WorkDimensions } from './collection-source.ts';
 
 /** Disjoint owner declarations, including failed prefixes and terminal controls. A missing
  * declaration is unknown, never zero. History's local declaration does not price other owners.
@@ -32,7 +32,7 @@ export const MEMBERS_PREPARATION_CHILDREN = [
   'cleanup',
 ] as const;
 export type MembersPreparationChild = (typeof MEMBERS_PREPARATION_CHILDREN)[number];
-export type MembersPreparationDeclarations = Readonly<Record<MembersPreparationChild, WorkDimensions | null>>;
+export type MembersPreparationDeclarations = Readonly<Record<MembersPreparationChild, OperationalWorkCost | null>>;
 
 const history = Object.freeze({
   historyRegistration: OPERATIONAL_WORK_REGISTRATION,
@@ -45,7 +45,7 @@ const history = Object.freeze({
 });
 export type MembersPreparationOwnerDeclarations = Omit<MembersPreparationDeclarations, keyof typeof history>;
 
-function snapshot(value: WorkDimensions | null): WorkDimensions {
+function snapshot(value: OperationalWorkCost | null): OperationalWorkCost {
   if (!value) throw new ProblemError('dependency_unavailable');
   const declared = { ...value };
   if (
@@ -61,6 +61,7 @@ function snapshot(value: WorkDimensions | null): WorkDimensions {
     emptySeeks: declared.emptySeeks,
     nativePoints: declared.nativePoints,
     witnessKeys: declared.witnessKeys,
+    engineRequests: declared.engineRequests,
     statements: declared.statements,
     bytes: declared.bytes,
   });
@@ -71,10 +72,10 @@ function snapshot(value: WorkDimensions | null): WorkDimensions {
  * repeated History bodies. This describes bounds; it does not allocate dispatch authority.
  */
 export function declareMembersPreparationParent(owners: MembersPreparationOwnerDeclarations): Readonly<{
-  children: Readonly<Record<MembersPreparationChild, WorkDimensions>>;
-  total: WorkDimensions;
+  children: Readonly<Record<MembersPreparationChild, OperationalWorkCost>>;
+  total: OperationalWorkCost;
 }> {
-  const children = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
+  const children = Object.create(null) as Record<MembersPreparationChild, OperationalWorkCost>;
   for (const name of MEMBERS_PREPARATION_CHILDREN) {
     const declaration = Object.hasOwn(history, name)
       ? history[name as keyof typeof history]

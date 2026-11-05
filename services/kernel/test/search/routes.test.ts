@@ -86,7 +86,11 @@ const service: SearchService = {
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return { subjects: [{ ...result, figure: missingFigure }], next: null, as_of: asOf };
+    return {
+      subjects: [{ ...result, figure: missingFigure, matchEvidence: { state: 'absent' } }],
+      next: null,
+      as_of: asOf,
+    };
   },
   async facets(principal, request) {
     calls.push(['facets', principal, request]);

@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -139,10 +138,12 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
       limit: 100,
     });
     const heightCandidate = currentCandidates(initialHeight.candidates).find(
-      (candidate) => candidate.source?.external_id === characterId,
+      (candidate) =>
+        candidate.source !== null && 'external_id' in candidate.source && candidate.source.external_id === characterId,
     );
     const weightCandidate = currentCandidates(initialWeight.candidates).find(
-      (candidate) => candidate.source?.external_id === characterId,
+      (candidate) =>
+        candidate.source !== null && 'external_id' in candidate.source && candidate.source.external_id === characterId,
     );
     if (!heightCandidate || !weightCandidate) throw new Error('Selected physical candidates are missing');
     expect(heightCandidate.source).toMatchObject({
