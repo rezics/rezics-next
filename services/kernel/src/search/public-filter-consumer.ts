@@ -750,8 +750,13 @@ type NativeGenerationInput = Readonly<{
   capture: PublicFilterConsumerCaptureInput;
   observation?: string;
 }>;
-const generationSources = new WeakMap<PublicDiscoveryConsumerOperations,
-  (input: NativeGenerationInput, context: PublicFilterConsumerContext) => Promise<NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable>>();
+const generationSources = new WeakMap<
+  PublicDiscoveryConsumerOperations,
+  (
+    input: NativeGenerationInput,
+    context: PublicFilterConsumerContext,
+  ) => Promise<NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable>
+>();
 
 /** Advance the existing native preparation/repair owner; this grants no serving authority. */
 export async function advanceNativeGenerationSource(
@@ -1687,7 +1692,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         )
       ).rows[0];
       if (old?.consumer_work)
-        return advanceCapture(decodeState<ConsumerWork>(old.consumer_work), old.consumer_work, m, context, page, publication);
+        return advanceCapture(
+          decodeState<ConsumerWork>(old.consumer_work),
+          old.consumer_work,
+          m,
+          context,
+          page,
+          publication,
+        );
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const preparation = {
         source: config.source,
@@ -2491,15 +2503,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       m.add(original.cost);
       if ('publication' in original) {
         if (original.status === 'pending') {
-          await repairStep({ consumer: input.consumer,
-            job: original.publication.queried.snapshot.observation }, context, m);
+          await repairStep(
+            { consumer: input.consumer, job: original.publication.queried.snapshot.observation },
+            context,
+            m,
+          );
         }
         return { ...original, cost: m.cost };
       }
       const { readGenerationPublicationCustody } = await import('./public-filter-custody.ts');
-      const retained = m.take(await readGenerationPublicationCustody(
-        config.pool, input.consumer, 0, context, input.observation,
-      ));
+      const retained = m.take(
+        await readGenerationPublicationCustody(config.pool, input.consumer, 0, context, input.observation),
+      );
       if (!('definition' in retained)) return m.unavailable('registration_missing');
       let q = retained.queried;
       const preparing = await m.sql<{ consumer_work: string | null }>(
@@ -2524,14 +2539,25 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           const acquired = m.take(await custody.acquire(q, context));
           if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
           try {
-            const started = await readNativePublicFilterRepairStart(binding, {
-              bootstrap: work.bootstrap.id, queried: q,
-            }, context);
+            const started = await readNativePublicFilterRepairStart(
+              binding,
+              {
+                bootstrap: work.bootstrap.id,
+                queried: q,
+              },
+              context,
+            );
             if (!started) return m.unavailable('source_pending');
             m.add(started.cost);
-            const appended = m.take(await custody.appendExecution({
-              use: acquired.use, execution: { id: input.job, start: started.start, ownRows: [] },
-            }, context));
+            const appended = m.take(
+              await custody.appendExecution(
+                {
+                  use: acquired.use,
+                  execution: { id: input.job, start: started.start, ownRows: [] },
+                },
+                context,
+              ),
+            );
             if (appended.status !== 'appended') return m.unavailable('observation_lost');
           } finally {
             m.add((await custody.release(acquired.use, context)).cost);
@@ -2541,9 +2567,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         await save(work, loaded.encoded, false, m);
       }
       // Source commits the immutable tuple before any repair dispatch or adoption.
-      const completion = await readNativePublicFilterPublicationCompletion(binding, {
-        job: input.job, bootstrap: work.bootstrap.id, queried: q, execution: work.execution,
-      }, context);
+      const completion = await readNativePublicFilterPublicationCompletion(
+        binding,
+        {
+          job: input.job,
+          bootstrap: work.bootstrap.id,
+          queried: q,
+          execution: work.execution,
+        },
+        context,
+      );
       m.add(completion.cost);
       if (completion.status === 'pending') {
         await repairStep(job, context, m);

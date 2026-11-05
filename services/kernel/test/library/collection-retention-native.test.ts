@@ -466,21 +466,27 @@ test('unheld ever-public native capture stays retained and its whole custody fam
     expect(pending).toContain(store);
 }, 120000);
 
-
 test('public Collection reductions keep head, log and unresolved coverage atomic for associated and standalone commands', async () => {
   const collection = await make('public');
-  const id = collection.id, route = routeOf(id)!, partition = partitionOf(route);
+  const id = collection.id,
+    route = routeOf(id)!,
+    partition = partitionOf(route);
   const subjectId = await f.createSubject('game');
   const member = await f.send(owner.bearer, 'POST', `/v1/collections/${id}/members`, { subjectId });
   expect(member.status).toBe(201);
   const memberId = (await member.json()).member.id;
-  const log = async () => (await f.pool.query(
-    `SELECT h.owner_epoch,h.position::text,l.affected,l.impacts,p.through_position::text
+  const log = async () =>
+    (
+      await f.pool.query(
+        `SELECT h.owner_epoch,h.position::text,l.affected,l.impacts,p.through_position::text
      FROM semantic.public_filter_privacy_head h
      JOIN semantic.public_filter_privacy_log l USING(partition_no,owner_epoch,position)
      JOIN semantic.public_filter_privacy_pending p ON p.partition_no=h.partition_no
        AND p.input_key=$2 AND p.through_position=h.position
-     WHERE h.partition_no=$1`, [partition, JSON.stringify(['scope','unresolved'])])).rows;
+     WHERE h.partition_no=$1`,
+        [partition, JSON.stringify(['scope', 'unresolved'])],
+      )
+    ).rows;
   const check = async () => {
     const rows = await log();
     expect(rows).toHaveLength(1);
@@ -489,29 +495,61 @@ test('public Collection reductions keep head, log and unresolved coverage atomic
     expect(rows[0].position).toBe(rows[0].through_position);
   };
   // Native HTTP commands carry the actual Library request accounting association.
-  expect((await f.send(owner.bearer, 'DELETE', `/v1/collections/${id}/members/${memberId}?revision=${(await current(id)).revision}`)).status).toBe(204);
+  expect(
+    (
+      await f.send(
+        owner.bearer,
+        'DELETE',
+        `/v1/collections/${id}/members/${memberId}?revision=${(await current(id)).revision}`,
+      )
+    ).status,
+  ).toBe(204);
   await check();
-  expect((await f.send(owner.bearer, 'PATCH', `/v1/collections/${id}`, { revision: (await current(id)).revision, visibility: 'private' })).status).toBe(200);
+  expect(
+    (
+      await f.send(owner.bearer, 'PATCH', `/v1/collections/${id}`, {
+        revision: (await current(id)).revision,
+        visibility: 'private',
+      })
+    ).status,
+  ).toBe(200);
   await check();
-  expect((await f.send(owner.bearer, 'PATCH', `/v1/collections/${id}`, { revision: (await current(id)).revision, visibility: 'public' })).status).toBe(200);
+  expect(
+    (
+      await f.send(owner.bearer, 'PATCH', `/v1/collections/${id}`, {
+        revision: (await current(id)).revision,
+        visibility: 'public',
+      })
+    ).status,
+  ).toBe(200);
   await remove(id, (await current(id)).revision);
   await check();
-  const standalone = () => runCommand(f.pool, { partition }, async (tx, command) => {
-    await recordPublicCollectionReduction(tx, route, id, command.transactionId);
-    return { value: null, events: [{ type: 'com.rezics.library.collection.updated.v1', subject: id, data: { collectionId: id } }] };
-  });
+  const standalone = () =>
+    runCommand(f.pool, { partition }, async (tx, command) => {
+      await recordPublicCollectionReduction(tx, route, id, command.transactionId);
+      return {
+        value: null,
+        events: [{ type: 'com.rezics.library.collection.updated.v1', subject: id, data: { collectionId: id } }],
+      };
+    });
   await standalone();
   await check();
   const before = await log();
-  await expect(runCommand(f.pool, { partition }, async (tx, command) => {
-    await recordPublicCollectionReduction(tx, route, id, command.transactionId);
-    throw new Error('Rollback original Collection reduction');
-  })).rejects.toThrow('Rollback original Collection reduction');
+  await expect(
+    runCommand(f.pool, { partition }, async (tx, command) => {
+      await recordPublicCollectionReduction(tx, route, id, command.transactionId);
+      throw new Error('Rollback original Collection reduction');
+    }),
+  ).rejects.toThrow('Rollback original Collection reduction');
   expect(await log()).toEqual(before);
-  await expect(runCommand(f.pool, { partition }, async (tx, command) => {
-    await tx.query('UPDATE semantic.public_filter_privacy_head SET owner_epoch=owner_epoch+1 WHERE partition_no=$1', [partition]);
-    await recordPublicCollectionReduction(tx, route, id, command.transactionId);
-    return { value: null, events: [] };
-  })).rejects.toThrow();
+  await expect(
+    runCommand(f.pool, { partition }, async (tx, command) => {
+      await tx.query('UPDATE semantic.public_filter_privacy_head SET owner_epoch=owner_epoch+1 WHERE partition_no=$1', [
+        partition,
+      ]);
+      await recordPublicCollectionReduction(tx, route, id, command.transactionId);
+      return { value: null, events: [] };
+    }),
+  ).rejects.toThrow();
   expect(await log()).toEqual(before);
 }, 120000);
