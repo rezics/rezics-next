@@ -42,6 +42,7 @@ export type ScopedFacetCandidatePage =
       cost: PublicFilterCost;
     }>
   | Readonly<{ status: 'changed' | 'unready' | 'unavailable'; cost: PublicFilterCost }>;
+type ScopedFacetInputPage = Extract<ScopedFacetCandidatePage, { status: 'progress' | 'complete' }>;
 
 export type ScopedFacetMembership =
   | Readonly<{
@@ -77,7 +78,7 @@ type ServiceScopeFacetRequest = {
   identity: ScopedFacetIdentity;
   progress: ScopeEvaluationProgress | null;
   reported: ReturnType<typeof zeroScopeWork>;
-  pendingPage?: Readonly<{ after: string | null; inputLimit: number; page: ScopedFacetCandidatePage }>;
+  pendingPage?: Readonly<{ after: string | null; inputLimit: number; page: ScopedFacetInputPage }>;
 };
 
 type RealmFacetFrontier = Readonly<{ basis: string; anchor: number; after: string | null }>;
@@ -88,7 +89,7 @@ type ServiceRealmFacetRequest = {
   work: ScopeWork;
   identity: ScopedFacetIdentity;
   reported: ReturnType<typeof zeroScopeWork>;
-  pendingPage?: Readonly<{ after: string | null; inputLimit: number; page: ScopedFacetCandidatePage }>;
+  pendingPage?: Readonly<{ after: string | null; inputLimit: number; page: ScopedFacetInputPage }>;
 };
 
 const ownerPorts = new WeakMap<object, Readonly<{ ports: ScopedFacetPorts; request: unknown }>>();
@@ -351,7 +352,7 @@ export function createServiceScopeFacetPorts(_resource: SearchResourceScope): Sc
       } catch (error) {
         const status = scopeFailure(error);
         if (!status) throw error;
-        return { status, cost: scopeWorkCost(request) };
+        return { status: status === 'changed' ? 'unready' : status, cost: scopeWorkCost(request) };
       }
     },
     async readCandidates(opaque, after, inputLimit, _context) {
@@ -533,7 +534,7 @@ export function createServiceRealmScopeFacetPorts(): ScopedFacetPorts {
     } catch (error) {
       const status = realmScopeResult(error);
       if (!status) throw error;
-      return { status, cost: realmScopeWorkCost(request) };
+      return { status: status === 'changed' ? 'unready' : status, cost: realmScopeWorkCost(request) };
     }
   }
 
