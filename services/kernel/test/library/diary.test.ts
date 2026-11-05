@@ -308,7 +308,7 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
   const identity = await native.identity(scopes);
   const a = await native.createSubject('game', 'Year repeat');
   const b = await native.createSubject('recipe', 'Year independent');
-  const dated = [];
+  const dated: string[] = [];
   for (const [subjectId, finishDate] of [
     [a, { year: 2020, month: 2, day: 29 }],
     [a, { year: 2020, month: 2 }],
@@ -317,12 +317,13 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
     [a, null],
   ] as const) {
     const session = await start(subjectId, identity.bearer);
+    if (typeof session.id !== 'string') throw new Error('Progress session is missing its native ID');
     if (finishDate)
       await json(
         await send('PATCH', `/v1/progressSessions/${session.id}/journal`, { revision: 0, finishDate }, identity.bearer),
       );
     await json(await send('POST', `/v1/progressSessions/${session.id}:complete`, { revision: 1 }, identity.bearer));
-    dated.push(session.id as string);
+    dated.push(session.id);
   }
   const active = await start(a, identity.bearer);
   await json(
@@ -346,7 +347,14 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
     }) as typeof fetch,
   });
   const open = async (month?: number | 'unallocated', cursor?: string) => {
-    const result = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor } });
+    const result = await client.libraryDiary.get({
+      query: {
+        year: 2020,
+        limit: 1,
+        ...(month === undefined ? {} : { month }),
+        ...(cursor === undefined ? {} : { cursor }),
+      },
+    });
     expect(result.error).toBeNull();
     return result.data!;
   };
@@ -354,32 +362,55 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
     await json(await send('GET', '/v1/libraryReportedYearSummary?year=2020', undefined, identity.bearer));
   const totals = await summary();
   expect(totals).toMatchObject({ completedOccurrences: '4', distinctCompletedSubjects: '2', repeatOccurrences: '2' });
+  const februarySecond = dated[2];
+  const march = dated[3];
+  if (!februarySecond || !march) throw new Error('The expected dated progress sessions are missing');
   for (const [month, expected] of [
     [undefined, dated.slice(0, 4)],
     [2, dated.slice(0, 2)],
-    [3, [dated[2]]],
-    ['unallocated', [dated[3]]],
+    [3, [februarySecond]],
+    ['unallocated', [march]],
     [1, []],
   ] as const) {
     let value = await open(month);
     const first = value;
-    const ids = value.occurrences.map((row) => row.id);
+    const ids = value.occurrences.map((row) => {
+      if (row.id === undefined) throw new Error('Diary occurrence is missing its native ID');
+      return row.id;
+    });
     expect(value.currentness).toEqual(totals.currentness);
     while (value.next) {
       value = await open(month, value.next);
-      ids.push(...value.occurrences.map((row) => row.id));
+      ids.push(
+        ...value.occurrences.map((row) => {
+          if (row.id === undefined) throw new Error('Diary occurrence is missing its native ID');
+          return row.id;
+        }),
+      );
     }
     expect(ids).toEqual([...expected].sort().reverse());
     if (first.continuation) {
-      expect(value.continuation).toBeString();
-      expect((await client.libraryDiary.$cancel.post({ continuation: value.continuation! })).error).toBeNull();
-      const stale = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor: first.next! } });
+      const continuation = value.continuation;
+      const cursor = first.next;
+      if (!continuation || !cursor) throw new Error('The next diary page is missing its continuation');
+      expect(continuation).toBeString();
+      expect((await client.libraryDiary.$cancel.post({ continuation })).error).toBeNull();
+      const stale = await client.libraryDiary.get({
+        query: { year: 2020, ...(month === undefined ? {} : { month }), limit: 1, cursor },
+      });
       expect(stale.error?.status).toBe(409);
     }
   }
   const first = await open(2);
   for (const query of [{ year: 2020, month: 3 }, { year: 2021, month: 2 }, {}]) {
-    const changed = await client.libraryDiary.get({ query: { ...query, limit: 1, cursor: first.next! } });
+    const changed = await client.libraryDiary.get({
+      query: {
+        limit: 1,
+        cursor: first.next!,
+        ...(query.year === undefined ? {} : { year: query.year }),
+        ...(query.month === undefined ? {} : { month: query.month }),
+      },
+    });
     expect(changed.error?.status).toBe(400);
   }
   const exact = await json(

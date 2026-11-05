@@ -769,7 +769,21 @@ export function createAniListImport(deps: Dependencies) {
             matchFingerprint: matching.fingerprint,
           },
           currentVote: native
-            ? { status: 'current', vote: native.currentVote }
+            ? {
+                status: 'current',
+                vote:
+                  native.currentVote.state === 'absent'
+                    ? null
+                    : {
+                        voterId: account.accountId,
+                        questionId: question.id,
+                        targetId: native.currentVote.originalTargetId,
+                        units: native.currentVote.units,
+                        revision: native.currentVote.revision,
+                        changedAt: native.currentVote.changedAt,
+                        transactionId: native.currentVote.transactionId,
+                      },
+              }
             : { status: 'unavailable', reason: unavailable! },
           commandKey: randomUUID(),
           consentKey: randomUUID(),

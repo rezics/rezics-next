@@ -64,7 +64,7 @@ async function capture(collectionId: string, memberIds: string[]) {
       ...input,
       transactionId: original.recordedTransactionId,
       initiator: original,
-      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences', memberIds } },
+      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences' } },
       creationReceipt: {
         partition: partitionOf(route),
         principalKind: 'account',

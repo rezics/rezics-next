@@ -23,29 +23,35 @@ const selection = {
 } as const;
 const descriptor = (revision = 7) => ({
   id: sourceId,
+  curatorAccountId: actor.accountId,
+  title: 'Saved source',
+  description: null,
   revision,
-  membershipKind: 'curated',
-  visibility: 'private',
-  orderEpoch: 0,
+  membershipKind: 'dynamic' as const,
+  visibility: 'private' as const,
+  presentationKind: null,
+  presentationKindSource: 'mixed' as const,
+  cover: null,
+  coverSource: 'none' as const,
 });
 type Reads = Parameters<typeof captureCollectionBulkSource>[0];
 
 function readsFor(rows: string[], options: { revision?: () => number; preparing?: boolean } = {}): Reads {
   return {
     async readCollection() {
-      return descriptor(options.revision?.() ?? 7) as never;
+      return descriptor(options.revision?.() ?? 7);
     },
-    async readMembers(_actor, _sourceId, query) {
-      if (options.preparing) return { preparing: true } as never;
+    async readMembers(_actor, _sourceId, query = {}) {
+      if (options.preparing) return { preparing: true };
       const start = query.cursor == null ? 0 : Number(query.cursor);
       const page = rows.slice(start, start + (query.limit ?? 100));
       const end = start + page.length;
       return {
-        members: page.map((value) => ({ subjectId: value })),
+        members: page.map((subjectId) => ({ kind: 'dynamic' as const, subjectId })),
         next: end < rows.length ? String(end) : null,
-      } as never;
+      };
     },
-  } as unknown as Reads;
+  };
 }
 
 test('captures every Members page, canonical filter and unique subject operand', async () => {

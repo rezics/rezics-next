@@ -36,6 +36,9 @@ import { withLoanHttpWork, type LoanHttpOperation, type LoanHttpWorkOwner } from
 import { LoanConflictError, LoanInvalidError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
 import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
 import { attachCopyListContext } from './copy-list-context.ts';
+import type { CopyListContext } from './copy-list-context.ts';
+import type { CopyInventory } from './copy-inventory.ts';
+import type { CopyPresentation } from './copy-model.ts';
 import {
   createEntryCommands,
   LibraryConflictError,
@@ -119,6 +122,16 @@ const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const personalRevision = t.Integer({ minimum: 0, maximum: 2_147_483_646 });
 const stateInput = libraryVocabularyIdSchema;
 const statusInput = libraryVocabularyIdSchema;
+const copyConditionValueSchema = t.Union([
+  t.Literal('unknown'),
+  t.Literal('mint'),
+  t.Literal('near_mint'),
+  t.Literal('very_good_plus'),
+  t.Literal('very_good'),
+  t.Literal('good'),
+  t.Literal('fair'),
+  t.Literal('poor'),
+]);
 const pageQuery = {
   ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
@@ -192,14 +205,9 @@ const copyFields = {
   acquiredOn: t.Optional(nullable),
   disposedOn: t.Optional(nullable),
   note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
-  mediaCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
-  ),
-  packagingCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
-  ),
+  mediaCondition: t.Optional(t.Union([copyConditionValueSchema, t.Null()])),
+  packagingCondition: t.Optional(t.Union([copyConditionValueSchema, t.Null()])),
 };
-const copyConditionValueSchema = t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value)));
 const copyConditionDisplaySchema = t.Union([
   t.Object({ state: t.Literal('not_recorded') }, closed),
   t.Object({ state: t.Literal('unavailable') }, closed),
@@ -290,9 +298,10 @@ const copyListContextSchema = t.Union([
     },
     closed,
   ),
-  ...(['scope', 'withheld', 'missing', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, closed),
-  ),
+  t.Object({ state: t.Literal('scope') }, closed),
+  t.Object({ state: t.Literal('withheld') }, closed),
+  t.Object({ state: t.Literal('missing') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
 const followSchema = t.Object(
   {
@@ -486,7 +495,9 @@ const correctionPageSchema = t.Object(
     page: t.Integer({ minimum: 0, maximum: 3 }),
     pageCount: t.Integer({ minimum: 1, maximum: 4 }),
     nextPage: t.Union([t.Integer({ minimum: 1, maximum: 3 }), t.Null()]),
-    items: t.Array(correctionItemSchema, { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
+    items: t.Unsafe<readonly Static<typeof correctionItemSchema>[]>(
+      t.Array(correctionItemSchema, { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
+    ),
   },
   closed,
 );
@@ -518,6 +529,7 @@ const loanResponse = t.Object(
   },
   closed,
 );
+type LoanResponse = Static<typeof loanResponse>;
 const loanCopyResponse = t.Object(
   {
     state: t.Union([t.Literal('available'), t.Literal('deleted'), t.Literal('missing')]),
@@ -741,15 +753,59 @@ function copyView({ id, subjectId, kind, status, revision, location, source, acq
     note,
   };
 }
+function copyInventoryView(filterOptions: CopyInventory) {
+  return {
+    kinds: { ...filterOptions.kinds, choices: [...filterOptions.kinds.choices] },
+    statuses: { ...filterOptions.statuses, choices: [...filterOptions.statuses.choices] },
+  };
+}
+function copyListContextView(context: CopyListContext): Static<typeof copyListContextSchema> {
+  switch (context.state) {
+    case 'available':
+      return {
+        state: 'available',
+        work: context.work.map((item) => ({ ...item, labels: { ...item.labels } })),
+        facts: { ...context.facts },
+      };
+    case 'unsupported':
+      return { state: 'unsupported', facts: { ...context.facts } };
+    case 'scope':
+      return { state: 'scope' };
+    case 'withheld':
+      return { state: 'withheld' };
+    case 'missing':
+      return { state: 'missing' };
+    case 'unavailable':
+      return { state: 'unavailable' };
+  }
+}
+function copyPresentationView(presentation: CopyPresentation): Static<typeof copyPresentationSchema> {
+  return {
+    ...presentation,
+    statusEditing:
+      presentation.statusEditing.state === 'supported'
+        ? { ...presentation.statusEditing, statuses: [...presentation.statusEditing.statuses] }
+        : presentation.statusEditing,
+    conditionEditing:
+      presentation.conditionEditing.state === 'supported'
+        ? {
+            state: 'supported',
+            currentness: 'current',
+            choices: COPY_CONDITION_CHOICES.map((choice) => ({ ...choice })),
+          }
+        : presentation.conditionEditing,
+  };
+}
 function loanView(
   loan: Loan,
   boundary: LoanDueBoundary,
   people: ReadonlyMap<string, string | null>,
   copyAvailable = true,
-) {
+): LoanResponse {
   const state = loanState(loan, boundary);
-  const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
-  const action = { allowed: reason === null, reason };
+  const reason: LoanResponse['actions']['extend']['reason'] =
+    state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
+  const action: LoanResponse['actions']['extend'] = { allowed: reason === null, reason };
   const counterparty =
     loan.counterparty.kind === 'name'
       ? { kind: 'name' as const, name: loan.counterparty.name }
@@ -832,7 +888,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     languages: readonly string[] | undefined,
     revalidate: () => Promise<void>,
   ) {
-    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { languages, revalidate });
+    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, {
+      ...(languages === undefined ? {} : { languages }),
+      revalidate,
+    });
   }
   return app
     .post(
@@ -854,7 +913,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().create(actor, body)),
         );
         set.status = 201;
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .get(
@@ -872,7 +931,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const review = await admission.run('normal', job, () =>
           correctionCommand(() => corrections().readPage(actor, params.reviewId, query.page)),
         );
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .post(
@@ -899,7 +958,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
         );
         if (result.commandOutcome) session.record(result.commandOutcome);
-        return { review: result.page } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .post(
@@ -967,7 +1026,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
-          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders))),
+          command(() =>
+            createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER])),
+          ),
         );
       },
     )
@@ -1506,7 +1567,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           return fullView(config(), actor, query.view, {
             copies: result.copies.map(copyView),
             next: result.next,
-            filterOptions: result.filterOptions,
+            filterOptions: copyInventoryView(result.filterOptions),
           });
 
         const copiesPage = await attachCopyListContext(
@@ -1526,7 +1587,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
           },
         );
-        return { copies: copiesPage, next: result.next, filterOptions: result.filterOptions };
+        return {
+          copies: copiesPage.map((copy) => ({ ...copy, context: copyListContextView(copy.context) })),
+          next: result.next,
+          filterOptions: copyInventoryView(result.filterOptions),
+        };
       },
     )
     .get(
@@ -1570,15 +1635,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                     const editing = presentation.statusEditing;
                     const value = {
                       ...copyView(copy),
-                      presentation: {
-                        ...presentation,
-                        statusEditing:
-                          editing.state === 'supported' ? { ...editing, statuses: [...editing.statuses] } : editing,
-                        conditionEditing:
-                          presentation.conditionEditing.state === 'supported'
-                            ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
-                            : presentation.conditionEditing,
-                      },
+                      presentation: copyPresentationView(presentation),
                     };
                     if (query.view !== 'FULL') return { copy: value };
                     const subject = disclosure.subject
@@ -1751,7 +1808,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 revision: item.copy.revision,
                 kind: item.copy.kind,
                 status: item.copy.status,
-                context: context?.context ?? {
+                context: context ? copyListContextView(context.context) : {
                   state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
                 },
               };

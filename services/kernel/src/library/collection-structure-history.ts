@@ -184,7 +184,7 @@ function binding(
   };
 }
 
-function currentHead(row: HeadRow | undefined): Head {
+function currentHead(row: HeadRow | null | undefined): Head {
   if (!row)
     return {
       nextChangeNo: '0',

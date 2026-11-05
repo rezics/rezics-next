@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -8,7 +9,7 @@ import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { collectionResourceSchema, strict } from './collection-routes.ts';
-import { collectionReadView } from './collection-reads.ts';
+import { collectionReadView, type CollectionResourceView } from './collection-reads.ts';
 import { createPins } from './pins.ts';
 import { pinWireResponseBound, runPinBoundedStep } from './pin-operation-bounds.ts';
 
@@ -47,6 +48,16 @@ function detail(operation: string, action: string, write = false) {
 function queryFields(request: Request, allowed: string[]) {
   for (const key of new URL(request.url).searchParams.keys())
     if (!allowed.includes(key)) throw new ProblemError('invalid_request');
+}
+function pinTarget(value: CollectionResourceView | null): Static<typeof collectionResourceSchema> | null {
+  if (!value) return null;
+  const target = collectionReadView(value);
+  if ('builtinKind' in target) return { ...target };
+  const { allowedVisibilityActions, ...fields } = target;
+  return {
+    ...fields,
+    ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
+  };
 }
 
 /** Lazy Access is resolved only after kernel composition and native route admission. */
@@ -91,12 +102,13 @@ export function pinRoutes(
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () => {
           const page = await pins().list(actor, query);
+<<<<<<< HEAD
           return runPinBoundedStep(
             'library.pin.wire-response',
             pinWireResponseBound({ pins: page.pins.length, revision: page.revision, next: page.next }),
             async () => ({
               ...page,
-              pins: page.pins.map((pin) => ({ ...pin, target: pin.target && collectionReadView(pin.target) })),
+              pins: page.pins.map((pin) => ({ collectionId: pin.collectionId, target: pinTarget(pin.target) })),
             }),
           );
         });

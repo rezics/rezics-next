@@ -34,20 +34,35 @@ async function planFor(source: ReturnType<typeof record>) {
   return plan;
 }
 
-function titleValues(statements: readonly BatchStatement[] | undefined) {
+type CandidateValue = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
+
+function contentOf(statement: { value: CandidateValue }): unknown {
+  return statement.value.type === 'value' ? statement.value.content : undefined;
+}
+
+function titleValues(statements: readonly { value: CandidateValue }[] | undefined) {
   return (statements ?? [])
-    .flatMap((statement) =>
-      statement.value.type === 'value' &&
-      statement.value.content &&
-      typeof statement.value.content === 'object' &&
-      'text' in statement.value.content
-        ? [statement.value.content as { language: string; text: string }]
-        : [],
-    )
+    .flatMap((statement) => {
+      const content = contentOf(statement);
+      if (
+        content === null ||
+        typeof content !== 'object' ||
+        !('language' in content) ||
+        typeof content.language !== 'string' ||
+        !('text' in content) ||
+        typeof content.text !== 'string'
+      )
+        return [];
+      return [{ language: content.language, text: content.text }];
+    })
     .sort((left, right) => `${left.language}\u0000${left.text}`.localeCompare(`${right.language}\u0000${right.text}`));
 }
 
-function hasTitleCandidate(candidates: readonly { statement: BatchStatement }[], language: string, text: string) {
+function hasTitleCandidate(
+  candidates: readonly { statement: { value: CandidateValue } }[],
+  language: string,
+  text: string,
+) {
   return candidates.some(
     (candidate) =>
       candidate.statement.value.type === 'value' &&
@@ -92,12 +107,12 @@ test('Book names move through explicit publication and same-UUID refresh without
       limit: 100,
     });
     const firstCandidates = currentCandidates(firstPage.candidates);
-    expect(firstCandidates.map((candidate) => candidate.statement.value.content)).toContainEqual({
+    expect(firstCandidates.map((candidate) => contentOf(candidate.statement))).toContainEqual({
       language: 'zh',
       text: 'Source Chinese title',
     });
     expect(
-      firstCandidates.some((candidate) => JSON.stringify(candidate.statement.value.content).includes('Must not leak')),
+      firstCandidates.some((candidate) => JSON.stringify(contentOf(candidate.statement)).includes('Must not leak')),
     ).toBe(false);
     expect(
       await runtime.importTransport
@@ -173,7 +188,7 @@ test('Book names move through explicit publication and same-UUID refresh without
     });
     expect(
       currentCandidates(afterFence.candidates).some((candidate) =>
-        JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
+        JSON.stringify(contentOf(candidate.statement)).includes('Fenced alias'),
       ),
     ).toBe(false);
     expect(

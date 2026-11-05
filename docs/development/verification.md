@@ -35,6 +35,8 @@ snapshots support review by eye. The development publication is `https://storybo
 
 ## Check selection and failures
 
+Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
+
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 
