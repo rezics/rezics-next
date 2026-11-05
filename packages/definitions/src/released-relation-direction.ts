@@ -63,6 +63,7 @@ export function createReleasedRelationDirectionResolver(
       owners.push(type);
       sources.set(property, owners);
     }
+  }
   const inverses = new Map<string, string[]>();
   for (const [property, definition] of Object.entries(release.properties)) {
     const inverse = definition.relation?.inverse;
