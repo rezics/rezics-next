@@ -2,7 +2,6 @@
 
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
-A declaration is neither a native grant nor acceptance evidence.
 
 ## Collection operation costs
 
@@ -10,10 +9,10 @@ Keep repair pages at 128 raw occurrences independently of Source's 100-key ceili
 separately authorized repair begin, each committed page/event and each DBOS enqueue/retry separately. History SQL
 retains 128 entries, the 51-row sentinel, exact original operands and escaped maxima for both metadata snapshots.
 The original body/key survives repair; the failed edit commits no receipt. Enqueue charges one engine request
-separately from its event fence. Full actor/History/result composition remains with its command owner.
+separately from its event fence. 
 
-Every operation retains all nine axes: candidate keys, native rows, identity metadata rows, native points,
-witness keys, statements, bytes, empty seeks and engine requests. Use pure `@rezics/bounds` sums/repeats, retain
+Retain all nine axes: candidate keys, native rows, identity metadata rows, native points,
+witness keys, statements, bytes, empty seeks and engine requests. Use `@rezics/bounds` sums/repeats; retain
 negative/discarded work, and preserve native 100-key/262,144-row ceilings. Never reprice from returned row counts.
 
 ## Follow operation composition

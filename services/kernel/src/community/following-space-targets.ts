@@ -100,8 +100,8 @@ function spaceResource(
       const prepared = base.prepare ? await base.prepare(input) : base;
       return {
         ...prepared,
-        async read(client, ids, at, time) {
-          const native = await prepared.read(client, ids, at, time);
+        async read(client, ids, at, time, work) {
+          const native = await prepared.read(client, ids, at, time, work);
           const current = await pageSnapshot(client, ids, at);
           return Object.fromEntries(
             ids.map((id) => [id, native[id] === true && sameSpace(current.get(id), expected.get(id)!)]),
@@ -122,7 +122,7 @@ function realmResource(
       const prepared = base.prepare ? await base.prepare(input) : base;
       return {
         ...prepared,
-        async read(client, ids, at, time) {
+        async read(client, ids, at, time, work) {
           const expected = ids.flatMap((id) => {
             const snapshot = expectedByRealm.get(id);
             return snapshot ? [{ realmId: id, snapshot }] : [];
@@ -132,7 +132,7 @@ function realmResource(
             expected.flatMap(({ snapshot }) => (snapshot.space_id === null ? [] : [snapshot.space_id])),
             at,
           );
-          const native = await prepared.read(client, ids, at, time);
+          const native = await prepared.read(client, ids, at, time, work);
           return Object.fromEntries(
             expected.map(({ realmId, snapshot }) => {
               const source = snapshot.space_id === null ? undefined : current.get(snapshot.space_id);
@@ -251,7 +251,7 @@ export async function followingSpaceTargets(
         resources,
         bindings: dependencies.bindings,
         clock: dependencies.clock,
-        work: currentCommandWorkAssociation()?.access,
+        ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
       },
       actor,
       refs,

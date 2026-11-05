@@ -62,6 +62,12 @@ export function createPool(
     }
     return callback ? connect(callback) : connect();
   }) as Connect;
+  const originalQuery = pool.query;
+  pool.query = ((...args: unknown[]) => {
+    const accounting = queryAccounting.getStore();
+    const dispatch = () => Reflect.apply(originalQuery, pool, args);
+    return accounting ? accountQuery(accounting, args, () => accounting.connection(dispatch)) : dispatch();
+  }) as Pool['query'];
   return pool;
 }
 
@@ -73,6 +79,14 @@ export type QueryAccounting = Readonly<{
 const queryAccounting = new AsyncLocalStorage<QueryAccounting>();
 export function withQueryAccounting<T>(accounting: QueryAccounting, run: () => Promise<T>): Promise<T> {
   return queryAccounting.run(accounting, run);
+}
+
+function accountQuery<T>(accounting: QueryAccounting, args: unknown[], dispatch: () => Promise<T>): Promise<T> {
+  const statement = args[0] as string | { text: string; values?: readonly unknown[] };
+  const sql = typeof statement === 'string' ? statement : statement.text;
+  const operands =
+    typeof statement === 'string' ? ((args[1] as readonly unknown[] | undefined) ?? []) : (statement.values ?? []);
+  return accounting.query(sql, operands, dispatch);
 }
 
 export function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -93,11 +107,7 @@ async function checkedOutConnection<T>(
   const originalQuery = client.query;
   if (accounting) {
     client.query = ((...args: unknown[]) => {
-      const statement = args[0] as string | { text: string; values?: readonly unknown[] };
-      const sql = typeof statement === 'string' ? statement : statement.text;
-      const operands =
-        typeof statement === 'string' ? ((args[1] as readonly unknown[] | undefined) ?? []) : (statement.values ?? []);
-      return accounting.query(sql, operands, () => Reflect.apply(originalQuery, client, args));
+      return accountQuery(accounting, args, () => Reflect.apply(originalQuery, client, args));
     }) as PoolClient['query'];
   }
   try {

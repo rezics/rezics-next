@@ -1,6 +1,6 @@
 WITH args AS (
   SELECT :account_id::uuid AS account_id,
-         :target_type::text AS target_type,
+         :target_type::nullable(text) AS target_type,
          :after_updated_at::timestamptz AS after_updated_at,
          :after_target_id::uuid AS after_target_id,
          :has_cursor::boolean AS has_cursor,

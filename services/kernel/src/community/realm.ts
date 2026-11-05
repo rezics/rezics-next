@@ -1,3 +1,4 @@
+import { viewerActionEligibilityWork } from './eligibility-access-work.ts';
 import { bindRealmDiscoveryCommand } from './discovery-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -570,9 +571,10 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
 /** The read route's exact identity/head eligibility, batched by supplied full keys. */
 export const realmViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
   readAction: 'realm:read',
-  async read(client, ids, at) {
-    const result = await client.query<{ id: string; public: boolean }>(
-      `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
+  async read(client, ids, at, _time, work) {
+    const dispatch = async () => {
+      const result = await client.query<{ id: string; public: boolean }>(
+        `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
        CROSS JOIN LATERAL (
          WITH identity AS MATERIALIZED (
            SELECT h.* FROM community.realm h
@@ -590,8 +592,12 @@ export const realmViewerActionResource: import('../access/viewer-actions.ts').Vi
            AND EXISTS (SELECT 1 FROM community.space s WHERE s.route=h.route AND s.space_id=h.space_id AND s.state='active')
            AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
        ) row`,
-      [ids.map((id) => routeOf(id)!), ids, at],
-    );
-    return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+        [ids.map((id) => routeOf(id)!), ids, at],
+      );
+      return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+    };
+    return work
+      ? work.run('community.realm.viewer-resource', viewerActionEligibilityWork('realm', ids, at), dispatch)
+      : dispatch();
   },
 };

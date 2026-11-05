@@ -268,7 +268,7 @@ export function createFollowCommands(config: FollowDeps) {
     requestKey: string,
     deadline = workStepDeadline(),
   ): Promise<FollowWrite> {
-    const original = typeof input === 'string' ? input : Object.freeze(asTarget(input));
+    const original = typeof input === 'string' ? input : Object.freeze({ ...input });
     return withFollowWork(deadline, () =>
       withRequestDeadline(deadline, async () =>
         write(await admit(actor, 'follow:create', deadline), original, requestKey, 'follow', deadline),
@@ -282,7 +282,7 @@ export function createFollowCommands(config: FollowDeps) {
     requestKey: string,
     deadline = workStepDeadline(),
   ): Promise<FollowWrite> {
-    const original = typeof input === 'string' ? input : Object.freeze(asTarget(input));
+    const original = typeof input === 'string' ? input : Object.freeze({ ...input });
     return withFollowWork(deadline, () =>
       withRequestDeadline(deadline, async () =>
         write(await admit(actor, 'follow:delete', deadline), original, requestKey, 'unfollow', deadline),

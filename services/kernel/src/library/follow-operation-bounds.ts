@@ -32,6 +32,8 @@ import addressClaims from '../community/space-address-batch-active.sql';
 import coverReferences from '../content/read-cover-reference.sql';
 import sourceFences from '../content/read-source-fences.sql';
 import { RELEASE_LIMITS } from '@rezics/definitions';
+import { isAccessWorkDispatch } from '../access/work.ts';
+import openGroups from '../access/gates/open-groups.sql';
 
 type Client = Pick<PoolClient, 'query'>;
 type Query<I, R> = Readonly<{ sql: string; params: readonly string[]; run(client: Client, input: I): Promise<R> }>;
@@ -41,7 +43,7 @@ type Input<Q> = Q extends Query<infer I, unknown> ? I : never;
 // retain their original cardinality. Bytes always use the original wire binds.
 const arrayValues = (value: unknown): readonly unknown[] =>
   typeof value === 'string'
-    ? (pg.types.getTypeParser(1009, 'text')(value) as unknown[])
+    ? (pg.types.getTypeParser(1009 as Parameters<typeof pg.types.getTypeParser>[0], 'text')(value) as unknown[])
     : (value as readonly unknown[]);
 const recordValues = (value: unknown): readonly unknown[] =>
   typeof value === 'string' ? (JSON.parse(value) as unknown[]) : (value as readonly unknown[]);
@@ -427,6 +429,17 @@ function targetStatement(sql: string, operands: readonly unknown[]): Bound | und
  * including representative planning attempts and terminal currentness reads. */
 function viewStatement(sql: string, operands: readonly unknown[]): Bound | undefined {
   const values = (query: { params: readonly string[] }, name: string) => operands[query.params.indexOf(name)];
+  if (sql === openGroups.sql) {
+    const groups = arrayValues(values(openGroups, 'groups'));
+    return sqlWork(sql, operands, {
+      keys: groups.length,
+      rows: 4 * groups.length,
+      points: groups.length,
+      seeks: groups.length,
+      output: groups.length,
+      width: size({ group: '' }) + size(groups),
+    });
+  }
   if (sql === partitions.sql) {
     const count = arrayValues(values(partitions, 'partitions')).length;
     return sqlWork(sql, operands, {
@@ -659,6 +672,8 @@ export function withFollowCommandWork<T>(
   return withNativeCommandAccounting(
     {
       connection(dispatch) {
+        // Access's native checkout declaration already owns this physical wait.
+        if (isAccessWorkDispatch()) return dispatch();
         return consumeFollowWork(
           'connection',
           declareBound({
@@ -676,6 +691,19 @@ export function withFollowCommandWork<T>(
         );
       },
       query(sql, operands, dispatch) {
+        if (isAccessWorkDispatch()) {
+          // The foreign owner already holds keys/rows/points/witnesses/binds and
+          // projections. Add only the literal SQL surface missing in its six
+          // dimensions, including negative and failed dispatches.
+          return consumeFollowWork(
+            'access-sql',
+            declareBound({
+              ...followBytes(Buffer.byteLength(sql)),
+              statements: 1,
+            }),
+            dispatch,
+          );
+        }
         const bound = plan.statement(sql, operands);
         return bound ? consumeFollowWork('command', bound, dispatch) : dispatch();
       },

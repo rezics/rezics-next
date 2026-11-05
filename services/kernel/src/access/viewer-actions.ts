@@ -47,6 +47,7 @@ export type ViewerActionResource = Readonly<{
     ids: readonly string[],
     at: string,
     time?: AuthoritativeTime,
+    work?: AccessWorkAccounting,
   ): Promise<Readonly<Record<string, boolean>>>;
 }>;
 export type ViewerActionResources = ReadonlyMap<string, ViewerActionResource>;
@@ -217,7 +218,7 @@ export async function readViewerActions(
   const actions = new Set([...typeActions.values()].flatMap((values) => [...values]));
   let readTime: AuthoritativeTime | undefined;
   try {
-    const context = { pool: deps.pool, deadline, work: deps.work };
+    const context = { pool: deps.pool, deadline, ...(deps.work ? { work: deps.work } : {}) };
     const decisions = await prepareReadDecisions(deps.access, { actor, actions, typeActions, context });
     const time = viewerActionReadTime(deps.access, context);
     readTime = time;
@@ -298,7 +299,7 @@ export async function readViewerActions(
           }
         for (const [type, ids] of selected) {
           const owner = owners.get(type)!;
-          const eligibility = await owner.read(client, ids, at, time);
+          const eligibility = await owner.read(client, ids, at, time, deps.work);
           const nativeActions = await owner.actionAvailability?.(client, ids, actor, time);
           const candidates = [
             ...new Set([

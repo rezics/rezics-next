@@ -102,11 +102,16 @@ class ViewReader {
       const resolved = await resolveSubject(this.deps, actor, id, undefined, {
         pool,
         deadline: this.deadline,
-        work: currentCommandWorkAssociation()?.access,
+        ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
       });
       if (!resolved) return null;
       const observed = await readSubjectSummaryObservation(
-        { ...this.deps, actor, deadline: this.deadline, work: currentCommandWorkAssociation()?.access },
+        {
+          ...this.deps,
+          actor,
+          deadline: this.deadline,
+          ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
+        },
         [resolved.subjectId],
       );
       // An independently changed source cannot authorize disclosure of the older
@@ -181,7 +186,10 @@ class ViewReader {
     const { pool, access } = this.deps;
     if (type === 'collection') {
       try {
-        const value = await createCollectionReads(this.deps).readCollection(this.actor, id, this.deadline);
+        const reads = createCollectionReads(this.deps);
+        const value = this.follow
+          ? await reads.readCollectionSummary(this.actor, id, this.deadline, currentCommandWorkAssociation()?.access)
+          : await reads.readCollection(this.actor, id, this.deadline);
         return value.title === null ? null : { id, type, label: value.title };
       } catch (error) {
         if (error instanceof ProblemError && error.code === 'not_found') return null;
@@ -196,7 +204,13 @@ class ViewReader {
       this.actor,
       'space:read',
       { ...identity, eligibility: spaceReadEligibility(identity) },
-      { pool, deadline: this.deadline, ...(this.follow ? { work: currentCommandWorkAssociation()?.access } : {}) },
+      {
+        pool,
+        deadline: this.deadline,
+        ...(this.follow
+          ? { ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}) }
+          : {}),
+      },
     );
     return withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, this.deadline);

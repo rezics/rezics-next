@@ -184,7 +184,7 @@ export async function readSubjectSummaryObservation(
               deps.actor,
               'subject:read',
               { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-              { pool: deps.pool, deadline: deps.deadline, work: deps.work },
+              { pool: deps.pool, deadline: deps.deadline, ...(deps.work ? { work: deps.work } : {}) },
             ),
           );
         }
@@ -239,7 +239,7 @@ async function readSummaryBatch(
             deps.actor,
             'subject:read',
             { route: routeOf(id)!, id, eligibility: relatedReadEligibility({ route: routeOf(id)!, id }, batch) },
-            { pool: deps.pool, deadline, work: deps.work },
+            { pool: deps.pool, deadline, ...(deps.work ? { work: deps.work } : {}) },
           ),
         )
       : deps.authorize;

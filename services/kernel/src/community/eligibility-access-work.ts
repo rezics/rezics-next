@@ -219,3 +219,18 @@ export function participationEligibilityAccessWork<E extends object>(resource: P
     realmPlan,
   };
 }
+
+/** The actual batched viewer resource read: unnest, identity/head probes and
+ * projection, plus Realm's current host EXISTS. SQL text/statements are a
+ * separate transport surface; these are the native owner's six dimensions. */
+export function viewerActionEligibilityWork(kind: 'space' | 'realm', ids: readonly string[], at: string): AccessWork {
+  const probes = kind === 'space' ? 2 : 3;
+  return Object.freeze({
+    keys: probes * ids.length,
+    points: probes * ids.length + 1,
+    rows: (kind === 'space' ? 7 : 9) * ids.length,
+    witnesses: 0,
+    emptySeeks: 1,
+    bytes: bytes([ids.map((id) => routeOf(id)!), ids, at]) + 2 + ids.length * (bytes({ id: uuid, public: false }) + 1),
+  });
+}
