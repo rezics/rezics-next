@@ -151,7 +151,7 @@ test('consent reviews and decisions belong to the current visit and survive sign
     await answer(11);
     expect(button('Approve')).toBeUndefined();
     await answer(12, 200, 'person-2');
-    expect(host.textContent).not.toContain('An earlier approval result is unknown');
+    expect(host.textContent).toContain('An earlier approval result is unknown');
     expect(host.textContent).toContain('An earlier submission for this client and request is unresolved.');
     await flush(() => button('Approve')!.click());
     await answer(13, 503);

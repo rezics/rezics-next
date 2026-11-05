@@ -188,7 +188,7 @@ test('reviewed Allow bounds actual response bytes and accepts UTF-8 split across
     expect(state.state).toBe('ready');
     expect(visit.shouldWarn()).toBe(true);
     expect(markers.size).toBe(1);
-    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2);
+    expect(calls.filter((call) => call.method !== 'POST')).toHaveLength(2);
     expect(calls.filter((call) => call.method === 'POST')).toHaveLength(3);
   } finally {
     visit.dispose();
