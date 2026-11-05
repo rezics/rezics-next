@@ -1,4 +1,5 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
+import { securityResponseLimits } from '@rezics/auth-contract';
 import { authPost } from './api';
 import { readConsent } from './consent';
 import { privateAuthRead } from './private-auth-read';
@@ -114,7 +115,8 @@ const readInventory = createServerFn({ method: 'POST' })
       !record(value) ||
       !['clients', 'consents'].includes(String(value.view)) ||
       Object.keys(value).some((key) => !['view', 'cursor'].includes(key)) ||
-      (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 8192))
+      (value.cursor !== undefined &&
+        (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > securityResponseLimits.cursor))
     )
       throw new Error('Invalid inventory request');
     return value as InventoryInput;

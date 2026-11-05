@@ -1,6 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import { securityResponseLimits } from '@rezics/auth-contract';
 import type { Root } from 'react-dom/client';
 import type { InventoryPage, InventoryRows, InventoryView } from '../src/security-inventory';
 import type { InventorySource } from '../src/security-inventory-view';
@@ -239,6 +240,35 @@ test('failed Next and Previous keep exact targets for one deliberate retry', asy
   ]);
   expect(findButton(m.auth_inventory_previous())).toBeNull();
   expect(fetchCalls.filter(({ path, method }) => path === '/consent' && method === 'POST')).toEqual([]);
+});
+
+test('maximum opaque cursor failure retains accepted history and retries the exact target', async () => {
+  const maximumCursor = 'x'.repeat(securityResponseLimits.cursor);
+  const first = consent('first', 'First observation', ['subject:read']);
+  const second = consent('second', 'Second observation', ['profile:write']);
+  const third = consent('third', 'Third observation', ['offline_access']);
+  let maximumReads = 0;
+  await mount(
+    sourceFor((cursor) => {
+      if (cursor === undefined) return ready([first], nextCursor);
+      if (cursor === nextCursor) return ready([second], maximumCursor);
+      maximumReads++;
+      return maximumReads === 1 ? { kind: 'expired' } : ready([third]);
+    }),
+  );
+
+  await flush(() => click(m.auth_inventory_next()));
+  await waitText('Second observation');
+  await flush(() => click(m.auth_inventory_next()));
+  await waitText(m.auth_connected_retry_page());
+  expect(readCalls.at(-1)?.cursor === maximumCursor).toBe(true);
+  expect(findButton(m.auth_inventory_previous())).not.toBeNull();
+  await flush(() => click(m.auth_connected_retry_page()));
+  await waitText('Third observation');
+  expect(readCalls.at(-1)?.cursor === maximumCursor).toBe(true);
+  await flush(() => click(m.auth_inventory_previous()));
+  await waitText('Second observation');
+  expect(readCalls.at(-1)?.cursor === nextCursor).toBe(true);
 });
 
 test('failed first-page navigation preserves accepted history until a later success', async () => {

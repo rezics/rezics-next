@@ -463,6 +463,9 @@ preparation free. No separate preparation or
 per-row authority calls are added. Expansion, collapse, copying, focus and locale changes perform zero native reads.
 The Security entry/return preparation and other inventory costs below remain additional whole-call terms.
 
+Decision: the Auth BFF uses the shared native `securityResponseLimits.cursor` allowance (8,260 UTF-16 code units);
+each selected clients/consents request retains its existing one-native-page read cost.
+
 Replacement reads remove old rows and details while visibly pending. Failed navigation retains its exact intended
 cursor/direction for deliberate retry; only an accepted response commits navigation. Reload retains the accepted
 cursor, and an expired cursor offers a separate explicit first-page restart. Identifiers and scopes stay selectable
