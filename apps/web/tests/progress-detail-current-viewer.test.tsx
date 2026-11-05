@@ -456,6 +456,7 @@ function retainedSubmit(form: HTMLFormElement) {
   const props = Reflect.get(form, key) as {
     onSubmit: (event: { preventDefault(): void }) => void;
   };
+  if (!props) throw new Error(`Form callback properties: ${Reflect.ownKeys(form).map(String).join(',')}`);
   return () => props.onSubmit({ preventDefault() {} });
 }
 const recorded = (p: Extract<ProgressDetail, { state: 'ready' }>, amount = '4.75') =>
