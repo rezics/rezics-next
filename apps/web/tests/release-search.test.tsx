@@ -2,19 +2,24 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ConditionEditor } from '../src/search/condition-editor';
+import * as start from '../.storybook/react-start';
+import type { Fact } from '../src/search/results';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+const { ConditionEditor } = await import('../src/search/condition-editor');
 import { m } from '../src/paraglide/messages.js';
 import { locales } from '../src/paraglide/runtime.js';
 import { hitCalendarDate, releaseDateText } from '../src/search/release-search-date';
-import { ResultRow, type Fact } from '../src/search/results';
+const { ResultRow } = await import('../src/search/results');
 import { listKeyFacts } from '../src/media/type-presentation';
-import { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } from '../src/search/discovery';
+const { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } = await import('../src/search/discovery');
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { FilterRelease } from '@rezics/filter';
 import { parseReleaseSearch, releaseSearchHref, releaseSearchRequest } from '../src/search/release-search';
-import * as releaseSearchQuery from '../src/search/release-search-query';
+const releaseSearchQuery = await import('../src/search/release-search-query');
 import { defaultParseSearch } from '@tanstack/react-router';
-import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
+const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings');
 
 type ChildReader = typeof releaseSearchQuery.readReleaseSearchChildren;
 type ChildReaderInput = Parameters<ChildReader>[0];
@@ -817,7 +822,7 @@ test('current release visits retire pending windows and bound cursor progress wi
     expect(group().querySelectorAll('ul > li')).toHaveLength(1);
 
     for (const status of ['restart', 'denied', 'invalid', 'unavailable'] as const) {
-      currentPage = { ...currentPage, as_of: `${currentPage.as_of}-new` };
+      currentPage = { ...currentPage, as_of: new Date(Date.parse(currentPage.as_of) + 86400000).toISOString() };
       await render();
       await open();
       await click();
