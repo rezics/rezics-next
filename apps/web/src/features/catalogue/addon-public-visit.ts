@@ -78,9 +78,21 @@ function publicOrigin(value: unknown, id: string, locale: string): AddonPublicOr
 
 /** The complete encoded URL, including its canonical path, pays the outer budget. Never truncate. */
 export function addonPublicCorrectionHref(base: string, origin: AddonPublicOrigin): string {
-  const href = `${base}?${new URLSearchParams({ origin: JSON.stringify(origin) })}`;
+  const href = `${base}?${new URLSearchParams({
+    origin: JSON.stringify({
+      subject: origin.subject,
+      type: origin.type,
+      context: origin.context,
+      definition: origin.definition,
+      ...(origin.realm ? { realm: origin.realm } : {}),
+      returnHref: origin.returnHref,
+    }),
+  })}`;
+  const encoded = new URL(href, 'https://rezics.invalid');
   // Missing/oversized observation must reach refusal rather than become an implicit legacy Global visit.
-  return addonPublicIntentFits(href) ? href : `${base}?origin=!`;
+  return addonPublicIntentFits(href) && addonPublicIntentFits(`${encoded.pathname}${encoded.search}${encoded.hash}`)
+    ? href
+    : `${base}?origin=!`;
 }
 
 /** A deliberate Global visit discards the selected correction intent but retains the one public return. */
