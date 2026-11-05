@@ -239,6 +239,12 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
 
+The retained fresh-checkout sign-in/sign-out check calls this Bun-owned entrypoint directly, so a remote host does
+not need a Task launcher alias. Its browser receives the allocated origins instead of assuming the developer ports.
+Mounted website-scope composition runs through `stack-run` with `prepareCompilerDatabase`, applying Kernel and Auth
+migrations before Reylo or any SQL module loads; an invented URL is not compiler evidence. These checks retain the
+original mounted-scope, sign-up, cookie, sign-in, sign-out and issuer assertions.
+
 Kernel setup and launch bind the selected loopback Auth issuer, audience and JWKS URL together with the selected API
 port. An isolated stack must not retain the default stack's issuer identity from a generated `.env`.
 
