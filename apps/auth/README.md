@@ -481,8 +481,32 @@ parsing/migration and native journey qualification remain separate work.
 The security page has Password, Passkeys, Sessions and Organizations sections, followed by Delete account, in a
 content column up to 42rem wide. Organizations links to `/organizations/new`; Delete account explains the result and
 links to `/account/delete` with a destructive outline control. It reads the
-current viewer, validated session/passkey inventories and per-target action advice from one native `GET /security-page`, through the existing private BFF. The view makes no kernel reads. A password change uses three Auth calls. Session revocation and passkey removal first check the current native account using the same BFF request cookie, then dispatch the existing exact-key command once. A signed-out response
-offers a link to `/login`.
+current viewer, validated session/passkey inventories and per-target action advice from one native `GET /security-page`, through the existing private BFF. The view makes no kernel reads. A password change uses three Auth calls.
+
+Decision: exact-target removal reuses the admitted account-session reader and trusted
+`AUTH_SECURITY_SCOPE_CONFIGURATION`; only a complete endpoint-specific native envelope settles a command.
+
+Before dispatch, the BFF calls `readNativeAccountSession` through the existing Security issuer transport, which
+forwards the original request cookie and signal to the configured issuer, applies the shared
+`catalogue:<C>` or explicit `native-no-catalogue` configuration, and bounds `/session` with
+`securityResponseByteBudgets(C).session`. It compares the returned account ID with the original exact target before
+sending the existing `{ session_id }` or `{ id }` command once. Missing or invalid configuration/session data is
+unavailable before dispatch; a signed-out preflight offers `/login`. No new session/currentness read is added.
+
+The action receiver uses `securityActionResponseByteBudgets.session` and `.passkey`, exact UTF-8 maxima derived from
+the native compact envelopes: `max(utf8('{}'), utf8('{"error":"authentication_denied"}'),
+utf8('{"error":"authentication_denied","code":"stale_review"}'))` for session revoke; and
+`max(utf8('{"success":true}'), utf8('{"error":"step_up_required","effect_status":"not_applied"}'),
+utf8('{"error":"credential_effect_denied","effect_status":"not_applied"}'),
+utf8('{"error":"authentication_denied"}'))` for passkey removal. It counts streamed bytes before fatal UTF-8 and
+JSON parsing. Only `{}` confirms session revoke and only `{ success: true }` confirms passkey removal; extra fields,
+malformed/excess/lost bodies and unmatched status/envelope pairs remain unknown. Step-up requires the native 401
+`step_up_required/not_applied` envelope; the passkey attempt wrapper's 429 `authentication_denied` is a known
+refusal; session unknown/foreign 404 requires `authentication_denied`. The native passkey refusal envelope is
+`credential_effect_denied/not_applied`; 409 alone, or that generic envelope, does not identify a last-credential
+refusal. Last-credential advice remains in the current Security inventory. Native `Set-Cookie` values are forwarded
+unchanged before body receiving; a clearing cookie retires private presentation but never converts unreadable output
+into acknowledgement.
 
 Password changes, passkey prompts/removal and session revocation share one operation boundary: all other credential
 and session writes stay disabled until completion or cancellation. Uncertain removal/revocation holds that boundary
@@ -497,20 +521,23 @@ native last-credential refusal. Readback never repeats a removal. A complete cur
 absence; a truncated missing row cannot prove absence. Only a currently present target permits a newly reviewed
 exact-target command. Recovery descriptions come only from a fresh present row; retained list rows are marked as previously shown until current readback.
 
-Retired Security attempts use the mounted generic history. A current inventory proves only current presence or
-absence, never which earlier action ran. Same-account exact target retry needs a fresh native review and new
-confirmation; changed authority hides private targets. Generic history remains independent of these controls.
+Retired Security attempts use the mounted generic history. One invocation retains only its original account, kind and
+exact id while active; late results cannot confirm a replacement target or republish retired details. A current
+inventory proves only current presence or absence, never which earlier action ran. A truncated window cannot prove
+absence. Same-account retry needs a fresh native review and confirmation of that same target; Retry itself and
+readback send zero removals. Changed authority hides private target data while generic outcome history remains.
 
-Whole-call costs remain bounded: the page uses one native `GET /security-page` read; dispatch uses the existing current
-`GET /session` check and one exact-key removal command (two Auth requests, zero kernel reads); each deliberate
+Whole-call costs remain bounded: the page uses one native `GET /security-page` read; each action uses one native
+`GET /session` preflight and one exact-key removal command (two Auth requests, zero kernel reads); each deliberate
 current-state check uses one native Security page read and zero commands. Pagehide, return, focus and notice dismissal
 add no Auth or kernel calls, inventory scans or per-row reads.
 
-The browser action wait is twelve seconds: the existing sequential five-second native account check and
-five-second command, plus two seconds for browser/BFF delivery. Expiry, abort, thrown transport or malformed
-acknowledgement after invocation becomes unknown. One invocation sends at most one command; cancellation cannot
-undo native work. Target reads use the five-second private-read deadline even if an injected source or browser
-transport ignores abort. Retired waits cannot publish or release another operation.
+The browser action wait remains twelve seconds: the sequential five-second native account check and five-second
+command, plus two seconds for browser/BFF delivery. The original caller signal spans preflight, command and bounded
+body receiving; expiry or abort after the shared issuer transport starts its command fetch is unknown. One invocation
+sends at most one command; cancellation cannot undo native work. Target reads use the five-second private-read
+deadline even if an injected source or browser transport ignores abort. Retired waits cannot publish or release
+another operation.
 
 Passkey enrollment shows options preparation, the browser prompt, registration dispatch, and its confirmed or unknown
 result as separate states. Cancelling before dispatch sends no registration request. After dispatch, a lost response or
@@ -619,8 +646,12 @@ date (or "Never used"), formatted for the page locale and time zone, and a Remov
 the passkey's name. The add form has an optional name that defaults to the browser and system. Adding sends
 `POST /passkeys/register/options` with `{}`, runs the browser ceremony, then sends `POST /passkeys/register` with
 `{ response, name? }`; the 201 body `{ id, name, created_at }` acknowledges creation, then the native page is refreshed before target actions resume. Removing
-asks for confirmation and sends the existing `POST /passkeys/remove` with `{ id }` after the current-account check. Native success revokes all sessions: the page clears private data and requires sign-in. A 409 means it was the person's last interactive
-credential, so nothing changed and a localized message says so. Registration and removal are credential changes: a 401
+asks for confirmation and sends the existing `POST /passkeys/remove` with `{ id }` after the shared bounded
+current-account check. Native success revokes all sessions: the page clears private data and requires sign-in. Native
+last-credential advice is explicit in the current inventory. Removal refusal returns the fixed
+`credential_effect_denied/not_applied` envelope; its generic 409 can also report a stale selected effect, so the BFF
+does not classify 409 alone or that shared envelope as proof that this was the last interactive credential.
+Registration and removal are credential changes: a 401
 `step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the browser has no WebAuthn, saved passkeys and their native removal advice remain visible; only creation is unavailable. A failed inventory shows an alert in its section, never an empty-list claim.
 
 Enrollment preparation and acknowledgement use the shared closed formulas in

@@ -235,6 +235,47 @@ test.each(['review', 'write', 'read'] as const)(
   },
 );
 
+test('unknown target history survives replacement and a late reply cannot settle the replacement target', async () => {
+  controlTime();
+  const replies: ReturnType<typeof Promise.withResolvers<SecurityActionResult>>[] = [];
+  const writes: SecurityTarget[] = [];
+  const ui = await mount(ready(), {
+    act: (target) => {
+      writes.push(target);
+      const reply = Promise.withResolvers<SecurityActionResult>();
+      replies.push(reply);
+      return reply.promise;
+    },
+    read: async () => ({ kind: 'unavailable' }),
+  });
+  await review(ui.host);
+  await confirm(ui.host);
+  await expire(12_000);
+  expect(ui.host.textContent).toContain(m.auth_security_target_return_unknown());
+
+  const replacement = ready();
+  replacement.accountId = 'replacement-account';
+  if (replacement.passkeys.kind !== 'ready') throw new Error('fixture');
+  replacement.passkeys.passkeys[0]!.id = 'replacement-passkey';
+  replacement.passkeys.passkeys[0]!.name = 'Replacement credential';
+  await ui.replace(replacement);
+  expect(ui.host.textContent).toContain(m.auth_security_target_return_unknown());
+  expect(ui.host.textContent).toContain('Replacement credential');
+
+  await review(ui.host);
+  await confirm(ui.host);
+  expect(writes).toEqual([
+    { accountId: ready().accountId, kind: 'passkey', id: 'passkey' },
+    { accountId: 'replacement-account', kind: 'passkey', id: 'replacement-passkey' },
+  ]);
+  await flush(() => replies[0]!.resolve({ kind: 'accepted', sessionEnded: true }));
+  expect(ui.host.textContent).toContain(m.auth_security_target_return_unknown());
+  expect(ui.host.textContent).toContain('Replacement credential');
+  await flush(() => replies[1]!.resolve({ kind: 'unknown' }));
+  expect(ui.host.textContent).toContain(m.auth_security_target_return_unknown());
+  expect(ui.host.textContent).not.toContain(m.auth_security_target_return_acknowledged());
+});
+
 test('native last-credential refusal after an allowed review keeps the passkey and releases the boundary', async () => {
   const ui = await mount(ready(), {
     act: async () => ({ kind: 'last-credential' }),

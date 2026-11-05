@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { securityResponseLimits } from '@rezics/auth-contract';
 import { readJsonBounded } from './private-auth-json';
 import { readSecurityIssuerResponse, trustedSecurityResponseConfiguration } from './security-response-config';
@@ -31,7 +31,8 @@ export function parseAccountSession(body: unknown, scopeLimit: number): SessionO
   };
 }
 
-const readSession = createServerFn({ method: 'POST' }).handler(async (): Promise<SessionObservation> => {
+/** Read the caller's native session through the shared trusted issuer transport. */
+export const readNativeAccountSession = createServerOnlyFn(async (): Promise<SessionObservation> => {
   const configuration = await trustedSecurityResponseConfiguration();
   if (!configuration) return { kind: 'failure' };
   return readSecurityIssuerResponse('/session', undefined, async (response, signal) => {
@@ -43,6 +44,8 @@ const readSession = createServerFn({ method: 'POST' }).handler(async (): Promise
     );
   });
 });
+
+const readSession = createServerFn({ method: 'POST' }).handler(async () => readNativeAccountSession());
 
 export function requestAccountSession(signal?: AbortSignal): Promise<SessionObservation> {
   return readSession(signal ? { signal } : {});

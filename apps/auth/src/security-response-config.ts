@@ -58,6 +58,7 @@ export const serverSecurityInventoryResponseByteBudget = createServerOnlyFn(asyn
 });
 
 type SecurityResponseReader<T> = (response: Response, signal: AbortSignal) => Promise<T>;
+type SecurityIssuerRequestStart = () => void;
 
 function raceAbort<T>(signal: AbortSignal, promise: Promise<T>): Promise<T> {
   let onAbort: () => void = () => {};
@@ -71,7 +72,12 @@ function raceAbort<T>(signal: AbortSignal, promise: Promise<T>): Promise<T> {
 
 /** One private Auth issuer transport, shared by Security inventory and account-session receiving. */
 export const readSecurityIssuerResponse = createServerOnlyFn(
-  async <T>(path: string, body: unknown | undefined, read: SecurityResponseReader<T>): Promise<T> => {
+  async <T>(
+    path: string,
+    body: unknown | undefined,
+    read: SecurityResponseReader<T>,
+    requestStart?: SecurityIssuerRequestStart,
+  ): Promise<T> => {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     const request = getRequest();
     setResponseHeader('Cache-Control', 'private, no-store');
@@ -86,6 +92,7 @@ export const readSecurityIssuerResponse = createServerOnlyFn(
 
     // The originating privateAuthRead signal bounds headers, body consumption and delivery.
     signal.throwIfAborted();
+    requestStart?.();
     const response = await raceAbort(
       signal,
       fetch(new URL(path, issuer), {
