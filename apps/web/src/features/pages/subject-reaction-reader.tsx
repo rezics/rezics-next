@@ -17,6 +17,7 @@ type ReactionScopeState = {
   retirement: number;
   healthy: boolean;
   recovering: boolean;
+  writeRevision: number;
 };
 
 export type SubjectReactionOrigin = {
@@ -142,6 +143,7 @@ class SubjectReactionReaderRegistry {
       retirement: 0,
       healthy: true,
       recovering,
+      writeRevision: 0,
     };
     this.scopes.set(base, scope);
     this.scopesByKey.set(scope.key, scope);
@@ -239,6 +241,7 @@ class SubjectReactionReaderRegistry {
       scopeKey: scope.key,
       isCurrent: () => this.isCurrent(scope, () => this.hasDesiredOwner(scope)),
       hasLiveObserver: () => this.hasLiveObserver(scope),
+      getWriteRevision: () => scope.writeRevision,
     };
   }
 }
@@ -324,6 +327,9 @@ function useSubjectReactionAdmission(input: {
     recoveryFailed: Boolean(scope && reader !== null && registry.recoveryFailed(scope, isDesired)),
     recoveryPending: Boolean(scope && reader !== null && registry.recoveryPending(scope, isDesired)),
     retryOwnReaction,
+    recordMutation: () => {
+      if (scope && origin.isCurrent()) scope.writeRevision++;
+    },
   };
 }
 
@@ -362,6 +368,7 @@ export function useSubjectReactionReader(input: {
       const reader = admission.reader;
       const origin = admission.origin;
       if (!reader || !origin.isCurrent()) return;
+      admission.recordMutation();
       client.setQueryData<SubjectOwnReaction>(ownReactionQuery.queryKey, (current) =>
         current?.reader === reader && origin.isCurrent() ? { ...current, value } : current,
       );

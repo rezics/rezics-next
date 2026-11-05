@@ -357,6 +357,7 @@ const readSubjectReader = createServerFn({ method: 'GET', strict: false })
       (await subjectKernelClient(data.locale)).client,
       getRequest(),
       env as Partial<SessionEnv>,
+      { signal: getRequest().signal },
     );
     if (!settings.signedIn) return { reader: null, preferences: defaultReader };
     const preferences = 'preferences' in settings ? settings.preferences : undefined;
@@ -381,7 +382,11 @@ const readSubjectReactions = createServerFn({ method: 'GET', strict: false })
     return { id: value.id, locale: value.locale };
   })
   .handler(async ({ data }) => {
-    return readReactionCounts((await subjectKernelClient(data.locale)).client, data.id);
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
+    const { client } = await subjectKernelClient(data.locale);
+    signal.throwIfAborted();
+    return readReactionCounts(client, data.id, signal);
   });
 
 const readSubjectOwnReaction = createServerFn({ method: 'GET', strict: false })
@@ -430,7 +435,11 @@ const readSubjectRatings = createServerFn({ method: 'GET', strict: false })
     return { id: value.id, locale: value.locale, source };
   })
   .handler(async ({ data }) => {
-    return readRatings((await subjectKernelClient(data.locale)).client, data.id, data.source);
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
+    const { client } = await subjectKernelClient(data.locale);
+    signal.throwIfAborted();
+    return readRatings(client, data.id, data.source, signal);
   });
 
 const readSubjectOwnRating = createServerFn({ method: 'GET', strict: false })
@@ -476,13 +485,16 @@ export type SubjectPersonalQueryScope = {
 };
 
 export type SubjectPersonalReadTransport = {
-  readReader: (input: { id: string; locale: string }) => Promise<SubjectReaderObservation>;
-  readOwnRating: (input: { id: string; locale: string; expectedReader: string | null }) => Promise<SubjectOwnRating>;
+  readReader: (input: { id: string; locale: string }, signal?: AbortSignal) => Promise<SubjectReaderObservation>;
+  readOwnRating: (
+    input: { id: string; locale: string; expectedReader: string | null },
+    signal?: AbortSignal,
+  ) => Promise<SubjectOwnRating>;
 };
 
 const defaultSubjectPersonalTransport: SubjectPersonalReadTransport = {
-  readReader: (data) => readSubjectReader({ data }),
-  readOwnRating: (data) => readSubjectOwnRating({ data }),
+  readReader: (data, signal) => readSubjectReader({ data, signal }),
+  readOwnRating: (data, signal) => readSubjectOwnRating({ data, signal }),
 };
 
 const emptySubjectPersonalScope: SubjectPersonalQueryScope = {
@@ -640,8 +652,10 @@ export const subjectReaderQuery = (
       scope.incarnation ?? 0,
     ] as const,
     meta: subjectPersonalMeta(id, locale, scope, 'reader'),
-    queryFn: async () => {
-      const result = await transport.readReader({ id, locale });
+    queryFn: async ({ signal }) => {
+      signal.throwIfAborted();
+      const result = await transport.readReader({ id, locale }, signal);
+      signal.throwIfAborted();
       if ((scope.isCurrent && !scope.isCurrent()) || (scope.hasLiveObserver && !scope.hasLiveObserver()))
         throw new Error('Subject preference observation retired');
       if (result.reader !== scope.reader) throw new Error('Subject preference reader changed');
@@ -654,7 +668,12 @@ export const subjectReactionsQuery = (id: string, locale: string) =>
   queryOptions({
     ...publicRead,
     queryKey: ['subject-reactions', id, locale] as const,
-    queryFn: () => readSubjectReactions({ data: { id, locale } }),
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const result = await readSubjectReactions({ data: { id, locale }, signal });
+      signal.throwIfAborted();
+      return result;
+    },
   });
 
 export const subjectRatingQuery = (id: string, locale: string, source?: RatingSource) =>
@@ -662,10 +681,16 @@ export const subjectRatingQuery = (id: string, locale: string, source?: RatingSo
     ...publicRead,
     queryKey: ['subject-rating', id, locale, ...(source ? [source] : [])] as const,
     retry: false,
-    queryFn: () =>
-      readSubjectRatings({ data: { id, locale, ...(source ? { source } : {}) } }).catch(() =>
-        failedRatingSources(source),
-      ),
+    queryFn: async ({ signal }) => {
+      try {
+        const result = await readSubjectRatings({ data: { id, locale, ...(source ? { source } : {}) }, signal });
+        signal.throwIfAborted();
+        return result;
+      } catch {
+        signal.throwIfAborted();
+        return failedRatingSources(source);
+      }
+    },
   });
 
 export type SubjectReactionQueryScope = {
@@ -676,6 +701,7 @@ export type SubjectReactionQueryScope = {
   scopeKey: string;
   isCurrent(): boolean;
   hasLiveObserver(): boolean;
+  getWriteRevision?: () => number;
 };
 
 const emptySubjectReactionScope: SubjectReactionQueryScope = {
@@ -705,13 +731,21 @@ export const subjectOwnReactionQuery = (
       scope.cacheEpoch,
     ] as const,
     meta: { subjectReactionScope: scope.scopeKey, subjectReactionCacheEpoch: scope.cacheEpoch },
-    queryFn: async (): Promise<SubjectOwnReaction> => {
+    queryFn: async ({ signal, client, queryKey }): Promise<SubjectOwnReaction> => {
+      signal.throwIfAborted();
+      const writeRevision = scope.getWriteRevision?.();
       const reader = scope.reader;
       if (!reader || !scope.isCurrent() || !scope.hasLiveObserver())
         throw new Error('Subject reaction observation retired');
-      const result = await readSubjectOwnReaction({ data: { id, locale, expectedReader: reader } });
+      const result = await readSubjectOwnReaction({ data: { id, locale, expectedReader: reader }, signal });
+      signal.throwIfAborted();
       if (!result || result.reader !== reader || !scope.isCurrent() || !scope.hasLiveObserver())
         throw new Error('Subject reaction reader changed');
+      if (scope.getWriteRevision && scope.getWriteRevision() !== writeRevision) {
+        const current = client.getQueryData<SubjectOwnReaction>(queryKey);
+        if (current !== undefined) return current;
+        throw new Error('Subject reaction read superseded by a write');
+      }
       return result;
     },
     enabled: personalRead.enabled && scope.reader !== null && scope.isCurrent() && scope.hasLiveObserver(),
@@ -742,8 +776,11 @@ export const subjectOwnRatingQuery = (
     ] as const,
     meta: subjectPersonalMeta(id, locale, scope, 'own-rating'),
     queryFn: async (context) => {
+      const { signal } = context;
+      signal.throwIfAborted();
       const writeRevision = scope.getWriteRevision?.() ?? 0;
-      const result = await transport.readOwnRating({ id, locale, expectedReader: scope.reader });
+      const result = await transport.readOwnRating({ id, locale, expectedReader: scope.reader }, signal);
+      signal.throwIfAborted();
       if ((scope.isCurrent && !scope.isCurrent()) || (scope.hasLiveObserver && !scope.hasLiveObserver()))
         throw new Error('Subject rating observation retired');
       if (scope.getWriteRevision && scope.getWriteRevision() !== writeRevision) {

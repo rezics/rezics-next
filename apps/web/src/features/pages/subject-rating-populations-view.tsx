@@ -76,6 +76,8 @@ class PopulationRegistry {
     return replaced;
   }
   private observe(event: QueryCacheNotifyEvent) {
+    // Observer results are announced before the cache success event. They are not replacements.
+    if (event.type !== 'added' && event.type !== 'removed' && event.type !== 'updated') return;
     const { query } = event;
     if (query.queryKey.length === 1 && query.queryKey[0] === 'session') {
       const currentQuery = this.client.getQueryCache().find({ queryKey: ['session'], exact: true });

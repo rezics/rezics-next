@@ -73,7 +73,7 @@ mock.module('../src/threads/thread-reactions', () => ({
 }));
 
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider, useQueryClient } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, useQueryClient, useQuery } = await import('@tanstack/react-query');
 const { useSubjectReactionReader } = await import('../src/features/pages/subject-reaction-reader');
 const { SubjectHeaderActions } = await import('../src/features/pages/subject-reactions-view');
 const { m } = await import('../src/paraglide/messages.js');
@@ -186,6 +186,109 @@ test('Subject and Zone headers retry failed own-reaction reads without reviving 
       await tick();
     });
     await until(() => ['subject-one', 'subject-two'].every((id) => reactionProps.get(id)?.personalReady));
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+  }
+});
+
+test('signed-out public count Retry is independent, settles keyboard focus and retires replaced focus intent', async () => {
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const pending: ReturnType<typeof deferred<{ counts: { like: number }; value: null } | null>>[] = [];
+  const privateBefore = reads.length;
+  let privateRetries = 0;
+  function PublicSurface({ id }: { id: string }) {
+    const query = useQuery({
+      queryKey: ['public-counts', id],
+      queryFn: () => {
+        const read = deferred<{ counts: { like: number }; value: null } | null>();
+        pending.push(read);
+        return read.promise;
+      },
+    });
+    return (
+      <SubjectHeaderActions
+        id={id}
+        locale="en"
+        signedIn={false}
+        returnTo="/en/subjects/one"
+        reactions={query.data ?? null}
+        verification={{ sitekey: '', scriptUrl: '' }}
+        publicRecovery={{
+          pending: query.isFetching,
+          retry: () => {
+            void query.refetch();
+          },
+        }}
+        reactionRecovery={{
+          failed: true,
+          pending: false,
+          retry: () => {
+            privateRetries++;
+          },
+        }}
+      />
+    );
+  }
+  const render = async (id: string) =>
+    act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <PublicSurface id={id} />
+        </QueryClientProvider>,
+      );
+      await tick();
+    });
+  const retry = () =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.subject_reaction_counts_retry(),
+    )!;
+  try {
+    await render('public-one');
+    await act(async () => {
+      pending[0]!.resolve(null);
+      await tick();
+    });
+    await until(() => !retry().disabled);
+    await act(async () => {
+      retry().focus();
+      retry().click();
+      await tick();
+    });
+    expect(retry().disabled).toBe(true);
+    expect(privateRetries).toBe(0);
+    expect(reads).toHaveLength(privateBefore);
+    await act(async () => {
+      pending[1]!.resolve({ counts: { like: 0 }, value: null });
+      await tick();
+    });
+    await until(() => reactionProps.get('public-one')?.counts.like === 0);
+    expect(window.document.activeElement?.getAttribute('aria-label')).toBe(m.subject_reaction_counts_group());
+    expect(host.textContent).toContain(m.subject_reaction_recovery_failure());
+    await render('public-two');
+    await act(async () => {
+      pending[2]!.resolve(null);
+      await tick();
+    });
+    await until(() => !retry().disabled);
+    await act(async () => {
+      retry().focus();
+      retry().click();
+      await tick();
+    });
+    await render('public-three');
+    await act(async () => {
+      pending[3]!.resolve({ counts: { like: 7 }, value: null });
+      pending[4]!.resolve(null);
+      await tick();
+    });
+    expect(window.document.activeElement?.getAttribute('aria-label')).not.toBe(m.subject_reaction_counts_group());
+    expect(reads).toHaveLength(privateBefore);
+    expect(privateRetries).toBe(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();

@@ -522,6 +522,13 @@ export function SubjectOverview({
                   <SubjectHeaderActions
                     id={subject.id}
                     reactions={reactions}
+                    locale={locale}
+                    publicRecovery={{
+                      pending: reactionsQuery.isFetching,
+                      retry: () => {
+                        void reactionsQuery.refetch();
+                      },
+                    }}
                     signedIn={session === 'signed-in'}
                     personalReady={session !== 'signed-in' || subjectReaction.ready}
                     reactionOrigin={subjectReaction.origin}

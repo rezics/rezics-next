@@ -279,39 +279,49 @@ export function suppliedRatingSources(data: Ratings): RatingSources {
 }
 
 /** One anonymous read per requested source, concurrently; no credential, memberships or own vote is acquired. */
-export async function readRatings(client: KernelClient, id: string, only?: RatingSource): Promise<RatingSources> {
+export async function readRatings(
+  client: KernelClient,
+  id: string,
+  only?: RatingSource,
+  signal?: AbortSignal,
+): Promise<RatingSources> {
+  signal?.throwIfAborted();
+  const fetch = { signal };
   const subject = client.subjects({ id });
   const requested = (source: RatingSource) => only === undefined || only === source;
   async function settle<T>(source: RatingSource, read: () => Promise<RatingOutcome<T>>): Promise<RatingOutcome<T>> {
     if (!requested(source)) return { kind: 'idle' };
     try {
-      return await read();
+      const result = await read();
+      signal?.throwIfAborted();
+      return result;
     } catch {
+      signal?.throwIfAborted();
       return { kind: 'failed' };
     }
   }
   const [question, figure, global, statistics] = await Promise.all([
     settle('question', async () => {
-      const result = await client['rating-questions']({ questionId: QUESTION }).get();
+      const result = await client['rating-questions']({ questionId: QUESTION }).get({ fetch });
       return result.status === 200 && isRatingQuestion(result.data)
         ? { kind: 'ready', value: result.data }
         : ratingFailure(result.status, ratingResponseHeaders(result));
     }),
     settle('figure', async () => {
-      const result = await subject.figure.get();
+      const result = await subject.figure.get({ fetch });
       return result.status === 200 && isPublicFigure(result.data?.figure)
         ? { kind: 'ready', value: result.data.figure }
         : ratingFailure(result.status, ratingResponseHeaders(result));
     }),
     settle('global', async () => {
-      const result = await subject.ratings.get({ query: { question: QUESTION, population: [GLOBAL] } });
+      const result = await subject.ratings.get({ query: { question: QUESTION, population: [GLOBAL] }, fetch });
       if (result.status !== 200) return ratingFailure(result.status, ratingResponseHeaders(result));
       const aggregate = admitRatingAggregate(result.data, { subject: id, question: QUESTION, populations: [GLOBAL] });
       const value = aggregate?.figures[0];
       return value ? { kind: 'ready', value } : { kind: 'failed' };
     }),
     settle('statistics', async () => {
-      const result = await subject['source-statistics'].get();
+      const result = await subject['source-statistics'].get({ fetch });
       return result.status === 200 && isStatistics(result.data)
         ? { kind: 'ready', value: result.data }
         : ratingFailure(result.status, ratingResponseHeaders(result));
@@ -327,17 +337,22 @@ export async function readOwnRating(
   id: string,
   expectedReader?: string | null,
 ): Promise<SubjectOwnRating> {
+  const signal = request.signal;
   let reader: string | null = null;
   try {
+    signal.throwIfAborted();
     await prepareSession(request, env);
+    signal.throwIfAborted();
     const authorization = viewerCredential(request);
     reader = await preparedRatingReader(request, authorization);
+    signal.throwIfAborted();
     if (!authorization || (expectedReader !== undefined && reader !== expectedReader))
       return { reader, kind: 'unavailable' };
     const result = await client
       .subjects({ id })
       .ratings({ questionId: QUESTION })
-      .vote.get({ headers: { authorization } });
+      .vote.get({ headers: { authorization }, fetch: { signal } });
+    signal.throwIfAborted();
     if (result.status === 200) {
       const value = decodeOwnRatingValue(result.data);
       return value ? { reader, kind: 'ready', units: value.units } : { reader, kind: 'unavailable' };
@@ -345,6 +360,7 @@ export async function readOwnRating(
     if (result.status === 404) return { reader, kind: 'ready', units: null };
     return { reader, kind: 'unavailable' };
   } catch {
+    signal.throwIfAborted();
     return { reader, kind: 'unavailable' };
   }
 }

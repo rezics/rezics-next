@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PublicReactionRecovery } from './public-reaction-recovery';
 import { m } from '../../paraglide/messages.js';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
@@ -21,6 +22,8 @@ export function SubjectHeaderActions({
   onPersonalChange,
   reactionOrigin,
   reactionRecovery,
+  publicRecovery,
+  locale = 'en',
   children,
 }: {
   id: string;
@@ -32,6 +35,8 @@ export function SubjectHeaderActions({
   onPersonalChange?: (kind: SubjectReactionKind | null) => Promise<void>;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
   reactionRecovery?: { failed: boolean; pending: boolean; retry(): void };
+  publicRecovery?: { pending: boolean; retry(): void };
+  locale?: string;
   children?: ReactNode;
 }) {
   return (
@@ -40,8 +45,14 @@ export function SubjectHeaderActions({
         className="flex min-w-0 flex-wrap items-start justify-end gap-2 sm:flex-nowrap sm:col-start-2 sm:row-start-1"
         data-slot="subject-header-actions"
       >
-        {reactions ? (
-          <div className="min-w-0 flex-1 sm:flex-none">
+        <PublicReactionRecovery
+          key={JSON.stringify([id, locale])}
+          available={reactions !== null}
+          pending={publicRecovery?.pending ?? false}
+          retry={publicRecovery?.retry}
+          locale={locale}
+        >
+          {reactions && (
             <ThreadReactions
               counts={reactions.counts}
               returnTo={returnTo}
@@ -54,12 +65,8 @@ export function SubjectHeaderActions({
                 ? { onMutation: (kind) => onPersonalChange(kind as SubjectReactionKind | null) }
                 : {})}
             />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground" role="status">
-            {m.subject_reactions_unavailable()}
-          </p>
-        )}
+          )}
+        </PublicReactionRecovery>
         {reactionRecovery && (reactionRecovery.failed || reactionRecovery.pending) ? (
           <div className="flex items-center gap-2">
             <p className="text-sm text-muted-foreground" role="status">
