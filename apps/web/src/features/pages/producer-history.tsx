@@ -51,12 +51,14 @@ function ProducerHistoryPageLive({
   transport,
   search,
   initial,
+  returnTo,
 }: {
   id: string;
   locale: string;
   transport: ProducerHistoryTransport;
   search: EntityPickerSearch;
   initial?: ProducerHistoryRead | undefined;
+  returnTo?: string | undefined;
 }) {
   const streamId = useId();
   const lifetime = useEditorLifetime();
@@ -194,7 +196,7 @@ function ProducerHistoryPageLive({
     >
       <ViewHeading label={m.producer_history_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.producer_history_intro({}, o)}</p>
-      <a className={linkClass} href={origin}>
+      <a className={linkClass} href={returnTo ?? origin}>
         {m.producer_history_back({}, o)}
       </a>
       {read && (

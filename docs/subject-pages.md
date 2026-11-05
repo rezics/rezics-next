@@ -1347,6 +1347,14 @@ fields + accepted public bytes); retained UI references share the one admitted p
 JSON/string/object overhead remains additional memory. Locale strings wrap and all actions have 44px targets in the
 existing phone390/desktop1280 theme layouts. Source stories are illustrative, not native or browser verification.
 
+### Producer-history correction entry
+
+Decision: the existing public Organization entry carries the observed Subject Context and one immediate same-Organization return; unsupported Context or Realm visits offer that return and a separately named fresh Global visit, while an oversized exact history return falls back to the overview with an explanation.
+
+The entry remains inside the existing public `renderedActions` and Realm gates. The route admits only a closed same-locale Organization overview return with matching selected Context/Realm where supplied; it rejects nested returns, duplicate fields, contradictory selectors, other origins and intents over 2,048 characters or UTF-8 bytes across the outer query. A supported Global visit drops selected Context/Realm and keeps only that immediate return. Direct legacy `/producer` visits remain Global. The return rereads the current public Subject through the Organization reader; only its existing history locator can reopen a current disclosed assertion. No producer row is selected from that locator.
+
+**Cost:** no entry read is added. An admitted Global visit performs the original fresh producer-history read and its existing operation advice. Returning starts the existing public Subject/Organization observation again. The address retains one immediate return, capped at 2,048 characters and UTF-8 bytes across its query; an exact history locator that does not fit is not shortened and uses the overview return instead. Existing producer stream/page/detail limits and Organization reader bounds are unchanged.
+
 ## Statement consent
 
 The relation editor uses the released `disclosure: sourceOrConsent` annotation. For an unsourced assertion,

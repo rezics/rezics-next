@@ -3,6 +3,9 @@ import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ProducerHistoryPage } from '../features/pages/producer-history';
 import { producerRecoveryExample, type RecoveryExample } from '../features/pages/producer-history-reading/examples';
+import { ProducerHistoryEntry } from '../features/catalogue/producer-history/entry';
+import { ProducerHistoryOriginChoice } from '../features/catalogue/producer-history/session';
+import { organizationHistoryVisitReturnFragment } from '../features/pages/subject-visit-navigation';
 import { CandidateReaderBoundary } from '../subject/candidate-lifetime';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
@@ -39,6 +42,58 @@ function RecoveryStory({ scenario = 'later' }: { scenario?: RecoveryExample }) {
     </PatternStory>
   );
 }
+
+function UnsupportedContextStory() {
+  const locale = getLocale();
+  const id = '00000000-0000-4000-8000-00000000d811';
+  const context = '00000000-0000-4000-8000-00000000d812';
+  return (
+    <PatternStory path={`/subjects/${id}/producer`} visitor="Signed In">
+      <AppShell>
+        <main className="mx-auto w-full min-w-0 px-4 py-8 sm:px-8">
+          <ProducerHistoryOriginChoice
+            id={id}
+            locale={locale}
+            returnTo={`/${locale}/subjects/${id}/paper-lantern-studio?context=${context}#connections`}
+          />
+        </main>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+function OversizedHistoryReturnStory() {
+  const locale = getLocale();
+  const id = '00000000-0000-4000-8000-00000000d811';
+  const context = '00000000-0000-4000-8000-00000000d812';
+  const history = organizationHistoryVisitReturnFragment({
+    holder: id,
+    context,
+    locale,
+    property: 'wdt:P749',
+    candidate: '00000000-0000-4000-8000-00000000d813',
+    revision: 1,
+    release: 'organization-release',
+    focus: 'pointer',
+  });
+  const currentHref = `/${locale}/subjects/${id}/${'history-'.repeat(250)}?context=${context}${history}`;
+  return (
+    <PatternStory path={`/subjects/${id}`} visitor="Signed Out">
+      <AppShell>
+        <main className="mx-auto w-full min-w-0 px-4 py-8 sm:px-8">
+          <ProducerHistoryEntry
+            id={id}
+            label="Paper Lantern Studio"
+            locale={locale}
+            context={context}
+            currentHref={currentHref}
+          />
+        </main>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
 const meta = {
   title: 'Pages/Catalogue/Producer history recovery',
   component: RecoveryStory,
@@ -95,4 +150,12 @@ export const CorrectionReaderRetired: Story = {
     await expect(canvas.queryByRole('region', { name: m.relation_title() })).toBeNull();
     await expect(canvas.getByRole('button', { name: m.producer_history_retired_close() })).toBeVisible();
   },
+};
+
+export const UnsupportedContextOffersPublicReturnAndGlobal: Story = {
+  render: () => <UnsupportedContextStory />,
+};
+
+export const OversizedHistoryReturnUsesOverview: Story = {
+  render: () => <OversizedHistoryReturnStory />,
 };
