@@ -4,7 +4,8 @@ import type { GuideRelease } from '../catalogue/definition-guide';
 import { fetchGuideRelease } from '../catalogue/definition-guide';
 import { loadSubjectPage, subjectBody, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
-import type { Section } from './overview';
+import type { OverviewValue, Section } from './overview';
+import { creditVisit, type CreditVisit } from '../catalogue/credit-inspection/model';
 import { characterWorkStream } from '../catalogue/character-work-visit/intent';
 
 export const connectionGroups = ['relations', 'characters', 'credits'] as const;
@@ -49,6 +50,13 @@ export type ConnectionVisit =
       sections: Partial<Record<ConnectionGroup, ConnectionSection>>;
       graph?: { ok: true; body: ConnectionGraph } | { ok: false; status: number };
     };
+
+/** Reuse the current admitted native credit window and a declared page node for exact return navigation. */
+export function connectionCreditVisit(value: OverviewValue, current: ConnectionSection): CreditVisit | undefined {
+  if (current.stream.group !== 'credits' || !current.section.ok) return;
+  const node = value.relationNodes.find(({ props }) => props.property === current.stream.property);
+  return node ? creditVisit(value, node.id, current.section, 'works') : undefined;
+}
 
 /** Metadata, not a catalogue traversal: emitted bases already contain the effective type ancestry. */
 export function connectionStreams(release: GuideRelease, type: string, id: string, locale: string): ConnectionStream[] {
