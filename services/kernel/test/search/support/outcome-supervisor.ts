@@ -352,7 +352,9 @@ function supervise(parent: OutcomeRpc) {
     );
     if (!child.pid) throw new Error('Worker has no process identity');
     await own({ kind: 'worker_process', pid: child.pid });
-    observation.workerStats = await workerRpc.request<WorkerStats>('init', { env });
+    const stats = await workerRpc.request<WorkerStats>('init', { env });
+    observation.workerStats = stats;
+    return stats;
   }
   let beforeClosing: Promise<void> | undefined;
   function beforeClose() {
@@ -452,8 +454,8 @@ function supervise(parent: OutcomeRpc) {
           const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
           return createKernel({
             ...config,
-            onAccessReady(access) {
-              config.onAccessReady?.(access);
+            onAccessReady(access, readers) {
+              config.onAccessReady?.(access, readers);
               const keys = createSubjectSourceKeyPages(config.pool, config.routeKey, access);
               nativeCoverage = async () => {
                 const generation = (await subjectGenerations(client, prefix)).active!;
@@ -516,9 +518,9 @@ function supervise(parent: OutcomeRpc) {
         KERNEL_SEARCH_PREFIX: prefix,
       });
       workerEnvironment = env;
-      await launchWorker(env);
+      const workerStats = await launchWorker(env);
       ready = true;
-      return { globalContext: semantic.globalContext, indexPrefix: prefix, workerStats: observation.workerStats };
+      return { globalContext: semantic.globalContext, indexPrefix: prefix, workerStats };
     } catch (error) {
       try {
         await dispose();
