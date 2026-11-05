@@ -80,6 +80,7 @@ function mapCareers(result: ReturnType<typeof convert>, type = 'schema:Person', 
 }
 
 test('career mapping emits cited P106 only for the exact current source-backed Person Concept', () => {
+  // Conversion retains text; only the mapper binds the exact Person, source key, Scheme, Concept and P106.
   const valid = convert(1, ['producer']);
   const mapped = mapCareers(valid);
   const proposals = mapped.proposals.filter(
@@ -94,6 +95,7 @@ test('career mapping emits cited P106 only for the exact current source-backed P
     type: 'value',
     content: concept,
   });
+  // Career assertions cite the exact Person record with the source-owned career field location.
   expect(proposals[0]?.op === 'propose' ? proposals[0].statement.references?.[0]?.parts : []).toContainEqual({
     property: { id: 'schema:url' },
     value: { type: 'value', content: 'https://bgm.tv/person/8101#/career' },
