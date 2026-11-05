@@ -178,6 +178,7 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       expect(controlFor(texts[0]!)).toBe(first);
       expect(first.getAttribute('aria-expanded')).toBe('true');
       narrow = true;
+      await act(async () => resizeCallbacks.forEach((resize) => resize()));
       await act(async () => user.keyboard(' '));
       expect(first.getAttribute('aria-expanded')).toBe('false');
       expect(window.document.activeElement).toBe(first);
