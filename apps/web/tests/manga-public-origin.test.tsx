@@ -2,8 +2,6 @@ import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { candidateContext } from '../src/subject/candidates';
-import { MangaProfileEntry } from '../src/features/catalogue/manga-profile-entry';
-import { collectEditorialEntries } from '../src/features/catalogue/editorial-entry';
 import {
   mangaGlobalVisitHref,
   mangaObservedOrigin,
@@ -29,7 +27,9 @@ const origin: MangaPublicOrigin = {
 };
 const parse = (href: string) => parseMangaPublicVisit(new URL(href, 'https://site.test').search, id, 'en', base);
 
-test('actual Manga entry and contribution collector retain observed origin without reading producers or changing creation', () => {
+test('actual Manga entry and contribution collector retain observed origin without reading producers or changing creation', async () => {
+  const { MangaProfileEntry } = await import('../src/features/catalogue/manga-profile-entry');
+  const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
   const entry = <MangaProfileEntry id={id} label="Comic" locale="en" origin={origin} />;
   const href = collectEditorialEntries(entry).entries[0]!.href;
   expect(renderToStaticMarkup(entry)).toContain('origin=');
