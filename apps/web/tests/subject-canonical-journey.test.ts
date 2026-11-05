@@ -9,7 +9,6 @@ import recordedSubject from '../src/kernel/recorded/subject.json';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { loadSubject } from '../src/subject/load-subject';
 import { accountHref, canonicalRedirect, keepSearch, subjectUrlForView } from '../src/subject/subject-href';
-import { formerHandleRedirect } from '../src/features/pages/agent';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import { cachePublicPage } from '../src/security/page-cache';
 
@@ -17,6 +16,7 @@ const original = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadSubjectPage, SubjectPage, subjectBody } = await import('../src/features/pages/subject');
+const { formerHandleRedirect } = await import('../src/features/pages/agent');
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
