@@ -374,7 +374,8 @@ test('ordinary echoes and callback replacement preserve current serialized repla
         call.data.target === 'post' && call.data.id === 'one' && call.headers.get('x-csrf-token') === 'csrf-one',
     ),
   ).toBe(true);
-  expect(refreshed).toEqual(['original', 'current', 'current']);
+  // Queued writes keep the refresh captured with their visit; a callback replacement retains the queue only.
+  expect(refreshed).toEqual(['original', 'original', 'original']);
   expect(host.querySelector('[aria-busy="true"]')).toBeNull();
   unsubscribe();
   await act(async () => {
