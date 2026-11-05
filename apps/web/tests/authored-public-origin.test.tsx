@@ -200,9 +200,12 @@ test('mounted entry, contribution menu and authored route keep public intent out
         <AuthoredFieldEntry id={addonProfileId} title={label} locale="en" origin={observed} />
       </EditorialEntry>,
     );
-    await act(async () => within(host).getByRole('button', { name: m.contribute_title() }).click());
-    await act(async () => within(host).getByText(m.contribute_edit(), { exact: true }).click());
-    const menuHref = host.querySelector<HTMLAnchorElement>('a[href*="/authored?origin="]')?.getAttribute('href');
+    const publicDom = within(window.document.body);
+    await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
+    await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
+    const menuHref = window.document.body
+      .querySelector<HTMLAnchorElement>('a[href*="/authored?origin="]')
+      ?.getAttribute('href');
     expect(menuHref).toBe(authoredPublicCorrectionHref(base, observed));
 
     const originHref = authoredPublicCorrectionHref(base, observed);
