@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
 import { publicationReadWithin } from '../collection-publication';
 import { isRecord } from '../collection-records';
 import {
@@ -31,12 +32,13 @@ export function QueryPublicationView({
   subject: string;
   collectionId: string;
   revision: number;
-  visibility?: 'private' | 'public' | 'unlisted' | null;
+  visibility?: 'private' | 'public' | 'unlisted' | null | undefined;
   capture(): Transport | null;
   isCurrent(): boolean;
   canBegin(): boolean;
 }) {
   const storageKey = JSON.stringify(['collection-query-publication', subject, collectionId]);
+  const collectionHref = `/${getLocale()}/collections/${encodeURIComponent(collectionId)}`;
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [status, setStatus] = useState<QueryPublicationStatus | null>(null);
   const [failure, setFailure] = useState<Extract<QueryPublicationResult, { ok: false }>['reason'] | null>(null);
@@ -166,10 +168,7 @@ export function QueryPublicationView({
               <p className="break-all">
                 {m.library_publication_published_generation({ generation: status.publication.generation })}
               </p>
-              <a
-                className="inline-flex min-h-11 items-center text-primary underline"
-                href={`/collections/${encodeURIComponent(collectionId)}`}
-              >
+              <a className="inline-flex min-h-11 items-center text-primary underline" href={collectionHref}>
                 {m.library_publication_view()}
               </a>
             </div>
@@ -192,10 +191,7 @@ export function QueryPublicationView({
                 : m.library_query_publication_unknown()}
         </p>
       ) : null}
-      <a
-        className="inline-flex min-h-11 items-center text-primary underline"
-        href={`/collections/${encodeURIComponent(collectionId)}`}
-      >
+      <a className="inline-flex min-h-11 items-center text-primary underline" href={collectionHref}>
         {m.library_publication_back()}
       </a>
     </section>

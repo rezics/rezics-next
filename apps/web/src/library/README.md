@@ -330,6 +330,7 @@ starts another command automatically. Only native `complete` status supplies the
 visible response deadline does not cancel the native operation. The page uses the installed `$publish.post` and
 `collectionPublications({ id }).get` bindings and consumes their responses into plain server-function values.
 Private facts and query populations are never stored in recovery. A terminal response clears the retained request.
+Mode selection has distinct action labels, and completion/return links retain the current locale.
 
 ### Selected publication
 

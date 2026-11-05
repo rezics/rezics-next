@@ -161,7 +161,7 @@ test('returning to publication retries an unacknowledged request, then resumes t
     expect(attempts).toHaveLength(2);
     expect(host.textContent).toContain(m.library_query_publication_complete());
     expect(host.textContent).toContain(generation);
-    expect(host.querySelector('a')?.getAttribute('href')).toBe(`/collections/${collectionId}`);
+    expect(host.querySelector('a')?.getAttribute('href')).toBe(`/en/collections/${collectionId}`);
     expect(sessionStorage.length).toBe(0);
   } finally {
     await act(async () => root.unmount());
