@@ -1,5 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { act } from 'react';
 import type { ReviewPage, ReadState } from '../src/account-verification/transport';
 
@@ -70,7 +71,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const { sessionQueryKey } = await import('../src/session/browser-state');
   const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
   const { m } = await import('../src/paraglide/messages.js');
-  const require = await import('node:module').then(({ createRequire }) => createRequire(import.meta.url));
+  const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
   const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
   const oldLocale = getLocale;
   overwriteGetLocale(() => 'en');
