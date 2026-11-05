@@ -233,7 +233,14 @@ async function mountRouted(
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
-    expect(ready()).toBe(true);
+    if (!ready())
+      throw new Error(
+        `Route did not settle: ${JSON.stringify({
+          href: router.state.location.href,
+          matches: router.state.matches.map((match) => ({ routeId: match.routeId, status: match.status })),
+          text: host.textContent?.slice(0, 500),
+        })}`,
+      );
   };
   const click = async (label: string) =>
     act(async () => {
