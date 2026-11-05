@@ -128,7 +128,9 @@ const page = Type.Object(
 );
 
 export function decodeOwnVotesPage(value: unknown): OwnVotesPage | null {
-  return Value.Check(page, value) ? (value as OwnVotesPage) : null;
+  if (!Value.Check(page, value)) return null;
+  const accepted = value as OwnVotesPage;
+  return { viewer: accepted.viewer, votes: accepted.votes, next: accepted.next };
 }
 
 export function isOwnVoteActions(value: unknown): value is OwnVoteActions {
