@@ -26,7 +26,7 @@ const binding = (request: Request) => [
 /** Capture before the restore can be dispatched, alongside its deletion receipt. */
 export async function captureEntryRestoreCredential(request: Request, env: Partial<SessionEnv>) {
   // Explicit bearer clients own their credential and resubmit it themselves.
-  if (!cookie(request, SESSION_COOKIE)) return undefined;
+  if (request.headers.has('authorization') || !cookie(request, SESSION_COOKIE)) return undefined;
   const authorization = viewerCredential(request);
   if (!authorization || !sessionSubject(request)) throw new Error('Missing restore viewer');
   const iv = crypto.getRandomValues(new Uint8Array(12));
