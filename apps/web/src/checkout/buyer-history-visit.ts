@@ -2,6 +2,7 @@ import { useLayoutEffect, useSyncExternalStore, type MouseEvent as ReactMouseEve
 import { useRouter, type AnyRouter } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { browserObservation } from '../session/observation';
+import { purchaseReaderOriginFromState } from './purchase-return';
 import type { BuyerCurrentOrigin } from './buyer-current-origin';
 import { BuyerHistoryWindows, type BuyerHistoryIntent, type BuyerHistoryList, type BuyerHistoryMovement } from './buyer-history-windows';
 
@@ -78,8 +79,16 @@ export class BuyerHistoryVisit {
       if (fromLocation?.href === toLocation.href) return;
       const from = fromLocation && buyerRoute(fromLocation.publicHref);
       const to = buyerRoute(toLocation.publicHref);
-      if (!from || !to || from.locale !== to.locale) this.clear();
-      else if (this.focus && to.list !== this.focus.ticket.list) this.focus = undefined;
+      let eligible = !!from && !!to && from.locale === to.locale;
+      if (eligible && to?.list === 'editions') {
+        const origin = purchaseReaderOriginFromState(toLocation.state, to.id!, to.locale!);
+        eligible = !!origin && from?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && from.id === origin.recordId;
+      } else if (eligible && from?.list === 'editions') {
+        const origin = purchaseReaderOriginFromState(fromLocation!.state, from.id!, from.locale!);
+        eligible = !!origin && to?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && to.id === origin.recordId;
+      }
+      if (!eligible) this.clear();
+      else if (this.focus && to?.list !== this.focus.ticket.list) this.focus = undefined;
     });
     const focus = (event: FocusEvent) => {
       if (this.focus && event.target !== this.focus.initiator) this.focus = undefined;
