@@ -65,8 +65,7 @@ import { SelectionReviewView, SelectionReviewList, type SelectionReviewItem } fr
 import { appendSelectionWithinLimit, selectionReviewSignature, selectionResultState } from './selection-review';
 import { SelectionResultView } from './selection-result-view';
 import { useReceivedEntryReading } from './received-entry-reading/use-reading';
-import { LibraryOwnScore } from './score.tsx';
-import type { LibraryScoreQuestion, LibraryViewerFacts } from './score';
+import { LibraryOwnScore, type LibraryScoreQuestion, type LibraryViewerFacts } from './score';
 
 export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
   return state ? (label ?? m.library_other()) : undefined;

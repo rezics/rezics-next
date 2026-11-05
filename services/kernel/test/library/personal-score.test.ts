@@ -53,10 +53,10 @@ test('Content identity work and voter standing fence the owner-wide score versio
   expect(afterRepair).toMatchObject({ status: 'current' });
   if (afterRepair.status !== 'current') throw new Error('expected current after repair');
   expect(afterRepair.version).not.toBe(current.version);
-  await db.admin.query(
-    `INSERT INTO rating.voter_state(route,voter_id,state) VALUES($1,$2,'ineligible')`,
-    [route, owner],
-  );
+  await db.admin.query(`INSERT INTO rating.voter_state(route,voter_id,state) VALUES($1,$2,'ineligible')`, [
+    route,
+    owner,
+  ]);
   expect(await readPersonalScoreCurrentness(db.admin, ownerRef)).toMatchObject({
     status: 'unavailable',
     reason: 'Content voter standing ineligible refuses score currentness',

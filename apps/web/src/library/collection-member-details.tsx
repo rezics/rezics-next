@@ -6,8 +6,7 @@ import {
   CollectionMemberDetails as CollectionSubjectDetails,
   CollectionMemberViewerDetails,
 } from './collection-member-row';
-import { isLikedCollection } from './liked';
-import { LikedMemberScore } from './liked.tsx';
+import { isLikedCollection, LikedMemberScore } from './liked';
 import { CollectionNoteReader } from './collection-note-reader';
 import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import type { CollectionListPresentations } from './collection-presentation';
