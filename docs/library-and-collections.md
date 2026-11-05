@@ -634,6 +634,14 @@ Collections and History link to their more specific contracts for exact addresse
   exact saved address and owners in [Continue](library-continue.md). Following and Pins retain their own bounded
   continuation and replacement rules.
 
+### Private Label assignment windows
+
+Decision: One eligible Label and locale visit keeps at most eight admitted predecessor cursor coordinates, the current coordinate and one staged target; movement commits only after that exact window is admitted, and a refused cursor can be retried at its exact address.
+
+The shelf continues to read one native FULL page of at most 100 assignments. Previous rereads the exact retained cursor; First removes the cursor; More uses only the native continuation. A short page with a continuation remains traversable, and an empty terminal window keeps Previous and First. A direct later-cursor entry has no in-memory Previous. The existing 2,048-character route cursor bound remains in force; these coordinates do not impose a native response-byte limit.
+
+The visit retains cursor coordinates only. It does not retain assignment pages, selected rows, Label names, Undo operands, receipts or credentials. Layout, size and columns preserve the trail. Label, locale, viewer, credential or access replacement, departure or disposal clears the trail and pending focus. Cursor links remain ordinary GETs without script; browser Back and Forward reread their addressed windows, and reload does not invent predecessors. Cursor refusal preserves its honest state and same-Label First destination; Retry repeats the exact failed address without an automatic reset.
+
 ## Lifecycle, privacy and acceptance
 
 Terminal account fencing takes effect before cleanup; readers and workers cannot recreate private facts after it.

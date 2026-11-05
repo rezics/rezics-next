@@ -1,12 +1,21 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from '@tanstack/react-router';
-import { useMemo, useRef, useState } from 'react';
+import { useLocation, useRouter } from '@tanstack/react-router';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { consolidationEnvelope } from './label-consolidation/envelope';
 import { consolidationTransport } from './label-consolidation/route';
 import { ConsolidationWorkspace } from './label-consolidation/workspace';
 import { m } from '../paraglide/messages.js';
 import { usePrivateReportOrigin, usePrivateReportPayload } from './private-report-current-origin';
-import { LabelShelfPage } from './entries-page';
+import { LabelShelfPage, type LabelShelfWindowLinks } from './entries-page';
+import {
+  admitLabelShelfWindow,
+  emptyLabelShelfWindow,
+  hasPreviousLabelShelfWindow,
+  previousLabelShelfWindow,
+  stageLabelShelfWindow,
+  type LabelShelfWindowMove,
+  type LabelShelfWindowState,
+} from './label-shelf-window-navigation';
 import {
   labelShelfSource,
   type CurrentLabelShelfData,
@@ -116,7 +125,8 @@ export function CurrentLabelShelf({
   presentation?: ShelfPresentationResolution;
   read: ReadShelf;
 }) {
-  const search = useLocation({ select: (location) => location.search });
+  const location = useLocation();
+  const search = location.search;
   const source = sourceAt(search);
   const { origin, value, hydrated } = usePrivateReportOrigin(
     addressOf(source, locale),
@@ -141,7 +151,14 @@ export function CurrentLabelShelf({
         ? initial
         : { state: 'preparing' };
     return (
-      <LabelShelfPage page={serverPage} locale={locale} display={display} {...(presentation ? { presentation } : {})} />
+      <LabelShelfPage
+        page={serverPage}
+        locale={locale}
+        display={display}
+        currentCursor={source.cursor}
+        retryHref={location.publicHref}
+        {...(presentation ? { presentation } : {})}
+      />
     );
   }
   const enrolled = origin.capture(...readGroups);
@@ -159,9 +176,18 @@ export function CurrentLabelShelf({
     };
     return <LabelShelfPage page={page} locale={locale} display={display} {...(presentation ? { presentation } : {})} />;
   }
+  const visit = JSON.stringify([
+    source.labelId,
+    locale,
+    value.subject,
+    value.csrfToken,
+    value.authority,
+    value.admitted,
+    value.observation?.id,
+  ]);
   return (
-    <LabelShelfRead
-      key={origin.version(...readGroups)}
+    <LabelShelfVisit
+      key={visit}
       origin={origin}
       originatingRead={current}
       episode={origin.version(...readGroups)}
@@ -176,18 +202,13 @@ export function CurrentLabelShelf({
   );
 }
 
-function LabelShelfRead({
-  origin,
-  originatingRead,
-  episode,
-  payload,
-  subject,
-  source,
-  locale,
-  display,
-  presentation,
-  read,
-}: {
+type FocusHandoff = {
+  target: string | null;
+  action: HTMLAnchorElement;
+  cancel: () => void;
+};
+
+function LabelShelfVisit(props: {
   origin: ReturnType<typeof usePrivateReportOrigin>['origin'];
   originatingRead: () => boolean;
   episode: string;
@@ -199,7 +220,114 @@ function LabelShelfRead({
   presentation?: ShelfPresentationResolution;
   read: ReadShelf;
 }) {
+  const [windows, setWindows] = useState(emptyLabelShelfWindow);
+  const focusHandoff = useRef<FocusHandoff | null>(null);
+  const clearFocusHandoff = () => {
+    focusHandoff.current?.cancel();
+    focusHandoff.current = null;
+  };
+  useEffect(() => clearFocusHandoff, []);
+  const stage = (
+    move: LabelShelfWindowMove,
+    target: string | null,
+    event: MouseEvent<HTMLAnchorElement>,
+    current: string | null,
+  ) => {
+    clearFocusHandoff();
+    setWindows((state) => {
+      const ready = move === 'next' && state.pending === null && state.current !== current
+        ? admitLabelShelfWindow(state, current)
+        : state;
+      return stageLabelShelfWindow(ready, move, target);
+    });
+    if (event.detail !== 0) return;
+    const action = event.currentTarget;
+    const handoff: FocusHandoff = { target, action, cancel: () => {} };
+    const onFocus = (next: FocusEvent) => {
+      if (next.target === document.body || next.target === action) return;
+      if (focusHandoff.current === handoff) clearFocusHandoff();
+    };
+    document.addEventListener('focusin', onFocus);
+    handoff.cancel = () => document.removeEventListener('focusin', onFocus);
+    focusHandoff.current = handoff;
+  };
+  const admit = (target: string | null) => {
+    const committed = windows.pending?.target === target;
+    if (committed) {
+      const handoff = focusHandoff.current;
+      if (
+        handoff?.target === target &&
+        (document.activeElement === handoff.action || document.activeElement === document.body)
+      )
+        document.querySelector<HTMLElement>('[data-label-shelf-heading]')?.focus({ preventScroll: true });
+      clearFocusHandoff();
+    }
+    setWindows((current) => admitLabelShelfWindow(current, target));
+  };
+  const fail = (target: string | null) => {
+    clearFocusHandoff();
+    setWindows((current) => {
+      if (current.pending?.target === target) return current;
+      if (current.current === target) return { ...current, pending: null };
+      if (current.current === null && current.pending === null && current.predecessors.length === 0) return current;
+      return emptyLabelShelfWindow();
+    });
+  };
+  return (
+    <LabelShelfRead
+      {...props}
+      windows={windows}
+      onStage={stage}
+      onAdmitted={admit}
+      onFailed={fail}
+    />
+  );
+}
+
+function internalLibraryHref(href: string, locale: string): string {
+  const prefix = `/${encodeURIComponent(locale)}`;
+  return href.startsWith(`${prefix}/`) ? href.slice(prefix.length) : href;
+}
+
+function LabelShelfRead({
+  origin,
+  originatingRead,
+  episode,
+  payload,
+  subject,
+  source,
+  locale,
+  display,
+  presentation,
+  read,
+  windows,
+  onStage,
+  onAdmitted,
+  onFailed,
+}: {
+  origin: ReturnType<typeof usePrivateReportOrigin>['origin'];
+  originatingRead: () => boolean;
+  episode: string;
+  payload: Payload;
+  subject: string;
+  source: LabelShelfSource;
+  locale: string;
+  display: ShelfDisplay;
+  presentation?: ShelfPresentationResolution;
+  read: ReadShelf;
+  windows: LabelShelfWindowState;
+  onStage: (
+    move: LabelShelfWindowMove,
+    target: string | null,
+    event: MouseEvent<HTMLAnchorElement>,
+    current: string | null,
+  ) => void;
+  onAdmitted: (target: string | null) => void;
+  onFailed: (target: string | null) => void;
+}) {
   const client = useQueryClient();
+  const router = useRouter();
+  const currentHref = useLocation({ select: (location) => location.publicHref });
   const current = originatingRead;
   const key = ['library', 'label-shelf', subject, sourceKey(source), locale, episode];
   const query = useQuery({
@@ -317,15 +445,63 @@ function LabelShelfRead({
   const accepted = isCurrent() && query.data && matches(query.data, subject, source, locale) ? query.data : undefined;
   if (accepted?.state === 'loaded' || accepted?.state === 'cursor-rejected') payload.value = accepted;
   const page: LabelShelfPageData = accepted ?? { state: query.isError ? 'unavailable' : 'preparing' };
-  const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
-  // CSRF, revisions and command keys remain exactly those captured by this payload's originating read.
   const shown = reopened?.binding === binding.id ? reopened.page : page;
+  useEffect(() => {
+    if (!current() || query.isFetching) return;
+    if (accepted?.state === 'loaded' && isCurrent()) {
+      if (
+        windows.pending?.target === source.cursor ||
+        (windows.current !== source.cursor && windows.pending?.target !== source.cursor)
+      )
+        onAdmitted(source.cursor);
+    } else onFailed(source.cursor);
+  }, [accepted, current, isCurrent, onAdmitted, onFailed, query.isFetching, query.isError, source.cursor, windows]);
+  const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
+  const view = presentation?.intent ?? { label: source.labelId, ...explicitShelfDisplay(display) };
+  const hrefAt = (cursor: string | null) =>
+    shelfHref(locale, { ...view, cursor: cursor ?? undefined });
+  const action = (move: LabelShelfWindowMove, target: string | null) => ({
+    href: hrefAt(target),
+    onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      if (!isCurrent()) return;
+      onStage(move, target, event, source.cursor);
+      void router.navigate({ href: internalLibraryHref(hrefAt(target), locale) });
+    },
+  });
+  const prior = previousLabelShelfWindow(windows);
+  const windowLinks: LabelShelfWindowLinks = {
+    ...(hasPreviousLabelShelfWindow(windows) && prior !== undefined ? { previous: action('previous', prior) } : {}),
+    ...(source.cursor !== null || windows.current !== null || windows.predecessors.length > 0 || windows.pending?.move === 'first'
+      ? { first: action('first', null) }
+      : {}),
+    ...(shown.state === 'loaded' && shown.next ? { next: action('next', shown.next) } : {}),
+    ...(page.state === 'cursor-rejected' && source.cursor !== null && !query.isFetching
+      ? {
+          retry: {
+            href: currentHref,
+            onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              if (!isCurrent()) return;
+              onStage('retry', source.cursor, event, source.cursor);
+              void query.refetch();
+            },
+          },
+        }
+      : {}),
+  };
+  // CSRF, revisions and command keys remain exactly those captured by this payload's originating read.
   if (page.state !== 'loaded')
     return (
       <LabelShelfPage
         page={page}
         locale={locale}
         display={display}
+        currentCursor={source.cursor}
+        retryHref={currentHref}
+        windowLinks={windowLinks}
         {...(presentation ? { presentation } : {})}
         isCurrent={isCurrent}
         canUnassign={canUnassign}
@@ -355,6 +531,9 @@ function LabelShelfRead({
         page={shown}
         locale={locale}
         display={display}
+        currentCursor={source.cursor}
+        retryHref={currentHref}
+        windowLinks={windowLinks}
         {...(presentation ? { presentation } : {})}
         isCurrent={isCurrent}
         canUnassign={canUnassign}
