@@ -657,6 +657,7 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   async submit(reset = false) {
+    this.keepLocal();
     if (!this.canSubmit()) return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
