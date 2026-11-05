@@ -2529,6 +2529,8 @@ hydrates only `schema:abstract`. Catalogue file and release-group pages keep vie
 `{ state, context, statementPropose }`; admitted quotation pages keep `{ kind }` plus correction `actions`.
 Decision: direct quotation routes carry Context; one-use receipts pin Context, caller generation and assertion across `via` returns; corrections use exact Subject/Context permission and stay unavailable when Global-only operation advice cannot serve the selected Context.
 
+Decision: Subject exploration carries `context ?? frame.context` into the canonical quotation address. A malformed Context or an observed Realm is explicitly unsupported at this entry and never becomes an implicit Global reading. The entry retains one same-locale, same-Subject public origin only when the local return parser accepts its route, its Context matches the observation when present, and the complete encoded address fits 2,048 characters and UTF-8 bytes; otherwise it labels exact return unsupported and offers a separately named fresh general quotation visit. The entry carries no selected quotation or assertion.
+
 The public `via` address remains a bounded path plus quote intent and a one-use marker whose public Context suffix is
 only a recovery address, because the shared Subject return validator does not admit Context inside a nested quotation
 address. A lost receipt restarts with a current read. Accept and adopt stay on their Context commands. A hidden speaker stays omitted from statements and related,
@@ -2571,6 +2573,13 @@ growth measures the selected quotation page, outbound relation reads, document b
 Qualifiers and reference parts come from that same selected subject response; they add no provider or
 per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats the same bounded
 read and hides old source controls until it completes.
+
+The Subject exploration entry builds one canonical local `/quotations` address and retains at most one admitted
+same-locale, same-Subject origin whose Context matches the observation when present. The complete encoded address is
+capped at 2,048 characters and UTF-8 bytes; opening the entry makes no producer request. An unsupported Realm,
+malformed Context, rejected origin or over-budget address shows a local state instead of a selector-dropping link.
+A separately named general visit carries no Context or quotation selection and starts only after an explicit link
+activation.
 
 ## Work title variants
 
