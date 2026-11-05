@@ -137,6 +137,7 @@ export function NamesHandoff({
   const router = useRouter({ warn: false });
   const host = useRef<HTMLDivElement>(null);
   const focused = useRef<EventTarget | null>(null);
+  const focusedDeparture = useRef<'sources' | 'terms' | undefined>(undefined);
   const lastName = useRef<NameTarget | undefined>(undefined);
   const nameTargets = useRef(new Map<HTMLElement, NameTarget>());
   const groupTargets = useRef(new Map<HTMLElement, string>());
@@ -160,8 +161,16 @@ export function NamesHandoff({
     [],
   );
   useLayoutEffect(() => {
-    if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
-      host.current?.querySelector<HTMLElement>('summary')?.focus();
+    if (
+      focused.current instanceof Element &&
+      !focused.current.isConnected &&
+      document.activeElement === document.body
+    ) {
+      const departure =
+        focusedDeparture.current &&
+        host.current?.querySelector<HTMLElement>(`[data-names-${focusedDeparture.current}] a`);
+      (departure || host.current?.querySelector<HTMLElement>('summary'))?.focus();
+    }
   });
   const [restored, setRestored] = useState<{
     window?: NamesWindow;
@@ -242,6 +251,11 @@ export function NamesHandoff({
       className="min-w-0"
       onFocusCapture={(event) => {
         focused.current = event.target;
+        focusedDeparture.current = event.target.closest('[data-names-sources]')
+          ? 'sources'
+          : event.target.closest('[data-names-terms]')
+            ? 'terms'
+            : undefined;
         const name = nameTargets.current.get(event.target as HTMLElement);
         if (name) lastName.current = name;
         else if (!(event.target instanceof Element && event.target.closest('[data-names-terms], [data-names-sources]')))
