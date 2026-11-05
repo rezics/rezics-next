@@ -127,11 +127,11 @@ test('promotion publishes the exact gated candidate onto main', async () => {
       if (command[0] === 'true') gated.push(git(cwd, 'rev-parse', 'HEAD'));
       return success;
     });
+    const published = h.head('main');
     expect(gated.length).toBeGreaterThan(0);
-    expect(new Set(gated)).toEqual(new Set([h.head('main')]));
-    expect(h.head('main')).toBe(gated[0]);
+    expect(new Set(gated)).toEqual(new Set([published]));
     expect(h.store.task(task.id).state).toBe('merged');
-    expect(h.store.task(task.id).mergedCommit).toBe(gated[0]);
+    expect(h.store.task(task.id).mergedCommit).toBe(published);
     expect(h.store.promotion()).toBeUndefined();
   } finally {
     h.dispose();

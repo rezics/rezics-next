@@ -179,9 +179,10 @@ test('promotion without a stabilize branch cuts one from a passing quick-gated d
       if (command[0] === 'true') gated.push(git(cwd, 'rev-parse', 'HEAD'));
       return success;
     });
+    const published = h.head('main');
     expect(gated.length).toBeGreaterThan(0);
-    expect(h.head('main')).toBe(gated[0]);
-    expect(h.head('stabilize')).toBe(h.head('main'));
+    expect(new Set(gated)).toEqual(new Set([published]));
+    expect(h.head('stabilize')).toBe(published);
     expect(h.store.task(task.id).state).toBe('merged');
   } finally {
     h.dispose();
