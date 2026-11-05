@@ -158,6 +158,20 @@ async function allowed(
   return (await accessCheck(access, ctx.actor, action, resource, ctx))(pool);
 }
 
+function fixtureAccess(
+  catalogue: ReturnType<typeof actionCatalogue> = new Map(actions.map((action) => [action, { anonymous: false }])),
+) {
+  return createAccess({
+    actions: catalogue,
+    auth: {
+      issuer: 'https://auth.example.test',
+      audience: 'https://api.rezics.test',
+      jwksUrl: 'https://auth.example.test/.well-known/jwks.json',
+      fetch: async () => auth.handler(new Request('https://auth.example.test/.well-known/jwks.json')),
+    },
+  });
+}
+
 beforeAll(async () => {
   authDatabase = `bootstrap_auth_${process.pid}`;
   const authUrl = new URL(url);
@@ -252,15 +266,7 @@ beforeAll(async () => {
     automated,
     person,
   ]);
-  access = createAccess({
-    actions: catalogue,
-    auth: {
-      issuer: 'https://auth.example.test',
-      audience: 'https://api.rezics.test',
-      jwksUrl: 'https://auth.example.test/.well-known/jwks.json',
-      fetch: async () => auth.handler(new Request('https://auth.example.test/.well-known/jwks.json')),
-    },
-  });
+  access = fixtureAccess();
 }, 60_000);
 afterAll(async () => {
   await authPool?.end();
@@ -313,15 +319,7 @@ test('exact root CLI installs one durable normal Global role and one registered 
 
 test('Auth-issued scopes and installed formula govern delegation, revocation and unrelated resources', async () => {
   const semanticActions = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
-  const semantic = createAccess({
-    actions: semanticActions,
-    auth: {
-      issuer: 'https://auth.example.test',
-      audience: 'https://api.rezics.test',
-      jwksUrl: 'https://auth.example.test/.well-known/jwks.json',
-      fetch: async () => auth.handler(new Request('https://auth.example.test/.well-known/jwks.json')),
-    },
-  });
+  const semantic = fixtureAccess(semanticActions);
   const semanticContext = await context(person, actions, semantic);
   expect(
     await (
@@ -558,6 +556,7 @@ test('local showcase uses one native identity grant, authoritative validity and 
   await invoke(person);
   const governance = await snapshot();
   expect(await showcaseSnapshot()).toEqual({ grants: [], receipts: [], events: [] });
+  const position = (await reader.query('SELECT position FROM core.partition WHERE partition_no=0')).rows[0].position;
   expect(await bootstrapLocalShowcaseBoardCreation(pool, person)).toEqual({
     resource: PLATFORM_RESOURCE,
     subjectId: person,
@@ -570,6 +569,7 @@ test('local showcase uses one native identity grant, authoritative validity and 
   const grant = installed.grants[0];
   const receipt = installed.receipts[0];
   const event = installed.events[0];
+  expect(BigInt(receipt.position)).toBe(BigInt(position) + 1n);
   expect(grant).toMatchObject({
     subject_kind: 'identity',
     subject_id: person,
@@ -604,11 +604,12 @@ test('local showcase uses one native identity grant, authoritative validity and 
   await bootstrapLocalShowcaseBoardCreation(pool, person);
   expect(await showcaseSnapshot()).toEqual(installed);
   const mounted = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
-  const using = createAccess({ actions: mounted });
+  const using = fixtureAccess(mounted);
   // Self-renunciation uses the existing native grant command and a genuine Auth-issued actor.
   const ctx = await context(
     person,
     [...mounted.keys()].filter((scope) => scope !== 'media:complete'),
+    using,
   );
   expect(await (await accessCheck(using, ctx.actor, 'board:create', PLATFORM_RESOURCE, ctx))(pool)).toBe(true);
   expect(await (await accessCheck(using, ctx.actor, 'thread:create', PLATFORM_RESOURCE, ctx))(pool)).toBe(false);
@@ -617,7 +618,7 @@ test('local showcase uses one native identity grant, authoritative validity and 
       await accessCheck(using, ctx.actor, 'board:create', { route: routeOf(person)!, id: person }, ctx)
     )(pool),
   ).toBe(false);
-  const unrelated = await context(other, ctx.actor.scopes);
+  const unrelated = await context(other, ctx.actor.scopes, using);
   expect(await (await accessCheck(using, unrelated.actor, 'board:create', PLATFORM_RESOURCE, unrelated))(pool)).toBe(
     false,
   );
