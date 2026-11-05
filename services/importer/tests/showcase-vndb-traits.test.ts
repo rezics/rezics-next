@@ -15,7 +15,7 @@ import {
 } from '../src/showcase-character-vocabulary.ts';
 
 const scheme = '00000000-0000-4000-8000-000000000010';
-const concepts = ['00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000012'] as const;
+const concepts = ['00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000012'];
 const subjects = Object.fromEntries([
   ['vndb-character-traits-scheme', scheme],
   ...['i23', 'i30'].map((code, index) => [`vndb-character-traits-${code}`, concepts[index]!]),
@@ -78,7 +78,7 @@ test('the development trait adapter reuses current reviewed Concepts only for it
   expect(prepared.bindings.concepts.map((concept) => concept.code)).toEqual(['i23']);
   expect(profileFromCharacterVocabularyBindings(prepared.bindings)?.traits).toEqual({
     schemeId: scheme,
-    concepts: [{ code: 'i23', id: concepts[0] }],
+    concepts: [{ code: 'i23', id: concepts[0]! }],
   });
   plan.records.vndb.push(plan.entities.vndb.pop()!);
   const fromRecords = await prepareShowcaseVndbTraits(plan, sourcePlan, port, subjects);
@@ -210,6 +210,6 @@ test('the development selector keeps its five exact works and only their direct 
   const vocabulary = await planShowcaseCharacterVocabulary(tables, plan);
   const prepared = await prepareShowcaseVndbTraits(plan, vocabulary.plan, vocabularyPort(), subjects);
   expect(prepared.traits).toEqual([{ id: 'c6487', tid: 'i23', spoil: '1', lie: 'f' }]);
-  expect(prepared.bindings.concepts.map((concept) => concept.id)).toEqual([concepts[0]]);
+  expect(prepared.bindings.concepts.map((concept) => concept.id)).toEqual([concepts[0]!]);
   expect(vocabulary.requirements.terms.map((term) => term.code).sort()).toEqual(['i23', 'i99', 'main']);
 });
