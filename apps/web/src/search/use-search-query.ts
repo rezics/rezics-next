@@ -4,13 +4,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReaderAddress, useWorkspaceAdmission } from '../session/reader';
 import { searchQueryOptions } from './search-queries';
 import { searchPageForRecovery, searchUnavailablePage } from './search-recovery';
-import { discoverySearchHref, searchLoaderDeps, type SearchLoaderDeps } from './search-params';
+import {
+  discoverySearchHref,
+  realmCatalogueSearchLoaderDeps,
+  searchLoaderDeps,
+  type SearchLoaderDeps,
+} from './search-params';
 
 const operations = [] as const;
 
-type SearchQueryRouteOwner = Readonly<{ pathname: string; cursorParam?: string }>;
+type SearchQueryRouteOwner = Readonly<{ pathname: string; cursorParam?: string; realmId?: string }>;
 
 function locationSearchDeps(search: Record<string, unknown>, routeOwner?: SearchQueryRouteOwner): SearchLoaderDeps {
+  if (routeOwner?.realmId) return realmCatalogueSearchLoaderDeps(search, routeOwner.realmId);
   return searchLoaderDeps(routeOwner?.cursorParam ? { ...search, cursor: search[routeOwner.cursorParam] } : search);
 }
 
@@ -80,7 +86,7 @@ export function useSearchQuery(
         predicate: (candidate) => JSON.stringify(candidate.queryKey) !== target,
       });
     });
-  }, [router, client, locale, reader, routeOwner?.pathname, routeOwner?.cursorParam]);
+  }, [router, client, locale, reader, routeOwner?.pathname, routeOwner?.cursorParam, routeOwner?.realmId]);
   useEffect(() => {
     const restored = (event: PageTransitionEvent) => {
       if (enabled && event.persisted) void query.refetch({ cancelRefetch: true });

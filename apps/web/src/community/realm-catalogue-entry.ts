@@ -1,6 +1,15 @@
-import { safeParse } from 'valibot';
+import { parse, safeParse } from 'valibot';
 import { isSearchResourceScope, searchResourceScopeAction } from '../search/advanced-scope';
 import { searchParams } from '../search/search-params';
+import { realmReadingSearch } from './realm-reading-return';
+
+/** Search and the native shelves share an address, but retain separate continuations. */
+export function realmCataloguePageSearch(value: Record<string, unknown>) {
+  const search = { ...parse(searchParams, value) };
+  delete search.node;
+  delete search.cursor;
+  return { ...search, ...realmReadingSearch(value) };
+}
 
 /** A handoff has no stored Search state, cursor, facets, sort or rating population. */
 export type RealmCatalogueEntry = Readonly<{

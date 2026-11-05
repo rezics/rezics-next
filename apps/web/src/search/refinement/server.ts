@@ -86,7 +86,7 @@ export const readRefinement = createServerFn({ method: 'POST' })
       (resourceScope.kind !== parsedScope.scope.kind || resourceScope.id.toLowerCase() !== parsedScope.scope.id)
     )
       return { status: 'invalid', code: 'scope_mismatch' };
-    const readerState = { resourceScope, ratingPopulation };
+    const readerState = { ...data.conditions, resourceScope, ratingPopulation };
     const reader = searchRequiresCurrentReader(readerState) ? await readScopedSearchReader(requestContext) : undefined;
     if (searchRequiresCurrentReader(readerState) && (!reader || data.reader !== reader.owner))
       return { status: 'restart', httpStatus: 401, code: 'reader_changed' };
@@ -117,7 +117,7 @@ export const readRefinement = createServerFn({ method: 'POST' })
     try {
       return await readFacetPage(facetRead, (body) =>
         kernelClient(data.locale).subjects.$facets.post(body, {
-          ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+          ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
           fetch: { signal },
         }),
       );
