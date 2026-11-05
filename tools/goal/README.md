@@ -1360,6 +1360,8 @@ This check establishes only that Bun can transpile each changed source entry. It
 import cycles, TypeScript types, application boot, native checks or acceptance. The root typecheck, optional boot check,
 independent verifier and main promotion retain their existing policies. The target cost is below one second for a typical
 landing; the observed disposable-fixture command cost is recorded with the `dev-landing-transpile` guard below.
+The measured fixture was 7ms for 7 changed paths, 4 executable TypeScript entries and 180 source bytes; this is one
+sample against the target, not a claim that all landings meet it.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
