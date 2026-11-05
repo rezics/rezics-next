@@ -56,7 +56,8 @@ export function mangaPublicReturn(value: unknown, id: string, locale: string, re
       ? { continuation: { node: url.searchParams.get('node')!, cursor: url.searchParams.get('cursor') ?? '' } }
       : {}),
   });
-  return mangaCurrentAddress(accepted, fallback);
+  const current = mangaCurrentAddress(accepted, fallback);
+  return current === accepted ? current : undefined;
 }
 
 function publicOrigin(value: unknown, id: string, locale: string): MangaPublicOrigin | undefined {
