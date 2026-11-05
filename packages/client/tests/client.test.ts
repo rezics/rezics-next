@@ -4,7 +4,13 @@ import {
   SESSION_HEADER,
   type Kernel,
   type KernelClient,
+  type AccountAvatar,
+  type AccountProfile,
+  type AccountProfileResponse,
   type KernelSubjectsClient,
+  type ManagedAccountOrganization,
+  type ManagedAccountResponsibility,
+  type ManagedAccountsPage,
   type NoticeInboxItem,
   type NoticeInboxPage,
   type SubjectRead,
@@ -222,6 +228,29 @@ test('the generated account client reads the Inbox and unread summary', async ()
   expect(sent.map(({ url, method }) => [url, method])).toEqual([
     [`${ORIGIN}/v1/accounts/${ID}/notifications`, 'GET'],
     [`${ORIGIN}/v1/accounts/${ID}/notifications/count`, 'GET'],
+  ]);
+});
+
+test('profile and managed-account readers expose the mounted account responses', async () => {
+  const { sent, fetch } = kernel([() => json(200, { profile: { avatar: null } }), () => json(200, {})]);
+  const client = createKernelClient(ORIGIN, { fetch });
+  const profile = await client.accounts({ accountId: ID }).profile.get();
+  const managed = await client.me.managedAccounts.get({ query: { organizationsCursor: 'selected-page' } });
+  const accountProfile: AccountProfile = profile.data!.profile;
+  const avatar: AccountAvatar | null = accountProfile.avatar;
+  const accountProfileResponse: AccountProfileResponse = profile.data!;
+  const page: ManagedAccountsPage = managed.data!;
+  const organization: ManagedAccountOrganization | undefined = page.organizations.items[0];
+  const responsibility: ManagedAccountResponsibility | undefined = page.responsibilities.items[0];
+
+  expectTypeOf(accountProfileResponse.profile).toEqualTypeOf<AccountProfile>();
+  expectTypeOf(avatar).toEqualTypeOf<AccountAvatar | null>();
+  expectTypeOf(page.account.id).toEqualTypeOf<string>();
+  expectTypeOf(organization).toEqualTypeOf<ManagedAccountOrganization | undefined>();
+  expectTypeOf(responsibility).toEqualTypeOf<ManagedAccountResponsibility | undefined>();
+  expect(sent.map(({ url, method }) => [url, method])).toEqual([
+    [`${ORIGIN}/v1/accounts/${ID}/profile`, 'GET'],
+    [`${ORIGIN}/v1/me/managedAccounts?organizationsCursor=selected-page`, 'GET'],
   ]);
 });
 

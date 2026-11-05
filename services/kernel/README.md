@@ -35,6 +35,9 @@ referenced by the public client entrypoint as well as mounted routes.
 Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
 independently of future source candidates or unfinished consumers.
 
+Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
+managed-account navigation or unread data.
+
 The profile admits 512 regular members, 32 MiB decoded total, 2 MiB per member, 16 relative path components and
 1024 UTF-8 path bytes. Paths must be normalized NFC, collision-free under case folding, and free of traversal,
 backslashes, control characters and ambiguous trailing dots/spaces. Links, multiple hard links and special files,

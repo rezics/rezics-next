@@ -73,6 +73,14 @@ type Routes = KernelType['~Routes']['v1'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
 export type RatingQuestionDirectory = Routes['rating-questions']['get']['response'][200];
 export type RatingQuestion = RatingQuestionDirectory['ratingQuestions'][number];
+type AccountProfileRoute = Routes['accounts'][':accountId']['profile']['get'];
+export type AccountProfileResponse = AccountProfileRoute['response'][200];
+export type AccountProfile = AccountProfileResponse['profile'];
+export type AccountAvatar = NonNullable<AccountProfile['avatar']>;
+type ManagedAccountsRoute = Routes['me']['managedAccounts']['get'];
+export type ManagedAccountsPage = ManagedAccountsRoute['response'][200];
+export type ManagedAccountOrganization = ManagedAccountsPage['organizations']['items'][number];
+export type ManagedAccountResponsibility = ManagedAccountsPage['responsibilities']['items'][number];
 type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['labels']['get']['response'][200];
 
 export type QuestionLabel = QuestionLabelHistoryResponse['labels'][number];
