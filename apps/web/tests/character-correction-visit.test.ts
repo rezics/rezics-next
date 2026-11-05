@@ -24,8 +24,8 @@ import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
 import { characterProfileFixture, characterProfileId } from '../src/kernel/fake/catalogue-character-profile';
 
 const contextA = '019a1b2c-3d4e-7f00-8a00-000000000011';
-const realmA = '019a1b2c-3d4-7f00-8a00-000000000022';
-const realmB = '019a1b2c-3d4-7f00-8a00-000000000033';
+const realmA = '019a1b2c-3d4e-7f00-8a00-000000000022';
+const realmB = '019a1b2c-3d4e-7f00-8a00-000000000033';
 const handoff = '019a1b2c-3d4e-7f00-8a00-000000000055';
 
 test('Character correction address and native read retain exact Context and Realm, while Global remains a fresh visit', async () => {
