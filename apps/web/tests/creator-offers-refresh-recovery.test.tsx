@@ -402,7 +402,8 @@ describe('Creator offer editing recovery retains real drafts without extending p
       changed.data.keys[creatorOfferFixture.id] = { reprice: id(70), delist: id(71) };
       await p.refresh();
       await p.settle(p.listReads[3]!, changed);
-      expect(p.host.textContent).not.toContain('New read title');
+      expect(p.host.textContent).toContain('New read title');
+      expect(p.host.textContent).toContain('Observed private offer');
       expect(p.host.textContent).toContain(m.creator_uncertain());
       await act(async () => {
         p.session(A, 'csrf-rotated');
@@ -587,6 +588,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.host.querySelector('form')).toBeNull();
       expect(p.host.textContent).toContain(m.creator_offers_empty());
       await p.show('editor');
+      await p.refresh();
       await p.tick();
       await p.settle(p.editorReads[0]!, editor());
       await p.refresh();
