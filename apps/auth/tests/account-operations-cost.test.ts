@@ -12,10 +12,13 @@ const session = 'account-operation-cost-session';
 const state = createFakeAuthState();
 const calls: FakeAuthRequest[] = [];
 let inventoryObserved: (() => void) | undefined;
-const fake = startFakeAuth({ state, onRequest: (request) => {
-  calls.push(request);
-  inventoryObserved?.();
-} });
+const fake = startFakeAuth({
+  state,
+  onRequest: (request) => {
+    calls.push(request);
+    inventoryObserved?.();
+  },
+});
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {

@@ -107,7 +107,7 @@ test('refusing the submitted marker preserves the original descriptor and sends 
   await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
   await flush(() => send(page.host));
   const original = readPendingAccountOperationStepUp()!;
-  const write = spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+  const write = spyOn(Object.getPrototypeOf(window.sessionStorage), 'setItem').mockImplementation(() => {
     throw new Error('storage refused');
   });
   try {
