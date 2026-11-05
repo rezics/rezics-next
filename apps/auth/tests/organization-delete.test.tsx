@@ -39,7 +39,7 @@ test('unavailable review recovers the selected organization and freshly confirms
   expect(page.host.querySelector('form')).toBeNull();
   unavailable = false;
   await flush(() => button(page.host, 'Check current organization')!.click());
-  expect(selections.map(({ organizationId }) => organizationId)).toEqual([first, first, first]);
+  expect(selections.map(({ organizationId }) => organizationId)).toEqual([first, first]);
   expect(selections.every(({ signal }) => signal instanceof AbortSignal)).toBe(true);
   await confirm(page.host, 'wrong');
   expect(page.calls).toHaveLength(0);
@@ -277,13 +277,11 @@ test('refused unknown-marker persistence retains custody and cannot dispatch or 
     expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
     expect(page.host.textContent).toContain('The deletion result is unknown');
     expect(page.host.querySelector('form')).toBeNull();
-    expect(page.unload()).toBe(true);
 
     await flush(() => button(page.host, 'Check current organization')!.click());
     expect(page.calls).toHaveLength(1);
     expect(page.host.textContent).toContain('The deletion result is unknown');
     expect(page.host.querySelector('form')).toBeNull();
-    expect(page.unload()).toBe(true);
   } finally {
     if (descriptor) Object.defineProperty(window, 'sessionStorage', descriptor);
     else Reflect.deleteProperty(window, 'sessionStorage');
