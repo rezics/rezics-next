@@ -135,11 +135,7 @@ async function refusalFrom(response: Response, onResponseWait?: UploadResponseWa
   return attachRefusalMetadata(new UploadRefusal('unavailable'), retryAfterHeader, responseTime);
 }
 
-function siteFetch(
-  path: string,
-  init: RequestInit & { method: string },
-  credential?: string,
-): Promise<Response> {
+function siteFetch(path: string, init: RequestInit & { method: string }, credential?: string): Promise<Response> {
   const headers = new Headers(init.headers);
   if (init.method !== 'GET' && init.method !== 'HEAD') headers.set('X-CSRF-Token', credential ?? csrfToken());
   return fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store', headers });
@@ -163,7 +159,10 @@ function mediaOf(value: unknown): ReservedMedia | null {
   if (
     typeof record.id !== 'string' ||
     record.id === '' ||
-    (record.state !== 'reserved' && record.state !== 'uploaded' && record.state !== 'available' && record.state !== 'rejected') ||
+    (record.state !== 'reserved' &&
+      record.state !== 'uploaded' &&
+      record.state !== 'available' &&
+      record.state !== 'rejected') ||
     typeof record.mediaType !== 'string' ||
     typeof record.byteCount !== 'number' ||
     !Number.isSafeInteger(record.byteCount) ||
@@ -285,12 +284,16 @@ async function reserve(
   options?.episode?.assertCurrent();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (intent) headers['idempotency-key'] = JSON.stringify(intent.key);
-  const response = await siteFetch('/media', {
-    method: 'POST',
-    signal,
-    headers,
-    body: JSON.stringify(intent?.body ?? reserveBody(target, file, purpose)),
-  }, credential);
+  const response = await siteFetch(
+    '/media',
+    {
+      method: 'POST',
+      signal,
+      headers,
+      body: JSON.stringify(intent?.body ?? reserveBody(target, file, purpose)),
+    },
+    credential,
+  );
   throwIfAborted(signal);
   options?.episode?.assertCurrent();
   if (response.status === 409 && typeof target !== 'string' && 'newThread' in target) {
@@ -342,12 +345,16 @@ async function putBytes(
   onResponseWait?: UploadResponseWait,
 ): Promise<void> {
   throwIfAborted(signal);
-  const response = await siteFetch(`/media/${encodeURIComponent(media.id)}`, {
-    method: 'PUT',
-    signal,
-    headers: { 'content-type': media.mediaType },
-    body: file.slice(0, file.size, media.mediaType),
-  }, credential);
+  const response = await siteFetch(
+    `/media/${encodeURIComponent(media.id)}`,
+    {
+      method: 'PUT',
+      signal,
+      headers: { 'content-type': media.mediaType },
+      body: file.slice(0, file.size, media.mediaType),
+    },
+    credential,
+  );
   if (!response.ok) throw await refusalFrom(response, onResponseWait);
   await response.body?.cancel().catch(() => {});
 }
@@ -438,7 +445,13 @@ async function uploadImage(
     onStage?.('reservation');
     const reserved = await reserve(target, file, signal, purpose, intent, options, credential, onResponseWait);
     const expectedContainer =
-      typeof target === 'string' ? target : 'containerId' in target ? target.containerId : 'realmId' in target ? target.realmId : null;
+      typeof target === 'string'
+        ? target
+        : 'containerId' in target
+          ? target.containerId
+          : 'realmId' in target
+            ? target.realmId
+            : null;
     if (
       reserved.mediaType !== file.type ||
       reserved.byteCount !== file.size ||
@@ -451,7 +464,15 @@ async function uploadImage(
     await putBytes(reserved, file, signal, credential, onResponseWait ?? options?.onResponseWait);
     throwIfAborted(signal);
     onStage?.('processing', mediaId);
-    return await readUploadedImage(mediaId, file, signal, undefined, undefined, credential, onResponseWait ?? options?.onResponseWait);
+    return await readUploadedImage(
+      mediaId,
+      file,
+      signal,
+      undefined,
+      undefined,
+      credential,
+      onResponseWait ?? options?.onResponseWait,
+    );
   } catch (error) {
     throwIfAborted(signal);
     if (isAbort(error)) throw error;
@@ -471,7 +492,16 @@ export function uploadReplyImage(
   const originalTarget = command?.body;
   const reservedTarget =
     originalTarget && 'containerId' in originalTarget ? { containerId: originalTarget.containerId! } : target;
-  return uploadImage(reservedTarget, file, signal, 'post-image', command, options?.onStage, options, options?.onResponseWait);
+  return uploadImage(
+    reservedTarget,
+    file,
+    signal,
+    'post-image',
+    command,
+    options?.onStage,
+    options,
+    options?.onResponseWait,
+  );
 }
 
 /** Resume only missing bytes on the original reservation, then observe its native processing state. */

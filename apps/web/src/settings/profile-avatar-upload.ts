@@ -46,7 +46,10 @@ export type AvatarAdviceReadResult = {
   retryAfter?: string;
   responseTime: number;
 };
-export type AvatarAdviceRead = (signal: AbortSignal, onResponseWait?: UploadResponseWait) => Promise<AvatarAdviceReadResult>;
+export type AvatarAdviceRead = (
+  signal: AbortSignal,
+  onResponseWait?: UploadResponseWait,
+) => Promise<AvatarAdviceReadResult>;
 export type AvatarAdviceState = 'loading' | 'unavailable' | 'denied' | 'allowed';
 type Failure = Pick<UploadRefusal, 'reason' | 'retryAfter'>;
 type Avatar = ProfileValues['avatar'];
@@ -125,9 +128,10 @@ export class ProfileAvatarUpload {
   };
   private update(state: UploadState) {
     const failure = state.failure ?? this.waits.commandFailure;
-    const next: UploadState = Date.now() < this.waits.commandRetryAt
-      ? { ...state, retryAt: this.waits.commandRetryAt, ...(failure ? { failure } : {}) }
-      : { ...state };
+    const next: UploadState =
+      Date.now() < this.waits.commandRetryAt
+        ? { ...state, retryAt: this.waits.commandRetryAt, ...(failure ? { failure } : {}) }
+        : { ...state };
     if (this.waits.adviceRetryAt > 0) next.adviceRetryAt = this.waits.adviceRetryAt;
     else delete next.adviceRetryAt;
     this.state = { ...next, advice: this.advice };
@@ -187,10 +191,7 @@ export class ProfileAvatarUpload {
     try {
       const onResponseWait: UploadResponseWait = (_status, retryAfter, responseTime) =>
         this.retainAdviceWait(target, retryAfter, responseTime);
-      const result = await withProfileDeadline(
-        (signal) => this.readAdvice(signal, onResponseWait),
-        request.signal,
-      );
+      const result = await withProfileDeadline((signal) => this.readAdvice(signal, onResponseWait), request.signal);
       if (!this.ownsAdvice(target, episode, request)) return;
       this.retainAdviceWait(target, result.retryAfter, result.responseTime);
       const parsed = result.ok ? parseAvatarUploadAdvice(result.body, target) : null;

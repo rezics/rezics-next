@@ -34,7 +34,8 @@ export function useProfileAvatarUpload(
     const guardedUpload: AvatarUpload = (accountId, file, signal, intent, onStage, onResponseWait) =>
       upload(accountId, file, signal, intent, onStage, onResponseWait);
     const guardedResume: AvatarResume | undefined =
-      resume && ((mediaId, file, signal, onStage, intent, onResponseWait) =>
+      resume &&
+      ((mediaId, file, signal, onStage, intent, onResponseWait) =>
         resume(mediaId, file, signal, onStage, intent, onResponseWait));
     const readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice;
     return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume, readAdvice);

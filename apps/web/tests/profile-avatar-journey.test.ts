@@ -554,19 +554,15 @@ test('phase deadlines retire stalled crop and upload work, close a late bitmap, 
   const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
   const timers: { id: number; delay: number; callback: () => void; active: boolean }[] = [];
   let timerId = 0;
-  const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(
-    ((callback: TimerHandler, delay = 0) => {
-      const timer = { id: ++timerId, delay, callback: callback as () => void, active: true };
-      timers.push(timer);
-      return timer.id as unknown as ReturnType<typeof setTimeout>;
-    }) as typeof setTimeout,
-  );
-  const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout').mockImplementation(
-    ((id: ReturnType<typeof setTimeout>) => {
-      const timer = timers.find((candidate) => candidate.id === Number(id));
-      if (timer) timer.active = false;
-    }) as typeof clearTimeout,
-  );
+  const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((callback: TimerHandler, delay = 0) => {
+    const timer = { id: ++timerId, delay, callback: callback as () => void, active: true };
+    timers.push(timer);
+    return timer.id as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout);
+  const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout').mockImplementation(((id: ReturnType<typeof setTimeout>) => {
+    const timer = timers.find((candidate) => candidate.id === Number(id));
+    if (timer) timer.active = false;
+  }) as typeof clearTimeout);
   const decoded = deferred<ImageBitmap>();
   const decodeStarted = deferred<void>();
   const lateTransfer = deferred<{ src: string }>();
@@ -594,8 +590,8 @@ test('phase deadlines retire stalled crop and upload work, close a late bitmap, 
     const jpeg = new File(
       [
         Uint8Array.from([
-          0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x05, 0x00, 0x07, 0x01, 0x01, 0x11, 0x00,
-          0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+          0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x05, 0x00, 0x07, 0x01, 0x01, 0x11, 0x00, 0xff, 0xda, 0x00,
+          0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
         ]),
       ],
       'local.jpg',
