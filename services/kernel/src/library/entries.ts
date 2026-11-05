@@ -14,7 +14,6 @@ import {
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -60,7 +59,12 @@ import {
 import { LibraryConflictError } from './entry-errors.ts';
 export { LibraryConflictError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
-import { ENTRY_STATE_HISTORY_PAGE_LIMIT } from './entry-operation-bounds.ts';
+import partitionEpochRead from './entry-partition-epoch-read.sql';
+import {
+  ENTRY_STATE_HISTORY_PAGE_LIMIT,
+  entryOperationPlan,
+  withEntryOperation,
+} from './entry-operation-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -706,82 +710,88 @@ export function createEntryCommands(config: Dependencies) {
     if (options.cursor !== undefined && (typeof options.cursor !== 'string' || options.cursor.length > 4096))
       throw new ProblemError('invalid_cursor');
 
-    return snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
-      const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
-      if (!current) throw new LibraryNotFoundError();
-      if (!current.incarnationId) {
-        if (options.cursor !== undefined) throw new ProblemError('stale_cursor');
+    const operationPlan = entryOperationPlan('library.entry.state-history', options, limit + 1);
+    return withEntryOperation(operationPlan, () =>
+      snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
+        const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
+        if (!current) throw new LibraryNotFoundError();
+        if (!current.incarnationId) {
+          if (options.cursor !== undefined) throw new ProblemError('stale_cursor');
+          return {
+            incarnationId: null,
+            currentRevision: current.revision,
+            changes: [],
+            coverage: 'unknown' as const,
+            next: null,
+          };
+        }
+        const epoch = await partitionEpochRead.run({ query: client.query.bind(client) }, { partition_no: partitionOf(route) });
+        const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
+        let afterRevision: number | null = null;
+        let cursorCoverage: 'complete' | 'partial' | null = null;
+        if (options.cursor !== undefined) {
+          const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
+          if (!cursor.ok || !validStateHistoryAfter(cursor.after)) throw new ProblemError('invalid_cursor');
+          if (!epoch || cursor.epoch !== epoch.epoch) throw new ProblemError('stale_cursor');
+          afterRevision = Number(cursor.after[0]);
+          if (Number(cursor.after[1]) !== current.revision) throw new ProblemError('stale_cursor');
+          cursorCoverage = cursor.after[2] as 'complete' | 'partial';
+        }
+        const rows = await pageEntryStateChanges(client, {
+          route,
+          accountId: accountOwner.accountId,
+          subjectId,
+          incarnationId: current.incarnationId,
+          afterRevision,
+          limit: limit + 1,
+        });
+        const changes = rows.slice(0, limit);
+        const hasMore = rows.length > limit;
+        const last = changes.at(-1);
+        const coverage: 'complete' | 'partial' | 'unknown' = changes.length
+          ? changes[0]!.coverageComplete
+            ? ('complete' as const)
+            : ('partial' as const)
+          : (cursorCoverage ?? 'unknown');
+        if (hasMore && !epoch) throw new CommandUnavailableError('fenced', partitionOf(route));
         return {
-          incarnationId: null,
+          incarnationId: current.incarnationId,
           currentRevision: current.revision,
-          changes: [],
-          coverage: 'unknown' as const,
-          next: null,
+          changes: changes.map(stateChangeView),
+          coverage,
+          next:
+            hasMore && last && epoch
+              ? encodeCursor(tokens, cursorBinding, {
+                  epoch: epoch.epoch,
+                  after: [String(last.revision), String(current.revision), coverage],
+                })
+              : null,
         };
-      }
-      const partition = await readPartition(client as PoolClient, partitionOf(route));
-      const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
-      let afterRevision: number | null = null;
-      let cursorCoverage: 'complete' | 'partial' | null = null;
-      if (options.cursor !== undefined) {
-        const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
-        if (!cursor.ok || !validStateHistoryAfter(cursor.after)) throw new ProblemError('invalid_cursor');
-        if (!partition || cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
-        afterRevision = Number(cursor.after[0]);
-        if (Number(cursor.after[1]) !== current.revision) throw new ProblemError('stale_cursor');
-        cursorCoverage = cursor.after[2] as 'complete' | 'partial';
-      }
-      const rows = await pageEntryStateChanges(client, {
-        route,
-        accountId: accountOwner.accountId,
-        subjectId,
-        incarnationId: current.incarnationId,
-        afterRevision,
-        limit: limit + 1,
-      });
-      const changes = rows.slice(0, limit);
-      const hasMore = rows.length > limit;
-      const last = changes.at(-1);
-      const coverage: 'complete' | 'partial' | 'unknown' = changes.length
-        ? changes[0]!.coverageComplete
-          ? ('complete' as const)
-          : ('partial' as const)
-        : (cursorCoverage ?? 'unknown');
-      if (hasMore && !partition) throw new CommandUnavailableError('fenced', partitionOf(route));
-      return {
-        incarnationId: current.incarnationId,
-        currentRevision: current.revision,
-        changes: changes.map(stateChangeView),
-        coverage,
-        next:
-          hasMore && last && partition
-            ? encodeCursor(tokens, cursorBinding, {
-                epoch: partition.epoch,
-                after: [String(last.revision), String(current.revision), coverage],
-              })
-            : null,
-      };
-    });
+      }),
+    );
   }
 
   async function reviewEntryStateChange(actor: Actor, subjectId: string, selectedRevision: number) {
     const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
     const selected = revision(selectedRevision);
-    const reviewed = await snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
-      const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
-      if (!current) throw new LibraryNotFoundError();
-      if (!current.incarnationId) throw new LibraryNotFoundError();
-      const change = await readEntryStateChange(client, {
-        route,
-        accountId: accountOwner.accountId,
-        subjectId,
-        incarnationId: current.incarnationId,
-        revision: selected,
-      });
-      if (!change) throw new LibraryNotFoundError();
-      return { current, change };
-    });
+    const operationPlan = entryOperationPlan('library.entry.state-review', { subjectId, revision: selected });
+    const reviewed = await withEntryOperation(operationPlan, () =>
+      snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
+        const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
+        if (!current) throw new LibraryNotFoundError();
+        if (!current.incarnationId) throw new LibraryNotFoundError();
+        const change = await readEntryStateChange(client, {
+          route,
+          accountId: accountOwner.accountId,
+          subjectId,
+          incarnationId: current.incarnationId,
+          revision: selected,
+        });
+        if (!change) throw new LibraryNotFoundError();
+        return { current, change };
+      }),
+    );
     let availability: 'available' | 'no_prior_state' | 'state_unavailable';
     if (reviewed.change.beforeState === null) availability = 'no_prior_state';
     else
@@ -1063,18 +1073,21 @@ export function createEntryCommands(config: Dependencies) {
   async function readEntry(actor: Actor, subjectId: string): Promise<Entry> {
     const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
-    const existing = await snapshot(actor, 'library_entry:read', (client, owner, route) =>
-      store.readEntry(client, route, owner.accountId, subjectId),
-    );
-    if (existing) return existing;
+    const operationPlan = entryOperationPlan('library.entry.read', { subjectId });
+    return withEntryOperation(operationPlan, async () => {
+      const existing = await snapshot(actor, 'library_entry:read', (client, owner, route) =>
+        store.readEntry(client, route, owner.accountId, subjectId),
+      );
+      if (existing) return existing;
 
-    const resolved = await resolveSubject({ pool, access }, actor, subjectId);
-    if (!resolved) throw new LibraryNotFoundError();
-    const entry = await snapshot(actor, 'library_entry:read', (client, owner, route) =>
-      store.readEntry(client, route, owner.accountId, resolved.subjectId),
-    );
-    if (!entry || entry.accountId !== owner.accountId) throw new LibraryNotFoundError();
-    return entry;
+      const resolved = await resolveSubject({ pool, access }, actor, subjectId);
+      if (!resolved) throw new LibraryNotFoundError();
+      const entry = await snapshot(actor, 'library_entry:read', (client, owner, route) =>
+        store.readEntry(client, route, owner.accountId, resolved.subjectId),
+      );
+      if (!entry || entry.accountId !== owner.accountId) throw new LibraryNotFoundError();
+      return entry;
+    });
   }
 
   async function listEntries(actor: Actor, options: ListEntryOptions = {}) {
@@ -1090,48 +1103,51 @@ export function createEntryCommands(config: Dependencies) {
     if (options.cursor !== undefined && (typeof options.cursor !== 'string' || options.cursor.length > 4096))
       throw new ProblemError('invalid_cursor');
 
-    return snapshot(actor, 'library_entry:list', async (client, accountOwner, route) => {
-      const partition = await readPartition(client as PoolClient, partitionOf(route));
-      const cursorBinding = binding(accountOwner, selectedState);
-      let after: [string, string] | null = null;
-      if (options.cursor !== undefined) {
-        const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
-        if (!cursor.ok || !validAfter(cursor.after)) throw new ProblemError('invalid_cursor');
-        if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-        after = cursor.after;
-      }
-      const rows = await entryPage.run(
-        { query: client.query.bind(client) },
-        {
-          route,
-          account_id: accountOwner.accountId,
-          state: selectedState,
-          after_updated_at: after?.[0] ?? '2026-01-01T00:00:00.000Z',
-          after_subject_id: after?.[1] ?? '00000000-0000-0000-0000-000000000000',
-          has_cursor: after !== null,
-          limit: limit + 1,
-        },
-      );
-      if (rows.some((row) => row.libraryProfilePin === null)) {
-        await assertPreProfileLibraryRead(client, accountOwner.accountId);
-        const legacyStates = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
-        if (rows.some((row) => row.libraryProfilePin === null && !legacyStates.includes(row.state)))
-          throw new Error('Invalid pre-profile entry state');
-      }
-      const pageRows = rows.slice(0, limit).map(asEntry);
-      const hasMore = rows.length > limit;
-      const last = pageRows.at(-1);
-      return {
-        entries: pageRows,
-        next:
-          hasMore && last && partition
-            ? encodeCursor(tokens, cursorBinding, {
-                epoch: partition.epoch,
-                after: [last.updatedAt, last.subjectId],
-              })
-            : null,
-      };
-    });
+    const operationPlan = entryOperationPlan('library.entry.list', options, limit + 1);
+    return withEntryOperation(operationPlan, () =>
+      snapshot(actor, 'library_entry:list', async (client, accountOwner, route) => {
+        const epoch = await partitionEpochRead.run({ query: client.query.bind(client) }, { partition_no: partitionOf(route) });
+        const cursorBinding = binding(accountOwner, selectedState);
+        let after: [string, string] | null = null;
+        if (options.cursor !== undefined) {
+          const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
+          if (!cursor.ok || !validAfter(cursor.after)) throw new ProblemError('invalid_cursor');
+          if (cursor.epoch !== epoch?.epoch) throw new ProblemError('stale_cursor');
+          after = cursor.after;
+        }
+        const rows = await entryPage.run(
+          { query: client.query.bind(client) },
+          {
+            route,
+            account_id: accountOwner.accountId,
+            state: selectedState,
+            after_updated_at: after?.[0] ?? '2026-01-01T00:00:00.000Z',
+            after_subject_id: after?.[1] ?? '00000000-0000-0000-0000-000000000000',
+            has_cursor: after !== null,
+            limit: limit + 1,
+          },
+        );
+        if (rows.some((row) => row.libraryProfilePin === null)) {
+          await assertPreProfileLibraryRead(client, accountOwner.accountId);
+          const legacyStates = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
+          if (rows.some((row) => row.libraryProfilePin === null && !legacyStates.includes(row.state)))
+            throw new Error('Invalid pre-profile entry state');
+        }
+        const pageRows = rows.slice(0, limit).map(asEntry);
+        const hasMore = rows.length > limit;
+        const last = pageRows.at(-1);
+        return {
+          entries: pageRows,
+          next:
+            hasMore && last && epoch
+              ? encodeCursor(tokens, cursorBinding, {
+                  epoch: epoch.epoch,
+                  after: [last.updatedAt, last.subjectId],
+                })
+              : null,
+        };
+      }),
+    );
   }
 
   return {
