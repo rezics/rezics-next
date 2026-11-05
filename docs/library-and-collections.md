@@ -206,6 +206,9 @@ native review, confirmation, one-item apply/retry, cancel and result boundary is
 Commerce receives each refreshed Label shelf only against its captured exact request: the source cursor is retained,
 the target starts at its first page, and omitted result/Undo query fields stay omitted. Matching refreshes retain the
 supplied native Undo receipt; mismatches remain unavailable without replaying consolidation.
+Decision: If a structurally admitted Label continuation receives native `invalid_cursor` (400) or `stale_cursor`
+(409), Commerce offers an explicit first-page link for that same Label, locale and admitted presentation. The link
+drops only the cursor and reads only when chosen; recovery carries no label metadata, rows or mutation authority.
 Immutable Subject security-evidence binding, generated client declarations and full caller growth remain a continuation.
 
 The mounted [personal VNDB upload](library-import-vndb.md) supports private preview, identifier matching, explicit
