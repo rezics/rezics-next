@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { problemSchema } from '../http/problem.ts';
 import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
@@ -304,6 +305,19 @@ const finalManifest = t.Union([
     closed,
   ),
 ]);
+const pageSchema = t.Object(
+  {
+    exportId: text,
+    state,
+    records: t.Array(
+      t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecordV2, journalRecordV3, ...providerRecords]),
+      { maxItems: 16 },
+    ),
+    next: nullable,
+    manifest: t.Union([finalManifest, t.Null()]),
+  },
+  closed,
+);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -319,6 +333,47 @@ const failures = {
     'deadline_exceeded',
   ),
 };
+type ExportService = ReturnType<typeof createLibraryExport>;
+type StatusOutput = Awaited<ReturnType<ExportService['get']>>;
+type PageOutput = Awaited<ReturnType<ExportService['page']>>;
+
+function statusView(value: StatusOutput): Static<typeof statusSchema> {
+  const omissions = { ...value.omissions };
+  switch (value.version) {
+    case 1:
+      return { ...value, sections: [...value.sections], omissions };
+    case 2:
+      return { ...value, sections: [...value.sections], omissions };
+    case 3:
+      return { ...value, sections: [...value.sections], omissions };
+    case 4:
+      return { ...value, sections: [...value.sections], omissions };
+  }
+}
+
+function finalManifestView(value: NonNullable<PageOutput['manifest']>): Static<typeof finalManifest> {
+  const omissions = { ...value.omissions };
+  switch (value.version) {
+    case 1:
+      return { ...value, sections: [...value.sections], omissions };
+    case 2:
+      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
+    case 3:
+      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
+    case 4:
+      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
+  }
+}
+
+function pageView(value: PageOutput): Static<typeof pageSchema> {
+  return {
+    exportId: value.exportId,
+    state: value.state,
+    records: value.records.map((record) => ({ ...record })),
+    next: value.next,
+    manifest: value.manifest === null ? null : finalManifestView(value.manifest),
+  };
+}
 function requestSignal(request: Request, signal?: AbortSignal) {
   return signal ? AbortSignal.any([request.signal, signal]) : request.signal;
 }
@@ -349,8 +404,14 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().create(actor, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), requestSignal(request, job.signal)),
+        return admission.run('normal', job, async () =>
+          statusView(
+            await service().create(
+              actor,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              requestSignal(request, job.signal),
+            ),
+          ),
         );
       },
     )
@@ -363,7 +424,9 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)));
+        return admission.run('normal', job, async () =>
+          statusView(await service().get(actor, params.id, requestSignal(request, job.signal))),
+        );
       },
     )
     .get(
@@ -371,37 +434,13 @@ export function libraryExportRoutes(
       {
         params,
         query: t.Object({ cursor: t.String({ minLength: 1, maxLength: 4096 }) }, closed),
-        response: {
-          200: t.Object(
-            {
-              exportId: text,
-              state,
-              records: t.Array(
-                t.Union([
-                  legacyRecord,
-                  annotationRecord,
-                  provenanceRecord,
-                  journalRecordV2,
-                  journalRecordV3,
-                  ...providerRecords,
-                ]),
-                {
-                  maxItems: 16,
-                },
-              ),
-              next: nullable,
-              manifest: t.Union([finalManifest, t.Null()]),
-            },
-            closed,
-          ),
-          ...failures,
-        },
+        response: { 200: pageSchema, ...failures },
         detail: detail('library_export.page'),
       },
       async ({ request, actor, params, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().page(actor, params.id, query.cursor, requestSignal(request, job.signal)),
+        return admission.run('normal', job, async () =>
+          pageView(await service().page(actor, params.id, query.cursor, requestSignal(request, job.signal))),
         );
       },
     )
@@ -414,8 +453,8 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().cancel(actor, params.id, requestSignal(request, job.signal)),
+        return admission.run('normal', job, async () =>
+          statusView(await service().cancel(actor, params.id, requestSignal(request, job.signal))),
         );
       },
     );
