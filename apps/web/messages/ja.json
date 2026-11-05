@@ -10333,5 +10333,6 @@
   "manga_reader_open_contents": "内容を開く",
   "manga_reader_open_editions": "版を開く",
   "manga_reader_next": "次の範囲",
-  "manga_reader_native_order": "この一覧は現在開示された範囲を元の順序で表示します。"
+  "manga_reader_native_order": "この一覧は現在開示された範囲を元の順序で表示します。",
+  "character_person_results": "キャラクターと人物の検索結果"
 }

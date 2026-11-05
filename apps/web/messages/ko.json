@@ -10283,5 +10283,6 @@
   "manga_reader_open_contents": "내용 열기",
   "manga_reader_open_editions": "판본 열기",
   "manga_reader_next": "다음 범위",
-  "manga_reader_native_order": "이 목록은 현재 공개된 범위를 기본 순서대로 표시합니다."
+  "manga_reader_native_order": "이 목록은 현재 공개된 범위를 기본 순서대로 표시합니다.",
+  "character_person_results": "캐릭터 및 인물 검색 결과"
 }

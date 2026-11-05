@@ -10290,5 +10290,6 @@
   "manga_reader_open_contents": "打开内容",
   "manga_reader_open_editions": "打开版本",
   "manga_reader_next": "下一个窗口",
-  "manga_reader_native_order": "此列表仅呈现当前披露的窗口，并保留原生顺序。"
+  "manga_reader_native_order": "此列表仅呈现当前披露的窗口，并保留原生顺序。",
+  "character_person_results": "角色与人物搜索结果"
 }
