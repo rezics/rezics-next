@@ -51,6 +51,7 @@ import {
 } from './collection-presentation.ts';
 import { CollectionOrderRepairRequired, planCollectionPlacement } from './collection-order-placement.ts';
 import { assertCollectionOrderWritable, beginCollectionOrderRepair } from './collection-order.ts';
+import { withCollectionOrderDeclaration } from './collection-order-bounds.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 import {
   deleteMember as deleteMemberRow,
@@ -742,7 +743,10 @@ export function createCollectionCommands(config: {
         repairKind,
         repairKey,
         { collectionId: error.collectionId, originalKind: kind, originalKey: requestKey, fence: error.fence },
-        async (tx, _command, repairRoute) => beginCollectionOrderRepair(tx, repairRoute, error.collectionId),
+        async (tx, _command, repairRoute) =>
+          withCollectionOrderDeclaration('begin', () =>
+            beginCollectionOrderRepair(tx, repairRoute, error.collectionId),
+          ),
       );
       throw new ProblemError('dependency_unavailable');
     }

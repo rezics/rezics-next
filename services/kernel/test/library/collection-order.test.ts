@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
 import type { CloudEvent } from '../../src/events/log.ts';
+import {
+  COLLECTION_ORDER_DECLARATION,
+  COLLECTION_ORDER_MAX_STEP,
+  withinCollectionOrderCeiling,
+} from '../../src/library/collection-order-bounds.ts';
 import { advanceCollectionOrderRepair } from '../../src/library/collection-order-work.ts';
 import { COLLECTION_ORDER_WORKFLOW, type CollectionOrderLocator } from '../../src/library/collection-order.ts';
 import { libraryWorkModule } from '../../src/library/work-module.ts';
@@ -28,8 +34,8 @@ test('Large Collections keep bounded point edits and resumable order repair', as
       (await f.current(collection.id)).revision,
       entryKey(),
     );
-    const ids = [first.id, ...Array.from({ length: 5000 }, () => newId(route))];
-    const dense = ids.map((id, index) => ({ id, key: `a0${'V'.repeat(30)}${index.toString(36).padStart(4, '0')}V` }));
+    const ids = [first.id, ...Array.from({ length: 5118 }, () => newId(route))];
+    const dense = ids.map((id, index) => ({ id, key: `a0${'V'.repeat(41)}${index.toString(36).padStart(4, '0')}V` }));
     // Data-only existing-population fixture. Every identity, subject, parent and
     // grant above entered through its ordinary native boundary. Stored 48-byte
     // keys model a migrated dense order; commands cannot submit rank strings.
@@ -74,6 +80,7 @@ test('Large Collections keep bounded point edits and resumable order repair', as
         )
       ).rows;
     const original = await snapshot();
+    expect(dense[0]!.key).toHaveLength(48);
     expect(original.map((row) => row.member_id)).toEqual(ids);
     const page = await f.send(f.owner.bearer, 'GET', `/v1/collections/${collection.id}/members?limit=1`);
     expect(page.status).toBe(200);
@@ -88,7 +95,7 @@ test('Large Collections keep bounded point edits and resumable order repair', as
     const preparing = await add();
     expect(preparing.status, await preparing.clone().text()).toBe(503);
     expect((await preparing.json()).code).toBe('dependency_unavailable');
-    expect((await f.current(collection.id)).memberCount).toBe(5001);
+    expect((await f.current(collection.id)).memberCount).toBe(5119);
     expect(await snapshot()).toEqual(original);
     const capture = (
       await f.pool.query(
@@ -114,6 +121,41 @@ test('Large Collections keep bounded point edits and resumable order repair', as
     expect((await advanceCollectionOrderRepair({ pool: f.pool, clock: () => new Date() }, locator)).value.state).toBe(
       'stale',
     );
+
+    // Simulate an out-of-band parent fence change, then restore it. The stale
+    // page must roll back before changing either the captured frontier or members.
+    const bumpParentRevision = async (delta: 1 | -1) => {
+      const connection = await f.pool.connect();
+      try {
+        await connection.query('BEGIN');
+        await connection.query('ALTER TABLE library.collection DISABLE TRIGGER collection_order_parent');
+        await connection.query(
+          'UPDATE library.collection SET revision=revision+$3 WHERE route=$1 AND collection_id=$2',
+          [route, collection.id, delta],
+        );
+        await connection.query('ALTER TABLE library.collection ENABLE TRIGGER collection_order_parent');
+        await connection.query('COMMIT');
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      } finally {
+        connection.release();
+      }
+    };
+    await bumpParentRevision(1);
+    await expect(
+      advanceCollectionOrderRepair({ pool: f.pool, clock: () => new Date() }, { ...locator, step: 1 }),
+    ).rejects.toThrow('Captured Collection order fence changed without terminalization');
+    expect(await snapshot()).toEqual(original);
+    expect(
+      (
+        await f.pool.query(
+          'SELECT step,processed,after_key FROM library.collection_order_repair WHERE route=$1 AND collection_id=$2',
+          [route, collection.id],
+        )
+      ).rows[0],
+    ).toMatchObject({ step: 1, processed: 128, after_key: dense[127]!.key });
+    await bumpParentRevision(-1);
     expect((await add()).status).toBe(503);
     const stale = await f.send(
       f.owner.bearer,
@@ -133,6 +175,7 @@ test('Large Collections keep bounded point edits and resumable order repair', as
     await worker.launch();
     // Deliver committed envelopes through the production effect, as in the
     // existing Collection HTTP suite. The registered workflow owns every page.
+    let exactExhaustionObserved = false;
     for (let step = 1; step < 50; step++) {
       const found = (
         await f.pool.query(
@@ -142,6 +185,27 @@ test('Large Collections keep bounded point edits and resumable order repair', as
       ).rows[0];
       if (!found) break;
       expect(found.step).toBe(step);
+      if (step === 39) {
+        // Step 39 is the exact 128-raw-row window with one retained deletion.
+        // Leave its committed outbox event untouched until resuming this locator.
+        const frontier = (
+          await f.pool.query(
+            'SELECT state,step,processed,after_key,after_member_id FROM library.collection_order_repair WHERE route=$1 AND collection_id=$2',
+            [route, collection.id],
+          )
+        ).rows[0]!;
+        expect(frontier).toMatchObject({ state: 'active', step: 39, processed: 4992, after_key: dense[4991]!.key });
+        const rawWindow = await f.pool.query<{ member_id: string; active: boolean }>(
+          `SELECT member_id,deletion_id IS NULL AS active FROM library.collection_member
+           WHERE route=$1 AND collection_id=$2 AND ordinal_key >= $3::text COLLATE "C"
+             AND (ordinal_key,member_id) > ($4::text COLLATE "C",$5::uuid)
+           ORDER BY ordinal_key,member_id LIMIT 128`,
+          [route, collection.id, capture.original_minimum, frontier.after_key, frontier.after_member_id],
+        );
+        expect(rawWindow.rows).toHaveLength(128);
+        expect(rawWindow.rows.filter((row) => row.active)).toHaveLength(127);
+        expect(rawWindow.rows.some((row) => row.member_id === deleted.id && !row.active)).toBe(true);
+      }
       const row = (
         await f.pool.query(
           `SELECT * FROM core.outbox WHERE partition_no=$1 AND subject=$2
@@ -179,7 +243,29 @@ test('Large Collections keep bounded point edits and resumable order repair', as
         .getResult({ pollingIntervalMs: 10 });
       expect(await snapshot()).toEqual(original);
       expect(await tombstone()).toEqual(retained);
+      if (step === 39) {
+        const consumedWindow = (
+          await f.pool.query(
+            'SELECT state,step,processed,after_key FROM library.collection_order_repair WHERE route=$1 AND collection_id=$2',
+            [route, collection.id],
+          )
+        ).rows[0]!;
+        expect(consumedWindow).toMatchObject({ state: 'active', step: 40, processed: 5119 });
+        expect(consumedWindow.after_key).toBe(`~${deleted.id}`);
+      }
+      if (step === 40) {
+        const exhaustion = (
+          await f.pool.query(
+            'SELECT state,step,processed,after_key FROM library.collection_order_repair WHERE route=$1 AND collection_id=$2',
+            [route, collection.id],
+          )
+        ).rows[0]!;
+        expect(exhaustion).toMatchObject({ state: 'complete', step: 41, processed: 5119 });
+        expect(exhaustion.after_key).toBe(`~${deleted.id}`);
+        exactExhaustionObserved = true;
+      }
     }
+    expect(exactExhaustionObserved).toBe(true);
     expect(
       (
         await f.pool.query('SELECT 1 FROM library.collection_order_repair WHERE route=$1 AND collection_id=$2', [
@@ -195,7 +281,7 @@ test('Large Collections keep bounded point edits and resumable order repair', as
     expect(applied.status, await applied.clone().text()).toBe(201);
     const inserted = (await applied.json()).member;
     expect(inserted).toMatchObject({ subjectId: subject, note: draft.note });
-    expect((await f.current(collection.id)).memberCount).toBe(5002);
+    expect((await f.current(collection.id)).memberCount).toBe(5120);
     expect((await snapshot()).map((row) => row.member_id)).toEqual([
       ...ids.slice(0, 2501),
       inserted.id,
@@ -231,10 +317,41 @@ test('Large Collections keep bounded point edits and resumable order repair', as
       note: selected.note,
       addedAt: selected.addedAt,
     });
-    expect(transferred.value.destination.memberCount).toBe(5004);
+    expect(transferred.value.destination.memberCount).toBe(5122);
   } finally {
     await worker?.shutdown();
     await client?.close();
     await f.close();
   }
 }, 180_000);
+
+test('Collection order rejects unsafe declarations and out-of-domain repair steps before dispatch', async () => {
+  const ceiling = COLLECTION_ORDER_DECLARATION.paths.page.ceiling;
+  let usefulDispatches = 0;
+  const dispatch = () => {
+    usefulDispatches++;
+    return true;
+  };
+  expect(() => withinCollectionOrderCeiling({ ...ceiling, bytes: ceiling.bytes + 1 }, ceiling, dispatch)).toThrow(
+    'Collection order work exceeds its static ceiling',
+  );
+  expect(() =>
+    withinCollectionOrderCeiling({ ...ceiling, bytes: Number.MAX_SAFE_INTEGER + 1 }, ceiling, dispatch),
+  ).toThrow('Invalid bound declaration value: bytes');
+  expect(usefulDispatches).toBe(0);
+
+  let poolCheckouts = 0;
+  const pool = {
+    async connect() {
+      poolCheckouts++;
+      throw new Error('Unexpected command dispatch');
+    },
+  } as unknown as Pool;
+  await expect(
+    advanceCollectionOrderRepair(
+      { pool, clock: () => new Date() },
+      { collectionId: newId(123), repairId: newId(123), step: COLLECTION_ORDER_MAX_STEP + 1 },
+    ),
+  ).rejects.toThrow('Invalid order repair locator');
+  expect(poolCheckouts).toBe(0);
+});

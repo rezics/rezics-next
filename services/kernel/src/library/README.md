@@ -2028,6 +2028,8 @@ attribution; its execution remains with the controller's protected native growth
 
 ### Durable Collection order repair and cleanup
 
+Decision: the Library owns fixed nine-axis declarations at its existing repair-begin, barrier, page and outbox call sites; the declarations describe bounded work and do not create dispatch or reservation authority.
+
 - Touches: One immutable repair capture/progress row, one exact parent/account fence and at most 128 examined original
   raw occurrences per transaction. Output updates are point CAS operations. Parent order/source fences, invalidation
   and the next stable work intent commit atomically. Terminal cleanup deletes one capture; parent erasure cascades
@@ -2035,8 +2037,22 @@ attribution; its execution remains with the controller's protected native growth
 - Bound: O(128 log N + log M) work and bounded keys/memory per step; O(M log N) total maintenance and O(M/128) durable
   pages, plus one finite terminal cleanup page. Deleted rows pay the same examined-frontier budget and retain identity.
   Structural barriers prevent an unbounded invalidate/restart loop. No `generateNKeysBetween` call receives `M`.
+- Declaration: `collection-order-bounds.ts` shares each caller's exact SQL literal and prices the raw 128-row window,
+  active point writes, 32-byte generated keys, 48-byte stored keys, trigger lifecycle reads, parent/repair locks,
+  account share, time and transaction controls, event fence, result bytes, retries, and durable continuation locator.
+  Deleted rows remain in `candidateKeys` and `nativeRows` even when no ordinal is rewritten. An exact 128-row result
+  always takes another charged query to observe exhaustion. No deferred unique-constraint statement or per-occurrence
+  History event runs during this repair.
+- Admission boundary: the ordinary actor-authorized `runCommand` path has no public whole-command nine-axis admission
+  for begin, including Access preparation, current authorization, account lifecycle, receipt/History, serialization,
+  controls, event/outbox work and rollback/commit. Page declarations are finite and complete for one attempt, but
+  `runCommand` cannot receive them against a live native admission. The existing DBOS retry policy remains the page
+  retry owner; a page runs one command attempt per DBOS attempt. The outbox call carries only a locator, while the
+  DBOS client has no matching nine-axis enqueue admission. These descriptors do not reserve Source work or fund a
+  dispatch. See `.temp/continuation/collection-order-native-admission.md` for the remaining contract.
 - Growth check: Existing work/Source staleness and privacy assertions remain required for controller proof, including
-  interruption, account terminal fencing and held sources. The maintained outcome is not a native performance proof.
+  interruption, account terminal fencing, changed fences, terminal cleanup and held sources. Native receiving and
+  broader acceptance remain deferred to the controller.
 
 ### Note member
 
