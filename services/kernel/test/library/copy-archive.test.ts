@@ -365,8 +365,12 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
     expect(parsed.coverage.reduce((n, section) => n + section.recordBytes, 0)).toBe(a.manifest.recordBytes);
     expect(parsed.holdings).toHaveLength(12);
     expect(parsed.progress).toHaveLength(6);
+    if (parsed.manifest === null) throw new Error('A complete archive parse is missing its manifest');
     expect(parsed.manifest).toEqual(a.manifest);
-    expect(parsed.holdings[0]!.evidence).toEqual(a.records.find((row) => row.section === 'holdings'));
+    const firstHolding = parsed.holdings[0];
+    const capturedHolding = a.records.find((row) => row.section === 'holdings');
+    if (!firstHolding || !capturedHolding) throw new Error('The expected holding record is missing');
+    expect(firstHolding.evidence).toEqual(capturedHolding);
     if (version === 1) expect(parsed.coverage.some((row) => row.section === 'annotations')).toBe(false);
     if (version !== 1) {
       expect(parsed.coverage.find((row) => row.section === 'journals')).toMatchObject({

@@ -195,12 +195,14 @@ test('native operands use explicit mixed presentation, exact curated time and in
   const collection = await f.collection({ visibility: 'public' });
   const subjects: string[] = [];
   for (let index = 0; index < 5; index++) subjects.push(await f.subject(`Subject operand ${index}`));
+  const selectedSubject = subjects[4];
+  if (selectedSubject === undefined) throw new Error('Collection discovery fixture is missing its fifth subject');
   for (const subjectId of subjects)
     expect((await f.send('POST', `/v1/collections/${collection.id}/members`, { subjectId })).status).toBe(201);
 
   const source = publicCollectionDiscoverySource({ pool: f.database.pool });
   const result = available(
-    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: subjects[4] }),
+    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: selectedSubject }),
   );
   expect(result.items[0]).toMatchObject({
     status: 'indexable',
@@ -209,7 +211,7 @@ test('native operands use explicit mixed presentation, exact curated time and in
       presentationKind: null,
       operands: {
         presentationKind: { kind: 'mixed' },
-        subjectMembership: { subjectId: subjects[4], matches: true },
+        subjectMembership: { subjectId: selectedSubject, matches: true },
         popularity: null,
         recency: [expect.any(String), routeOf(collection.id), collection.id],
       },

@@ -344,7 +344,9 @@ test('the actual Members workflow fails closed before undeclared Source and rele
       'SELECT result FROM core.operational_work_selection WHERE partition_no=$1 AND workflow_id=$2',
       [episode.locator.route >> 4, episode.workflowId],
     );
-    expect(outcome.rows[0]!.result).toEqual(result.episodes[0]);
+    const selectedEpisode = result.episodes[0];
+    if (!selectedEpisode) throw new Error('The retained episode result is missing');
+    expect(outcome.rows[0]!.result).toEqual(selectedEpisode);
     expect(outcome.rows[0]!.result).toMatchObject({ kind: 'failure' });
   } finally {
     await worker.close();

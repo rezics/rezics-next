@@ -15,6 +15,7 @@ const journal = {
   startDate: { year: 2020 },
   finishDate: null,
   reflection: null,
+  assessment: { meaningRevision: 1, units: null },
 };
 const review = (start: ReturnType<typeof aniListDateSource>, finish = aniListDateSource({}, 'completedAt')) =>
   reviewImportConsumptionDates({

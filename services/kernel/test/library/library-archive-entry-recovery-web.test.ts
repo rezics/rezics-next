@@ -94,6 +94,7 @@ function receiver(owner: Identity, loseAck = false) {
     viewer: owner.actor.accountId,
     credentialEpoch: owner.bearer,
     csrfEpoch: 'native-bearer',
+    admission: 'native-current',
     source: 'native-file',
     route: '/library/recover-archive',
     locale: 'en',

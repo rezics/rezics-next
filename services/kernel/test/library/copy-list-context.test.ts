@@ -5,6 +5,22 @@ import { ProblemError } from '../../src/http/problem.ts';
 import { attachCopyListContext } from '../../src/library/copy-list-context.ts';
 import { createCopyListContextFixture } from './copy-list-context-fixture.ts';
 
+type CopyListRow = {
+  id: string;
+  subjectId: string;
+  kind: string;
+  status: string;
+  revision: number;
+  acquiredOn: string | null;
+  note: string | null;
+  context: unknown;
+};
+type CopyListPage = { copies: CopyListRow[]; next: string | null };
+
+async function responseBody<T>(response: Response): Promise<T> {
+  return (await response.json()) as T;
+}
+
 const date = {
   time: '+2024-01-01T00:00:00Z',
   precision: 11,
@@ -39,7 +55,7 @@ test('FULL copies keep native row identity and private metadata with only disclo
     expect(JSON.stringify(await basic.json())).not.toContain('context');
     const response = await f.page(f.ownerToken);
     expect(response.status).toBe(200);
-    const result = (await response.json()) as { copies: Array<Record<string, any>>; next: string | null };
+    const result = await responseBody<CopyListPage>(response);
     expect(result.next).toBeNull();
     expect(result.copies.map((copy) => copy.id).sort()).toEqual([first.id, second.id, sibling.id, hidden.id].sort());
     expect(result.copies.find((copy) => copy.id === first.id)).toMatchObject({
@@ -64,7 +80,7 @@ test('FULL copies keep native row identity and private metadata with only disclo
     expect(JSON.stringify(hiddenRow.context)).not.toContain(hiddenWork);
 
     const otherPage = await f.page(f.otherToken);
-    expect((await otherPage.json()).copies.map((copy: { id: string }) => copy.id)).toEqual([foreign.id]);
+    expect((await responseBody<CopyListPage>(otherPage)).copies.map((copy) => copy.id)).toEqual([foreign.id]);
     expect((await f.page(null)).status).toBe(401);
 
     const unsupported = result.copies.find((copy) => copy.id === first.id)!;
@@ -123,11 +139,16 @@ test('FULL copies keep native row identity and private metadata with only disclo
     expect(disposed.status).toBe(200);
     const disposedCopy = (await disposed.json()).copy as { revision: number };
     const retired = structuredClone(bundledRelease);
-    retired.libraryProfiles!['book.reading']!.copies.kinds = [{ id: 'digital', statuses: [{ id: 'owned' }] }];
+    const bookProfile = retired.libraryProfiles?.['book.reading'];
+    if (!bookProfile?.copies) throw new Error('Book profile copy kinds are missing');
+    bookProfile.copies.kinds = [
+      { id: 'digital', labels: { en: 'Digital' }, statuses: [{ id: 'owned', labels: { en: 'Owned' } }] },
+    ];
     await f.publish(retired);
-    const retiredRow = ((await (await f.page(f.ownerToken)).json()).copies as Array<Record<string, any>>).find(
+    const retiredRow = (await responseBody<CopyListPage>(await f.page(f.ownerToken))).copies.find(
       (copy) => copy.id === second.id,
     );
+    if (!retiredRow) throw new Error('Retired copy row is missing');
     expect(retiredRow).toMatchObject({ kind: 'physical', status: 'disposed', context: { state: 'unsupported' } });
 
     await f.checked('POST', '/v1/platform/exposure/subject_identity:open', {}, 'operator');
@@ -149,7 +170,7 @@ test('FULL copies keep native row identity and private metadata with only disclo
 
     const removed = await f.send(f.ownerToken, 'DELETE', `/v1/copies/${second.id}?revision=${disposedCopy.revision}`);
     expect(removed.status).toBe(204);
-    const remaining = ((await (await f.page(f.ownerToken)).json()).copies as Array<{ id: string }>).map(({ id }) => id);
+    const remaining = (await responseBody<CopyListPage>(await f.page(f.ownerToken))).copies.map(({ id }) => id);
     expect(remaining).not.toContain(second.id);
   } finally {
     await f.close();
@@ -164,7 +185,8 @@ test('FULL Copies refuses revision or account epoch movement during Semantic ass
     const second = await f.copy(f.ownerToken, subject, 'lookahead row');
     const basic = await f.page(f.ownerToken, 'BASIC', 1);
     expect(basic.status).toBe(200);
-    const firstId = (await basic.json()).copies[0].id as string;
+    const firstId = (await responseBody<CopyListPage>(basic)).copies[0]?.id;
+    if (firstId === undefined) throw new Error('Basic copy page is empty');
     const visible = first.id === firstId ? first : second;
     const outside = first.id === firstId ? second : first;
     const originalPrepare = f.access.prepare!.bind(f.access);

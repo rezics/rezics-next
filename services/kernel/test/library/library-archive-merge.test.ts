@@ -993,7 +993,7 @@ test('V3 unknown and V2 absent assessments stay inert while an explicit archived
     );
     expect(applied.applied[0].status).toBe(c.expected);
     expect((await sessions.readSessionJournal(owner.actor, target.id)).assessment).toEqual(
-      c.expected === 'accepted' ? null : { meaningRevision: 1, units: 17 },
+      { meaningRevision: 1, units: c.expected === 'accepted' ? null : 17 },
     );
   }
 });

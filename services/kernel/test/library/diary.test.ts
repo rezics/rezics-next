@@ -346,7 +346,14 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
     }) as typeof fetch,
   });
   const open = async (month?: number | 'unallocated', cursor?: string) => {
-    const result = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor } });
+    const result = await client.libraryDiary.get({
+      query: {
+        year: 2020,
+        limit: 1,
+        ...(month === undefined ? {} : { month }),
+        ...(cursor === undefined ? {} : { cursor }),
+      },
+    });
     expect(result.error).toBeNull();
     return result.data!;
   };
@@ -363,11 +370,19 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
   ] as const) {
     let value = await open(month);
     const first = value;
-    const ids = value.occurrences.map((row) => row.id);
+    const ids = value.occurrences.map((row) => {
+      if (row.id === undefined) throw new Error('Diary occurrence is missing its native ID');
+      return row.id;
+    });
     expect(value.currentness).toEqual(totals.currentness);
     while (value.next) {
       value = await open(month, value.next);
-      ids.push(...value.occurrences.map((row) => row.id));
+      ids.push(
+        ...value.occurrences.map((row) => {
+          if (row.id === undefined) throw new Error('Diary occurrence is missing its native ID');
+          return row.id;
+        }),
+      );
     }
     expect(ids).toEqual([...expected].sort().reverse());
     if (first.continuation) {
@@ -379,7 +394,14 @@ test('reported year and explicit buckets page exact completed IDs and reject cha
   }
   const first = await open(2);
   for (const query of [{ year: 2020, month: 3 }, { year: 2021, month: 2 }, {}]) {
-    const changed = await client.libraryDiary.get({ query: { ...query, limit: 1, cursor: first.next! } });
+    const changed = await client.libraryDiary.get({
+      query: {
+        limit: 1,
+        cursor: first.next!,
+        ...(query.year === undefined ? {} : { year: query.year }),
+        ...(query.month === undefined ? {} : { month: query.month }),
+      },
+    });
     expect(changed.error?.status).toBe(400);
   }
   const exact = await json(

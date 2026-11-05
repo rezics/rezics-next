@@ -12,8 +12,9 @@ const path = (subjectId: string) => `/v1/libraryEntries/${subjectId}`;
 async function entry(label: string) {
   const subjectId = await f.createSubject('game', label);
   const saved = await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey());
-  if (!saved.value.entry.incarnationId) throw new Error('Expected an incarnated entry');
-  return { subjectId, ...saved.value.entry, incarnationId: saved.value.entry.incarnationId };
+  const savedEntry = saved.value.entry;
+  if (!savedEntry.incarnationId) throw new Error('Expected an incarnated entry');
+  return { ...savedEntry, incarnationId: savedEntry.incarnationId };
 }
 
 async function personal(subjectId: string) {
@@ -43,11 +44,13 @@ async function createReview(items: unknown[]) {
   return body.review;
 }
 
-function selected(entry: Awaited<ReturnType<typeof entry>>, note: unknown, priority: unknown) {
+type CreatedEntry = Awaited<ReturnType<typeof entry>>;
+
+function selected(createdEntry: CreatedEntry, note: unknown, priority: unknown) {
   return {
-    subjectId: entry.subjectId,
-    incarnationId: entry.incarnationId,
-    currentRevision: entry.revision,
+    subjectId: createdEntry.subjectId,
+    incarnationId: createdEntry.incarnationId,
+    currentRevision: createdEntry.revision,
     note,
     priority,
   };

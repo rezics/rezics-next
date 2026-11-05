@@ -9,7 +9,7 @@ import {
 import type { LibraryCopyKindDescriptor, LibraryProfilePin } from '../../src/library/profile.ts';
 
 // Structural supplier fixture, not a claim that Definitions currently publishes this capability.
-const physical = {
+const physical: LibraryCopyKindDescriptor = {
   id: 'physical',
   labels: { en: 'Physical copy' },
   statuses: [],
@@ -64,7 +64,8 @@ test('old command operands remain absent and exact retries retain clear versus u
 test('physical labels, digital kinds and missing publication cannot admit writes', () => {
   const unsupported: LibraryCopyKindDescriptor = { id: 'physical', labels: { en: 'Physical' }, statuses: [] };
   expect(copyConditionAdmission(unsupported)).toEqual({ state: 'unavailable', reason: 'unsupported' });
-  const future = { ...physical, condition: 'future' };
+  // A raw imported release can contain a future value before its compiler contract is updated.
+  const future = { ...physical, condition: 'future' } as LibraryCopyKindDescriptor;
   expect(copyConditionAdmission(future)).toEqual({ state: 'unavailable', reason: 'unrecognized_vocabulary' });
   for (const kind of [unsupported, { ...unsupported, id: 'digital' }]) {
     expect(() => mergeCopyConditionFields({}, { mediaCondition: 'mint' }, { kind, pin })).toThrow(
