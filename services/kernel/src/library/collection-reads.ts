@@ -799,16 +799,19 @@ export function createCollectionReads(
         if (!partition) throw new ProblemError('partition_unavailable');
         throw new ProblemError('stale_cursor');
       }
-      const statement = listFilter.source === 'curator' ? curatorPage : curatorPublicPage;
-      const rows = await statement.run(queryOf(client), {
+      const query = queryOf(client);
+      const parameters = {
         route,
         curator_account_id: curatorAccountId,
         after_updated_at: after?.updatedAt ?? ABSENT_UPDATED_AT,
         after_id: after?.id ?? ABSENT_ID,
         has_cursor: after !== null,
         limit: remaining + 1,
-        ...(listFilter.source === 'public' ? listFilter.parameters : {}),
-      });
+      };
+      const rows =
+        listFilter.source === 'curator'
+          ? await curatorPage.run(query, parameters)
+          : await curatorPublicPage.run(query, { ...parameters, ...listFilter.parameters });
       const hasMore = rows.length > remaining;
       const shown = rows.slice(0, remaining);
       if (hasMore && !partition) throw new ProblemError('partition_unavailable');
