@@ -26,7 +26,7 @@ function failureReference(
   status: number,
   code: unknown,
   id: string,
-  headers: HeadersInit,
+  headers: HeadersInit | undefined,
 ): ConditionConceptReference {
   const result = statusForFailure(status, code);
   if (result !== 'preparing' && result !== 'unavailable') return { status: result, id };

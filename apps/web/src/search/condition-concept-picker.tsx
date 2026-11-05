@@ -25,7 +25,8 @@ type ReferenceView =
   | Readonly<{ owner: string; phase: 'settled'; result: ConditionConceptReference }>;
 type FocusIntent =
   | Readonly<{ kind: 'open' | 'close'; visit: number }>
-  | Readonly<{ kind: 'search' | 'reference'; owner: string; from: HTMLElement }>;
+  | Readonly<{ kind: 'search'; owner: string; from: HTMLElement }>
+  | Readonly<{ kind: 'reference'; owner: string; from: HTMLElement }>;
 
 function ownsFocusOrLostTrigger(from: HTMLElement): boolean {
   const active = document.activeElement;
@@ -40,7 +41,7 @@ type Props = {
   lookup: ConditionConceptLookup;
   locale: string;
   disabled: boolean;
-  preventImplicitSubmit?(event: KeyboardEvent<HTMLElement>): void;
+  preventImplicitSubmit?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   onChange(value: FilterDocument): void;
 };
 
