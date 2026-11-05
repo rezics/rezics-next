@@ -517,9 +517,9 @@ test('community body survives initial session preparation while private advice w
     sourceKey: 'native-source',
   };
   client.removeQueries({ queryKey: ['session'], exact: true });
-  const view = () => (
+  const view = (value = community) => (
     <QueryClientProvider client={client}>
-      <SubjectCommunityContext.Provider value={community}>
+      <SubjectCommunityContext.Provider value={value}>
         <SubjectCommunityRegion
           id="reviews"
           kind="review"
@@ -545,6 +545,14 @@ test('community body survives initial session preparation while private advice w
 
   await act(async () => {
     client.setQueryData(['session'], reader('reader-two'));
+    await tick();
+  });
+  expect(host.textContent).toContain('Visible public body');
+  expect(host.querySelector('[data-slot="community-actions"]')).toBeNull();
+  await act(async () => {
+    client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
+    await tick();
+    root.render(view({ ...community, sourceKey: 'replacement-after-sign-out' }));
     await tick();
   });
   expect(host.textContent).toContain('Visible public body');
