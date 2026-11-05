@@ -16,12 +16,12 @@ For a same-home command, the single native held row is `core.partition(partition
 
 Content's original voter command retains its `VoteReviewGuard` read and own-vote checks, but the guarded effect branch in `rating/votes.ts` still returns `atomic_guard_unavailable` on this source. Semantic supplies the installed participant without activating or duplicating that Content-owned effect path. The prevented defect is committing a vote after its question or identity authority changes on a foreign logical home. Content must compose question admission and this participant on its original authorized command, retaining its receipt, replay and independent readback custody. The producer estimate for that receiving integration and successful provider effects is two attempts, 8–12 hours; source-epoch-only observations cannot substitute for it.
 
-| Provider caller | Actual guarded request | Native command custody |
-| --- | --- | --- |
-| VNDB | `list-import-vndb.ts` sends stored `nativeGuard`, canonical observation and owner-selected units to `votes.putVoteOutcome` | Stored original command actor/key and `scoreAdmission` |
-| Bangumi | `list-import-bangumi.ts` sends `plan.nativeGuard`, selected target and units | Retained score command key |
-| MAL | `list-import-mal.ts` sends `scoreReview.guard`, reviewed target and units | Started score checkpoint key |
-| AniList | `list-import-anilist.ts` sends `reviewed.score.native.guard`, native target and units | Retained native command key and separate consent |
+| Provider caller | Actual guarded request                                                                                                     | Native command custody                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| VNDB            | `list-import-vndb.ts` sends stored `nativeGuard`, canonical observation and owner-selected units to `votes.putVoteOutcome` | Stored original command actor/key and `scoreAdmission` |
+| Bangumi         | `list-import-bangumi.ts` sends `plan.nativeGuard`, selected target and units                                               | Retained score command key                             |
+| MAL             | `list-import-mal.ts` sends `scoreReview.guard`, reviewed target and units                                                  | Started score checkpoint key                           |
+| AniList         | `list-import-anilist.ts` sends `reviewed.score.native.guard`, native target and units                                      | Retained native command key and separate consent       |
 
 The four-provider native test uploads real provider records through each mounted owner, explicitly selects a native Subject, reviews and applies the score, then independently reads Content and Semantic. It records each actual requested/canonical Subject UUID, standard question UUID/home, native account UUID/command home, source homes and persisted control locators. It selects the caller through native account registration in a different home from the Subject, never by rewriting account IDs or inserting provider mapping/control rows. Every such exact foreign tuple remains `atomic_guard_unavailable` even on the same PostgreSQL instance, with no own vote written. These are genuine caller-home refusal witnesses, not successful-effect coverage. Successful effects and independent readback remain required in Content's existing journey once its receiving delivery lands. Semantic does not supply Person identifier merge expectations.
 
