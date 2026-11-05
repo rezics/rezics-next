@@ -18,7 +18,7 @@ const profile: PresentationProfile = {
   types: [],
   routes: [],
 };
-const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d8801';
+const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d8811';
 const success = (value = profile, head = 7): Extract<CurationRead, { ok: true }> => ({
   ok: true,
   reader,

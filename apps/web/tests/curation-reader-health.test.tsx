@@ -119,20 +119,23 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     reader: string;
     work: Deferred<CurationRead>;
     signal: AbortSignal | undefined;
-    retiredAt: string | undefined;
   }[] = [];
+  const adviceReads: AbortSignal[] = [];
+  let adviceOpening: CurationRead | null = null;
   const publishes: { reader: string; input: PublishInput; work: Deferred<PublishResult> }[] = [];
   const transport = {
     read: (reader: string, signal?: AbortSignal) => {
       const work = deferred<CurationRead>();
-      const entry = { reader, work, signal, retiredAt: undefined as string | undefined };
-      signal?.addEventListener('abort', () => {
-        entry.retiredAt = new Error('opening retired').stack;
-      });
-      reads.push(entry);
+      reads.push({ reader, work, signal });
       return work.promise;
     },
-    readOpening: (reader: string, signal: AbortSignal) => transport.read(reader, signal),
+    readOpening: (reader: string, signal: AbortSignal) => {
+      if (adviceOpening) {
+        adviceReads.push(signal);
+        return Promise.resolve(adviceOpening);
+      }
+      return transport.read(reader, signal);
+    },
     publish: (input: PublishInput, reader: string) => {
       const work = deferred<PublishResult>();
       publishes.push({ reader, input: structuredClone(input), work });
@@ -302,8 +305,11 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(original.expectedHead).toBe(7);
     expect(original.profile).not.toEqual(profileA);
     expect(original.keys.publish).not.toBe(original.keys.activate);
+    adviceOpening = readFor(readerA, profileA, 7);
     await act(async () => publishes[0]!.work.resolve({ ok: false, reason: 'unavailable', outcome: 'unknown' }));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'unknown original outcome');
+    await settle(() => adviceReads.length === 1, 'current action advice after uncertain publication');
+    adviceOpening = null;
 
     // Retry is now explicit. Cache A/B/A publishes synchronously retire it before React commits.
     await click(m.curation_retry_original());
@@ -320,10 +326,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
       oldReload?.();
     });
     expect(publishes).toHaveLength(2);
-    expect(
-      reads,
-      JSON.stringify(reads.map(({ reader, signal, retiredAt }) => ({ reader, aborted: signal?.aborted, retiredAt }))),
-    ).toHaveLength(1);
+    expect(reads).toHaveLength(1);
     await settle(() => reads.length === 1, 'fresh A admission after batched ABA');
     await act(async () => reads[0]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'retained original after A recovery');
