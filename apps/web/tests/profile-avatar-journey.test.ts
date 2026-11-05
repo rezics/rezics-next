@@ -47,8 +47,7 @@ function profile(accountId = 'account-one'): ProfileValues {
 }
 const file = () => new File(['local bytes'], 'private-file-name.png', { type: 'image/png' });
 const settle = async () => {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let step = 0; step < 8; step += 1) await Promise.resolve();
 };
 const adviceTypes = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
 function advice(accountId: string, actions: ['upload'] | [] = ['upload']) {

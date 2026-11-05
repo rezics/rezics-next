@@ -315,7 +315,7 @@ test('one episode shares a disclosed future container and repeats the exact unce
         lose = false;
         throw new Error('reservation response lost');
       }
-      return media('reserved');
+      return media('reserved', mediaId, 'private-thread');
     }
     return init.method === 'PUT' ? new Response(null, { status: 204 }) : media('available');
   });
@@ -428,7 +428,7 @@ test('disclosed future-thread 409 retains its admitted container command through
         lose = false;
         throw new Error('lost admitted reserve');
       }
-      return media('reserved');
+      return media('reserved', mediaId, 'disclosed-container');
     }
     return init.method === 'PUT' ? new Response(null, { status: 204 }) : media('available');
   });
