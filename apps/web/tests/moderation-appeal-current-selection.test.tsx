@@ -343,6 +343,27 @@ test('mounted keyboard appeal return restores the activator only after exact que
   cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   cache.setQueryData(['session'], session);
   const history = workbenchQueueWindowHistory(cache);
+  const admitAppeal = history.admitAppeal.bind(history);
+  const appealAdmissions: unknown[] = [];
+  history.admitAppeal = (input) => {
+    const result = admitAppeal(input);
+    const visit = (history as unknown as { appealVisit?: Record<string, unknown> }).appealVisit;
+    appealAdmissions.push({
+      visitId: input.visitId,
+      case: input.search.case,
+      admitted: input.admitted,
+      pageState: input.page.state,
+      result,
+      state: visit && {
+        visitId: visit.visitId,
+        mode: visit.mode,
+        pending: visit.pending,
+        transitionApproved: visit.transitionApproved,
+        generation: visit.generation,
+      },
+    });
+    return result;
+  };
   const beginAppealReturn = history.beginAppealReturn.bind(history);
   let returnObservation: unknown;
   history.beginAppealReturn = (input) => {
@@ -355,6 +376,7 @@ test('mounted keyboard appeal return restores the activator only after exact que
         appealId: visit.appealId,
         mode: visit.mode,
         pending: visit.pending,
+        transitionApproved: visit.transitionApproved,
         generation: visit.generation,
         fence: visit.fence,
       },
@@ -453,7 +475,7 @@ test('mounted keyboard appeal return restores the activator only after exact que
   await act(async () => {
     returnLink.dispatchEvent(new browser.MouseEvent('click', { bubbles: true, detail: 0 }));
   });
-  console.log('appeal return observation', JSON.stringify(returnObservation));
+  console.log('appeal return observation', JSON.stringify(returnObservation), JSON.stringify(appealAdmissions));
   await transition;
   expect(current.search.cursor).toBe('captured');
   expect(current.search.case).toBeUndefined();
