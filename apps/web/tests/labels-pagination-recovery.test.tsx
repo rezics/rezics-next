@@ -451,13 +451,11 @@ test('Recovery presentation retains the original uncertain create through refres
       current = false;
       await act(async () => complete({ ok: true }));
       expect(refresh).not.toHaveBeenCalled();
-      expect((form().querySelector('input[name="idempotencyKey"]') as HTMLInputElement).value).toBe(
-        original.data.idempotencyKey,
-      );
+      expect(host.querySelector('#new-label')).toBeNull();
+      expect(host.textContent).not.toContain('Original draft');
       const click = new window.MouseEvent('click', { bubbles: true, cancelable: true });
       link(host, m.library_collections_first_page()).dispatchEvent(click);
       expect(click.defaultPrevented).toBe(true);
-      await submit();
       expect(writes).toHaveLength(before + 2);
     } finally {
       await act(async () => root.unmount());

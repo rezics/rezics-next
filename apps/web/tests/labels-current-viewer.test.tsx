@@ -454,6 +454,11 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await show(session('B', 'another-nonempty-csrf'));
       busy(); // Ordinary same-viewer loader/CSRF refresh preserves the outstanding attempt.
       await settleWrite(2, { ok: false, reason: 'conflict' });
+      expect(pendingReads).toHaveLength(1); // The retired response cannot launch a fresh read.
+      await submit('rename'); // Retry only after the replacement origin has admitted the same owner again.
+      expect(writes[3]!.data).toEqual(uncertain);
+      expect(writes[3]!.csrf).toBe('session-B');
+      await settleWrite(3, { ok: false, reason: 'conflict' });
       expect(pendingReads[1]!.data).toEqual({ cursor: search.cursor, query: search.q });
       await settleRead(1, response('B', search, 24));
       expect(
@@ -468,10 +473,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await act(async () => select('rename')());
       await changeName('Changed B draft');
       await submit('rename');
-      expect(writes[3]!.data.name).toBe('Changed B draft');
-      expect(writes[3]!.data.idempotencyKey).not.toBe(uncertain.idempotencyKey);
-      expect(writes[3]!.data.revision).toBe(24);
-      await settleWrite(3, { ok: true });
+      expect(writes[4]!.data.name).toBe('Changed B draft');
+      expect(writes[4]!.data.idempotencyKey).not.toBe(uncertain.idempotencyKey);
+      expect(writes[4]!.data.revision).toBe(24);
+      await settleWrite(4, { ok: true });
       await settleRead(2, response('B', search, 25));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
 
@@ -482,14 +487,14 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       const deleteKey = (document.querySelector('[role="dialog"] input[name="idempotencyKey"]') as HTMLInputElement)
         .value;
       await submit('delete');
-      expect(writes[4]!.data).toEqual({
+      expect(writes[5]!.data).toEqual({
         operation: 'delete',
         id: 'label-B',
         revision: 25,
         name: 'Private B',
         idempotencyKey: deleteKey,
       });
-      await settleWrite(4, { ok: true, revision: 73 }); // Keep A/B refresh IO pending while C starts using its route.
+      await settleWrite(5, { ok: true, revision: 73 }); // Keep A/B refresh IO pending while C starts using its route.
       await show(session('C'));
       retired('B');
       await settleRead(4, response('C', search));
@@ -505,10 +510,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await settleRead(5, response('D', search));
       await act(async () => select('rename')());
       await submit('rename');
-      await settleWrite(5, new Error('Retired C failure'));
+      await settleWrite(6, new Error('Retired C failure'));
       busy();
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-      await settleWrite(6, { ok: false, reason: 'conflict' });
+      await settleWrite(7, { ok: false, reason: 'conflict' });
       await settleRead(6, response('D', search));
       await act(async () => {
         const cancel = [...document.querySelectorAll('[role="dialog"] button')].find(
@@ -518,9 +523,9 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       });
       await act(async () => select('delete')());
       await submit('delete');
-      const deleteInput = writes[7]!.data;
+      const deleteInput = writes[8]!.data;
       expect(deleteInput).toMatchObject({ operation: 'delete', id: 'label-D', revision: 7, name: 'Private D' });
-      await settleWrite(7, { ok: true, revision: 91 });
+      await settleWrite(8, { ok: true, revision: 91 });
       const deleted = response('D', search);
       deleted.page.labels = [];
       await settleRead(7, deleted);
@@ -529,13 +534,13 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       const restoreForm = host.querySelector('input[name="operation"][value="restore"]')!.closest('form')!;
       const undoKey = (restoreForm.querySelector('input[name="idempotencyKey"]') as HTMLInputElement).value;
       await act(async () => undo.actionProps!.onClick!({} as never));
-      expect(writes[8]!.data).toEqual({ operation: 'restore', id: 'label-D', revision: 91, idempotencyKey: undoKey });
-      await settleWrite(8, { ok: true, revision: 92 });
+      expect(writes[9]!.data).toEqual({ operation: 'restore', id: 'label-D', revision: 91, idempotencyKey: undoKey });
+      await settleWrite(9, { ok: true, revision: 92 });
       await settleRead(8, response('D', search, 92));
       expect(host.querySelector('input[name="operation"][value="restore"]')).toBeNull();
       await act(async () => select('delete')());
       await submit('delete');
-      await settleWrite(9, { ok: true, revision: 93 });
+      await settleWrite(10, { ok: true, revision: 93 });
       await settleRead(9, deleted);
       const retiredUndo = toastEntries.at(-1)!;
       await act(async () => {
@@ -581,7 +586,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(host.textContent).toContain('Private F');
       await act(async () => select('rename')());
       await submit('rename');
-      await settleWrite(10, { ok: true });
+      await settleWrite(11, { ok: true });
       await settleRead(17, response('F', { ...search, cursor: 'wrong refresh cursor' }));
       retired('F');
       await show(
