@@ -671,7 +671,8 @@ test('later selected-family reseeds carry the newly current release classificati
         {
           taxonomy: vndbReleasePlatformTaxonomy,
           uri: vndbReleasePlatformSchemeUri,
-          schemeId: classifications.bindings.schemes.find((scheme) => scheme.taxonomy === vndbReleasePlatformTaxonomy)!.id,
+          schemeId: classifications.bindings.schemes.find((scheme) => scheme.taxonomy === vndbReleasePlatformTaxonomy)!
+            .id,
           concepts: [{ code: 'win', id: changedPlatformId }],
         },
       ],
@@ -689,9 +690,9 @@ test('later selected-family reseeds carry the newly current release classificati
       },
       preservedBindings: classifications.bindings,
     });
-    expect(
-      withoutPlatform.bindings.schemes.some((scheme) => scheme.taxonomy === vndbReleasePlatformTaxonomy),
-    ).toBe(false);
+    expect(withoutPlatform.bindings.schemes.some((scheme) => scheme.taxonomy === vndbReleasePlatformTaxonomy)).toBe(
+      false,
+    );
     expect(withoutPlatform.groups.some((group) => group.taxonomy === vndbReleasePlatformTaxonomy)).toBe(false);
 
     const nextCommands = commands.length;
@@ -704,12 +705,14 @@ test('later selected-family reseeds carry the newly current release classificati
       groups: releaseContext.groups,
       extras: extras(),
     });
-    const laterPlatformProposals = commands.slice(nextCommands).filter(
-      (command) =>
-        command.op === 'propose' &&
-        command.source.external_id === 'r1' &&
-        command.statement.property.id === 'schema:gamePlatform',
-    );
+    const laterPlatformProposals = commands
+      .slice(nextCommands)
+      .filter(
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === 'r1' &&
+          command.statement.property.id === 'schema:gamePlatform',
+      );
     expect(later.identities.find((identity) => identity.key === 'r1')?.subjectId).toBe(
       first.identities.find((identity) => identity.key === 'r1')?.subjectId,
     );

@@ -85,10 +85,7 @@ async function writeCrossMediaDump(directory: string, platform: string): Promise
   ]) {
     await writeFile(join(bangumi, `${table}.jsonlines`), '');
   }
-  await writeFile(
-    join(bangumi, 'subject.jsonlines'),
-    `${JSON.stringify({ id: 1, type: 2, name: 'Selected Work' })}\n`,
-  );
+  await writeFile(join(bangumi, 'subject.jsonlines'), `${JSON.stringify({ id: 1, type: 2, name: 'Selected Work' })}\n`);
 
   const tables: Record<string, { columns: string[]; rows?: Record<string, string | number | null>[] }> = {
     vn_titles: {
@@ -117,8 +114,24 @@ async function writeCrossMediaDump(directory: string, platform: string): Promise
     releases_media: { columns: ['id', 'medium', 'qty'], rows: [{ id: 'r1', medium: 'cd', qty: null }] },
     chars: {
       columns: [
-        'id', 'image', 'bloodt', 'cup_size', 'sex', 'spoil_sex', 'gender', 'spoil_gender', 'main', 'main_spoil',
-        's_bust', 's_waist', 's_hip', 'birthday', 'height', 'weight', 'age', 'description',
+        'id',
+        'image',
+        'bloodt',
+        'cup_size',
+        'sex',
+        'spoil_sex',
+        'gender',
+        'spoil_gender',
+        'main',
+        'main_spoil',
+        's_bust',
+        's_waist',
+        's_hip',
+        'birthday',
+        'height',
+        'weight',
+        'age',
+        'description',
       ],
     },
     producers_relations: { columns: ['id', 'pid', 'relation'] },
@@ -454,7 +467,12 @@ test('cross-media CLI retains selected release classifications through later voc
     const tokenResponse = await support.request(
       '/token',
       {},
-      new Headers({ cookie: signIn.headers.getSetCookie().map((cookie) => cookie.split(';')[0]).join('; ') }),
+      new Headers({
+        cookie: signIn.headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(';')[0])
+          .join('; '),
+      }),
     );
     expect(tokenResponse.status).toBe(200);
     const bearer = ((await tokenResponse.json()) as { access_token: string }).access_token;
@@ -504,17 +522,28 @@ test('cross-media CLI retains selected release classifications through later voc
     const run = () =>
       runCrossMediaSeedCli(
         [
-          '--bangumi', dump.bangumi,
-          '--vndb', dump.vndb,
-          '--state', state,
-          '--result', resultPath,
-          '--api', runtime.origin,
-          '--auth', authOrigin,
-          '--account-key', keyPath,
-          '--account', runtime.identity.governance.accountId,
-          '--client', clientId,
-          '--showcase-state', showcase,
-          '--vndb-release-state-bindings', join(directory, 'release-bindings.json'),
+          '--bangumi',
+          dump.bangumi,
+          '--vndb',
+          dump.vndb,
+          '--state',
+          state,
+          '--result',
+          resultPath,
+          '--api',
+          runtime.origin,
+          '--auth',
+          authOrigin,
+          '--account-key',
+          keyPath,
+          '--account',
+          runtime.identity.governance.accountId,
+          '--client',
+          clientId,
+          '--showcase-state',
+          showcase,
+          '--vndb-release-state-bindings',
+          join(directory, 'release-bindings.json'),
         ],
         { selection: { bangumi: [1], vndb: ['v1'], peoplePerProvider: 1 } },
       );

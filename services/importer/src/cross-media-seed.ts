@@ -3407,7 +3407,10 @@ export async function runCrossMediaSeedCli(
         journal,
         stage: 'concepts',
       });
-      const sameBindings = sameShowcaseVndbReleaseClassifications(result.bindings, currentReleaseClassifications.bindings);
+      const sameBindings = sameShowcaseVndbReleaseClassifications(
+        result.bindings,
+        currentReleaseClassifications.bindings,
+      );
       releaseClassificationPreparation = currentReleaseClassifications;
       releaseClassificationRequirements = currentReleaseClassifications.requirements;
       if (!sameBindings) {
