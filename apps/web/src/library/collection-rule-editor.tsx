@@ -269,7 +269,6 @@ export function CollectionRuleEditor(props: EditorProps) {
   const { page, viewerId, collectionId, admitted } = props;
   const hasCredential = !!(props.currentCsrf ? props.currentCsrf() : props.csrfToken);
   const canRead =
-    hasCredential &&
     !!viewerId &&
     !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
   const canSave =
@@ -277,7 +276,7 @@ export function CollectionRuleEditor(props: EditorProps) {
   const canLabel = !!admitted?.includes('library_label.list');
   const scope = JSON.stringify(
     props.isOwnerCurrent
-      ? [viewerId, collectionId, hasCredential]
+      ? [viewerId, collectionId]
       : [viewerId, collectionId, hasCredential, canRead, canSave, canLabel],
   );
   const latest = useRef({ page, scope });
@@ -316,7 +315,7 @@ export function CollectionRuleEditor(props: EditorProps) {
       epoch={boundary.epoch}
       retired={boundary.retired}
       seen={boundary.seen}
-      authorized={canRead && canSave}
+      authorized={canRead}
       canLabel={canLabel}
     />
   );
