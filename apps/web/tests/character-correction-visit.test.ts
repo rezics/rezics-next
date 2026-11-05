@@ -25,10 +25,11 @@ import { characterProfileFixture, characterProfileId } from '../src/kernel/fake/
 const contextA = '019a1b2c-3d4e-7f00-8a00-000000000011';
 const realmA = '019a1b2c-3d4-7f00-8a00-000000000022';
 const realmB = '019a1b2c-3d4-7f00-8a00-000000000033';
-const workId = '019a1b2c-3d4e-7f00-8a00-000000000044';
 const handoff = '019a1b2c-3d4e-7f00-8a00-000000000055';
 
 test('Character correction address and native read retain exact Context and Realm, while Global remains a fresh visit', async () => {
+  const fixture = characterProfileFixture();
+  const workId = fixture.work.id;
   const parsed = parseCharacterCorrectionSearch({ context: contextA, realm: realmA, work: workId });
   expect(parsed).toEqual({ ok: true, value: { context: contextA, realm: realmA, work: workId } });
   expect(parseCharacterCorrectionUrl(`?context=${contextA}&realm=${realmA}&work=${workId}`).ok).toBe(true);
@@ -50,11 +51,11 @@ test('Character correction address and native read retain exact Context and Real
   const entryUrl = new URL(entry.href, 'https://site.test');
   expect(Object.fromEntries(entryUrl.searchParams)).toEqual({ work: workId, context: contextA, realm: realmA });
 
-  const fixture = characterProfileFixture();
   fixture.character.subject.context = contextA;
   const requests: { id: string; context?: string }[] = [];
   const client = {
     definitions: fixture.client.definitions,
+    definitionTypes: fixture.client.definitionTypes,
     subjects: ({ id }: { id: string }) => {
       const endpoint = fixture.client.subjects({ id });
       return {
