@@ -2610,6 +2610,9 @@ Decision: each verification builds one source-interval landing history (one Git 
 batched extra-commit read). That projection is not reused across source intervals, and a landing is not treated as
 verified unless its acceptance passed on that exact head.
 
+Decision: `dev-verifier-plan.ts` owns read-only source projections and verifier check planning; `dev-verifier.ts`
+retains hashes, cache policy, execution, comparison, findings and lifecycle writes.
+
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.
 Checks still require the installed pinned Bun; an actual installation failure remains infrastructure.

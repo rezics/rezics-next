@@ -319,6 +319,7 @@ test('worker-owned briefs keep affected verification without inventing an accept
       return { passed: true, output: '', timedOut: false };
     },
   });
+  expect(commands).toContain('env TYPECHECK_CHANGED=services/kernel/change.ts bun scripts/typecheck.ts');
   expect(commands).toContain('affected-check');
   expect(commands).not.toContain('');
   expect(commands.some((command) => command.startsWith('acceptance'))).toBe(false);
@@ -420,6 +421,14 @@ test('projects verifier source inputs once per immutable revision with bounded G
   expect(checkInput(settings, head, { command: present.command, closure: present.closure }, many)).not.toBe(input);
   writeFileSync(join(settings.stateDirectory, 'remote-check-hosts.json'), '{"hosts":[]}');
   expect(checkInput(settings, head, present, many)).not.toBe(input);
+
+  const next = commit(root, 'apps/widget/src/value.ts', 'export const value = 2;\n', 'change widget');
+  const newer = projectChecksSource(root, next, [present]);
+  const oldObject = one.objects.get('apps/widget/src/value.ts');
+  expect(oldObject).toEqual(expect.any(String));
+  expect(newer).toMatchObject({ commit: next, gitReads: 1 });
+  expect(newer.objects.get('apps/widget/src/value.ts')).not.toBe(oldObject);
+  expect(one.objects.get('apps/widget/src/value.ts')).toBe(oldObject);
 });
 
 test('fallback landings keep acceptance while skipped kinds do not', async () => {

@@ -181,13 +181,26 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
   const root = repository();
   const base = git(root, 'rev-parse', 'dev-verified');
   commit(root, 'tools/goal/src/fixture.ts', 'export const fixture = true;\n', 'add fixture source');
-  const head = commit(
+  commit(
     root,
     'tools/goal/src/fixture.test.ts',
     "console.log('fixture test');\n",
     'add fixture sibling test',
   );
-  git(root, 'update-ref', 'refs/heads/dev', head, base);
+  commit(root, 'apps/widget/bunfig.toml', '[install]\n', 'add widget bunfig');
+  commit(root, 'apps/widget/src/widget.ts', 'export const widget = true;\n', 'add widget source');
+  commit(root, 'apps/widget/src/helper.ts', 'export const helper = true;\n', 'add widget helper');
+  commit(root, 'apps/widget/src/widget.test.ts', "console.log('widget');\n", 'add widget test');
+  commit(root, 'apps/widget/src/helper.test.ts', "console.log('helper');\n", 'add helper test');
+  commit(root, 'services/worker/bunfig.toml', '[install]\n', 'add worker bunfig');
+  commit(root, 'services/worker/src/worker.ts', 'export const worker = true;\n', 'add worker source');
+  const finalHead = commit(
+    root,
+    'services/worker/src/worker.test.ts',
+    "console.log('worker');\n",
+    'add worker test',
+  );
+  git(root, 'update-ref', 'refs/heads/dev', finalHead, base);
   const ctx = context(root);
   const verifierCommand = ['bun', 'run', 'scripts/typecheck.ts'];
   const legacyAffectedCommand = ['bun', 'test', 'scripts/typecheck.ts'];
@@ -195,24 +208,34 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
   ctx.settings.verifierChecks = [{ paths: ['tools/goal/src/**'], command: verifierCommand }];
   ctx.settings.affectedTests = [{ paths: ['tools/goal/src/**'], command: legacyAffectedCommand }];
   ctx.settings.siblingTests = { command: siblingCommand };
-  const executed: string[][] = [];
+  const executed: { command: string[]; cwd: string }[] = [];
 
   try {
     await verifyDev({
       ...ctx,
-      runGate: runner(async (command) => {
-        executed.push([...command]);
+      runGate: runner(async (command, cwd) => {
+        executed.push({ command: [...command], cwd });
         return { passed: true, output: '', timedOut: false };
       }),
     });
-    expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
-    expect(executed.filter((command) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(1);
-    expect(executed.filter((command) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(finalHead);
+    expect(executed.filter(({ command }) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(1);
+    expect(executed.filter(({ command }) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
     expect(
       executed.filter(
-        (command) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' '),
+        ({ command }) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' '),
       ),
     ).toHaveLength(1);
+    expect(
+      executed
+        .filter(({ command }) => command.join(' ') === 'bun test src/helper.test.ts src/widget.test.ts')
+        .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
+    ).toEqual(['apps/widget']);
+    expect(
+      executed
+        .filter(({ command }) => command.join(' ') === 'bun test src/worker.test.ts')
+        .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
+    ).toEqual(['services/worker']);
   } finally {
     ctx.close();
   }
