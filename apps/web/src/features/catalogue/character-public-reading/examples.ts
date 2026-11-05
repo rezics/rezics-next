@@ -86,11 +86,12 @@ export function characterPublicExample(
     ),
   });
   const read: ConnectionRead = async (address) => {
-    const result = visit(Boolean(address.only && address.selection?.[address.only]?.cursor));
-    if (address.only) {
-      const section = result.sections[address.only]!;
-      const cursor = address.selection?.[address.only]?.cursor;
-      if (section.section.ok)
+    const cursorOf = (group: string) => address.selection?.[group as 'characters' | 'credits']?.cursor;
+    const result = visit(Boolean(address.only ? cursorOf(address.only) : cursorOf('characters') || cursorOf('credits')));
+    const apply = (group: 'characters' | 'credits') => {
+      const section = result.sections[group];
+      const cursor = cursorOf(group);
+      if (section?.section.ok)
         section.section.read = {
           kind: 'links',
           id: character,
@@ -98,7 +99,13 @@ export function characterPublicExample(
           limit: 12,
           ...(cursor ? { cursor } : {}),
         };
-      result.sections = { [address.only]: section };
+    };
+    if (address.only === 'characters' || address.only === 'credits') {
+      apply(address.only);
+      result.sections = { [address.only]: result.sections[address.only]! };
+    } else {
+      apply('characters');
+      apply('credits');
     }
     return result;
   };
