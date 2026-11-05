@@ -245,7 +245,7 @@ cursor; it does not replay the child chain. This is a reversible visit-local cei
 The child owner includes exact form values, ordered operands, locale and the initial native group page/checkpoint.
 The route supplies Web's public reader origin, composing browserObservation, useReaderAddress and
 useReaderResponseOrigin; its lifetime changes on actual observation or response replacement even for an equal
-principal or equal response values. Search consumes addressLease/readLease through session/reader; it has no session
+principal or equal response values. Search consumes addressLease/readLease through session/index; it has no session
 registry or replacement detector. An owner change hides old windows during render, aborts pending requests and
 rejects late completions even if cancellation is ignored. Equivalent renders retain expansion and independent work
 state. Focus intent belongs only to an activated current action: completion keeps the surviving action or named

@@ -636,8 +636,8 @@ test('work expansions keep independent child progress and resume their own respo
 
 test('current release visits retire pending windows and bound cursor progress without reviving prior visits', async () => {
   const { QueryClient } = await import('@tanstack/react-query');
-  const { browserObservation } = await import('../src/session');
-  const { addressLease, useReaderResponseOrigin } = await import('../src/session/reader');
+  const { browserObservation, addressLease } = await import('../src/session');
+  const { useReaderResponseOrigin } = await import('../src/session/reader');
   const { sessionQueryKey } = await import('../src/session/browser-state');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
