@@ -57,7 +57,6 @@ const kernel = createKernel({
 });
 const projection = linkProjection(pool);
 const relays = startRelays(pool, [projection], { intervalMs: 20 });
-const sessions = new Map<string, string>();
 type Persona = keyof typeof accounts | undefined;
 const citation = {
   parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/original' } }],
@@ -178,11 +177,7 @@ function appearance(target: string, position: number, spoiler = false, extraCita
 
 async function handle(method: string, path: string, as?: Persona, body?: unknown, key = randomUUID()) {
   const headers: Record<string, string> = { 'accept-language': 'zh-CN, ja;q=0.8, en;q=0.3' };
-  if (as) {
-    headers.authorization = `Bearer ${real.bearer(as)}`;
-    const session = sessions.get(as);
-    if (session) headers['rezics-session-token'] = session;
-  }
+  if (as) headers.authorization = `Bearer ${real.bearer(as)}`;
   if (method === 'POST') headers['idempotency-key'] = `"${key}"`;
   if (body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
@@ -192,8 +187,6 @@ async function handle(method: string, path: string, as?: Persona, body?: unknown
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
-  const session = response.headers.get('rezics-session-token');
-  if (as && session) sessions.set(as, session);
   return { status: response.status, headers: response.headers, body: (await response.json()) as any };
 }
 
@@ -280,6 +273,7 @@ beforeAll(async () => {
     await real.grant({ route: routeOf(person)!, id: person }, 'editor', 'subject:read');
   }
   hidden = people[15]!;
+  await real.grant({ route: routeOf(hidden)!, id: hidden }, 'steward', 'moderation:hide');
   const created = await call('POST', '/v1/subjects', 'editor', {
     type: 'ex:Work',
     labels: { en: 'Journey work', ja: '旅程の作品' },
@@ -297,12 +291,22 @@ beforeAll(async () => {
   });
   work = created.subject.id;
   partitions.add(partitionOf(routeOf(work)!));
-  await real.grant({ route: routeOf(work)!, id: work }, 'editor', 'subject:read');
+  const workResource = { route: routeOf(work)!, id: work };
+  await real.grant(workResource, 'editor', 'subject:read');
+  await real.grant(workResource, 'editor', 'statement:propose');
+  await real.grant(workResource, 'acceptor', 'subject:read');
+  await real.grant(workResource, 'acceptor', 'context:accept');
+  await real.grant(workResource, 'acceptor', 'context:adopt');
+  await real.grant(workResource, 'outsider', 'subject:read');
+  await real.grant(workResource, 'steward', 'subject:read');
+  await real.grant(workResource, 'steward', 'moderation:hide');
   for (const [index, target] of people.entries()) {
     if (index < 4) continue;
     const proposed = await handle('POST', `/v1/subjects/${work}/candidates`, 'editor', {
       statement: appearance(target, index + 1),
     });
+    if (proposed.status !== 201)
+      throw new Error(`POST /v1/subjects/${work}/candidates: ${proposed.status} ${JSON.stringify(proposed.body)}`);
     expect(proposed.status).toBe(201);
     const accepted = await handle(
       'POST',
