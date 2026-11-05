@@ -297,10 +297,12 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   ).toEqual(['https://example.test/original', 'https://example.test/copy']);
   expect(byTarget.get(people[2])?.statement.references).toHaveLength(1);
   expect(
-    byTarget.get(people[3])?.statement.qualifiers?.some(
-      (snak: { property: { id: string }; value: { content: { amount: string } } }) =>
-        snak.property.id === 'rezics:spoilerLevel' && snak.value.content.amount === '+2',
-    ),
+    byTarget
+      .get(people[3])
+      ?.statement.qualifiers?.some(
+        (snak: { property: { id: string }; value: { content: { amount: string } } }) =>
+          snak.property.id === 'rezics:spoilerLevel' && snak.value.content.amount === '+2',
+      ),
   ).toBe(true);
 
   const observer = observeSql(pool);
