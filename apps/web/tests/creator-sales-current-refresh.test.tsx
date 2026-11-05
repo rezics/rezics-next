@@ -538,7 +538,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     expect(requested.at(-1)).toBe('second+/=');
     let replacement!: Promise<void>;
     await act(async () => {
-      replacement = router.navigate({ href: '/en/creator/sales?cursor=second%2B%2F%3D' });
+      replacement = router.invalidate({ filter: (match) => match.routeId === salesRouteId });
       await Promise.resolve();
     });
     expect(requested.filter((cursor) => cursor === 'second+/=')).toHaveLength(2);
