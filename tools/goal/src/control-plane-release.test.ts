@@ -1286,12 +1286,10 @@ test('ordinary dev independence: repeated interrupted admissions are finite acro
       let current = true;
       await train(
         h,
-        async (_command, _cwd, _log, options) => {
+        async () => {
+          // The command already running finishes its step; the next command boundary hands the request off.
           gateCalls++;
           current = false;
-          await new Promise<void>((resolve) =>
-            options!.signal!.addEventListener('abort', () => resolve(), { once: true }),
-          );
           return { passed: true, output: '', timedOut: false };
         },
         releaseEvidence,
