@@ -11,6 +11,7 @@ type NativeResult = NativeArchiveResults['results'][number];
 type ResultContext = Omit<NativeArchiveResults, 'results'>;
 type SelectedResult = Pick<NativeResult, 'ordinal' | 'section' | 'status'> & {
   subjectId: string | null;
+  labelId?: string;
 };
 
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -51,7 +52,8 @@ export function selectedArchiveRecoveryResults(
   const rows: SelectedResult[] = [];
   for (const row of page.results) {
     if (selected.get(row.ordinal) !== row.section) continue;
-    rows.push({ ordinal: row.ordinal, section: row.section, status: row.status, subjectId: destination(row) });
+    const labelId = row.status === 'acknowledged' && row.section === 'labels' && row.result?.effect === 'label.create' && typeof row.result.labelId === 'string' ? row.result.labelId : undefined;
+    rows.push({ ordinal: row.ordinal, section: row.section, status: row.status, subjectId: destination(row), ...(labelId === undefined ? {} : { labelId }) });
   }
   const context: ResultContext = { uploadId: page.uploadId, state: page.state, next: page.next };
   return ownRecoveryPage({ rows, context });

@@ -1,144 +1,78 @@
 # Library archive entry and private-label recovery
 
-`/library/recover-archive` is the Library navigation destination for a person's completed REZICS Library export.
-It is separate from [private export](private-export/contract.ts) and provider-list import visits. The native owner is
-[Library archive review and merge](../../../../docs/library-archive-merge.md); the installed file format is owned by
-[Library export](../../../../docs/library-export.md). This guide owns the Web visit.
+`/library/recover-archive` is the Library destination for recovering selected Entries, private labels and assignments
+from a completed local archive. The native owner is [Library archive review and merge](../../../../docs/library-archive-merge.md);
+the artifact format is owned by [Library export](../../../../docs/library-export.md). This guide owns the mounted Web visit.
 
-## Current admission
+Decision: enable the Entry/private-label/assignment branch through the installed generated original-text upload and
+exact `{items:[{ordinal,reviewRevision}]}` confirmation; preserve local work by default and keep personal-field recovery independent.
+The base generated declarations contain these operands. Web consumes them without probing or casting Eden's proxy,
+generating another client, decoding files locally or adding a native endpoint. Content remains the shared publisher.
 
-Decision: keep production file selection disabled until generated merge methods and exact review-version confirmation
-are both available; the transport-neutral visit seam never claims artifact admission or native results. Explain scope
-and keep the person's completed file on their device.
+## Upload and inventory
 
-The server mounts `libraryArchiveMergeRoutes`, and the generated client composition now includes that member and
-its route declaration. `KernelClient` exposes `libraryArchiveMerges`, including raw upload. Eden's runtime proxy is
-not a capability probe: arbitrary property access can manufacture methods. Web must not cast that proxy to a
-handwritten interface or treat the decoder as an HTTP method.
+The signed-in route prepares exposure, sets `private, no-store`, keeps no private loader cache and uses noindex metadata.
+The mounted visit captures the existing encrypted original-sender credential before accepting a file. Every server
+function admits the expected current viewer and credential epoch before opening that credential. The browser keeps
+it only with the mounted visit; an uncertain command never swaps to a newly captured sender.
 
-The native implementation now returns `reviewRevision` in preview and review and requires
-`{items:[{ordinal,reviewRevision}]}` for selected apply. It rejects replaced reviews and preserves original command
-bindings. The installed generated declaration still omits those revisions and accepts `{ordinals}` instead.
-Its upload body remains `unknown`, rather than the producer's declared original text or admitted envelope.
-Publication of the matching declarations remains with the existing native/shared producer; Web does not generate,
-cast or replace them. The producer's transport example in `packages/client/tests/library-archive-merge.test.ts`
-proves original text/envelope upload and preview, not immutable selected apply.
+The file control admits an original file up to 34 MiB before reading its text. The generated upload sends that text
+unchanged. Only the native decoder interprets JSON, with depth 32, 100,000 records, 32 MiB compact record bytes and
+120,000 bytes per record. Completed V1/V2/V3 artifacts follow current native support; V4 remains refused, even though
+new exports emit it. Malformed, incomplete, unsupported and inconsistent files retain their native outcomes.
 
-The current page accepts no file, holds no private preview and issues no archive request. Its route requires sign-in,
-prepares existing exposure, marks responses `private, no-store`, uses noindex metadata and caches no private loader
-data. Scope text is prospective and explicitly says no file has been admitted: it is not a fabricated inventory or
-successful empty capture. There are no local upload endpoints, alternate native commands or restoration receipts.
+One upload identity and one preview page of at most 100 records are retained. Inventory shows native computed
+section counts, capture and treatment alongside validated overall manifest rows and compact bytes. It explains empty
+captures, retained unsupported evidence and manifest omissions. An empty page never substitutes for inventory.
+Annotation, journal, observation and Collection recovery are not activated by this branch or a generic result object.
 
-## Native bounds for the continuation
+## Deliberate selection and immutable review
 
-The values below come from `LIBRARY_ARCHIVE_MERGE_LIMITS`, its decoder limits and the installed export format,
-not an illustrative Web fixture.
+A person explicitly enters the current canonical Subject, a supported current state and create/update/preserve choice,
+or chooses a current private label ID or validated creation using its archived name. Equal names and archived IDs
+never supply mappings. Native review validates these inputs against current owners. Preserve is the default Entry
+and assignment action. Label mappings must be reviewed before assignments; a created label must be acknowledged
+before reviewing its assignments. Selection is bounded to twenty across page navigation.
 
-| Operand                                                    | Installed bound                                                           |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Raw upload U                                               | 34 MiB (35,651,584 bytes)                                                 |
-| Decoder depth                                              | 32                                                                        |
-| Archive records                                            | 100,000                                                                   |
-| Encoded archive records                                    | 32 MiB (33,554,432 bytes)                                                 |
-| Producer page / maximum encoded record admitted by decoder | 120,000 bytes                                                             |
-| Preview or result page P                                   | 100 records; native default 50                                            |
-| Selected review / apply                                    | 20 items each                                                             |
-| Evidence cleanup                                           | 100 child rows per explicit command                                       |
-| Native evidence retention                                  | Seven days from upload                                                    |
-| Export capture lifetime                                    | Fifteen minutes; an expired completed capture remains historical evidence |
+The selected choices and returned ordinal, status and `reviewRevision` appear together. The displayed preview also
+shows its exact native review, including current conflicts. Explicit confirmation binds the returned revisions; a
+review refresh or selection edit clears confirmation. A changed current revision/incarnation produces fresh native
+conflict and requires a new review and explicit confirmation for unstarted effects. Accepted rows can be unselected
+before reviewing the remaining work; a native acknowledged row is never refreshed or reapplied as a new choice.
 
-The decoder validates the final manifest, fourteen V1 or seventeen V2 declared sections, overall `rows` and compact
-`recordBytes`. Version 1 has no declared per-section counts; V2 validates declared per-section totals. Native coverage computes `present`/`empty` counts and distinguishes
-`requires-explicit-mapping` from `retained-unsupported`. The Web continuation must show actual native inventory,
-overall totals and omissions, explaining computed counts separately from manifest declarations.
+## Delivery, cancellation and readback
 
-The archive limit does not establish a delivered maximum response-byte constant B. Preview can include evidence
-and review objects in addition to record bytes; generated response types and an array cap alone do not prove B.
-Derive the composed response bound with Commerce/Performance before claiming O(P+B) observed cost. Current admission
-holds no upload/page/selection/result state and performs zero archive reads or effects, independent of archive size.
+`visit.ts` owns the existing bounded selection, immutable confirmation and cancellation checkpoints. `controller.ts`
+connects it to `KernelClient.libraryArchiveMerges` upload/status/preview/review/apply/results/cancel/prune. Unknown
+upload delivery retains the original text/key for explicit retry and disables replacement. After admission the text
+is released. Unknown apply retains the exact original upload, revisions and sender; native per-item custody retains
+its original key, canonical operands and started checkpoint. Reads of current facts never settle that uncertainty.
+A refused replay also retains the original command. Cancellation stops unstarted effects while preserving accepted
+partial results; it cannot release a started command before matching native acknowledgement.
 
-## Remaining visit
+Only acknowledged matching Entry/label/assignment effects supply canonical destinations. One selected result page
+is shown; native result navigation never imports unrelated journal/session fields. Explicit readback uses the actual
+current Entry read or the existing addressed FULL label-assignment read (one row, including current label metadata),
+not historical archive values. Removal and seven-day expiry of private evidence do not undo admitted Library changes.
+Expiry clears private upload/replay state and retains accepted results until replacement or session retirement.
+Pruning is explicit and native-bounded to 100 evidence records per command.
 
-Decision: prepare transport-neutral bounded visit custody while keeping raw upload unavailable until generated
-merge DTOs and immutable native review confirmation are delivered.
+Every callback is fenced by upload identity and the existing visit requests, the live viewer/credential/CSRF epoch,
+route address, locale, exposure observation and mounted lifetime. Replacement and unmount retire callbacks and
+private state. The server functions return `private, no-store`; archive values never enter query caches or errors.
 
-`archive-entry-recovery/selection.ts` owns at most twenty deliberate entry, label or assignment choices;
-unsupported sections cannot enter that selection. `archive-entry-recovery/visit.ts` owns one upload identity,
-one projected page of at most one hundred rows, that selection, one confirmed operand and one result page.
-It copies and freezes JSON values, replaces pages, invalidates review on choice changes, preserves exact original
-uncertain operands and keeps acknowledged receipts during cancellation. If cancellation overlaps a claimed apply,
-retain its original review and key until the native receipt is checkpointed, then show accepted partial results. Stale
-admission retains choices as context and requires a fresh review. Viewer, credential/CSRF epoch, source, route, locale, exposure,
-replacement and visit deadline retire private callbacks. Decision: evidence expiry clears upload, preview, selection
-and replay operands while retaining accepted
-native result pages until session retirement, explicit upload replacement or unmount; expiry grants no retry permission.
-The mounted adapter must provide the current binding reader and retire the visit on unmount and session
-events; no private state is connected to the unavailable page yet.
+## Bounds and verification
 
-These modules define local custody rather than a handwritten HTTP client or a native review-version schema.
-Decision: retain the original confirmed operand for native `recoverable` outcomes as for uncertain transport;
-native `failed` outcomes retain their result page and require fresh explicit review before another apply.
-The generated adapter must project bounded native pages without duplicating their rows in page context, carry the
-native exact review identity and original request credentials/keys, and enforce native admission and receipts.
-Local state tests do not establish artifact admission, native effects, response-byte bounds or mounted completion.
+One native preview/result acquisition reads P+1 complete retained rows (P≤100); review/apply selects R≤20. The
+120,000-byte record cap does not bound the full response: every preview row also includes review JSON and revision,
+and results include native result JSON. The composed maximum is the UTF-8 size of the complete native envelope,
+including coverage, escaped evidence/review/results and punctuation. The native producer's precise caller formula
+and remaining native costs are owned by [Bounds and verification](../../../../docs/library-archive-merge.md#bounds-and-verification).
+This page adds one sender preparation, one upload, one first preview, a review plus a refresh of only the displayed
+page, explicit apply/retry/cancel, and only requested status/result/current reads or cleanup. It never scans every
+page or account-wide labels and adds no smaller native cap. Source bounds are not observed byte/growth acceptance.
 
-Decision: deliver cancellation checkpointing and bounded selected-result projection while keeping route admission
-closed on the stale generated confirmation contract. A partial `recoverable` or stale cancellation response does
-not checkpoint the unresolved command, and a read racing its apply cannot release the original review/key.
-`archive-entry-recovery/results.tsx` projects the installed native results type in supplied order, retaining only
-selected Entry/label/assignment outcomes and the page continuation. Canonical destinations require an acknowledged
-receipt for the matching native effect. Arbitrary result JSON, including `progressSession` and `completedEpisodes`,
-never enters this projection. This reader boundary is prepared for the mounted continuation; it does not enable upload.
-
-After the native continuation, use only generated methods for raw upload, owner status, indexed preview/results,
-selected review/apply, cancel and expired-evidence pruning. Keep one upload, one current page, one bounded selection
-and one current result page in visit memory. No archive JSON decoder, full-page walk, per-row hydration, automatic
-refill or whole-job polling belongs in Web. First/deep/terminal page changes replace the current page.
-
-Entries, private labels and assignments require explicit choices. Archived state/label evidence stays separate from
-the current Subject, state and label identity. Equal label names never imply a mapping. Only the native validated
-create-label operation may create a label. Show unresolved identity, unavailable old vocabulary, local conflict,
-already equal, explicit create and preserved local edit distinctly. Preserve current work by default and never
-remove unrelated labels. Confirm exactly the selected, freshly admitted review operands; stale review retains
-private choices as context but requires new admission. Do not apply a replacement review silently.
-
-Sessions, units, history, holdings, Collections, pins, occurrences and provider evidence remain unsupported here.
-Ratings, financial data and other omitted sources gain neither a fabricated count nor a restoration claim. Recovery
-does not publish notes, complete progress, replace all entries or install archived revisions, timestamps or pins.
-
-Bind visit memory and every late callback to the current viewer, CSRF session/credential epoch, source, route, upload
-identity and native retention deadline. Retirement drops private reads; another account cannot resume them. Keep file
-contents, previews, choices and receipts out of URLs, persistent browser storage, shared query caches, errors and
-public metadata. Reopening requires an actually delivered owner read. Historical evidence never grants current
-account permission.
-
-An uncertain effect retains the original sender, credential, key and body for explicit retry. Native per-item
-receipts distinguish partial success from unresolved effects; selected retries must not manufacture replacement
-commands. Cancellation stops unstarted effects. Evidence deletion does not undo acknowledged Library changes.
-Link only admitted successful canonical Subjects or the current Library.
-
-## Presentation and verification
-
-The unavailable upload state has eight localized versions, a visible current step, a disabled native file control,
-scope and privacy explanations, and wrapping 44px Library/export destinations. The existing Storybook route harness
-connects this state without a second publisher or native success fixture. Review, conflict and partial-result stories
-belong to the remaining delivered journey, not simulated availability.
-
-Focused tests pin discoverability, localized scope and unavailable upload admission. They do not establish native
-execution or completion of recovery. The continuation needs an actual final producer artifact, malformed/incomplete
-and unsupported format refusals, state/label mapping, conflict preservation, changed revision/incarnation refusal,
-partial receipts, original replay, cancellation and mounted source/session retirement. Exercise supplied pages at
-1/50/100 rows while independently varying unrelated archive rows at 64/512/4096; navigation, review, apply, retry
-and cancel must not add account-size reads. Controller acceptance and Storybook/browser inspection remain deferred.
-
-References for this visit: the native owner and export format above; the portability criterion in
-[API-first platform coverage](../../../../docs/research/api-first-platform-coverage.md#gaps-ranked-for-vndb-and-bangumi-users);
-`legacy-final:apps/web/features/library/library-import.tsx` and `library-import-rows.tsx` (upload, deliberate row
-resolution, conflict choices and result recovery, with all-row loading to replace); and the older app's
-`apps/web/features/progress/components/progress-import-dialog.tsx` (token-help navigation, not history import).
-
-The current continuation also consulted the installed generated merge declaration, mounted merge route/service,
-the generated client's original-text/envelope transport example, and the final producer-artifact assembly in
-`services/kernel/test/library/library-archive-merge.test.ts` (retained V2 capture), plus the decoder examples in
-`services/kernel/test/library/library-archive.test.ts`. Fixed V3 assessment and inert V4 provider evidence retain
-their existing producer/consumer ownership; this change does not widen admitted formats or restored sections.
+Focused Web tests cover mounted file admission, exact confirmation, unchanged original retries, cancellation,
+current readback and native boundary outcomes using the existing native fixture. Existing controller fence and
+bounded-growth assertions remain. Browser, installed-root, byte/caller observations, broader native acceptance and
+promotion remain integration responsibilities.
