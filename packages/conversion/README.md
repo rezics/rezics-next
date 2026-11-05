@@ -6,17 +6,17 @@ This pure package deterministically turns one licensed provider record into boun
 
 The public subpaths are defined in [package.json](package.json).
 
-| Subpath | Public entry |
-| --- | --- |
-| @rezics/conversion | Shared source and conversion types, diagnostics, errors and source-classification projection |
-| @rezics/conversion/bangumi | Bangumi converter, revision and result |
-| @rezics/conversion/bangumi-vocabulary | Bangumi vocabulary mapper and revision |
-| @rezics/conversion/vndb | VNDB converter, revision, limits and result |
-| @rezics/conversion/vndb-vocabulary | VNDB vocabulary mapper, revision, tag-weight producer and row types |
-| @rezics/conversion/source-vocabulary | Released binding, identity, row, gap and result types |
-| @rezics/conversion/open-library | Open Library converter, revision and result |
-| @rezics/conversion/wikidata | Wikidata converter, revision, limits and result |
-| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection |
+| Subpath                                 | Public entry                                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| @rezics/conversion                      | Shared source and conversion types, diagnostics, errors and source-classification projection |
+| @rezics/conversion/bangumi              | Bangumi converter, revision and result                                                       |
+| @rezics/conversion/bangumi-vocabulary   | Bangumi vocabulary mapper and revision                                                       |
+| @rezics/conversion/vndb                 | VNDB converter, revision, limits and result                                                  |
+| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight producer and row types                          |
+| @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                        |
+| @rezics/conversion/open-library         | Open Library converter, revision and result                                                  |
+| @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                              |
+| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                   |
 
 Current exports are Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@15. Registration imports these revisions; source records cannot choose them.
 
@@ -26,12 +26,12 @@ Context separates trusted caller values from source data: alias, existing subjec
 
 ## Source mappings and rights
 
-| Provider | Native input, grain and current mapping | Rights and exclusions |
-| --- | --- | --- |
-| Bangumi | One native subject; supported types are Book, TVAnime, Music, Game and admitted live action. Source identity retains its native ID; names retain locale, attributed summaries become Text abstracts, and type facts and citations stay on that subject. Unsupported types remain source records without invented subjects. P5732 is admitted only for the exact Bangumi source-site rule below. | Metadata and attributed summaries use CC BY-SA 3.0. Cover rights are separate and unknown until admitted by the media owner. |
-| VNDB | Grouped native COPY tables or supported API; visual novels, releases, staff, producers and characters retain native keys and exact table origins. | Permitted metadata uses ODbL 1.0 database and LicenseRef-DbCL-1.0 contents terms. Descriptions, posts, images and other creative material are excluded. |
-| Open Library | Native TSV Work and Edition rows map to Book and bf:Instance and retain IDs and relations. Work first_publish_date maps to cited schema:datePublished; page counts, validated ISBN-13 and dates stay on Edition. | CC0-1.0 permits bibliographic metadata only; unknown-licensed prose and covers are excluded. |
-| Wikidata | One JSONL item; exact bundled type, property, rank, datatype, qualifier and time/quantity mappings govern claims. Unresolved relations remain unresolved. | CC0-1.0 structured data. Unsupported properties, instructions, user/talk content and Commons images are excluded. |
+| Provider     | Native input, grain and current mapping                                                                                                                                                                                                                                                                                                                                                         | Rights and exclusions                                                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bangumi      | One native subject; supported types are Book, TVAnime, Music, Game and admitted live action. Source identity retains its native ID; names retain locale, attributed summaries become Text abstracts, and type facts and citations stay on that subject. Unsupported types remain source records without invented subjects. P5732 is admitted only for the exact Bangumi source-site rule below. | Metadata and attributed summaries use CC BY-SA 3.0. Cover rights are separate and unknown until admitted by the media owner.                            |
+| VNDB         | Grouped native COPY tables or supported API; visual novels, releases, staff, producers and characters retain native keys and exact table origins.                                                                                                                                                                                                                                               | Permitted metadata uses ODbL 1.0 database and LicenseRef-DbCL-1.0 contents terms. Descriptions, posts, images and other creative material are excluded. |
+| Open Library | Native TSV Work and Edition rows map to Book and bf:Instance and retain IDs and relations. Work first_publish_date maps to cited schema:datePublished; page counts, validated ISBN-13 and dates stay on Edition.                                                                                                                                                                                | CC0-1.0 permits bibliographic metadata only; unknown-licensed prose and covers are excluded.                                                            |
+| Wikidata     | One JSONL item; exact bundled type, property, rank, datatype, qualifier and time/quantity mappings govern claims. Unresolved relations remain unresolved.                                                                                                                                                                                                                                       | CC0-1.0 structured data. Unsupported properties, instructions, user/talk content and Commons images are excluded.                                       |
 
 Provider allowlists never traverse unknown or private subtrees or truncate values. Malformed or unadmitted input becomes bounded diagnostics and omissions, not substitutes. IDs, revisions, labels, citations and locales retain explicit provider fields, not spelling or order inference. URLs are descriptive evidence, never identities, fetch instructions or licences.
 
@@ -83,13 +83,13 @@ Caller context supplies existing subject IDs and resolved references; source IDs
 
 For bounded record M, conversion and output are O(M); projection, hashing, validation, citations and commands touch only that record. Logical bounds exclude unrelated catalogue/history and do not claim heap or time measurements.
 
-| Converter | Static input and output envelope |
-| --- | --- |
-| Bangumi | Projection and infobox at most 64 KiB; summary Text snapshot at most 32 KiB; bounded tag, title, diagnostic and command arrays; at most one cover intent. |
-| VNDB | Grouped normalized record at most 64 KiB; bounded titles, links and source fields; no media assets. |
-| Open Library | Normalized record at most 2 MiB; prose at most 1 MiB; bounded field and relation arrays; at most 100 proposals. |
-| Wikidata | Supported item at most 128 KiB; bounded statements, terms, references and snaks; at most 100 commands. |
-| Source vocabulary | At most 128 input rows, bounded released bindings and no more than the free slots in the 100-command batch. |
+| Converter         | Static input and output envelope                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bangumi           | Projection and infobox at most 64 KiB; summary Text snapshot at most 32 KiB; bounded tag, title, diagnostic and command arrays; at most one cover intent. |
+| VNDB              | Grouped normalized record at most 64 KiB; bounded titles, links and source fields; no media assets.                                                       |
+| Open Library      | Normalized record at most 2 MiB; prose at most 1 MiB; bounded field and relation arrays; at most 100 proposals.                                           |
+| Wikidata          | Supported item at most 128 KiB; bounded statements, terms, references and snaks; at most 100 commands.                                                    |
+| Source vocabulary | At most 128 input rows, bounded released bindings and no more than the free slots in the 100-command batch.                                               |
 
 - VNDB citation touches one native revision and optional modification timestamp; each fact carries the exact source-record reference.
 - VNDB release minimum age touches one bounded scalar, at most one quantity proposal and its existing citation; no additional read or identity.

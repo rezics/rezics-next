@@ -169,38 +169,38 @@ R is source records, B binding/journal rows, N input bytes, M record/request/res
 
 ### Operation bounds
 
-| Operation | Touches and bound | Growth check |
-| --- | --- | --- |
-| CLI entry and bounded input | Validates exact HTTPS origins before I/O; A≤16 KiB and owner key K≤16 KiB; one input read. | tests/cli-outcomes.test.ts |
-| Streaming gzip dump transform | O(C+B); reader windows Wc,Wd≤256 KiB plus configured zlib window. | tests/compressed-dump-growth.test.ts |
-| Streaming zstd dump transform | O(C+B); parent windows ≤256 KiB plus 8 KiB stderr; child memory cap 128 MiB. | tests/zstd-input.test.ts |
-| Dump lines and parsing | O(M) scan/parse per line; live input O(C+L) with bounded record lines. | tests/dumps-growth.test.ts |
-| Bangumi pure conversion | O(M), one source projection; static bounds in conversion README. | packages/conversion/tests/bangumi-growth.test.ts |
-| VNDB pure conversion | O(M), one source projection; static bounds in conversion README. | packages/conversion/tests/vndb-growth.test.ts |
-| Open Library pure conversion | O(M), one source projection; static bounds in conversion README. | packages/conversion/tests/open-library-growth.test.ts |
-| Wikidata pure conversion | O(M), one source projection; static bounds in conversion README. | packages/conversion/tests/wikidata-growth.test.ts |
-| VNDB raw entry chunks | Full backing admitted before projection; row ≤65,536 bytes, hard ceiling 1 MiB. | tests/vndb-chunk-growth.test.ts |
-| VNDB archive streaming and staging | O(M) supplied bytes; spool pages of 32; keyed state and bounded row payloads. | tests/vndb-tables-growth.test.ts |
-| VNDB validation, projection page and cleanup | Keyset pages of at most 32 rows plus bounded terminal ranges. | tests/vndb-tables-growth.test.ts |
-| Retain conversion diagnostics | Exact generation/record/phase keys; ≤4 statements/point rows per record plus 2 transaction controls. | tests/conversion-diagnostics-growth.test.ts |
-| Retire superseded complete generations | Indexed source/run prefixes; p≤100 per page and at most 100 selected generations. | tests/retention-growth.test.ts |
-| Retire unpublished staging | Exact generation; indexed review and bounded cleanup, counts O(D) once per review. | tests/staging-retirement-growth.test.ts |
-| Review diagnostic pages and exact record | One source and generation point read; keyset page P+1 and P diagnostic rows. | tests/diagnostics-cli-growth.test.ts |
-| Binding inspection overview, page and exact request | Exact owner point reads; keyset page P≤100; bounded request body. | tests/binding-inspection-growth.test.ts |
-| Fetch one request | Exact request and response bytes; attempts default 3, maximum 5; O(aM) transmitted bytes. | tests/import-fetch-growth.test.ts |
-| Run start, capability, seal and checkpoint controls | Indexed generation/lease points; at most 3 statements per control operation plus transaction controls. | tests/run-store-growth.test.ts |
-| Review a stopped mass disappearance | Exact source/generation header; page L≤101 including continuation. | tests/disappearance-review-growth.test.ts |
-| Run stage one record | Exact generation, entry and member keys; at most 5 point statements per record plus 2 controls. | tests/run-store-growth.test.ts |
-| Run pages and stored projection/observation | Keyset pages of r≤100; staged, pending and vanished pages add only bounded lookahead rows. | tests/run-store-growth.test.ts |
-| Run classify, prepare and omission checks | Exact generation/entry/command keys; bounded omission and candidate rows. | tests/run-store-growth.test.ts |
-| Run acknowledgement and finalize checkpoint | At most 1+8r point statements/rows; response envelope ≤65,536 bytes. | tests/run-store-growth.test.ts |
-| Record get, count, page and upsert | Exact record/source keys; get/count one row, pages r rows; put 2–3 point operations. | tests/sqlite-growth.test.ts |
-| Binding lookup, candidate page and media projection | Exact source/external ID and journal keys; candidate pages ≤100; bounded media projection. | tests/bindings-growth.test.ts |
-| Binding prepare, acknowledge and taken-down write | Exact owner/media/group keys; bounded candidate and receipt mutations. | tests/bindings-growth.test.ts |
-| Media prepare, accept and observe | Exact owner/media keys; prepare ≤4 point statements, accept/observe ≤3 plus controls. | tests/bindings-growth.test.ts |
-| Media resolution | At most 64 assets; each snapshot ≤65,536 bytes, depth ≤32 and 65,536 nodes. | tests/media-resolver-outcomes.test.ts |
-| Checkpointed staging resume | Hashes the complete local bytes; indexed prefix and checkpoint per accepted record. | tests/staging-checkpoint-growth.test.ts |
-| Checkpointed VNDB table resume | Hashes original file; resumes accepted COPY effects with bounded spool pages of 32. | tests/vndb-acquisition-growth.test.ts |
-| Coordinator acquisition and reconciliation | O(input bytes + S log R); stages to EOF and seals before effects. | tests/importer-reconciliation-growth.test.ts |
-| Session ownership and recovery | Exact source lease; acquire at most 2 point statements, busy at most 1 plus controls. | tests/importer-reconciliation-growth.test.ts |
-| Kernel writes and fence reads per record/batch | e≤q≤300 per prepared record; each batch ≤100 commands and 65,536 bytes; route limits remain separate from conversion. | tests/import-fetch-growth.test.ts |
+| Operation                                           | Touches and bound                                                                                                     | Growth check                                          |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| CLI entry and bounded input                         | Validates exact HTTPS origins before I/O; A≤16 KiB and owner key K≤16 KiB; one input read.                            | tests/cli-outcomes.test.ts                            |
+| Streaming gzip dump transform                       | O(C+B); reader windows Wc,Wd≤256 KiB plus configured zlib window.                                                     | tests/compressed-dump-growth.test.ts                  |
+| Streaming zstd dump transform                       | O(C+B); parent windows ≤256 KiB plus 8 KiB stderr; child memory cap 128 MiB.                                          | tests/zstd-input.test.ts                              |
+| Dump lines and parsing                              | O(M) scan/parse per line; live input O(C+L) with bounded record lines.                                                | tests/dumps-growth.test.ts                            |
+| Bangumi pure conversion                             | O(M), one source projection; static bounds in conversion README.                                                      | packages/conversion/tests/bangumi-growth.test.ts      |
+| VNDB pure conversion                                | O(M), one source projection; static bounds in conversion README.                                                      | packages/conversion/tests/vndb-growth.test.ts         |
+| Open Library pure conversion                        | O(M), one source projection; static bounds in conversion README.                                                      | packages/conversion/tests/open-library-growth.test.ts |
+| Wikidata pure conversion                            | O(M), one source projection; static bounds in conversion README.                                                      | packages/conversion/tests/wikidata-growth.test.ts     |
+| VNDB raw entry chunks                               | Full backing admitted before projection; row ≤65,536 bytes, hard ceiling 1 MiB.                                       | tests/vndb-chunk-growth.test.ts                       |
+| VNDB archive streaming and staging                  | O(M) supplied bytes; spool pages of 32; keyed state and bounded row payloads.                                         | tests/vndb-tables-growth.test.ts                      |
+| VNDB validation, projection page and cleanup        | Keyset pages of at most 32 rows plus bounded terminal ranges.                                                         | tests/vndb-tables-growth.test.ts                      |
+| Retain conversion diagnostics                       | Exact generation/record/phase keys; ≤4 statements/point rows per record plus 2 transaction controls.                  | tests/conversion-diagnostics-growth.test.ts           |
+| Retire superseded complete generations              | Indexed source/run prefixes; p≤100 per page and at most 100 selected generations.                                     | tests/retention-growth.test.ts                        |
+| Retire unpublished staging                          | Exact generation; indexed review and bounded cleanup, counts O(D) once per review.                                    | tests/staging-retirement-growth.test.ts               |
+| Review diagnostic pages and exact record            | One source and generation point read; keyset page P+1 and P diagnostic rows.                                          | tests/diagnostics-cli-growth.test.ts                  |
+| Binding inspection overview, page and exact request | Exact owner point reads; keyset page P≤100; bounded request body.                                                     | tests/binding-inspection-growth.test.ts               |
+| Fetch one request                                   | Exact request and response bytes; attempts default 3, maximum 5; O(aM) transmitted bytes.                             | tests/import-fetch-growth.test.ts                     |
+| Run start, capability, seal and checkpoint controls | Indexed generation/lease points; at most 3 statements per control operation plus transaction controls.                | tests/run-store-growth.test.ts                        |
+| Review a stopped mass disappearance                 | Exact source/generation header; page L≤101 including continuation.                                                    | tests/disappearance-review-growth.test.ts             |
+| Run stage one record                                | Exact generation, entry and member keys; at most 5 point statements per record plus 2 controls.                       | tests/run-store-growth.test.ts                        |
+| Run pages and stored projection/observation         | Keyset pages of r≤100; staged, pending and vanished pages add only bounded lookahead rows.                            | tests/run-store-growth.test.ts                        |
+| Run classify, prepare and omission checks           | Exact generation/entry/command keys; bounded omission and candidate rows.                                             | tests/run-store-growth.test.ts                        |
+| Run acknowledgement and finalize checkpoint         | At most 1+8r point statements/rows; response envelope ≤65,536 bytes.                                                  | tests/run-store-growth.test.ts                        |
+| Record get, count, page and upsert                  | Exact record/source keys; get/count one row, pages r rows; put 2–3 point operations.                                  | tests/sqlite-growth.test.ts                           |
+| Binding lookup, candidate page and media projection | Exact source/external ID and journal keys; candidate pages ≤100; bounded media projection.                            | tests/bindings-growth.test.ts                         |
+| Binding prepare, acknowledge and taken-down write   | Exact owner/media/group keys; bounded candidate and receipt mutations.                                                | tests/bindings-growth.test.ts                         |
+| Media prepare, accept and observe                   | Exact owner/media keys; prepare ≤4 point statements, accept/observe ≤3 plus controls.                                 | tests/bindings-growth.test.ts                         |
+| Media resolution                                    | At most 64 assets; each snapshot ≤65,536 bytes, depth ≤32 and 65,536 nodes.                                           | tests/media-resolver-outcomes.test.ts                 |
+| Checkpointed staging resume                         | Hashes the complete local bytes; indexed prefix and checkpoint per accepted record.                                   | tests/staging-checkpoint-growth.test.ts               |
+| Checkpointed VNDB table resume                      | Hashes original file; resumes accepted COPY effects with bounded spool pages of 32.                                   | tests/vndb-acquisition-growth.test.ts                 |
+| Coordinator acquisition and reconciliation          | O(input bytes + S log R); stages to EOF and seals before effects.                                                     | tests/importer-reconciliation-growth.test.ts          |
+| Session ownership and recovery                      | Exact source lease; acquire at most 2 point statements, busy at most 1 plus controls.                                 | tests/importer-reconciliation-growth.test.ts          |
+| Kernel writes and fence reads per record/batch      | e≤q≤300 per prepared record; each batch ≤100 commands and 65,536 bytes; route limits remain separate from conversion. | tests/import-fetch-growth.test.ts                     |

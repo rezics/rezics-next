@@ -98,7 +98,8 @@ test('Imports authority and selected cost cases stay consolidated in their owner
     ['conversion README', conversion],
     ['importer README', importer],
     ['Imports capability', capability],
-  ]) expect(Buffer.byteLength(source, 'utf8'), `${name} exceeds 40,000 bytes`).toBeLessThanOrEqual(40_000);
+  ])
+    expect(Buffer.byteLength(source, 'utf8'), `${name} exceeds 40,000 bytes`).toBeLessThanOrEqual(40_000);
   for (const source of [goal, capability]) {
     expect(source).not.toMatch(/^#{1,4} .*Provider review/im);
     expect(source).not.toMatch(/^#{1,4} .*Audit gap/im);
