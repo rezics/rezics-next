@@ -909,6 +909,7 @@ function ShelfEntriesPage({
               revision={entry.revision}
               {...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId })}
               idempotencyKey={entry.removeKey}
+              credential={entry.removeCredential}
               locale={locale}
               returnTo={shelfHref(locale, {
                 layout,

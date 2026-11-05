@@ -141,7 +141,7 @@ test.each([
     method: 'DELETE',
     path: `/v1/libraryEntries/${subjectId}`,
     query: { revision: 7 },
-    headers: { authorization: 'Bearer reader', 'idempotency-key': restoreKey },
+    headers: { authorization: 'Bearer reader', 'idempotency-key': JSON.stringify(restoreKey) },
   });
 });
 
@@ -244,11 +244,9 @@ test('the client sends one DELETE and one POST to the restore suffix with the ex
     ['POST', `/v1/libraryEntries/${subjectId}:restore`],
   ]);
   expect(new URL(calls[0]!.url).searchParams.get('revision')).toBe('7');
-  expect(calls[0]!.headers.get('idempotency-key')).toBe('0192f3a0-6c1e-7b2a-9d4e-000000000002');
+  expect(calls[0]!.headers.get('idempotency-key')).toBe(JSON.stringify('0192f3a0-6c1e-7b2a-9d4e-000000000002'));
   expect(await calls[1]!.json()).toEqual({ deletionId: 'undo-ok', revision: 12 });
-  expect(calls[1]!.headers.get('idempotency-key')).toMatch(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-  );
+  expect(calls[1]!.headers.get('idempotency-key')).toBe(JSON.stringify(restoreKey));
   expect(calls.every((call) => call.headers.get('authorization') === 'Bearer reader')).toBe(true);
 });
 
@@ -470,7 +468,7 @@ test.each([false, true])(
         ['POST', `/v1/libraryEntries/${subjectId}:restore`],
       ]);
       expect(await writes[1]!.json()).toEqual({ deletionId: 'undo-ok', revision: 12 });
-      expect(writes[1]!.headers.get('idempotency-key')).toBe(fields.get('idempotencyKey'));
+      expect(writes[1]!.headers.get('idempotency-key')).toBe(JSON.stringify(fields.get('idempotencyKey')));
       expect(writes.every((call) => call.headers.get('authorization') === 'Bearer reader')).toBe(true);
     }
     setFakeAdmitted([]);
@@ -660,7 +658,7 @@ test('a lost restore acknowledgement retries the original native command without
     body: { deletionId, revision: 12 },
     headers: {
       authorization: 'Bearer reader',
-      'idempotency-key': restoreKey,
+      'idempotency-key': JSON.stringify(restoreKey),
     },
   });
   expect(effects).toBe(1);
@@ -712,4 +710,96 @@ test('script-free unknown restore retains its exact intent and invalid keys neve
   expect(retry.get('csrf_token')).toBe('original');
   expect(await (await send(retry)).text()).toContain('data-restored-entry');
   expect(calls[1]).toEqual(calls[0]);
+});
+
+test('cookie command credentials survive refresh and lost deletion responses without disclosure to another session', async () => {
+  const { prepareSession } = await import('../src/session/request');
+  const { captureEntryRestoreCredential } = await import('../src/library/entry-restore-credential');
+  const { libraryEntryFormResponse } = await import('../src/library/entry-form');
+  const csrf = 'a'.repeat(22);
+  let accessToken = 'original';
+  const env = {
+    SITE_ORIGINS: 'https://rezics.test',
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'api',
+    WEBSITE_SCOPES: 'scope',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'private-key',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({ status: 'active', subject: 'owner', accessToken, csrfToken: csrf }),
+      }),
+    },
+  } as unknown as import('../src/session/client').SessionEnv;
+  const cookie = `__Host-rezics_session=${'a'.repeat(43)}`;
+  const loaded = new Request('https://rezics.test/en/library', { headers: { cookie } });
+  await prepareSession(loaded, env);
+  const credential = await captureEntryRestoreCredential(loaded, env);
+  expect(credential).toEqual(expect.any(String));
+  const command = { subjectId, revision: 7, idempotencyKey: restoreKey, credential };
+  const calls: unknown[] = [];
+  let lost = true;
+  const client = {
+    platform: {
+      exposure: { get: async () => ({ data: { admitted: ['library_entry.delete', 'library_entry.restore'] } }) },
+    },
+    libraryEntries: () => ({
+      delete: async (_: unknown, options: unknown) => {
+        calls.push(options);
+        if (lost) {
+          lost = false;
+          throw new TypeError('Lost acknowledgement');
+        }
+        return {
+          status: 204,
+          error: null,
+          response: new Response(null, {
+            status: 204,
+            headers: {
+              'Library-Entry-Deletion-Id': deletionId,
+              'Library-Entry-Deletion-Revision': '12',
+            },
+          }),
+        };
+      },
+    }),
+  } as never;
+  const send = (body: URLSearchParams, session = cookie) =>
+    libraryEntryFormResponse(
+      new Request('https://rezics.test/library/entry', {
+        method: 'POST',
+        headers: { cookie: session, origin: 'https://rezics.test' },
+        body,
+      }),
+      env,
+      client,
+    );
+  const fields = new URLSearchParams({
+    ...command,
+    revision: '7',
+    credential: credential!,
+    intent: 'remove',
+    locale: 'en',
+    csrf_token: csrf,
+    returnTo: '/en/library?state=planned',
+  });
+  accessToken = 'refreshed';
+  const html = await (await send(fields)).text();
+  const retry = new URLSearchParams();
+  for (const match of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g))
+    retry.set(match[1]!, match[2]!.replaceAll('&amp;', '&'));
+  expect(retry.get('intent')).toBe('remove');
+  expect(retry.get('idempotencyKey')).toBe(restoreKey);
+  expect(retry.get('credential')).toBe(credential!);
+  expect(html).not.toContain('Bearer original');
+  const recovered = await (await send(retry)).text();
+  expect(recovered).toContain(`name="deletionId" value="${deletionId}"`);
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(calls[0]).toMatchObject({
+    headers: { authorization: 'Bearer original', 'idempotency-key': JSON.stringify(restoreKey) },
+  });
+  await send(retry, `__Host-rezics_session=${'b'.repeat(43)}`);
+  expect(calls).toHaveLength(2);
 });

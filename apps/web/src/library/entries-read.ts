@@ -54,6 +54,7 @@ export type PersonalLibraryEntry = {
   subject: LibrarySubject | null;
   changeKey: string;
   removeKey: string;
+  removeCredential?: string;
 };
 
 export type PersonalLibraryView =
@@ -106,6 +107,7 @@ export type LibraryChangeInput = Partial<ExpectedReader> & {
 };
 
 export type LibraryRemoveInput = Partial<ExpectedReader> & {
+  credential?: string;
   subjectId: string;
   revision: number;
   incarnationId?: string | null;
@@ -211,7 +213,7 @@ function thrownRefusalReason(error: unknown): LibraryRefusal | undefined {
 }
 
 function writeHeaders(authorization: string, idempotencyKey: string) {
-  return { authorization, 'idempotency-key': idempotencyKey };
+  return { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) };
 }
 
 async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promise<string | null> {
@@ -367,6 +369,7 @@ export async function loadPersonalLibrary(
       next: null,
     };
   }
+  const credential = await captureEntryRestoreCredential(request, sessionEnv);
   return {
     signedIn: true,
     ...(type ? { type } : {}),
@@ -374,7 +377,10 @@ export async function loadPersonalLibrary(
     sort,
     sortExplicit,
     ...(cursorReset ? { cursorReset: true } : {}),
-    entries: presentShelfEntries(page.libraryEntries),
+    entries: presentShelfEntries(page.libraryEntries).map((entry) => ({
+      ...entry,
+      ...(credential ? { removeCredential: credential } : {}),
+    })),
     next: page.next,
   };
 }
@@ -492,9 +498,11 @@ export async function removePersonalLibraryEntry(
 ): Promise<LibraryMutationResult> {
   try {
     const guarded = input.expectedReader !== undefined || input.expectedCredential !== undefined;
-    const authorization = guarded
+    const currentAuthorization = guarded
       ? await prepareExpectedReader(request, sessionEnv, input as ExpectedReader)
       : await bearer(request, sessionEnv);
+    if (!currentAuthorization) return { ok: false, reason: 'signed-out' };
+    const authorization = await originalEntryRestoreCredential(request, sessionEnv, input.credential);
     if (!authorization) return { ok: false, reason: 'signed-out' };
     const result = await client.libraryEntries({ subjectId: input.subjectId }).delete(undefined, {
       query: {
@@ -509,7 +517,7 @@ export async function removePersonalLibraryEntry(
       const deletionId = headers?.get('Library-Entry-Deletion-Id');
       const revision = Number(headers?.get('Library-Entry-Deletion-Revision'));
       if (!deletionId || !Number.isSafeInteger(revision) || revision < 1) return { ok: true };
-      const credential = await captureEntryRestoreCredential(request, sessionEnv);
+      const credential = input.credential ?? (await captureEntryRestoreCredential(request, sessionEnv));
       return {
         ok: true,
         undo: { deletionId, revision, idempotencyKey: crypto.randomUUID(), ...(credential ? { credential } : {}) },

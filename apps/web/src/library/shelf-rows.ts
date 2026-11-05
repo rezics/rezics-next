@@ -949,6 +949,7 @@ export function useShelfRows(
         revision: entry.revision,
         ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
         idempotencyKey: entry.removeKey,
+        ...(entry.removeCredential ? { credential: entry.removeCredential } : {}),
       },
       headers: new Headers(requestHeaders),
       viewer: currentViewer,

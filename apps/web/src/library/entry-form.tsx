@@ -11,6 +11,7 @@ import {
   removePersonalLibraryEntry,
   restorePersonalLibraryEntry,
   validateLibraryRestoreInput,
+  type LibraryRemoveInput,
   type LibraryRestoreInput,
   type LibraryRestoreResult,
 } from './entries-read';
@@ -98,8 +99,8 @@ export async function libraryEntryFormResponse(
       back.origin === new URL(request.url).origin && back.pathname.startsWith(`/${locale}/`)
         ? `${back.pathname}${back.search}`
         : `/${locale}/library`;
-    const authorized = new Request(request.url, { method: 'POST', headers: { authorization } });
     let undo: LibraryRestoreInput | undefined;
+    let retryRemove: LibraryRemoveInput | undefined;
     let restore: LibraryRestoreResult | undefined;
     let removed = false;
     let conflict = false;
@@ -115,20 +116,21 @@ export async function libraryEntryFormResponse(
       );
       if (!restore.ok && ['unavailable', 'closed', 'signed-out'].includes(restore.reason)) undo = input;
     } else {
-      const result = await removePersonalLibraryEntry(
-        client,
-        authorized,
-        {},
-        {
-          subjectId,
-          revision,
-          ...(incarnationId ? { incarnationId } : {}),
-          idempotencyKey,
-        },
-      );
+      const input: LibraryRemoveInput = {
+        subjectId,
+        revision,
+        ...(incarnationId ? { incarnationId } : {}),
+        idempotencyKey,
+        ...(credential ? { credential } : {}),
+      };
+      const result = await removePersonalLibraryEntry(client, request, sessionEnv, input);
+      if (!result.ok && result.reason === 'unavailable') {
+        const captured = credential ?? (await captureEntryRestoreCredential(request, sessionEnv));
+        retryRemove = { ...input, ...(captured ? { credential: captured } : {}) };
+      }
       removed = result.ok || result.reason === 'missing';
       if (result.ok && result.undo && admitted.includes('library_entry.restore' as never)) {
-        const credential = await captureEntryRestoreCredential(request, sessionEnv);
+        const credential = result.undo.credential;
         undo = {
           subjectId,
           ...result.undo,
@@ -161,6 +163,7 @@ export async function libraryEntryFormResponse(
                 undo={undo}
                 restore={restore}
                 removed={removed}
+                retryRemove={retryRemove}
                 conflict={conflict}
                 csrfToken={csrfToken}
                 returnTo={returnTo}
