@@ -7,6 +7,14 @@ the original pending command. Each envelope includes the native phases plus five
 Decision: permission search filters only the current native response, keeps the selected choice visible, and shows
 returned nondelegable roles disabled with their returned action expansion.
 
+Decision: retain at most eight admitted predecessor cursors, the current cursor, and one staged target; commit a
+window move only after a ready read, and retry the identical staged target after any non-ready result. A fresh visit
+starts at First with no predecessors. The coordinates hold at most 10 cursor strings, or 40,960 JavaScript code
+units at the native 4,096-unit cursor ceiling. Each explicit Next, Previous, First, page Retry, or current-page
+reload performs one bounded native `grants.read` with the existing ten-second native deadline and fifteen-second
+review envelope. Only the current admitted twenty-row page and its supplied identities remain in memory; history
+never restores old rows or management authority.
+
 The deadline includes headers and body decoding, races transports that ignore cancellation, composes caller
 cancellation and releases its timer/listeners. Resource/account/session retirement still invalidates late
 continuations. A stalled review becomes unavailable; a potentially dispatched command stays uncertain with
