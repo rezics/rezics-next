@@ -62,8 +62,26 @@ type NameField = {
   form: 'empty' | 'scalar' | 'list';
   values: string[];
   unsupported: boolean;
+  archiveList?: 'open' | 'closed';
   workEvidence?: BangumiWorkEvidenceFieldState;
 };
+
+/** Archive name lists are `{` followed by `[value]` rows and `}`. */
+function archiveNameRow(
+  field: { archiveList?: 'open' | 'closed'; unsupported: boolean },
+  line: string,
+  add: (value: string) => void,
+): boolean {
+  if (field.archiveList === undefined) return false;
+  if (field.archiveList === 'closed') field.unsupported = true;
+  else if (line === '}') field.archiveList = 'closed';
+  else {
+    const row = /^\[([^\[\]{}]+)\]$/u.exec(line);
+    if (row) add(row[1]!);
+    else field.unsupported = true;
+  }
+  return true;
+}
 
 function* sourceLines(text: string): Generator<{ line: string; number: number }> {
   let start = 0;
@@ -264,7 +282,7 @@ export function extractBangumiTVAnimeEvidence(
       omit(field.pointer, 'unsupported_infobox_structure');
       return;
     }
-    if (field.unsupported) {
+    if (field.unsupported || field.archiveList === 'open') {
       omit(field.pointer, 'unsupported_infobox_name_form');
       return;
     }
@@ -354,7 +372,10 @@ export function extractBangumiTVAnimeEvidence(
           : {}),
       };
       if (key === '中文名' || key === '别名' || (tvAnime && key === '官方网站')) {
-        if (value) {
+        if (key === '别名' && value === '{') {
+          active.form = 'list';
+          active.archiveList = 'open';
+        } else if (value) {
           active.form = 'scalar';
           active.values.push(value);
         }
@@ -382,6 +403,7 @@ export function extractBangumiTVAnimeEvidence(
       }
       continue;
     }
+    if (archiveNameRow(active, continuation, (value) => active!.values.push(value))) continue;
     if (continuation.startsWith('*')) {
       if (active.key !== '别名' || continuation.startsWith('**') || continuation === '*' || active.form === 'scalar') {
         active.unsupported = true;
@@ -416,6 +438,7 @@ type TemplateNameField = {
   values: string[];
   unsupported: boolean;
   limitExceeded: boolean;
+  archiveList?: 'open' | 'closed';
 };
 
 /** Extract admitted names from one pinned template with bounded field staging. */
@@ -495,7 +518,7 @@ export function extractBangumiNamesForTemplate(
       omit(field.pointer, 'unsupported_infobox_structure');
       return;
     }
-    if (field.unsupported) {
+    if (field.unsupported || field.archiveList === 'open') {
       omit(field.pointer, 'unsupported_infobox_name_form');
       return;
     }
@@ -562,7 +585,10 @@ export function extractBangumiNamesForTemplate(
       const value = cleanHorizontal(line.slice(equals + 1));
       active = { key, pointer, form: 'empty', values: [], unsupported: false, limitExceeded: false };
       if (key === '中文名' || key === '别名') {
-        if (value) {
+        if (value === '{' && template.listFields.has(key)) {
+          active.form = 'list';
+          active.archiveList = 'open';
+        } else if (value) {
           active.form = 'scalar';
           stageValue(active, value);
         }
@@ -575,6 +601,7 @@ export function extractBangumiNamesForTemplate(
     }
     if (active.key !== '中文名' && active.key !== '别名') continue;
     const continuation = cleanHorizontal(line);
+    if (archiveNameRow(active, continuation, (value) => stageValue(active!, value))) continue;
     if (continuation.startsWith('*')) {
       if (
         !template.listFields.has(active.key as '中文名' | '别名') ||

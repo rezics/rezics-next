@@ -57,6 +57,35 @@ test('unavailable evidence retires an old excerpt, while unsupported owner evide
   expect(html).not.toContain('old excerpt');
 });
 
+test('CJK and Latin alias evidence stays separate from reader labels and canonical destinations', () => {
+  for (const [locale, language, title] of [
+    ['en', 'en', 'Steins;Gate'],
+    ['zh-Hant', 'zh-Hant', '命運石之門'],
+    ['ja', 'ja', 'STEINS;GATE'],
+    ['zh-Hant', 'und', 'STEINS;GATE'],
+  ]) {
+    const page = structuredClone(discoveryExample);
+    const hit = page.hits[0]!;
+    if (hit.summary.kind !== 'subject') throw new Error('Expected catalogue work');
+    hit.labels = { [language!]: title! };
+    hit.summary.value.label = { language: language!, value: title! };
+    hit.matchEvidence = {
+      state: 'current',
+      source: { id: hit.key.id, revision: 1 },
+      query: 'a'.repeat(64),
+      reasons: [{ field: 'alias', language: 'und', text: 'Shutage', spans: [{ start: 0, end: 7 }] }],
+    };
+    const html = renderToStaticMarkup(
+      createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: locale! }),
+    );
+    expect(html).toContain(`lang="${language}"`);
+    expect(html).toContain(title!);
+    expect(html).toContain(`/${locale}/subjects/${hit.key.id}/`);
+    expect(html).toContain('Shutage</mark>');
+    expect(html).not.toContain('命運石之門</mark>');
+  }
+});
+
 test('malformed spans, overlong UTF-8 excerpts and a different source identity are refused', () => {
   const base = {
     state: 'current',

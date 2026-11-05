@@ -174,6 +174,44 @@ analysis. Preserve multivalue phrase boundaries and description-only matches. Na
 preserve this text, analyzer, phrase/Boolean meaning and ranking, not title-only, substring/ILIKE or private-corpus
 scores. Private notes, progress and label names add no public text fields.
 
+Decision: searchable names combine public display terms with every currently adopted public `schema:name` and
+`schema:alternateName` value from the same native snapshot. Retain monolingual language metadata for evidence;
+Semantic still selects display labels and canonical identity. Deduplicate exact name strings for indexing, keep
+each value separate for phrases, and attribute highlights only to unique current source text. Evidence scans the
+complete bounded native names, rather than refusing a valid match after 32 values; excerpt, span and page limits
+remain unchanged. The existing 512-slot × 32-candidate source ceiling and native field limits bound traversal and
+write bytes; no additional native read or catalogue replay is introduced. The unchanged mapping uses ordinary
+bounded rebuild/certify/activate to publish retained names and default relay for subsequent title/alias edits.
+
+### Retained cross-script query matrix
+
+Source inventory: Bangumi `dump-2026-10-20.210332Z` subjects 10380, 51 and 84148; VNDB
+`vndb-db-2026-11-04` `vn_titles` and `vn.alias` rows v2002 and v4. Resolve canonical UUIDs from the seed's
+provider identities, never title equality: the VN, anime and manga remain distinct works. Run each query for
+`en`, `zh-Hant` and `ja` readers; assert inclusion of the named identity, independent of other legitimate matches.
+
+| Source identity | Exact accepted text | Stored language | Queries |
+| --- | --- | --- | --- |
+| VNDB v2002 | 命運石之門; 命运石之门 | zh-Hant; zh-Hans | Each exact title and its quoted phrase |
+| VNDB v2002 | シュタインズ・ゲート; シュタゲ | und (source alias has no language) | Exact kana; しゅたいんず・げーと; しゅたげ |
+| VNDB v2002 | Shutage | und | Shutage; shutage; Ｓｈｕｔａｇｅ |
+| VNDB v2002 | Mingyun Shi zhi Men | zh-Latn for both Chinese source titles | `"Mingyun Shi zhi Men"`; `Shutage -CLANNAD` |
+| VNDB v4 | クラナド; 团子大家族 | und | クラナド; くらなど; 团子大家族; 團子大家族 |
+| Bangumi 10380 | 命运石之门; シュタインズ・ゲート; シュタゲ; 石头门; 斯坦因之门 | zh for title; und for aliases | Each exact value; 命運石之門; しゅたげ |
+| Bangumi 51 | CLANNAD -クラナド-; クラナド; 小镇家族 | und | クラナド; くらなど; 小镇家族; 小鎮家族 |
+| Bangumi 84148 | シュタインズ・ゲート | und (accepted schema:name) | Exact kana and Hiragana fold |
+
+These selected work records have no Japanese-language kanji title; do not relabel Chinese Han names or invent a
+Japanese spelling. Japanese kanji coverage uses an actual accepted title when the verifier's retained seed includes
+one. For the above records, `ja` readers retain the available Japanese label or existing fallback; matching `und`
+aliases do not become translated labels. VNDB v2002's `zh-Hant` label remains 命運石之門 for kana/Latin queries.
+
+Integration verification owns real OpenSearch and production localized Search at 390/1440 in light/dark, including
+mixed-kind rows and canonical destinations. Refresh affected Bangumi records through normal registration and
+accept/adopt their new proposals, then rebuild through ordinary publication. Edit a title/alias through the native
+command, wait for normal relay freshness, and assert the new text matches without stale evidence for the old text.
+Retain the existing raw-query cursor binding, old-cursor behavior and current disclosure during publication lag.
+
 Decision: `textField` defaults to this existing all-catalogue text; `credited_creator` is an explicit choice limited
 to complete, currently public outgoing credits and remains part of query-share and cursor bindings.
 

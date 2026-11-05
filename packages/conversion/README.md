@@ -18,7 +18,7 @@ The public subpaths are defined in [package.json](package.json).
 | @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                              |
 | @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                   |
 
-Current exports are Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@15. Registration imports these revisions; source records cannot choose them.
+Current exports are Bangumi bangumi@16, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@16. Registration imports these revisions; source records cannot choose them.
 
 ConversionInput carries the provider-native external ID, record revision and record. Revisions are not inferred from dump dates, checksums, row order or converter versions. A missing native revision stays null where permitted; Wikidata uses unversioned only when the entity has no lastrevid. Other required provider revisions must match the native record. The importer records the source revision or unversioned digest alongside the converter revision.
 
@@ -46,6 +46,8 @@ Only admitted source-site rows containing a parsed public Bangumi /subject/N URL
 Game names retain locale; cited publication dates preserve admitted precision and unsupported forms omit. Genres remain unsplit source literals; player counts require complete admitted forms. TVAnime run facts, copyright notices, official sites and descriptive links retain separate properties and citations. Malformed fields do not suppress valid siblings. Creator and voice credits retain selected source relationships and exact role/person citations. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
 
 Decision: for TVAnime, top-level `name_cn` and infobox `中文名` are independent source observations. Keep differing values as separate cited `schema:name` facts; only exact duplicate property, language and text tuples deduplicate.
+
+Decision: `bangumi@16` also admits the archive's closed `{` / `[value]` / `}` alias lists for the existing TVAnime, Book and Game templates. Preserve their source text and `und` language, existing property selection, 24-name/500-character limits and exact citations. Unclosed, nested or mixed lists omit that field; they never publish bracket syntax as a name. Ordinary and selected-family registration revisions trigger the existing finite per-record refresh.
 
 ### VNDB
 
