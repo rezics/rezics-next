@@ -4,14 +4,16 @@ The mounted Kernel API imports only the authenticated person's uploaded `vndb-ex
 It does not fetch accounts, claim another person's account, create catalogue subjects, change provider mappings,
 create holdings, labels or sessions, import provider aggregates, or publish notes/reviews. Web owns the interface.
 
-Decision: the seed caller submits the supplied private export through the installed generated VNDB preview method,
+The mounted personal-list caller submits the supplied private export through the generated VNDB preview method,
 seals the exact upload body and idempotency key in the existing `ShowcaseJournal`, and returns only the native upload
-UUID and row count. Progress and vote effects remain unavailable until their owning native producers admit them.
+UUID and row count. Imports remains the sole mounted personal-list caller and owns review matching. Progress and vote
+effects remain unavailable until their consumers safely compose the owning native producers.
 
-Decision: compose explicit released entry-state commands with private source evidence; role suggestions never
-grant an import mapping or invent state IDs, and every other field stays retained until its native owner admits it.
-Profiles with no entry state set cannot receive a state. There is no separately released VNDB field mapping.
-Integration preserves AniList label adoption with native operation metadata and existing erasure phase numbers; VNDB evidence cleanup appends after label consolidation.
+State changes use explicit released entry-state commands alongside private source evidence. Role suggestions never
+grant a mapping or invent state IDs. Every other field remains evidence until its native owner admits it; a profile
+with no entry state set cannot receive a state. There is no separate VNDB field mapping. A changed re-import preserves
+the original Entry identity. AniList label adoption and VNDB evidence cleanup remain with their existing import and
+erasure owners.
 
 Matching uses the admitted native `semantic.external_claim` tuple `(source="vndb", external_id="v123")`,
 its tuple home, current canonical identity and subject readability. Alternate source namespaces are unavailable
@@ -27,9 +29,9 @@ Unmatched rows accept an explicit readable target obtained through ordinary cata
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; the person explicitly selects an actual released state ID.                                                                                                                                                                                                        |
 | Other labels and per-label attributes                    | Private evidence; no automatic local label creation.                                                                                                                                                                                                                                                                             |
-| Vote                                                     | Retain exact raw spelling and original 1–10, step 0.1 scale. Zero is invalid. Values such as 7.3 have no exact native half-point value; the person may choose native units explicitly, with no rounding or exact-conversion claim. Native admission currently returns typed unavailable and performs no vote or aggregate write. |
+| Vote                                                     | Retain exact raw spelling and original 1–10, step 0.1 scale. Zero is invalid. Values such as 7.3 have no exact native half-point value; the person may choose native units explicitly, with no rounding or exact-conversion claim. Library effects remain unavailable until the consumer safely composes the current guarded Rating writer. |
 | Started / finished                                       | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred.                                                                                                                                             |
-| Progress and measure                                     | Preserve original value, including zero, and supplied unit; no session or counted activity is inferred.                                                                                                                                                                                                                          |
+| Progress and measure                                     | Preserve original value, including zero, and supplied unit as private evidence. VNDB progress binding/readback is an open Commerce decision; no session, historical activity or counted use is inferred.                                                                                                                                 |
 | Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                                                                                                                                                                 |
 
 Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
@@ -44,8 +46,8 @@ account authority, chosen identity, readability, release, cancellation and nativ
 An unknown failure retries that original command; it cannot be re-reviewed into different operands. Exact native
 receipt replay remains possible after an acknowledgement is lost. Applied rows are never applied again.
 
-Decision: a refreshed source review retires its metadata tokens rather than carrying them into a corrected match;
-an unresolved state, metadata or date dispatch must settle before review replacement.
+Refreshing a source review retires its metadata tokens rather than carrying them into a corrected match. An
+unresolved state, metadata or date dispatch must settle before review replacement.
 Corrected matches may explicitly adopt labels on the chosen readable target. New label operands bind both the
 source review and its observed match digest; a later match change invalidates that consent. Existing label operands
 retain their original native receipt input and conservative match check.
@@ -66,19 +68,16 @@ new review, even if an old mutation receipt exists. Exact metadata/date acknowle
 the bounded native outcome; it does not restore private evidence access. Label orchestration still requires its live
 preview lifetime, so expired label acknowledgement reconciliation remains unavailable in this delivery.
 
-Decision: score review requires the owner to choose native units explicitly; native zero is a vote, clear is a
-separate explicit action, and source absence preserves the current vote.
-
 ## Native score review
 
 The VNDB `vote` remains a private `fields.score` value with its exact `raw` spelling and source scale. A valid
 source score can be reviewed for the standard question `00000000-0000-7000-8000-000000000001`, revision 1,
 meaning and native units 0–20 step 1. The page shows the actual Content question and the owner's current vote or
-absence. A source value such as 7.3 is valid VNDB evidence but has no exact native value; the owner chooses the
-native units deliberately. An exact candidate for 7.5 is shown only as a candidate, never applied automatically.
-Source zero is invalid and cannot be adopted as a vote. A clear uses a separate `{ kind: "clear" }` selection and
-never means source absence or native units zero. Only `kind: "vn"` score fields can enter this flow; release IDs,
-reviews and length votes stay retained evidence.
+absence. A source value such as 7.3 is valid VNDB evidence but has no exact native value; the owner chooses native
+units deliberately. An exact candidate for 7.5 is shown only as a candidate, never applied automatically. Source zero
+is invalid and cannot be adopted as a vote. Clear uses a separate `{ kind: "clear" }` selection and is not source
+absence or native units zero. Only `kind: "vn"` score fields enter this flow; release IDs, reviews and length votes
+stay private evidence.
 
 The explicit review choice records `adopt-native-vote` or `clear-native-vote` consent, the selected target, exact
 source score, question revision/meaning/scale, current vote or absence, source fingerprint and stable native command
@@ -88,13 +87,16 @@ Parsed evidence reserves one 32 KiB slot per possible page row for score context
 existing 16 MiB evidence cap. The XML, escaped JSON request, page, batch, upload count, lifetime and erasure bounds
 remain unchanged; no score table or second evidence store is added.
 
-Effects are typed `unavailable`. The installed Content producer is
-`createVoteCommands.putVoteOutcome(actor, input, idempotencyKey)` and has no conditional reviewed-current guard for
-question revision, canonical/counting identity and vote absence/current revision. Until Content supplies that guard
-inside its native writer, Library does not call the writer, clear a vote, expose a success result or claim Done. The
-next delivery must preserve Content's authorization-before-receipt, receipt replay and component semantics. When
-available, the command must use the frozen review operands/key and return only the native vote's permitted public
-view. Existing native authorization continues to control question/vote reads; no provider aggregate is imported.
+The current [Rating module owner](../services/kernel/src/rating/README.md) supplies `putVoteOutcome` with
+`input.guard` and its closed `VoteReviewGuard`. The native witness binds the question and revision, canonical/counting
+identity, and the owner's vote or absence. Stale/unavailable witnesses and authorization-before-receipt remain the
+writer's contract; the reader witness is not atomic permission. The VNDB reader does not implement or replace that
+writer.
+
+Library's score effect remains typed `unavailable` until its unbound consumer composes the actual guarded writer
+safely with the private source/review admission and exact retry. When admitted, the command must use the frozen review
+operands and key and return only the permitted native vote view. Do not create a Library vote writer or import a
+provider aggregate. No progress binding/readback is inferred from score review.
 
 ## Caller cost and cleanup
 
@@ -189,13 +191,9 @@ const scoreApplyRequest: { rows: ScoreApplyRow[] } = {
 // DELETE /v1/libraryImports/vndb/{uploadId} => 200 {uploadId:UUID,state:"deleted"}
 ```
 
-Catalogue dependency history keeps the conservative account-bearing classification when duplicate declarations
-conflict; native command and Record account associations remain independently guarded.
-
-Read references: `legacy-final:services/main/src/modules/library-import/formats/vndb.ts`, its contract/bounds/XML
-helpers and `csv.ts#sourceDate`; native entry/profile/identifier contracts; `.reference/INDEX.md` (no VNDB entry).
-The native HTTP scenarios live in `services/kernel/test/library/list-import-vndb-http.test.ts`; broader frozen
-acceptance remains an integration responsibility. No provider live-account or alternate-source support is claimed.
+Catalogue matching keeps the conservative account-bearing classification when duplicate declarations conflict;
+native command and Record account associations remain independently guarded. Only the admitted VNDB tuple namespace
+is supported here; titles never create a match.
 
 ## Inclusive retained-source caller derivation
 
@@ -238,14 +236,3 @@ remain separate from growth in unrelated owners/history. The V4 exporter uses it
 it does not reinterpret V1/V2/V3 or make V4 recoverable. Independent all-pool 64/512/4096 executed measurements,
 composed V4 fidelity/recovery refusal and terminal cases remain controller acceptance, not results of this derivation.
 
-The existing Web signatures remain unchanged. For example, retrying
-`apply(actor, uploadId, [{ordinal, reviewId}], record)` after a lost state acknowledgement may return
-`{uploadId,outcomes:[{ordinal,reviewId,status:'applied'}],stopped:'cancelled'}` after expiry. This acknowledges the
-original effect only; subsequent page/source reads return not found. This is a constructed shape, not acceptance evidence.
-
-Persisted lifecycle scenarios currently cannot execute past native fixture setup: subject creation reports
-`Unclassified history event type`; direct subject preparation reports
-`Exact self requires native subject:create authorization`; label review reports
-`A command must emit at least one event`. These failures also occur on the retained base. Workspace typechecking
-likewise retains the base compiler failures, beginning with the missing generated `rating/own-votes-counted` module.
-The new lifecycle cases therefore remain unverified; frozen acceptance, native growth and browser checks are deferred.

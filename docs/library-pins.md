@@ -94,5 +94,18 @@ identity after unpin. They do not calculate IDs or seed headers. Both files rema
 does not claim built-in completion. Missing pin routes or built-in discovery must produce meaningful native RED,
 never skip/todo, a missing-driver verifier, permanent throw or normalized success.
 
-Run the two named files through the worker wrapper, then the root typecheck. The handoff records literal case names,
-final hashes, commit and raw native failure evidence for freezing. Existing acceptance files remain unchanged.
+## Visit admission and recovery
+
+The shared [Library visit contract](library-and-collections.md#destinations-and-actions) applies. A signed-in native
+permission refusal is a permission state, distinct from empty, not-found, preparing, unsupported and dependency
+unavailable. Invalid or stale cursors require an explicit first-page restart; do not make an extra read or refresh
+authority automatically. Preserve the exact admitted address until the owner chooses recovery.
+
+A current Pins-list `403` is visibly denied and exact `platform_closed` is visibly closed. Either outcome clears Pins
+rows and exposes no Pin commands, while independent Collection reads remain available under their own admission.
+Denied or closed state never implies list or mutation authority and stays distinct from dependency unavailability.
+
+Pin-list admission and Collection-list admission are independent. Neither grants the other's list authority. A new
+pin still requires an ordinary current Collection read; a stored pin can be reordered or removed under its own
+current owner admission even if the target is now concealed. Target disappearance or a refused refresh never settles
+a dispatched write. Retain its exact intent, credential, key and operands, and do not rebase on refreshed list facts.

@@ -1,5 +1,13 @@
 # Buyer receipts
 
+## Recorded money presentation
+
+Use the requested locale for formatted amounts, recorded-raw amounts and unknown-unit messages. Preserve localized
+word order and the existing supported Intl-locale behavior, including `ar-EG`. Financial evidence remains its exact
+signed integer, currency and captured exponent: never infer an exponent from currency, round, guess unknown history,
+or change settlement or tax meaning. An unavailable policy preserves the seller's draft; an uncertain edit keeps its
+exact intent, key and credential. A deliberate correction requires reviewed current terms.
+
 The ordinary own-order detail consumes `GET /v1/orders/{orderId}` through the generated client and the default
 Order page BFF. Its accepted price is the order's captured `currency`, `unitAmountMinor`, `moneyUnit`,
 `taxBehavior` and `taxCode`, never the offer's current terms. The recorded unit price is labelled separately from
@@ -64,24 +72,27 @@ separate mutation credential and explicit terms acceptance. Anonymous visitors u
 retry and restart performs one bounded directory read, preserving native offer order and exact target identities.
 Missing or denied read authority remains distinct from an empty directory; there is no anonymous fallback or
 per-offer entitlement read. Session, Subject, locale and viewer-exposure changes retire previous rows and late replies.
-Decision: a viewer-exposure cache update restarts discovery at the first page with a fresh read, including when an
-account changes away and back before rendering.
-
-Decision: public inspection reuses the owned captured-term/reference reader, limits comparison to two deliberate
-operands from one received page, clears selection on every replacement, and uses page-local Edition/version numbers
-only as reading labels, never catalogue names or selection keys.
+An exposure-cache update restarts at the first page with a fresh read, including when an account changes away and back
+before rendering. Public inspection reuses the owned captured-term/reference reader and compares at most two deliberate
+operands from one received page. Every replacement clears selection. Page-local Edition/version numbers are reading
+labels only, never catalogue names or selection keys.
 
 ## VNDB score admission handoff
 
-The installed Content writer, `createVoteCommands.putVoteOutcome(actor, input, idempotencyKey)`, has no conditional
-guard for the reviewed question revision, canonical/counting identity and current vote or absence. VNDB score review
-and private evidence are installed, while score effects remain typed unavailable until Content supplies that guard
-inside its native writer; no Library vote writer or provider aggregate is introduced.
+The [Rating module owner](../services/kernel/src/rating/README.md) owns the current conditional vote writer:
+`putVoteOutcome` accepts `input.guard` using its closed `VoteReviewGuard`, with the reviewed native question,
+identity and own-vote witness. Stale or unavailable observations and authorization-before-receipt behavior remain
+with that native writer; a read witness is not an atomic permission.
+
+Library's VNDB score consumer remains unbound. Its effects stay unavailable until the consumer composes that actual
+writer safely with source/review admission and exact retry. A delivered producer is not consumer completion; do not
+invent a Library vote writer or import provider aggregates. VNDB score units and explicit clear consent stay private
+review choices.
 
 ## AniList native score admission
 
-Decision: AniList score effects remain unavailable until Content provides a conditional native vote guard for the
-reviewed question revision, counted vote or absence, canonical/counting identity and local correction; score review
+AniList score effects stay unavailable until its consumer safely composes the conditional native vote guard for the
+reviewed question revision, counted vote or absence, canonical/counting identity and local correction. Score review
 stores owner-selected units and separate effects consent.
 
 ## Owned offer terms inspection
@@ -92,7 +103,7 @@ Captured revision, declared licence, delivery, acquisition and quantity remain s
 and sale eligibility. Revision/hash/reference disclosure performs no content read or independent verification.
 Existing public money adapters retain recorded units and before-tax meaning.
 
-Decision: after a definitive seller refusal, keep the typed draft and require explicit review of current native
+After a definitive seller refusal, keep the typed draft and require explicit review of current native
 Edition/offer and price facts before a separate correction. Adopt the revision and schema from the same review
 response. While a command may have dispatched, retain its amount, currency, Edition, credential and original key;
 retry those operands unchanged. Recorded history continues to use its captured units, including signed adjustments
@@ -100,7 +111,7 @@ and explicit unknown meaning, without combining incompatible records.
 Unavailable current price configuration retains an admitted seller's form and draft; it cannot complete correction
 review. Authority withdrawal still retires the private display and command origin.
 
-Decision: replacement keeps the opened observation until deliberate review of the received row; inspection review
-never changes an existing command’s original observation, draft, key or recovery, and selection retires with the
-existing current origin or visit. Missing rows offer restart without scanning pages. Management keeps its retained
-row, while public destinations require an active row on the received page.
+The offer page keeps its received observation until deliberate review. Inspection never changes a command's original
+observation, draft, key or recovery. Selection retires with the current origin or visit; a missing row offers an
+explicit restart without scanning pages. Management may inspect its retained row, while public destinations require
+an active row on the received page.

@@ -54,17 +54,17 @@ summary expansion and the Community reader's nested access/admission, not just t
 remain with their native owners. Connected stories distinguish selected-read success, denial, retirement, unavailability
 and no destination; their successful inspection does not claim a delivered one-page destination/action projection.
 
-Decision: after browser return, keep target inspection and links suspended until a fresh page observation arrives.
+## Admission and command custody
 
-Decision: preserve native row order rather than type grouping, and request twenty rows from the existing page reader;
-the retained base requested one hundred rows and grouped them by type.
+The shared [Library visit contract](../../../../docs/library-and-collections.md#destinations-and-actions) applies.
+A native signed-in `403` keeps the requested kind, cursor and locale as a private permission page; it replaces rows
+and inspection without supplying read or Follow authority. It remains distinct from empty, not-found, preparing,
+unsupported and dependency-unavailable results. Only an explicit current-owner refresh may replace that state.
 
-Decision: route only current supplied Realm membership actions to the canonical Realm owner; unsupported Community
-actions stay unavailable in Following.
-
-Decision: Commerce receives an ordinary native Following list denial as a private permission page under the original
-kind, cursor and locale, replacing rows and inspection without supplying read or Follow authority. Explicit current-owner
-refresh may replace it; list denial never settles or replaces a captured uncertain Follow command. Accounts owns requested
-and issued website scope alignment; native permissions, preparations, admission and session ceilings remain authoritative.
+Read denial, page replacement, browser return and renewed admission never settle or replace a captured uncertain
+Follow command. A same-visit denied-to-admitted reattachment preserves its exact intent, credential, sender and key;
+retry resends those original operands, and refreshed facts do not rebase them. Viewer, credential, exposure, locale,
+address, source or visit replacement retires stale rows, destinations, callbacks and focus. Recovery is explicit and
+read-only; it does not make another read automatically.
 
 Kind navigation is owned by [Following kind navigation](../following-kind-navigation/README.md).

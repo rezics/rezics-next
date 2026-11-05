@@ -1,8 +1,8 @@
 # Independent personal labels
 
-This document owns the accepted private label model, HTTP contract and cost obligations in the generic Library.
-Native storage is partially implemented; the implementation boundary below distinguishes it from absent producers.
-Collection query runtime and saved-query semantics remain with the dynamic Collections contract.
+This document owns the private label model, HTTP contract and cost obligations in the generic Library. The shared
+[Library visit contract](library-and-collections.md#destinations-and-actions) owns cross-destination admission and
+recovery. Collection query and saved-query semantics remain with the dynamic Collections contract.
 
 ## Model
 
@@ -93,7 +93,24 @@ scopes. They add no resource type or scope and change no Collection action. The 
 - `GET /v1/libraryLabelAssignments`: exactly one of `labelId` or `subjectId`, optional `cursor`, `limit`, `view`;
   returns `200 {assignments:[{id,labelId,subjectId,revision}],next}` in default `BASIC` view. Row `id` is `assignmentId`.
 
-**WEB ADDRESS DECISION:** Labels preserves `q` exactly up to 100 Unicode scalar values; correcting a prefix starts at page one, while correcting a cursor carries the unchanged valid prefix.
+A native signed-in `403` is a permission state, distinct from empty, not-found, preparing, invalid/stale cursor and
+dependency-unavailable. Subject exposure and current `library_entry:read` admission precede every assignment read,
+including `FULL`; denied exposure prevents the assignment query. Invalid or stale cursor recovery is an explicit
+first-page restart that retains other valid address fields. Never issue an automatic extra read or refresh authority.
+
+When a structurally admitted Label continuation returns native `invalid_cursor` (`400`) or `stale_cursor` (`409`),
+offer an explicit first-page link for that same Label, locale and admitted presentation. Drop only the cursor and read
+only when the owner chooses the link. The recovery link carries no Label metadata, rows or mutation authority.
+Removal review binds one supplied assignment's exact identity and name; confirmation and Undo use the existing native
+unassign and restore path.
+
+The browser preserves the original Library command intent, credential and key across read refusal, disappearance or
+refresh. A read result does not settle a dispatched mutation and refreshed facts do not rebase its operands. Only the
+native receipt settles a write and enables its exact Undo; reopening or refresh cannot substitute a new receipt or
+target revision. The ordinary current owner, scope, subject exposure and account-deletion fences run before receipt
+lookup, including replay.
+
+Labels preserves `q` exactly up to 100 Unicode scalar values; correcting a prefix starts at page one, while correcting a cursor carries the unchanged valid prefix.
 
 **WEB SHELF LABEL SEARCH DECISION:** Assign and unassign keep the raw draft, validate and search with an NFC/Unicode-whitespace-normalized copy, and enforce the server action's existing 4,096 UTF-16-unit transport bound separately from the native 100-scalar limit.
 
@@ -207,10 +224,12 @@ adapter; this contract defines only the fact contribution:
   remain in Everything, or a subject with facts to be hidden from it, that needs a separate explicit owner fact and
   contract.
 
-This document defines no query language or Collection runtime. The Dynamic Collections contract owns built-in result
-semantics and the shared members page; its Everything result consumes live label facts through that same reserved
-access path. This contract adds no custom label predicate or saved-query runtime. A private label fact is never exposed as a
-public member field.
+This document defines no query language or Collection runtime. The [Dynamic Collections](dynamic-collections.md) and
+[Collection Source](collection-source.md) contracts own built-in results and the shared members page; Everything
+consumes live label facts through the same reserved access path. This contract adds no custom predicate or saved-query
+runtime. A private label fact is never exposed as a public member field. Missing source coverage or currentness stays
+preparing/unavailable; sparse filtering must reach useful output or preserve that state, never return an empty/short
+successful chain over rejected raw windows.
 
 Labels alone establish no profile binding or lookup. Only surviving live entry, retained-session and copy facts with
 actual accepted pins establish in-use state sets and sibling state Collections. Soft-deleted/trash snapshots are exact
@@ -396,67 +415,21 @@ write basis or position advance; ordinary finalize/current authorization still r
 skip its receipt, or mint a fixture/no-op domain event. Runnable bounded purge and cleanup of owned private
 receipt/outbox/workflow payload remain integration work; no label-local engine or invented shared custody port.
 
-## Profile policy and implementation handoff
+## Profile boundary and source completeness
 
 Owner-defined label names are not definition values: they are not compiler vocabulary, inherited profile data, a
 profile revision, or an inline profile field. No definition compiler or release change is part of this contract.
-Profile absence must never silently create built-in labels or enable an adapter.
+Profile absence never creates labels or enables an adapter. A readable subject needs no profile for label assignment,
+unassignment or curated occurrence editing; a missing/retired profile blocks only new profiled state, progress and
+holding values. Stored facts remain readable and independently clearable. Existing subject visibility, scopes, CAS,
+deletion fences and authorization-before-receipt remain required. No default state, legacy fallback, profile
+synthesis, presence/hide fact, duplicate permission cache, copied parent-generation catalogue or second list engine is
+introduced.
 
-**DECIDED:** a readable subject needs no library profile for label assign/unassign or curated occurrence add/remove.
-Missing/retired profiles forbid only NEW state/progress/holding values; stored own facts remain readable and clearable.
-Existing real subject visibility, scopes, CAS, deletion fences and authorization-before-receipt continue to apply.
-No default state, legacy fallback, profile synthesis or new presence/hide primitive is introduced. Everything contains
-unique subjects with any surviving state, live label assignment, retained session or holding; follow/curated-only
-subjects and soft-deleted facts do not count. Clearing state preserves other facts; the last live fact removes membership.
-
-The [catalogue schema](../services/kernel/db/library/migrations/20261027190250_personal_labels.sql) supplies tuple,
-live-name and due indexes. The [reservation migration](../services/kernel/db/library/migrations/20261027234813_label_reservation_source.sql)
-adds same-row IDs/slots, covering reserved-source indexes and a shared fact-source head, not producer readiness.
-The [catalogue DAO](../services/kernel/src/library/label-store.ts) and [lifecycle SQL](../services/kernel/src/library/label-store-lifecycle.sql)
-provide metadata CAS/undo. The [assignment DAO](../services/kernel/src/library/label-assignment-store.ts),
-[reservation seek](../services/kernel/src/library/label-assignment-reservations.sql) and
-[reclaim CAS](../services/kernel/src/library/label-assignment-reclaim.sql) implement native set admission and original-deadline reclaim.
-[Native admission tests][admission-tests] and [plan tests][admission-plans] exist; they do not prove shipped HTTP or purge.
-
-The [label HTTP routes](../services/kernel/src/library/label-routes.ts) are mounted by
-[kernel composition](../services/kernel/src/http/kernel.ts). Native catalogue commands, assignment lifecycle routes,
-prefix paging and retention source now exist, with a
-[native label adapter](../services/kernel/test/library/support/native-labels-driver.ts) importing the original
-outcomes. They are installed interfaces, not a completed API/cleanup acceptance result. Complete source cutover,
-whole-purge and shared private receipt/outbox/workflow minimization still require their native evidence.
-The [restore problem definitions](../services/kernel/src/http/problem.ts) and their
-[schema test](../services/kernel/test/http/library-label-restore-problems.test.ts) establish error shapes only.
-The [standard summary reader](../services/kernel/src/library/views.ts) and [shared cursor](../services/kernel/src/tokens/list-cursor.ts)
-are existing integration surfaces. Implementation briefs are requirements, not evidence of shipped producers.
-
-Remaining integration must reuse installed storage, lifecycle/pages, commands/receipts and retention work rather than
-rebuild them. Bind missing source/cutover and durable-cleanup observations in bounded slices with native acceptance.
-Use the existing IDs/slots/indexes;
-backfill <=100 raw keys before filtering with same-transaction checkpoints, preserve logical keys,
-values/times/revisions, and block activation on 33 live facts. Fence writers/parent changes and prove source
-completeness before enabling the one source; incomplete is unavailable. No copied parent-generation catalogue.
-Reuse generic Library command/receipt/admission, shared encrypted cursors, existing Collections and shared cleanup/account barrier. Do not add a second list engine,
-public view counts, a label Collection route, a profile compiler extension, or saved-query runtime. The production
-change must add native row tests and the driver-backed outcomes in `specs/library-labels-outcomes.test.ts`.
-
-## Evidence read for this contract
-
-The repository contract is `docs/library-and-collections.md`; its cited research is `docs/research/library-abstraction.md`.
-Current implementation boundaries are described by `services/kernel/src/library/README.md`,
-`services/kernel/src/library/personal-routes.ts`, `services/kernel/src/library/collection-routes.ts`,
-`services/kernel/src/library/shelf-contract.md`, and `services/kernel/src/library/shelf-maintenance-ops-contract.md`.
-The accepted profile ABI uses immutable release digests and a closed type-to-profile reference; a missing profile does
-not fall back to the unattached legacy migration profile. It defines no owner-created label vocabulary. This contract
-adds no profile field or compiler behavior, and adopts the decided unprofiled assignment policy above.
-
-The source-bound [profile/label review](research/profiles-labels-quality.md) and
-[Library outcome review](research/library-outcomes-quality.md) retain their original native entry points and leave
-independence, privacy, retention and whole-graph cleanup unmeasured. The label adapter's unavailable inspection
-needs actual native Collection grants, receipts/outbox/work and cleanup run/page/crash observations, not fabricated
-empty arrays. Source-declared unavailable latches are fixture gaps, not observed thrown errors or failing exits.
-Clearing state preserves effective labels, retained sessions/history and holdings in Everything; labels require no
-profile and create no other personal fact. Local cleanup or dispatched work cannot acknowledge shared Source/DBOS
-minimization. Native/acceptance/browser execution remains deferred to integration.
+The native label source uses bounded raw-key paging before filtering, same-home fact/parent currentness and shared
+receipts, outbox, work and account cleanup. A missing source proof is unavailable; no local completion or dispatched
+work acknowledges shared custody. Keep the existing 32-effective-assignment cap and finite same-row reservation and
+reclaim rules above. The original label outcome and lifecycle suites remain acceptance requirements.
 
 The read-only reference sources consulted were BookWyrm's `bookwyrm/models/shelf.py` and Bangumi's
 `openapi/components/user_subject_collection.yaml` and `user_subject_collection_modify_payload.yaml`, at the commits

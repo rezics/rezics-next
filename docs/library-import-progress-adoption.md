@@ -5,9 +5,14 @@ session API. The import provider remains the owner of upload evidence, row revie
 retention and erasure. Progress sessions remain the only owner of occurrence identity, profile admission, values,
 revision history and lifecycle.
 
-Decision: map a source measure only to the same-ID scalar unit admitted by the subject's current profile; current Anime
+Adopt a source measure only to the same-ID scalar unit admitted by the subject's current profile. Current Anime
 series/season profiles admit `episode`, current Book profiles admit `page`, and MAL/AniList chapter and volume fields
-remain unsupported until a current accepting profile admits those exact units.
+remain unsupported until a current accepting profile admits those exact units. Never infer a conversion from similar
+labels or values.
+
+VNDB progress binding and readback remain a separate open Commerce decision. VNDB source values, including zero and
+supplied units, stay private evidence meanwhile; they infer no session, historical activity, counted use, mapping,
+profile scope or global grant. This contract does not authorize a VNDB progress writer.
 
 ## Source field and unit matrix
 

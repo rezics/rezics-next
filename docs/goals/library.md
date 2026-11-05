@@ -2,194 +2,91 @@
 
 ## Outcome
 
-People collect subjects, manage private states, labels, progress and holdings, curate or follow Collections and
-explicitly publish only what they choose. Every compatible vertical uses the same definition-driven capability.
-
-Decision: Subject Label removal reviews one supplied assignment's exact identity and name; confirmed removal and Undo keep using the existing native unassign and restore path.
-
-Decision: A current-owner new-rule page with an exact null-Collection address enters the editor when Collection admission arrives; released definitions remain usable and Label choices remain independently gated.
+People maintain a private Library of subject states, labels, progress and copies; curate or follow common Collections;
+and publish only what they explicitly choose. Compatible subject types use the same definition-driven capability.
 
 ## Done when
 
-- Curated and built-in Collections share identity, visibility, common members/filtering, ordering where applicable,
-  notes, follows, export and Zone mounting. Curated duplicate occurrences stay editable; removing a mount does not
-  delete its Collection.
-- Owners manage exclusive states, independent labels, copies/holdings and every supported progress mode, including
-  rereads and noncontiguous completed units. Clearing one personal fact preserves other facts and their Library
-  presence under the existing authority. Stored subject references and accepted profile meaning remain intact.
-- Definition-driven Library profiles work consistently across compatible subject types, release changes and historic
-  reads/Undo. Generic labels and curated edits need no invented profile or state.
-- Everything, state, Liked, Continue and canonical browsing meet the adopted native owner-query/disclosure contracts.
-  Filtering and owner-local plans work wherever the common Collection abstraction appears, with next-read owner-write
-  visibility, honest preparation/unavailable responses and bounded native work.
-- Following, private owner counts and History use their existing owner boundaries. Public discovery contains no
-  private Library facts; publication is explicit, never inferred from payment, import mappings or personal edits.
-- Lifecycle cleanup covers the complete owned graph and shared payload custody, with immediate terminal fencing,
-  real participant completion and no resurrection. Ordinary exact Undo remains governed by shared deletion.
-- Real APIs and storage support subject actions, Library/Collection browsing and editing, labels, copies, progress,
-  Following and History through reviewed pages using Web's shared shell and patterns.
+- Curated and built-in Collections share identity, visibility, members, filtering, ordering where applicable, notes,
+  follows, export and Zone mounting. Duplicate curated occurrences remain independently editable; unmounting does not
+  delete the Collection.
+- Owners manage exclusive entry states, independent labels, copies/holdings and every admitted progress mode,
+  including rereads and sparse or noncontiguous completed units. Clearing one fact preserves independent facts and
+  Library presence. Stored subject references and accepted profile meaning remain intact across release changes,
+  history and Undo.
+- Definitions drive state sets, progress modes/units, copy kinds and import meaning across compatible subject types.
+  Generic labels and curated occurrence edits need no invented profile or state.
+- Everything, state, Liked, Continue and canonical browsing meet native owner-query and disclosure contracts.
+  Filtering and owner-local plans work across the common Collection abstraction, with next-read owner-write
+  visibility, honest preparation/unavailability and bounded native work. Sparse matches reach useful pages after
+  finite preparation; no rejected raw window becomes an empty or short successful page.
+- Private facts, follows, counts, imports and History retain their owner boundaries. Public discovery contains no
+  private Library facts. Publication is explicit and never inferred from payment, copies, imports or source mappings.
+- Lifecycle cleanup covers the owned graph and shared-payload custody, with immediate terminal fencing, complete
+  participant work and no resurrection. Ordinary exact Undo uses the shared deletion contract.
+- Real APIs and storage support subject actions, Library and Collection browsing/editing, labels, copies, progress,
+  following, history and import journeys through reviewed pages using Web's shared shell and patterns.
 
-Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
-implemented, exposed, tested and promoted are separate states; a passing local check alone does not complete a Goal.
+Completion requires scoped outcomes on main with checks bound to the promoted revision. Preserve the original
+Library, labels, profiles, dynamic Collection and shelf outcomes; exercise owner, other-account, anonymous and
+suspended/terminal personas, visibility, duplicate occurrences, CAS/replay conflicts, independent progress
+preservation, private exclusions, sparse pages and lifecycle/shared-payload cleanup. Include native suites, owner
+growth evidence, real APIs, recorded-response stories and reviewed locale/theme/device states. Native, browser,
+growth and promotion obligations are not replaced by specification, source, typing or Storybook evidence.
 
 ## Scope
 
-Retains the existing personal Library, common Collections, independent labels, follows, progress, copies/holdings,
-publication, filtering and lifecycle obligations. This is separate owner documentation under the **same commerce
-manager**, preserving all original tasks and native/main completion requirements. It creates no new control-plane
-Goal and no implicit deferral. Payment/benefit purchase behavior belongs to the [Commerce Goal](commerce.md).
-Saved personal dynamic Collection definition create/read/edit is adopted in the current scope, including private
-ALL-leaf admission, stored meaning and native CAS. Execution remains unavailable until the common Source executes;
-no interface or source typing substitutes for native, privacy, whole-journey or promoted-main proof. The shared
-[public scope](../scope.md) table awaits its Root owner update. Points and Library legal holds remain deferred.
-External personal-library imports are not inferred from definition mapping metadata.
+This Goal covers the personal Library, common Collections, independent labels, follows, progress, copies/holdings,
+publication, filtering, imports and lifecycle under Commerce ownership. It creates no control-plane Goal and defers none of
+the original native or main completion requirements. Saved personal dynamic definitions, private ALL-leaf admission,
+stored meaning and native CAS are included; execution obeys the common Source contract. Points and Library legal
+holds remain deferred. Buying a benefit is governed by the [Commerce Goal](commerce.md); Library presence grants no
+protected-use authority.
 
-## Ownership and sole behavior authorities
+## Ownership
 
-Owns `services/kernel/{src,db,test}/library/**` and its journey pages in `apps/web`, coordinated with existing Web
-producers. Web owns shell/navigation, UI patterns, Storybook organization and visual review. Existing in-flight
-pages remain handoffs, not duplicate rewrites. Personal facts stay in their owner partition; Collection headers
-and curated occurrences stay in the curator home. This brief links behavior rather than copying a second contract:
+Commerce owns `services/kernel/{src,db,test}/library/**` and Library journey pages with Web's existing producers.
+Web owns the shell/navigation, shared UI patterns, Storybook and visual review. Subject, profile, label, Collection,
+Continue, Following, History, import and pin behavior belongs to its linked owner contracts below. Commerce owns
+Library diagnosis and receipt of Pin mutations; Accounts owns website scope alignment. Native Library permissions,
+preparations and gates remain authoritative. Pins and Collection-list admission are independent; neither authorizes
+the other.
 
-- [Library and Collections](../library-and-collections.md): personal facts, common abstraction, identity, disclosure,
-  destinations and lifecycle; [Library module](../../services/kernel/src/library/README.md): algorithms and actual
-  implementation inventory.
-- [Independent labels](../library-labels.md) and [profile consumers](../library-profile-consumers.md).
-- [Dynamic Collections](../dynamic-collections.md), [native owner queries](../library-owner-queries.md),
-  [Continue](../library-continue.md) and [filtered lists](../filtered-lists.md).
-- [Collection presentation/editor](../collection-presentation.md) and [Collection source](../collection-source.md)
-  for export/mount integration with Zones.
-- [Private follow counts](../private-follow-counts.md), shared with Accounts; [deletion](../deletion.md) and Accounts'
-  [erasure consumers](../../services/kernel/src/access/README.md#erasure-consumers).
+- [Library and Collections](../library-and-collections.md) owns shared facts, identities, disclosure, destinations and
+  lifecycle; the [Library module](../../services/kernel/src/library/README.md) owns native algorithms and composition.
+- Specialized contracts: [labels](../library-labels.md), [profiles](../library-profile-consumers.md),
+  [dynamic Collections](../dynamic-collections.md), [owner queries](../library-owner-queries.md),
+  [Continue](../library-continue.md), [pins](../library-pins.md), [filtered lists](../filtered-lists.md),
+  [Collection presentation](../collection-presentation.md), [Collection Source](../collection-source.md),
+  [progress import adoption](../library-import-progress-adoption.md), and [VNDB import](../library-import-vndb.md).
+- Semantic owns definitions, subject identity and shared filter meaning; Search owns catalogue plans and maxima;
+  Accounts owns Access, account lifecycle and scope/grant evaluation; Content owns reactions, publication sources,
+  Rating and protected content. No Library fact grants publication or benefit use.
 
-Semantic owns definitions, subject identity and shared filter semantics; Search owns catalogue plans/scoped search;
-Accounts owns Access, account lifecycle and count-management evaluation; Content owns reactions/publication sources.
-Library never treats a purchase, entitlement or its own copies as permission for a protected benefit.
+## Dependencies and acceptance
 
-Decision: Review the exact Entry first; confirmation uses the existing clear, and Undo requires its supplied native receipt.
-
-Decision: Personal Shelf removal classifies native and recognized thrown refusals; definite refusals keep the row, show its failure and rotate the next explicit key, while uncertain retries retain their exact command and captured credentials only for the same viewer.
-
-Decision: Continue preserves exact native `platform_closed` and recognized `PlatformClosedError` refusals as a closed region, separate from permission denial and unavailability; closure clears retained rows and does not retry.
-Decision: Commerce owns Library diagnosis and receiving of Pin mutations; Accounts owns ordinary website scope alignment. Native Library permissions, preparations and gates remain authoritative; an actual denied mutation conveys no write authority.
-Decision: Commerce receives a current Pins-list 403 as denied and exact `platform_closed` as visibly closed; either refusal clears Pins rows, preserves independent Collection reads and exposes no Pin commands.
-
-## Dependencies
-
-Requires release-pinned profiles, references and redirects; ordinary Access/resource grants and durable kernel work;
+Requires release-pinned profiles, references and redirects; ordinary Access/resource grants and durable Kernel work;
 admitted catalogue/disclosure and identity interfaces for mixed lists; complete Content reaction sources; and shared
-operational preparation/custody boundaries. Supplies mountable common Collections to Zones, follow steps to community
-joins and ordinary APIs to its pages. Agree actual exports before consuming them; missing producers must remain
-visible as preparation/unavailability, not false empty data.
+preparation/custody boundaries. It supplies common Collections to Zones and ordinary APIs to its pages. Missing
+producers remain preparation/unavailability, never false empty data or a parallel write path.
 
-## Acceptance
+Retain the original personal-list journeys, including state/status imports, scalar progress adoption, explicit vote
+review/readback, and changed re-import with stable Entry identity. Retain the original outcome specifications:
+[Library](../../specs/library-outcomes.test.ts), [labels](../../specs/library-labels-outcomes.test.ts),
+[profiles](../../specs/library-profiles-outcomes.test.ts), [dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts)
+and [shelves](../../specs/library-shelves-outcomes.test.ts), plus native suites and complete owning growth evidence.
+Exercise immutable profile pins, duplicate occurrences, entry state/CAS, independently cleared facts, all progress
+modes, votes, imports, public/private separation, owner-query visibility, sparse continuation, lifecycle cleanup and
+reviewed served pages across mounted surfaces. Keep the original compiler, module, default-worker and native fixture
+obligations.
 
-Retain [Library outcomes](../../specs/library-outcomes.test.ts),
-[label outcomes](../../specs/library-labels-outcomes.test.ts),
-[profile outcomes](../../specs/library-profiles-outcomes.test.ts),
-[dynamic Collection outcomes](../../specs/dynamic-collections-outcomes.test.ts),
-[shelf outcomes](../../specs/library-shelves-outcomes.test.ts), native Library suites and owning growth evidence.
-Cover owner, another viewer, anonymous and suspended/terminal personas, Collection visibility, duplicate occurrences,
-CAS/replay conflicts, progress preservation, private exclusions and sparse filtered pages. Vary definitions and
-Collection kinds across the same capability, including mounted surfaces and lifecycle/shared-payload cleanup.
+Members retains the approved C3 static statement/History/receive bounds, complete Source child declaration and
+separate final physical authority requirements in the [Collection Source contract](../collection-source.md). Local
+prices, header completion and worker success do not fund or prove a whole call. Preserve its SQL,
+closure/currentness, custody, retries and cleanup contracts, including the tracked bulk L2 semantics.
 
-Use the owning kernel runner and [verification](../development/verification.md) for budgets and promoted-main evidence.
-Pages need real APIs, recorded-response stories, Web visual review and representative locale/theme/device states.
-Documentation separation claims no runtime, native, interface or promotion proof.
-
-The five kernel-discoverable wrappers import those original specifications with their expected environment factories.
-Their [native adapters](../../services/kernel/test/library/support/native-conformance.ts) share the existing isolated
-Library fixture: real Auth consent and suspended credentials, Access, compiled/published Definitions, semantic subjects,
-raw kernel requests, production profile migration, label retention and owned executor cleanup. Profile scenario inputs
-are compiler data, including inherited profiles, sparse track units, numeric boundaries and manifest expansion. Entry
-setup threads only the captured revision and incarnation; arbitrary requests remain unmodified.
-
-This is provisional source binding, not whole-suite or Goal completion. Unsupported native surfaces throw explicit
-`dependency_unavailable` errors; no missing-driver pass, modeled backend, skipped case or fabricated readiness replaces
-them. Deferred bindings include the Auth account-operation host; historical pre-profile DATA/receipt restoration;
-semantic primary-type/privacy fixture operations; Collection export/mount/bulk and projection redelivery; native
-preparation, state-reference repair and Search observations; shelf digest/type-work fault seams and shaped growth
-fixtures; and label cleanup run/page/crash observations. SQL measurements refuse incomplete internal-pool attribution.
-Profile migration page/receipt instrumentation and complete privacy inspections also remain deferred. These adapters
-must be replaced by actual producer bindings as those surfaces land. Existing frozen outcomes and their full growth,
-replay, current-authorization and privacy obligations remain required for the controller's combined native checks.
-
-Acceptance, useful native outcomes, whole-row privacy, integration, promotion and Goal proof remain pending;
-wrapper discoverability and compiler success establish none of those results. Preserve the owning runner's
-configured compiler-database/check-host placement for later execution.
-
-The adopted quality reports leave every Done-when clause and interface evidence open. They are source inventories
-with their own immutable revision bindings, not measurements on this or a later integrated commit:
-
-- [Personal facts/lifecycle](../research/library-outcomes-quality.md): clauses 2, 5, 6 and 7, independent union,
-  private counts, actual cleanup ownership and the original Library/Undo/terminal commands.
-- [Profiles/labels](../research/profiles-labels-quality.md): clauses 2 and 3, existing native adapters and HTTP,
-  historical migration DATA/receipts, missing observations and the original profile/label commands.
-- [Collections](../research/collections-outcomes-quality.md): clauses 1 and 4, installed curated/private built-in
-  ready-source and Liked interfaces, missing composed fixtures and the original dynamic/shelf/source/Zone commands.
-- [Growth](../research/library-growth-quality.md): clauses 1, 4, 5 and 6, authored populations/repetitions,
-  corrected static bounds and missing physical attribution.
-- [Page review](../research/library-page-review-quality.md): clause 7 and interface bars, with the exact existing
-  [route inventory](../research/library-page-review-quality.md#routed-surface-inventory) and
-  [story file/export appendix](../research/library-page-review-quality.md#complete-owned-story-family-inventory).
-
-The page appendix records 53 owned families and 456 exports; the two private-count files sharing a title remain
-separate families. There is no `/library/history` route; History uses the existing progress/log surfaces. Bulk
-operation status/Undo routes have no dedicated family in that inventory. The absent `library.capabilities.md`
-manifest and stale planned page-story ledger need the separate mapping brief; this adoption creates neither.
-Existing Progress continuation-target and historical-meaning repairs need rendered remeasurement, not another
-implementation assignment. Stories/JSON recordings prove inventory only, not native provenance or reviewed quality.
-
-Web's runner owns page execution. Capture matching clean source/build identity and actual native API recordings,
-original-size phone/desktop images with actual dimensions, light/dark, all eight locales, per-story completion/font
-readiness, fine/coarse pointer, keyboard and touch behavior. Measure truthful Continue/counts, exact occurrence
-identity/order/notes, publication uncertainty and original intent, private labels, 44px coarse-pointer targets,
-single-line progress bar/number, Menu Escape/focus return and cover treatment. Use actual exports rather than
-invented viewport-suffix IDs. Native/acceptance/browser execution remains deferred to integration; there are no
-current measured exits, screenshots, visual defects, growth passes or promotion proof from these reports.
-
-## Durable Members source decisions
-
-The owned Members consumer uses the installed selected-runtime interface, not a retained request transfer.
-Selection releases before a new live Source transaction, while apply/failure stay on the selected original's
-unchanged deadline. Native header lookup coordinates point to the exact committed selected result;
-the reader also revalidates current original, Source/Scope, owner and disclosure. A header complete flag, SDK success
-or exhausted raw prefix cannot establish readiness. Bounded generation repair uses an explicit repair checkpoint,
-child-first pages of at most 100 results and one new native version per continuation.
-Completed headers missing original provenance return unavailable rather than polling; internal worker errors retain
-the failed outcome instead of being classified as missing dependencies.
-
-Approved C3 assigns 16 statements to the Members body, with constant History registration (464), receiving/readback
-(429), Core/Access, transfers, executor controls, retries and cleanup as a documented static equation. Runtime
-admission opens History from those bounds without a NativeCollectionWork parent. The released Source body remains gated by the missing complete Source
-child declaration (`selected-runtime-source-declaration-unavailable`); final completion separately lacks the
-producer's current Source and physical authority (`selected-runtime-final-source-physical-authority-unavailable`).
-The selected producer's local prices and Search's inner receipts do not fund or price those whole calls.
-
-Focused [budget](../../services/kernel/test/library/members-preparation-budget.test.ts) and
-[native refusal/provenance](../../services/kernel/test/library/members-preparation-durable-native.test.ts) cases
-preserve those distinctions using the existing fixture and default worker. They supplement existing reservation,
-consumer, stale/terminal and mounted recovery acceptance without replacing or weakening it. Native, browser,
-privacy/growth, integration and promoted-main verification remain deferred to the controller.
-
-## External conditions
-
-Applicable retention schedules and external source licensing follow their owners. No live payment setup is needed
-for Library acceptance. Local deterministic outcomes and existing public scope remain obligations while shared
-producer work completes.
-
-Mounted filtered reads keep the existing direct-reader cursor protocol until C3 funding and prepared/direct
-dispatch are installed; retained reader presence alone does not replace a working direct page. The status journey
-preserves the Collection header, filter and cursor across read errors and only polls genuine preparing responses.
-An in-flight status read settles its busy indicator during a temporary admission gap while its response stays fenced;
-renewed admission can retry without retaining a stale busy state.
-Members retry keeps its own physical read lifetime alongside save and removal confirmation; neither confirmation
-is cleared by a status read, and an active editor or writer keeps the status retry disabled.
-
-Retained Members integration preserves native immutable-release byte validation and empty/stale caller semantics alongside selected-runtime provenance.
-
-Runtime integration extends the existing native Members tables; unpositioned retained candidates remain disposable and are drained by subject identity during retirement and erasure without granting completion authority.
-
-Collection command writer pools inherit the caller's trusted receipt key ring; native fixtures supply dedicated test receipt keys independently of token sealing keys.
-
-Decision: preserve native metadata reservation and immutable-definition recovery; explicit runtime admission requires the complete C3 parent and list previews stay read-only.
+Page acceptance uses real APIs and recorded responses across the original route/story inventory, all eight locales,
+light/dark themes, phone/desktop, fine/coarse pointer, keyboard and touch. Verify truthful Continue/counts, occurrence
+identity/order/notes, publication uncertainty and intent, private labels, target sizing, progress, focus recovery and
+covers. Use the Web runner and [verification workflow](../development/verification.md); screenshot inventory,
+typing or a local integrated task is not review or Goal completion.

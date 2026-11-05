@@ -1,5 +1,9 @@
 # Continue
 
+The shared [Library visit contract](library-and-collections.md#destinations-and-actions) owns cross-destination
+admission, stale display retirement and command custody. This document owns Continue's address, page and Progress
+handoff.
+
 This is the owner contract for the private Library Continue row. It adopts the bounded native read required by
 [Library and Collections](library-and-collections.md#destinations-and-actions) and the
 [Library module](../services/kernel/src/library/README.md#required-built-ins-and-personal-space).
@@ -133,6 +137,10 @@ work and eventually successful I/O. GET never starts that work. Unavailable depe
 
 ## Native authorization boundary
 
+Preserve exact native `platform_closed` and recognized `PlatformClosedError` as a closed region, distinct from
+permission denial and dependency unavailability. Closure clears retained Continue rows and does not retry. It cannot
+be rendered as an empty or admitted list.
+
 Require bearer authentication, `library_entry:list`, `progress_session:list`, and the existing `personal_library`
 and `reading_progress` gates, matching native shelf activity/BASIC-session disclosure admission. The actual
 progress point/history operations used by acceptance additionally require `progress_session:read`; that existing
@@ -213,9 +221,14 @@ The Web destination admits absent or nonempty opaque cursors of at most 4096 UTF
 
 ### Window navigation
 
-Decision: Keep the cursor trail in one memory-only QueryClient record for the Router history visit; only an exact successful native page read commits a staged move, and reader identity replacement or newest recovery retires that trail.
+Keep the cursor trail in one memory-only QueryClient record for the Router history visit. Only an exact successful
+native page read commits a staged move; reader identity replacement or newest-page recovery retires that trail.
 
 Next stages the supplied native `next` cursor. Previous returns to the latest accepted predecessor, and First deliberately reads the native first window. A fresh direct visit to a later cursor has no invented Previous, but can choose First. A staged target becomes current only when that exact address returns a loaded native result; preparing, denied, signed-out, unavailable, malformed and stale results do not advance history. Retry repeats the same staged address. Stale recovery removes only `cursor`, preserves other query fields and the fragment, and starts without the retired trail.
+
+The Continue and historical Progress handoffs keep the exact admitted saved address. Malformed or stale addresses do
+not trigger an automatic read or silently replace authority. Recovery is an explicit first-page GET that removes
+only the invalid cursor, preserves other valid query fields and the fragment, and retires the previous cursor trail.
 
 The route visit retains at most eight accepted predecessor cursors, the current cursor and one staged target. Each cursor stays within the existing 4096 UTF-16 code-unit address bound. Store coordinates only: keep at most the current six FULL native rows in the existing reader, with no copied page bodies, sessions or historical Subject cache. One deliberate movement makes one existing native read; there is no prefetch, refill, second reader or durable storage. Keyboard heading focus returns only while the initiating intent remains eligible and still owns focus.
 

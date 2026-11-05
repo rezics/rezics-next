@@ -5,33 +5,20 @@ admission, freshness, useful pages, canonical identity and cost. [Library and Co
 [Dynamic Collections](dynamic-collections.md) and [Deletion](deletion.md) retain native owner authority. This document
 specializes Collection obligations for shared Search/Zone composition, not a new Collection model or filter language.
 
-## Current implementation and superseded scaffolding
+## Source composition
 
-The exported `createCollectionSource` factory composes native Collection authorization, source-scoped identity
-observations and maintained canonical generations. Preparation and every later call admit current source authority;
-positive membership additionally checks current original support and the ordinary original/terminal Subject guards.
-Unknown scope, incomplete generations and unavailable public capture return retryable `dependency_unavailable`.
+The source consumer composes native Collection authorization, scoped identity observation, canonical generations and
+complete current membership under the installed Work allowance. Every preparation and continuation admits the
+current source. Positive membership also checks original support and the ordinary original/terminal Subject guards.
+Unknown scope, incomplete generations and unavailable public capture remain retryable `dependency_unavailable`;
+public output requires its own native public capture and never borrows private Library custody.
 
-`canonical-source-store.ts` owns indexed successor/group reads, native raw-driver repair checkpoints and complete
-publication CAS. The default Library WorkModule binds its existing operational transaction/client and maintenance
-queue. Population capture uses `createNativeLibrarySourceCustody`; mapping points only map examined originals.
-Semantic's closed `IdentityScopedObservations` declarations are consumed through its real module name. The
-provisional producer adapter returns explicit `source_unready` with zero work until its authoritative body lands.
-Public output needs Semantic's independent public capture, never a borrowed Library capture. Native useful-page,
-whole-query and lifecycle proof remains pending combined integration.
-`collection-source-order.ts` owns the data-only raw ordinal declaration. Its native reader
-`readNativeCollectionRawOrdinalPage` reads 1–100 raw curated occurrences in actual `(ordinalKey,memberId)` order,
-including retained deletion episodes. The frontier settles the last examined raw occurrence even when later
-membership/disclosure excludes it; an exact-sized page conservatively needs a later seek to prove exhaustion.
-It returns no notes or other retained member payload. These internal rows provide neither canonical uniqueness,
-current viewer disclosure nor complete query observations. The caller uses the same Source work allowance and
-receipt; complete observations still require the shared native scope producer.
-
-Old exported identity-basis, sealed-repair, alias-window and one-pending-group protocols are superseded list
-scaffolding until replacement native acceptance permits removal. The universal 256 raw-key ledger, exhaustive
-request-time alias recovery, repeated home sweeps and final leaf replay are no longer list requirements. Existing
-code and frozen tests are unchanged by this prose adoption. Native batch, byte/string and cursor limits keep their
-independent units and scope. The scoped observation ABI is selected in `semantic/identity-scope-types.ts`; raw ordinal data retains the callable below.
+Raw curated-ordinal reads expose only native member identity, ordinal, revision and deletion episode. Their frontier
+settles the last examined raw key even when later membership or disclosure excludes it; exact-sized pages require a
+further seek to prove exhaustion. Raw rows provide neither canonical uniqueness, current viewer disclosure nor a
+complete query observation. Charge them to the same Source allowance as every other axis. Shared native scope,
+identity, Collection, SQL and preparation contracts retain their own authority; no raw prefix, declaration or
+prepared handle supplies a permission or completeness shortcut.
 
 ## Raw native ordinal callable
 
@@ -306,11 +293,10 @@ private/no-store preparing page. Progress is retained preparation, not cached au
 
 ## Native delivery and acceptance
 
-The actual factory, owner indexes, preparation, built-in discovery/materialization, complete public activation,
-freeze/revoke, identity-epoch participation and default worker integration remain required. The Zone resource
-substrate is integrated; actual membership/page/default execution and Zone-specific withholding/purge/account/
-scheduler work are incomplete. Typed schemas, immutable loaders, cursor capacity and helper setup prove none of
-those native outcomes. Old proof reports remain evidence, not gates for the replacement architecture.
+The native contract composes the source factory, owner indexes, preparation, built-in discovery/materialization,
+complete public activation, freeze/revoke, identity-epoch participation and default worker. Zone membership, page,
+withholding, purge, account and scheduler outcomes use their owning native contracts. Typed schemas, immutable
+loaders, cursor capacity and helper setup do not replace native outcomes.
 
 Use the [shared acceptance matrix](filtered-lists.md#shared-acceptance-matrix): harem light novels, Book
 wordCount > 1,000,000 (exact threshold and absent count excluded), and combined, in public Zone/Collection, own library and
@@ -320,10 +306,18 @@ qualifiers/units, compact/expanded conformance, two-release pins, current grant/
 sparse matches, crash/replay, canonical cross-page order, last-eligible-original direct targets, epoch readiness and
 native cursor restart/session/cache. Full persona/API/default/growth and unrelated owner acceptance remain required.
 
+Members keeps the approved C3 static equation: 16 body statements, 464 History registrations, and 429
+receive/readback units, plus its existing Core/Access, transfer, executor, retry and cleanup costs. Runtime admission
+opens History only from these bounds and needs no `NativeCollectionWork` parent. A complete Source child declaration
+is separately required for the released Source body. Final completion separately requires the producer's current
+Source and physical authority. A local price, complete header or worker success neither funds the whole call nor
+establishes current completion. Keep complete-source SQL, closure/currentness, custody, retries and cleanup; the
+equation and declarations are not executed physical evidence.
+
 ## Bulk selection capture and confirmation
 
-Commerce decision L2 supersedes the cross-home confirmation-cut protocol. An explicit selection or native Members
-query yields at most 1,000 exact effects, each written once to installed `library.bulk_target` rows. A query names
+An explicit selection or native Members query yields at most 1,000 exact effects, each written once to the
+`library.bulk_target` manifest. A query names
 its source Collection, canonical filter and optional native `id` sort. Capture uses the installed Collection
 descriptor and Members readers, follows every continuation, and admits at most 100 pages/10,000 returned source
 candidates before refusing an unfinished preparation. The 1,001st unique Subject or target occurrence refuses
@@ -337,9 +331,18 @@ checks its captured entry or occurrence revision/incarnation atomically. A chang
 `conflict/revision_mismatch`, displayed as “Changed since preview; skipped”; the remaining targets continue.
 Current authorization remains mandatory for preview, confirmation, effects and recovered results.
 
-Decision: explicit subject targets are canonical and unique; occurrence selections preserve each selected member,
-including duplicate subjects, and retain the occurrence revision. A query header stores source/filter/order, stable
-source revision/exposure, capture digest and bounded counts; the target rows remain the sole effect manifest.
+Explicit subject targets are canonical and unique; occurrence selections preserve each selected member, including
+duplicate subjects, and retain the occurrence revision. A query header stores source/filter/order, stable source
+revision/exposure, capture digest and bounded counts; the target rows remain the sole effect manifest.
+
+The feasible-50-original whole-query first-prefix branch requires at least 114 keys: 16 prefix keys, 49 raw keys and
+49 fact keys. Before settlement it requires `50*8192 + sum(64*r for r=50..1) = 491200` rows. Both lower bounds exceed the
+unchanged 100-key and 262144-row ceilings, so refuse the entire branch before useful staging. Do not reduce the
+prefix or original count, raise a cap, omit nested cost or settle partially. Refusal leaves checkpoints/frontiers,
+output disclosure, sealing and activation unchanged, preserving current output A. Keep the original client, owner,
+absolute deadline, attempt bound and drain/release-once custody. Settlement, retries, every existing cost axis and
+cleanup remain charged; declarations alone supply no funding. This source-derived refusal proves neither a native
+run nor another branch. Preserve existing SQL, Collection semantics, closure/currentness and preparations.
 
 The [bulk owner contract](../services/kernel/src/library/bulk-contract.md) owns persistence and delivery. Existing
 action writers, operation keys, current authorization, original receipts and cleanup remain authoritative. Account
@@ -371,12 +374,11 @@ erasure remains composed through Accounts 27af; this operation does not grant an
 
 ## Staged owner directory binding
 
-The [owner implementation status](library-owner-queries.md#staged-native-owner-implementation) records the native
-structural directory, all four native writer families, bounded bootstrap/parent repair and released pin metadata.
-Common Collection callers share `builtin-runtime.ts`; logical empty Everything is read-only and needs no header,
-grant or receipt. The general `createCollectionSource` factory remains unavailable. Nonempty common members and
-state descriptors refuse readiness/current disclosure until the actual cross-owner publication and whole-query
-privacy bindings arrive; source versions and structural candidates are not substitutes.
+The common owner candidate/support directory is discovery data, never permission or a personal fact. Logical empty
+Everything is read-only and needs no header, grant or receipt. Nonempty common members and state descriptors require
+complete current cross-owner publication and whole-query privacy bindings; structural candidates and source versions
+are not substitutes. The general source factory and all common callers retain the shared factory, writer, bootstrap,
+repair and release-pin contracts rather than a parallel runtime.
 
 The adopted [current](research/library-scoped-title-plan-current.md) and
 [deep](research/library-scoped-title-plan-deep.md) text-plan direction is finite retained evaluation over ONE
