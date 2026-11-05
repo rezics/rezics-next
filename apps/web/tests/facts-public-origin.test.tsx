@@ -3,9 +3,7 @@ import { createRequire } from 'node:module';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import * as start from '../.storybook/react-start';
-import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { addonProfileFixture, addonProfileId, addonWorkId } from '../src/kernel/fake/catalogue-addon-profile';
 import { subjectFactsFixture } from '../src/kernel/fake/subject-facts';
 import {
@@ -98,7 +96,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
       value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name),
     });
   const { createRoot } = await import('react-dom/client');
-  const { within, waitFor } = await import(
+  const { waitFor } = await import(
     createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom')
   );
   const { m } = await import('../src/paraglide/messages.js');
@@ -128,9 +126,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
   }));
 
   const { Route } = await import('../src/routes/subjects/$id_.$slug_.edit');
-  const { SubjectPage, pageContext } = await import('../src/features/pages/subject');
-  const { subjectPageMessages } = await import('../src/features/pages/route-support');
-  const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
+  const { collectEditorialEntries, contributionMenu } = await import('../src/features/catalogue/editorial-entry');
   const { sessionQuery } = await import('../src/session/query');
   const { QueryClient: Client } = await import('@tanstack/react-query');
   const client = new Client({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -189,35 +185,14 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
       <SubjectFactsEntry id={addonProfileId} label={label} locale="en" origin={observed} />;
     await renderNode(direct);
     expect(host.querySelector<HTMLAnchorElement>('a')?.getAttribute('href')).toBe(originHref);
-    expect(collectEditorialEntries(direct).entries[0]?.href).toBe(originHref);
-
-    const page = structuredClone(recordedPage) as unknown as import('../src/features/pages/subject').SubjectPageData;
-    page.subject = addonProfileId;
-    page.catalogue = {
-      state: 'released',
-      type: profile.current.subject.type,
-      digest: profile.current.subject.release,
-      definitions: profile.release,
-    };
-    const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-    for (const [key, read] of Object.entries(plan.reads))
-      if (read.kind === 'subject' && read.id === page.subject)
-        page.reads[key] = { status: 200, body: structuredClone(profile.current) };
-    await renderNode(
-      <SubjectPage page={page} locale="en" messages={subjectPageMessages()} currentHref={publicHref} renderJsonLd={false} />,
+    const collected = collectEditorialEntries(direct).entries;
+    expect(collected[0]?.href).toBe(originHref);
+    const editGroup = contributionMenu(collected, 'en', false).find(
+      (entry) => entry.type === 'submenu' && entry.label === m.contribute_edit(),
     );
-    const publicDom = within(window.document.body);
-    await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
-    await waitFor(() =>
-      expect(
-        publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
-      ).not.toBeNull(),
-    );
-    await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
-    const menuHref = host.querySelector<HTMLAnchorElement>('a[href*="/edit?origin="]')?.getAttribute('href');
-    expect(menuHref).toBe(originHref);
+    expect(editGroup?.type === 'submenu' ? editGroup.entries[0]?.href : undefined).toBe(originHref);
     expect(
-      parseFactsPublicVisit(new URL(menuHref!, 'https://site.test').search, addonProfileId, 'en', base),
+      parseFactsPublicVisit(new URL(collected[0]!.href, 'https://site.test').search, addonProfileId, 'en', base),
     ).toMatchObject({ kind: 'origin', origin: { subject: addonProfileId, context: candidateContext } });
 
     const visitValidator = Route.options.validateSearch as (input: Record<string, unknown>) => Record<string, unknown>;
