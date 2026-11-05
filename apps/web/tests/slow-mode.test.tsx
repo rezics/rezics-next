@@ -82,6 +82,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'slow-mode-session' };
   let read: SlowModeRead = { kind: 'unavailable' };
   let readCalls = 0;
+  const readSignals: AbortSignal[] = [];
   let heldReads = 0;
   const delayedReads: ((value: SlowModeRead) => void)[] = [];
   const changes: {
@@ -94,8 +95,9 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   }[] = [];
   const acknowledgedIntervals: number[] = [];
   const port: SlowModePort = {
-    read: async () => {
+    read: async ({ signal }) => {
       readCalls++;
+      readSignals.push(signal);
       if (heldReads === 0) return read;
       heldReads--;
       return new Promise((resolve) => delayedReads.push(resolve));
@@ -278,6 +280,23 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
         await Promise.resolve();
       });
     expect(host.textContent).not.toContain(m.slow_mode_saved());
+    for (const replace of [
+      () => client.setQueryData(sessionQuery.queryKey, { ...owner }),
+      async () => {
+        await client.invalidateQueries({ queryKey: sessionQuery.queryKey, refetchType: 'none' });
+        client.setQueryData(sessionQuery.queryKey, { ...owner });
+      },
+      () => client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => ({ ...owner }) }),
+    ]) {
+      await appeared(m.slow_mode_setting_legend());
+      const oldSignals = readSignals.slice();
+      const before = readCalls;
+      await act(async () => { await replace(); });
+      await appeared(m.slow_mode_setting_legend());
+      expect(readCalls).toBeGreaterThan(before);
+      expect(oldSignals.every((signal) => signal.aborted)).toBe(true);
+      expect(host.querySelector('#thread-title')).toHaveProperty('value', 'Cooldown draft');
+    }
     expect(documentText(body)).toContain('cooldown');
   } finally {
     await act(async () => root.unmount());

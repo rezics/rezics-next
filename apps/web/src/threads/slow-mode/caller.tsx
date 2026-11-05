@@ -1,6 +1,9 @@
 import { QueryClientContext, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { sessionQuery } from '../../session/query';
+import { browserObservation } from '../../session/observation';
+import { useReaderAddress } from '../../reader/current-origin';
+import { getLocale } from '../../paraglide/runtime.js';
 import type { SlowModePort, SlowModeRead } from './contract';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
@@ -45,20 +48,10 @@ export type SlowModeVisit = {
   retire: () => void;
 };
 
-function sessionIdentity(session: SessionValue | undefined): string {
-  return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
-}
-
 let nextVisitId = 0;
-
-function useSessionValue(): SessionValue | undefined {
-  const client = useContext(QueryClientContext);
-  return useSyncExternalStore(
-    (notify) => client?.getQueryCache().subscribe(() => notify()) ?? (() => {}),
-    () => client?.getQueryData<SessionValue>(sessionQuery.queryKey),
-    () => undefined,
-  );
-}
+const closedObservation = { state: 'unknown' } as const;
+const emptySubscribe = () => () => {};
+const emptySnapshot = () => closedObservation;
 
 /** Private visit bound to its source, selection, credential mode, viewer and CSRF. */
 export function useSlowModeVisit(
@@ -67,10 +60,17 @@ export function useSlowModeVisit(
   credentialMode = 'session',
 ): SlowModeVisit | null {
   const client = useContext(QueryClientContext);
-  const session = useSessionValue();
-  const owner = sessionIdentity(session);
+  const observation = client ? browserObservation(client) : undefined;
+  const owner = useSyncExternalStore(
+    observation?.subscribe ?? emptySubscribe,
+    observation?.getSnapshot ?? emptySnapshot,
+    observation?.getServerSnapshot ?? emptySnapshot,
+  );
+  const session = client?.getQueryData<SessionValue>(sessionQuery.queryKey);
+  const address = useReaderAddress(null, undefined, getLocale());
   const ready =
     !!boardId &&
+    owner.state === 'signed-in' &&
     session?.state === 'signed-in' &&
     typeof session.subject === 'string' &&
     session.subject.length > 0 &&
@@ -78,11 +78,10 @@ export function useSlowModeVisit(
     session.csrfToken.length > 0;
   const visit = useMemo(() => {
     if (!ready || !boardId || !session?.subject || !session.csrfToken) return null;
-    const state: SlowModeVisit & { retired: boolean; owner: string } = {
+    const state: SlowModeVisit & { retired: boolean } = {
       id: String(++nextVisitId),
       controller: new AbortController(),
       retired: false,
-      owner,
       boardId,
       subject: session.subject,
       csrfToken: session.csrfToken,
@@ -93,18 +92,25 @@ export function useSlowModeVisit(
         state.controller.abort();
       },
       current(signal = state.controller.signal) {
-        const live = client?.getQueryData<SessionValue>(sessionQuery.queryKey);
-        if (sessionIdentity(live) !== state.owner) state.retire();
+        if (observation?.getSnapshot() !== owner || !address.isCurrent()) state.retire();
         return !state.retired && !signal.aborted && signal === state.controller.signal;
       },
     };
     return state;
-  }, [boardId, client, credentialMode, owner, ready, scopeKey, session?.csrfToken, session?.subject]);
+  }, [boardId, client, credentialMode, owner, ready, scopeKey, session?.csrfToken, session?.subject, address.key]);
+  // Render replacement retires the previous owner before any retained callback can dispatch.
+  const previous = useRef(visit);
+  if (previous.current !== visit) previous.current?.retire();
+  previous.current = visit;
   useLayoutEffect(() => {
     if (!visit) return;
     if (!visit.retired && visit.controller.signal.aborted) visit.controller = new AbortController();
-    return () => visit.retire();
-  }, [visit]);
+    const stop = observation?.subscribe(() => visit.current());
+    return () => {
+      stop?.();
+      visit.retire();
+    };
+  }, [visit, observation]);
   if (!visit?.current()) return null;
   return visit;
 }

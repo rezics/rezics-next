@@ -27,6 +27,11 @@ replacement, locale or credential-mode changes, and unmount retire in-flight wor
 visit key, so late results cannot populate the returning visit. An uncertain setting command retains its original
 sender, CSRF token, credential mode, interval, scope and idempotency key for an explicit same-command retry.
 
+Decision: slow-mode visits consume the shared browser session observation and reader address lease; equal session
+replacement, fetching and invalidation retire the original visit, including transitions batched before React renders.
+Current inspection cannot acknowledge an original command. Source-object replacement still requires the caller's
+original source identity in addition to its selection scope.
+
 ## Native refusal recovery
 
 A cooldown refusal keeps the draft and shows the native retry time. The person explicitly resubmits when they choose
