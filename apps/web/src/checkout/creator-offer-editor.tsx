@@ -149,25 +149,26 @@ export function CreatorOfferOriginScope({
 }
 
 function CreatorOfferOriginPanelSlot() {
-  const context = useContext(CreatorOfferOriginContext);
+  const origin = useContext(CreatorOfferOriginContext);
   const router = useRouter({ warn: false });
   const session = useSession();
   const requestNavigation = useCreatorOfferDraftNavigation();
-  if (!context?.resolution) return null;
+  const resolution = origin?.resolution;
+  if (!origin || !resolution) return null;
 
   const navigate = (href: string) => {
     if (requestNavigation) void requestNavigation(href);
     else if (router) void router.navigate({ href });
   };
   const currentReceipt = () => {
-    if (context.resolution?.kind !== 'current') return null;
-    const resolution = readCreatorEditionOrigin(context.token, session.subject, context.resolution.receipt.editionId);
-    return resolution.kind === 'current' ? resolution.receipt : null;
+    if (resolution.kind !== 'current') return null;
+    const current = readCreatorEditionOrigin(origin.token, session.subject, resolution.receipt.editionId);
+    return current.kind === 'current' ? current.receipt : null;
   };
   const restart = () => {
-    if (context.resolution.kind === 'current') {
+    if (resolution.kind === 'current') {
       const current = currentReceipt();
-      const receipt = current && restartCreatorEditionOrigin(context.token);
+      const receipt = current && restartCreatorEditionOrigin(origin.token);
       if (receipt) {
         navigate(creatorEditionOriginReturnHref(receipt));
         return;
@@ -177,17 +178,17 @@ function CreatorOfferOriginPanelSlot() {
   };
   return (
     <CreatorEditionOriginPanel
-      resolution={context.resolution}
-      onReturn={
-        context.resolution.kind === 'current'
-          ? () => {
+      resolution={resolution}
+      {...(resolution.kind === 'current'
+        ? {
+            onReturn: () => {
               const receipt = currentReceipt();
               if (receipt) navigate(creatorEditionOriginReturnHref(receipt));
-            }
-          : undefined
-      }
+            },
+          }
+        : {})}
       onRestart={restart}
-      editionId={context.resolution.kind === 'current' ? context.resolution.receipt.editionId : undefined}
+      editionId={resolution.kind === 'current' ? resolution.receipt.editionId : undefined}
     />
   );
 }
