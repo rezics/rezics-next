@@ -99,17 +99,7 @@ export async function accountErasureFixture() {
   const governor = await person();
   await bootstrapGovernance(db.pool, governor.accountId);
   async function grant(id: string, subject: Person, granted: string[]) {
-    const actor = await native.access.authenticate(governor.bearer, { pool: db.pool, deadline: Date.now() + 30_000 });
-    await native.COMMANDS.grants.create(
-      { pool: db.pool, actor, deadline: Date.now() + 30_000 },
-      {
-        resource: { route: routeOf(id)!, id },
-        subject: { kind: 'account', id: subject.accountId },
-        actions: granted,
-        valid: '(,)',
-        key: randomUUID(),
-      },
-    );
+    await grantAs(governor, id, subject, granted);
   }
   async function grantAs(grantor: Person, id: string, subject: Person, granted: string[]) {
     const result = await call(grantor, 'POST', '/v1/grants', {
@@ -118,7 +108,7 @@ export async function accountErasureFixture() {
       actions: granted,
       valid: '(,)',
     });
-    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    expect(result.status, JSON.stringify({ resource: id, actions: granted, response: result.body })).toBe(201);
   }
   async function delegated(principal: Person, delegate: Person) {
     await grant(principal.accountId, principal, ['access:delegate']);

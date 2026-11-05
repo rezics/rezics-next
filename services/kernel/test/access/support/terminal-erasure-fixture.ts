@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createPool } from '../../../src/database/pool.ts';
@@ -13,7 +13,7 @@ import { nativeFixture } from '../native-account-bindings-fixture.ts';
 import { routeOf } from '../../../src/route/route.ts';
 
 type NativeAuth = Awaited<ReturnType<typeof nativeFixture>>;
-type NativeWorker = Awaited<ReturnType<typeof createTerminalErasureWorker>>;
+type NativeWorker = Awaited<ReturnType<typeof startTerminalErasureWorker>>;
 
 /** Owns the isolated native Auth, Access, kernel and production worker resources for terminal erasure. */
 export async function createTerminalErasureFixture() {
