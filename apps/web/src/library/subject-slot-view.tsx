@@ -410,12 +410,11 @@ function SubjectLibrarySlotView({
     labelSearchState === 'loaded' &&
     labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
     subjectLabelReviewIsCurrent(review, currentLabelReviewOrigin());
-  if (labelReview && !isCurrentLabelReview(labelReview)) {
+  const currentLabelReview = labelReview && isCurrentLabelReview(labelReview) ? labelReview : null;
+  if (labelReview && !currentLabelReview) {
+    // Fence callbacks and hide the private choice in this render. State cleanup runs after commit below.
     labelReviewRef.current = null;
-    setLabelReview(null);
-    setLabelReviewDraft(null);
-    setLabelReviewNotice('stale');
-    labelReviewFocus.current = { kind: 'input' };
+    appliedLabelReview.current = null;
   }
   const [entryOrigin, setEntryOrigin] = useState(entryLifetime);
   const [labelOrigin, setLabelOrigin] = useState(labelLifetime);
@@ -498,6 +497,31 @@ function SubjectLibrarySlotView({
     (data.stateOptions ?? []).map(({ id, label }) => [id, label.text, label.lang]),
   ]);
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    if (
+      !labelReview ||
+      labelOrigin.seed !== labelLifetime.seed ||
+      isCurrentLabelReview(labelReview)
+    )
+      return;
+    setLabelReview(null);
+    setLabelReviewDraft(null);
+    setLabelReviewNotice('stale');
+    labelReviewFocus.current = { kind: 'input' };
+  }, [
+    labelReview,
+    labelOrigin.seed,
+    labelLifetime.seed,
+    labelPickerOpen,
+    labelListAdmitted,
+    labelSearchState,
+    labelQuery,
+    labelChoices,
+    labels,
+    subject.id,
+    locale,
+    searchSequence,
+  ]);
   useEffect(() => {
     if (!entryLifetime.current()) return;
     const loadedEntry =
@@ -1656,14 +1680,14 @@ function SubjectLibrarySlotView({
                 </summary>
                 {/* Keep the no-script form; hydrated closed pickers have no inactive required controls. */}
                 {(!hydrated || labelPickerOpen) && !uncertainLabel.current ? (
-                  labelReview && isCurrentLabelReview(labelReview) ? (
+                  currentLabelReview ? (
                     <SubjectLabelAssignmentReview
-                      review={labelReview}
+                      review={currentLabelReview}
                       subjectName={subject.label}
-                      alreadyAssigned={subjectLabelReviewAlreadyAssigned(labelReview, labels)}
-                      applyAction={labelReviewApplyAction(labelReview)}
-                      onEdit={() => editLabelReview(labelReview)}
-                      onDiscard={() => discardLabelReview(labelReview)}
+                      alreadyAssigned={subjectLabelReviewAlreadyAssigned(currentLabelReview, labels)}
+                      applyAction={labelReviewApplyAction(currentLabelReview)}
+                      onEdit={() => editLabelReview(currentLabelReview)}
+                      onDiscard={() => discardLabelReview(currentLabelReview)}
                     />
                   ) : (
                   <form
