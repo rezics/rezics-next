@@ -3695,6 +3695,8 @@
   "library_continue_address_malformed": "保存されたページ位置が正しくありません。最新のページを開いて続けてください。",
   "library_continue_address_expired": "保存されたページ位置は利用できなくなりました。最新のページを開いて続けてください。",
   "library_continue_address_newest": "最新のページを開く",
+  "library_continue_previous_window": "前のページ",
+  "library_continue_first_window": "最初のページ",
   "library_continue_empty": "続ける作品はまだありません。",
   "library_continue_preparing": "続きのリストを準備しています。",
   "library_continue_loading": "続きのリストを読み込んでいます…",

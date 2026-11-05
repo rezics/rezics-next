@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import { continueAddress, continueNewestHref } from '../src/library/continue-address';
-import { nativeContinueSource } from '../src/library/continue-adapter';
+import { nativeContinueSource, presentContinuePage } from '../src/library/continue-adapter';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -25,10 +25,19 @@ test('served route and server reject malformed positions before any native read 
     const input = validate({ cursor });
     expect(input.cursor).toEqual(cursor);
     const failure = { state: 'unavailable', reason: 'invalid-address' };
-    expect(await load({ deps: input })).toEqual(failure);
+    expect(await load({ deps: input })).toEqual({ address: continueAddress(input), result: failure });
     expect(await readContinueEntries({ data: { cursor } })).toEqual(failure);
     expect(await loadContinueState(client, new Request('https://site.test'), {}, { cursor })).toEqual(failure);
   }
+});
+
+test('native continuation cursors stay within the admitted address bound', () => {
+  expect(presentContinuePage({ subjects: [], next: 'x'.repeat(4096) })).toEqual({
+    state: 'loaded',
+    entries: [],
+    next: 'x'.repeat(4096),
+  });
+  expect(presentContinuePage({ subjects: [], next: 'x'.repeat(4097) })).toEqual({ state: 'unavailable' });
 });
 
 test('absent and bounded opaque positions retain exact text through admission and one native read', async () => {

@@ -3696,6 +3696,8 @@
   "library_continue_address_malformed": "This saved page position is malformed. Open the newest page to continue.",
   "library_continue_address_expired": "This saved page position is no longer usable. Open the newest page to continue.",
   "library_continue_address_newest": "Open newest page",
+  "library_continue_previous_window": "Previous window",
+  "library_continue_first_window": "First window",
   "library_continue_empty": "Nothing to continue yet.",
   "library_continue_preparing": "Your Continue list is being prepared.",
   "library_continue_loading": "Loading your Continue list…",

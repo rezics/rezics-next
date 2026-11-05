@@ -6,6 +6,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { ContinueExample, continueExamples } from './library-continue/example';
 import type { ContinueView } from '../library/continue-source';
+import { ContinueSection } from '../library/continue';
+import { continueCursorHref } from '../library/continue-address';
 
 const meta = {
   title: 'Patterns/Library/Continue',
@@ -182,6 +184,63 @@ export const Navigation: Story = {
         await canvas.findByRole('button', { name: `${m.library_continue()} ${m.library_nav_selector()}` }),
       );
       await expect(await within(document.body).findByText(m.library_nav_tracked_entries())).toBeVisible();
+    }
+  },
+};
+
+export const WindowNavigation: Story = {
+  render: () => {
+    const locale = getLocale();
+    const search = '?display=compact&tag=a&tag=b&cursor=current';
+    const hash = '#resume';
+    return (
+      <PatternStory visitor="Signed In" path="/library/continue">
+        <AppShell>
+          <div className="mx-auto max-w-7xl p-4 sm:p-8">
+            <ContinueSection
+              destination
+              locale={locale}
+              state={{ state: 'loaded', entries: continueExamples.slice(0, 1), next: 'next+/==' }}
+              windowActions={[
+                {
+                  direction: 'previous',
+                  target: 'previous+/==',
+                  href: continueCursorHref(locale, search, hash, 'previous+/=='),
+                  label: m.library_continue_previous_window(),
+                },
+                {
+                  direction: 'first',
+                  target: null,
+                  href: continueCursorHref(locale, search, hash, null),
+                  label: m.library_continue_first_window(),
+                },
+                {
+                  direction: 'next',
+                  target: 'next+/==',
+                  href: continueCursorHref(locale, search, hash, 'next+/=='),
+                  label: m.library_next_page(),
+                },
+              ]}
+            />
+          </div>
+        </AppShell>
+      </PatternStory>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const view = await continueMain(canvasElement);
+    for (const [label, cursor] of [
+      [m.library_continue_previous_window(), 'previous+/=='],
+      [m.library_continue_first_window(), null],
+      [m.library_next_page(), 'next+/=='],
+    ] as const) {
+      const link = await view.findByRole('link', { name: label });
+      await expect(link).toHaveClass(/min-h-11/);
+      await expect(link).toHaveClass(/focus-visible:outline-2/);
+      await expect(link).toHaveAttribute(
+        'href',
+        continueCursorHref(getLocale(), '?display=compact&tag=a&tag=b&cursor=current', '#resume', cursor),
+      );
     }
   },
 };
