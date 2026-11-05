@@ -1,12 +1,12 @@
 import { expect, mock, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ScreenEpisodeList } from '../src/features/catalogue/screen-episode-reader/view';
-import { screenEpisodeContinuationHref } from '../src/features/catalogue/screen-episode-reader/navigation';
-import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
-import { subjectHref } from '../src/subject/subject-href';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ScreenEpisodeList } = await import('../src/features/catalogue/screen-episode-reader/view');
+const { screenEpisodeContinuationHref } = await import('../src/features/catalogue/screen-episode-reader/navigation');
+const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+const { subjectHref } = await import('../src/subject/subject-href');
 const { readScreenEpisodePage, SCREEN_EPISODE_PAGE_MAX_BYTES } = await import(
   '../src/features/catalogue/screen-episode-reader/read'
 );
