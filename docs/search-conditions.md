@@ -74,6 +74,8 @@ Decision: the Web Concept reader retries only after an explicit action for the u
 
 Decision: tag weight uses a released quantity qualifier range (`{property,range:{gte?,lte?,unit}}`) on the same fixed concept statement. Definitions owns eligible qualifiers and units; sourceTagWeight retains its source metric and spoiler evidence rather than creating a separate weight assertion. The mounted weight form commits through the existing tagQualifiers visit field and clears only hit continuation. Universal kind counts remain the designated-kind-leaf exception; property/value facets and public totals remain count-free.
 
+Decision: mounted Concept works use configured released work kinds and Universal Search kind metadata/counts, with the kind leaf directly under the top-level AND. They do not translate catalogue work kinds through the obsolete `subject` alias.
+
 The mounted Concept visit uses the existing locale-prefixed `/subjects/:id/:slug/concepts` route. Its bounded query
 state keeps the selected property, source scheme, work type, admitted name or rating sort, descendant choice, spoiler
 threshold, additional condition and opaque continuation together with the fixed Concept. Changing a selection,
