@@ -287,6 +287,8 @@ test('Following management has a genuine discovery destination after the last un
     ...session,
     useSession: () => ({ state: 'signed-in', subject: 'alice', csrfToken }),
   }));
+  const query = await import('../src/kernel/query');
+  mock.module('../src/kernel/query', () => ({ ...query, personalRead: { ...query.personalRead, enabled: true } }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -558,7 +560,6 @@ test('Following marks only a successful single stale-cursor fallback and never r
   }
 });
 
-
 test('Following receives only ordinary native denial, including a denied stale-cursor fallback', async () => {
   for (const stale of [false, true]) {
     const calls: Request[] = [];
@@ -571,27 +572,40 @@ test('Following receives only ordinary native denial, including a denied stale-c
           : Response.json({ code: 'forbidden' }, { status: 403 });
       },
     });
-    expect(await loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {
-      cursor: 'opaque/current+', kind: 'space',
-    })).toEqual({ signedIn: true, forbidden: true, follows: [], next: null });
+    expect(
+      await loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {
+        cursor: 'opaque/current+',
+        kind: 'space',
+      }),
+    ).toEqual({ signedIn: true, forbidden: true, follows: [], next: null });
     expect(calls.map((call) => Object.fromEntries(new URL(call.url).searchParams))).toEqual([
       { view: 'FULL', limit: '20', targetType: 'space', cursor: 'opaque/current+' },
       ...(stale ? [{ view: 'FULL', limit: '20', targetType: 'space' }] : []),
     ]);
   }
   for (const [status, body] of [
-    [403, { code: 'platform_closed' }], [401, { code: 'unauthorized' }],
-    [404, { code: 'not_found' }], [503, { code: 'unavailable' }], [200, {}],
+    [403, { code: 'platform_closed' }],
+    [401, { code: 'unauthorized' }],
+    [404, { code: 'not_found' }],
+    [503, { code: 'unavailable' }],
+    [200, {}],
   ] as const) {
     let calls = 0;
     const client = createKernelClient('https://kernel.example.test', {
-      fetch: async () => { calls++; return Response.json(body, { status }); },
+      fetch: async () => {
+        calls++;
+        return Response.json(body, { status });
+      },
     });
-    await expect(loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {})).rejects.toBeDefined();
+    await expect(
+      loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {}),
+    ).rejects.toBeDefined();
     expect(calls).toBe(1);
   }
   const client = createKernelClient('https://kernel.example.test', {
-    fetch: async () => { throw new TypeError('Transport lost'); },
+    fetch: async () => {
+      throw new TypeError('Transport lost');
+    },
   });
   await expect(loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {})).rejects.toThrow();
 });
