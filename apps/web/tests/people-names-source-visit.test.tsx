@@ -144,7 +144,7 @@ for (const kind of ['Person', 'Character'] as const)
       await draw(h(RouterProvider, { router }));
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
       expect(host.textContent).toContain('Mél—旅人 39');
-      expect(document.activeElement).toBe(host.querySelector('[data-names-sources] a'));
+      expect(document.activeElement === host.querySelector('[data-names-sources] a')).toBe(true);
       await act(async () => {
         history.forward();
         await router.load();
@@ -156,7 +156,8 @@ for (const kind of ['Person', 'Character'] as const)
       await act(async () => router.load());
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
       expect(host.textContent).toContain('Mél—旅人 39');
-      expect(document.activeElement).toBe(host.querySelector('[data-names-sources] a'));
+      expect(document.activeElement?.textContent).toBe(host.querySelector('[data-names-sources] a')?.textContent);
+      expect(document.activeElement === host.querySelector('[data-names-sources] a')).toBe(true);
       await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
       await act(async () => router.load());
       const nextSaved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
@@ -284,7 +285,9 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
       const group = host.querySelector<HTMLDetailsElement>(`[data-name-language="${language}"]`)!;
       group.open = true;
       await act(async () => [...group.querySelectorAll('button')].find((b) => b.textContent === 'More names')!.click());
-      const copy = group.querySelector<HTMLButtonElement>('button')!;
+      const copy = [...group.querySelectorAll('li')]
+        .find((row) => row.querySelector('[data-supplied-name]')?.textContent === spelling)!
+        .querySelector<HTMLButtonElement>('button')!;
       expect(copy.closest('li')?.textContent).toContain(spelling);
       await act(async () => copy.focus());
       await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
@@ -309,10 +312,7 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
       expect(JSON.stringify(saved)).not.toContain(spelling);
       current = structuredClone(current);
       if (outcome === 'surviving')
-        current.subject.aliases.en = [
-          ...current.subject.aliases.en!.slice(0, 24),
-          ...current.subject.aliases.en!.slice(24).reverse(),
-        ];
+        current.subject.aliases.en!.splice(24, 2, ...current.subject.aliases.en!.slice(24, 26).reverse());
       if (outcome === 'removed' || outcome === 'language' || outcome === 'role')
         current.subject.aliases.en = current.subject.aliases.en!.filter((text) => text !== spelling);
       if (outcome === 'language') current.subject.aliases.ja = [spelling];

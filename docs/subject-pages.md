@@ -2456,28 +2456,22 @@ loading, failure, refusal and signed-out state. Only failed advice has one expli
 reading starts a new visit. It never retries the Subject or each language. Terms re-reads its original native
 candidate and authority and retains its existing draft/uncertain-command recovery.
 
-Decision: supplied-name return uses one bounded browser history value and the existing validated same-locale `via`
-address; filters stay out of URLs, and changed caller, Context or release refuses restoration.
-The shared handoff restores the expanded disclosure, mounted language groups, group/row window, filter and Terms
-or Sources focus on work and people names. Its binding includes Subject, actual Context, selected Realm, locale,
-release/revision and browser session-cache incarnation metadata (including weak query identity, so replacing a cache entry cannot revive a return); it contains no credentials or editing state.
-A returned fresh page may restore the view, but a mounted retired source object never becomes current again,
-including A-to-B-to-A, locale replacement and session refresh. Late copy and advice callbacks cannot update it.
-Ordinary browser history owns the value; there is no return registry, retained catalogue or former reading list.
+Decision: one bounded browser-history value and the validated same-locale `via` restore work/people names expansion,
+mounted groups, group/row windows, filter and Terms/Sources focus. Filters stay out of URLs. Binding includes Subject,
+actual Context, selected Realm, locale, release/revision and session-cache incarnation (including weak query identity).
+Changed bindings refuse restoration. No credentials or editor state are retained. A fresh page may restore; retired
+source objects never revive, including A-to-B-to-A, locale replacement and session refresh. Late copy/advice cannot
+update them. History owns the value, without a registry, retained catalogue or former reading list.
 
-Decision: shared exact-name focus carries only language, label/alias role and a SHA-256 identity of the exact JSON
-spelling, never copied spelling or a former row index. The fresh finite projection must contain that address and its
-current mounted copy control before focus returns there. Removed, moved-language, changed-role or unmounted names
-show changed-reading recovery at the connected language summary, or the names summary if its group is absent.
-Restoration leaves an already focused connected control alone. The shared presentation exposes only current group
-and name targets; no second handoff or retained name registry is added.
+Decision: exact-name focus carries language, label/alias role and SHA-256 identity of the exact JSON spelling,
+without copied spelling or row indices. Validate against fresh finite names and connected copy controls. Removed,
+moved-language, changed-role or unmounted names show changed-reading recovery at the current language summary,
+or names summary if absent. Connected visitor focus wins. Presentation exposes current group/name targets only.
 
-Decision: name Sources activation uses the existing validated same-locale `via` address with the actual selected
-Realm and stores its closed view descriptor only in ordinary browser history. Back, Forward and the explicit
-`SubjectSourcesPage.returnTo` link transfer the same validated descriptor through the existing Names return adapter.
-A state-less return or new tab focuses the newly admitted names section and restarts its local window. Sources
-continues to own native disclosure and provider selection. A departure whose descriptor exceeds the history budget
-still navigates with its validated return URL and restarts without local state.
+Decision: Sources uses validated same-locale `via` with the selected Realm. Back, Forward and explicit
+`SubjectSourcesPage.returnTo` share the closed history descriptor through the Names return adapter. Without state
+(including new tabs or over-budget descriptors), navigation still works; return focuses fresh names and restarts
+the window. Sources owns native disclosure and provider selection.
 
 ### Supplied names Cost
 
