@@ -543,6 +543,42 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(host.textContent).toContain('Private F');
       expect(host.querySelector('input[name="operation"]')).toBeNull();
       expect(host.querySelector('input[name="q"]')!.getAttribute('value')).toBe(search.q!);
+
+      search = { q: '  Private %_ + & ?  ', cursor: 'exact+/native-rejected==' };
+      const rejectedRead = pendingReads.length;
+      await show(session('F'));
+      expect(pendingReads).toHaveLength(rejectedRead + 1);
+      const rejected = response('F', search);
+      rejected.page.state = 'unavailable';
+      rejected.page.labels = [];
+      rejected.page.next = null;
+      rejected.page.feedback = {
+        ok: false,
+        reason: 'invalid_cursor',
+        undo: { id: 'label-F', name: 'Original deleted name', revision: 52 },
+        undoKey: 'original-native-undo-key',
+      };
+      await settleRead(rejectedRead, rejected);
+      expect(host.textContent).toContain(m.library_labels_invalid_cursor());
+      expect(host.textContent).not.toContain('Private F');
+      expect(host.querySelector('input[name="operation"][value="create"]')).toBeNull();
+      const recovery = [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_collections_first_page());
+      expect(recovery?.getAttribute('href')).toBe(
+        `/en/library/labels?${new URLSearchParams({ q: search.q! })}`,
+      );
+      const undoForm = [...host.querySelectorAll('form')].find((form) =>
+        form.querySelector('input[name="operation"][value="restore"]'),
+      )!;
+      expect((undoForm.querySelector('input[name="undoId"]') as HTMLInputElement).value).toBe('label-F');
+      expect((undoForm.querySelector('input[name="undoName"]') as HTMLInputElement).value).toBe(
+        'Original deleted name',
+      );
+      expect((undoForm.querySelector('input[name="undoRevision"]') as HTMLInputElement).value).toBe('52');
+      expect((undoForm.querySelector('input[name="undoKey"]') as HTMLInputElement).value).toBe(
+        'original-native-undo-key',
+      );
+      expect(pendingReads).toHaveLength(rejectedRead + 1);
+
       initial = response('A', search); // A newly replaced loader also cannot keep a previously accepted F page.
       await show(session('F'), ['personal_library', 'library_label.list']);
       retired('A');

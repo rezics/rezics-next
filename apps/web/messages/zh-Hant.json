@@ -2418,6 +2418,7 @@
   "library_labels_empty": "你還沒有標籤。",
   "library_labels_page_empty": "此頁沒有可顯示的標籤。",
   "library_labels_stale_cursor": "此頁已過期。請從第一頁開始查看。",
+  "library_labels_invalid_cursor": "無法使用此已儲存的頁面位置。請從第一頁開始查看。",
   "library_label_unconfirmed": "無法確認此次變更的結果。請重試同一變更以確認結果。",
   "library_label_draft_navigation_title": "捨棄未儲存的標籤名稱？",
   "library_label_draft_navigation_description": "未儲存的標籤名稱將遺失。選擇留下可繼續編輯，選擇捨棄則繼續操作。",

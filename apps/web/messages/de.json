@@ -2418,6 +2418,7 @@
   "library_labels_empty": "Du hast noch keine Schlagwörter.",
   "library_labels_page_empty": "Auf dieser Seite werden keine Schlagwörter angezeigt.",
   "library_labels_stale_cursor": "Diese Seite ist nicht mehr aktuell. Beginne auf der ersten Seite.",
+  "library_labels_invalid_cursor": "Diese gespeicherte Seitenposition kann nicht verwendet werden. Beginne auf der ersten Seite.",
   "library_label_unconfirmed": "Diese Änderung konnte nicht bestätigt werden. Wiederhole dieselbe Änderung, um ihr Ergebnis zu prüfen.",
   "library_label_draft_navigation_title": "Ungespeicherten Labelnamen verwerfen?",
   "library_label_draft_navigation_description": "Dein ungespeicherter Labelname geht verloren. Bleibe zum Weiterbearbeiten oder verwirf ihn, um fortzufahren.",
