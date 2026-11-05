@@ -1,8 +1,26 @@
 import { expect, test } from 'bun:test';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import {
+  completeAgentVerification,
+  finishAgentVerification,
+  mergeVerifiedAgent,
+  readAgentVerificationWorkflowRequest,
+  recordPendingAgentVerification,
+} from '../../src/access/agent-verification.ts';
+import { accountAgentId, accountAgentsForSubjects } from '../../src/semantic/agents.ts';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
+import { readIdentityMappings } from '../../src/semantic/identity-adapters/read.ts';
+import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
+import { readAccountDiscoverySummaries } from '../../src/access/account-discovery-source.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
+import { runCommand } from '../../src/command/command.ts';
+import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { admittedAccess, authenticateAccount, accountToken } from '../support/admitted-access.ts';
+import { digest, epochFixture, globalResource, identityEpochDatabase } from '../semantic/support/identity-epoch.ts';
+import type { IdentityReceipt } from '../../src/semantic/identity-epoch-contract.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -182,3 +200,163 @@ test('native handled and handleless Accounts and catalogue Person converge; curr
     await pool.end();
   }
 }, 60_000);
+
+test('native account context reads the exact published agent graph and withholds pending or unavailable mappings', async () => {
+  const deployment = await identityEpochDatabase();
+  try {
+    const fixture = await epochFixture(deployment.url, { pool: deployment.pool });
+    try {
+      const pool = fixture.pool,
+        accountId = fixture.accounts.editor,
+        staffId = fixture.accounts.outsider,
+        routeKey = new Uint8Array(32).fill(93),
+        tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(46)]]) },
+        writeRate = createWriteRateLimiter({ secret: crypto.randomUUID() });
+      const routeKernel = createKernel({ pool, routeKey, tokens, writeRate });
+      const actions = new Map(actionCatalogue(routeKernel));
+      const access = admittedAccess({ actions });
+      const kernel = createKernel({ pool, routeKey, tokens, writeRate, access });
+      const clientId = 'account-population-context';
+      const scopes = [...actions.keys(), 'account:manage', 'gate:any'];
+      const accountBearer = await accountToken({ accountId, clientId, scopes });
+      const staffBearer = await accountToken({ accountId: staffId, clientId, scopes });
+      const subject = (await fixture.create('Published account context person')).subject.id;
+      const original = accountAgentId(accountId);
+      await ensureAccountAgent(pool, { account: accountId, kind: 'person', name: 'Published account context person' });
+      await fixture.real.grant({ route: routeOf(accountId)!, id: accountId }, 'editor', 'account:update');
+      await fixture.real.grant({ route: routeOf(accountId)!, id: accountId }, 'editor', 'account:read');
+      await bootstrapGovernance(pool, staffId);
+
+      const post = async (path: string, bearer: string, body?: unknown) => {
+        const headers: Record<string, string> = { [IDEMPOTENCY_HEADER]: JSON.stringify(crypto.randomUUID()) };
+        const init: RequestInit = { method: 'POST', headers };
+        if (body !== undefined) {
+          headers['content-type'] = 'application/json';
+          init.body = JSON.stringify(body);
+        }
+        headers.authorization = `Bearer ${bearer}`;
+        return kernel.handle(new Request(`https://kernel.test${path}`, init));
+      };
+      const opened = await post('/v1/platform/exposure/agent_verification:open', staffBearer);
+      expect(opened.status).toBe(200);
+      const requested = await post(`/v1/accounts/${accountId}:requestVerification`, accountBearer, {
+        subject,
+        statement: 'This public subject represents my account.',
+        links: [{ label: 'Website', url: 'https://example.test/profile' }],
+      });
+      expect(requested.status).toBe(200);
+      const requestBody = (await requested.json()) as { verificationRequest: { id: string } };
+      const approved = await post(`/v1/verification-requests/${requestBody.verificationRequest.id}:approve`, staffBearer, {});
+      expect(approved.status).toBe(200);
+      const decision = await readAgentVerificationWorkflowRequest(pool, requestBody.verificationRequest.id);
+      if (!decision?.decisionReceiptId) throw new Error('Approved verification has no native decision receipt');
+      const workflow = { ...decision, receiptId: decision.decisionReceiptId };
+      const clock = () => new Date();
+      await recordPendingAgentVerification(pool, workflow, clock);
+      await mergeVerifiedAgent(pool, workflow);
+      await completeAgentVerification(pool, workflow, clock);
+      await finishAgentVerification(pool, workflow, clock);
+
+      const nativeLink = (await accountAgentsForSubjects(pool, [subject])).get(subject);
+      expect(nativeLink).toMatchObject({
+        account: accountId,
+        agent_id: original,
+        subject,
+        verified: true,
+        receipt_id: workflow.receiptId,
+      });
+      const mappings = await readIdentityMappings(pool, [original, subject]);
+      expect(mappings).toMatchObject([
+        { state: 'mapped', original, terminal: subject },
+        { state: 'mapped', original: subject, terminal: subject },
+      ]);
+      if (mappings[0]?.state !== 'mapped' || mappings[1]?.state !== 'mapped')
+        throw new Error('Published account context mapping is unavailable');
+      expect(mappings[0].epoch).toBeGreaterThan(0n);
+      expect(mappings[0].epoch).toBe(mappings[1].epoch);
+
+      const actor = await authenticateAccount(
+        access,
+        { pool, deadline: Date.now() + 30_000 },
+        { accountId, clientId, scopes },
+      );
+      const read = (context: boolean) =>
+        readAccountDiscoverySummaries(
+          { pool, routeKey, access, actor, deadline: Date.now() + 30_000 },
+          [accountId],
+          { context },
+        );
+      const available = (await read(true)).get(accountId);
+      expect(available?.verifiedAgent).toEqual({
+        id: subject,
+        label: 'Published account context person',
+        type: 'schema:Person',
+      });
+      expect(available?.context?.followTarget).toMatchObject({
+        state: 'available',
+        id: subject,
+        label: 'Published account context person',
+        type: 'schema:Person',
+      });
+      expect((await read(false)).get(accountId)).not.toHaveProperty('context');
+
+      const sourceEpoch = mappings[0].epoch;
+      await fixture.admin.query(
+        'UPDATE semantic.identity_epoch_mapping SET epoch=0 WHERE route=$1 AND original=$2',
+        [routeOf(original), original],
+      );
+      try {
+        expect((await read(true)).get(accountId)?.context?.followTarget).toEqual({ state: 'unavailable' });
+      } finally {
+        await fixture.admin.query(
+          'UPDATE semantic.identity_epoch_mapping SET epoch=$3 WHERE route=$1 AND original=$2',
+          [routeOf(original), original, sourceEpoch.toString()],
+        );
+      }
+
+      const pendingSubject = (await fixture.create('Pending account context merge')).subject.id;
+      const merger = await authenticateAccount(
+        access,
+        { pool, deadline: Date.now() + 30_000 },
+        { accountId, clientId, scopes },
+      );
+      const store = identityEpochStore,
+        key = crypto.randomUUID();
+      const receipt: IdentityReceipt = {
+        kind: 'subject.merge',
+        command: {
+          actorAccountId: accountId,
+          kind: 'subject.merge',
+          key,
+          digest: digest(key),
+        },
+      };
+      await runCommand(
+        pool,
+        {
+          partition: store.controlPartition,
+          basis: { actorAccountId: merger.accountId, clientId: merger.clientId, requestedBy: merger.requestedBy },
+          authorization: await accessCommandAuthorization(
+            access,
+            merger,
+            'subject:merge',
+            globalResource,
+            { pool, deadline: Date.now() + 30_000 },
+            () => new Error('Native identity merge admission denied'),
+          ),
+        },
+        (tx) =>
+          store.admit(tx, {
+            intent: { kind: 'merge', survivor: subject, redirected: pendingSubject, release: bundledDigest },
+            receipt,
+          }),
+      );
+      expect(await store.readMapping(pool, original)).toMatchObject({ state: 'pending' });
+      expect((await read(true)).get(accountId)?.context?.followTarget).toEqual({ state: 'unavailable' });
+    } finally {
+      await fixture.close();
+    }
+  } finally {
+    await deployment.close();
+  }
+}, 120_000);
