@@ -32,3 +32,28 @@ Keyboard navigation reuses the existing focus owner for one admitted heading han
 
 The [native bulk contract](../../../../services/kernel/src/library/bulk-contract.md) owns effects, operation-bound
 cursor invalidation, outcome facts and deletion evidence; applied outcomes alone never authorize Undo.
+
+## Undo evidence windows
+
+The mounted Undo reader keeps eight predecessor opaque coordinates, the accepted current coordinate and one
+staged target, each cursor at most 4096 characters. History stores coordinates only. Native evidence is one replacing
+page of at most twenty outcomes. Previous rereads the exact predecessor; First omits cursor; Refresh rereads the
+accepted coordinate. More follows only the current native next, abandoning the forward branch. Successful empty
+pages commit movement, including terminal pages; failed movement retains its exact target for deliberate Retry.
+Invalid retired cursors use deliberate First recovery and a fresh admitted path. Movement commits only while its
+original private admission remains current. Address, locale, mounted reader and private authority replacement retire
+coordinates and failed targets through the existing origin; display rerenders retain them.
+
+Decision: use the existing localized window controls and render captured restore attempts separately from current
+native evidence, preserving uncertain Retry and completed results when a row leaves the page. No navigation creates,
+replaces or settles a restore command. Preparation and sending block movement. Refresh never follows an acknowledged
+restore automatically. Revisited targets use current authorized deletion evidence and the existing exact preparation;
+expired evidence retains its expired meaning. Applied outcomes and counts alone never authorize Undo.
+
+Each read activation performs one operation GET and one native outcomes GET with limit twenty, without prefetch,
+refill or hydration. Deliberate preparation uses the existing session authorization, one exposure GET and the same
+bounded operation/outcomes read; it seals credentials and creates one request key. Restore retains existing session/credential authorization and one native restore POST (an occupied result may
+reread that Entry once; successful/occupied results retain the action’s existing presentation naming reads). Exact uncertain Retry repeats that original command, sender,
+headers and credential, without another preparation. There is no browser persistence or additional receipt ledger.
+The [native reader](bulk-operation-recovery-native.ts), [deletion evidence decoder](bulk-operation-undo-evidence.ts)
+and [Undo preparation](bulk-operation-undo-native.ts) retain their independent authorization and deadline contracts.

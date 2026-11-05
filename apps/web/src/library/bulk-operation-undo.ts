@@ -53,6 +53,8 @@ export type UndoState = {
   operation?: BulkOperation;
   page?: Extract<BulkUndoRead, { state: 'ready' }>['page'] | undefined;
   cursor?: string | undefined;
+  previous?: boolean;
+  readRetry?: boolean;
   preparing?: string | undefined;
   failure?: ReadFailure | undefined;
 };
@@ -64,6 +66,19 @@ export class BulkOperationUndo {
   private live = true;
   private reading = false;
   private sending = false;
+  private predecessors: (string | undefined)[] = [];
+  private target?: { cursor: string | undefined; movement: 'current' | 'more' | 'previous' | 'first' };
+  private evidenceCurrent?: () => boolean;
+
+  /** Coordinates retire with read authority; captured commands retain their separate lifetime. */
+  retireEvidence() {
+    if (!this.evidenceCurrent || this.evidenceCurrent()) return;
+    this.evidenceCurrent = undefined;
+    this.predecessors = [];
+    this.target = undefined;
+    this.state = { read: 'unavailable' };
+    this.publish();
+  }
   constructor(
     readonly address: Readonly<{ id: string; viewer: string }>,
     private access: Access,
@@ -82,31 +97,67 @@ export class BulkOperationUndo {
   private publish() {
     if (this.current()) this.changed();
   }
-  async read(cursor = this.state.cursor) {
-    if (!this.current() || this.reading) return;
+  read() {
+    this.retireEvidence();
+    return this.move({ cursor: this.state.cursor, movement: 'current' });
+  }
+  retryRead() {
+    this.retireEvidence();
+    if (this.target) return this.move(this.target);
+  }
+  first() {
+    this.retireEvidence();
+    return this.move({ cursor: undefined, movement: 'first' });
+  }
+  previous() {
+    this.retireEvidence();
+    if (this.predecessors.length) return this.move({ cursor: this.predecessors.at(-1), movement: 'previous' });
+  }
+  more() {
+    this.retireEvidence();
+    if (this.state.page?.next) return this.move({ cursor: this.state.page.next, movement: 'more' });
+  }
+  private async move(target: NonNullable<BulkOperationUndo['target']>) {
+    if (!this.current() || this.reading || this.sending) return;
     const current = this.access.capture();
+    this.evidenceCurrent = current;
+    this.target = target;
     this.reading = true;
-    this.state = { ...this.state, read: 'loading', cursor, page: undefined };
+    this.state = { ...this.state, read: 'loading', readRetry: false, page: undefined };
     this.publish();
     let result: BulkUndoRead;
     try {
-      result = await this.transport.read({ ...this.address, ...(cursor === undefined ? {} : { cursor }) });
+      result = await this.transport.read({
+        ...this.address,
+        ...(target.cursor === undefined ? {} : { cursor: target.cursor }),
+      });
     } catch {
       result = { state: 'unavailable' };
     }
     this.reading = false;
     if (!this.current() || !current()) return;
     if (result.state === 'ready' && result.operation.id !== this.address.id) result = { state: 'unavailable' };
-    this.state =
-      result.state === 'ready'
-        ? { ...this.state, read: 'ready', operation: result.operation, page: result.page }
-        : { ...this.state, read: result.state, page: undefined };
+    if (result.state === 'ready') {
+      if (target.movement === 'more') this.predecessors = [...this.predecessors, this.state.cursor].slice(-8);
+      else if (target.movement === 'previous') this.predecessors.pop();
+      else if (target.movement === 'first') this.predecessors = [];
+      this.target = undefined;
+      this.state = {
+        ...this.state,
+        read: 'ready',
+        operation: result.operation,
+        page: result.page,
+        cursor: target.cursor,
+        previous: this.predecessors.length > 0,
+        readRetry: false,
+      };
+    } else {
+      this.state = { ...this.state, read: result.state, page: undefined, readRetry: true };
+    }
     this.publish();
   }
-  more() {
-    if (this.state.page?.next) return this.read(this.state.page.next);
-  }
   async restore(ordinal: string, retry = false) {
+    this.retireEvidence();
     if (!this.current() || this.sending || !this.access.restore()) return;
     let attempt = this.attempts.get(ordinal);
     if (retry ? attempt?.status !== 'uncertain' : !!attempt) return;
