@@ -282,7 +282,15 @@ async function form(page: Page) {
   const emailInput = page.getByLabel('Email', { exact: true });
   const passwordInput = page.getByLabel('Password', { exact: true });
   const confirmationInput = page.getByLabel('Confirm password', { exact: true });
-  expect(await handleInput.count(), 'sign-up has a labelled handle field').toBe(1);
+  if ((await handleInput.count()) !== 1)
+    throw new Error(
+      `sign-up form unavailable: ${JSON.stringify({
+        url: page.url(),
+        alerts: await page.getByRole('alert').allTextContents(),
+        status: await page.getByRole('status').allTextContents(),
+        requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+      })}`,
+    );
   expect(await emailInput.count(), 'sign-up has a labelled email field').toBe(1);
   expect(await passwordInput.count(), 'sign-up has a labelled password field').toBe(1);
   expect(await confirmationInput.count(), 'sign-up confirms the password locally').toBe(1);
