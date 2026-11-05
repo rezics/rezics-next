@@ -138,7 +138,7 @@ export function projectRevisionSource(cwd: string, commit: string, paths: readon
   const lines = output ? output.split('\n') : [];
   unique.forEach((path, index) => {
     const line = lines[index] ?? '';
-    objects.set(path, line.endsWith(' missing') ? null : (line.split(' ')[0] || null));
+    objects.set(path, line.endsWith(' missing') ? null : line.split(' ')[0] || null);
   });
   return { commit, objects, gitReads: 1 };
 }
