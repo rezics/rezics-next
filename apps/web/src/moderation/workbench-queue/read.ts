@@ -109,8 +109,7 @@ class WorkbenchReadFailure extends Error {
 }
 
 function boundedQueueContinuation(cursor: string | null): string | null {
-  if (cursor !== null && (cursor.length === 0 || cursor.length > 4096))
-    throw new WorkbenchReadFailure('unavailable');
+  if (cursor !== null && (cursor.length === 0 || cursor.length > 4096)) throw new WorkbenchReadFailure('unavailable');
   return cursor;
 }
 

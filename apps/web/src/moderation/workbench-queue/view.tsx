@@ -83,7 +83,10 @@ function CaseRow({
   if (!scope) return null;
   const href = localizeHref(workbenchCaseHref(item, search));
   return (
-    <li id={item.kind === 'report' ? `workbench-case-${encodeURIComponent(item.id)}` : undefined} className="min-w-0 border-b py-3">
+    <li
+      id={item.kind === 'report' ? `workbench-case-${encodeURIComponent(item.id)}` : undefined}
+      className="min-w-0 border-b py-3"
+    >
       {selection && item.kind === 'report' ? (
         <WorkbenchReportSelect controller={selection} reportId={item.id} number={number} />
       ) : null}
@@ -152,7 +155,10 @@ export function WorkbenchView({
     !search.case &&
     queueScope?.kind === 'board' &&
     (search.queue === 'reports' || search.queue === 'resolved');
-  const leaveFor = (event: MouseEvent<HTMLButtonElement>, proceed: (source: HTMLButtonElement, keyboard: boolean) => void) => {
+  const leaveFor = (
+    event: MouseEvent<HTMLButtonElement>,
+    proceed: (source: HTMLButtonElement, keyboard: boolean) => void,
+  ) => {
     const source = event.currentTarget;
     const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
     departure.requestNavigation(() => proceed(source, keyboard));
@@ -300,7 +306,9 @@ export function WorkbenchView({
                   </Button>
                 ) : null}
               </nav>
-              <p role="status" className="sr-only">{m.moderation_workbench_window_loaded()}</p>
+              <p role="status" className="sr-only">
+                {m.moderation_workbench_window_loaded()}
+              </p>
             </>
           ) : null}
           <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">

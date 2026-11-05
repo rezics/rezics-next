@@ -112,7 +112,10 @@ function createVisit(original: WorkbenchCasePageProps, client: QueryClient | und
 export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
   const client = useContext(QueryClientContext);
   const browserClient = typeof window !== 'undefined' ? client : undefined;
-  const windowHistory = useMemo(() => (browserClient ? workbenchQueueWindowHistory(browserClient) : undefined), [browserClient]);
+  const windowHistory = useMemo(
+    () => (browserClient ? workbenchQueueWindowHistory(browserClient) : undefined),
+    [browserClient],
+  );
   const visit = useRef<WorkbenchVisit | null>(null);
   const previous = visit.current;
   if (!previous || previous.page.generation !== props.page.generation) {
@@ -151,7 +154,17 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
         locale: getLocale(),
       });
     }
-  }, [current, props.active, props.input, props.navigation?.visitId, props.page, props.reportId, props.search, readerVersion, windowHistory]);
+  }, [
+    current,
+    props.active,
+    props.input,
+    props.navigation?.visitId,
+    props.page,
+    props.reportId,
+    props.search,
+    readerVersion,
+    windowHistory,
+  ]);
 
   function returnToQueue(source?: HTMLElement) {
     if (!props.onReturnQueue) return;

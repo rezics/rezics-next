@@ -165,8 +165,7 @@ export function WorkbenchPage({
   function navigateSearch(next: WorkbenchSearch) {
     if (!isCurrent()) return;
     if (windowHistory) {
-      if (isWorkbenchHistoryTransition(search, next))
-        windowHistory.beginHistory(navigation?.visitId, search, next);
+      if (isWorkbenchHistoryTransition(search, next)) windowHistory.beginHistory(navigation?.visitId, search, next);
       else windowHistory.clearForVisit(navigation?.visitId);
     }
     onSearch(next);

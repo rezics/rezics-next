@@ -6,11 +6,8 @@ import type { WorkbenchSearch } from '../src/moderation/workbench-queue/scope';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const {
-  WorkbenchQueueWindowHistory,
-  WORKBENCH_PRIOR_WINDOW_LIMIT,
-  workbenchReaderFence,
-} = await import('../src/moderation/workbench-queue/window-history');
+const { WorkbenchQueueWindowHistory, WORKBENCH_PRIOR_WINDOW_LIMIT, workbenchReaderFence } =
+  await import('../src/moderation/workbench-queue/window-history');
 const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
@@ -150,12 +147,14 @@ test('failed Next keeps its cursor and exact Retry direction; sparse admitted pa
   const failed = page('unavailable', null);
   history.admitQueue({ visitId: 'visit-1', page: failed, search: requested, locale: 'en', admitted: true });
   expect(history.view('visit-1', requested, 'unavailable').retry).toBe('next');
-  expect(history.beginRetry({
-    visitId: 'visit-1',
-    search: requested,
-    fence: workbenchReaderFence(failed, 'en'),
-    keyboard: false,
-  })).toBe(true);
+  expect(
+    history.beginRetry({
+      visitId: 'visit-1',
+      search: requested,
+      fence: workbenchReaderFence(failed, 'en'),
+      keyboard: false,
+    }),
+  ).toBe(true);
 
   const admitted = page('ready', 'cursor-2');
   history.admitQueue({ visitId: 'visit-1', page: admitted, search: requested, locale: 'en', admitted: true });
@@ -253,7 +252,13 @@ test('direct canonical deep links have no invented predecessors and a changed re
     }),
   ).toBe(true);
   expect(history.navigate('second-visit', target(restarted), second, expired)).toBe(true);
-  history.admitQueue({ visitId: 'recovered', page: page('ready', 'cursor-1', 5), search: restarted, locale: 'en', admitted: true });
+  history.admitQueue({
+    visitId: 'recovered',
+    page: page('ready', 'cursor-1', 5),
+    search: restarted,
+    locale: 'en',
+    admitted: true,
+  });
   expect(history.view('recovered', restarted, 'ready')).toMatchObject({ previous: false, first: false });
 });
 
@@ -265,12 +270,10 @@ test('an oversized native continuation cannot become a queue address', async () 
       },
     }),
   };
-  const result = await readWorkbenchPage(
-    client as never,
-    queue(),
-    'credential-is-not-retained',
-    { subject: 'moderator', csrfFingerprint: 'private' },
-  );
+  const result = await readWorkbenchPage(client as never, queue(), 'credential-is-not-retained', {
+    subject: 'moderator',
+    csrfFingerprint: 'private',
+  });
   expect(result.state).toBe('unavailable');
   expect(result.next).toBeNull();
 });

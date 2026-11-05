@@ -18,9 +18,8 @@ const {
   workbenchCaseQueueHref,
 } = await import('../src/moderation/workbench-case/read-model');
 const { WorkbenchCaseDetail } = await import('../src/moderation/workbench-case');
-const { WorkbenchQueueWindowHistory, workbenchReaderFence } = await import(
-  '../src/moderation/workbench-queue/window-history'
-);
+const { WorkbenchQueueWindowHistory, workbenchReaderFence } =
+  await import('../src/moderation/workbench-queue/window-history');
 const {
   workbenchCaseHref: workbenchRowHref,
   workbenchQueueHref,
@@ -213,7 +212,13 @@ test('same-session exact case return rereads the captured queue and restores its
     ),
   ).toBe(true);
   const admittedReturn = { ...privatePage, state: 'ready' as const, next: 'queue-cursor-3' };
-  history.admitQueue({ visitId: 'queue-return-visit', page: admittedReturn, search: returned, locale: 'en', admitted: true });
+  history.admitQueue({
+    visitId: 'queue-return-visit',
+    page: admittedReturn,
+    search: returned,
+    locale: 'en',
+    admitted: true,
+  });
   expect(history.previousAddress('queue-return-visit', returned)).toBeNull();
   expect(returned.cursor).toBe('queue-cursor-2');
   expect(returned.directoryCursor).toBe('directory-frontier');

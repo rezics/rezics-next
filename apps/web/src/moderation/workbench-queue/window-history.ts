@@ -1,12 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { PrivateReaderRead } from '../private-reader-lifetime';
 import { parseWorkbenchCaseSearch, type WorkbenchCaseSearch } from '../workbench-case/read-model';
-import {
-  workbenchScope,
-  workbenchSearch,
-  type WorkbenchQueueKind,
-  type WorkbenchSearch,
-} from './scope';
+import { workbenchScope, workbenchSearch, type WorkbenchQueueKind, type WorkbenchSearch } from './scope';
 
 export const WORKBENCH_PRIOR_WINDOW_LIMIT = 8;
 const WORKBENCH_WINDOW_LIMIT = WORKBENCH_PRIOR_WINDOW_LIMIT + 1;
@@ -169,22 +164,17 @@ function caseMatchesQueue(
 ) {
   const routeId = caseIdFromPath(target.pathname);
   const search = parseWorkbenchCaseSearch(target.search);
-  return (
-    (routeId === encodeURIComponent(expectedReportId) || routeId === expectedReportId) &&
+  return (routeId === encodeURIComponent(expectedReportId) || routeId === expectedReportId) &&
     search &&
     caseSearchMatchesQueue(identity, address, search)
-      ? expectedReportId
-      : null
-  );
+    ? expectedReportId
+    : null;
 }
 
 function queueAddressMatches(identity: QueueIdentity, address: WorkbenchAddress, target: WorkbenchSearch) {
   const targetIdentity = identityOf(target);
   return (
-    targetIdentity !== null &&
-    sameIdentity(identity, targetIdentity) &&
-    cursorOf(target) === address &&
-    !target.case
+    targetIdentity !== null && sameIdentity(identity, targetIdentity) && cursorOf(target) === address && !target.case
   );
 }
 
@@ -253,23 +243,26 @@ export class WorkbenchQueueWindowHistory {
     this.publish();
   }
 
-  view(visitId: string | undefined, search: WorkbenchSearch, pageState: WorkbenchQueuePage['state']): WorkbenchWindowView {
+  view(
+    visitId: string | undefined,
+    search: WorkbenchSearch,
+    pageState: WorkbenchQueuePage['state'],
+  ): WorkbenchWindowView {
     const identity = identityOf(search);
     const state = this.state;
     const matches = Boolean(
       visitId &&
-        identity &&
-        state &&
-        state.visitId === visitId &&
-        sameIdentity(state.identity, identity) &&
-        !search.history &&
-        !search.case,
+      identity &&
+      state &&
+      state.visitId === visitId &&
+      sameIdentity(state.identity, identity) &&
+      !search.history &&
+      !search.case,
     );
     const active = matches && state?.mode === 'queue' && state.index >= 0 && !state.pending;
     const current = active ? state!.addresses[state!.index] : null;
-    const pendingMove = matches && state?.mode === 'failed' && state.pending?.kind === 'move'
-      ? state.pending.move
-      : undefined;
+    const pendingMove =
+      matches && state?.mode === 'failed' && state.pending?.kind === 'move' ? state.pending.move : undefined;
     const isFirst = cursorOf(search) === null;
     const firstPending = Boolean(matches && state?.pending?.kind === 'move' && state.pending.move === 'first');
     return {
@@ -277,11 +270,8 @@ export class WorkbenchQueueWindowHistory {
       refresh: Boolean(active && pageState === 'ready' && current === cursorOf(search)),
       first: Boolean(
         identity &&
-          pageState !== 'denied' &&
-          (pageState === 'stale' ||
-            !isFirst ||
-            Boolean(active && state!.index > 0) ||
-            firstPending),
+        pageState !== 'denied' &&
+        (pageState === 'stale' || !isFirst || Boolean(active && state!.index > 0) || firstPending),
       ),
       ...(pendingMove ? { retry: pendingMove } : matches && state?.mode === 'failed' ? { retry: 'current' } : {}),
     };
@@ -299,14 +289,12 @@ export class WorkbenchQueueWindowHistory {
     const state = this.state;
     if (!identity || !input.visitId || !input.fence || !state || state.visitId !== input.visitId) return false;
     if (!sameIdentity(state.identity, identity) || !sameFence(state.fence, input.fence)) return false;
-    if (
-      state.mode !== 'queue' &&
-      !(input.move === 'first' && (state.mode === 'stale' || state.mode === 'failed'))
-    )
+    if (state.mode !== 'queue' && !(input.move === 'first' && (state.mode === 'stale' || state.mode === 'failed')))
       return false;
     if (state.pending && input.move !== 'first') return false;
     if (input.move === 'previous' && state.index <= 0) return false;
-    if (input.move === 'next' && (state.index < 0 || cursorOf(input.search) !== state.addresses[state.index])) return false;
+    if (input.move === 'next' && (state.index < 0 || cursorOf(input.search) !== state.addresses[state.index]))
+      return false;
     if (input.move === 'refresh' && (state.index < 0 || cursorOf(input.search) !== state.addresses[state.index]))
       return false;
     if (input.move === 'first') {
@@ -367,7 +355,7 @@ export class WorkbenchQueueWindowHistory {
       !nextIdentity ||
       !state ||
       state.visitId !== visitId ||
-      state.mode !== 'queue' && state.mode !== 'history' ||
+      (state.mode !== 'queue' && state.mode !== 'history') ||
       !sameIdentity(state.identity, identity) ||
       !sameIdentity(identity, nextIdentity) ||
       cursorOf(current) !== cursorOf(next) ||
@@ -514,11 +502,7 @@ export class WorkbenchQueueWindowHistory {
       allowed = Boolean(next && identity && sameIdentity(state.identity, identity) && !next.history && !next.case);
       if (allowed) {
         if (pending.move === 'next')
-          allowed =
-            page.state === 'ready' &&
-            !!page.next &&
-            page.next.length <= 4096 &&
-            next!.cursor === page.next;
+          allowed = page.state === 'ready' && !!page.next && page.next.length <= 4096 && next!.cursor === page.next;
         else if (pending.move === 'previous')
           allowed = state.index > 0 && (next!.cursor ?? null) === state.addresses[state.index - 1];
         else if (pending.move === 'first') allowed = next!.cursor === undefined;
@@ -532,29 +516,27 @@ export class WorkbenchQueueWindowHistory {
       const targetAddress = next ? cursorOf(next) : null;
       allowed = Boolean(
         next &&
-          nextIdentity &&
-          currentIdentity &&
-          sameIdentity(state.identity, nextIdentity) &&
-          sameIdentity(state.identity, currentIdentity) &&
-          currentAddress === address &&
-          targetAddress === address &&
-          (isHistorySearch(next) || Boolean(next.historyReturn)),
+        nextIdentity &&
+        currentIdentity &&
+        sameIdentity(state.identity, nextIdentity) &&
+        sameIdentity(state.identity, currentIdentity) &&
+        currentAddress === address &&
+        targetAddress === address &&
+        (isHistorySearch(next) || Boolean(next.historyReturn)),
       );
     } else if (allowed && pending.kind === 'case-open') {
       const caseSearch = parseWorkbenchCaseSearch(target.search);
-      const targetReportId = address === undefined ? null : caseMatchesQueue(state.identity, address, target, state.reportId ?? '');
+      const targetReportId =
+        address === undefined ? null : caseMatchesQueue(state.identity, address, target, state.reportId ?? '');
       allowed = Boolean(
         targetReportId === state.reportId &&
-          caseSearch &&
-          caseSearchMatchesQueue(state.identity, address ?? null, caseSearch),
+        caseSearch &&
+        caseSearchMatchesQueue(state.identity, address ?? null, caseSearch),
       );
     } else if (allowed && pending.kind === 'case-return') {
       const next = workbenchTarget(target);
       allowed = Boolean(
-        next &&
-          currentIdentity === null &&
-          allowedCaseReturnSearch(state, target.search) &&
-          !next.historyReturn,
+        next && currentIdentity === null && allowedCaseReturnSearch(state, target.search) && !next.historyReturn,
       );
     }
 
@@ -576,7 +558,14 @@ export class WorkbenchQueueWindowHistory {
   }): FocusResult | null {
     const identity = identityOf(input.search);
     const fence = fenceOf(input.page, input.locale);
-    if (input.page.state === 'denied' || !input.visitId || !identity || !fence || !input.admitted || input.search.case) {
+    if (
+      input.page.state === 'denied' ||
+      !input.visitId ||
+      !identity ||
+      !fence ||
+      !input.admitted ||
+      input.search.case
+    ) {
       this.clear();
       return null;
     }
@@ -606,8 +595,7 @@ export class WorkbenchQueueWindowHistory {
         ...(input.page.state === 'unavailable' ? { pending: { kind: 'move', move: 'current' } as const } : {}),
       };
       this.state = state;
-      if (input.page.state === 'ready' && !input.search.history)
-        this.startChain(state, cursorOf(input.search));
+      if (input.page.state === 'ready' && !input.search.history) this.startChain(state, cursorOf(input.search));
       const focus = this.consumeFocus(state, input.page.state);
       this.publish();
       return focus;
@@ -753,8 +741,10 @@ export function isWorkbenchHistoryTransition(current: WorkbenchSearch, next: Wor
   const from = identityOf(current);
   const to = identityOf(next);
   return Boolean(
-    from && to && sameIdentity(from, to) && cursorOf(current) === cursorOf(next) &&
-      (isHistorySearch(next) || (current.history && next.historyReturn)),
+    from &&
+    to &&
+    sameIdentity(from, to) &&
+    cursorOf(current) === cursorOf(next) &&
+    (isHistorySearch(next) || (current.history && next.historyReturn)),
   );
 }
-
