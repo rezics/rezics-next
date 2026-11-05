@@ -1291,7 +1291,7 @@ test("a walk worker's own checks still place on a check host, as any other worke
       { label: 'the run', root: directory, cwd: directory, command: ['true'] },
       { ...fixture.env, KERNEL_CHECK_REMOTE: hosts, GOAL_TASK_ID: 'worker', ...extra },
       async (options) => {
-        placed.push(options.allowedHosts);
+        placed.push(options.hosts.map(({ name }) => name));
         return 0;
       },
     );
