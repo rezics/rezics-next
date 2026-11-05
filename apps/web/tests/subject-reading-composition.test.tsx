@@ -19,6 +19,20 @@ import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profil
 import recordedSubject from '../src/kernel/recorded/subject.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+function subjectPageFetch<T extends object>(recording: T): typeof fetch {
+  const fallback = createRecordedKernelFetch({ 'subject-page': recording as never });
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.method === 'POST' && new URL(request.url).pathname === '/v1/pages:read') {
+      const { status: rawStatus, ...body } = recording as T & { status?: unknown };
+      const status = typeof rawStatus === 'number' ? rawStatus : 200;
+      return Response.json(body, { status });
+    }
+    return fallback(request);
+  }) as typeof fetch;
+}
+
 const [
   { loadSubjectPage, SubjectPage, subjectBody, pageContext },
   { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage },
@@ -53,7 +67,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   // The recorded native default composition, with the same owner leaves as the ordinary route.
   const recorded = await loadSubjectPage(
     createKernelClient('https://kernel.invalid', {
-      fetch: createRecordedKernelFetch({ 'subject-page': recordedPage }),
+      fetch: subjectPageFetch(recordedPage),
     }),
     recordedPage.subject,
   );
@@ -169,23 +183,12 @@ test('The default Subject reader does not describe admitted incoming editions as
   const renderLoaded = async (recording: typeof ownEmpty) => {
     const loaded = await loadSubjectPage(
       createKernelClient('https://kernel.invalid', {
-        fetch: createRecordedKernelFetch({ 'subject-page': recording }),
+        fetch: subjectPageFetch(recording),
       }),
       recordedPage.subject,
     );
     if (loaded.kind !== 'page') throw new Error('Expected a loaded subject page.');
-    const loadedPlan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
-    const html = renderPage(loaded.page);
-    console.log('loaded render diagnostic', JSON.stringify({
-      views: loaded.page.views,
-      node: loadedPlan.nodes.editions,
-      planned: loadedPlan.reads[loadedPlan.nodes.editions!],
-      result: loaded.page.reads[loadedPlan.nodes.editions!],
-      sections: [...html.matchAll(/id="([^"]+)"/g)]
-        .map(([, id]) => id)
-        .filter((id) => ['editions', 'summary', 'sources', 'edition-work'].includes(id ?? '')),
-    }));
-    return html;
+    return renderPage(loaded.page);
   };
   const incoming = await renderLoaded(ownEmpty);
   expect(incoming).toContain('The Little Prince (Reynal &amp; Hitchcock, 1943)');
@@ -230,7 +233,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   }
 
   // A dependency failure retries the same ordinary read, with no command or privileged fallback.
-  const recordedFetch = createRecordedKernelFetch({ 'subject-page': ownEmpty });
+  const recordedFetch = subjectPageFetch(ownEmpty);
   const requests: Request[] = [];
   const recoveryClient = createKernelClient('https://kernel.invalid', {
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
