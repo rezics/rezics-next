@@ -604,10 +604,10 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
     ['26', 'person:7001', 2002],
   ]);
   expect(planned.gaps).toContainEqual(
-    expect.objectContaining({ reason: 'Author identity is not an individual person', property: 'schema:author' }),
+    expect.objectContaining({ reason: 'author identity is not an individual person', property: 'schema:author' }),
   );
   expect(planned.gaps).toContainEqual(
-    expect.objectContaining({ reason: 'Author identity is missing from the dump', property: 'schema:author' }),
+    expect.objectContaining({ reason: 'author identity is missing from the dump', property: 'schema:author' }),
   );
 
   const directory = await mkdtemp(join(tmpdir(), 'showcase-books-gaps-'));
