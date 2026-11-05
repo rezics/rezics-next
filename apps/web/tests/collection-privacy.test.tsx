@@ -141,6 +141,7 @@ test('review keeps a retained unsupported visibility labelled and offers Use cur
   const current = {
     ...privateCurated,
     visibility: 'public' as const,
+    revision: 8,
     allowedVisibilityActions: ['private'] as const,
   };
   await mounted(
