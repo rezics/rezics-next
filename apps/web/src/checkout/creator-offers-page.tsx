@@ -140,6 +140,7 @@ function OfferCommands({
   const csrf = () => guard.csrfToken();
   const uncertain = result?.kind === 'retry';
   const conflicted = result?.kind === 'conflict';
+  const requiresReview = !!result && result.kind !== 'retry' && result.kind !== 'saved';
   const frozen = busy || uncertain || conflicted || (result?.kind === 'saved' && !confirmed);
   const editable = observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
   // Disclosure never hides an edited intent or an operation's recovery/result. Authority
@@ -169,7 +170,13 @@ function OfferCommands({
       // This read starts after the command result. An older or missing row cannot
       // settle the display, and reading never resubmits the saved command.
       const current = await confirmOffer(observed.id);
-      if (!lifetime.active || !guard.isCurrent() || !current || current.revision <= observed.revision) return;
+      if (
+        !lifetime.active ||
+        !guard.isCurrent() ||
+        !current ||
+        (review ? current.revision < observed.revision : current.revision <= observed.revision)
+      )
+        return;
       pending.current = null;
       submittedCsrf.current = undefined;
       keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
@@ -207,7 +214,8 @@ function OfferCommands({
     const lifetime = mounted.current;
     const owns = () => lifetime.active && guard.isCurrent();
     const csrfToken = csrf();
-    if (!isCurrent() || !csrfToken || locked.current || conflicted || !editable) return;
+    if (!isCurrent() || !csrfToken || locked.current || (requiresReview && operation === 'reprice') || !editable)
+      return;
     if (!pending.current) {
       const key = keys.current?.[operation];
       if (!key) return;
@@ -335,6 +343,7 @@ function OfferCommands({
                 }
               }}
               locale={locale}
+              policyUnavailable={data.schema === null}
               disabled={!editable || frozen}
             />
             <p className="text-sm leading-relaxed text-muted-foreground">{m.creator_revision_meaning()}</p>
@@ -358,7 +367,7 @@ function OfferCommands({
               <div className="flex flex-wrap gap-3">
                 <Button
                   type="submit"
-                  disabled={!editable || frozen || parsedPrice(text, rule) === null}
+                  disabled={!editable || frozen || requiresReview || parsedPrice(text, rule) === null}
                   className="min-h-11"
                 >
                   {m.creator_reprice()}
@@ -377,15 +386,19 @@ function OfferCommands({
           </form>
         )}
         {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
-        {(conflicted || (result?.kind === 'saved' && !confirmed)) && confirmOffer && (
+        {(requiresReview || (result?.kind === 'saved' && !confirmed)) && confirmOffer && (
           <Button
             type="button"
             variant="outline"
             className="min-h-11"
-            disabled={checking}
-            onClick={() => void refreshSaved(conflicted)}
+            disabled={checking || (requiresReview && data.schema === null)}
+            onClick={() => void refreshSaved(requiresReview)}
           >
-            {checking ? m.creator_offers_preparing() : conflicted ? m.offer_review_terms() : m.creator_offers_refresh()}
+            {checking
+              ? m.creator_offers_preparing()
+              : requiresReview
+                ? m.offer_review_terms()
+                : m.creator_offers_refresh()}
           </Button>
         )}
       </div>
@@ -531,7 +544,6 @@ export function CreatorOffersPage({
                               offer.unitAmountMinor,
                               recordedMoneyUnit(offer),
                             ) ?? m.creator_offers_amount_unavailable()}{' '}
-                            <span className="text-sm">{offer.currency.toUpperCase()}</span>
                           </p>
                           <p>
                             {recordedTaxBehavior(offer) === 'exclusive'

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import { parseCreatorPrice } from '../src/checkout/creator-price';
+import { parseCreatorPrice, validateCreatorPrice } from '../src/checkout/creator-price';
 import { formatMinorAmount } from '../src/checkout/money';
 import { parseMoneySchema, recordedMoneyUnit } from '../src/checkout/money-schema';
 import { configuredPriceExample, configuredUsdRule, recordedStripeUnit } from '../src/kernel/fake/creator-offers';
@@ -58,8 +58,27 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
     ])
       expect(() => parseCreatorPrice(input, configuredUsdRule)).toThrow(RangeError);
   });
+  test('price feedback distinguishes malformed input, currency policy, bounds and increments', () => {
+    expect(validateCreatorPrice('12.990', configuredUsdRule)).toEqual({ kind: 'invalid', issue: 'malformed-decimal' });
+    expect(validateCreatorPrice('12.99')).toEqual({ kind: 'invalid', issue: 'unsupported-currency' });
+    expect(validateCreatorPrice('12.99', { ...configuredUsdRule, chargeMultiple: 0 })).toEqual({
+      kind: 'invalid',
+      issue: 'policy-unavailable',
+    });
+    expect(validateCreatorPrice('0.49', configuredUsdRule)).toEqual({ kind: 'invalid', issue: 'minimum' });
+    expect(validateCreatorPrice('1000000', configuredUsdRule)).toEqual({ kind: 'invalid', issue: 'maximum' });
+    const stepped = { ...configuredUsdRule, chargeMultiple: 5 };
+    expect(validateCreatorPrice('12.99', stepped)).toEqual({ kind: 'invalid', issue: 'increment' });
+    expect(validateCreatorPrice('13.00', stepped)).toEqual({ kind: 'valid', amountMinor: 1300 });
+  });
   test('schema is closed configuration, not Intl recognition or an enable-all currency list', () => {
     expect(parseMoneySchema(configuredPriceExample)).toEqual(configuredPriceExample);
+    expect(
+      parseMoneySchema({
+        ...configuredPriceExample,
+        configuredSaleCurrencies: [{ ...configuredUsdRule, minAmountMinor: 100, maxAmountMinor: 250000, chargeMultiple: 5 }],
+      }),
+    ).not.toBeNull();
     expect(parseMoneySchema({ ...configuredPriceExample, qualified: true })).toBeNull();
     for (const currency of ['jpy', 'kwd', 'zzz'])
       expect(
@@ -83,7 +102,7 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
           [1299, 12.99],
           [0, 0],
         ] as const)
-          expect(formatMinorAmount(locale, currency, raw, recordedStripeUnit)).toBe(
+          expect(formatMinorAmount(locale, currency, raw, recordedStripeUnit)).toContain(
             new Intl.NumberFormat(locale, {
               style: 'currency',
               currency,
@@ -91,9 +110,15 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
               maximumFractionDigits: 2,
             }).format(major),
           );
+        for (const [currency, raw] of [['usd', 1299], ['eur', 1299], ['usd', 0]] as const)
+          expect(formatMinorAmount(locale, currency, raw, recordedStripeUnit)).toContain(
+            `${raw} ${currency.toUpperCase()} minor units (exponent 2)`,
+          );
       }
-    expect(formatMinorAmount('en', 'usd', Number.MAX_SAFE_INTEGER, recordedStripeUnit)).toBe('$90,071,992,547,409.91');
-    expect(formatMinorAmount('en', 'eur', -Number.MAX_SAFE_INTEGER, recordedStripeUnit)).toBe(
+    expect(formatMinorAmount('en', 'usd', Number.MAX_SAFE_INTEGER, recordedStripeUnit)).toContain(
+      '$90,071,992,547,409.91',
+    );
+    expect(formatMinorAmount('en', 'eur', -Number.MAX_SAFE_INTEGER, recordedStripeUnit)).toContain(
       '-€90,071,992,547,409.91',
     );
   });
@@ -106,18 +131,29 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         });
-        expect(formatMinorAmount(locale, currency, -0, recordedStripeUnit)).toBe(formatter.format(0));
-        expect(formatMinorAmount(locale, currency, -1, recordedStripeUnit)).toBe(formatter.format(-0.01));
+        expect(formatMinorAmount(locale, currency, -0, recordedStripeUnit)).toContain(formatter.format(0));
+        expect(formatMinorAmount(locale, currency, -1, recordedStripeUnit)).toContain(formatter.format(-0.01));
       }
   });
-  test('recorded units override Intl digits, while absent historical metadata remains unknown', () => {
-    expect(formatMinorAmount('en', 'mga', 500, { ...recordedStripeUnit, exponent: 0 })).toBe('MGA\u00a0500');
-    expect(formatMinorAmount('en', 'isk', 500, recordedStripeUnit)).toBe('ISK\u00a05.00');
-    expect(formatMinorAmount('en', 'usd', 70)).toBeNull();
+  test('recorded values keep zero exponents, signed adjustments and raw unknown units intelligible', () => {
+    expect(formatMinorAmount('en', 'mga', 500, { ...recordedStripeUnit, exponent: 0 })).toContain('MGA\u00a0500');
+    expect(formatMinorAmount('en', 'mga', 500, { ...recordedStripeUnit, exponent: 0 })).toContain(
+      '500 MGA minor units (exponent 0)',
+    );
+    expect(formatMinorAmount('en', 'isk', 500, recordedStripeUnit)).toContain('ISK\u00a05.00');
+    expect(formatMinorAmount('en', 'isk', 500, recordedStripeUnit)).toContain('500 ISK minor units (exponent 2)');
+    expect(formatMinorAmount('en', 'usd', 70)).toBe('Recorded amount 70 USD; unit meaning is unknown.');
+    expect(formatMinorAmount('en', 'usd', -70)).toBe('Recorded amount -70 USD; unit meaning is unknown.');
     expect(recordedMoneyUnit({ currency: 'usd', unitAmountMinor: 70 })).toBeNull();
-    expect(formatMinorAmount('en', 'zzz', 70, recordedStripeUnit)).toBeNull();
-    expect(formatMinorAmount('en', 'kwd', 70, { ...recordedStripeUnit, exponent: 3 })).toBeNull();
+    expect(formatMinorAmount('en', 'zzz', 70, recordedStripeUnit)).toBe(
+      'Recorded 70 minor units of ZZZ (exponent 2).',
+    );
+    expect(formatMinorAmount('en', 'kwd', 70, { ...recordedStripeUnit, exponent: 3 })).toBe(
+      'Recorded amount 70 KWD; unit meaning is unknown.',
+    );
     expect(formatMinorAmount('en', 'usd', Number.MAX_SAFE_INTEGER + 1, recordedStripeUnit)).toBeNull();
-    expect(formatMinorAmount('en', 'usd', 70, { ...recordedStripeUnit, factsVersion: 'unproved' })).toBeNull();
+    expect(formatMinorAmount('en', 'usd', 70, { ...recordedStripeUnit, factsVersion: 'unproved' })).toBe(
+      'Recorded amount 70 USD; unit meaning is unknown.',
+    );
   });
 });

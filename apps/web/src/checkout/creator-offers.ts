@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { isSafeMinorAmount } from '@rezics/money';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -70,7 +71,8 @@ export type CreatorEditorData =
       schema: CommerceMoneySchema;
     }
   | CreatorFailure
-  | { kind: 'choose-edition' };
+  | { kind: 'choose-edition' }
+  | { kind: 'price-unavailable'; edition: EditionMetadata };
 export type CreatorEditorPageData = {
   editor: CreatorEditorData;
   csrfToken: string;
@@ -266,7 +268,9 @@ export function validateCreatorOfferMutation(value: unknown): CreatorOfferMutati
   const { operation, idempotencyKey } = input;
   if (typeof idempotencyKey !== 'string' || !UUID.test(idempotencyKey)) throw new Error('Invalid offer key');
   const raw = input.unitAmountMinor;
-  const validAmount = typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 50 && raw <= 99999999;
+  // This validates the frozen wire operand only. Current sale limits belong to the native writer,
+  // which must still receive the same key and amount on an uncertain retry.
+  const validAmount = isSafeMinorAmount(raw) && raw > 0;
   if (operation === 'create') {
     if (
       Object.keys(input).some(
@@ -350,10 +354,15 @@ export async function loadCreatorEditor(
     if (!edition || edition.editionId !== contentEditionId) return { kind: 'unavailable' };
     if (subject !== undefined && edition.creatorAccountId !== subject) return { kind: 'denied' };
     if (edition.state !== 'published') return { kind: 'rejected' };
-    const money = await moneyApi.read(authorization);
-    if (money.kind !== 'ready') return { kind: 'unavailable' };
+    let money: Awaited<ReturnType<MoneySchemaApi['read']>>;
+    try {
+      money = await moneyApi.read(authorization);
+    } catch {
+      return { kind: 'price-unavailable', edition };
+    }
+    if (money.kind !== 'ready') return { kind: 'price-unavailable', edition };
     const schema = parseMoneySchema(money.schema);
-    return schema ? { kind: 'ready', edition, schema } : { kind: 'unavailable' };
+    return schema ? { kind: 'ready', edition, schema } : { kind: 'price-unavailable', edition };
   } catch {
     return { kind: 'unavailable' };
   }

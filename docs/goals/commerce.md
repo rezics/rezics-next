@@ -42,6 +42,9 @@ First scope is direct licensed sales on one US Stripe account with hosted Manage
 subscription, consumable, wallet, issued token/points, transferable item, market, exchange or ledger implementation.
 [Future modules](../commerce-modules.md) is the sole future module map, not additional current financial scope.
 
+Recorded-money units use exact closed decoding against descriptors supplied by Commerce. Bare-unit and response-envelope
+readers remain distinct; missing, malformed, unsupported and incompatible historical units stay unknown.
+
 ## Ownership
 
 Owns `services/kernel/{src,db,test}/commerce/**` and Commerce journey pages in `apps/web` using Web's shell/patterns.

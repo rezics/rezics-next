@@ -1,20 +1,70 @@
+import { parseDecimalAmount, validateMinorAmount } from '@rezics/money';
 import { isSaleCurrencyRule, type ConfiguredSaleCurrencyRule } from './money-schema';
 
-/** ASCII major-unit input; the native server independently validates the resulting raw integer. */
+export type CreatorPriceIssue =
+  | 'malformed-decimal'
+  | 'unsupported-currency'
+  | 'policy-unavailable'
+  | 'minimum'
+  | 'maximum'
+  | 'increment'
+  | 'unsafe-integer';
+export type CreatorPriceValidation =
+  | Readonly<{ kind: 'valid'; amountMinor: number }>
+  | Readonly<{ kind: 'invalid'; issue: CreatorPriceIssue }>;
+
+export class CreatorPriceError extends RangeError {
+  constructor(readonly issue: CreatorPriceIssue) {
+    super(issue);
+    this.name = 'CreatorPriceError';
+  }
+}
+
+/** Validate a typed seller draft against the exact rule currently shown beside the input. */
+export function validateCreatorPrice(
+  text: string,
+  rule?: ConfiguredSaleCurrencyRule,
+): CreatorPriceValidation {
+  if (!rule) return { kind: 'invalid', issue: 'unsupported-currency' };
+  if (!isSaleCurrencyRule(rule)) return { kind: 'invalid', issue: 'policy-unavailable' };
+
+  const parsed = parseDecimalAmount(text, rule.unit.exponent);
+  if (!parsed.ok) {
+    return {
+      kind: 'invalid',
+      issue:
+        parsed.error.code === 'unsafe-integer'
+          ? 'unsafe-integer'
+          : parsed.error.code === 'invalid-exponent'
+            ? 'policy-unavailable'
+            : 'malformed-decimal',
+    };
+  }
+
+  const validated = validateMinorAmount(parsed.value, {
+    minimumMinor: rule.minAmountMinor,
+    maximumMinor: rule.maxAmountMinor,
+    incrementMinor: rule.chargeMultiple,
+  });
+  if (!validated.ok) {
+    const issue: CreatorPriceIssue =
+      validated.error.code === 'below-minimum'
+        ? 'minimum'
+        : validated.error.code === 'above-maximum'
+          ? 'maximum'
+          : validated.error.code === 'increment-mismatch'
+            ? 'increment'
+            : validated.error.code === 'unsafe-integer'
+              ? 'unsafe-integer'
+              : 'policy-unavailable';
+    return { kind: 'invalid', issue };
+  }
+  return { kind: 'valid', amountMinor: validated.value };
+}
+
+/** ASCII major-unit input; native Commerce independently validates the captured operands. */
 export function parseCreatorPrice(text: string, rule: ConfiguredSaleCurrencyRule): number {
-  if (!isSaleCurrencyRule(rule) || typeof text !== 'string' || text.length > 32)
-    throw new RangeError('Invalid creator price');
-  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]+))?$/.exec(text);
-  if (!match || match[0] !== text || (match[2]?.length ?? 0) > rule.unit.exponent)
-    throw new RangeError('Invalid creator price');
-  const scale = 10n ** BigInt(rule.unit.exponent);
-  const raw = BigInt(match[1]!) * scale + BigInt((match[2] ?? '').padEnd(rule.unit.exponent, '0') || '0');
-  if (
-    raw < BigInt(rule.minAmountMinor) ||
-    raw > BigInt(rule.maxAmountMinor) ||
-    raw % BigInt(rule.chargeMultiple) !== 0n ||
-    raw > BigInt(Number.MAX_SAFE_INTEGER)
-  )
-    throw new RangeError('Invalid creator price');
-  return Number(raw);
+  const result = validateCreatorPrice(text, rule);
+  if (result.kind === 'invalid') throw new CreatorPriceError(result.issue);
+  return result.amountMinor;
 }

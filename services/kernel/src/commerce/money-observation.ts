@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { decodeRecordedMoneyUnit, sameMoneyUnit } from '@rezics/money';
 import type { CheckoutSnapshot, Order, StripeTransaction } from './model.ts';
 import { StripeUnavailableError } from './model.ts';
 import { assertTransactionBound, movementEconomics } from './settlement.ts';
 import {
-  recordedMoneyUnit,
-  sameMoneyUnit,
+  stripeRecordedMoneyUnits,
   stripeEvidenceMoneyUnit,
   type StripeMoneyContext,
   type StripeMoneyProvenance,
@@ -19,6 +19,11 @@ import erasureDelete from './erasure-money-observation-delete.sql';
 type Client = Pick<PoolClient, 'query'>;
 const queryClient = (client: Client): Client => ({ query: client.query.bind(client) });
 export const moneyEconomicsHash = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+function recordedStripeUnit(value: unknown): StripeMoneyUnit | null {
+  const reading = decodeRecordedMoneyUnit(value, stripeRecordedMoneyUnits);
+  return reading.kind === 'known' ? (reading.unit as StripeMoneyUnit) : null;
+}
 
 /** Exact native financial-owner inventory. No receipt, body, URL, token or fee-description mirror.
  * The financial participant owns the fence and the pending financial retention decision;
@@ -74,7 +79,7 @@ function observation(
     (provenance.responseApiVersion !== null && !/^\d{4}-\d{2}-\d{2}(?:\.[a-z]+)?$/.test(provenance.responseApiVersion))
   )
     throw new StripeUnavailableError('Money observation lineage is incomplete');
-  const unit = recordedMoneyUnit(captured);
+  const unit = recordedStripeUnit(captured);
   if (captured != null && (!unit || !sameMoneyUnit(unit, stripeEvidenceMoneyUnit(currency, context))))
     throw new StripeUnavailableError('Money observation unit context is unavailable');
   return {
@@ -213,7 +218,7 @@ export async function interpretedTransactions(
     if (!row) return { ...transaction, moneyUnit: null, providerApiVersion: null, moneyProvenance: null };
     return {
       ...transaction,
-      moneyUnit: recordedMoneyUnit(JSON.parse(row.unit!)),
+      moneyUnit: recordedStripeUnit(JSON.parse(row.unit!)),
       providerApiVersion: row.providerApiVersion,
       moneyProvenance: {
         objectId: transaction.id,
@@ -251,7 +256,7 @@ export async function checkoutIntegrationMoney(
     (order.amountTaxMinor != null && amounts['total_details.amount_tax'] !== order.amountTaxMinor)
   )
     return null;
-  const moneyUnit = recordedMoneyUnit(JSON.parse(row.unit!));
+  const moneyUnit = recordedStripeUnit(JSON.parse(row.unit!));
   const tax = amounts['total_details.amount_tax'];
   if (!moneyUnit || typeof tax !== 'number' || !Number.isSafeInteger(tax) || tax < 0) return null;
   return { moneyUnit, amountTaxMinor: tax };
