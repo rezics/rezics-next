@@ -331,7 +331,7 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
     history: createMemoryHistory({
       initialEntries: [
         routed
-          ? `/library/progress/${initial.address.id}?${new URLSearchParams(Object.entries(initial.address).filter(([key, value]) => key !== 'id' && value !== undefined) as [string, string][])}&history=%2Flibrary%2Fhistory%3Fcursor%3Doriginal%252F%252B%253D%253D`
+          ? `/library/progress/${initial.address.id}?${new URLSearchParams(Object.entries(initial.address).filter(([key, value]) => key !== 'id' && value !== undefined) as [string, string][])}&history=%2Flibrary%2Fhistory%3Fcursor%3Doriginal%252F%252B%253D%253D#facts`
           : `/?${new URLSearchParams(Object.entries(initial.address).filter(([key, value]) => key !== 'id' && value !== undefined) as [string, string][])}`,
       ],
     }),
@@ -882,6 +882,7 @@ test('routed detail traverses independent native windows, retries an exact faile
     await move('units', m.library_collections_first_page());
     expect(h.reads.at(-1)!.data).toEqual({ ...address, units: undefined });
     await admit();
+    expect(h.router.state.location.hash).toBe('facts');
     expect(h.router.state.location.search.logs).toBe(address.logs);
     expect(h.router.state.location.search.history).toBe('/library/history?cursor=original%2F%2B%3D%3D');
     await h.record('4.75');
