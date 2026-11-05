@@ -27,6 +27,26 @@ const label = 'Harbor: Northern lights';
 const subject = subjectHref({ id, label }, 'en').href;
 const routePath = `${subject}/relation-edit`;
 
+function parseSearch(searchString: string): Record<string, unknown> {
+  const parsed: Record<string, unknown> = Object.create(null);
+  for (const [key, value] of new URLSearchParams(searchString)) {
+    if (!Object.hasOwn(parsed, key)) parsed[key] = value;
+    else if (Array.isArray(parsed[key])) (parsed[key] as string[]).push(value);
+    else parsed[key] = [parsed[key] as string, value];
+  }
+  return parsed;
+}
+
+function stringifySearch(search: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (typeof value === 'string') params.append(key, value);
+    else if (Array.isArray(value)) for (const item of value) if (typeof item === 'string') params.append(key, item);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 test('relation public intent is closed, bounded, and separate from legacy route operands', () => {
   const entry = subjectContributionEntries({ id, label, locale: 'en', context: candidateContext })[0]!;
   const visit = parseRelationPublicVisit(new URL(entry.href, 'https://site.test').search, id, 'en', routePath);
@@ -198,6 +218,8 @@ test('mounted menu and production relation route gate unsupported origins before
   const router = createRouter({
     routeTree: rootRoute.addChildren([localeRoute.addChildren([Route])]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
+    parseSearch,
+    stringifySearch,
   });
   const menu = <EditorialEntry id={subjectId} label={label} locale="en" context={candidateContext}>{null}</EditorialEntry>;
   const renderMenu = async () =>
