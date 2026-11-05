@@ -65,7 +65,10 @@ export function HomeFeedFilterSummary({
                       <bdi lang={selection.lang}>{selection.value}</bdi>
                     </span>
                     {selection.description ? (
-                      <span lang={selection.descriptionLang} className="block text-xs font-normal text-muted-foreground">
+                      <span
+                        lang={selection.descriptionLang}
+                        className="block text-xs font-normal text-muted-foreground"
+                      >
                         {selection.description}
                       </span>
                     ) : null}
