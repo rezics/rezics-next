@@ -393,6 +393,9 @@ export function createCopyCommands(config: Dependencies) {
       subjectId: parsed.subjectId,
       requestKey,
       receiptKeys: receiptKeysFor(pool).keys.size,
+      clientId: owner.clientId,
+      requestedBy: owner.requestedBy,
+      durationMs: Math.max(0, deadline - Date.now()),
       commandInput: parsed,
       copyId: '00000000-0000-0000-0000-000000000000',
       kind: parsed.kind,
@@ -469,6 +472,9 @@ export function createCopyCommands(config: Dependencies) {
       copyId,
       requestKey,
       receiptKeys: receiptKeysFor(pool).keys.size,
+      clientId: owner.clientId,
+      requestedBy: owner.requestedBy,
+      durationMs: Math.max(0, deadline - Date.now()),
       commandInput,
       revision: patch.revision,
       status: patch.status,
@@ -563,6 +569,9 @@ export function createCopyCommands(config: Dependencies) {
       copyId,
       requestKey,
       receiptKeys: receiptKeysFor(pool).keys.size,
+      clientId: owner.clientId,
+      requestedBy: owner.requestedBy,
+      durationMs: Math.max(0, deadline - Date.now()),
       commandInput,
       revision: expected,
     });
@@ -616,6 +625,9 @@ export function createCopyCommands(config: Dependencies) {
       copyId,
       requestKey,
       receiptKeys: receiptKeysFor(pool).keys.size,
+      clientId: owner.clientId,
+      requestedBy: owner.requestedBy,
+      durationMs: Math.max(0, deadline - Date.now()),
       commandInput: selected,
       revision: selected.revision,
       deletionId: selected.deletionId,
@@ -659,7 +671,7 @@ export function createCopyCommands(config: Dependencies) {
               if (!profile?.copies?.kinds.some((kind) => kind.id === row.kind))
                 throw new Error('Retained copy accepted kind profile is unavailable');
             }
-            const currentSubject = await resolveSubject(config, owner, row.subject_id, attempt.time);
+            const currentSubject = await resolveSubject(config, owner, row.subject_id, attempt.time, { pool, deadline, time: attempt.time, ...(attempt.commandWork ? { work: attempt.commandWork.access } : {}) });
             if (!currentSubject || currentSubject.subjectId !== row.subject_id) throw new LibraryNotFoundError();
             return { error: null };
           } catch (error) {

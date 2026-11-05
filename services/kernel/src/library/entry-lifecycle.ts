@@ -35,6 +35,7 @@ export async function admitEntryAttempt(
     group: 'personal_library',
     clientAction: action,
     deadline,
+    ...(attempt.commandWork ? { work: attempt.commandWork.access, time: attempt.time } : {}),
     clock: () => new Date(authoritativeTimeValue(attempt.time)),
   });
 }
