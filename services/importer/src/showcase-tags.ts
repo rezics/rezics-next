@@ -1048,7 +1048,8 @@ export async function prepareShowcaseTagParentPublications(input: {
         source: 'vndb',
         fields: ['tags_parents.id', 'tags_parents.parent'],
         record: { id: binding.child, parent: binding.parent, path: binding.path, main: binding.main },
-        reason: fence === 'fenced' ? 'VNDB tag parent source tuple is fenced' : 'VNDB tag parent source fence is unavailable',
+        reason:
+          fence === 'fenced' ? 'VNDB tag parent source tuple is fenced' : 'VNDB tag parent source fence is unavailable',
       });
       continue;
     }
@@ -1056,8 +1057,7 @@ export async function prepareShowcaseTagParentPublications(input: {
     commands.push(command);
     byKey.set(command.key, binding);
   }
-  if (commands.length)
-    await sendMissingTagCommands({ port: input.port, journal: input.journal, commands });
+  if (commands.length) await sendMissingTagCommands({ port: input.port, journal: input.journal, commands });
 
   const acknowledgements: ShowcaseAcknowledgement[] = [];
   const acknowledgedByKey = new Map(input.journal.acknowledgedCommands().map((row) => [row.command.key, row]));

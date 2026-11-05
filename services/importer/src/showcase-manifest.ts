@@ -7,7 +7,11 @@ import type { SourceRecord } from '@rezics/conversion';
 import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
-import { sourceDigest, vndbPublicTagTaxonomy, type VndbPublicTagCategory } from '../../../packages/conversion/src/support.ts';
+import {
+  sourceDigest,
+  vndbPublicTagTaxonomy,
+  type VndbPublicTagCategory,
+} from '../../../packages/conversion/src/support.ts';
 import { showcaseTagParentCommand } from './showcase-cross-provider-tags.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaGap, CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
@@ -971,7 +975,12 @@ export function buildShowcaseManifest(input: {
     if (existing) return;
     if (conflictingSourceParentEndpoints.has(record.subjectId)) return;
     const prior = sourceParentEndpoints.get(record.subjectId);
-    if (prior && (prior.sourceUri !== record.sourceUri || prior.nativeType !== record.nativeType || prior.schemeId !== record.schemeId)) {
+    if (
+      prior &&
+      (prior.sourceUri !== record.sourceUri ||
+        prior.nativeType !== record.nativeType ||
+        prior.schemeId !== record.schemeId)
+    ) {
       sourceParentEndpoints.delete(record.subjectId);
       conflictingSourceParentEndpoints.add(record.subjectId);
       return;
@@ -1098,16 +1107,14 @@ export function buildShowcaseManifest(input: {
       throw new TypeError('VNDB tag parent publication outcome changed its exact binding');
     let status: ShowcaseTagParentPublication;
     if (!exact || !acknowledgement || !assertion || !child) {
-      status =
-        suppliedOutcome ??
-        {
-          path: binding.path,
-          childId: binding.childId,
-          parentId: binding.parentId,
-          schemeId: binding.schemeId,
-          status: 'withheld',
-          reason: 'parent proposal was not acknowledged exactly',
-        };
+      status = suppliedOutcome ?? {
+        path: binding.path,
+        childId: binding.childId,
+        parentId: binding.parentId,
+        schemeId: binding.schemeId,
+        status: 'withheld',
+        reason: 'parent proposal was not acknowledged exactly',
+      };
       omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'source-claim-withheld' });
     } else {
       if (child.assertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
