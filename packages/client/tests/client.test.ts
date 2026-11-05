@@ -244,7 +244,9 @@ test('profile and managed-account readers expose the mounted account responses',
           next: null,
         },
         responsibilities: {
-          items: [{ reservationId: `${ID}-reservation`, accountId: ID, account: organizationAccount, state: 'current' }],
+          items: [
+            { reservationId: `${ID}-reservation`, accountId: ID, account: organizationAccount, state: 'current' },
+          ],
           next: null,
         },
       }),
