@@ -6,7 +6,8 @@ import { DumpInputError } from './dump-input.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { Importer, ImportRunOptions } from './importer.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSourceRegistration, vndbSourceStatistics } from './source-registry.ts';
+import { VndbSnapshotReader, type VndbTableSnapshot } from './vndb-snapshot.ts';
 import {
   evaluateVndbResume,
   VndbAcquisitionError,
@@ -61,6 +62,8 @@ export class VndbMaterialization {
     const columns = db.query('PRAGMA table_info(vndb_table_runs)').all() as { name: string }[];
     if (!columns.some((column) => column.name === 'materialized_generation'))
       db.exec('ALTER TABLE vndb_table_runs ADD COLUMN materialized_generation TEXT');
+    if (!columns.some((column) => column.name === 'snapshot_json'))
+      db.exec('ALTER TABLE vndb_table_runs ADD COLUMN snapshot_json TEXT');
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS vndb_materialized_generation
       ON vndb_table_runs(source,materialized_generation) WHERE materialized_generation IS NOT NULL`);
   }
@@ -80,12 +83,13 @@ export class VndbMaterialization {
   acquisition(run: string) {
     const inspect = this.tables.inspect(this.source, run);
     const row = this.importer.session.store.database
-      .query(`SELECT materialized_generation AS generation FROM vndb_table_runs
+      .query(`SELECT materialized_generation AS generation, snapshot_json FROM vndb_table_runs
         WHERE source=? AND run_id=?`)
-      .get(this.source, run) as { generation: string | null } | null;
+      .get(this.source, run) as { generation: string | null; snapshot_json: string | null } | null;
     return {
       ...inspect,
       materializedGeneration: row?.generation ?? null,
+      sourceSnapshot: row?.snapshot_json ? JSON.parse(row.snapshot_json) as VndbTableSnapshot : null,
       checkpoint: this.tables.checkpoint(this.source, run),
     };
   }
@@ -105,7 +109,17 @@ export class VndbMaterialization {
 
   async stage(run: string, entries: VndbEntries, tracking?: VndbStageTracking): Promise<void> {
     try {
-      await this.tables.stage(this.source, run, entries, tracking);
+      const snapshot = new VndbSnapshotReader(this.options.maxChunkBytes);
+      const self = this;
+      async function* observed() {
+        yield* snapshot.entries(entries);
+        // Persist before the reader marks tables ready. A ready acquisition can
+        // always publish after a crash without reacquiring its snapshot date.
+        self.importer.session.store.database
+          .query('UPDATE vndb_table_runs SET snapshot_json=? WHERE source=? AND run_id=?')
+          .run(JSON.stringify(snapshot.finish()), self.source, run);
+      }
+      await this.tables.stage(this.source, run, observed(), tracking);
     } catch (error) {
       if (error instanceof DumpInputError || error instanceof VndbAcquisitionError) throw error;
       throw new VndbInputError();
@@ -166,7 +180,15 @@ export class VndbMaterialization {
         ...(onPageRecords === undefined ? {} : { onPageRecords }),
       });
     }
-    return this.importer.runRecords(this.registration, records(), runOptions);
+    const snapshot = this.acquisition(run).sourceSnapshot;
+    const registration = snapshot ? {
+      ...this.registration,
+      convert: (...args: Parameters<SourceRegistration['convert']>) => {
+        const conversion = this.registration.convert(...args);
+        return { ...conversion, ...vndbSourceStatistics(conversion.normalized, this.source, snapshot.asOf) };
+      },
+    } : this.registration;
+    return this.importer.runRecords(registration, records(), runOptions);
   }
 
   private linkedAcquisition(generation: string): string | null {

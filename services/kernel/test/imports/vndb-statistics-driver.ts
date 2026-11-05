@@ -291,6 +291,8 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
             transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
           writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
           clearSourceStatistic: (input, signal) => transport.clearSourceStatistic(input, signal),
+          readSourceStatistics: transport.readSourceStatistics,
+          readPublicFigure: transport.readPublicFigure,
         },
       });
     importer = open();
@@ -364,7 +366,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
         );
       },
       observe() {
-        const source = importer!.session.store.source(registration.source);
+        const source = importer!.session.store.source('vndb');
         // The port's fingerprint reports the maintained generation pointer, not a content hash.
         return capture.observe({ fingerprint: source.generation, records: source.count });
       },

@@ -1,13 +1,14 @@
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { sqliteEvidence } from '../../../specs/imports-vndb-tables-driver.ts';
 import { Importer, type ImporterOptions } from '../src/importer.ts';
 import { VndbInputError, VndbMaterialization } from '../src/vndb-materialization.ts';
+import { createSourceRegistration } from '../src/source-registry.ts';
+import type { ImportTransport, SourceRegistration } from '../src/import-contract.ts';
 
 const names = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta'];
 async function* entries(change = false, lateInvalid = false, children?: number, alias?: string) {
@@ -38,10 +39,13 @@ async function* entries(change = false, lateInvalid = false, children?: number, 
 
 // Local protocol double only. Native Auth/API/receipt acceptance is owned by
 // vndb-materialization-native.test.ts, never inferred from these unit checks.
-async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase']) {
-  const directory = await mkdtemp(join(tmpdir(), 'vndb-materialization-unit-'));
+async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'], registration?: SourceRegistration) {
+  await mkdir('.temp', { recursive: true });
+  const directory = await mkdtemp('.temp/vndb-materialization-unit-');
   const calls: BatchWriteRequest[] = [];
+  const statistics: Parameters<NonNullable<ImportTransport['writeSourceStatistic']>>[0][] = [];
   let deny = false;
+  let denyStatistics = false;
   const transport = {
     setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async batchWrite(body: BatchWriteRequest): Promise<BatchWriteResult> {
@@ -63,7 +67,10 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'])
     async readFence() {
       return { fenced: false, securityRevision: null };
     },
-    async writeSourceStatistic() {},
+    async writeSourceStatistic(input: (typeof statistics)[number]) {
+      statistics.push(structuredClone(input));
+      if (denyStatistics) throw new Error('Unit statistic response unavailable');
+    },
     async clearSourceStatistic() {},
   };
   const open = () =>
@@ -74,7 +81,7 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'])
       ...(instrumentDatabase ? { instrumentDatabase } : {}),
     });
   let importer = open();
-  let facade = new VndbMaterialization(importer, undefined, { childRowsPerVn: 8, pageSize: 16 });
+  let facade = new VndbMaterialization(importer, registration, { childRowsPerVn: 8, pageSize: 16 });
   return {
     get facade() {
       return facade;
@@ -83,18 +90,29 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'])
       return importer;
     },
     calls,
+    statistics,
     deny(value: boolean) {
       deny = value;
     },
-    async stage(change = false, alias?: string) {
+    denyStatistics(value: boolean) {
+      denyStatistics = value;
+    },
+    async stage(change = false, alias?: string, timestamp?: string) {
       const run = facade.begin();
-      await facade.stage(run, entries(change, false, undefined, alias));
+      await facade.stage(run, (async function* () {
+        yield* entries(change, false, undefined, alias);
+        if (timestamp !== undefined) {
+          const bytes = new TextEncoder().encode(timestamp);
+          yield { path: 'TIMESTAMP', kind: 'file' as const, declaredBytes: bytes.length,
+            bytes: (async function* () { yield bytes; })() };
+        }
+      })());
       return run;
     },
     async reopen() {
       await importer.close();
       importer = open();
-      facade = new VndbMaterialization(importer);
+      facade = new VndbMaterialization(importer, registration);
     },
     async close() {
       await importer.close();
@@ -254,6 +272,123 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     expect((await f.facade.commit(removed)).status).toBe('committed');
     expect(f.facade.baseline('v123')!.run).toBe(removed);
     expect(commands().some((command) => command.op === 'retract')).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+test('archive snapshot provenance survives ready reopen and sealed recovery before a successor date', async () => {
+  const f = await local();
+  try {
+    const missing = await f.stage();
+    expect((await f.facade.commit(missing)).status).toBe('committed');
+    expect(f.statistics).toEqual([]);
+    const dated = await f.stage(false, undefined, '2026-10-25 08:00:24+00\n');
+    const snapshot = f.facade.acquisition(dated).sourceSnapshot!;
+    expect(snapshot).toMatchObject({ timestamp: '2026-10-25 08:00:24+00', asOf: '2026-10-25' });
+    expect(snapshot.membersDigest).toMatch(/^[a-f0-9]{64}$/);
+    await f.reopen();
+    expect(f.facade.acquisition(dated).sourceSnapshot).toEqual(snapshot);
+    f.denyStatistics(true);
+    expect((await f.facade.commit(dated)).status).toBe('bulk-failed');
+    const sealed = structuredClone(f.statistics[0]!);
+    expect(sealed.value).toMatchObject({ sourceRecordId: 'v123', asOf: '2026-10-25', mean: 7, count: 2 });
+    const generation = f.importer.session.store.source('vndb').generation;
+    const successor = await f.stage(false, undefined, '2026-10-26 08:00:24+00\n');
+    await f.reopen();
+    f.denyStatistics(false);
+    f.statistics.length = 0;
+    expect((await f.facade.commit(successor)).status).toBe('committed');
+    expect(f.statistics[0]).toEqual(sealed);
+    expect(f.statistics.every((input) => input.value.asOf === '2026-10-25')).toBe(true);
+    expect(f.importer.session.store.source('vndb').generation).not.toBe(generation);
+    f.statistics.length = 0;
+    expect((await f.facade.commit(successor)).status).toBe('committed');
+    expect(f.statistics.every((input) => input.value.asOf === '2026-10-26')).toBe(true);
+    expect(f.statistics.length).toBeGreaterThan(0);
+  } finally {
+    await f.close();
+  }
+});
+
+test('sealed observation intent survives a caller registration date change without archive provenance', async () => {
+  const options = { sourceSnapshotAsOf: '2026-10-25' };
+  const f = await local(undefined, createSourceRegistration('vndb', options));
+  try {
+    f.denyStatistics(true);
+    expect((await f.facade.commit(await f.stage())).status).toBe('bulk-failed');
+    const sealed = structuredClone(f.statistics[0]!);
+    options.sourceSnapshotAsOf = '2026-10-26';
+    await f.reopen();
+    f.denyStatistics(false);
+    f.statistics.length = 0;
+    expect((await f.facade.commit(await f.stage())).status).toBe('committed');
+    expect(f.statistics[0]).toEqual(sealed);
+    expect(f.statistics.every((input) => input.value.asOf === '2026-10-25')).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+test('invalid archive snapshot dates cannot publish or replace the completed generation', async () => {
+  const f = await local();
+  try {
+    expect((await f.facade.commit(await f.stage())).status).toBe('committed');
+    const before = f.facade.baseline('v123');
+    for (const timestamp of ['2026-02-30 08:00:24+00\n', '2026-10-25 24:00:00+00\n', 'x'.repeat(65)])
+      await expect(f.stage(false, undefined, timestamp)).rejects.toThrow();
+    expect(f.facade.baseline('v123')).toEqual(before);
+    expect(f.statistics).toEqual([]);
+  } finally {
+    await f.close();
+  }
+});
+
+test('unchanged VNDB rows refresh newly reviewed tag bindings and preserve unrelated candidates', async () => {
+  const { bundledDigest } = await import('@rezics/definitions/bundled');
+  const { vndbPublicTagScheme, vndbPublicTagTaxonomy } = await import('../../../packages/conversion/src/support.ts');
+  const native = createSourceRegistration('vndb');
+  const schemeId = randomUUID();
+  let conceptId: string | undefined;
+  const registration: SourceRegistration = {
+    ...native,
+    convert(input, context) {
+      return native.convert(input, input.external_id !== 'v123' ? context : {
+        ...context,
+        sourceVocabulary: {
+          bindings: {
+            releaseDigest: bundledDigest,
+            schemes: [{ taxonomy: vndbPublicTagTaxonomy('cont'), uri: vndbPublicTagScheme('cont'), id: schemeId,
+              type: 'skos:ConceptScheme', releaseDigest: bundledDigest }],
+            concepts: conceptId ? [{ taxonomy: vndbPublicTagTaxonomy('cont'), code: 'g311', id: conceptId,
+              type: 'skos:Concept', schemeId, releaseDigest: bundledDigest }] : [],
+          },
+          rows: context.subjectId ? [{ kind: 'tag', path: '/tags_vn/v123/g311/tag', code: 'g311', category: 'cont',
+            spoiler: 0, subject: { id: context.subjectId, type: 'wd:Q689445', releaseDigest: bundledDigest } }] : [],
+        },
+      });
+    },
+  };
+  const f = await local(undefined, registration);
+  try {
+    expect((await f.facade.commit(await f.stage())).status).toBe('committed');
+    const before = f.importer.session.bindings.candidates({ source: 'vndb', external_id: 'v123' }, 'facts', { limit: 100 });
+    f.calls.length = 0;
+    conceptId = randomUUID();
+    await f.reopen();
+    expect((await f.facade.commit(await f.stage())).status).toBe('committed');
+    const proposed = f.calls.flatMap((request) => request.commands);
+    expect(proposed).toHaveLength(1);
+    expect(proposed[0]).toMatchObject({ op: 'propose', statement: { property: { id: 'schema:genre' },
+      value: { type: 'value', content: conceptId } } });
+    const after = f.importer.session.bindings.candidates({ source: 'vndb', external_id: 'v123' }, 'facts', { limit: 100 });
+    expect(after.map((candidate) => candidate.candidate)).toEqual(expect.arrayContaining(before.map((candidate) => candidate.candidate)));
+    f.calls.length = 0;
+    expect((await f.facade.commit(await f.stage())).status).toBe('committed');
+    expect(f.calls).toEqual([]);
+    conceptId = randomUUID();
+    expect((await f.facade.commit(await f.stage())).status).toBe('committed');
+    expect(f.calls.flatMap((request) => request.commands).map((command) => command.op).sort()).toEqual(['propose', 'retract']);
   } finally {
     await f.close();
   }
