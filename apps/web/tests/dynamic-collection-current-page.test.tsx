@@ -38,11 +38,8 @@ for (const [key, value] of Object.entries(globals))
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const {
-  admitSavedQueryResultsWindow,
-  savedQueryResultsWindowBase,
-  stageSavedQueryResultsWindowMove,
-} = await import('../src/library/saved-query-results-windows');
+const { admitSavedQueryResultsWindow, savedQueryResultsWindowBase, stageSavedQueryResultsWindowMove } =
+  await import('../src/library/saved-query-results-windows');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');

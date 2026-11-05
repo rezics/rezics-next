@@ -47,12 +47,7 @@ function focusHandoff(source: HTMLElement | undefined): StoredFocusHandoff | und
     release();
   };
   onFocusIn = (event) => {
-    if (
-      event.target !== source &&
-      event.target !== owner.body &&
-      event.target !== owner.documentElement
-    )
-      cancel();
+    if (event.target !== source && event.target !== owner.body && event.target !== owner.documentElement) cancel();
   };
   owner.addEventListener('focusin', onFocusIn, true);
   owner.addEventListener('pointerdown', cancel, true);
@@ -63,8 +58,7 @@ function focusHandoff(source: HTMLElement | undefined): StoredFocusHandoff | und
     eligible: () =>
       eligible &&
       (owner.activeElement === source ||
-        (!source.isConnected &&
-          (owner.activeElement === owner.body || owner.activeElement === owner.documentElement))),
+        (!source.isConnected && (owner.activeElement === owner.body || owner.activeElement === owner.documentElement))),
     release,
   };
 }
@@ -190,7 +184,8 @@ export function stageSavedQueryResultsWindowMove(
   source?: HTMLElement,
 ): boolean {
   const reading = visitFor(client, base).readings[mode];
-  if (!reading || reading.scope !== scope || !reading.admitted || reading.current !== from || reading.staged) return false;
+  if (!reading || reading.scope !== scope || !reading.admitted || reading.current !== from || reading.staged)
+    return false;
   if (move === 'previous' && reading.predecessors[reading.predecessors.length - 1] !== target) return false;
   reading.staged = { target, move, focus: focusHandoff(source), failed: false };
   return true;
@@ -302,11 +297,7 @@ export function failPendingSavedQueryResultsWindowMove(
   return changed;
 }
 
-export function retireSavedQueryResultsWindowReading(
-  client: QueryClient,
-  base: string,
-  mode: ResultsWindowMode,
-): void {
+export function retireSavedQueryResultsWindowReading(client: QueryClient, base: string, mode: ResultsWindowMode): void {
   const visit = visits.get(client);
   if (visit?.base === base) {
     releaseReading(visit.readings[mode]);

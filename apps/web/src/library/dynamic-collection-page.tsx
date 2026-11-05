@@ -244,11 +244,7 @@ function DynamicCollectionPageLifetime({
       if (windowNavigation.fail(current)) setWindowObservation((value) => value + 1);
     }
   }, [current, membersReady, incompleteFilter, windowNavigation, windowObservation]);
-  function activateWindow(
-    event: MouseEvent<HTMLAnchorElement>,
-    target: ResultsCursor,
-    movement: ResultsWindowMove,
-  ) {
+  function activateWindow(event: MouseEvent<HTMLAnchorElement>, target: ResultsCursor, movement: ResultsWindowMove) {
     if (
       !windowNavigation ||
       event.defaultPrevented ||
@@ -302,7 +298,9 @@ function DynamicCollectionPageLifetime({
                   decorative
                 />
               </div>
-              <PageHeading ref={resultsHeading} tabIndex={-1}>{current.title}</PageHeading>
+              <PageHeading ref={resultsHeading} tabIndex={-1}>
+                {current.title}
+              </PageHeading>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <PinControlView control={pinActions} />

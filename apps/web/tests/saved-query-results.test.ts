@@ -220,15 +220,7 @@ test('failed exact targets stay staged, public reads cannot commit private moves
   );
   admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'second', false);
   expect(
-    stageSavedQueryResultsWindowMove(
-      queries,
-      base,
-      'session',
-      sessionScope,
-      'second',
-      'failed/+==',
-      'continue',
-    ),
+    stageSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'second', 'failed/+==', 'continue'),
   ).toBe(true);
   expect(failSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'failed/+==')).toBe(true);
   expect(hasPendingSavedQueryResultsWindowTarget(queries, base, 'session', 'failed/+==')).toBe(true);
@@ -239,17 +231,15 @@ test('failed exact targets stay staged, public reads cannot commit private moves
     failedTarget: true,
     hasPrevious: false,
   });
-  expect(admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'failed/+==', false).changed).toBe(
-    true,
-  );
+  expect(admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'failed/+==', false).changed).toBe(true);
   expect(readSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'failed/+==')).toMatchObject({
     previous: 'second',
     hasPrevious: true,
     failedTarget: false,
   });
-  expect(stageSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'failed/+==', 'second', 'previous')).toBe(
-    true,
-  );
+  expect(
+    stageSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'failed/+==', 'second', 'previous'),
+  ).toBe(true);
   admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'second', false);
   expect(readSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'second').previous).toBe('first');
 
@@ -258,9 +248,9 @@ test('failed exact targets stay staged, public reads cannot commit private moves
   expect(readSavedQueryResultsWindow(queries, base, 'session', changedScope, 'direct-later-cursor').hasPrevious).toBe(
     false,
   );
-  expect(
-    admitSavedQueryResultsWindow(queries, base, 'session', changedScope, 'expired-cursor', true).changed,
-  ).toBe(true);
+  expect(admitSavedQueryResultsWindow(queries, base, 'session', changedScope, 'expired-cursor', true).changed).toBe(
+    true,
+  );
   expect(readSavedQueryResultsWindow(queries, base, 'session', changedScope, undefined).hasPrevious).toBe(false);
 
   const otherBase = savedQueryResultsWindowBase({ id: 'other', locale: 'en', admission: 2 });

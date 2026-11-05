@@ -299,12 +299,7 @@ function CollectionContentLifetime({
       return <CollectionAccessState state="not-found" />;
     }
     failPendingSavedQueryResultsWindowMove(queryClient, windowBase, 'session', search.cursor);
-    const retryPendingMove = hasPendingSavedQueryResultsWindowTarget(
-      queryClient,
-      windowBase,
-      'session',
-      search.cursor,
-    );
+    const retryPendingMove = hasPendingSavedQueryResultsWindowTarget(queryClient, windowBase, 'session', search.cursor);
     return (
       <div className="space-y-3">
         <CollectionAccessState state="unavailable" />
@@ -313,9 +308,7 @@ function CollectionContentLifetime({
             className="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
             type="button"
             disabled={sessionPage.isFetching}
-            onClick={() =>
-              void queryClient.refetchQueries({ queryKey: privateQuery.queryKey, exact: true })
-            }
+            onClick={() => void queryClient.refetchQueries({ queryKey: privateQuery.queryKey, exact: true })}
           >
             {m.library_dynamic_retry_unavailable()}
           </button>
@@ -499,8 +492,7 @@ function CollectionResultLifetime({
           const cursor = next.cursorRestarted ? input.cursor : next.cursor;
           const scope = savedQueryResultsWindowScope(windowBase, mode, viewerId, next);
           const view = readSavedQueryResultsWindow(queryClient, windowBase, mode, scope, cursor);
-          if (view.pendingTarget)
-            cancelSavedQueryResultsWindowFocus(queryClient, windowBase, mode, scope, cursor);
+          if (view.pendingTarget) cancelSavedQueryResultsWindowFocus(queryClient, windowBase, mode, scope, cursor);
           else retireSavedQueryResultsWindowReading(queryClient, windowBase, mode);
         },
       }

@@ -302,7 +302,9 @@ test('Saved-query windows expose exact Previous, First and Continue addresses an
       { from: cursor, target: undefined, movement: 'first' },
       { from: cursor, target: next, movement: 'continue' },
     ]);
-    expect(h.host.querySelector('[data-collection-members] a')?.getAttribute('href')).toBe('/fr/subjects/book%2F%E4%BA%8C/livre');
+    expect(h.host.querySelector('[data-collection-members] a')?.getAttribute('href')).toBe(
+      '/fr/subjects/book%2F%E4%BA%8C/livre',
+    );
     expect(h.read).not.toHaveBeenCalled();
 
     await h.render(page({ builtinKind: undefined, cursor: 'terminal', members: [], next: null }), search, undefined, {
