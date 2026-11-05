@@ -189,12 +189,19 @@ export function createPersonalLabelCommands(config: {
       transactionId: 'f'.repeat(36),
       time: '\u0000'.repeat(64),
     });
+    const commandInput = admission
+      ? { name: parsed.name, review: admission.input }
+      : guard
+        ? { name: parsed.name, importReview: guard }
+        : malLabelFence
+          ? { name: parsed.name, malLabelFence }
+          : { name: parsed.name };
     const execution: LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) =>
       executeLabelOperation(
         composeLabelOperation(
           operation,
           [
-            labelCommandComponent('library_label.create', { name: parsed.name, requestKey: key }, {
+            labelCommandComponent('library_label.create', { input: commandInput, requestKey: key }, {
               label: { id: 'f'.repeat(36), revision: 2_147_483_647 },
             }),
             ...(guard
@@ -520,7 +527,7 @@ export function createPersonalLabelCommands(config: {
         ? {
             prefix: q,
             upper: store.personalLabelPrefixEnd(q),
-            afterName: hasCursor ? '\u{10ffff}'.repeat(LABEL_NAME_SCALARS) : q,
+            ...(hasCursor ? { afterName: '\u{10ffff}'.repeat(LABEL_NAME_SCALARS) } : {}),
           }
         : {}),
       afterLabelId: hasCursor ? 'f'.repeat(36) : '00000000-0000-0000-0000-000000000000',
