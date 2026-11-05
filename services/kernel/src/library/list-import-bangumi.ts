@@ -517,6 +517,9 @@ export function createBangumiImport(deps: Dependencies) {
     }
     const questionView = scoreQuestion(native.question);
     const currentVote = currentScoreVote(native.currentVote);
+    // A redirect between the Library and Rating observations requires a new target review.
+    if (native.guard.subject.canonicalId !== target)
+      return unavailable('identity_observation_unavailable', questionView, currentVote);
     if (native.question.revision !== 1 || native.question.lifecycleState !== 'active')
       return unavailable('question_revision_unsupported', questionView, currentVote);
     if (native.question.minimumUnits !== 0 || native.question.maximumUnits !== 20 || native.question.stepUnits !== 1)

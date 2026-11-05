@@ -49,7 +49,8 @@ plans without the complete guard remain unavailable and require a deliberate new
 reinterpreted or migrated.
 
 `score.native.admission = {status: "reviewed", reason: "native_review_observed"}` means complete native operands were
-observed, not that an effect was admitted. Confirmed set/clear calls `putVoteOutcome(actor,
+observed, not that an effect was admitted. A redirect between Library target observation and native review
+returns identity-observation unavailable instead of silently adopting the new canonical target. Confirmed set/clear calls `putVoteOutcome(actor,
 {questionId, targetId, units, guard}, originalKey)`. Current native authorization and exposure precede receipt replay;
 fresh native execution owns all conditional fences. Typed native stale and unavailable reasons pass through the score
 outcome. A selected unperformed score makes the row stale or unsupported even when independent state was applied.

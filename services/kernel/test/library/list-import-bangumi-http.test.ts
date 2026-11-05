@@ -602,6 +602,14 @@ test('uncertain score delivery retains exact native operands and a changed own v
   try {
     const target = await score.createSubject('game');
     const native = createVoteCommands({ pool: score.pool, access: score.access });
+    const redirected = await score.createSubject('game');
+    const mismatched = createBangumiImport({
+      pool: score.pool, access: score.access, tokens: score.tokens, routeKey: testRouteKey(),
+      votes: { ...native, readVoteReview: (actor, questionId) => native.readVoteReview(actor, questionId, redirected) },
+    });
+    const otherUpload = await mismatched.preview(score.owner.actor, upload([{ ...record(900006), subject_type: 4, rate: 8 }]).upload, randomUUID());
+    const mismatch = await mismatched.review(score.owner.actor, otherUpload.uploadId, 0, target, { action: 'set', units: 0 }, randomUUID());
+    expect(mismatch.review!.score!.native.admission).toEqual({ status: 'unavailable', reason: 'identity_observation_unavailable' });
     const attempts: { input: Parameters<typeof native.putVoteOutcome>[1]; key: string }[] = [];
     const importer = createBangumiImport({
       pool: score.pool, access: score.access, tokens: score.tokens, routeKey: testRouteKey(),
