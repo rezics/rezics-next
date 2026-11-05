@@ -7,6 +7,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/cross-media-entities';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
+import { ImportTransportError } from '../src/import-client.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import {
   parseVndbCopyHeader,
@@ -253,4 +254,62 @@ test('operator plans authored public tags and imports exact genre proposals thro
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('reviewed tag bindings treat only not-found as absent and preserve authorization or unexpected failures', async () => {
+  const known = {
+    schemes: [{ category: 'cont' as const, id: schemeIds.cont }],
+    concepts: [{ category: 'cont' as const, code: 'g311', id: conceptIds.g311 }],
+  };
+  const base = port([]);
+  const missingScheme = await readVndbPublicTagBindings(
+    {
+      ...base,
+      async readReviewedSubject() {
+        throw new ImportTransportError(404);
+      },
+    },
+    known,
+  );
+  expect(missingScheme.schemes).toEqual([]);
+  expect(missingScheme.concepts).toEqual([]);
+
+  const missingConcept = await readVndbPublicTagBindings(
+    {
+      ...base,
+      async readReviewedSubject(id) {
+        if (id === conceptIds.g311) throw new ImportTransportError(404);
+        return base.readReviewedSubject(id);
+      },
+    },
+    known,
+  );
+  expect(missingConcept.schemes.map((scheme) => scheme.id)).toEqual([schemeIds.cont]);
+  expect(missingConcept.concepts).toEqual([]);
+
+  const denied = new ImportTransportError(403);
+  await expect(
+    readVndbPublicTagBindings(
+      {
+        ...base,
+        async readReviewedSubject() {
+          throw denied;
+        },
+      },
+      known,
+    ),
+  ).rejects.toBe(denied);
+
+  const unexpected = new Error('unexpected native reader failure');
+  await expect(
+    readVndbPublicTagBindings(
+      {
+        ...base,
+        async readReviewedSubject() {
+          throw unexpected;
+        },
+      },
+      known,
+    ),
+  ).rejects.toBe(unexpected);
 });
