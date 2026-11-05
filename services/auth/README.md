@@ -1025,28 +1025,25 @@ Stale sessions require another step-up; approval expiry and current native check
 still apply. An unknown execution result is not final workflow/readback evidence.
 
 `POST /account-management/operators/transfer-review` accepts exactly `{ kind: "readiness" }`,
-`{ kind: "source", subjectAccountId }` or `{ kind: "destination", request }`. Ordinary humans learn only that the
-transfer profile is required. Source uses `readOperatorTransferState` for exact tuple/version and action advice.
-Decision: destination treats the source tuple as file data, checks transfer-acceptance's destination `account:manage`
-action/resource, and never reads the source-private relation. Advice performs no approval, execution, receipt lookup
-or command lock.
+`{ kind: "source", subjectAccountId }` or `{ kind: "destination", request }`. Ordinary sessions get only transfer-profile advice. Source uses `readOperatorTransferState` for exact tuple/version and action advice.
+Decision: destination checks transfer-acceptance's `account:manage` action/resource, treating the source tuple as file
+data without reading its private relation. No approval, execution, receipt lookup or command lock.
 
-Readiness checks one Auth session/profile proof. Selected review obtains a server-only Access token, authenticates
-once natively and rechecks the same human/profile after I/O, within ten seconds. Source uses two bounded snapshots
+Readiness checks one session/profile proof. Selected review obtains a server-only Access token, authenticates once
+and rechecks that human/profile after I/O within ten seconds. Source uses two bounded snapshots
 (subject/operator homes/accounts, slot/version, actor floor/assignment), one released preparation and final action
 check. Destination uses two actor/destination snapshots (homes/accounts, actor floor, at most one principal/assignment),
-one released preparation and final check. No lists, profile fanout, writes, pool preflight or client publication.
+one released preparation and final check. No lists, fanout, writes, pool preflight or publication.
 
-Decision: closed `private, no-store` responses publish `@rezics/auth-contract` operator-page bounds. Shared fields:
-lowercase routed UUID36 and canonical nonnegative bigint decimal `0..9223372036854775807`, kept as strings.
+Decision: `private, no-store` replies publish `@rezics/auth-contract` operator-page bounds: routed lowercase UUID36
+and canonical bigint decimal `0..9223372036854775807`, kept as strings.
 Provenance: Kernel `operator-transfer-page-source.ts`, `management-source.ts`, `management-source-operator.sql`
 (`operator_relation_version::text`), and `access.account.operator_relation_version bigint`. Source's empty-field JSON
 skeleton adds `3 × 36 + 19`; destination adds 36. Fixed viewers/continuation, stages, action flags and syntax are counted;
 variable alphabets need no escaping. Error allowance: the larger refused/refused or ready/unavailable skeleton.
-Port fields/branches are validated before serialization; invalid IDs/versions, extra fields or wrong selections become
-unavailable. Opening owns its endpoint and composes these shared fields. Browser receiving limits actual bytes before
-decoding/parsing within five seconds, adding zero native calls. Native/browser and integration acceptance remain
-controller-owned qualifications.
+Port projection validates before serialization; invalid IDs/versions, extra fields or wrong selections become
+unavailable. Opening shares fields for its separate endpoint. Browser receiving limits actual bytes before
+decoding/parsing within five seconds, adding zero native calls. Native/browser/integration acceptance remains controller-owned.
 
 `POST /account-management/operators/relation` is the private native source for the
 existing transfer page. Its exact JSON body is `{ subjectAccountId: string }`;
