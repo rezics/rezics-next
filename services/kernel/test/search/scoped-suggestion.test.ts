@@ -98,6 +98,7 @@ function fixture(changeDuringHydration = false, changeDisplayedFields = false) {
       filter: {} as FilterDocument,
       release: {} as FilterRelease,
       source,
+      currentText: async () => true,
       scope: scope as never,
       preparedScope: { readiness: 'ready', basis: { canonical: 'current-scope' } } as PreparedSearchScope,
       scopeWork: work,

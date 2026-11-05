@@ -65,13 +65,19 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
       (async () => {
         const leaves = new Map<string, Token[]>();
         const visit = async (node: TextNode): Promise<void> => {
-          if (node.kind === 'term' || node.kind === 'phrase') {
-            const key = `${node.kind}\0${node.value}`;
-            if (!leaves.has(key)) leaves.set(key, await analyze('cjk_bigram_v2', node.value));
-            return;
+          switch (node.kind) {
+            case 'term':
+            case 'phrase': {
+              const key = `${node.kind}\0${node.value}`;
+              if (!leaves.has(key)) leaves.set(key, await analyze('cjk_bigram_v2', node.value));
+              return;
+            }
+            case 'not':
+              return visit(node.child);
+            case 'and':
+            case 'or':
+              await Promise.all(node.children.map(visit));
           }
-          if (node.kind === 'not') return visit(node.child);
-          await Promise.all(node.children.map(visit));
         };
         await visit(query);
         return leaves;
@@ -107,10 +113,17 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
       leafMatches.set(key, matched);
     }
     const evaluate = (node: TextNode): boolean => {
-      if (node.kind === 'term' || node.kind === 'phrase')
-        return leafMatches.get(`${node.kind}\0${node.value}`) ?? false;
-      if (node.kind === 'not') return !evaluate(node.child);
-      return node.kind === 'and' ? node.children.every(evaluate) : node.children.some(evaluate);
+      switch (node.kind) {
+        case 'term':
+        case 'phrase':
+          return leafMatches.get(`${node.kind}\0${node.value}`) ?? false;
+        case 'not':
+          return !evaluate(node.child);
+        case 'and':
+          return node.children.every(evaluate);
+        case 'or':
+          return node.children.some(evaluate);
+      }
     };
     return evaluate(query);
   }
