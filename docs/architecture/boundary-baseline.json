@@ -53364,11 +53364,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/search/account-context/follow.tsx",
-          "edge": "value import \"../../library/follow-control\" #1 => apps/web/src/library/follow-control.tsx"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/search/character-person-search.tsx",
           "edge": "value import \"../shell/page-heading\" #1 => apps/web/src/shell/page-heading.tsx"
         },
@@ -53385,17 +53380,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/search/collection-context/follow.tsx",
-          "edge": "type import \"../../library/follow-records\" #1 => apps/web/src/library/follow-records.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/collection-context/follow.tsx",
           "edge": "type import \"../../session/expected-reader\" #1 => apps/web/src/session/expected-reader.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/collection-context/follow.tsx",
-          "edge": "value import \"../../library/follow-control\" #1 => apps/web/src/library/follow-control.tsx"
         },
         {
           "rule": "rule 2",
