@@ -160,6 +160,9 @@ test('review windows browse only admitted targets, retry exact failures, cap his
     await act(async () => {
       await waitFor(() => expect(host.querySelector('[role="region"]')?.getAttribute('aria-busy')).toBe('false'));
     });
+    await act(async () => {
+      await waitFor(() => expect(queryClient.isFetching({ queryKey: ['account-verification', 'review'] })).toBe(0));
+    });
     await flush();
   };
   const pageRow = (name: string) =>
