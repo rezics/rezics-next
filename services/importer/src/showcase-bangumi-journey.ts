@@ -3,18 +3,20 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/anime-journey');
 const privateLogs = resolve(root, '.temp/anime-stack');
+const stackId = randomUUID().slice(0, 8);
 const env = {
   ...process.env,
-  KERNEL_DATABASE_CONTAINER: 'rezics-anime-journey',
-  KERNEL_DATABASE_VOLUME: 'rezics-anime-journey',
+  KERNEL_DATABASE_CONTAINER: `rezics-anime-${stackId}`,
+  KERNEL_DATABASE_VOLUME: `rezics-anime-${stackId}`,
   KERNEL_DATABASE_PORT: '15439',
-  KERNEL_SEARCH_CONTAINER: 'rezics-anime-journey-search',
-  KERNEL_SEARCH_VOLUME: 'rezics-anime-journey-search',
+  KERNEL_SEARCH_CONTAINER: `rezics-anime-search-${stackId}`,
+  KERNEL_SEARCH_VOLUME: `rezics-anime-search-${stackId}`,
   KERNEL_SEARCH_PORT: '15939',
   REZICS_LOCAL_STACK_WEB_ORIGIN: 'http://127.0.0.1:13039',
   REZICS_LOCAL_STACK_ISSUER_ORIGIN: 'http://127.0.0.1:14239',
@@ -60,7 +62,10 @@ async function current(id: string) {
 export async function runBangumiJourney() {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await mkdir(privateLogs, { recursive: true, mode: 0o700 });
-  await command('infrastructure', ['go-task', 'dev:infra']);
+  // These are the existing Taskfile's dev:infra commands; check hosts need only Bun and Docker.
+  await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']);
+  await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']);
+  await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']);
   const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
   const stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
     cwd: root,
@@ -72,14 +77,20 @@ export async function runBangumiJourney() {
     phase = 'readiness';
     await Promise.race([
       Promise.all([ready(web), ready(env.REZICS_LOCAL_STACK_ISSUER_ORIGIN), ready(api)]),
-      stack.exited.then((code) => { throw new Error(`Development stack exited ${code}`); }),
+      stack.exited.then((code) => {
+        throw new Error(`Development stack exited ${code}`);
+      }),
     ]);
     phase = 'persona';
-    await command('persona', ['go-task', 'dev:persona']);
+    await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
     phase = 'seed';
-    await command('seed', ['go-task', 'seed:dev']);
-    const report = JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8')) as CrossMediaSeedReport;
-    const works = report.showcase!.published.filter((row) => row.provider === 'bangumi' && ['10380', '51'].includes(row.sourceKey));
+    await command('seed', ['bun', '--env-file=.temp/local-stack/seed.env', import.meta.path, '--seed']);
+    const report = JSON.parse(
+      await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'),
+    ) as CrossMediaSeedReport;
+    const works = report.showcase!.published.filter(
+      (row) => row.provider === 'bangumi' && ['10380', '51'].includes(row.sourceKey),
+    );
     assert.equal(works.length, 2, 'both selected anime have native publication identities');
     phase = 'anonymous-api';
     const reads = [];
@@ -89,7 +100,13 @@ export async function runBangumiJourney() {
         assert.ok(read.subject.statements[property]?.length, `${work.sourceKey} current ${property}`);
       }
       assert.ok(work.assertions.some((row) => row.citations?.includes(`https://bgm.tv/subject/${work.sourceKey}`)));
-      reads.push({ sourceKey: work.sourceKey, id: work.subjectId, route: work.readerRoute, assertions: work.assertions, read });
+      reads.push({
+        sourceKey: work.sourceKey,
+        id: work.subjectId,
+        route: work.readerRoute,
+        assertions: work.assertions,
+        read,
+      });
     }
     await writeFile(resolve(evidence, 'native.json'), JSON.stringify(reads, null, 2), { mode: 0o600 });
     phase = 'anonymous-browser';
@@ -106,11 +123,18 @@ export async function runBangumiJourney() {
         assert.equal(response?.status(), 200, `mounted work ${work.sourceKey}`);
         await page.locator('main').waitFor();
         const text = await page.locator('main').innerText();
-        const links = await page.locator('main a[href]').evaluateAll((nodes) => nodes.map((node) => ({ href: node.getAttribute('href')!, text: node.textContent ?? '' })));
+        const links = await page
+          .locator('main a[href]')
+          .evaluateAll((nodes) =>
+            nodes.map((node) => ({ href: node.getAttribute('href')!, text: node.textContent ?? '' })),
+          );
         visits.push({ sourceKey: work.sourceKey, url: page.url(), text, links });
         await page.screenshot({ path: resolve(evidence, `anonymous-${work.sourceKey}.png`), fullPage: true });
         assert.ok(text.includes('STEINS;GATE') || text.includes('CLANNAD'), 'selected anime title rendered');
-        assert.ok(links.some((link) => link.href.includes('bgm.tv')), 'source citation rendered');
+        assert.ok(
+          links.some((link) => link.href.includes('bgm.tv')),
+          'source citation rendered',
+        );
       }
       await writeFile(resolve(evidence, 'browser.json'), JSON.stringify(visits, null, 2), { mode: 0o600 });
     } finally {
@@ -124,4 +148,11 @@ export async function runBangumiJourney() {
   }
 }
 
-if (import.meta.main) await runBangumiJourney();
+if (import.meta.main) {
+  if (Bun.argv[2] === '--seed') {
+    const { runDevelopmentSeed } = await import('../../../scripts/datasets/cross-media-seed.ts');
+    // The composed report also covers private-list and commerce outcomes outside the anime journey.
+    // Assert this journey's current source/native reads independently below.
+    await runDevelopmentSeed();
+  } else await runBangumiJourney();
+}
