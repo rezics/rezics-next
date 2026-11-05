@@ -165,8 +165,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   const { createRoot } = await import('react-dom/client');
   const { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
-  const { sessionQuery } = await import('../src/session/query');
-  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+  const { sessionQuery, exposureQuery } = await import('../src/session/query');
   const { useCurrentLibraryNavigation } = await import('../src/library/pins-current');
   const { usePinControlActions: useActions, PinControlNotice } = await import('../src/library/pin-control');
   const { LibraryNavigation } = await import('../src/library/library-nav');
@@ -196,17 +195,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const session = (subject: string, csrfToken = 'csrf') => ({ state: 'signed-in' as const, subject, csrfToken });
   client.setQueryData(sessionQuery.queryKey, session('A'));
-  const exposureLifetime = viewerExposureLifetime(client);
-  const stopExposure = exposureLifetime.subscribe(() => {});
-  const grant = (admitted: readonly string[]) => {
-    const current = exposureLifetime.getSnapshot();
-    if (current.state !== 'signed-in') throw new Error('Expected current viewer observation');
-    client.setQueryData(viewerExposureQuery(current.observation).queryKey, {
-      subject: current.observation.subject,
-      admitted,
-    });
-  };
-  grant(['personal_library', 'collections']);
+  client.setQueryData(exposureQuery.queryKey, ['personal_library', 'collections']);
   const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
   const invalidate = spyOn(router, 'invalidate').mockResolvedValue(undefined);
   const cache = spyOn(client, 'invalidateQueries').mockResolvedValue(undefined);
@@ -276,10 +265,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   });
   try {
     await show(); // A remains unresolved while B becomes immediately usable.
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, session('B'));
-      grant(['personal_library', 'collections']);
-    });
+    await act(async () => client.setQueryData(sessionQuery.queryKey, session('B')));
     await tick();
     expect(pendingReads).toHaveLength(2);
     await settle(1, response('B', ['a', 'x', 'b', 'c']));
@@ -323,8 +309,8 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(host.textContent).not.toContain('Private C');
     await settle(3, response('C', ['b']));
     await act(async () => {
-      grant(['collections']);
-      grant(['personal_library', 'collections']);
+      client.setQueryData(exposureQuery.queryKey, ['collections']);
+      client.setQueryData(exposureQuery.queryKey, ['personal_library', 'collections']);
     });
     await tick();
     expect(navigation.data.pins.state).not.toBe('loaded');
@@ -365,7 +351,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(cache).toHaveBeenCalledWith({ queryKey: navigation.pinsOrigin.queryKey, exact: true });
     expect(control.pending).toBe(false);
     // Unrelated owner Collections admission cannot revoke this same-viewer removal of a null target.
-    await act(async () => grant(['personal_library']));
+    await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
     await tick();
     await act(async () => select(m.library_pin_unpin())());
     expect(writes[4]!.operation).toBe('delete');
@@ -438,7 +424,6 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => writes[6]!.work.resolve({ ok: true, revision: 8 }));
   } finally {
     await act(async () => root.unmount());
-    stopExposure();
     client.clear();
     host.remove();
     for (const spy of [read, put, remove, invalidate, cache, observeMenu]) spy.mockRestore();
