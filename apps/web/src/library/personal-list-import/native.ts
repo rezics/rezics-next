@@ -31,7 +31,7 @@ function unknown(command: VndbCommand): VndbUnknown {
   return { kind: 'unknown', command };
 }
 
-async function withSession(
+export async function withVndbSession(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
@@ -70,7 +70,7 @@ export function kernelVndbPort(
     resultOf: (value: T) => R,
   ): Promise<R | VndbFailure | VndbUnknown> {
     if (!route) return { kind: 'unavailable', status: 503 };
-    const auth = await withSession(request, sessionEnv, originConfigured, expectedSubject);
+    const auth = await withVndbSession(request, sessionEnv, originConfigured, expectedSubject);
     if ('kind' in auth) return auth;
     try {
       const result = await send(auth.authorization);
@@ -109,7 +109,7 @@ export function kernelVndbPort(
           route!({ uploadId: command.uploadId }).source.get({
             headers: headers(authorization),
           }),
-        (xml) => ({ kind: 'source', xml }),
+        (value) => ({ kind: 'source', xml: value.xml }),
       );
     },
     review(command) {

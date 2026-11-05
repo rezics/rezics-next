@@ -8,7 +8,7 @@ import { readRelease } from '../../subject/definitions';
 import { libraryStateOptions } from '../profiles';
 import { VNDB_ROWS, type VndbCommand } from './contract';
 import { requireVndbId as requireId, vndbReviewBody, vndbApplyBody } from './requests';
-import { kernelVndbPort } from './native';
+import { kernelVndbPort, withVndbSession } from './native';
 
 function originConfigured(): boolean {
   return Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
@@ -102,6 +102,24 @@ export const deleteVndbImport = createServerFn({ method: 'POST' })
     };
   })
   .handler(async ({ data }) => port(data.sender).delete(data));
+
+/** Bounded current occurrences for the explicitly selected work; never infer a start. */
+export const readVndbOccurrences = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object' || !('targetId' in input)) throw new Error('Invalid VNDB import');
+    return { targetId: requireId(input.targetId), sender: requireSender(input) };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const auth = await withVndbSession(getRequest(), env as Partial<SessionEnv>, originConfigured(), data.sender);
+    if ('kind' in auth) return { kind: 'unavailable' as const };
+    const response = await kernelClient().progressSessions.get({
+      query: { subjectId: data.targetId, limit: 8 },
+      headers: { authorization: auth.authorization },
+    });
+    if (response.error) return { kind: 'unavailable' as const };
+    return { kind: 'occurrences' as const, sessions: response.data.progressSessions, next: response.data.next };
+  });
 
 /** State labels come only from the currently released profile for the explicitly searched catalogue type. */
 export const readVndbTargetStates = createServerFn({ method: 'GET' })
