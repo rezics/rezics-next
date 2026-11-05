@@ -107,7 +107,7 @@ owns the limits of native, browser and finite-execution evidence.
 
 ## Native identity scope planning and current seals
 
-Decision: one immutable Library-owned nine-axis operation set prices exact SQL, original binds and native result projections for both dispatch and original composition; SQL work declares `engineRequests=0`, while custody adapters and Source/History/Core controls retain their owners.
+The plan-specific SQL and projections below refine the shared [Collection operation cost declarations](#collection-operation-costs).
 
 `createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
 same-command `verifySeal` ports. The exact key is `{job, sourceIdentity, scope: 'collection-source'}`.
@@ -221,11 +221,10 @@ ledger, changed deadline or escaped callback cannot become independent funding. 
 and finish descendants no longer construct a second ledger or transfer a fresh allowance. A historical capture
 allowance cannot fund a continuation. Verification resolves the already-live allocation before any SQL, meters
 its exact command query surface on that same ledger and performs no checkout or foreign IO. Positive and genuine
-sealed-zero verification both retain the native current/receipt/job checks, including a repeated final recheck. Normal Semantic
-receiving can recognize the concrete exported `libraryIdentityFootprint` declaration; its strict unknown refusal
-must remain until its actual SQL owner adopts the reached bodies. The local 512-row/32-point/16-statement/
-262144-byte cap is not additional Source funding. Accounts' selected current original admission/position/control
-is local and fully spent. Its installed Library term now resolves, while the complete Source/History term remains absent. The whole authentic parent must reserve the
-disjoint Accounts local, all reached Source/History, all reached Library and transfer-control terms before first
-IO, preserving original/position/Pool/WorkClient/SDK/registry/deadline and live callback. That complete parent
-price remains unknown; this native declaration supplies no guessed zero or replacement foreign producer.
+sealed-zero verification both retain the native current/receipt/job checks, including a repeated final recheck.
+Normal Semantic receiving recognizes the concrete exported `libraryIdentityFootprint` declaration; unknown reached
+bodies remain refused until their SQL owner declares them. The local 512-row/32-point/16-statement/262144-byte cap
+is not additional Source funding. The whole authentic parent reserves disjoint Accounts-local, every reached
+Source/History and Library, and transfer-control terms before first I/O. It preserves the original,
+position, Pool, WorkClient, SDK, registry, deadline and live callback. If any reached term is unavailable, refuse
+before child I/O; never substitute zero or a replacement foreign producer.
