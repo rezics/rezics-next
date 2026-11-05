@@ -8,6 +8,7 @@ import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
+  continuationAdmissionProjection,
   continuationOverlap,
   continuationReview,
   continuationReleased,
@@ -811,6 +812,8 @@ async function dispatchReady(
       continuation = readBriefContinuation(markdown);
       // Worker remainders create new work; manager-authored retries retain their exact-owner validation.
       if (basename(claimed).startsWith('continuation-')) {
+        // Each claimed brief gets a fresh projection so the next admission sees completed dispatches and edits.
+        const admission = continuationAdmissionProjection(runtime.stateDirectory, pick.goal, runtime.policy);
         const claimedName = basename(claimed);
         const source =
           continuation?.taskId ??
@@ -833,10 +836,11 @@ async function dispatchReady(
           [claimed],
           runtime.policy?.brief,
           Number.isSafeInteger(parsedAttempt) && parsedAttempt > 0 ? parsedAttempt : undefined,
+          admission,
         );
         const reason =
           overlap.reason ??
-          (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy) &&
+          (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy, 0, admission) &&
           !continuationReleased(runtime.stateDirectory, pick.goal, claimedName, markdown)
             ? 'Goal continuation review is enabled; release or retire this proposal'
             : undefined);

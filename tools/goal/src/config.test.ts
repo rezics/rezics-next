@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import * as configEntry from './config.ts';
 import { checkSettings, createRuntime, loadSettings, readDerivedFiles } from './config.ts';
+import { configurationProblem } from './local-settings.ts';
+import * as settingsEntry from './settings.ts';
 import { run } from './cli.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -92,6 +95,56 @@ test('settings anchor to the main checkout from a linked worktree; local setting
     h.dispose();
   }
 });
+
+test('config and settings entries share resolution, strict validation, and recovery identity', () => {
+  for (const name of [
+    'mainCheckout',
+    'settingsFile',
+    'loadSettings',
+    'checkSettings',
+    'readDerivedFiles',
+    'readIntegrationChecks',
+    'readControlPolicy',
+  ] as const)
+    expect(configEntry[name]).toBe(settingsEntry[name]);
+
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const env = { GOAL_LOCAL_CONFIG: h.settings.localFile, GOAL_STATE_DIRECTORY: '.temp/env-state' };
+    const envOptions = { cwd: task.worktree, env };
+    const localOptions = {
+      cwd: task.worktree,
+      env: { GOAL_STATE_DIRECTORY: '.temp/env-state' },
+      localFile: h.settings.localFile,
+    };
+    expect(configEntry.mainCheckout(task.worktree)).toBe(h.root);
+    expect(configEntry.settingsFile(envOptions)).toBe(settingsEntry.settingsFile(envOptions));
+    expect(configEntry.settingsFile(localOptions)).toBe(settingsEntry.settingsFile(localOptions));
+    expect(configEntry.loadSettings(envOptions)).toEqual(settingsEntry.loadSettings(localOptions));
+    expect(configEntry.loadSettings(envOptions).stateDirectory).toBe(join(h.root, '.temp/env-state'));
+
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    local.silenceMs = 12_345;
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(settingsEntry.loadSettings(localOptions).silenceMs).toBe(12_345);
+
+    local.silenceMs = 'invalid';
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => configEntry.checkSettings(localOptions)).toThrow('invalid silenceMs');
+    expect(() => settingsEntry.checkSettings(localOptions)).toThrow('invalid silenceMs');
+    const recovered = settingsEntry.loadSettings(localOptions);
+    expect(recovered.silenceMs).toBe(12_345);
+    expect(configurationProblem(recovered)?.reported).toBe(false);
+
+    local.silenceMs = 23_456;
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(configEntry.loadSettings(localOptions).silenceMs).toBe(23_456);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('an invalid live local file keeps its last valid settings, is reported once, and config check stays strict', async () => {
   const h = harness();
   try {
@@ -145,7 +198,7 @@ test('account configuration cannot be tracked, and an environment-selected untra
     expect(loadSettings({ cwd: h.root, env: { GOAL_LOCAL_CONFIG: other } }).localFile).toBe(other);
     const defaults = JSON.parse(readFileSync(join(import.meta.dir, '../defaults.json'), 'utf8'));
     expect(defaults.pools).toBeUndefined();
-    expect(defaults.policy).toBeUndefined();
+    expect(defaults.policy).toBeDefined();
   } finally {
     h.dispose();
   }
@@ -215,7 +268,7 @@ test('legacy affected and integration checks migrate to post-integration verifie
     expect(selected.some((check) => check.command.includes('scripts/typecheck.ts'))).toBe(false);
     expect(selected.some((check) => check.command.includes('install'))).toBe(false);
     expect(selected.some((check) => check.command.includes('apps/web/scripts/remote-browser.test.ts'))).toBe(true);
-    expect(selected.some((check) => check.command.includes('page-stories.test.ts'))).toBe(true);
+    expect(selected.some((check) => check.command.some((part) => part.includes('page-stories.test.ts')))).toBe(true);
     expect(selected.some((check) => check.paths.includes('services/kernel/**'))).toBe(false);
     expect(selected.filter((check) => check.command.includes('scripts/workspace-imports.ts'))).toHaveLength(1);
     expect(settings.siblingTests).toEqual({ command: ['bun', 'test', '--timeout', '30000'] });

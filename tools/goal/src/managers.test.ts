@@ -2,11 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, renameSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { StdioAppServer, type Notification } from './app-server.ts';
+import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 async function setup(policy?: ControlPolicy) {
@@ -29,10 +30,11 @@ async function setup(policy?: ControlPolicy) {
   let now = Date.now();
   const services = {
     ...(policy ? { policy } : {}),
-    connect: async () => {
+    connect: async (_pool?: CodexPool, _onStart?: (identity: ProcessIdentity) => void) => {
       connections++;
       return client;
     },
+    onAppServerStart(_identity: ProcessIdentity) {},
     windows: {
       register(manager: string, argv: string[]) {
         windows.push({ manager, argv });
@@ -194,6 +196,7 @@ test('a steer racing a completed turn rejoins and starts a turn without losing t
     await s.managers.flush();
     expect(s.inbox.notifications(manager.id)).toHaveLength(0);
     expect(s.managers.get(manager.id).activeTurnId).toBe('turn-2');
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
   } finally {
     await s.close();
   }
@@ -805,6 +808,128 @@ test('a turn in which the manager writes or returns a backlog brief is not an em
     s.advance(60_000);
     await turn('empty', () => {});
     expect(s.managers.get(state.id).status).toBe('paused');
+  } finally {
+    await s.close();
+  }
+});
+
+test('startup saves the thread before a later provider request fails', async () => {
+  const s = await setup();
+  try {
+    writeFileSync(s.failFile, JSON.stringify({ method: 'thread/goal/set' }));
+    await expect(s.managers.start(s.spec)).rejects.toThrow('Thread not loaded');
+    expect(s.managers.get(s.spec.id)).toMatchObject({ status: 'paused', threadId: 'thread-1' });
+    expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(1);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a notification from a retired thread does not change the current session', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.managers.flush();
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: 'retired-thread', turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    await s.notify({
+      method: 'thread/goal/updated',
+      params: {
+        threadId: 'retired-thread',
+        goal: { status: 'complete', tokensUsed: 9, timeUsedSeconds: 1, tokenBudget: 40000 },
+      },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      threadId: manager.threadId,
+      activeTurnId: manager.activeTurnId,
+      turns: 1,
+    });
+    expect(s.managers.get(manager.id).goalState?.status).toBe('active');
+  } finally {
+    await s.close();
+  }
+});
+
+test('a failed connection is evicted so the next start reconnects', async () => {
+  const s = await setup();
+  try {
+    let attempts = 0;
+    const connect = s.services.connect!;
+    s.services.connect = async () => {
+      attempts++;
+      if (attempts === 1) throw new Error('connect failed');
+      return connect();
+    };
+    await expect(s.managers.start(s.spec)).rejects.toThrow('connect failed');
+    expect(s.managers.get(s.spec.id)).toMatchObject({ status: 'paused', threadId: null });
+    expect((await s.managers.start(s.spec)).status).toBe('running');
+    expect(attempts).toBe(2);
+  } finally {
+    await s.close();
+  }
+});
+
+test('one ownership callback fires per process identity', async () => {
+  const s = await setup();
+  try {
+    const seen: { pid: number; start: string; boot: string }[] = [];
+    s.services.onAppServerStart = (identity: ProcessIdentity) => seen.push(identity);
+    const connect = s.services.connect!;
+    s.services.connect = async (_pool?: CodexPool, onStart?: (identity: ProcessIdentity) => void) => {
+      const server = await connect();
+      if (server.identity) onStart?.(server.identity);
+      return server;
+    };
+    await s.managers.start(s.spec);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual(s.client.identity);
+  } finally {
+    await s.close();
+  }
+});
+
+test('pause falls back to resume then interrupt when the active turn is gone', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    writeFileSync(s.failFile, JSON.stringify({ method: 'turn/interrupt' }));
+    await s.managers.stop(manager.id);
+    const methods = s
+      .requests()
+      .filter((r) => r.id && r.method !== 'initialize')
+      .map((r) => r.method);
+    const interruptAt = methods.lastIndexOf('turn/interrupt');
+    expect(methods.slice(interruptAt - 2, interruptAt + 1)).toEqual([
+      'turn/interrupt',
+      'thread/resume',
+      'turn/interrupt',
+    ]);
+    expect(s.managers.get(manager.id).status).toBe('paused');
+  } finally {
+    await s.close();
+  }
+});
+
+test('close flushes a pending wake and ignores later notifications', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Finish before close' });
+    const waking = s.managers.wake(manager.id);
+    await s.managers.close();
+    await waking;
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+    expect(s.requests().some((r) => r.method === 'turn/steer')).toBe(true);
+    const turns = s.managers.get(manager.id).turns;
+    await s
+      .notify({
+        method: 'turn/started',
+        params: { threadId: manager.threadId, turn: { id: 'after-close', status: 'inProgress' } },
+      })
+      .catch(() => {});
+    expect(s.managers.get(manager.id).turns).toBe(turns);
   } finally {
     await s.close();
   }

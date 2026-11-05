@@ -3,7 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
-import { groupMembers, sameProcess } from './process.ts';
+import { groupMembers, runPidFilePresence, sameProcess } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -1886,7 +1886,7 @@ export class WorkerStore implements AttemptFence {
           const started = this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started');
           const processIdentity = attempt.process
             ? 'known'
-            : attempt.state === 'pending' && !started && !auxiliaryProcesses.length
+            : !started && !auxiliaryProcesses.length && runPidFilePresence(attempt.logPath) === 'absent'
               ? 'not-started'
               : 'unknown';
           intent = {

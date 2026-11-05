@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { driveGateParity, parseParityArguments, planGateParity } from '../scripts/gate-parity.ts';
-import { gateParityScenario } from './lifecycle-scenarios.ts';
+import { gateParityScenario } from '../test-support/lifecycle-scenarios.ts';
 import { parseSmokeArguments } from '../scripts/launch-smoke.ts';
 
 const repository = resolve(import.meta.dir, '../../..');

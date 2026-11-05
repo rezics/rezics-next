@@ -9,7 +9,7 @@ import { WorkerStore } from './store.ts';
 import type { Attempt } from './types.ts';
 import { harness, repository } from './test-support.ts';
 import type { ProcessIdentity } from './process.ts';
-import { observeSqliteWork, type SqliteWork } from './sqlite-work.test-support.ts';
+import { observeSqliteWork, type SqliteWork } from '../test-support/sqlite-work.ts';
 
 const deadDriver: ProcessIdentity = { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 };
 

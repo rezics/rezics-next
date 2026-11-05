@@ -81,6 +81,41 @@ export function listOpenToolIncidents(store: WorkerStore): ToolIncident[] {
     .sort((a, b) => a.openedAt.localeCompare(b.openedAt));
 }
 
+/** Invocation-local view used by status to share its incident history and probe task reads. */
+export function projectToolIncidentStatus(store: WorkerStore, tasks: readonly Task[]) {
+  const states = currentStates(store);
+  const taskStates = new Map<string, string | undefined>(
+    tasks.map((task): [string, string | undefined] => [task.id, task.state]),
+  );
+  for (const { status, incident } of states.values()) {
+    if (status !== 'open' || taskStates.has(incident.probe.taskId)) continue;
+    try {
+      taskStates.set(incident.probe.taskId, store.taskState(incident.probe.taskId));
+    } catch {
+      taskStates.set(incident.probe.taskId, undefined);
+    }
+  }
+  const active = new Map<string, ToolIncident>();
+  for (const { status, incident } of states.values()) {
+    if (
+      status === 'open' &&
+      !['integrated', 'merged', 'cancelled'].includes(taskStates.get(incident.probe.taskId) ?? '')
+    )
+      active.set(incident.fingerprint, incident);
+  }
+  return {
+    toolIncidents: [...active.values()]
+      .map((incident) => structuredClone(incident))
+      .sort((a, b) => a.openedAt.localeCompare(b.openedAt)),
+    forAttempt(task: Task, attempt: Attempt): ToolIncident | null {
+      if (attempt.failureKind !== 'tool') return null;
+      const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
+      const incident = fingerprint ? active.get(fingerprint) : undefined;
+      return incident ? structuredClone(incident) : null;
+    },
+  };
+}
+
 function openIncidentForFingerprint(store: WorkerStore, fingerprint: string): ToolIncident | null {
   const state = currentStates(store).get(fingerprint);
   return state?.status === 'open' && !probeFinished(store, state.incident) ? structuredClone(state.incident) : null;

@@ -1,11 +1,38 @@
 import { expect, test } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { continuationOverlap } from './continuation.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerJob } from './job.ts';
+import { StaleAttemptError } from './contracts.ts';
 import { harness, markdown } from './test-support.ts';
 import { retryWait } from './watchdog.ts';
+import { runWorkerCommand } from './worker-commands.ts';
+
+async function setupFailedAttempt(h: ReturnType<typeof harness>) {
+  const task = h.tasks.dispatch(h.briefFile);
+  const first = await h.tasks.retry(task.id);
+  await first.exited;
+  const prior = { taskId: task.id, attempt: 1 };
+  h.store.updateAttempt(prior, (attempt) => {
+    attempt.checks = ['check-a'];
+  });
+  await h.tasks.stop(task.id);
+  h.settings.integrationBranch = 'invalid branch name';
+  await expect(h.tasks.retry(task.id)).rejects.toThrow();
+  const ref = { taskId: task.id, attempt: 2 };
+  expect(h.store.events(task.id, 2).some((event) => event.kind === 'launch-failed')).toBe(true);
+  expect(existsSync(`${h.store.attempt(ref).logPath}.pid`)).toBe(false);
+  return { task, ref, prior, priorPid: `${h.store.attempt(prior).logPath}.pid` };
+}
+
+async function recover(h: ReturnType<typeof harness>) {
+  const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  await job.recoverOrphans({ adoptRunning: false });
+  await job.recoverOrphans({ adoptRunning: false });
+  return job;
+}
 
 for (const [operation, terminal] of [
   ['stop', 'stopped'],
@@ -79,6 +106,145 @@ for (const predecessorState of ['stopped', 'cancelled'] as const) {
     expect(retryWait(intent, task, () => predecessorState, Date.now())).toBeNull();
   });
 }
+
+test('a setup-failed never-launched stop settles without a current PID and keeps earlier processes, checks and retry', async () => {
+  const h = harness('#!/usr/bin/env bun\n');
+  const earlier = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: h.root, stdio: 'ignore' });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      earlier.once('spawn', resolve);
+      earlier.once('error', reject);
+    });
+    const { task, ref, prior, priorPid } = await setupFailedAttempt(h);
+    writeFileSync(priorPid, `${earlier.pid}\n`);
+    await h.tasks.stop(task.id);
+    await recover(h);
+    expect(existsSync(`${h.store.attempt(ref).logPath}.pid`)).toBe(false);
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(h.store.attempt(ref)).toMatchObject({
+      state: 'stopped',
+      terminationIntent: { operation: 'stop', state: 'complete', processIdentity: 'not-started', process: null },
+    });
+    expect(h.store.events(task.id, 2).filter((event) => event.kind === 'stopped')).toHaveLength(1);
+    expect(h.store.attempt(prior).checks).toEqual(['check-a']);
+    expect(existsSync(priorPid)).toBe(true);
+    expect(earlier.exitCode).toBeNull();
+    writeFileSync(join(h.settings.stateDirectory, 'capacity.json'), JSON.stringify({ maxWorkers: 0 }));
+    await runWorkerCommand('retry', [task.id], { tasks: h.tasks, print() {} });
+    expect(h.store.retryIntent(ref)?.status).toBe('pending');
+  } finally {
+    if (earlier.exitCode === null && earlier.signalCode === null) {
+      const exited = new Promise<void>((resolve) => earlier.once('exit', () => resolve()));
+      earlier.kill('SIGTERM');
+      await exited;
+    }
+    await h.disposeAsync();
+  }
+});
+
+test('host recovery settles an already-unknown setup-failed attempt that never wrote a PID', async () => {
+  const h = harness('#!/usr/bin/env bun\n');
+  try {
+    const { task, ref } = await setupFailedAttempt(h);
+    h.store.updateAttempt(ref, (attempt) => {
+      attempt.terminationIntent = {
+        operation: 'stop',
+        requestedAt: new Date().toISOString(),
+        state: 'unknown',
+        processIdentity: 'unknown',
+        process: null,
+        auxiliaryProcesses: [],
+        error: 'process identity unavailable',
+      };
+    });
+    await recover(h);
+    expect(existsSync(`${h.store.attempt(ref).logPath}.pid`)).toBe(false);
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(h.store.attempt(ref).terminationIntent).toMatchObject({
+      operation: 'stop',
+      state: 'complete',
+      processIdentity: 'unknown',
+      process: null,
+    });
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('a setup-failed never-launched cancel settles without a current PID and stays fenced', async () => {
+  const h = harness('#!/usr/bin/env bun\n');
+  try {
+    const { task, ref } = await setupFailedAttempt(h);
+    await h.tasks.cancel(task.id);
+    await recover(h);
+    expect(existsSync(`${h.store.attempt(ref).logPath}.pid`)).toBe(false);
+    expect(h.store.task(task.id).state).toBe('cancelled');
+    expect(h.store.attempt(ref).terminationIntent).toMatchObject({
+      operation: 'cancel',
+      state: 'complete',
+      processIdentity: 'not-started',
+    });
+    expect(() => h.tasks.queueRetry(task.id)).toThrow(/cancelled/);
+    await expect(runWorkerCommand('retry', [task.id], { tasks: h.tasks, print() {} })).rejects.toThrow(/cancelled/);
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('never-launched recovery stays open while a live descendant is in the worktree', async () => {
+  const h = harness('#!/usr/bin/env bun\n');
+  let live: ReturnType<typeof spawn> | undefined;
+  try {
+    const { task, ref } = await setupFailedAttempt(h);
+    live = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: task.worktree, stdio: 'ignore' });
+    await new Promise<void>((resolve, reject) => {
+      live!.once('spawn', resolve);
+      live!.once('error', reject);
+    });
+    await expect(h.tasks.cancel(task.id)).rejects.toThrow('never-launched identity');
+    await recover(h);
+    expect(h.store.attempt(ref).terminationIntent).toMatchObject({
+      state: 'requested',
+      processIdentity: 'not-started',
+    });
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
+  } finally {
+    if (live && live.exitCode === null && live.signalCode === null) {
+      const exited = new Promise<void>((resolve) => live!.once('exit', () => resolve()));
+      live.kill('SIGTERM');
+      await exited;
+    }
+    await h.disposeAsync();
+  }
+});
+
+test('never-launched recovery stays open when current PID evidence is unreadable', async () => {
+  const h = harness('#!/usr/bin/env bun\n');
+  const hidden = join(h.settings.stateDirectory, 'hidden-pid');
+  try {
+    const { task, ref } = await setupFailedAttempt(h);
+    mkdirSync(hidden);
+    writeFileSync(join(hidden, 'pid'), '1');
+    chmodSync(hidden, 0);
+    symlinkSync(join(hidden, 'pid'), `${h.store.attempt(ref).logPath}.pid`);
+    await expect(h.tasks.cancel(task.id)).rejects.toThrow('unknown process identity');
+    await recover(h);
+    expect(h.store.attempt(ref).terminationIntent).toMatchObject({
+      state: 'unknown',
+      processIdentity: 'unknown',
+    });
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
+  } finally {
+    try {
+      chmodSync(hidden, 0o755);
+    } catch {
+      // The fixture directory may already have been removed.
+    }
+    await h.disposeAsync();
+  }
+});
 
 for (const terminal of ['stopped', 'cancelled'] as const) {
   test(`continuation overlap admission ignores a ${terminal} task`, () => {

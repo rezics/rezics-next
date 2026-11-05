@@ -1,8 +1,19 @@
-import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
+import { readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
 export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
+export type RunPidFilePresence = 'present' | 'absent' | 'unreadable';
+
+/** Presence of the launch PID file beside a run log; ENOENT is absence, any other stat failure is unreadable. */
+export function runPidFilePresence(logPath: string): RunPidFilePresence {
+  try {
+    statSync(`${logPath}.pid`);
+    return 'present';
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'unreadable';
+  }
+}
 
 /** Optional ownership hooks for callers that need to observe worker and waiter lifetimes. */
 export type ProcessOwnershipAdapter = {

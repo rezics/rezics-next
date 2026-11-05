@@ -7,7 +7,7 @@ import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { JSON5 } from 'bun';
 import { CHECK_COMPATIBILITY_CONTRACT } from '../src/check-compatibility.ts';
-import { runBoundedProcess, type BoundedProcessResult } from '../src/lifecycle-fixture.ts';
+import { runBoundedProcess, type BoundedProcessResult } from '../test-support/lifecycle-fixture.ts';
 
 export type ParityOptions = { inputRoot: string; scriptsRoot: string; policy?: ControlPolicy | undefined };
 type Identity = { root: string; commit: string; tree: string; status: string };

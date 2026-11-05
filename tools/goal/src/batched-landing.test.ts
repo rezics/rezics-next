@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MergeTrain, type IntegrationCheck } from './merge-train.ts';
 import { git } from './merge.ts';
+import { TrainResolver } from './train-resolver.ts';
 import { integrationHarness } from './test-support.ts';
 
 function setChecks(h: ReturnType<typeof integrationHarness>, checks: IntegrationCheck[]): void {
@@ -291,6 +292,70 @@ appendFileSync(${JSON.stringify(runs)}, 'run\\n');
     expect(() => git(h.root, 'show', 'dev:stale.ts')).toThrow();
     expect(h.queue.next()).toBeUndefined();
     expect(h.store.task(stale.id).currentAttempt).toBe(2);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a resolver handoff runs after the dev lane lease is released', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const task = h.dispatch('shared.txt');
+    await h.start(task);
+    h.advanceDev('shared.txt', 'dev version');
+    const leasePath = join(h.settings.stateDirectory, 'train.lease');
+    const leaseHeldDuringResolution: boolean[] = [];
+    const resolver = new TrainResolver(h.store);
+    resolver.compose = async (request, tree, target, targetRef, source) => {
+      leaseHeldDuringResolution.push(existsSync(leasePath));
+      const sourceTree = git(tree, 'rev-parse', source + '^{tree}');
+      const resolvedCommit = git(
+        tree,
+        'commit-tree',
+        sourceTree,
+        '-p',
+        target,
+        '-p',
+        source,
+        '-m',
+        'Test resolver result',
+      );
+      return {
+        taskId: request.taskId,
+        attempt: request.attempt,
+        key: request.taskId + ':' + request.attempt,
+        sourceCommit: source,
+        targetCommit: target,
+        targetRef,
+        targetHead: target,
+        commonBase: git(tree, 'merge-base', target, source),
+        conflictFiles: ['shared.txt'],
+        startedAt: new Date().toISOString(),
+        method: 'mechanical',
+        tokens: { input: 0, cached: 0, output: 0 },
+        resolvedCommit,
+      };
+    };
+
+    await new MergeTrain({
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+          h.job.onGateOutcome(outcome);
+        },
+      },
+      trainResolver: resolver,
+      async runGate() {
+        return { passed: true, output: '', timedOut: false };
+      },
+    }).run();
+
+    expect(leaseHeldDuringResolution).toEqual([false]);
+    expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([[task.id, true]]);
   } finally {
     h.dispose();
   }

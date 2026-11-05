@@ -5,6 +5,7 @@ import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import {
+  type Dirent,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -14,7 +15,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { AttemptRef } from './contracts.ts';
 import {
   BRIEF_KINDS,
@@ -61,15 +62,139 @@ function scope(markdown: string): { paths: string[]; title: string } {
   };
 }
 
-function markdownFiles(directory: string): string[] {
+function directoryEntries(directory: string, ignoreErrors = false): Dirent[] {
   try {
-    return readdirSync(directory, { withFileTypes: true })
+    return readdirSync(directory, { withFileTypes: true });
+  } catch (error) {
+    if (ignoreErrors || (error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+type ContinuationInventoryEntry = {
+  file: string;
+  markdown: string;
+  scope: ReturnType<typeof scope>;
+};
+
+/** A fresh, admission-local view of continuation overlap and review inputs. */
+export type ContinuationAdmissionProjection = {
+  root: string;
+  overlapDirectories: Map<string, Map<string, ContinuationInventoryEntry>>;
+  dispatchedNames: Set<string>;
+  reviewFiles?: Set<string>;
+  continuationCount: number;
+};
+
+const CONTINUATION_OVERLAP_DIRECTORIES = ['', 'held', '.dispatching'];
+const CONTINUATION_REVIEW_DIRECTORIES = [
+  '',
+  'proposed',
+  'dispatched',
+  'continued',
+  'failed',
+  'retired',
+  '.dispatching',
+];
+
+function isContinuationFile(file: string): boolean {
+  return /(?:^|-)continuation-/.test(basename(file));
+}
+
+function readContinuationProjection(
+  stateDirectory: string,
+  goal: string,
+  options: { overlap: boolean; review: boolean },
+): ContinuationAdmissionProjection {
+  const root = backlogDirectory(stateDirectory, goal);
+  const overlapDirectories = new Map<string, Map<string, ContinuationInventoryEntry>>();
+  const reviewFiles = options.review ? new Set<string>() : undefined;
+  const dispatchedNames = new Set<string>();
+  let continuationCount = 0;
+  const reviewDirectories = new Set(CONTINUATION_REVIEW_DIRECTORIES);
+  const overlapPaths = new Set(CONTINUATION_OVERLAP_DIRECTORIES.map((relative) => join(root, relative)));
+  if (options.overlap) for (const directory of overlapPaths) overlapDirectories.set(directory, new Map());
+
+  const directories = new Set<string>([
+    ...(options.overlap ? CONTINUATION_OVERLAP_DIRECTORIES : []),
+    ...(options.review ? CONTINUATION_REVIEW_DIRECTORIES : []),
+    ...(options.overlap ? ['dispatched'] : []),
+  ]);
+  for (const relative of directories) {
+    const directory = join(root, relative);
+    // The original dispatched sibling check treated an unreadable directory as no matches. Review inventory keeps
+    // its existing strict filesystem error behaviour.
+    const entries = directoryEntries(directory, relative === 'dispatched' && !options.review);
+    if (relative === 'dispatched') for (const entry of entries) dispatchedNames.add(entry.name);
+    const files = entries
       .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
       .map((entry) => join(directory, entry.name))
       .sort();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
+    if (reviewFiles && reviewDirectories.has(relative))
+      for (const file of files) {
+        reviewFiles.add(file);
+        if (isContinuationFile(file)) continuationCount++;
+      }
+    const overlap = overlapDirectories.get(directory);
+    if (overlap)
+      for (const file of files) {
+        try {
+          const markdown = readFileSync(file, 'utf8');
+          overlap.set(file, { file, markdown, scope: scope(markdown) });
+        } catch {
+          // An incomplete manager draft has no usable scope yet; ordinary dispatch will validate it.
+        }
+      }
+  }
+  return {
+    root,
+    overlapDirectories,
+    dispatchedNames,
+    ...(reviewFiles ? { reviewFiles } : {}),
+    continuationCount,
+  };
+}
+
+/** Build the single projection shared by one backlog admission or one source-task harvest. */
+export function continuationAdmissionProjection(
+  stateDirectory: string,
+  goal: string,
+  policy: ControlPolicy = defaultPolicy,
+): ContinuationAdmissionProjection {
+  return readContinuationProjection(stateDirectory, goal, {
+    overlap: true,
+    review: policy.backlog.continuationReview[goal] === undefined,
+  });
+}
+
+function recordPublishedContinuation(
+  projection: ContinuationAdmissionProjection,
+  file: string,
+  markdown: string,
+): void {
+  if (projection.reviewFiles && !projection.reviewFiles.has(file)) {
+    projection.reviewFiles.add(file);
+    if (isContinuationFile(file)) projection.continuationCount++;
+  }
+  const entries = projection.overlapDirectories.get(dirname(file));
+  entries?.set(file, { file, markdown, scope: scope(markdown) });
+}
+
+function movePublishedContinuation(
+  projection: ContinuationAdmissionProjection,
+  source: string,
+  destination: string,
+): void {
+  const sourceEntries = projection.overlapDirectories.get(dirname(source));
+  const existing = sourceEntries?.get(source);
+  if (existing) {
+    sourceEntries!.delete(source);
+    projection.overlapDirectories.get(dirname(destination))?.set(destination, { ...existing, file: destination });
+  }
+  if (projection.reviewFiles?.delete(source)) {
+    projection.reviewFiles.add(destination);
+    if (isContinuationFile(source)) projection.continuationCount--;
+    if (isContinuationFile(destination)) projection.continuationCount++;
   }
 }
 
@@ -92,15 +217,12 @@ function continuationBatchPrefix(taskId: string, attempt: number): string {
   return `continuation-${taskId.slice(0, 8)}-${attempt}-`;
 }
 
-function dispatchedFromBatch(stateDirectory: string, goal: string, taskId: string, prefix: string): boolean {
-  try {
-    return readdirSync(join(backlogDirectory(stateDirectory, goal), 'dispatched')).some((name) => {
-      const rest = name.startsWith(`${taskId}-`) ? name.slice(taskId.length + 1) : '';
-      return rest.startsWith(prefix);
-    });
-  } catch {
-    return false;
+function dispatchedFromBatch(projection: ContinuationAdmissionProjection, taskId: string, prefix: string): boolean {
+  for (const name of projection.dispatchedNames) {
+    const rest = name.startsWith(`${taskId}-`) ? name.slice(taskId.length + 1) : '';
+    if (rest.startsWith(prefix)) return true;
   }
+  return false;
 }
 
 /** Append dependency task IDs to a brief's `after` list; existing values stay first. */
@@ -141,7 +263,9 @@ export function continuationOverlap(
   ignoredFiles: string[] = [],
   policy: ControlPolicy['brief'] = defaultPolicy.brief,
   sourceAttempt?: number,
+  admission?: ContinuationAdmissionProjection,
 ): ContinuationOverlap {
+  const projection = admission ?? readContinuationProjection(stateDirectory, goal, { overlap: true, review: false });
   const candidate = scope(markdown);
   const remaining = remainingPaths(candidate.paths, policy);
   const prefix =
@@ -158,7 +282,7 @@ export function continuationOverlap(
     .all(goal) as { id: string; body: string }[];
   for (const row of rows) {
     if (row.id === sourceTask) continue;
-    if (prefix && dispatchedFromBatch(stateDirectory, goal, row.id, prefix)) continue;
+    if (prefix && dispatchedFromBatch(projection, row.id, prefix)) continue;
     const brief = (JSON.parse(row.body) as Task).brief;
     const other = { paths: remainingPaths(brief.paths ?? [], policy), title: scope(brief.markdown ?? '').title };
     if (candidate.title && candidate.title === other.title)
@@ -167,22 +291,19 @@ export function continuationOverlap(
       return duplicate(`overlaps task ${row.id}; merge the remainder into that task's scope`);
     if (coversAny(remaining, other.paths, policy)) after.add(row.id);
   }
-  const root = backlogDirectory(stateDirectory, goal);
-  for (const directory of [root, join(root, 'held'), join(root, '.dispatching')]) {
-    for (const file of markdownFiles(directory)) {
-      try {
-        const otherMarkdown = readFileSync(file, 'utf8');
-        if (ignoredFiles.includes(file) && otherMarkdown === markdown) continue;
-        if (prefix && basename(file).startsWith(prefix)) continue;
-        const other = scope(otherMarkdown);
-        if (candidate.title && candidate.title === other.title)
-          return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
-        const otherRemaining = remainingPaths(other.paths, policy);
-        if (coversAll(remaining, otherRemaining, policy))
-          return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
-      } catch {
-        // An incomplete manager draft has no usable scope yet; ordinary dispatch will validate it.
-      }
+  for (const directory of CONTINUATION_OVERLAP_DIRECTORIES.map((relative) => join(projection.root, relative))) {
+    const entries = projection.overlapDirectories.get(directory);
+    if (!entries) continue;
+    for (const { file, markdown: otherMarkdown, scope: other } of [...entries.values()].sort((a, b) =>
+      a.file < b.file ? -1 : a.file > b.file ? 1 : 0,
+    )) {
+      if (ignoredFiles.includes(file) && otherMarkdown === markdown) continue;
+      if (prefix && basename(file).startsWith(prefix)) continue;
+      if (candidate.title && candidate.title === other.title)
+        return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
+      const otherRemaining = remainingPaths(other.paths, policy);
+      if (coversAll(remaining, otherRemaining, policy))
+        return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
     }
   }
   return { after: [...after] };
@@ -194,15 +315,13 @@ export function continuationReview(
   goal: string,
   policy: ControlPolicy = defaultPolicy,
   additional = 0,
+  admission?: ContinuationAdmissionProjection,
 ): boolean {
   const configured = policy.backlog.continuationReview[goal];
   if (configured !== undefined) return configured;
-  const root = backlogDirectory(stateDirectory, goal);
-  const files = ['', 'proposed', 'dispatched', 'continued', 'failed', 'retired', '.dispatching'].flatMap((directory) =>
-    markdownFiles(join(root, directory)),
-  );
-  const continuations = files.filter((file) => /(?:^|-)continuation-/.test(basename(file))).length;
-  return continuations + additional > files.length - continuations;
+  const projection = admission ?? readContinuationProjection(stateDirectory, goal, { overlap: false, review: true });
+  const files = projection.reviewFiles!;
+  return projection.continuationCount + additional > files.size - projection.continuationCount;
 }
 
 /** A retained reason and a moved brief are the manager's explicit release; overlaps are still checked. */
@@ -472,6 +591,8 @@ export function harvestContinuations(
     settings.policy?.leases,
   );
   try {
+    // One task's output is one admission plan. A later harvest builds a fresh projection after this lease ends.
+    const admission = continuationAdmissionProjection(settings.stateDirectory, task.brief.goal, settings.policy);
     for (const name of names) {
       if (trackedNames.has(name)) continue;
       const path = join(source, name);
@@ -529,6 +650,7 @@ export function harvestContinuations(
         [...readyCandidates, ...proposedCandidates],
         settings.policy?.brief,
         ref.attempt,
+        admission,
       );
       const admitted = overlap.reason ? markdown : withContinuationAfter(markdown, overlap.after);
       const proposalReason =
@@ -540,6 +662,7 @@ export function harvestContinuations(
           [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, admitted) === 'match')
             ? 0
             : 1,
+          admission,
         )
           ? 'Goal continuation review is enabled; release or retire this proposal'
           : undefined);
@@ -564,7 +687,10 @@ export function harvestContinuations(
         continue;
       }
       if (proposalReason) {
+        recordPublishedContinuation(admission, destination, admitted);
         proposeContinuation(destination, settings.stateDirectory, task.brief.goal, proposalReason);
+        const proposed = join(target, 'proposed', basename(destination));
+        if (proposed !== destination) movePublishedContinuation(admission, destination, proposed);
         rmSync(path, { force: true });
         result.proposed.push({ file: destination, reason: proposalReason });
         store.event(ref, 'continuation-proposed', { file: name, path: destination, reason: proposalReason });
@@ -576,6 +702,7 @@ export function harvestContinuations(
         });
         continue;
       }
+      recordPublishedContinuation(admission, destination, admitted);
       rmSync(path, { force: true });
       result.queued.push(destination);
       store.event(ref, 'continuation-queued', { file: name, path: destination });

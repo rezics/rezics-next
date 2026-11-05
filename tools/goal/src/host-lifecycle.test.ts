@@ -506,3 +506,86 @@ test('daily audit validation and dispatch failures are durable and reported once
     }
   }
 }, 15_000);
+
+function extractedHostScript(path: string, extras = '') {
+  const source = (name: string) => JSON.stringify(join(import.meta.dir, name));
+  writeFileSync(
+    path,
+    `
+      import { writeFileSync } from 'node:fs';
+      import { createIntegrationRuntime } from ${source('fixtures/cli-runtime.ts')};
+      import { serveManagers } from ${source('manager-host.ts')};
+      const runtime = createIntegrationRuntime();
+      ${extras}
+      await serveManagers(runtime);
+      runtime.db.close();
+    `,
+  );
+}
+
+async function waitForFlag(path: string, child: ChildProcess, label: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!existsSync(path)) {
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error(`extracted host exited before ${label} (${child.exitCode ?? child.signalCode})`);
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+test('extracted host answers while recovery continues and finishes one in-flight request before stop', async () => {
+  const f = fixture({ FAKE_GOAL_HOST_SWEEP_MS: '25' });
+  const script = join(f.path, 'extracted-host.ts');
+  const recoveryStarted = join(f.path, 'recovery-started');
+  const requestStarted = join(f.path, 'request-started');
+  extractedHostScript(
+    script,
+    `
+      runtime.recoverOrphans = () => {
+        writeFileSync(${JSON.stringify(recoveryStarted)}, '1');
+        return new Promise(() => {});
+      };
+      const connect = runtime.managerServices.connect;
+      runtime.managerServices.connect = async () => {
+        writeFileSync(${JSON.stringify(requestStarted)}, '1');
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return connect();
+      };
+    `,
+  );
+  let child: ChildProcess | undefined;
+  let hostExited: Promise<void> | undefined;
+  try {
+    child = spawn(process.execPath, [script], { env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    hostExited = new Promise<void>((resolve) => child!.once('exit', () => resolve()));
+    await new Promise<void>((resolve, reject) => {
+      const lines = createInterface({ input: child!.stdout! });
+      lines.once('line', (line) => {
+        lines.close();
+        line === 'ready' ? resolve() : reject(new Error(line));
+      });
+      child!.once('exit', (code) => reject(new Error(`extracted host exited before ready (${code})`)));
+    });
+    await waitForFlag(recoveryStarted, child, 'recovery start');
+    await expect(
+      hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000),
+    ).rejects.toThrow('Unknown manager');
+    const starting = f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
+    await waitForFlag(requestStarted, child, 'in-flight start');
+    const started = await starting;
+    expect(started.stderr).toBe('');
+    expect(started.code).toBe(0);
+    expect(JSON.parse(started.stdout).threadId).toBe('thread-1');
+    rmSync(f.path, { recursive: true, force: true });
+    await hostExited;
+    expect(existsSync(join(f.path, 'manager.sock'))).toBe(false);
+    expect(existsSync(join(f.path, 'manager-app-servers.json'))).toBe(false);
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+      await hostExited;
+    }
+    await cleanHosted(f.path);
+    f.close();
+  }
+}, 15_000);

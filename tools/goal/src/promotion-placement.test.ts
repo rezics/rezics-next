@@ -128,18 +128,20 @@ test('an observation write failure cannot turn a rejected full gate into promoti
     const mainBefore = h.head('main');
     const ordinaryHostsFile = join(h.settings.stateDirectory, 'remote-check-hosts.json');
     writeFileSync(ordinaryHostsFile, JSON.stringify({ hosts: [host('a'), host('b'), host('c')] }));
-    h.settings.gate = [
+    const configuredGate = [
       'env',
       'KERNEL_CHECK_CONCURRENCY=5',
       `KERNEL_CHECK_REMOTE=${ordinaryHostsFile}`,
       'bun',
       'scripts/gate.ts',
     ];
+    h.settings.gate = configuredGate;
     h.settings.promotionPlacement = { ordinaryHostsFile };
     ensurePromotionObservationSchema(h.store.db);
     h.store.db.exec(`CREATE TRIGGER reject_promotion_observation BEFORE INSERT ON promotion_group_windows
       BEGIN SELECT RAISE(ABORT, 'fixture telemetry failure'); END`);
     let rootGateCalled = false;
+    let executedRootCommand: readonly string[] | undefined;
 
     await promote({
       settings: h.settings,
@@ -148,6 +150,7 @@ test('an observation write failure cannot turn a rejected full gate into promoti
       runGate: async (command) => {
         if (command.includes('scripts/gate.ts')) {
           rootGateCalled = true;
+          executedRootCommand = [...command];
           return { passed: false, output: 'AssertionError: gate rejected the frozen candidate', timedOut: false };
         }
         return { passed: true, output: '', timedOut: false };
@@ -157,7 +160,12 @@ test('an observation write failure cannot turn a rejected full gate into promoti
     expect(rootGateCalled).toBe(true);
     expect(h.head('main')).toBe(mainBefore);
     expect(h.head()).toBe(frozenCandidate);
-    expect(h.store.promotion()?.phase).toBe('stabilize-blocked');
+    const run = h.store.promotion()!;
+    expect(run.phase).toBe('stabilize-blocked');
+    expect(run.headResults).toContainEqual(
+      expect.objectContaining({ commit: frozenCandidate, command: configuredGate, passed: false, timedOut: false }),
+    );
+    expect(executedRootCommand).not.toEqual(configuredGate);
     expect(readPromotionGroupWindows(h.store.db)).toEqual([]);
   } finally {
     h.dispose();

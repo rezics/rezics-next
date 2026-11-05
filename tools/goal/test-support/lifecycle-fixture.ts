@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 
 export type BoundedProcessResult = {
   status: number | null;

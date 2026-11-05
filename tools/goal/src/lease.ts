@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path';
 import { inspectProcessIdentity, processIdentity } from './process.ts';
 import type { ProcessIdentity } from './process.ts';
 
-type Owner = ProcessIdentity & { token: string };
-type OwnerRead = { kind: 'absent' } | { kind: 'invalid' } | { kind: 'owner'; owner: Owner };
+export type LeaseOwner = ProcessIdentity & { token: string; codeVersion?: string };
+type OwnerRead = { kind: 'absent' } | { kind: 'invalid' } | { kind: 'owner'; owner: LeaseOwner };
 function readOwner(directory: string): OwnerRead {
   let file: string | undefined;
   try {
@@ -18,9 +18,9 @@ function readOwner(directory: string): OwnerRead {
     throw error;
   }
   if (!file) return { kind: 'absent' };
-  let value: Owner;
+  let value: LeaseOwner;
   try {
-    value = JSON.parse(readFileSync(join(directory, file), 'utf8')) as Owner;
+    value = JSON.parse(readFileSync(join(directory, file), 'utf8')) as LeaseOwner;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'absent' };
     return { kind: 'invalid' };
@@ -34,11 +34,51 @@ function readOwner(directory: string): OwnerRead {
     typeof value.start !== 'string' ||
     typeof value.boot !== 'string' ||
     typeof value.token !== 'string' ||
-    !/^[a-zA-Z0-9-]+$/.test(value.token)
+    !/^[a-zA-Z0-9-]+$/.test(value.token) ||
+    (value.codeVersion !== undefined && (typeof value.codeVersion !== 'string' || !value.codeVersion))
   )
     return { kind: 'invalid' };
   // Earlier integration leases recorded start/boot identity without the process group.
-  return { kind: 'owner', owner: { ...value, group: value.group ?? processIdentity(value.pid)?.group ?? 0 } };
+  return {
+    kind: 'owner',
+    owner: {
+      ...value,
+      group: value.group ?? processIdentity(value.pid)?.group ?? 0,
+      ...(typeof value.codeVersion === 'string' ? { codeVersion: value.codeVersion } : {}),
+    },
+  };
+}
+
+export type TrainLane = 'main' | 'dev';
+export type TrainLaneStatus = {
+  lane: TrainLane;
+  state: 'running' | 'stopped' | 'missing';
+  pid?: number;
+  codeVersion?: string;
+};
+
+const TRAIN_LANES = [
+  { lane: 'main' as const, file: 'train-main.lease' },
+  { lane: 'dev' as const, file: 'train.lease' },
+];
+
+/** Status reads each lane's captured identity from its lease; a dead owner is stopped, not current. */
+export function trainLaneStatus(stateDirectory: string): TrainLaneStatus[] {
+  return TRAIN_LANES.map(({ lane, file }) => {
+    const read = readOwner(join(stateDirectory, file));
+    if (read.kind === 'absent') return { lane, state: 'missing' as const };
+    if (read.kind === 'invalid') return { lane, state: 'stopped' as const };
+    const { owner } = read;
+    const current = inspectProcessIdentity(owner.pid);
+    const live =
+      current !== null && current.start === owner.start && current.boot === owner.boot && current.group === owner.group;
+    return {
+      lane,
+      state: live ? ('running' as const) : ('stopped' as const),
+      pid: owner.pid,
+      ...(owner.codeVersion ? { codeVersion: owner.codeVersion } : {}),
+    };
+  });
 }
 
 export class LeaseHeldError extends Error {}
@@ -70,7 +110,11 @@ export function acquireDirectoryLeaseWaiting(
 }
 
 /** Fail closed while a new owner is writing its identity. No age limit evicts a live owner. */
-export function acquireDirectoryLease(directory: string, policy = defaultPolicy.leases): DirectoryLease {
+export function acquireDirectoryLease(
+  directory: string,
+  policy = defaultPolicy.leases,
+  extras?: { codeVersion?: string },
+): DirectoryLease {
   mkdirSync(dirname(directory), { recursive: true });
   const identity = processIdentity();
   if (!identity) throw new Error('Cannot identify lease owner');
@@ -78,7 +122,10 @@ export function acquireDirectoryLease(directory: string, policy = defaultPolicy.
   const prepared = join(dirname(directory), `${token}.initializing`);
   try {
     fs.mkdirSync(prepared);
-    fs.writeFileSync(join(prepared, `${token}.json`), JSON.stringify({ ...identity, token }));
+    fs.writeFileSync(
+      join(prepared, `${token}.json`),
+      JSON.stringify({ ...identity, token, ...(extras?.codeVersion ? { codeVersion: extras.codeVersion } : {}) }),
+    );
     for (let attempt = 0; attempt < policy.acquisitionAttempts; attempt++) {
       try {
         // Publish a populated directory atomically: no empty new-owner window for a reaper.

@@ -1,8 +1,12 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { expect, test } from 'bun:test';
 import { parseProviderObject, runLaunchSmoke } from '../scripts/launch-smoke.ts';
-import { parseWorkerResult } from './lifecycle-fixture.ts';
+import { parseWorkerResult } from '../test-support/lifecycle-fixture.ts';
+import { runInnerProcess } from '../scripts/launch-smoke-scenarios.ts';
+import { defaultPolicy } from './policy.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -71,4 +75,61 @@ test('provider result extraction reads the strict JSON from a Codex agent_messag
   ].map((event) => JSON.stringify(event));
 
   expect(parseWorkerResult(parseProviderObject(events.join('\n'), 'waiting'), 'waiting', checkId)).toEqual(waiting);
+});
+
+test('entry helpers stay inert and inner execution uses the candidate launch-smoke entry', async () => {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(root, '.temp/launch-smoke-entry-'));
+  const entry = join(root, 'tools/goal/scripts/launch-smoke.ts');
+  try {
+    const imported = spawnSync(
+      process.execPath,
+      ['-e', 'await import(' + JSON.stringify(pathToFileURL(entry).href) + ')'],
+      {
+        cwd: root,
+        env: { ...process.env, REZICS_LAUNCH_SMOKE_POLICY: '{' },
+        encoding: 'utf8',
+        timeout: 5_000,
+      },
+    );
+    expect(imported.status).toBe(0);
+    expect(imported.stdout).toBe('');
+    expect(imported.stderr).toBe('');
+
+    const candidateEntry = join(directory, 'tools/goal/scripts/launch-smoke.ts');
+    const argvPath = join(directory, 'inner-argv.json');
+    mkdirSync(dirname(candidateEntry), { recursive: true });
+    writeFileSync(
+      candidateEntry,
+      "import { writeFileSync } from 'node:fs';\n" +
+        'writeFileSync(' +
+        JSON.stringify(argvPath) +
+        ', JSON.stringify(process.argv.slice(2)));\n' +
+        "console.log('inner entry passed');\n",
+    );
+    const lines: string[] = [];
+    await runInnerProcess(directory, process.env, 5_000, (line) => lines.push(line), defaultPolicy.launchSmoke);
+    expect(JSON.parse(readFileSync(argvPath, 'utf8'))).toEqual(['--inner']);
+    expect(lines).toEqual(['inner entry passed']);
+
+    const inner = spawnSync(process.execPath, [entry, '--inner'], {
+      cwd: root,
+      env: {
+        ...process.env,
+        REZICS_LAUNCH_SMOKE_POLICY: JSON.stringify(defaultPolicy),
+        REZICS_LAUNCH_SMOKE_TREE: directory,
+        REZICS_LAUNCH_SMOKE_CLONE: directory,
+        REZICS_LAUNCH_SMOKE_SOURCE_ROOT: directory,
+        REZICS_LAUNCH_SMOKE_REPORT_PATH: join(directory, 'report.json'),
+      },
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 256 * 1024,
+    });
+    expect(inner.status).toBe(1);
+    expect(inner.stdout).toContain('setup: failed:');
+    expect(inner.stdout + inner.stderr).toContain(join(directory, 'tools/goal/src/config.ts'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
