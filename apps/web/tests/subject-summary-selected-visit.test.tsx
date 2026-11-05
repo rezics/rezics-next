@@ -71,11 +71,21 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   const japaneseContent = { document: '00000000-0000-4000-8000-000000000203', digest: 'd'.repeat(64), language: 'ja' };
   const japaneseCitation = 'https://example.test/japanese-synopsis';
   japanese.value = { type: 'value', content: japaneseContent };
-  japanese.references = [{ hash: 'japanese-reference', parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: japaneseCitation } }] }];
+  japanese.references = [
+    {
+      hash: 'japanese-reference',
+      parts: [
+        { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: japaneseCitation } },
+      ],
+    },
+  ];
   fixture.publicRead.subject.statements['schema:abstract']!.push(japanese);
   fixture.documents.set(japaneseContent.document, {
-    ...[...fixture.documents.values()][0]!, ...japaneseContent, id: japaneseContent.document,
-    candidateId: japanese.id, body: fromPlainText('日本語の概要。'),
+    ...[...fixture.documents.values()][0]!,
+    ...japaneseContent,
+    id: japaneseContent.document,
+    candidateId: japanese.id,
+    body: fromPlainText('日本語の概要。'),
   });
   let held: { resolve: (read: AuthoredRead) => void; address: AuthoredAddress } | undefined;
   let holdNext = false;
@@ -149,9 +159,12 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       if (!holdSourceRefresh) return result;
       holdSourceRefresh = false;
       return new Promise<typeof result>((resolve) => {
-        releaseSource = () => resolve(result.kind === 'ready'
-          ? { ...result, page: { ...result.page, title: { text: 'Late retired Sources' } } }
-          : result);
+        releaseSource = () =>
+          resolve(
+            result.kind === 'ready'
+              ? { ...result, page: { ...result.page, title: { text: 'Late retired Sources' } } }
+              : result,
+          );
       });
     },
   }));
@@ -316,17 +329,31 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.sources_retry())!;
     expect(retry).toBeDefined();
     failSourceRefresh = false;
-    await act(async () => { retry.focus(); await user.keyboard('{Enter}'); });
+    await act(async () => {
+      retry.focus();
+      await user.keyboard('{Enter}');
+    });
     await settle();
     expect(sourceRequests.at(-1)).toMatchObject({ statement: second.id, document: content.document });
-    expect(window.document.activeElement === host.querySelector('[data-slot="view-heading"] h1'), window.document.activeElement?.outerHTML).toBe(true);
+    expect(
+      window.document.activeElement === host.querySelector('[data-slot="view-heading"] h1'),
+      window.document.activeElement?.outerHTML,
+    ).toBe(true);
     await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
     expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
     expect(window.document.activeElement?.id).toBe('subject-summary-evidence');
     await act(async () => user.selectOptions(host.querySelector('select')!, japanese.id));
     await settle();
-    await click([...host.querySelectorAll('#subject-summary-evidence a')].find((link) => link.textContent === m.subject_synopsis_evidence())!);
-    expect(sourceRequests.at(-1)).toMatchObject({ statement: japanese.id, document: japaneseContent.document, language: 'ja' });
+    await click(
+      [...host.querySelectorAll('#subject-summary-evidence a')].find(
+        (link) => link.textContent === m.subject_synopsis_evidence(),
+      )!,
+    );
+    expect(sourceRequests.at(-1)).toMatchObject({
+      statement: japanese.id,
+      document: japaneseContent.document,
+      language: 'ja',
+    });
     expect(host.textContent).toContain(japaneseCitation);
     expect(host.textContent).not.toContain('日本語の概要。');
     await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);

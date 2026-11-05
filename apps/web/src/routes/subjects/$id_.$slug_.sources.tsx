@@ -88,7 +88,8 @@ function SourcesRoute() {
       void (async () => {
         if ((await requestKey(original)) !== request || !live) return;
         const refreshed =
-          !realm && result.kind === 'ready' &&
+          !realm &&
+          result.kind === 'ready' &&
           (session.state === 'signed-out' || (session.state === 'signed-in' && session.subject))
             ? await readCurrentSubjectSources({
                 data: {

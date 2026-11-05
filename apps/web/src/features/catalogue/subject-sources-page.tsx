@@ -169,10 +169,10 @@ export function SubjectSourcesPage({
             </a>
             {returnTo &&
               (page.selectedSynopsis || !summaryReadingReturn(new URL(returnTo, 'https://rezics.invalid').hash)) && (
-              <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
-                {m.subject_synopsis_return({}, o)}
-              </NamesReturnAnchor>
-            )}
+                <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
+                  {m.subject_synopsis_return({}, o)}
+                </NamesReturnAnchor>
+              )}
             <a className={linkClassName} href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}>
               {m.subject_details({}, o)}
             </a>

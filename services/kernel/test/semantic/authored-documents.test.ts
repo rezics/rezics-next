@@ -240,7 +240,9 @@ test('native exact Sources admits the second same-language document and loses it
   const second = subject.statements['schema:abstract'][1];
   await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
   const reference = second.value.content;
-  expect((await readAuthoredField(pool, routeOf(subject.id)!, reference.document))?.authorAccountId).toBe(accounts.editor);
+  expect((await readAuthoredField(pool, routeOf(subject.id)!, reference.document))?.authorAccountId).toBe(
+    accounts.editor,
+  );
   await realAccess.grant({ route: routeOf(reference.document)!, id: reference.document }, 'editor', 'document:erase');
   const input = {
     statement: second.id,
@@ -311,7 +313,9 @@ test('native exact Sources admits the second same-language document and loses it
           },
         }),
       );
-      expect(erased.status, JSON.stringify({ body: await erased.text(), checks: realAccess.checks.slice(-8) })).toBe(204);
+      expect(erased.status, JSON.stringify({ body: await erased.text(), checks: realAccess.checks.slice(-8) })).toBe(
+        204,
+      );
     } finally {
       hold.release();
     }

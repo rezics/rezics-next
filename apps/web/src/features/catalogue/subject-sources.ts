@@ -157,23 +157,22 @@ export function explainSubjectSources(
   const original = originalLanguage(read.subject);
   const title = pageText(subject.labels, locale, original);
   const identity = { id: subject.id, label: title.text };
-  const exactIds =
-    admittedExact
-      ? new Set(
-          [
-            exact.fact,
-            ...exact.fact.qualifiers,
-            ...exact.fact.references.flatMap((reference) => reference.parts),
-          ].flatMap((snak) => [
-            snak.property.id,
-            ...(snak.property.data_type === 'wikibase-item' &&
-            snak.value.type === 'value' &&
-            typeof snak.value.content === 'string'
-              ? [snak.value.content]
-              : []),
-          ]),
-        )
-      : new Set<string>();
+  const exactIds = admittedExact
+    ? new Set(
+        [
+          exact.fact,
+          ...exact.fact.qualifiers,
+          ...exact.fact.references.flatMap((reference) => reference.parts),
+        ].flatMap((snak) => [
+          snak.property.id,
+          ...(snak.property.data_type === 'wikibase-item' &&
+          snak.value.type === 'value' &&
+          typeof snak.value.content === 'string'
+            ? [snak.value.content]
+            : []),
+        ]),
+      )
+    : new Set<string>();
   const related: Related = exact
     ? Object.fromEntries(
         Object.entries(read.related)

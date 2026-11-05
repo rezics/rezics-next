@@ -28,13 +28,33 @@ function SourcesStory({
     const fixture = catalogueSourcesFixture(scenario);
     if (exact) {
       const { rezics: _revision, ...recorded } = fixture.read.subject.statements['schema:isbn']![0]!;
-      fixture.read.selectedSynopsis = exact === 'changed' ? { kind: 'changed' } : {
-        kind: 'matched', context: fixture.read.subject.context, release: fixture.read.subject.release,
-        fact: {
-          ...recorded, property: { id: 'schema:abstract', data_type: 'document' }, value: { type: 'somevalue' },
-          references: exact === 'empty' ? [] : [{ hash: 'selected-reference', parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://catalogue.example.test/second-synopsis' } }] }],
-        },
-      };
+      fixture.read.selectedSynopsis =
+        exact === 'changed'
+          ? { kind: 'changed' }
+          : {
+              kind: 'matched',
+              context: fixture.read.subject.context,
+              release: fixture.read.subject.release,
+              fact: {
+                ...recorded,
+                property: { id: 'schema:abstract', data_type: 'document' },
+                value: { type: 'somevalue' },
+                references:
+                  exact === 'empty'
+                    ? []
+                    : [
+                        {
+                          hash: 'selected-reference',
+                          parts: [
+                            {
+                              property: { id: 'schema:url', data_type: 'url' },
+                              value: { type: 'value', content: 'https://catalogue.example.test/second-synopsis' },
+                            },
+                          ],
+                        },
+                      ],
+              },
+            };
     }
     return fixture;
   }, [scenario, locale, exact]);
