@@ -9,7 +9,7 @@ import {
 import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
-import { createAccess, type AccessConfig } from '../../src/access/index.ts';
+import { accessActionCatalogue, createAccess, type AccessConfig } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -314,7 +314,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     const routeKey = new Uint8Array(randomBytes(32));
     const tokenKeys = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
     let auth: AuthService;
-    const actions = new Map([...importActionCatalogue(database, routeKey), ...LIFECYCLE_ACTIONS]);
+    const actions = accessActionCatalogue(new Map([...importActionCatalogue(database, routeKey), ...LIFECYCLE_ACTIONS]));
     // Mounted actions already carry resource-type declarations. Replacing them with a
     // bare scope drops those declarations and makes public media reservation throw.
     for (const scope of managementScopes) if (!actions.has(scope)) actions.set(scope, { anonymous: false });
@@ -356,6 +356,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       audience,
       secret: authSecret,
       signing: { activeKid: kid, privateKeys: [{ ...(await exportJWK(pair.privateKey)), kid }] },
+      siteActions: actions,
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
       stagingKey: registrationStagingKey,
