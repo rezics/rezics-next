@@ -45,7 +45,7 @@ GET /v1/libraryImports/mal/:id?after=0
 //   match: "matched" | "already-matched" | "unmatched" | "unavailable",
 //   state: string | null, current: {state,revision,incarnationId} | null,
 //   binding, source, review: MalReview | null, scoreReviewState: "observations-match" | "stale" | "unavailable" | null,
-//   outcome: MalOutcome | null }
+//   currentScoreVote: {units:number|null,revision:number,at:string} | null, outcome: MalOutcome | null }
 GET /v1/libraryImports/mal/:id/source // 200 { xml: string }; exact original, including export metadata
 POST /v1/libraryImports/mal/:id/review // Idempotency-Key: "review-1"
 { row: 0, target: null, skip: false, replace: false } // null uses the admitted identifier
@@ -97,7 +97,8 @@ The consumer now calls the actual installed producer. On this source base the pr
 `atomic_guard_unavailable` for guarded effects; this remains genuine unavailability, not positive acceptance.
 Content owns its original serial atomic-producer repair. No local vote writer, resolver or permission mechanism is
 introduced. Successful producer admission is followed by `readOwnVote`; receipts are never displayed as current votes.
-The owner Entry reader remains the page's current Library state source. Whole-list positive/changed-reimport,
+The page's `currentScoreVote` comes from a fresh native Rating reader on each visit, independently of retained
+review baselines and effect outcomes. The owner Entry reader remains the page's current Library state source. Whole-list positive/changed-reimport,
 effect-before-ack retry, all native fences and mounted caller acceptance remain required after producer integration.
 
 Bounds: 4 MiB JSON wire body (413 beyond it), 2 MiB decoded XML UTF-8 (400 beyond it), 500 rows, depth 16, pages/apply batches of 20, 64 selected fields, 48 MiB retained evidence per upload, three retained uploads per
@@ -127,7 +128,8 @@ Integration decision: MAL and Bangumi retain their separate native review guards
 
 Native rating cost: at most 20 selected rows per page/review/apply batch use one complete native `readVoteReview`
 per row (question directory/current account, bounded counted-reader prepare/read/finish, original/canonical slots and
-identity epoch fences). Unstarted apply and page repeat these observations. Each effect persists one started checkpoint,
+identity epoch fences). Unstarted apply and page repeat these observations; each score-reviewed page row also reads the current native own
+vote for `currentScoreVote`, even when independent fields have not completed. Each effect persists one started checkpoint,
 invokes one conditional native command with its original key/guard, reads current own vote, and persists one
 independent definitive score checkpoint before other selected effects. An uncertain retry
 repeats that exact command's authorization, exposure and receipt lookup before disclosure; it does not refresh review

@@ -733,6 +733,8 @@ export function createMalImport(deps: Dependencies) {
       const observed = await observe(actor, row, review?.binding ? null : (review?.target ?? null), deadline);
       const { profile, profileBinding: _profileBinding, ...observation } = observed;
       const scoreReviewState = review?.score ? await scoreReviewCurrent(actor, row, review, observed) : null;
+      const currentVote = review?.score && review.target
+        ? await votes.readOwnVote(actor, review.score.question.id, review.target) : null;
       rows.push({
         ...row,
         ...observation,
@@ -740,6 +742,8 @@ export function createMalImport(deps: Dependencies) {
         candidates: observation.target ? [{ subjectId: observation.target }] : [],
         review: review ?? null,
         scoreReviewState,
+        currentScoreVote: currentVote
+          ? { units: currentVote.units, revision: currentVote.revision, at: currentVote.changedAt } : null,
         outcome: doc.intents[row.index]?.outcome ?? null,
         dateReview: doc.dateReviews[row.index] ?? null,
         dateOutcome: doc.dateIntents[row.index]?.outcome ?? null,
