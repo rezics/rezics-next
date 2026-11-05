@@ -94,7 +94,9 @@ function response(
           visibility: 'private',
           preview: {
             state: 'loaded',
-            members: [{ id: `subject-${subject}`, type: 'Book', label: `Preview ${subject}`, cover: null }],
+            members: [
+              { id: `subject-${subject}`, type: 'Book', types: ['Book'], label: `Preview ${subject}`, cover: null },
+            ],
           },
         },
       ],
