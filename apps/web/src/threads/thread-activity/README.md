@@ -13,9 +13,11 @@ Activity uses the reader's exact query key, the shared browser observation/cache
 lease. Fetching, invalidation, replacement and session changes retire displayed advice without retiring readable bodies
 or taking over refresh. Equal session replacement and away/back transitions cannot reactivate a retired observation.
 
-Decision: reuse the existing closed activity display adapter for the additive native page field while the sole publisher
-publishes the complete mounted schema; an absent field is explicitly unavailable, never zero or a guessed total.
-The receiver introduces no replacement transport, API DTO, activity producer or browser lifetime host.
+Decision: consume `ReadingPageResponse.conversationActivity` directly through the existing closed display adapter once
+the official complete-input publication supplies that installed property and root-derived reading callable. The publisher
+owns generated declarations and public roots; the receiver introduces no API DTO or type override. An absent field at a
+retained compatibility boundary is explicitly unavailable, never zero or a guessed total. Keep the existing transport,
+activity producer and browser observation owner.
 
 The activity row wraps on small screens, uses a native keyboard button for retry, labels lower bounds in the active
 locale and renders the absolute native timestamp in UTC. Existing Board activity messages cover these same meanings.
