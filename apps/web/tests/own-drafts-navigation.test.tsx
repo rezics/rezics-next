@@ -59,7 +59,8 @@ test('an empty terminal window can return, and preparation never claims the inve
       requests.push(cursor);
       if (cursor) return page(null, null);
       firstPageReads++;
-      return firstPageReads === 1 ? page('One draft', 'empty-terminal') : page(null, null, 'preparing');
+      if (firstPageReads < 3) return page('One draft', 'empty-terminal');
+      return page(null, null, 'preparing');
     },
     async resume() {
       return 'unavailable';
@@ -85,6 +86,7 @@ test('an empty terminal window can return, and preparation never claims the inve
 
 test('Previous and cursor-free First retain exact failed targets for Retry', async () => {
   const requests: (string | undefined)[] = [];
+  let cursorOneReads = 0;
   let previousFails = true;
   let firstFails = true;
   let firstReads = 0;
@@ -100,7 +102,8 @@ test('Previous and cursor-free First retain exact failed targets for Retry', asy
         return page('First window', 'cursor-one');
       }
       if (cursor === 'cursor-two') return page('Last window', null);
-      if (previousFails) {
+      cursorOneReads++;
+      if (cursorOneReads > 1 && previousFails) {
         previousFails = false;
         return 'unavailable';
       }
