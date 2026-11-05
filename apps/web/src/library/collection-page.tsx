@@ -20,6 +20,7 @@ import { readCollectionMovePlacements } from './collection-move-read';
 import {
   collectionTransferReadback,
   collectionTransferReceipt,
+  collectionTransferReceiptUpdate,
   type CollectionTransferReceipt,
   type CollectionTransferReview,
   type CollectionTransferReviewState,
@@ -1421,30 +1422,28 @@ function CollectionPageLifetime({
     if (!request) return;
     setTransferReceipt({ ...previousReceipt, state: 'reading' });
     try {
-      const [source, target] = await Promise.all([
+      const [sourceRead, destinationRead] = await Promise.allSettled([
         refreshPage(),
-        readCollectionDestination({ data: previousReceipt.destinationId }),
+        readCollectionDestination({ data: previousReceipt.destinationId }).then(async (target) => {
+          if (!target || target.id !== previousReceipt.destinationId) return undefined;
+          await readCollectionMovePlacements({ data: { collectionId: target.id, revision: target.revision } });
+          return target;
+        }),
       ]);
       if (!isCurrent()) return;
-      if (
-        source.id !== previousReceipt.sourceId ||
-        (source.memberState ?? 'ready') !== 'ready' ||
-        !target ||
-        target.id !== previousReceipt.destinationId
-      )
-        throw new Error('Collection transfer reconciliation unavailable');
-      await readCollectionMovePlacements({ data: { collectionId: target.id, revision: target.revision } });
-      if (!isCurrent()) return;
-      queryClient.setQueryData(queryKey, source);
-      await router.invalidate();
-      if (!isCurrent()) return;
-      if (editing) resetEditor(source);
-      setTransferReceipt({
-        ...previousReceipt,
-        sourceRevision: source.revision,
-        destinationRevision: target.revision,
-        state: 'ready',
-      });
+      const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
+      const destination = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
+      const sourceReady =
+        sourcePage?.id === previousReceipt.sourceId && (sourcePage.memberState ?? 'ready') === 'ready'
+          ? sourcePage
+          : undefined;
+      if (sourceReady) {
+        queryClient.setQueryData(queryKey, sourceReady);
+        await router.invalidate();
+        if (!isCurrent()) return;
+        if (editing) resetEditor(sourceReady);
+      }
+      setTransferReceipt(collectionTransferReceiptUpdate(previousReceipt, sourceReady, destination));
     } catch {
       if (isCurrent()) setTransferReceipt({ ...previousReceipt, state: 'unavailable' });
     } finally {
