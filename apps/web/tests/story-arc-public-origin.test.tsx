@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, PAGE_GLOBAL_CONTEXT, type CompositionDocument } from '@rezics/composition';
 import { createRequire } from 'node:module';
-import { act, createContext, createElement, useContext, type ReactNode } from 'react';
+import { Children, act, createContext, createElement, isValidElement, useContext, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StoryArcProfileEntry, storyArcEntry } from '../src/features/catalogue/story-arc-profile-entry';
 import {
@@ -118,7 +118,8 @@ test('the mounted Subject, canonical route, correction session and existing read
   mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
   mock.module('../src/features/catalogue/editorial-entry', () => ({
-    EditorialEntry: ({ children }: { children: ReactNode }) => children,
+    EditorialEntry: ({ children }: { children: ReactNode }) =>
+      Children.toArray(children).find((child) => isValidElement(child) && child.type === StoryArcProfileEntry) ?? null,
   }));
   const fixture = storyArcProfileFixture();
   const profileLoads: unknown[] = [];
@@ -249,6 +250,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     const globalVisit = parseStoryArcProfileSearch(globalRoute.search, storyArcProfileId, 'en')!;
     expect(globalVisit).toMatchObject({ context: PAGE_GLOBAL_CONTEXT, definition: fixture.arc.subject.release });
     expect(globalVisit.via).toBe(`${actualSubject.href}#connections`);
+    await waitFor(() => readerLoads.length > 0);
     expect(readerLoads).toContainEqual({ id: storyArcProfileId, context: PAGE_GLOBAL_CONTEXT, locale: 'en' });
 
     const nonGlobalEntry = await subjectEntry(selectedContext);
