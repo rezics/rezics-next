@@ -77,7 +77,7 @@ export function savedQueryCollection(
     curatorAccountId,
     title: id,
     membershipKind,
-    builtinKind,
+    ...(builtinKind === undefined ? {} : { builtinKind }),
     curator: null,
     memberCount: 931,
     updatedAt: '2025-01-02T03:04:05Z',

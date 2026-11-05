@@ -1,3 +1,4 @@
+import { subjectSummary } from './factories/subjects';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
@@ -18,14 +19,7 @@ function entry(targetId: string, questionId: string, units = 0): OwnVoteEntry {
   return {
     targetId,
     questionId,
-    subject: {
-      id: terminalId,
-      type: 'work',
-      types: ['work'],
-      label: { value: 'Same summary', language: 'en' },
-      creativeWork: true,
-      cover: null,
-    },
+    subject: subjectSummary({ id: terminalId, label: { value: 'Same summary', language: 'en' } }),
     subjectHref: '/v1/subjects/admitted',
     question: {
       id: questionId,

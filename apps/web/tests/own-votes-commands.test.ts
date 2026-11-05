@@ -1,3 +1,4 @@
+import { subjectSummary } from './factories/subjects';
 import { expect, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
 import type { OwnVoteEntry } from '../../../services/kernel/src/rating/own-votes-page.ts';
@@ -15,14 +16,7 @@ function row(
   return {
     targetId,
     questionId,
-    subject: {
-      id: terminalId,
-      type: 'work',
-      types: ['work'],
-      label: { value: 'Merged title', language: 'en' },
-      creativeWork: true,
-      cover: null,
-    },
+    subject: subjectSummary({ id: terminalId, label: { value: 'Merged title', language: 'en' } }),
     subjectHref: `/v1/subjects/${targetId}`,
     question: {
       id: questionId,
