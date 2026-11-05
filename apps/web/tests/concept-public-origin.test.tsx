@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { candidateContext } from '../src/subject/candidates';
 import { subjectHref } from '../src/subject/subject-href';
+import { browserObservation } from '../src/session/observation';
 import {
   conceptPublicIntentFits,
   conceptPublicOriginHref,
@@ -131,6 +132,7 @@ test('production route admits public scope before the original session transport
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+  const stopObservation = browserObservation(client).subscribe(() => {});
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
@@ -272,6 +274,7 @@ test('production route admits public scope before the original session transport
       root.unmount();
       await Promise.resolve();
     });
+    stopObservation();
     client.clear();
     setLocale(previousLocale, { reload: false });
     for (const [name, descriptor] of saved)
