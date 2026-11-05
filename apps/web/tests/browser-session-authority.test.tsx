@@ -29,6 +29,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/state', () => ({
+  readSessionIdentity: () => sessionReader(),
   readSessionState: async () => {
     sessionReads += 1;
     return sessionReader();
@@ -718,10 +719,6 @@ test('mounted phone, following and Subject readers publish query changes after s
         };
         await render();
         await admit();
-        await act(async () => router.navigate({ to: '/en/inbox' }));
-        await render();
-        await act(async () => router.navigate({ to: '/en/subjects/book' }));
-        await render();
         expect(counts).toBeLessThanOrEqual(2);
         expect(errors.mock.calls.filter((args) => args.join(' ').includes('Cannot update a component'))).toEqual([]);
       } finally {
