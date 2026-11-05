@@ -765,3 +765,28 @@ describe('Comparison handoff remains independent of native editor and Undo inten
     expect(host.querySelectorAll('article')).toHaveLength(0);
   });
 });
+
+for (const operation of ['create', 'delete'] as const) {
+  test(`comparison preserves the exact original uncertain ${operation} intent`, async () => {
+    const copy = item('Uncertain intent');
+    await render(pageOf(copy));
+    const captured = await start(operation, copy);
+    await reject(captured);
+    const editor = form();
+    await click(m.library_copy_compare_select(), row(copy.note!));
+    await click(m.library_copy_compare_open());
+    await click(m.library_copy_compare_reset());
+    await click(m.library_copy_compare_close());
+    expect(form()).toBe(editor);
+    expect(calls.detail).toHaveLength(operation === 'create' ? 0 : 1);
+    expect(calls[operation]).toHaveLength(1);
+    expect(calls.undo).toHaveLength(0);
+    if (operation === 'create') await submit();
+    else {
+      await click(m.library_copy_delete(), form());
+      await click(m.library_copy_delete_confirm(), form());
+    }
+    expect(latest(operation).input).toEqual(captured.input);
+    await settle(latest(operation), { ok: false, reason: 'invalid' });
+  });
+}

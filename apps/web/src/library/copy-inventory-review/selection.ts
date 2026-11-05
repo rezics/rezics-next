@@ -55,7 +55,8 @@ export function useCopyInventoryReview({
       if (row?.revision === observation.revision) selected.push(observation);
       else retired.push({ id: observation.id, revision: observation.revision, reason: row ? 'changed' : 'missing' });
     }
-    if (selected.length !== selection.selected.length) selection = { ...selection, selected, retired };
+    if (selected.length !== selection.selected.length)
+      selection = { ...selection, selected, retired: retired.slice(-copyComparisonLimit) };
   }
   if (selection !== stored) setStored(selection);
   const latest = useRef(selection);
@@ -118,6 +119,10 @@ export function useCopyInventoryReview({
     },
     reset() {
       if (available()) update({ ...latest.current, selected: [], retired: [] });
+    },
+    returnToRow(copy: ObservedCopy, controlId: string) {
+      if (!available() || !exact(copy)) return;
+      document.getElementById(controlId)?.focus();
     },
     dismissRetired() {
       if (available()) update({ ...latest.current, retired: [] });
