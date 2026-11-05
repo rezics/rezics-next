@@ -1,3 +1,4 @@
+import { readAgentPage } from '../features/pages/agent-actions';
 import { PublicRealmsRoute } from '../accounts/public-profile/realm-windows/route';
 import { PublicAccountState } from '../accounts/public-profile/view';
 import { useSuspenseQuery } from '@tanstack/react-query';
@@ -43,13 +44,13 @@ const viewLabel = {
 export const Route = createFileRoute('/@{$handle}_/$view')({
   staticData: { publicCache: true },
   gcTime: 0,
-  remountDeps: ({ params, loaderDeps }) => (params.view === 'realms' ? loaderDeps : undefined),
+  remountDeps: ({ params, search }) => (params.view === 'realms' ? search.cursor : undefined),
   shouldReload: ({ params }) => (params.view === 'realms' ? true : undefined),
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  // readAgentPage(...) is called by the public view query factory; this loader only seeds its query cache.
+  // Realms replaces its native loader page; other named views keep their existing query cache.
   loader: async ({ params, deps, location, context }) => {
     const view = agentPathView(params.view);
     if (!view) throw notFound();
@@ -60,7 +61,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     const query = agentViewQuery(params.handle, locale, view, deps.cursor, search);
     const page =
       view === 'realms'
-        ? await query.queryFn()
+        ? await readAgentPage({ data: { handle: params.handle, locale, view, cursor: deps.cursor, search } })
         : await context.queryClient.fetchQuery({ ...query, staleTime: 0 }).catch((error: unknown) => {
             context.queryClient.removeQueries({ queryKey: query.queryKey });
             throw error;
@@ -91,7 +92,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
   head: ({ loaderData }) =>
     loaderData?.kind === 'page'
       ? agentPageHead(
-          loaderData.overview,
+          { ...loaderData.overview, account: loaderData.page.account! },
           getLocale(),
           publicOrigin(),
           loaderData.paths,
@@ -105,17 +106,20 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
 
 function AgentViewRoute() {
   const data = Route.useLoaderData();
-  const { view } = Route.useParams();
-  const { cursor } = Route.useSearch();
-  if (view === 'realms' && data.kind !== 'redirect')
-    return <PublicRealmsRoute source={data} locale={getLocale()} cursor={cursor} />;
-  return <NamedAccountViewRoute />;
-}
-
-function NamedAccountViewRoute() {
-  const { handle, view: rawView } = Route.useParams();
+  const { view: rawView } = Route.useParams();
   const view = agentPathView(rawView);
   if (!view || view === 'overview') throw notFound();
+  const { cursor } = Route.useSearch();
+  if (view === 'realms') return <PublicRealmsRoute source={data} locale={getLocale()} cursor={cursor} />;
+  return <NamedAccountViewRoute view={view} />;
+}
+
+function NamedAccountViewRoute({
+  view,
+}: {
+  view: Exclude<ReturnType<typeof agentPathView>, undefined | 'realms' | 'overview'>;
+}) {
+  const { handle, view: rawView } = Route.useParams();
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
@@ -125,7 +129,7 @@ function NamedAccountViewRoute() {
     handle,
     locale,
     path: { kind: 'view', view: rawView },
-    enabled: data.kind === 'page' && view !== 'realms',
+    enabled: data.kind === 'page',
     owner: data,
   });
   if (data.kind === 'redirect') {

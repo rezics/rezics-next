@@ -23,7 +23,7 @@ export function PublicRealmsRoute({
 }: {
   source: RealmsRouteSource;
   locale: string;
-  cursor?: string;
+  cursor?: string | undefined;
 }) {
   const router = useRouter();
   useLocation();

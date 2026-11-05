@@ -50,7 +50,7 @@ export class RealmsVisit {
   }
 
   accept(source: object, binding: string | undefined, coordinate: Coordinate, ready: boolean) {
-    if (this.source?.deref() === source) return false;
+    if (this.source?.deref() === source && this.binding === binding) return false;
     this.revision++;
     const pending = this.pending;
     if (this.binding !== undefined && this.binding !== binding) {
@@ -63,7 +63,7 @@ export class RealmsVisit {
     if (!ready) {
       this.pending?.focus?.release();
       if (this.pending) {
-        this.pending.focus = undefined;
+        delete this.pending.focus;
         this.pending.loading = false;
       }
       return false;
