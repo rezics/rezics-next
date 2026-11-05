@@ -23,6 +23,8 @@ export function kindLabel(kind: DirectedWorkRelation['kind'], locale: string) {
       return m.work_franchise_kind_screen({}, o);
     case 'book':
       return m.work_franchise_kind_book({}, o);
+    case 'book-series':
+      return m.work_franchise_kind_book_series({}, o);
   }
 }
 
