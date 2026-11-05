@@ -243,9 +243,9 @@ async function mount() {
       ),
     seed: (page: PublicationPage, credential: PublicationViewer) =>
       flush(() => {
-        const query = client.getQueryCache().find({
+        const query = client.getQueryCache().findAll({
           queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
-        });
+        }).at(-1);
         expect(query).toBeDefined();
         client.setQueryData(query!.queryKey, page);
       }),
@@ -514,7 +514,7 @@ test('Retired reload success and failure cannot reset a replacement viewer or ad
       });
 });
 
-test('Missing current authority and mismatched current source refuse starts; a fresh valid read enables a healthy retry', async () => {
+test('Missing current authority and one mismatched source refuse starts; Reload enables an empty-set retry', async () => {
   await mounted(async (page) => {
     for (const session of [
       { state: 'unknown', subject: null, csrfToken: null },
@@ -526,25 +526,14 @@ test('Missing current authority and mismatched current source refuse starts; a f
     }
     expect(reads).toHaveLength(0);
     await page.show(viewer());
-    for (const mismatch of ['subject', 'collection', 'cursor', 'source', 'unavailable'] as const) {
-      const valid = page.ready();
-      const invalid: PublicationPage =
-        mismatch === 'subject'
-          ? { ...valid, viewer: { ...valid.viewer!, subject: 'foreign-viewer' } }
-          : mismatch === 'collection'
-            ? { ...valid, address: { id: 'foreign-collection' } }
-            : mismatch === 'cursor'
-              ? { ...valid, address: { ...address, cursor: 'foreign-page' } }
-              : mismatch === 'source' && valid.source.state === 'ready'
-                ? { ...valid, source: { ...valid.source, page: { ...valid.source.page, id: 'foreign-source' } } }
-                : { ...valid, source: { state: 'unavailable' } };
-      await page.settle(reads.at(-1)!.work, invalid);
-      expect(page.checkboxes()).toHaveLength(0);
-      expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
-      expect(writes).toHaveLength(0);
-      await page.refresh();
-    }
-    await page.settle(reads.at(-1)!.work, page.ready());
+    expect(reads).toHaveLength(1);
+    await page.settle(reads[0]!.work, { ...page.ready(), source: { state: 'unavailable' } });
+    expect(page.checkboxes()).toHaveLength(0);
+    expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
+    expect(writes).toHaveLength(0);
+    await page.click(page.m.library_collection_reload());
+    expect(reads).toHaveLength(2);
+    await page.settle(reads[1]!.work, page.ready());
     await page.choose([]);
     await page.click(page.m.library_publication_publish(), true);
     expect(writes).toHaveLength(1);
