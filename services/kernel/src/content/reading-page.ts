@@ -482,7 +482,7 @@ export function readingPageOperationState(
     | { state: 'current'; watching: boolean }
     | { state: 'sign_in_required' }
     | { state: 'unavailable'; retryable: true },
-): ControlState {
+): Exclude<ControlState, 'withheld'> {
   if (operationId === 'thread.watch_state') return 'not_applicable';
   if (operationId === 'thread.watch' || operationId === 'thread.unwatch') {
     if (watch.state === 'unavailable') return 'unavailable';
