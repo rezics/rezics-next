@@ -1,4 +1,4 @@
-import type { ConceptSelection, FilterDocument, FilterRange } from '@rezics/filter';
+import { validateFilter, type ConceptSelection, type FilterDocument, type FilterRange } from '@rezics/filter';
 import type { ConditionMetadata } from './condition-editor-model';
 import { conditionConceptProperty } from './condition-concept-model';
 
@@ -69,8 +69,9 @@ function freshOperand(definition: PropertyDefinition) {
 export function changeStatementProperty(
   value: FilterDocument,
   nextProperty: string,
-  properties: Properties,
+  metadata: ConditionMetadata,
 ): ConditionPropertyTransition {
+  const properties = metadata.properties;
   if (!('statement' in value) || value.statement.property === nextProperty) {
     return { original: value, next: value, requiresConfirmation: false };
   }
@@ -121,11 +122,27 @@ export function changeStatementProperty(
     return false;
   });
 
+  let retainInverse = 'inverse' in statement && statement.inverse === true;
+  if (retainInverse) {
+    // Probe direction admission with complete placeholder values, independently of unfinished input.
+    const id = '018f0000-0000-7000-8000-00a000000020';
+    const probe = {
+      statement: {
+        property: nextProperty,
+        inverse: true,
+        ...(operands.in ? { in: [id] } : { range: {} }),
+        ...(operands.concept ? { concept: { scheme: id } } : {}),
+      },
+    };
+    retainInverse = validateFilter(probe, metadata, { inverse: true }).length === 0;
+    if (!retainInverse) requiresConfirmation = true;
+  }
+
   const next: FilterDocument = {
     statement: {
       property: nextProperty,
       ...operands,
-      ...('inverse' in statement && statement.inverse ? { inverse: true as const } : {}),
+      ...(retainInverse ? { inverse: true as const } : {}),
       ...(qualifiers.length ? { qualifiers } : {}),
     },
   } as FilterDocument;

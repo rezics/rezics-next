@@ -58,6 +58,8 @@ saved and authorized private predicates together, then exact-deduplicate and adm
 
 Decision: Preserve an item-valued operand across a property change only when both properties declare the same released target set; a different target set requires confirmation and resets the value.
 
+Decision: Property replacement preserves inverse direction only when released filter admission supports the replacement operand shape. Otherwise confirmation explicitly resets direction to direct and reviews both complete conditions; cancel preserves the original occurrence. Retained unsupported inverse drafts, including ranges, remain visible and allow explicit direct repair. Confirmation retires with its exact occurrence, draft, metadata, reader or locale.
+
 ### Concept-valued statements
 
 A concept predicate is a statement leaf with its property, one concept ID in `in`, and its selected scheme:

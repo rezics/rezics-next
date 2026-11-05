@@ -4349,6 +4349,7 @@
   "condition_add": "新增條件",
   "condition_add_type": "新增類型",
   "condition_add_statement": "新增屬性條件",
+  "condition_property_change_direction_reset": "反向將重設為正向：每個搜尋結果成為來源。請檢視下方原條件與替換後的條件。",
   "condition_property_change_title": "要變更屬性嗎？",
   "condition_property_change_message": "不相容的值、界限、單位或限定條件會清除。相容的部分會保持不變。",
   "condition_property_change_confirm": "變更屬性",

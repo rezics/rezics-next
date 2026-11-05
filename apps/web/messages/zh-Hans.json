@@ -4346,6 +4346,7 @@
   "condition_add": "添加条件",
   "condition_add_type": "添加类型",
   "condition_add_statement": "添加属性条件",
+  "condition_property_change_direction_reset": "反向将重设为正向：每个搜索结果成为来源。请查看下方原条件与替换后的条件。",
   "condition_property_change_title": "更改属性？",
   "condition_property_change_message": "不兼容的值、边界、单位或限定条件将被清除。兼容的部分会保持不变。",
   "condition_property_change_confirm": "更改属性",

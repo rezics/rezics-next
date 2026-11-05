@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { FilterDocument } from '@rezics/filter';
+import { validateFilter, type FilterDocument } from '@rezics/filter';
 import type { ConditionMetadata } from '../src/search/condition-editor-model';
 import {
   changeQualifierProperty,
@@ -24,13 +24,13 @@ test('statement changes retain released-compatible ranges and require confirmati
       qualifiers: [{ property: 'ex:language', in: ['ja'] }],
     },
   };
-  const compatible = changeStatementProperty(draft, 'ex:weightCopy', properties);
+  const compatible = changeStatementProperty(draft, 'ex:weightCopy', { types: {}, properties: properties });
   expect(compatible.requiresConfirmation).toBe(false);
   expect(compatible.next).toEqual({
     statement: { ...draft.statement, property: 'ex:weightCopy' },
   });
 
-  const incompatible = changeStatementProperty(draft, 'ex:date', properties);
+  const incompatible = changeStatementProperty(draft, 'ex:date', { types: {}, properties: properties });
   expect(incompatible.requiresConfirmation).toBe(true);
   expect(incompatible.next).toEqual({ statement: { property: 'ex:date', range: {} } });
   expect(resolveConditionPropertyChange(incompatible, false)).toEqual(draft);
@@ -66,4 +66,28 @@ test('qualifier changes preserve only the same released value definition and can
     },
   });
   expect(resolveConditionPropertyChange(incompatible, false)).toEqual(draft);
+});
+
+test('inverse property transitions preserve compatible meaning and explicitly reset unsupported direction', () => {
+  const relation = { datatype: 'wikibase-item', targets: ['ex:Work'], relation: { group: 'association' }, qualifiers: ['ex:language'] } as const;
+  const metadata: ConditionMetadata = {
+    types: { 'ex:Work': { facets: ['ex:relation', 'ex:copy', 'ex:plain', 'ex:weight'] } },
+    properties: { ...properties, 'ex:relation': relation, 'ex:copy': relation,
+      'ex:plain': { datatype: 'wikibase-item', targets: ['ex:Work'] } },
+  };
+  const original: FilterDocument = { statement: { property: 'ex:relation', inverse: true,
+    in: ['018f0000-0000-7000-8000-00a000000020'], qualifiers: [{ property: 'ex:language', in: ['ja'] }] } };
+  expect(changeStatementProperty(original, 'ex:copy', metadata)).toMatchObject({
+    requiresConfirmation: false, next: { statement: { ...original.statement, property: 'ex:copy' } },
+  });
+  for (const property of ['ex:plain', 'ex:weight', 'ex:date', 'ex:missing']) {
+    const transition = changeStatementProperty(original, property, metadata);
+    expect(transition.requiresConfirmation).toBe(true);
+    expect(resolveConditionPropertyChange(transition, false)).toBe(original);
+    expect('inverse' in (transition.next as typeof original).statement).toBe(false);
+  }
+  const range = changeStatementProperty(original, 'ex:weight', metadata).next;
+  expect(range).toEqual({ statement: { property: 'ex:weight', range: { unit: 'kg' },
+    qualifiers: original.statement.qualifiers } });
+  expect(validateFilter({ statement: { property: 'ex:weight', range: { gte: 4 }, inverse: true } }, metadata, { inverse: true }).length).toBeGreaterThan(0);
 });

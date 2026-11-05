@@ -4346,6 +4346,7 @@
   "condition_add": "조건 추가",
   "condition_add_type": "유형 추가",
   "condition_add_statement": "속성 조건 추가",
+  "condition_property_change_direction_reset": "역방향을 정방향으로 바꾸면 각 검색 결과가 출발점이 됩니다. 아래에서 원래 조건과 변경 후 조건을 확인하세요.",
   "condition_property_change_title": "속성을 변경할까요?",
   "condition_property_change_message": "호환되지 않는 값, 경계, 단위 또는 한정자는 지워집니다. 호환되는 항목은 변경되지 않습니다.",
   "condition_property_change_confirm": "속성 변경",
