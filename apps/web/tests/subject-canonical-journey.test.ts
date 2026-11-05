@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient, type SubjectRead } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import recordedSubject from '../src/kernel/recorded/subject.json';
@@ -19,6 +20,7 @@ test('the complete assigned visible journey uses actual current native data and 
   // This focused transport case does not establish current native authorization or document-body delivery.
   const read = structuredClone(recordedSubject) as SubjectRead;
   read.subject.type = 'schema:Person';
+  read.summary!.types = ['schema:Person', 'schema:Thing'];
   const calls: { path: string; authorization: string | null; redirect: RequestRedirect }[] = [];
   let handle: string | null = 'current_name';
   let concealed = false;
@@ -78,6 +80,28 @@ test('the complete assigned visible journey uses actual current native data and 
     '/ja/subjects/id/%E6%9C%AC/works?q=a%20b#roles',
   );
   expect(canonicalRedirect(accountHref('en', 'Current_Name', 'works'), '', '', 308).statusCode).toBe(308);
+});
+
+test('non-agent ID canonicalization uses the admitted type summary without loading a definitions release', async () => {
+  const read = structuredClone(recordedSubject) as SubjectRead;
+  read.subject.type = 'schema:TVSeries';
+  read.summary!.types = ['schema:TVSeries', 'schema:CreativeWork', 'schema:Thing'];
+  read.account = null;
+  const paths: string[] = [];
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      paths.push(path);
+      return path === `/v1/subjects/${read.subject.id}`
+        ? Response.json(read)
+        : Response.json({ code: 'unexpected_optional_read' }, { status: 500 });
+    },
+  });
+  const loaded = await loadSubject(client, read.subject.id, 'en');
+  if (loaded.kind !== 'subject') throw new Error('Expected the canonical public Subject');
+  expect(loaded.value.href).toContain(`/subjects/${read.subject.id}/`);
+  expect(paths).toEqual([`/v1/subjects/${read.subject.id}`]);
 });
 
 test('former handles use the current native forwarding decision and never cache mutable aliases or concealed pages', async () => {
@@ -143,21 +167,30 @@ test('anonymous typed public POST renders current terms without private SSR or i
   expect(selected?.subject.resolution).toEqual(recordedSubject.subject.resolution);
   expect(selected?.account).toEqual(recordedSubject.account);
   const queryClient = new QueryClient();
-  const html = renderToString(
+  queryClient.setQueryData(['exposure', 'anonymous'], ['personal_library']);
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () =>
+        createElement(SubjectPage, {
+          page: result.page,
+          locale: 'en',
+          renderJsonLd: false,
+          messages: {
+            unknown: 'Unknown',
+            none: 'None',
+            unlabelled: 'Unlabelled',
+            sources: 'Sources',
+            aliases: 'Also known as',
+          },
+        }),
+    }),
+    history: createMemoryHistory({ initialEntries: [`/en/subjects/${recordedSubject.subject.id}`] }),
+  });
+  await router.load();
+  const html = renderToStaticMarkup(
     createElement(QueryClientProvider, {
       client: queryClient,
-      children: createElement(SubjectPage, {
-        page: result.page,
-        locale: 'en',
-        renderJsonLd: false,
-        messages: {
-          unknown: 'Unknown',
-          none: 'None',
-          unlabelled: 'Unlabelled',
-          sources: 'Sources',
-          aliases: 'Also known as',
-        },
-      }),
+      children: createElement(RouterProvider, { router }),
     }),
   );
   expect(html).toContain(recordedSubject.subject.labels.en!);

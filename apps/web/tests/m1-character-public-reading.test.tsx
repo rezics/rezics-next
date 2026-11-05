@@ -12,6 +12,7 @@ import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 const { CharacterReader } = await import('../src/features/pages/showcase-people/character');
+const { m } = await import('../src/paraglide/messages.js');
 
 test('the Character voice stream uses the released P453 slot key and keeps P725 target as performer', async () => {
   const { connectionStreams, readConnectionStream } = await import('../src/features/pages/subject-connections');
@@ -125,6 +126,7 @@ test('the mounted Character profile uses exact native documents and withholds mi
     ]) {
       await render({ ...exact, ...mismatch });
       expect(host.textContent).not.toContain('The supplied public Character biography.');
+      expect(host.textContent).toContain(m.people_biography_unreadable());
     }
   } finally {
     await act(async () => root.unmount());

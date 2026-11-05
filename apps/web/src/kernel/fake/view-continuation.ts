@@ -20,13 +20,24 @@ const fixtures = {
 /** Contract-shaped continuation data; recordings stay unchanged. */
 function editions(later: boolean, limit: number) {
   return {
-    links: Array.from({ length: later ? Math.min(3, limit) : limit }, (_, index) => ({
-      subject: `0192f3a0-6c1e-7b2a-9d4e-${String(index + (later ? 100 : 1)).padStart(12, '0')}`,
-      label: `${later ? 'Later' : 'First'} edition ${index + 1}`,
-      type: 'schema:Book',
-      property: 'schema:exampleOfWork',
-      summary: null,
-    })),
+    links: Array.from({ length: later ? Math.min(3, limit) : limit }, (_, index) => {
+      const subject = `0192f3a0-6c1e-7b2a-9d4e-${String(index + (later ? 100 : 1)).padStart(12, '0')}`;
+      const label = `${later ? 'Later' : 'First'} edition ${index + 1}`;
+      return {
+        subject,
+        label,
+        type: 'schema:Book',
+        property: 'schema:exampleOfWork',
+        summary: {
+          id: subject,
+          type: 'schema:Book',
+          types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+          label: { value: label, language: 'en' },
+          creativeWork: true,
+          cover: null,
+        },
+      };
+    }),
     count: { value: 30, exact: true },
     next: 'continuation-next',
   };

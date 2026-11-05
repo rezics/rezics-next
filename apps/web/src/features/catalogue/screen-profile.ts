@@ -8,6 +8,7 @@ import { createSubjectRecord } from './create-subject-request';
 import { episodeMembershipAdmission, screenSeriesId } from './screen-episode-membership.ts';
 import { creationStatement, editableScalar, type StatementInput } from './statement-editor';
 import { catalogueEntries } from './catalogue-entry';
+import { displayTypeLabel } from '../../subject/definitions';
 import {
   profileFields,
   profileLibraryControls,
@@ -183,6 +184,7 @@ export type ScreenReaderVisit = {
   state: ProfileReaderState;
   type: string;
   grain: { text: string; lang: string | null };
+  description?: { text: string; lang: string | null };
   library: ProfileLibrary;
   unpublished: { tracks: false; episodes: boolean };
   groups: ProfileGroup[];
@@ -212,6 +214,13 @@ function screenReaderGroups(release: Release, type: string): Record<string, stri
   };
 }
 
+function releasedScreenGrain(release: Release, type: string, locale: string) {
+  const selected = pickText(release.types[type]?.labels ?? {}, locale);
+  return selected.text
+    ? { ...selected, text: displayTypeLabel(selected.text, selected.lang ?? locale) }
+    : selected;
+}
+
 /** Ordinary Screen reader visit. TVSeries and TVSeason readers can browse released work-parts membership. */
 export function screenReaderVisit(input: {
   locale: string;
@@ -233,7 +242,7 @@ export function screenReaderVisit(input: {
     return {
       state: 'loading',
       type,
-      grain: { text: type, lang: null },
+      grain: { text: '', lang: null },
       library: emptyLibrary,
       unpublished,
       groups: [],
@@ -245,7 +254,7 @@ export function screenReaderVisit(input: {
     return {
       state: input.reason,
       type,
-      grain: { text: type, lang: null },
+      grain: { text: '', lang: null },
       library: emptyLibrary,
       unpublished,
       groups: [],
@@ -258,7 +267,7 @@ export function screenReaderVisit(input: {
     return {
       state: 'unavailable',
       type,
-      grain: { text: type, lang: null },
+      grain: { text: '', lang: null },
       library: emptyLibrary,
       unpublished,
       groups: [],
@@ -271,7 +280,7 @@ export function screenReaderVisit(input: {
     return {
       state: 'invalid',
       type,
-      grain: pickText(release.types[type]?.labels ?? {}, input.locale),
+      grain: releasedScreenGrain(release, type, input.locale),
       library: emptyLibrary,
       unpublished,
       groups: [],
@@ -279,13 +288,16 @@ export function screenReaderVisit(input: {
       bounds,
     };
   }
-  const grain = pickText(release.types[type]?.labels ?? {}, input.locale);
+  const grain = releasedScreenGrain(release, type, input.locale);
+  const description = pickText(release.types[type]?.descriptions ?? {}, input.locale);
+  const meaning = description.text ? description : undefined;
   const library = profileLibraryControls(release, type);
   if (!publicRead) {
     return {
       state: 'empty',
       type,
       grain,
+      ...(meaning ? { description: meaning } : {}),
       library,
       unpublished,
       groups: [],
@@ -302,6 +314,7 @@ export function screenReaderVisit(input: {
     state: groups.length || profileSourceRecords(publicRead.subject).length ? 'ready' : 'empty',
     type: publicRead.subject.type,
     grain,
+      ...(meaning ? { description: meaning } : {}),
     library,
     unpublished,
     groups,
