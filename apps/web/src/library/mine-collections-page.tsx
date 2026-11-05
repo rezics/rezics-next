@@ -134,7 +134,7 @@ function mineCollectionsWindowAuthority(
   origin: ReturnType<typeof useLibraryReadOrigin>,
   locale: string,
 ): string | null {
-  const current = origin.store.read();
+  const current = origin.workspaceAdmission.read();
   const observation = current.observation;
   if (
     !origin.hydrated ||
