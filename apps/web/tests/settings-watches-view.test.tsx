@@ -313,11 +313,13 @@ test('a disclosed later-page visit returns to its exact current window without s
     expect(found).toBeDefined();
     return found!;
   };
-  const back = () =>
-    new Promise<void>((resolve) => {
+  const back = async () => {
+    await new Promise<void>((resolve) => {
       window.addEventListener('popstate', () => resolve(), { once: true });
       router.history.back();
     });
+    await router.load();
+  };
   const visitAndReturn = async (label: string) => {
     await act(async () => link(label).click());
     expect(host.textContent).toContain('Thread target');
