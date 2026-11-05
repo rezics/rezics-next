@@ -126,9 +126,10 @@ export type CollectionResourceView =
 export function collectionReadView(
   value: CollectionResourceView,
 ) {
-  const { allowedVisibilityActions, ...view } = value;
-  const actions = allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] };
-  if ('membershipKind' in value && value.membershipKind === 'dynamic') return { ...view, ...actions, membershipKind: value.membershipKind };
+  if ('membershipKind' in value && value.membershipKind === 'dynamic') {
+    const { allowedVisibilityActions, ...view } = value;
+    return { ...view, ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }) };
+  }
   if (
     value.membershipKind !== 'curated' ||
     typeof value.orderEpoch !== 'number' ||
@@ -136,7 +137,8 @@ export function collectionReadView(
     value.orderEpoch < 0
   )
     throw new ProblemError('dependency_unavailable');
-  return { ...view, ...actions, membershipKind: 'curated' as const, orderEpoch: value.orderEpoch };
+  const { allowedVisibilityActions, ...view } = value;
+  return { ...view, ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }), membershipKind: 'curated' as const, orderEpoch: value.orderEpoch };
 }
 
 export type MemberView = {
