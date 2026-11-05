@@ -8,6 +8,7 @@ import {
   buildSearchImage,
   cgroupArgs,
   subjectAutoCreateIndexSetting,
+  waitForSearch,
 } from '../../../../services/kernel/scripts/search.ts';
 import { catalogueEntries } from '../../src/features/catalogue/catalogue-entry.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
@@ -29,53 +30,26 @@ function docker(args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function dockerText(args: string[]): string | undefined {
-  const result = Bun.spawnSync(['docker', ...args]);
-  if (result.exitCode !== 0) return;
-  return result.stdout.toString().trim();
+function publishedLoopbackSearchUrl(container: string): string | undefined {
+  const published = docker(['port', container, '9200/tcp']);
+  const port = published.match(/127\.0\.0\.1:(\d+)/)?.[1] ?? published.match(/0\.0\.0\.0:(\d+)/)?.[1];
+  return port ? `http://127.0.0.1:${port}` : undefined;
 }
 
-function ownedSearchUrls(container: string): string[] {
-  const urls: string[] = [];
-  const published = dockerText(['port', container, '9200/tcp']);
-  const port = published?.match(/127\.0\.0\.1:(\d+)/)?.[1];
-  if (port) urls.push(`http://127.0.0.1:${port}`);
-  const addresses = dockerText([
-    'inspect',
-    '-f',
-    '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}',
-    container,
-  ]);
-  for (const ip of addresses?.split(/\s+/).filter(Boolean) ?? []) urls.push(`http://${ip}:9200`);
-  return [...new Set(urls)];
-}
-
-async function waitForOwnedSearch(container: string, timeoutMs = 180_000): Promise<string> {
+async function waitForPublishedSearch(container: string, timeoutMs = 30_000): Promise<string> {
   const deadline = Date.now() + timeoutMs;
-  let lastFailure = 'no address';
+  let last = 'no mapping';
   while (Date.now() < deadline) {
-    const candidates = ownedSearchUrls(container);
-    for (const url of candidates) {
-      try {
-        const response = await fetch(new URL('/_cluster/health?wait_for_status=yellow&timeout=2s', url), {
-          signal: AbortSignal.timeout(Math.min(2500, Math.max(1, deadline - Date.now()))),
-        });
-        if (!response.ok) {
-          lastFailure = `${url} HTTP ${response.status}`;
-          continue;
-        }
-        const health = (await response.json()) as { status?: string; timed_out?: boolean };
-        if (!health.timed_out && (health.status === 'yellow' || health.status === 'green')) return url;
-        lastFailure = `${url} cluster ${health.status ?? 'unknown'}`;
-      } catch (error) {
-        lastFailure = `${url} ${error instanceof Error ? error.message : String(error)}`;
-      }
+    try {
+      const url = publishedLoopbackSearchUrl(container);
+      if (url) return url;
+      last = docker(['port', container, '9200/tcp']);
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
     }
-    if (!candidates.length) lastFailure = 'owned search has no 127.0.0.1 mapping or container address yet';
-    await Bun.sleep(500);
+    await Bun.sleep(250);
   }
-  const logs = dockerText(['logs', '--tail', '80', container]) ?? lastFailure;
-  throw new Error(`OpenSearch node did not become reachable within ${timeoutMs} ms (${lastFailure}).\n${logs}`);
+  throw new Error(`Owned search has no 127.0.0.1 mapping within ${timeoutMs} ms (${last}).`);
 }
 
 beforeAll(async () => {
@@ -104,7 +78,9 @@ beforeAll(async () => {
       'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
       buildSearchImage(),
     ]);
-    process.env.OPENSEARCH_URL = await waitForOwnedSearch(ownedSearch);
+    const url = await waitForPublishedSearch(ownedSearch);
+    process.env.OPENSEARCH_URL = url;
+    await waitForSearch(url, ownedSearch, 180_000);
   }
   fixture = await startCatalogueClassificationFixture();
 }, 600_000);
