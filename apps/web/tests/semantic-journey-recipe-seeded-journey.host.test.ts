@@ -9,16 +9,11 @@ const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const minute = 'http://www.wikidata.org/entity/Q7727';
 const marker = `journeyrecipe${crypto.randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
 const steps = ['Rinse the rice.', 'Add water.', 'Simmer for 25 minutes.'];
+const citation = 'https://example.org/journey-recipe';
 const source = (id: string, content: unknown) => ({
   property: { id },
   value: { type: 'value', content },
-  references: [
-    {
-      parts: [
-        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/journey-recipe' } },
-      ],
-    },
-  ],
+  references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] }],
 });
 type Subject = {
   id: string;
@@ -42,9 +37,7 @@ beforeAll(async () => {
       statements: {
         'schema:cookTime': [source('schema:cookTime', { amount: '+25', unit: minute })],
         'schema:recipeYield': [source('schema:recipeYield', { amount: '+4', unit: '1' })],
-        'schema:recipeIngredient': [
-          source('schema:recipeIngredient', { language: 'en', text: '200 g rice' }),
-        ],
+        'schema:recipeIngredient': [source('schema:recipeIngredient', { language: 'en', text: '200 g rice' })],
         'schema:recipeInstructions': [
           source('schema:recipeInstructions', {
             language: 'en',
@@ -62,19 +55,19 @@ afterAll(async () => {
   await stack?.stop();
 }, 180_000);
 
+function json(): Record<string, string> {
+  return { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` };
+}
+
+async function send(path: string, body: unknown, persona?: string) {
+  return stack.kernel(path, { method: 'POST', headers: json(), body: JSON.stringify(body) }, persona);
+}
+
 async function write(path: string, body: unknown, persona = 'editor') {
-  const response = await stack.kernel(
-    path,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
-      body: JSON.stringify(body),
-    },
-    persona,
-  );
+  const response = await send(path, body, persona);
   const result = await response.json();
   expect({ status: response.status, body: response.ok ? undefined : result }).toEqual({
-    status: path === '/v1/subjects' ? 201 : 200,
+    status: path === '/v1/subjects' || path.endsWith('/candidates') ? 201 : 200,
     body: undefined,
   });
   return result as Record<string, any>;
@@ -84,12 +77,12 @@ async function command(path: string, body: unknown, persona = 'editor') {
   return (await write(path, body, persona)) as { subject: Subject };
 }
 
-function href(subject: Subject) {
-  return subjectHref({ id: subject.id, label: subject.labels.en! }, 'en').href;
+function href(subject: Subject, locale = 'en') {
+  return subjectHref({ id: subject.id, label: subject.labels.en! }, locale).href;
 }
 
-async function served(subject: Subject, persona?: string) {
-  const response = await stack.request(`${stack.web}${href(subject)}`, persona);
+async function served(subject: Subject, persona?: string, locale = 'en') {
+  const response = await stack.request(`${stack.web}${href(subject, locale)}`, persona);
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('text/html');
   const html = await response.text();
@@ -99,8 +92,7 @@ async function served(subject: Subject, persona?: string) {
       return [value, ...(value['@graph'] ?? [])];
     },
   );
-  const recipeNode = jsonld.find((node) => node['@type'] === 'Recipe');
-  return { html: html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''), recipe: recipeNode };
+  return { html: html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''), recipe: jsonld.find((node) => node['@type'] === 'Recipe') };
 }
 
 async function publicRead(id: string) {
@@ -115,16 +107,15 @@ test('the authored Recipe exists through the real API with diet, duration, yield
   expect(read.statements['schema:cookTime']![0]!.value.content).toMatchObject({ amount: '+25', unit: minute });
   expect(read.statements['schema:recipeYield']![0]!.value.content).toMatchObject({ amount: '+4', unit: '1' });
   expect(read.statements['schema:suitableForDiet']![0]!.value.content).toBe(diet.id);
-  const instructions = read.statements['schema:recipeInstructions']![0]!.value.content as {
-    document: string;
-    digest: string;
-  };
+  const instructions = read.statements['schema:recipeInstructions']![0]!.value.content as { document: string };
   const oracle = await stack.kernel(`/v1/documents/${instructions.document}`);
   expect(oracle.status).toBe(200);
-  const { document } = (await oracle.json()) as { document: { digest: string; language: string; body: unknown } };
+  const { document } = (await oracle.json()) as { document: { digest: string; language: string } };
   expect(document.language).toBe('en');
   const digest = [
-    ...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serializeDocument(fromPlainText(steps.join('\n')))))),
+    ...new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serializeDocument(fromPlainText(steps.join('\n'))))),
+    ),
   ]
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
@@ -147,26 +138,49 @@ test('anonymous and signed-in served pages show the same instructions, duration 
   expect(alice.html).toContain(`${href(recipe)}/recipe`);
 });
 
-test('a linked Subject serves and the Recipe serves again after returning', async () => {
-  const dietPage = await stack.request(`${stack.web}${href(diet)}`);
-  expect(dietPage.status).toBe(200);
+test('a linked Subject serves, the Recipe serves again after returning, and the Japanese locale falls back to English', async () => {
+  expect((await stack.request(`${stack.web}${href(diet)}`)).status).toBe(200);
   const back = await served(recipe, 'alice');
   expect(back.html).toContain(steps[0]!);
+  const japanese = await served(recipe, 'alice', 'ja');
+  expect(japanese.html).toContain(steps[0]!);
 });
 
-test('a signed-in cook-time correction is proposed, accepted, adopted and read back publicly', async () => {
-  const proposed = await stack.kernel(
+test('a signed-in cook-time correction is proposed and listed without changing the public reading', async () => {
+  const proposed = await write(`/v1/subjects/${recipe.id}/candidates`, {
+    statement: source('schema:cookTime', { amount: '+30', unit: minute }),
+  }, 'alice');
+  correction = proposed.candidate as string;
+  const listed = await stack.kernel(`/v1/subjects/${recipe.id}/candidates?property=schema:cookTime`, {}, 'alice');
+  expect(listed.status).toBe(200);
+  const { candidates } = (await listed.json()) as { candidates: { id: string }[] };
+  expect(candidates.map((candidate) => candidate.id)).toContain(correction);
+  const read = await publicRead(recipe.id);
+  expect(read.statements['schema:cookTime']![0]!.value.content).toMatchObject({ amount: '+25', unit: minute });
+});
+
+test('anonymous, malformed and non-steward writes are refused and leave the reading unchanged', async () => {
+  const anonymous = await send(`/v1/subjects/${recipe.id}/candidates`, {
+    statement: source('schema:cookTime', { amount: '+35', unit: minute }),
+  });
+  expect(anonymous.status).toBe(401);
+  const malformed = await send(
     `/v1/subjects/${recipe.id}/candidates`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
-      body: JSON.stringify({ statement: source('schema:cookTime', { amount: '+30', unit: minute }) }),
-    },
+    { statement: source('schema:cookTime', { amount: 'soon', unit: minute }) },
     'alice',
   );
-  expect(proposed.status).toBe(201);
-  correction = ((await proposed.json()) as { candidate: string }).candidate;
+  expect(malformed.status).toBe(400);
+  const refused = await send(
+    `/v1/subjects/${recipe.id}/candidates/${correction}:accept`,
+    { context: GLOBAL_CONTEXT, expected_head: null },
+    'alice',
+  );
+  expect(refused.status).toBe(403);
+  const read = await publicRead(recipe.id);
+  expect(read.statements['schema:cookTime']![0]!.value.content).toMatchObject({ amount: '+25', unit: minute });
+});
 
+test('a steward accepts and an acceptor adopts the correction; the new reading and its citation are public', async () => {
   const accepted = await write(
     `/v1/subjects/${recipe.id}/candidates/${correction}:accept`,
     { context: GLOBAL_CONTEXT, expected_head: null },
@@ -185,9 +199,8 @@ test('a signed-in cook-time correction is proposed, accepted, adopted and read b
     'acceptor',
   );
   expect(adopted).toHaveProperty('adoption');
-
   const read = await publicRead(recipe.id);
   expect(read.statements['schema:cookTime']![0]!.value.content).toMatchObject({ amount: '+30', unit: minute });
-  const anonymous = await served(recipe);
-  expect(anonymous.recipe).toMatchObject({ cookTime: 'PT30M' });
+  expect(JSON.stringify(read.statements['schema:cookTime']![0])).toContain(citation);
+  expect((await served(recipe)).recipe).toMatchObject({ cookTime: 'PT30M' });
 });

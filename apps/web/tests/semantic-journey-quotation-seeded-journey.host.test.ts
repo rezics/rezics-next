@@ -9,16 +9,11 @@ const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const marker = `journeyquote${crypto.randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
 const original = 'I will return.';
 const corrected = 'I will return soon.';
+const citation = 'https://example.org/journey-quotation';
 const source = (id: string, content: unknown) => ({
   property: { id },
   value: { type: 'value', content },
-  references: [
-    {
-      parts: [
-        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/journey-quotation' } },
-      ],
-    },
-  ],
+  references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] }],
 });
 type Subject = {
   id: string;
@@ -30,12 +25,15 @@ type Subject = {
 let stack: NativeWebStack;
 let work: Subject;
 let speaker: Subject;
+let author: Subject;
 let quotation: Subject;
+let textCandidate: string;
 
 beforeAll(async () => {
   stack = await startNativeWebStack();
   work = (await command('/v1/subjects', { type: 'schema:Book', labels: { en: `${marker} work` } })).subject;
   speaker = (await command('/v1/subjects', { type: 'wd:Q95074', labels: { en: `${marker} speaker` } })).subject;
+  author = (await command('/v1/subjects', { type: 'schema:Person', labels: { en: `${marker} author` } })).subject;
   quotation = (
     await command('/v1/subjects', {
       type: 'schema:Quotation',
@@ -55,16 +53,16 @@ afterAll(async () => {
   await stack?.stop();
 }, 180_000);
 
+function json(): Record<string, string> {
+  return { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` };
+}
+
+async function send(path: string, body: unknown, persona?: string) {
+  return stack.kernel(path, { method: 'POST', headers: json(), body: JSON.stringify(body) }, persona);
+}
+
 async function write(path: string, body: unknown, persona = 'editor') {
-  const response = await stack.kernel(
-    path,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
-      body: JSON.stringify(body),
-    },
-    persona,
-  );
+  const response = await send(path, body, persona);
   const result = await response.json();
   expect({ status: response.status, body: response.ok ? undefined : result }).toEqual({
     status: path === '/v1/subjects' || path.endsWith('/candidates') ? 201 : 200,
@@ -94,27 +92,28 @@ async function publicRead(id: string) {
   return ((await response.json()) as { subject: Subject }).subject;
 }
 
+async function documentBody(statement: { value: { content: any } }) {
+  const content = statement.value.content as { document: string };
+  const oracle = await stack.kernel(`/v1/documents/${content.document}`);
+  expect(oracle.status).toBe(200);
+  return ((await oracle.json()) as { document: { body: unknown; language: string } }).document;
+}
+
 test('the original Quotation is admitted through the real API with text, work and speaker', async () => {
   const read = await publicRead(quotation.id);
   expect(read.type).toBe('schema:Quotation');
   expect(read.statements['schema:about']![0]!.value.content).toBe(work.id);
   expect(read.statements['schema:spokenByCharacter']![0]!.value.content).toBe(speaker.id);
-  const text = read.statements['schema:text']![0]!.value.content as { document: string; language: string };
-  expect(text.language).toBe('en');
-  const oracle = await stack.kernel(`/v1/documents/${text.document}`);
-  expect(oracle.status).toBe(200);
-  const { document } = (await oracle.json()) as { document: { language: string; body: unknown } };
+  expect(JSON.stringify(read.statements['schema:text']![0])).toContain(citation);
+  const document = await documentBody(read.statements['schema:text']![0]!);
   expect(document.language).toBe('en');
   expect(document.body).toEqual(fromPlainText(original));
 });
 
 test('anonymous and signed-in Quotation pages show its body, and the companion lists it from the work', async () => {
-  const anonymous = await served(href(quotation));
-  const alice = await served(href(quotation), 'alice');
-  expect(anonymous).toContain(original);
-  expect(alice).toContain(original);
-  const companion = await served(`${href(work)}/quotations?quote=${quotation.id}`);
-  expect(companion).toContain(original);
+  expect(await served(href(quotation))).toContain(original);
+  expect(await served(href(quotation), 'alice')).toContain(original);
+  expect(await served(`${href(work)}/quotations?quote=${quotation.id}`)).toContain(original);
 });
 
 test('the linked work serves and the Quotation serves again after returning', async () => {
@@ -122,43 +121,73 @@ test('the linked work serves and the Quotation serves again after returning', as
   expect(await served(href(quotation), 'alice')).toContain(original);
 });
 
-test('a signed-in body correction is proposed, accepted, adopted and read back publicly', async () => {
+test('anonymous proposals and signed-in acceptance are refused; a signed-in body correction is listed while pending', async () => {
+  const anonymous = await send(`/v1/subjects/${quotation.id}/candidates`, {
+    statement: source('schema:text', { language: 'en', document: fromPlainText(corrected), licence: 'CC-BY-4.0' }),
+  });
+  expect(anonymous.status).toBe(401);
   const proposed = await write(
     `/v1/subjects/${quotation.id}/candidates`,
-    {
-      statement: source('schema:text', {
-        language: 'en',
-        document: fromPlainText(corrected),
-        licence: 'CC-BY-4.0',
-      }),
-    },
+    { statement: source('schema:text', { language: 'en', document: fromPlainText(corrected), licence: 'CC-BY-4.0' }) },
     'alice',
   );
-  const candidate = proposed.candidate as string;
+  textCandidate = proposed.candidate as string;
+  const refused = await send(
+    `/v1/subjects/${quotation.id}/candidates/${textCandidate}:accept`,
+    { context: GLOBAL_CONTEXT, expected_head: null },
+    'alice',
+  );
+  expect(refused.status).toBe(403);
+  const listed = await stack.kernel(`/v1/subjects/${quotation.id}/candidates?property=schema:text`, {}, 'alice');
+  const { candidates } = (await listed.json()) as { candidates: { id: string }[] };
+  expect(candidates.map((candidate) => candidate.id)).toContain(textCandidate);
+  expect(await served(href(quotation))).toContain(original);
+});
+
+test('a steward accepts and an acceptor adopts the body correction; the new body is read back publicly', async () => {
   const accepted = await write(
-    `/v1/subjects/${quotation.id}/candidates/${candidate}:accept`,
+    `/v1/subjects/${quotation.id}/candidates/${textCandidate}:accept`,
     { context: GLOBAL_CONTEXT, expected_head: null },
     'steward',
   );
-  expect(accepted).toMatchObject({ acceptance: { candidate, decision: 'accept' } });
+  expect(accepted).toMatchObject({ acceptance: { candidate: textCandidate, decision: 'accept' } });
   const adopted = await write(
     `/v1/subjects/${quotation.id}:adopt`,
     {
       context: GLOBAL_CONTEXT,
       property: 'schema:text',
       mode: 'replace',
-      selection: [{ candidate, rank: 'normal' }],
+      selection: [{ candidate: textCandidate, rank: 'normal' }],
       expected_head: null,
     },
     'acceptor',
   );
   expect(adopted).toHaveProperty('adoption');
-
-  const read = await publicRead(quotation.id);
-  const text = read.statements['schema:text']![0]!.value.content as { document: string };
-  const oracle = (await (await stack.kernel(`/v1/documents/${text.document}`)).json()) as {
-    document: { body: unknown };
-  };
-  expect(oracle.document.body).toEqual(fromPlainText(corrected));
+  const document = await documentBody((await publicRead(quotation.id)).statements['schema:text']![0]!);
+  expect(document.body).toEqual(fromPlainText(corrected));
   expect(await served(href(quotation))).toContain(corrected);
+});
+
+test('an accepted creator credit names the author publicly and on the served Quotation', async () => {
+  const proposed = await write(
+    `/v1/subjects/${quotation.id}/candidates`,
+    { statement: source('schema:creator', author.id) },
+    'alice',
+  );
+  const candidate = proposed.candidate as string;
+  await write(`/v1/subjects/${quotation.id}/candidates/${candidate}:accept`, { context: GLOBAL_CONTEXT, expected_head: null }, 'steward');
+  await write(
+    `/v1/subjects/${quotation.id}:adopt`,
+    {
+      context: GLOBAL_CONTEXT,
+      property: 'schema:creator',
+      target: author.id,
+      mode: 'replace',
+      selection: [{ candidate, rank: 'normal' }],
+      expected_head: null,
+    },
+    'acceptor',
+  );
+  expect(JSON.stringify((await publicRead(quotation.id)).statements['schema:creator'])).toContain(author.id);
+  expect(await served(href(quotation))).toContain(`${marker} author`);
 });
