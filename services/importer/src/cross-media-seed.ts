@@ -3062,8 +3062,13 @@ export async function runCrossMediaSeedCli(
   });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
-  const { parseVndbReleaseStateBindings, prepareShowcaseVndbReleaseClassifications, seedShowcaseVndbReleases } =
-    await import('./showcase-vndb-releases.ts');
+  const {
+    composeShowcaseVndbReleaseContext,
+    parseVndbReleaseStateBindings,
+    prepareShowcaseVndbReleaseClassifications,
+    sameShowcaseVndbReleaseClassifications,
+    seedShowcaseVndbReleases,
+  } = await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -3198,6 +3203,7 @@ export async function runCrossMediaSeedCli(
     bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     groups: [],
   };
+  let selectedReleaseContext: ReturnType<typeof composeShowcaseVndbReleaseContext> | undefined;
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
   try {
     if (journal && publicClient)
@@ -3389,25 +3395,25 @@ export async function runCrossMediaSeedCli(
         journal,
         stage: 'concepts',
       });
-      const sameBindings =
-        JSON.stringify(currentReleaseClassifications.bindings) ===
-        JSON.stringify(releaseClassificationPreparation.bindings);
+      const sameBindings = sameShowcaseVndbReleaseClassifications(result.bindings, currentReleaseClassifications.bindings);
       releaseClassificationPreparation = currentReleaseClassifications;
       releaseClassificationRequirements = currentReleaseClassifications.requirements;
       if (!sameBindings) {
+        const releaseContext = composeShowcaseVndbReleaseContext({
+          bindings: currentReleaseClassifications.bindings,
+          preservedBindings: result.bindings,
+          groups: currentReleaseClassifications.groups,
+          configuredGroups: vndbReleaseStateBindings?.groups,
+        });
         publicationPlan = structuredClone(plan);
         result = await seedShowcaseVndbReleases({
           tables: input,
           plan: publicationPlan,
           path: statePath,
           port,
-          bindings: currentReleaseClassifications.bindings,
+          bindings: releaseContext.bindings,
           destination: { origin: api },
-          ...(vndbReleaseStateBindings?.groups.length
-            ? { groups: [...vndbReleaseStateBindings.groups, ...currentReleaseClassifications.groups] }
-            : currentReleaseClassifications.groups.length
-              ? { groups: currentReleaseClassifications.groups }
-              : {}),
+          ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
           extras: {
             ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
             vndbCharacterProfileBindings: characterProfileBindings,
@@ -3439,6 +3445,11 @@ export async function runCrossMediaSeedCli(
           ...(characterBindings === undefined ? {} : { characterBindings }),
         });
       }
+      selectedReleaseContext = composeShowcaseVndbReleaseContext({
+        bindings: result.bindings,
+        groups: releaseClassificationPreparation.groups,
+        configuredGroups: vndbReleaseStateBindings?.groups,
+      });
     }
     let publicTags: Awaited<ReturnType<typeof importShowcaseTags>> | Awaited<ReturnType<typeof prepareShowcaseTags>>;
     if (preparedPublicTags) {
@@ -3626,14 +3637,15 @@ export async function runCrossMediaSeedCli(
     const reseedWithCurrentVocabulary = async (nextCharacterBindings: SourceVocabularyBindings) => {
       bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(nextCharacterBindings, importPort);
       publicationPlan = structuredClone(plan);
+      const releaseContext = selectedReleaseContext!;
       result = await seedShowcaseVndbReleases({
         tables: input,
         plan: publicationPlan,
         path: statePath,
         port,
-        bindings: result.bindings,
+        bindings: releaseContext.bindings,
         destination: { origin: api },
-        ...(vndbReleaseStateBindings?.groups.length ? { groups: vndbReleaseStateBindings.groups } : {}),
+        ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
         extras: {
           ...(currentVndbCreditReferences ? { vndbCreditReferences: currentVndbCreditReferences } : {}),
           vndbCharacterProfileBindings: characterProfileBindings,

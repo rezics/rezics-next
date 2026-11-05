@@ -1732,9 +1732,9 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 ### Publish selected-family VNDB release dates and states
 
-- Touches: the ordinary selected-family plan, already selected `releases` / `releases_vn` / `vn.devstatus` rows, finite reviewed-catalogue development-status subject IDs already published by `task seed:dev`, current native scheme/concept point reads for those codes, an optional UUID binding file, the existing seed/importer caller, and ordinary public batch/fence/candidate commands. Dates, TBA/unknown distinctions and development-status keywords are proposed on those native work/release identities. The standalone first-64 archive planner is not invoked.
-- Bound: one date or released-state row per selected release and one development-status row per selected work, inside the existing per-record vocabulary (64 rows), candidate (≤300) and journal budgets. Completeness stays a `wdt:P31` qualifier gap. TBA/unknown stay mapper `property_not_admitted` on `schema:keywords` because the current Release profile omits that property and the reviewed inventory has no released-state Concepts; a current development-status binding publishes work keywords. Decision: selected-family `schema:exampleOfWork` stays on the existing graph edge; the mapper still records the completeness gap without a second association. Decision: do not remap TBA/unknown onto `schema:creativeWorkStatus`. Decision: default seed rereads reviewed-catalogue development-status identities; a UUID file is an optional override validated by those same current reads.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. Local proof: `bun test services/importer/tests/showcase-vndb-releases.test.ts`. Native outcome `services/kernel/test/imports/showcase-vndb-releases.test.ts` is registered and not executed as a worker check in this attempt.
+- Touches: selected `releases` / `releases_vn` / `vn.devstatus` rows, reviewed development-status IDs, selected platform/media Concepts, current native reads, optional UUID binding file, the existing seed and common ShowcaseJournal publisher. Dates and admitted classifications stay on actual selected Release/Work identities; later vocabulary phases reuse the composed result and current groups. The standalone first-64 archive planner is not invoked.
+- Bound: one date or released-state row per selected release and one development-status row per selected work, within the existing 64-release, per-record vocabulary (64 rows), candidate (≤300) and journal budgets. Current scheme/concept reads remain limited to selected state and platform/media dependencies; no catalogue scan or extra publication path. Completeness stays a `wdt:P31` qualifier gap. TBA/unknown stay withheld because the current Release profile omits `schema:keywords` and the reviewed inventory has no released-state Concepts; do not remap them to `schema:creativeWorkStatus`. `schema:exampleOfWork` stays on the existing graph edge.
+- Growth check: `tests/showcase-vndb-releases.test.ts` covers a later selected-family reseed, changed current classification and a retracted binding. `services/kernel/test/imports/showcase-vndb-releases.test.ts` authors the full CLI, exact reopen, source refresh and independent current-read path; native execution remains controller-owned. Existing importer reconciliation and native sourced-write suites retain their units.
 
 ### Import authored VNDB release titles
 
@@ -2774,6 +2774,12 @@ with null object prototypes retain the same provenance; prototype identity is ne
 Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 
 [Seed denial diagnostics](seed-diagnostics.md).
+
+### Selected VNDB Release context across vocabulary phases
+
+Later Character, credit and Bangumi vocabulary reseeds reuse the actual selected Release/Work seed result and latest current platform/media groups. A changed current binding reseeds the same selected plan; a missing or retracted group withholds only its association. Release-state groups and source keys stay composed, while independent dates, names and editorial choices remain available. Ordinary imports remain proposal-only; explicit review uses the existing ShowcaseJournal and common publisher.
+
+Decision: later release reseeds carry the latest current classifications with the actual selected seed result; they retain released-state groups and source identities while replacing stale platform/media bindings.
 
 Decision: the local seed stores finite reviewed-catalogue journal identities in the same importer state file, then validates native bindings on every run; a transient unavailable read preserves only the exact prior keyword candidate.
 
