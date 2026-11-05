@@ -19,6 +19,7 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { admittedAccess, accountToken, authenticateAccount } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { compileEntryRelease, entryTypes } from './support/profile-entry-fixture.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
@@ -178,6 +179,7 @@ function unrelatedPopulation(name: string): Population {
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
+  configureTestReceiptKeys(database.pool);
   await bootstrapRelease(database.pool, await compileEntryRelease('original'));
   accounts = new Map<string, Account>();
   await installAccount(setupIdentity.accountId, 'active');
@@ -189,6 +191,7 @@ beforeAll(async () => {
     pool: database.pool,
     clock,
     tokens,
+    receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(73),
     writeRate: createWriteRateLimiter({ secret: 'native-library-entry-baseline-rate-secret' }),
     access(config) {

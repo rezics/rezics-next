@@ -21,20 +21,18 @@ import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
-import { createKernel } from '../../../src/http/kernel.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
-import type { Access, AccountActor, Resource } from '../../../src/request/access.ts';
+import type { AccountActor, Resource } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
-import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
+import { accountToken, admittedAuth, authenticateAccount } from '../../support/admitted-access.ts';
+import { testKernel, testRouteKey, testTokens } from '../../support/test-kernel.ts';
 import {
   createProfileHistoricalNativeFixture,
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
-import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
@@ -158,27 +156,18 @@ export async function createProfileEntryFixture(
   try {
     const tokens = testTokens();
     const routeKey = testRouteKey();
-    let access!: Access;
-    const kernel = createKernel({
+    const kernel = testKernel({
       pool,
       tokens,
-      routeKey,
-      receiptKeys: testReceiptKeys(),
+      auth: admittedAuth,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       requestDeadlineMs: 30_000,
-      access(config) {
-        return (access = admittedAccess(config));
-      },
       writeRate: createWriteRateLimiter({
         secret: 'native-profile-entry-test-rate-secret',
         overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
       }),
     });
-    // The kernel composes Access lazily from its complete mounted action catalogue.
-    // Resolve it through an ordinary public read before authenticating native actors.
-    const warm = await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
-    expect([200, 404]).toContain(warm.status);
-    expect(access).toBeDefined();
+    const access = kernel.testAccess;
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
     // Run the real relay for scenarios that consume Semantic link projections.

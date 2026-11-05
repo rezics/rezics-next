@@ -111,8 +111,10 @@ export async function membersPreparationRuntime() {
       db,
       async () => {
         const response = await send(owner, 'GET', `/v1/collections/${collection.id}/members`);
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ members: [], next: null });
+        expect({ status: response.status, body: await response.json() }).toEqual({
+          status: 200,
+          body: { members: [], next: null },
+        });
       },
       { includeBackends: true },
     );

@@ -1,5 +1,10 @@
 # Library native-operation authority
 
+Native Entry acceptance uses the mounted test Kernel composition and its durable receipt keys before any lifecycle
+setup command. Search preparation scenarios in one file share one native runtime: governance bootstrap is a one-time
+database installation, while each scenario still creates its own Collection and preparation episode. Retain the
+original behavioral and native cost assertions; add regressions only for defects reached through the seeded journey.
+
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
 

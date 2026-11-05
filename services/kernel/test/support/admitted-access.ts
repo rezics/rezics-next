@@ -1,5 +1,6 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
+import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import type { Access, AccessContext, AccountActor } from '../../src/request/access.ts';
 
 const issuer = 'https://admitted-access.example.test';
@@ -13,20 +14,20 @@ async function signing(): Promise<CryptoKeyPair> {
   return signingKeys;
 }
 
+/** The same signed test credential can enter the ordinary mounted Kernel composition. */
+export const admittedAuth: AuthenticationConfig = {
+  issuer,
+  audience,
+  jwksUrl: `${issuer}/jwks`,
+  async fetch() {
+    await signing();
+    return Response.json(jwks);
+  },
+};
+
 /** An Access from `createAccess`, so command admission and the other registries are installed. */
 export function admittedAccess(config: Omit<AccessConfig, 'auth'>): Access {
-  return createAccess({
-    ...config,
-    auth: {
-      issuer,
-      audience,
-      jwksUrl: `${issuer}/jwks`,
-      async fetch() {
-        await signing();
-        return Response.json(jwks);
-      },
-    },
-  });
+  return createAccess({ ...config, auth: admittedAuth });
 }
 
 /** Sign an access token this factory's Access will accept once the account exists. */

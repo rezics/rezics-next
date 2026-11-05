@@ -1,4 +1,4 @@
-import { expect, expectTypeOf, test } from 'bun:test';
+import { afterAll, beforeAll, expect, expectTypeOf, test } from 'bun:test';
 import { commandTime, type AuthoritativeTime } from '../../src/command/command.ts';
 import {
   currentOperationalResources,
@@ -25,6 +25,14 @@ import type { createSearchScopeSource } from '../../src/search/scope-source.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { definition, membersPreparationRuntime } from '../library/support/members-preparation-runtime.ts';
 
+let native: Awaited<ReturnType<typeof membersPreparationRuntime>>;
+beforeAll(async () => {
+  native = await membersPreparationRuntime();
+}, 120_000);
+afterAll(async () => {
+  await native.close();
+});
+
 test('work context is additive and uses the existing native scope adapter types', () => {
   expectTypeOf<MembersPreparationWorkContext>().toEqualTypeOf<
     Readonly<{ kind: 'members-preparation'; tx: OperationalTransaction; locator: PreparationLocator }>
@@ -49,8 +57,7 @@ test('work context is additive and uses the existing native scope adapter types'
 // Positive admission is deliberately real: no replacement MembersPreparation, ready Source or Actor
 // is supplied. A missing producer is a native failure here, never an expected successful outcome.
 test('Implement the sole4b native MembersPreparation work-context handoff', async () => {
-  const native = await membersPreparationRuntime();
-  try {
+  {
     const f = await native.fixture();
     const reserved = await f.store.reserve(f.actor, f.collectionId, [definition()]);
     expect(reserved.episodes).toHaveLength(1);
@@ -95,14 +102,11 @@ test('Implement the sole4b native MembersPreparation work-context handoff', asyn
       code: 'semantic_not_ready',
     });
     expect(native.db.pool.idleCount).toBe(native.db.pool.totalCount);
-  } finally {
-    await native.close();
   }
 }, 120_000);
 
 test('native work handoff refuses a different fenced account before episode admission', async () => {
-  const native = await membersPreparationRuntime();
-  try {
+  {
     const f = await native.fixture();
     const other = await native.person();
     const locator = native.locator(f.owner, f.collectionId);
@@ -124,7 +128,5 @@ test('native work handoff refuses a different fenced account before episode admi
         ).rejects.toMatchObject({ code: 'semantic_not_ready' });
       },
     );
-  } finally {
-    await native.close();
   }
 }, 120_000);
