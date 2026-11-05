@@ -22,6 +22,7 @@ import {
   readShowcaseCharacterVocabulary,
 } from '../src/showcase-character-vocabulary.ts';
 import {
+  appearanceRoleTaxonomy,
   appearanceRoleSchemeUri,
   characterTraitConceptUri,
   characterTraitSchemeUri,
@@ -165,6 +166,33 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
     identities: Map<string, string>;
   };
 }
+
+test('reviewed selection publishes only its source-supported appearance-role vocabulary', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-character-role-vocabulary-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const commands: BatchCommand[] = [];
+  const port = journaledPort(journal, commands);
+  try {
+    const tables = await selectedTables(directory);
+    const selected = await planCrossMediaSeed(tables, { deferVndbCharacterAppearances: true });
+    const prepared = await prepareShowcaseCharacterVocabulary({
+      tables,
+      selectedPlan: selected,
+      port,
+      journal,
+      stage: 'concepts',
+      taxonomies: [appearanceRoleTaxonomy],
+    });
+    expect(prepared.requirements.map((item) => item.sourceKey)).toEqual([
+      'vndb.char_role',
+      'vndb.char_role:main',
+    ]);
+    expect(JSON.stringify(commands)).not.toContain('character-trait');
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test('default seed publishes selected trait and role vocabulary without a UUID file and admits spoiler-qualified facts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-character-vocabulary-'));
