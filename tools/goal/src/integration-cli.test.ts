@@ -7,8 +7,9 @@ import { mkdirSync } from 'node:fs';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
-import { temporaryDirectory, repository } from './test-support.ts';
-import { createHourlyReportScheduler, singleFlight } from './integration-cli.ts';
+import { temporaryDirectory, repository, integrationHarness } from './test-support.ts';
+import { createHourlyReportScheduler, runIntegration, singleFlight, type IntegrationRuntime } from './integration-cli.ts';
+import { git } from './merge.ts';
 
 const cli = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
@@ -90,6 +91,128 @@ test('registered CLI commands enqueue, train and start and stop a manager throug
     host.kill('SIGTERM');
     await exited;
     repo.close();
+  }
+}, 60_000);
+
+test('false integration recovery preserves provenance, reopens the same queue entry and lands once', async () => {
+  const h = integrationHarness();
+  const previousTaskId = process.env.GOAL_TASK_ID;
+  const previousAttempt = process.env.GOAL_ATTEMPT;
+  delete process.env.GOAL_TASK_ID;
+  delete process.env.GOAL_ATTEMPT;
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.ensureDev();
+    const targetPath = 'target.txt';
+    const effectivePath = 'effective.txt';
+    const task = h.dispatch(targetPath);
+    writeFileSync(join(task.worktree, effectivePath), 'worker effective change');
+    git(task.worktree, 'add', '--', effectivePath);
+    git(task.worktree, 'commit', '-qm', 'Add worker effective change');
+    await h.start(task);
+
+    const publishedCommit = h.advanceDev(targetPath, targetPath);
+    const candidateTree = join(h.settings.stateDirectory, `candidate-${crypto.randomUUID()}`);
+    git(h.root, 'worktree', 'add', '--detach', candidateTree, publishedCommit);
+    let candidate: string;
+    try {
+      writeFileSync(join(candidateTree, effectivePath), 'worker effective change');
+      git(candidateTree, 'add', '--', effectivePath);
+      git(candidateTree, 'commit', '-qm', 'Resolved landing candidate');
+      candidate = git(candidateTree, 'rev-parse', 'HEAD');
+    } finally {
+      git(h.root, 'worktree', 'remove', '--force', candidateTree);
+    }
+
+    const ref = { taskId: task.id, attempt: 1 };
+    const entry = h.queue.entry(ref)!;
+    const resolvedRequest = {
+      ...entry.request,
+      devResolution: {
+        attempts: 1,
+        commit: candidate,
+        targetHead: publishedCommit,
+        method: 'resolver' as const,
+        tokens: { input: 0, cached: 0, output: 0 },
+        paths: [targetPath],
+      },
+    };
+    h.queue.requeueResolved(entry.id, resolvedRequest, candidate);
+    const falseOutcome = {
+      taskId: task.id,
+      attempt: 1,
+      passed: true,
+      stage: 'merge' as const,
+      logPath: join(h.settings.stateDirectory, 'false-landing.log'),
+      hostMs: 1,
+      changedFiles: [targetPath, effectivePath],
+      diffLines: 2,
+      mergedCommit: publishedCommit,
+    };
+    h.queue.finish(entry.id, falseOutcome);
+    h.job.onGateOutcome(falseOutcome);
+    h.queue.acknowledge(entry.id);
+
+    const original = h.store.task(task.id);
+    const originalSession = h.store.attempt(ref).sessionId;
+    const runtime = {
+      queue: h.queue,
+      db: h.store.db,
+      mainCheckout: h.root,
+      stateDirectory: h.settings.stateDirectory,
+      worktreeRoot: h.settings.worktreeRoot,
+      managerSocket: join(h.settings.stateDirectory, 'manager.sock'),
+      fence: h.store,
+      sink: { onGateOutcome() {} },
+      landing() {
+        throw new Error('recovery reuses the original queue request');
+      },
+      manager() {
+        throw new Error('recovery does not launch a manager');
+      },
+      managerServices: {},
+    } as unknown as IntegrationRuntime;
+    const args = ['recover', 'false-integration', task.id, '1'];
+    expect(await runIntegration(args, runtime)).toBe(0);
+    expect(h.store.task(task.id)).toMatchObject({
+      state: 'landing',
+      currentAttempt: 1,
+      branch: original.branch,
+      worktree: original.worktree,
+    });
+    expect(h.store.attempt(ref).sessionId).toBe(originalSession);
+    expect(h.queue.entry(ref)).toMatchObject({ delivered: 0, outcome: null, candidate: null });
+    expect(h.queue.entry(ref)?.request.devResolution).toBeUndefined();
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'false-integration-reconciled')).toHaveLength(1);
+    expect(await runIntegration(args, runtime)).toBe(0);
+
+    await h.train();
+
+    const actual = h.outcomes.find((outcome) => outcome.taskId === task.id)!;
+    const taskAfter = h.store.task(task.id);
+    expect(actual.passed).toBe(true);
+    expect(actual.mergedCommit).not.toBe(publishedCommit);
+    expect(actual.mergedCommit).toBe(git(h.root, 'rev-parse', 'refs/heads/dev'));
+    expect(taskAfter).toMatchObject({ state: 'integrated', currentAttempt: 1, integratedCommit: actual.mergedCommit });
+    expect(taskAfter.branch).toBe(original.branch);
+    expect(taskAfter.worktree).toBe(original.worktree);
+    expect(git(h.root, 'show', 'dev:target.txt')).toBe('target.txt');
+    expect(git(h.root, 'show', 'dev:effective.txt')).toBe('worker effective change');
+    expect(git(h.root, 'rev-list', '--count', `${publishedCommit}..refs/heads/dev`)).toBe('1');
+    const events = h.store.events(task.id, 1);
+    expect(events.filter((event) => event.kind === 'gate-outcome')).toHaveLength(2);
+    const reconciliation = events.find((event) => event.kind === 'false-integration-reconciled')!;
+    expect(JSON.parse(reconciliation.body)).toMatchObject({
+      publishedCommit,
+      candidate,
+      outcome: { passed: true, mergedCommit: publishedCommit },
+    });
+  } finally {
+    if (previousTaskId === undefined) delete process.env.GOAL_TASK_ID;
+    else process.env.GOAL_TASK_ID = previousTaskId;
+    if (previousAttempt === undefined) delete process.env.GOAL_ATTEMPT;
+    else process.env.GOAL_ATTEMPT = previousAttempt;
+    h.dispose();
   }
 }, 60_000);
 

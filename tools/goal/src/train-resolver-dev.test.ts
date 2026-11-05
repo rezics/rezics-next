@@ -24,6 +24,7 @@ async function startConflict(
   baseContent = base,
   workerContent = worker,
   devContent = dev,
+  extraWorker?: { file: string; content: string },
 ) {
   mkdirSync(dirname(join(h.root, conflictFile)), { recursive: true });
   writeFileSync(join(h.root, conflictFile), baseContent);
@@ -35,6 +36,12 @@ async function startConflict(
     join(task.worktree, '.temp/worker-plan.json'),
     JSON.stringify({ file: conflictFile, content: workerContent }),
   );
+  if (extraWorker) {
+    mkdirSync(dirname(join(task.worktree, extraWorker.file)), { recursive: true });
+    writeFileSync(join(task.worktree, extraWorker.file), extraWorker.content);
+    git(task.worktree, 'add', '--', extraWorker.file);
+    git(task.worktree, 'commit', '-qm', 'Retain effective fixture change');
+  }
   await h.start(task);
   h.advanceDev(conflictFile, devContent);
   return task;
@@ -159,6 +166,42 @@ test('a resolution replays cleanly onto an unrelated new dev head without anothe
     expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
     expect(git(h.root, 'show', `dev:${devOnly}`)).toBe('export const devOnly = true;');
     expect(git(h.root, 'worktree', 'list', '--porcelain')).not.toContain('train-resolver-dev-');
+  } finally {
+    h.dispose();
+  }
+}, 45_000);
+
+test('a target-preserving resolution publishes its other change after dev moves', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    const effectiveFile = 'packages/fixture/effective.txt';
+    const concurrentFile = 'packages/fixture/concurrent.txt';
+    const task = await startConflict(h, file, base, worker, dev, {
+      file: effectiveFile,
+      content: 'worker effective change\n',
+    });
+    const marker = join(h.settings.stateDirectory, 'release-target-preserving-resolver');
+    let releaseStarted!: () => void;
+    const started = new Promise<void>((resolve) => (releaseStarted = resolve));
+    const mocked = resolverAdapter(dev, releaseStarted, marker);
+    const resolving = withAgentAdapter(mocked.adapter, () => train(h).run());
+    await started;
+
+    const concurrentHead = h.advanceDev(concurrentFile, 'concurrent target edit\n');
+    writeFileSync(marker, 'continue');
+    await resolving;
+    await h.job.drain();
+
+    const outcome = h.outcomes.find((item) => item.taskId === task.id)!;
+    expect(mocked.calls()).toBe(1);
+    expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 1 } });
+    expect(outcome.mergedCommit).toBe(git(h.root, 'rev-parse', 'refs/heads/dev'));
+    expect(outcome.mergedCommit).not.toBe(concurrentHead);
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated', integratedCommit: outcome.mergedCommit });
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(dev.trimEnd());
+    expect(git(h.root, 'show', `dev:${effectiveFile}`)).toBe('worker effective change');
+    expect(git(h.root, 'show', `dev:${concurrentFile}`)).toBe('concurrent target edit');
   } finally {
     h.dispose();
   }

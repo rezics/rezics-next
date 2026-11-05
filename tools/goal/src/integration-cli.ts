@@ -1,6 +1,7 @@
 import { createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
 import { backlogStatus, formatBacklogStatus } from './backlog.ts';
+import { controlPlaneReleaseBrief } from './briefs.ts';
 import { runInboxCommand } from './inbox-cli.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { SqliteLandingQueue } from './land.ts';
@@ -13,8 +14,10 @@ import {
 import { createHourlyReportScheduler, serveManagers, singleFlight, startOrphanRecoveryTimer } from './manager-host.ts';
 import { recordManagerDecision } from './managers.ts';
 import { MergeTrain } from './merge-train.ts';
+import { git } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { authenticatedManager } from './priority-authority.ts';
+import { WorkerStore } from './store.ts';
 import { ensureServiceHost } from './service.ts';
 
 export type { HostRequest, IntegrationRuntime };
@@ -154,6 +157,52 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await runtime.pump();
       await runtime.drain?.();
     }
+    return 0;
+  }
+  if (command === 'recover' && subcommand === 'false-integration' && id) {
+    if (flags.length !== 1 || !/^\d+$/.test(flags[0]!))
+      throw new Error('usage: recover false-integration <task> <attempt>');
+    if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+      throw new Error('Workers cannot reconcile an integrated landing');
+    await recordManagerCommand(runtime);
+    if (!(runtime.fence instanceof WorkerStore)) throw new Error('Landing recovery requires the worker outcome store');
+    const store = runtime.fence;
+    const attempt = Number(flags[0]);
+    if (!Number.isSafeInteger(attempt) || attempt <= 0)
+      throw new Error('usage: recover false-integration <task> <attempt>');
+    const ref = { taskId: id, attempt };
+    store.assertCurrent(ref);
+    if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'false-integration-reconciled'))
+      return 0;
+    const task = store.task(ref.taskId);
+    const entry = queue.entry(ref);
+    if (!entry?.outcome || !entry.candidate) throw new Error('False integration has no retained landing candidate');
+    const publishedCommit = task.integratedCommit;
+    const { request, outcome, candidate } = entry;
+    if (
+      task.state !== 'integrated' ||
+      !publishedCommit ||
+      task.currentAttempt !== ref.attempt ||
+      task.brief.target === 'main' ||
+      task.brief.target === 'stabilize' ||
+      controlPlaneReleaseBrief(task.brief) ||
+      request.branch !== task.branch ||
+      request.worktree !== task.worktree ||
+      !request.workerCommit ||
+      outcome.mergedCommit !== publishedCommit ||
+      !outcome.passed ||
+      outcome.stage !== 'merge' ||
+      outcome.changedFiles.length === 0 ||
+      entry.delivered !== 1 ||
+      entry.batchId
+    )
+      throw new Error('Landing is not the expected false integrated result');
+    if (git(runtime.mainCheckout, 'rev-parse', `${request.branch}^{commit}`) !== request.workerCommit)
+      throw new Error('The original accepted source branch changed before landing recovery');
+    git(runtime.mainCheckout, 'merge-base', '--is-ancestor', publishedCommit, candidate);
+    if (!git(runtime.mainCheckout, 'diff', '--name-only', publishedCommit, candidate))
+      throw new Error('The retained landing candidate has no changes beyond its reported commit');
+    store.reconcileFalseIntegratedLanding(ref, { publishedCommit, candidate, request, outcome });
     return 0;
   }
   if (command === 'promote') {

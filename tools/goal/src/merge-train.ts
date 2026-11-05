@@ -2241,7 +2241,7 @@ export class MergeTrain {
             taskPaths,
             this.options.policy?.merge,
           );
-          if (delta.kind !== 'effective') {
+          if (delta.kind === 'already-present' || (lane === 'main' && delta.kind === 'partial-no-effect')) {
             acceptAlreadyPresent(result, previous, delta.paths, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
@@ -3770,7 +3770,10 @@ export class MergeTrain {
           taskPaths,
           this.options.policy?.merge,
         );
-        if (delta.kind !== 'effective') {
+        if (
+          delta.kind !== 'effective' &&
+          !(integratesIntoDev && !stabilize && delta.kind === 'partial-no-effect')
+        ) {
           if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, delta.paths, logPath);
           else refuseNoEffect(result, delta.paths, logPath);
           return finish();

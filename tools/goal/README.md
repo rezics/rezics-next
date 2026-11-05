@@ -1665,7 +1665,11 @@ Decision: Keep the accepted worker source fixed across dev movement; retry compo
 
 Resolver prompts include conflict hunks with context, source contracts and instructions for reading each Git stage; long compiler output includes its first and last lines plus the full log path.
 
-After rebasing a single or batched landing, the train checks every path changed by that task against the current dev tree. If the task changed a path but the landing leaves that path's dev content unchanged, the train returns the task to its worker at the merge stage and names the path; a task diff already empty against dev is treated as already represented. Markdown and configured JSON message conflict resolution also stays with the worker when the resolved file keeps only dev's content and discards a worker change. A landing with no net tree change against dev is never reported as integrated on an existing commit.
+After rebasing a single or batched landing, a composed candidate that preserves the target version of one changed path still proceeds through checks and publication when it contains another effective change. Only a candidate with no net tree change against dev is treated as already represented; it is never reported as integrated on an existing commit when that result is inaccurate.
+
+Decision: Publish every nonempty composed candidate through the existing checks and expected-head transaction; reconcile a false integrated outcome from its original delivered landing provenance, preserving the old outcome as evidence before replaying the same attempt.
+
+`bun tools/goal/src/cli.ts recover false-integration <task> <attempt>` reopens only that current task's delivered single-landing result when its saved candidate is a nonempty descendant of the reported commit and the accepted source branch still matches. It preserves the prior request and outcome, clears only resolver replay state, and leaves the same queue entry for the ordinary train.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left

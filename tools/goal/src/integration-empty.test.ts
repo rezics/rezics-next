@@ -73,3 +73,39 @@ test('a change already present on dev integrates without retrying the worker', a
     h.dispose();
   }
 });
+
+test('a partial batch member keeps its effective change and the prior sibling before publishing', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.batchSize = 2;
+    h.settings.integration.devLandingChecks = false;
+    h.ensureDev();
+    const sibling = h.dispatch('sibling.txt');
+    await h.start(sibling);
+
+    const targetPath = 'target.txt';
+    const effectivePath = 'effective.txt';
+    const partial = h.dispatch(targetPath);
+    writeFileSync(join(partial.worktree, effectivePath), 'worker effective change');
+    git(partial.worktree, 'add', '--', effectivePath);
+    git(partial.worktree, 'commit', '-qm', 'Add effective sibling file');
+    await h.start(partial);
+    h.advanceDev(targetPath, targetPath);
+
+    await h.train();
+
+    const siblingOutcome = h.outcomes.find((outcome) => outcome.taskId === sibling.id)!;
+    const partialOutcome = h.outcomes.find((outcome) => outcome.taskId === partial.id)!;
+    expect(siblingOutcome.passed).toBe(true);
+    expect(partialOutcome.passed).toBe(true);
+    expect(partialOutcome.mergedCommit).toBe(siblingOutcome.mergedCommit);
+    expect(partialOutcome.mergedCommit).toBe(git(h.root, 'rev-parse', 'refs/heads/dev'));
+    expect(h.store.task(sibling.id)).toMatchObject({ state: 'integrated', integratedCommit: partialOutcome.mergedCommit });
+    expect(h.store.task(partial.id)).toMatchObject({ state: 'integrated', integratedCommit: partialOutcome.mergedCommit });
+    expect(git(h.root, 'show', 'dev:sibling.txt')).toBe('sibling.txt');
+    expect(git(h.root, 'show', 'dev:target.txt')).toBe('target.txt');
+    expect(git(h.root, 'show', 'dev:effective.txt')).toBe('worker effective change');
+  } finally {
+    h.dispose();
+  }
+}, 60_000);

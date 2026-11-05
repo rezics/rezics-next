@@ -7,7 +7,7 @@ import { groupMembers, runPidFilePresence, sameProcess } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
-import type { AttemptFence, AttemptRef, LandingRequest, ManagerEvent } from './contracts.ts';
+import type { AttemptFence, AttemptRef, GateOutcome, LandingRequest, ManagerEvent } from './contracts.ts';
 import type {
   Attempt,
   AttemptRecord,
@@ -1001,6 +1001,102 @@ export class WorkerStore implements AttemptFence {
         .query('SELECT body FROM worker_integration_plans WHERE task_id=? AND attempt=?')
         .get(ref.taskId, ref.attempt),
     );
+  }
+  /** Reopen only a delivered successful dev landing whose saved candidate differs from its reported commit. */
+  reconcileFalseIntegratedLanding(
+    ref: AttemptRef,
+    evidence: { publishedCommit: string; candidate: string; request: LandingRequest; outcome: GateOutcome },
+  ): boolean {
+    return this.write(ref, () => {
+      if (this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'false-integration-reconciled'))
+        return false;
+      const task = this.task(ref.taskId);
+      if (
+        task.state !== 'integrated' ||
+        task.integratedCommit !== evidence.publishedCommit ||
+        task.brief.target === 'main' ||
+        task.brief.target === 'stabilize' ||
+        task.brief.kind === 'verification'
+      )
+        throw new Error('Task is not the expected current dev integration');
+      const row = this.db
+        .query('SELECT id, request, outcome, delivered, candidate, batch FROM landing_queue WHERE task=? AND attempt=?')
+        .get(ref.taskId, ref.attempt) as {
+        id: number;
+        request: string;
+        outcome: string | null;
+        delivered: number;
+        candidate: string | null;
+        batch: string | null;
+      } | null;
+      if (!row || !row.outcome || row.delivered !== 1 || row.batch !== null)
+        throw new Error('False integration has no delivered single-landing outcome');
+      const request = JSON.parse(row.request) as LandingRequest;
+      const outcome = JSON.parse(row.outcome) as GateOutcome;
+      if (
+        !isDeepStrictEqual(request, evidence.request) ||
+        !isDeepStrictEqual(outcome, evidence.outcome) ||
+        row.candidate !== evidence.candidate ||
+        request.taskId !== ref.taskId ||
+        request.attempt !== ref.attempt ||
+        request.branch !== task.branch ||
+        request.worktree !== task.worktree ||
+        !request.workerCommit ||
+        request.unchangedClaim ||
+        !outcome.passed ||
+        outcome.stage !== 'merge' ||
+        outcome.mergedCommit !== evidence.publishedCommit ||
+        !outcome.changedFiles.length ||
+        !evidence.candidate
+      )
+        throw new Error('False integration provenance changed before reconciliation');
+
+      const replay = { ...request };
+      delete replay.devResolution;
+      const updated = this.db
+        .query(
+          'UPDATE landing_queue SET request=?, outcome=NULL, delivered=0, candidate=NULL, batch=NULL, resolving=0 WHERE id=? AND outcome=? AND delivered=1 AND candidate=? AND batch IS NULL',
+        )
+        .run(JSON.stringify(replay), row.id, row.outcome, evidence.candidate);
+      if (updated.changes !== 1) throw new Error('False integration landing changed before reconciliation');
+
+      const at = new Date().toISOString();
+      this.db
+        .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(
+          ref.taskId,
+          ref.attempt,
+          'false-integration-reconciled',
+          at,
+          JSON.stringify({
+            publishedCommit: evidence.publishedCommit,
+            candidate: evidence.candidate,
+            request,
+            outcome,
+            taskIntegration: {
+              integratedBase: task.integratedBase,
+              integratedCommits: task.integratedCommits,
+              integratedCommit: task.integratedCommit,
+              mergedCommit: task.mergedCommit,
+            },
+          }),
+        );
+      task.state = 'landing';
+      delete task.integratedBase;
+      delete task.integratedCommits;
+      delete task.integratedCommit;
+      delete task.mergedCommit;
+      this.saveTask(task);
+      recordFlow(this.db, {
+        taskId: ref.taskId,
+        attempt: ref.attempt,
+        stage: 'landing',
+        action: 'false-integration-reconciled',
+        at,
+        detail: JSON.stringify({ publishedCommit: evidence.publishedCommit, candidate: evidence.candidate }),
+      });
+      return true;
+    });
   }
   clearIntegrationPlan(ref: AttemptRef): void {
     this.db.query('DELETE FROM worker_integration_plans WHERE task_id=? AND attempt=?').run(ref.taskId, ref.attempt);

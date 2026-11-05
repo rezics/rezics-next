@@ -1871,12 +1871,15 @@ export class WorkerJob implements GateOutcomeSink {
     let action: (() => Promise<void>) | undefined;
     let released: string[] = [];
     store.write(outcome, () => {
-      const duplicate = store
-        .events(task.id)
-        .some(
-          (e) =>
-            e.attempt === outcome.attempt && e.kind === 'gate-outcome' && JSON.parse(e.body).stage === outcome.stage,
-        );
+      const events = store.events(task.id, outcome.attempt);
+      const previous = events.findLast(
+        (event) => event.kind === 'gate-outcome' && JSON.parse(event.body).stage === outcome.stage,
+      );
+      const reconciled =
+        outcome.stage === 'merge' &&
+        previous !== undefined &&
+        events.some((event) => event.kind === 'false-integration-reconciled' && event.sequence > previous.sequence);
+      const duplicate = previous !== undefined && !reconciled;
       if (duplicate) {
         if (!outcome.passed && outcome.stage === 'gate' && store.retryIntent(outcome)?.status === 'pending')
           action = async () => this.runRetryIntent(outcome);
