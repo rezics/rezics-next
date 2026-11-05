@@ -3,26 +3,31 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
-import { readSubjectSlotSession } from '../subject-slot';
+import { prepareExpectedReader } from '../../session/expected-reader';
+import { captureEntryRestoreCredential, originalEntryRestoreCredential } from '../entry-restore-credential';
 import { consolidationClient, consolidationError, type ConsolidationTransport } from './client';
 
-type Owner = { viewer: string; sourceLabelId: string; csrfToken: string };
+type Owner = { viewer: string; sourceLabelId: string; csrfToken: string; sender?: string };
 type Call<K extends keyof ConsolidationTransport> = Owner & { args: Parameters<ConsolidationTransport[K]> };
 
 async function owner(data: Owner) {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
-  const identity = await readSubjectSlotSession(request, env as Partial<SessionEnv>);
-  if (
-    identity.state !== 'signed-in' ||
-    identity.subject !== data.viewer ||
-    !identity.csrfToken ||
-    identity.csrfToken !== data.csrfToken ||
-    !/^[0-9a-f-]{36}$/i.test(data.sourceLabelId)
-  )
+  if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, {
+    expectedReader: data.viewer,
+    expectedCredential: data.csrfToken,
+  })) || !/^[0-9a-f-]{36}$/i.test(data.sourceLabelId))
     throw new Error('Consolidation owner is no longer current');
-  return consolidationClient(kernelClient(), data.sourceLabelId, { authorization: identity.authorization });
+  const authorization = await originalEntryRestoreCredential(request, env as Partial<SessionEnv>, data.sender);
+  if (!authorization) throw new Error('Consolidation sender is no longer current');
+  return consolidationClient(kernelClient(), data.sourceLabelId, { authorization });
 }
+const captureSender = createServerFn({ method: 'POST' })
+  .validator((data: Owner) => data)
+  .handler(async ({ data }) => {
+    await owner(data);
+    return captureEntryRestoreCredential(getRequest(), env as Partial<SessionEnv>);
+  });
 const review = createServerFn({ method: 'POST' })
   .validator((data: Call<'review'>) => data)
   .handler(async ({ data }) => {
@@ -67,12 +72,15 @@ export function consolidationTransport(
   headers: Record<string, string>,
 ): ConsolidationTransport {
   const captured = { viewer, sourceLabelId, csrfToken: headers['x-csrf-token'] ?? '' };
+  // The visit retains this transport for an uncertain command. Capture before its first dispatch.
+  const sender = captureSender({ data: captured, headers });
+  const original = async () => ({ ...captured, sender: await sender });
   return {
-    review: (...args) => review({ data: { ...captured, args } }),
-    confirm: (...args) => confirm({ data: { ...captured, args } }),
-    apply: (...args) => apply({ data: { ...captured, args } }),
-    retry: (...args) => retry({ data: { ...captured, args } }),
-    cancel: (...args) => cancel({ data: { ...captured, args } }),
-    result: (...args) => result({ data: { ...captured, args } }),
+    review: async (...args) => review({ data: { ...await original(), args }, headers }),
+    confirm: async (...args) => confirm({ data: { ...await original(), args }, headers }),
+    apply: async (...args) => apply({ data: { ...await original(), args }, headers }),
+    retry: async (...args) => retry({ data: { ...await original(), args }, headers }),
+    cancel: async (...args) => cancel({ data: { ...await original(), args }, headers }),
+    result: async (...args) => result({ data: { ...await original(), args }, headers }),
   };
 }

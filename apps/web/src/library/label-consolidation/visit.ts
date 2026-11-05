@@ -29,6 +29,7 @@ export class ConsolidationVisit {
   private busy = false;
   private unknown = false;
   private command: Command | null = null;
+  private sender: Transport | null = null;
   private confirmationValue: Confirmation | null = null;
   private rejectionValue: { status: number; code: string | null } | null = null;
   private resultValue: ConsolidationResult | null = null;
@@ -172,11 +173,12 @@ export class ConsolidationVisit {
   private async dispatch(command: Command): Promise<VisitOutcome> {
     const captured = this.envelope.capture(command.operation);
     if (!captured || !captured.isCurrent()) return 'unavailable';
+    this.sender ??= this.transport({ ...captured.headers });
     this.command = structuredClone(command);
     this.unknown = false;
     this.busy = true;
     try {
-      const transport = this.transport(captured.headers);
+      const transport = this.sender;
       if (command.operation === 'confirm') {
         const response = await transport.confirm(structuredClone(command.evidence), command.key);
         if (this.retired || !captured.isCurrent()) return this.discard();
@@ -198,6 +200,7 @@ export class ConsolidationVisit {
         this.acceptResult(response.data);
       }
       this.command = null;
+      this.sender = null;
       return 'accepted';
     } catch {
       if (this.retired || !captured.isCurrent()) return this.discard();
@@ -224,6 +227,7 @@ export class ConsolidationVisit {
     this.retired = true;
     this.review.retire();
     this.command = null;
+    this.sender = null;
     this.unknown = false;
     this.confirmationValue = null;
     this.resultValue = null;
