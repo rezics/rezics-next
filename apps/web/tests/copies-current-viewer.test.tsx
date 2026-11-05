@@ -27,6 +27,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -359,6 +360,244 @@ test('Actual server exports certify only the exact native preparation, preserve 
     preparedViewer = 'A';
     preparation = 'active';
     currentRequest = request();
+  }
+});
+
+test('three routed inventory windows retain admitted predecessors, retry the exact target, inspect and return through Commerce address', async () => {
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const {
+    createRoute,
+    createRootRoute,
+    createMemoryHistory,
+    RouterProvider,
+    Outlet,
+    Link,
+    useRouterState,
+    createRouter,
+  } = await import('@tanstack/react-router');
+  const actions = await import('../src/library/copies-actions');
+  const { copiesAddress, copiesQuery } = await import('../src/library/copies-query');
+  const { copyInventoryReturnHref } = await import('../src/library/copy-reading-context/navigation');
+  const { CopiesCurrent } = await import('../src/library/copies-current');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+  const { m } = await import('../src/paraglide/messages.js');
+
+  const routeReads: Search[] = [];
+  const listReads: (ReturnType<typeof deferred<CopiesCurrentRead>> & { data: Search })[] = [];
+  const detailReads: (ReturnType<typeof deferred<CopyDetailCurrentRead>> & { data: Search & { id: string } })[] = [];
+  const read = spyOn(actions, 'readCopiesCurrent').mockImplementation(({ data }) => {
+    const call = { ...deferred<CopiesCurrentRead>(), data: data as Search };
+    listReads.push(call);
+    return call.promise;
+  });
+  const detail = spyOn(actions, 'readCopyDetailCurrent').mockImplementation(({ data }) => {
+    const call = { ...deferred<CopyDetailCurrentRead>(), data: data as Search & { id: string } };
+    detailReads.push(call);
+    return call.promise;
+  });
+  const inventory = (search: Search, number: number, note?: string): CopiesCurrentRead => {
+    const value = response('A', search);
+    value.page.copies = [{ ...copy('A', number), note: note ?? `Copy from window ${number}` }];
+    value.page.next = search.cursor === 'c2' ? null : search.cursor === 'c1' ? 'c2' : 'c1';
+    return value;
+  };
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const copiesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/library/copies',
+    validateSearch: (search: Record<string, unknown>) => copiesQuery(search),
+    loaderDeps: ({ search }) => search,
+    loader: ({ deps }) => {
+      const search = deps as Search;
+      routeReads.push(search);
+      return inventory(search, search.cursor === 'c1' ? 2 : search.cursor === 'c2' ? 3 : 1,
+        routeReads.length > 1 ? 'Fresh return' : undefined);
+    },
+    shouldReload: ({ cause }) => cause === 'enter',
+    component: () => {
+      const routeState = useRouterState({
+        select: (state) => ({
+          search: state.location.search as Search,
+          initial: state.matches.find((match) => match.routeId === '/library/copies')?.loaderData as CopiesCurrentRead,
+        }),
+      });
+      return <CopiesCurrent initial={routeState.initial} search={routeState.search} locale="en" />;
+    },
+  });
+  const subjectRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/subject',
+    validateSearch: (search: Record<string, unknown>) => search,
+    component: () => {
+      const via = useRouterState({ select: (state) => (state.location.search as { via?: string }).via });
+      const address = new URL(via ?? '/', window.location.origin);
+      const search = Object.fromEntries(
+        ['subjectId', 'kind', 'status', 'cursor'].flatMap((key) => {
+          const value = address.searchParams.get(key);
+          return value === null ? [] : [[key, value]];
+        }),
+      );
+      return (
+        <Link to="/library/copies" search={search}>
+          Return to inventory
+        </Link>
+      );
+    },
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([copiesRoute, subjectRoute]),
+    history: createMemoryHistory({ initialEntries: [`/library/copies?subjectId=${id(10)}`] }),
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['session'], { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' });
+  client.setQueryData(['exposure', 'anonymous'], []);
+  const exposure = viewerExposureLifetime(client);
+  const admitExposure = () => {
+    const snapshot = exposure.getSnapshot();
+    if (snapshot.state === 'signed-in')
+      client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+        subject: snapshot.observation.subject,
+        admitted: ['personal_library'],
+      });
+  };
+  admitExposure();
+  const release = exposure.subscribe(admitExposure);
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+  );
+  const tick = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  const link = (label: string) => {
+    const node = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.textContent === label);
+    expect(node, `Missing link ${label} in ${host.textContent}`).toBeDefined();
+    return node!;
+  };
+  const button = (label: string, region: ParentNode = host) => {
+    const node = [...region.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === label);
+    expect(node, `Missing button ${label} in ${region.textContent}`).toBeDefined();
+    return node!;
+  };
+  const clickLink = async (label: string) => {
+    await act(async () => link(label).click());
+    await tick();
+  };
+  const accept = async (index: number, search: Search, note?: string, page: Partial<CopiesPageData> = {}) => {
+    const value = inventory(search, search.cursor === 'c1' ? 2 : search.cursor === 'c2' ? 3 : 1, note);
+    value.page = { ...value.page, ...page };
+    await act(async () => listReads[index]!.resolve(value));
+    await tick();
+  };
+
+  try {
+    await tick();
+    expect(routeReads).toHaveLength(1);
+    expect(host.textContent).toContain('Copy from window 1');
+    await clickLink(m.library_copy_more());
+    expect(listReads.at(-1)?.data.cursor).toBe('c1');
+    await accept(0, { subjectId: id(10), cursor: 'c1' });
+    expect(host.textContent).toContain('Copy from window 2');
+    expect(window.document.activeElement?.id).toBe('copies-inventory-heading');
+
+    await clickLink(m.library_copy_more());
+    expect(listReads.at(-1)?.data.cursor).toBe('c2');
+    await act(async () => listReads.at(-1)!.reject(new Error('Target read failed')));
+    await tick();
+    expect(host.querySelector('[role="status"]')?.textContent).toContain(m.error_message());
+    await act(async () => button(m.subject_view_retry()).click());
+    await tick();
+    expect(listReads.at(-1)?.data.cursor).toBe('c2');
+    await accept(2, { subjectId: id(10), cursor: 'c2' }, undefined, { copies: [] });
+    expect(host.textContent).toContain(m.library_copy_page_empty());
+    expect(link(m.library_label_previous_page())).toBeDefined();
+    expect(link(m.library_collections_first_page())).toBeDefined();
+
+    await clickLink(m.library_label_previous_page());
+    expect(listReads.at(-1)?.data.cursor).toBe('c1');
+    await accept(3, { subjectId: id(10), cursor: 'c1' });
+    expect(host.textContent).toContain('Copy from window 2');
+    await clickLink(m.library_collections_first_page());
+    expect(listReads.at(-1)?.data.cursor).toBeUndefined();
+    await accept(4, { subjectId: id(10) });
+    expect(host.textContent).toContain('Copy from window 1');
+    await clickLink(m.library_copy_more());
+    expect(listReads.at(-1)?.data.cursor).toBe('c1');
+    await accept(5, { subjectId: id(10), cursor: 'c1' });
+
+    await act(async () => button(m.library_copy_edit()).click());
+    await tick();
+    expect(detailReads.at(-1)?.data).toMatchObject({ cursor: 'c1', id: id(2), subjectId: id(10) });
+    await act(async () =>
+      detailReads.at(-1)!.resolve({
+        sessionSubject: 'A',
+        requested: copiesAddress({ subjectId: id(10), cursor: 'c1' }, 'en'),
+        id: id(2),
+        result: { ok: true, copy: { ...copy('A', 2), note: 'Inspected current Copy' } },
+      }),
+    );
+    await tick();
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Inspected current Copy');
+    const editor = host.querySelector('[role="dialog"]')!;
+    await act(async () => button(m.library_copy_more(), editor).click());
+    const note = [...editor.querySelectorAll<HTMLTextAreaElement>('textarea')].find((field) => field.value);
+    expect(note).toBeDefined();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(note, 'Unsaved change');
+      note!.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    await clickLink(m.library_copy_more());
+    const departure = host.querySelector('[role="alertdialog"]')!;
+    expect(host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    expect(departure.textContent).toContain(m.library_copy_draft_navigation_description());
+    expect(router.state.location.search).toMatchObject({ subjectId: id(10), cursor: 'c1' });
+    expect(listReads).toHaveLength(6);
+    await act(async () => button(m.library_copy_draft_navigation_stay(), departure).click());
+    await tick();
+    expect(router.state.location.search).toMatchObject({ subjectId: id(10), cursor: 'c1' });
+    await act(async () => button(m.library_copy_cancel(), host.querySelector('[role="dialog"]')!).click());
+    const discard = host.querySelector('[role="alertdialog"]')!;
+    expect(discard.textContent).toContain(m.library_copy_draft_navigation_description());
+    await act(async () => button(m.library_copy_draft_navigation_discard(), discard).click());
+    await tick();
+    expect(router.state.location.search).toMatchObject({ subjectId: id(10), cursor: 'c1' });
+
+    const title = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((node) => node.href.includes('/subjects/'))!;
+    const via = new URL(title.href).searchParams.get('via');
+    expect(via).toBe(copyInventoryReturnHref({ subjectId: id(10), cursor: 'c1' }, 'en'));
+    await act(async () => router.navigate({ to: '/subject', search: { via } }));
+    await tick();
+    await clickLink('Return to inventory');
+    expect(routeReads.at(-1)).toMatchObject({ subjectId: id(10), cursor: 'c1' });
+    expect(host.textContent).toContain('Fresh return');
+    expect(listReads).toHaveLength(6);
+
+    await clickLink(m.library_copy_more());
+    expect(listReads.at(-1)?.data.cursor).toBe('c2');
+    const restarted = inventory({ subjectId: id(10), cursor: 'c2' }, 1, 'Restarted first page');
+    restarted.page = { ...restarted.page, cursorRestarted: true, next: 'after-restart' };
+    await act(async () => listReads.at(-1)!.resolve(restarted));
+    await tick();
+    expect(host.textContent).toContain('Restarted first page');
+    expect(link(m.library_label_previous_page())).toBeUndefined();
+    expect(link(m.library_collections_first_page())).toBeUndefined();
+    expect(new URL(link(m.library_copy_more())!.href).searchParams.get('cursor')).toBe('after-restart');
+  } finally {
+    read.mockRestore();
+    detail.mockRestore();
+    release();
+    await act(async () => root.unmount());
+    router.history.destroy();
+    client.clear();
+    host.remove();
   }
 });
 
