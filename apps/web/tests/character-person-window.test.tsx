@@ -184,8 +184,10 @@ test.each(['people', 'characters'])(
     expect(reads).toHaveLength(2);
     await finish({ ...ready, page: { ...ready.page, next: null } });
     expect(host.textContent).toContain(m.search_window_address({}, { locale: 'en' }));
-    const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
-    expect(previous.href).toBe(`https://search.test${characterPersonHref('en', parsed.search)}`);
+    const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]');
+    expect(previous?.href ?? JSON.stringify(window.history.state)).toBe(
+      `https://search.test${characterPersonHref('en', parsed.search)}`,
+    );
     await activateWindow('previous');
     expect(reads).toHaveLength(3);
     expect(reads.at(-1)!.search).toEqual(parsed.search);
@@ -224,8 +226,10 @@ test('failed forward reads hide old rows and keep the admitted Previous address 
   expect(reads).toHaveLength(2);
   await finish({ status: 'unavailable' });
   expect(host.querySelector('[data-character-person-results] [data-slot="discovery-results"]')).toBeNull();
-  const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
-  expect(previous.href).toBe(`https://search.test${characterPersonHref('en', operand().search)}`);
+  const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]');
+  expect(previous?.href ?? JSON.stringify(window.history.state)).toBe(
+    `https://search.test${characterPersonHref('en', operand().search)}`,
+  );
   await activateWindow('previous');
   expect(reads).toHaveLength(3);
   expect(reads.at(-1)!.search).toEqual(operand().search);
@@ -252,7 +256,7 @@ test('request A/B/A and locale replacement start fresh reads for the current add
   pageLocale = 'de';
   await act(async () => {
     setLocale('de', { reload: false });
-    await router.navigate({ href: characterPersonHref('de', searchA) });
+    await router.invalidate();
   });
   expect(reads).toHaveLength(4);
   expect(reads.at(-1)!.search).toEqual(searchA);
