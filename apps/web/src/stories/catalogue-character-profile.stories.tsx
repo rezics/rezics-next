@@ -26,6 +26,8 @@ function Example({
   scenario = 'ready',
   existing = false,
   work = false,
+  context,
+  realm,
   workLabel = 'supplied',
   retirement = false,
   onCreate,
@@ -33,6 +35,8 @@ function Example({
   scenario?: CharacterScenario;
   existing?: boolean;
   work?: boolean;
+  context?: string;
+  realm?: string;
   workLabel?: 'supplied' | 'long' | 'absent';
   retirement?: boolean;
   onCreate?: ObserveCreate;
@@ -41,13 +45,14 @@ function Example({
   const [retired, setRetired] = useState(false);
   const fixture = useMemo(() => {
     const current = characterProfileFixture(scenario, locale);
+    if (context) current.character.subject.context = context;
     if (workLabel === 'long')
       current.work.publicRead.subject.labels = {
         ja: '星を渡る旅人たちの物語 — Die Reise durch die Sternenstadt — '.repeat(8),
       };
     if (workLabel === 'absent') current.work.publicRead.subject.labels = {};
     return current;
-  }, [scenario, locale, workLabel]);
+  }, [scenario, locale, workLabel, context]);
   const transport = useMemo(
     () => ({
       ...fixture.transport,
@@ -62,13 +67,15 @@ function Example({
   );
   const profile = (
     <CharacterProfile
-      key={`${scenario}:${existing}:${work}:${locale}`}
+      key={`${scenario}:${existing}:${work}:${context ?? ''}:${realm ?? ''}:${locale}`}
       locale={locale}
       {...fixture.props}
       transport={transport}
       {...(retired ? { session: 'signed-out' as const } : {})}
       {...(existing ? { id: characterProfileId } : {})}
       {...(work ? { work: fixture.work.id } : {})}
+      {...(context ? { context } : {})}
+      {...(realm ? { realm } : {})}
     />
   );
   return (
@@ -156,6 +163,13 @@ export const LanguageRowRecovery: Story = {
   },
 };
 export const CurrentIdentity: Story = { args: { existing: true } };
+export const SelectedContextReadOnly: Story = {
+  args: {
+    existing: true,
+    context: '019a1b2c-3d4e-7f00-8a00-000000000011',
+    realm: '019a1b2c-3d4e-7f00-8a00-000000000022',
+  },
+};
 export const WorkCredits: Story = {
   args: { existing: true, work: true },
   play: async ({ canvasElement }) => {
