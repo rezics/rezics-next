@@ -911,3 +911,16 @@ export async function registerCollectionSourceWork(context: WorkContext): Promis
     },
   ]);
 }
+
+// Library-owned declaration region. Components never grant or refill work. A whole
+// installed declaration covers only the enforced selected Library schedule.
+export {
+  IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION,
+  declareLibraryIdentityStatement,
+  assembleLibraryIdentityOriginalComponents,
+  LIBRARY_IDENTITY_CHECKOUT_WORK,
+  LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS,
+  assembleLibraryIdentitySelectedBodies,
+  LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES,
+  LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS,
+} from './identity-original-work.ts';

@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { Pool, PoolClient } from 'pg';
 import * as installed from '../../src/library/collection-source-work.ts';
-import * as installedDeclaration from '../../src/library/identity-original-work.ts';
 import {
   assembleLibraryIdentityOriginalComponents,
   assembleLibraryIdentitySelectedBodies,
@@ -47,9 +46,9 @@ function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySe
 }
 
 test('installed selected Library declaration is own frozen data, covers the enforced schedule and excludes Source controls', () => {
-  const field = Object.getOwnPropertyDescriptor(installedDeclaration, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
+  const field = Object.getOwnPropertyDescriptor(installed, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
   expect(field && 'value' in field).toBe(true);
-  const declaration = installedDeclaration.IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION;
+  const declaration = installed.IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION;
   expect(Reflect.ownKeys(declaration).sort()).toEqual(['engineRequests', 'work']);
   expect(Reflect.ownKeys(declaration.work).sort()).toEqual([
     'bytes',

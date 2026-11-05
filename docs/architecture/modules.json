@@ -360,7 +360,6 @@
         "services/kernel/src/library/collection-routes.ts",
         "services/kernel/src/library/collection-source-native.ts",
         "services/kernel/src/library/collection-source.ts",
-        "services/kernel/src/library/identity-original-work.ts",
         "services/kernel/src/library/loan-operation-bounds.ts",
         "services/kernel/src/library/operation-declarations.ts",
         "services/kernel/src/library/transport-contract.ts"

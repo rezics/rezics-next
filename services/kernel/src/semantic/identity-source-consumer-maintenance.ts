@@ -593,7 +593,7 @@ export async function readIdentitySourceOriginalCostDisposition() {
   const { scopeConsumerFootprint } = await import('./identity-scoped-observations.ts');
   const history = await import('../history/agent-identity-inventory-work.ts');
   const retirement = await import('../history/agent-identity-retirement.ts');
-  const library = await import('../library/identity-original-work.ts');
+  const library = await import('../library/collection-source-work.ts');
   const effects = await import('../library/identity-scope-effects.ts');
   const ownValue = (module: object, name: string): unknown => {
     const field = Object.getOwnPropertyDescriptor(module, name);

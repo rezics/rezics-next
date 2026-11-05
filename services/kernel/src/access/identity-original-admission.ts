@@ -681,7 +681,7 @@ function installedDeclaration(module: object, name: string): WorkDimensions | nu
 
 async function installedHistoryOriginalAllocation(): Promise<HistoryOriginalAllocation> {
   const sourceModule = await import('../semantic/identity-source-consumer-maintenance.ts');
-  const libraryModule = await import('../library/identity-original-work.ts');
+  const libraryModule = await import('../library/collection-source-work.ts');
   const source = installedDeclaration(sourceModule, 'IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION');
   const library = installedDeclaration(libraryModule, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
   return Object.freeze({
