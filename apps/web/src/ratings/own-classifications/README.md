@@ -62,6 +62,9 @@ current readback cannot acknowledge that intent, including an absent or opposite
 stays unavailable. Acknowledged, stale or denied commands require fresh exact page inspection before another edit.
 Unknown commands keep new edits locked. Changing the selected record or private visit destroys drafts and intent.
 
+Decision: unsent drafts and uncertain commands protect departure; settled commands remain locked for fresh inspection
+but do not count as unsaved work, and confirmed Leave retires the current reader before route admission.
+
 ## Cost
 
 - **Touches:** one prepared native page read per mounted admission, explicit next/retry or return; one deliberately

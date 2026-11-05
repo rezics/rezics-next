@@ -51,7 +51,7 @@ export function ClassificationsReader({
   state: OwnClassificationsState | null;
   isCurrent: () => boolean;
   read: OwnClassificationsReadFn;
-  commands?: Omit<ClassificationCommands, 'read'>;
+  commands?: Omit<ClassificationCommands, 'read' | 'retire'>;
   onNext?: (frontier: ClassificationFrontier) => void;
 }) {
   const latest = useRef({
@@ -65,6 +65,7 @@ export function ClassificationsReader({
   });
   const address = classificationAddressKey(frontier);
   if (
+    !latest.current.active ||
     latest.current.subject !== subject ||
     latest.current.locale !== locale ||
     latest.current.address !== address ||
@@ -82,11 +83,21 @@ export function ClassificationsReader({
   const mounted = useRef(false);
   const inFlight = useRef<object | null>(null);
   const started = useRef<object | null>(null);
-  const current = () => mounted.current && latest.current === visit && visit.active && state === null && isCurrent();
+  const retire = () => {
+    visit.active = false;
+    visit.abort.abort();
+  };
+  const current = () => {
+    if (!mounted.current) return false;
+    const live = latest.current === visit && visit.active && state === null && isCurrent();
+    if (!live) retire();
+    return live;
+  };
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      visit.active = false;
       visit.abort.abort();
     };
   }, [visit]);
@@ -134,7 +145,11 @@ export function ClassificationsReader({
       isCurrent={isCurrent}
       onNext={onNext}
       onRetry={refresh}
-      commands={commands && candidate.state === 'ready' && admitted ? { ...commands, read: candidate } : undefined}
+      commands={
+        commands && candidate.state === 'ready' && admitted
+          ? { ...commands, read: candidate, retire }
+          : undefined
+      }
     />
   );
 }

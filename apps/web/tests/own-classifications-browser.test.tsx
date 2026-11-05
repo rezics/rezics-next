@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { ClassificationsReader } from '../src/ratings/own-classifications/reader';
 import type { ClassificationIntent } from '../src/ratings/own-classifications/intent';
 import type { OwnClassificationsRead } from '../src/ratings/own-classifications/types';
+import { m } from '../src/paraglide/messages.js';
 import { accountId, associationId, classificationsPage, subjectId } from './own-classification-assessments-fixture';
 
 const { Window } = await import(
@@ -150,5 +151,116 @@ test('replacement aborts old admission and commands; away and return require a n
     expect(host.textContent).not.toContain('Own-page subject');
   } finally {
     await act(async () => root.unmount());
+  }
+});
+
+test('an acknowledged classification stays locked for reinspection without protecting a settled form as dirty', async () => {
+  const host = window.document.createElement('div') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <ClassificationsReader
+          initial={ready()}
+          frontier={frontier}
+          locale="en"
+          subject={accountId}
+          state={null}
+          isCurrent={() => true}
+          read={async () => ready()}
+          commands={{
+            csrfToken: () => 'csrf',
+            send: async () => ({ kind: 'acknowledged' }),
+            review: async () => ({
+              kind: 'current',
+              own: {
+                associationId,
+                hasBallot: true,
+                assessment: 'oppose',
+                falsePositive: true,
+                revision: '2',
+                pending: 'current',
+              },
+            }),
+            departure: (dirty, locked) => {
+              const state = `${dirty}:${locked}`;
+              return <output data-protection="">{state}</output>;
+            },
+          }}
+        />,
+      ),
+    );
+    expect(host.querySelector('[data-protection]')?.textContent).toBe('false:false');
+    const select = host.querySelector('select');
+    if (!select) throw new Error('Expected assessment selector');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value')?.set;
+      setter?.call(select, 'oppose');
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    expect(host.querySelector('[data-protection]')?.textContent).toBe('true:false');
+    await act(async () => button(host, m.subject_classification_assessment_change()).click());
+    expect(host.textContent).toContain(m.own_classifications_acknowledged());
+    expect(host.querySelector('[data-protection]')?.textContent).toBe('false:false');
+    expect(select.closest('fieldset')?.disabled).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+test('reader replacement aborts a dispatched classification command before its late acknowledgement', async () => {
+  const host = window.document.createElement('div') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const signals: AbortSignal[] = [];
+  const intents: ClassificationIntent[] = [];
+  const retirements: (() => void)[] = [];
+  let finish!: (value: { kind: 'acknowledged' }) => void;
+  const render = (owner: string) =>
+    root.render(
+      <ClassificationsReader
+        key={owner}
+        initial={ready()}
+        frontier={frontier}
+        locale="en"
+        subject={accountId}
+        state={null}
+        isCurrent={() => true}
+        read={async () => ready()}
+        commands={{
+          csrfToken: () => 'csrf',
+          send: (intent, signal) => {
+            intents.push(intent);
+            signals.push(signal);
+            return new Promise((resolve) => {
+              finish = resolve;
+            });
+          },
+          review: async () => ({ kind: 'unavailable' }),
+          departure: (_dirty, _locked, _current, retire) => {
+            retirements.push(retire);
+            return null;
+          },
+        }}
+      />,
+    );
+  try {
+    await act(async () => render('original'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    await act(async () => button(host, 'Withdraw ballot').click());
+    await act(async () => button(host.querySelector('[role="group"]')!, 'Confirm clear').click());
+    expect(intents).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(false);
+    retirements.at(-1)?.();
+    expect(signals[0]?.aborted).toBe(true);
+
+    await act(async () => render('replacement'));
+    await act(async () => finish({ kind: 'acknowledged' }));
+    expect(host.textContent).not.toContain(m.own_classifications_acknowledged());
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
   }
 });

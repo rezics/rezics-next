@@ -206,10 +206,30 @@ export const WithheldClearRequiresPreparation: StoryType = {
 export const Phone: StoryType = {
   args: { mode: 'long' },
   globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });
+    inspect.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(inspect).toHaveAttribute('aria-pressed', 'true');
+    await expect(canvas.getByRole('status')).toHaveTextContent(m.own_classifications_coverage());
+    await expect(canvas.getByText(/A long disclosed title/)).toBeVisible();
+  },
 };
 export const Desktop: StoryType = {
   args: { mode: 'ready' },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });
+    inspect.focus();
+    await userEvent.keyboard('{Enter}');
+    const assessment = canvas.getByRole('combobox');
+    await userEvent.selectOptions(assessment, 'oppose');
+    await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_change() }));
+    await expect(canvas.getByText(m.own_classifications_acknowledged())).toBeVisible();
+    await expect(assessment).toBeDisabled();
+  },
 };
 export const SelectedOffPage: StoryType = { args: { mode: 'selected' } };
 export const Preparing: StoryType = { args: { mode: 'preparing' } };

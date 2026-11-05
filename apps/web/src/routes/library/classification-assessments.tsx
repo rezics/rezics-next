@@ -70,7 +70,9 @@ function ClassificationAssessmentsRoute() {
           executeClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
         review: (intent, signal) =>
           reviewClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
-        departure: (dirty, locked, current) => <OwnVotesDeparture dirty={dirty} locked={locked} isCurrent={current} />,
+        departure: (dirty, locked, current, retire) => (
+          <OwnVotesDeparture dirty={dirty} locked={locked} isCurrent={current} onLeave={retire} />
+        ),
       }}
     />
   );
