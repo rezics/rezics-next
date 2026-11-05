@@ -47,7 +47,8 @@ function diagnosticFrom(output: string): LandingTranspileDiagnostic | undefined 
   };
 }
 
-function runBuild(
+/** Runs Bun with argv in cwd; a SIGINT or SIGTERM kills the child and throws LandingTranspileInterruptedError. */
+export function runBun(
   cwd: string,
   args: string[],
 ): Promise<{ status: number | null; output: string; error?: Error; signal?: NodeJS.Signals }> {
@@ -114,7 +115,7 @@ export async function transpileLandingCandidate(input: {
   const tempRoot = join(cwd, '.temp');
   mkdirSync(tempRoot, { recursive: true });
   const outdir = mkdtempSync(join(tempRoot, 'dev-transpile-'));
-  let build: Awaited<ReturnType<typeof runBuild>>;
+  let build: Awaited<ReturnType<typeof runBun>>;
   let started = performance.now();
   try {
     const args = [
@@ -131,7 +132,7 @@ export async function transpileLandingCandidate(input: {
       `\nDev landing transpile candidate=${input.candidate} base=${input.base} changedFiles=${changedFileCount} typescriptFiles=${typescriptFiles.length}\n$ ${JSON.stringify([process.execPath, ...args])}\n`,
     );
     started = performance.now();
-    build = await runBuild(cwd, args);
+    build = await runBun(cwd, args);
   } finally {
     rmSync(outdir, { recursive: true, force: true });
   }
