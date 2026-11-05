@@ -258,6 +258,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   // the server result carries only the identity fingerprint from that same Request object.
   const expectedA = await expectedReader(readerA, null);
   const prepared = await readMyRealmsPageForReview({ data: { expected: expectedA } });
+  console.log({ prepared, credentialSubjects: credentialReads.map(({ subject }) => subject), authorized: membershipCalls().map(({ authorization }) => !!authorization) });
   expect(prepared).toMatchObject({
     kind: 'ready',
     page: { signedIn: true, realms: [{ realmId: realmA, name: 'Realm 1' }] },
