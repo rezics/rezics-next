@@ -241,7 +241,6 @@ function freePort(): Promise<number> {
 let child: ChildProcess | undefined;
 let started: Promise<number> | undefined;
 let browser: Browser | undefined;
-let devOutput = '';
 
 // Copied from apps/auth/tests/security.test.ts's dev-server startup and readiness check.
 function site(): Promise<number> {
@@ -249,10 +248,7 @@ function site(): Promise<number> {
     for (let attempt = 0; attempt < 4; attempt++) {
       const port = await freePort();
       let output = '';
-      const keep = (chunk: Buffer) => {
-        output = (output + chunk.toString()).slice(-8000);
-        devOutput = output;
-      };
+      const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-8000));
       child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
         cwd: app,
         detached: true,
@@ -351,10 +347,7 @@ async function open(
     }, pendingOperation);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    expect(
-      response?.status(),
-      `the documented dev server serves the page: ${await response?.text()}\n${devOutput}\n${JSON.stringify(calls.map(({ method, url }) => [method, url]))}`,
-    ).toBe(200);
+    expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, authenticator };
   } catch (error) {

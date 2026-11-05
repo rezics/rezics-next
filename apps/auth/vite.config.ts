@@ -19,7 +19,7 @@ export default defineConfig((context) => {
     html: { cspNonce: viteNonceMarker },
     // Fonts stay on the page origin under default-src 'self'.
     build: { assetsInlineLimit: 0 },
-    server: { cors: false },
+    server: { cors: false, allowedHosts: ['rezics.com'] },
     define: {
       __AUTH_ORIGIN__: JSON.stringify(command === 'serve' ? (process.env.AUTH_ORIGIN ?? '') : ''),
     },
