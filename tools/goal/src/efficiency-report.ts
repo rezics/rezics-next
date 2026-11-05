@@ -7,7 +7,7 @@ import { ensureFlow, type FlowEvent } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
-import { WorkerStore } from './store.ts';
+import { WorkerStore, workerRecordEndedAtExpression, workerRecordEndedAtMigration } from './store.ts';
 import { guardEndingCounts } from './guards.ts';
 import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
@@ -325,9 +325,11 @@ function usageSummary(db: Database, bucket: UtcHour): string {
 
 function guardEndingLine(db: Database, bucket: UtcHour): string {
   if (!hasTable(db, 'worker_records')) return 'Guard endings in bucket: unknown (attempt history unavailable).';
+  migrate(db, [workerRecordEndedAtMigration]);
   const records = db
     .query(
-      `SELECT body FROM worker_records WHERE json_extract(body, '$.endedAt') >= ? AND json_extract(body, '$.endedAt') < ?`,
+      `SELECT body FROM worker_records INDEXED BY worker_records_ended_at
+       WHERE ${workerRecordEndedAtExpression} >= ? AND ${workerRecordEndedAtExpression} < ?`,
     )
     .all(bucket.start, bucket.end)
     .map((row) => JSON.parse((row as { body: string }).body) as AttemptRecord);

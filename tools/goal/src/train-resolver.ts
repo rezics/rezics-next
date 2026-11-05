@@ -530,10 +530,18 @@ export class TrainResolver {
           goal: candidate.brief.goal,
           owner: candidate.brief.manager,
           source,
-          brief: candidate.brief.markdown,
+          brief: candidate.brief.markdown.slice(0, this.store.policy.trainResolver.sourceContractCharacters),
         },
       ];
-    });
+    })
+      // Only target-side contributions after the common base explain the conflict; older owners are already in the
+      // base. Keep the most recent ones within the same bound as source contracts.
+      .filter(
+        (contract) =>
+          spawnSync('git', ['merge-base', '--is-ancestor', contract.source, conflict.commonBase], { cwd: tree })
+            .status !== 0,
+      )
+      .slice(-this.store.policy.trainResolver.sourceContracts);
     const sourceContracts = task.workspace
       ? this.store
           .tasks()
