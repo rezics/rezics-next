@@ -616,8 +616,7 @@ export class WorkbenchQueueWindowHistory {
       return null;
     }
     if (input.search.case) {
-      const exactSelection =
-        input.search.case === state.appealId && input.page.selectedAppeal?.id === state.appealId;
+      const exactSelection = input.search.case === state.appealId && input.page.selectedAppeal?.id === state.appealId;
       const sameDetail =
         state.mode === 'detail' &&
         state.visitId === input.visitId &&

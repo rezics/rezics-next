@@ -237,11 +237,7 @@ export function WorkbenchPage({
       });
     onOpenCase?.(item, href);
   }
-  function returnAppeal(
-    appealId: string,
-    _source: HTMLAnchorElement,
-    event: MouseEvent<HTMLAnchorElement>,
-  ) {
+  function returnAppeal(appealId: string, _source: HTMLAnchorElement, event: MouseEvent<HTMLAnchorElement>) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (!isCurrent() || unresolved.current || readingRef.current) return;
@@ -332,10 +328,7 @@ export function WorkbenchPage({
     }
   }
   useLayoutEffect(() => {
-    if (
-      owner &&
-      (!owner.available() || getLocale() !== locale.current || navigation?.isCurrent() === false)
-    ) {
+    if (owner && (!owner.available() || getLocale() !== locale.current || navigation?.isCurrent() === false)) {
       if (navigation?.isCurrent() !== false && !owner.healthy()) {
         windowHistory?.clearForVisit(navigation?.visitId);
         windowHistory?.clearAppealForVisit(navigation?.visitId);
