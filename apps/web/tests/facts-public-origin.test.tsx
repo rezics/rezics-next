@@ -259,7 +259,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(router.state.location.searchStr).toBe(new URL(fresh!, 'https://site.test').search);
     await waitFor(() => expect(correctionReads.length).toBeGreaterThan(0));
     expect(host.textContent).toContain(m.facts_public_fresh_notice());
-    expect(host.querySelector('input,select')).not.toBeNull();
+    await waitFor(() => expect(host.querySelector('input,select')).not.toBeNull());
 
     await navigate(`${base}?origin=!`);
     await waitFor(() => expect(host.textContent).toContain(m.facts_public_invalid()));
