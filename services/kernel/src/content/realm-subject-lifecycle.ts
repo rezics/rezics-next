@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { jsonParameter } from '../database/json.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkDimensions } from '../library/collection-source.ts';
@@ -179,7 +180,7 @@ async function sourceAnchor(pool: Pool, event: CloudEvent, nativeId: string, dea
       id: event.id,
       type: event.type,
       subject: event.subject ?? null,
-      data: event.data,
+      data: jsonParameter(event.data),
     });
     const row = rows[0];
     if (

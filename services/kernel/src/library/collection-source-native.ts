@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 import { declareBound, type Bound } from '@rezics/bounds';
@@ -146,7 +147,7 @@ export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectio
     throw new RangeError('Native source limit must be 1..100');
   const maxUuid = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
   const requestValues = [65535, maxUuid, '~'.repeat(48), maxUuid, limit];
-  const requestBytes = Buffer.byteLength(ordinalPage.sql) + Buffer.byteLength(JSON.stringify(requestValues));
+  const requestBytes = statementBytes(ordinalPage) + Buffer.byteLength(JSON.stringify(requestValues));
   const resultBytes = 512 * limit;
   const projection = Object.freeze({
     candidateKeys: limit,

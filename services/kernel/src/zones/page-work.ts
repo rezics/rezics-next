@@ -1,3 +1,6 @@
+import { Value } from 'typebox/value';
+import { ZonePagePositionSchema } from './page-position.ts';
+import { jsonParameter } from '../database/json.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
@@ -49,7 +52,7 @@ export async function zonePageWork(
     decoded.after[1] === retained.generation &&
     decoded.after[2] === retained.revision;
   const generation = usable ? retained.generation : randomUUID();
-  const position = usable ? (retained.position as ZonePagePosition) : { reads: {} };
+  const position = usable ? Value.Decode(ZonePagePositionSchema, retained.position) : { reads: {} };
   const revision = retained?.revision;
   return {
     position,
@@ -63,7 +66,7 @@ export async function zonePageWork(
           basis: input.basis,
           generation,
           expected: revision ?? '0',
-          position: next,
+          position: jsonParameter(next),
         }),
       );
       if (!stored) return zoneUnavailable();

@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
@@ -183,7 +184,10 @@ export async function appendSemanticRecordSourceSet(
   }
   // An old/current term pair is two indexed versions of one native unit, never two declarations.
   for (let offset = 0; offset < members.length; offset += 512)
-    await append.run(tx, { ...locatorInput(state.locator), members: members.slice(offset, offset + 512) });
+    await append.run(tx, {
+      ...locatorInput(state.locator),
+      members: jsonParameter(members.slice(offset, offset + 512)),
+    });
 }
 
 export async function sealSemanticRecordSourceSet(tx: CommandTransaction, set: SemanticRecordSourceSet): Promise<void> {

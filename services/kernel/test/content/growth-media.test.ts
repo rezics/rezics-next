@@ -1,3 +1,4 @@
+import { jsonParameter } from '../../src/database/json.ts';
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
@@ -271,7 +272,7 @@ async function importedMediaAnchor(fixture: Fixture): Promise<MediaAnchor> {
     clock: () => new Date(), authorization, receipt: { kind, key: request.idempotencyKey, digest } }, async (tx, command) => {
     const row = await reserveImportedMedia.run(tx, { route, media_id: mediaId, container_id: input.containerId,
       uploader_id: fixture.actor.accountId, reservation_request_id: request.idempotencyKey, key: `m/${mediaId}/original`,
-      source_url: input.sourceUrl, credit: input.credit, provenance: input.provenance,
+      source_url: input.sourceUrl, credit: input.credit, provenance: jsonParameter(input.provenance),
       at: authoritativeTimeValue(command.time), transaction_id: command.transactionId });
     if (row.media_id !== mediaId) throw new GrantDeniedError();
     inserted = { tx, transactionId: command.transactionId };

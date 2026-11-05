@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
@@ -244,7 +245,7 @@ async function verifiedSource(pool: Pool, event: CloudEvent, id: string) {
       id: event.id,
       type: event.type,
       subject: event.subject ?? null,
-      data: event.data,
+      data: jsonParameter(event.data),
     });
     if (rows.length !== 1) throw new TypeError('Report outcome source missing');
     if (event.type === subjectVisibility) {

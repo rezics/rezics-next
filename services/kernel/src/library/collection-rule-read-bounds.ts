@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Closed nine-axis declaration for the exact saved-rule point read. */
 import { declareBound, withinCeiling, type Bound } from '@rezics/bounds';
 import { FILTER_LIMITS } from '@rezics/filter';
@@ -44,7 +45,7 @@ export function collectionRuleReadPlan(input: RuleReadInput): CollectionRuleRead
     witnessKeys: 0,
     statements: 1,
     bytes:
-      Buffer.byteLength(read.sql) +
+      statementBytes(read) +
       Buffer.byteLength(JSON.stringify(frozen)) +
       Buffer.byteLength('[]') +
       2 +

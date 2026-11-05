@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import type {
   PrivacyReduction,
@@ -360,13 +361,24 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
                 input_limit: request.inputLimit,
               }),
             );
-            const entries: PrivacyReductionLogEntry[] = found.map((row) => ({
-              head: privacyHead(request.partition, owner.epoch, row.position),
-              transactionId: row.transaction_id,
-              cause: row.cause,
-              affected: row.affected as PrivacyReduction['affected'],
-              impacts: row.impacts as PrivacyReduction['impacts'],
-            }));
+            const entries: PrivacyReductionLogEntry[] = [];
+            for (const row of found) {
+              const { affected, impacts } = row;
+              if (
+                !Array.isArray(affected) ||
+                !affected.every((value) => validDependency(value, request.partition)) ||
+                !Array.isArray(impacts) ||
+                !impacts.every((value) => validImpact(value, request.partition))
+              )
+                return { ...unready('metadata_missing'), cost: cost(found.length) };
+              entries.push({
+                head: privacyHead(request.partition, owner.epoch, row.position),
+                transactionId: row.transaction_id,
+                cause: row.cause,
+                affected,
+                impacts,
+              });
+            }
             if (
               entries.some(
                 (entry) =>
@@ -383,10 +395,6 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
                     'realm',
                     'board',
                   ].includes(entry.cause) ||
-                  !Array.isArray(entry.affected) ||
-                  !entry.affected.every((value) => validDependency(value, request.partition)) ||
-                  !Array.isArray(entry.impacts) ||
-                  !entry.impacts.every((value) => validImpact(value, request.partition)) ||
                   !validBroadReduction(entry),
               )
             )
@@ -467,8 +475,8 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
     position: position.toString(),
     transaction_id: command.transactionId,
     cause: reduction.cause,
-    affected: reduction.affected,
-    impacts: reduction.impacts,
+    affected: jsonParameter(reduction.affected),
+    impacts: jsonParameter(reduction.impacts),
     recorded_at: authoritativeTimeValue(command.time),
   };
   const appended =

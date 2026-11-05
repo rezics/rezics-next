@@ -1,3 +1,4 @@
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Private Source selection and bounded native IO; not a matcher or permission resolver. */
 import type { IndexedStatement } from '../search/source.ts';
 import { readNativeCalendarDate, readNativeSpoilerLevel } from '@rezics/filter';
@@ -152,7 +153,7 @@ export async function readNativeKindTypeAnchor(
   requireKindTypeHome(client, lookup, deadline);
   const lockInput = { route: lookup.route, subject_id: lookup.subjectId };
   const lockValues = kindTypeLock.params.map((name) => lockInput[name as keyof typeof lockInput]);
-  const lockBytes = Buffer.byteLength(kindTypeLock.sql) + sourceBytes(lockValues);
+  const lockBytes = statementBytes(kindTypeLock) + sourceBytes(lockValues);
   const lockReservation = work.reserve(kindTypeAnchorLockFootprint(lockBytes));
   lockReservation.dispatch();
   try {
@@ -177,7 +178,7 @@ export async function readNativeKindTypeAnchor(
     max_type_bytes: KIND_TYPE_MAX_BYTES,
   };
   const values = kindTypeAnchor.params.map((name) => parameters[name as keyof typeof parameters]);
-  const inputBytes = Buffer.byteLength(kindTypeAnchor.sql) + sourceBytes(values);
+  const inputBytes = statementBytes(kindTypeAnchor) + sourceBytes(values);
   requireKindTypeHome(client, lookup, deadline);
   const reservation = work.reserve(kindTypeAnchorFootprint(inputBytes));
   reservation.dispatch();

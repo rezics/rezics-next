@@ -57,7 +57,8 @@ export async function insertPublishedLog(
 ): Promise<PublishedLogRecord> {
   if (typeof log.sessionId !== 'string' || log.sessionId.length === 0)
     throw new TypeError('A published log requires a source session');
-  if (!['active', 'completed', 'abandoned'].includes(log.sessionState))
+  const sessionState = log.sessionState;
+  if (sessionState !== 'active' && sessionState !== 'completed' && sessionState !== 'abandoned')
     throw new TypeError('Unknown published log state');
   if (log.note !== null && log.note.length > 1000)
     throw new RangeError('A published log note is at most 1000 characters');
@@ -70,7 +71,7 @@ export async function insertPublishedLog(
         account_id: log.accountId,
         session_id: log.sessionId,
         subject_id: log.subjectId,
-        session_state: log.sessionState,
+        session_state: sessionState,
         started_at: log.startedAt,
         completed_at: log.completedAt,
         note: log.note,

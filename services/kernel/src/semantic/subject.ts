@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import {
   selectedSynopsisFact,
   redactSynopsisFact,
@@ -1216,7 +1217,9 @@ export async function updateSubjectIdentity(
         revision,
         transaction_id: transactionId,
         source: null,
-        labels: facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
+        labels: jsonParameter(
+          facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
+        ),
       });
       await collectSemanticRecordFacts(tx, options.subject, facts, revision);
       const keysChanged = options.labels !== undefined || type !== before.type;

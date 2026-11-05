@@ -1,3 +1,6 @@
+import { Type } from 'typebox';
+import { Value } from 'typebox/value';
+import { jsonParameter } from '../database/json.ts';
 import { registerLiveCopyRecovery } from './live-copy-work.ts';
 import { registerNativeErasureWork } from './erasure-native.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -71,6 +74,21 @@ export type RetentionException = {
   expiresAt: Date;
 };
 type StoredException = Omit<RetentionException, 'expiresAt'> & { expiresAt: string };
+const ErasureOutcomesSchema = Type.Record(
+  Type.String(),
+  Type.Object({
+    outcome: Type.String(),
+    retained: Type.Array(
+      Type.Object({
+        store: Type.String(),
+        fields: Type.Array(Type.String()),
+        purpose: Type.String(),
+        expiresAt: Type.String(),
+      }),
+    ),
+    resolutions: Type.Record(Type.String(), Type.String()),
+  }),
+);
 export type ErasureStatus = {
   state: 'pending' | 'retention-outstanding' | 'complete';
   version: number;
@@ -186,7 +204,7 @@ export async function acknowledgeErasure(
         )
           throw new SharedHistoryIncompleteError();
       }
-      const rows = await acknowledge.run(tx, { ...key, participant, outcome, retained });
+      const rows = await acknowledge.run(tx, { ...key, participant, outcome, retained: jsonParameter(retained) });
       const row = rows[0];
       if (!row || row.outcome !== outcome || canonicalize(row.retained) !== canonicalize(retained))
         throw new LifecycleDeniedError();
@@ -262,10 +280,7 @@ export async function readErasureStatus(client: AccessClient, accountId: string)
       (await statusFrontier.run(client, {
         workflow_until: row.workflowUntil,
       })) !== null);
-  const outcomes = row.outcomes as Record<
-    string,
-    { outcome: string; retained: StoredException[]; resolutions: Record<string, string> }
-  >;
+  const outcomes = Value.Decode(ErasureOutcomesSchema, row.outcomes);
   let outstanding = false;
   const recorded = Object.fromEntries(
     participants(row.version).map((id) => {
