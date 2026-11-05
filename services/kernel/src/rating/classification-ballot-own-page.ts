@@ -58,13 +58,24 @@ type Slot = {
   eligibilityGeneration: string;
 };
 type Contribution = { subjectId: string; associationId: string; bindingHash: Uint8Array; revision: string };
-type PageItem = {
-  state: 'available' | 'withheld';
+type PageItemCommon = {
   subjectId: string;
   associationId: string;
-  subject: { id: string; type: string; label: string | null; href: string } | null;
-  target: { id: string; type: string; label: string | null; href: string } | null;
-  association: null | {
+  own: { assessment: Assessment; falsePositive: boolean; revision: string; pending: 'current' | 'pending' | 'unknown' };
+  actions: {
+    state: 'editable' | 'read-only' | 'withdraw-only' | 'withheld';
+    readback: string | null;
+    set: string | null;
+    clear: string | null;
+  };
+};
+type PageItem = PageItemCommon &
+  (
+    | {
+      state: 'available';
+      subject: { id: string; type: string; label: string | null; href: string };
+      target: { id: string; type: string; label: string | null; href: string };
+      association: {
     subjectId: string;
     associationId: string;
     slotId: string;
@@ -77,16 +88,17 @@ type PageItem = {
     bindingHash: string;
     statementDigest: string;
     qualifiersDigest: string;
-  };
-  own: { assessment: Assessment; falsePositive: boolean; revision: string; pending: 'current' | 'pending' | 'unknown' };
-  aggregate: ReturnType<typeof classificationAggregateView> | null;
-  actions: {
-    state: 'editable' | 'read-only' | 'withdraw-only' | 'withheld';
-    readback: string | null;
-    set: string | null;
-    clear: string | null;
-  };
-};
+      };
+      aggregate: ReturnType<typeof classificationAggregateView> | null;
+    }
+    | {
+      state: 'withheld';
+      subject: null;
+      target: null;
+      association: null;
+      aggregate: null;
+    }
+  );
 export type ClassificationBallotOwnPage = {
   viewer: { accountId: string };
   inventory: {

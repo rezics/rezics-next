@@ -1,5 +1,6 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -170,6 +171,23 @@ const reviewExamples = [
     },
   },
 ];
+const appealListResponseBody = t.Object(
+  {
+    appeals: t.Array(appealReviewSchema, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+    selectedAppeal: t.Optional(selectedAppealSchema),
+    provenance: t.Object(
+      {
+        actorId: t.String(),
+        session: t.Object({ clientId: t.String(), authnEpoch: t.Integer() }, { additionalProperties: false }),
+        source: sourceSchema,
+        sourceObservations: t.Array(sourceObservationSchema, { maxItems: 101 }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false, examples: reviewExamples },
+);
 const readFailures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -280,26 +298,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
     params,
     query: listQuerySchema,
     response: {
-      200: withHeaders(
-        t.Object(
-          {
-            appeals: t.Array(appealReviewSchema, { maxItems: 100 }),
-            next: t.Union([t.String(), t.Null()]),
-            selectedAppeal: t.Optional(selectedAppealSchema),
-            provenance: t.Object(
-              {
-                actorId: t.String(),
-                session: t.Object({ clientId: t.String(), authnEpoch: t.Integer() }, { additionalProperties: false }),
-                source: sourceSchema,
-                sourceObservations: t.Array(sourceObservationSchema, { maxItems: 101 }),
-              },
-              { additionalProperties: false },
-            ),
-          },
-          { additionalProperties: false, examples: reviewExamples },
-        ),
-        privateHeaders,
-      ),
+      200: withHeaders(appealListResponseBody, privateHeaders),
       ...readFailures,
     },
   };
@@ -321,7 +320,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
           session.record(result.anchor);
           if (result.selectedAnchor) session.record(result.selectedAnchor);
           set.headers['cache-control'] = 'private, no-store';
-          return result.value;
+          return result.value satisfies Static<typeof appealListResponseBody>;
         }),
       ),
   );
@@ -343,7 +342,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
           session.record(result.anchor);
           if (result.selectedAnchor) session.record(result.selectedAnchor);
           set.headers['cache-control'] = 'private, no-store';
-          return result.value;
+          return result.value satisfies Static<typeof appealListResponseBody>;
         }),
       ),
   );
