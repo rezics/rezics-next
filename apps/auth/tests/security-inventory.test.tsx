@@ -248,7 +248,7 @@ test('fixed Security response readers accept escaped maxima, reject overflow bef
       }),
       setResponseHeader() {},
     }));
-    mock.module('../src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
+    mock.module('./apps/auth/src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityFixedResponseByteBudgets } = await import('@rezics/auth-contract');
     const id = '\\u0000'.repeat(1024), date = '2026-11-05T00:00:00.000Z';
@@ -304,9 +304,9 @@ test('fixed Security response readers accept escaped maxima, reject overflow bef
       if (mode === 'stalled' && path === overflowPath) streamStarted.resolve();
       return response(path);
     };
-    const { loadSecurityPage, loadPasskeyInventory } = await import('../src/security-inventory');
-    const { readRegistrationPage } = await import('../src/registration-page');
-    const { loadPasswordChangeLimits, reviewPasskeyRegistration } = await import('../src/security');
+    const { loadSecurityPage, loadPasskeyInventory } = await import('./apps/auth/src/security-inventory.ts');
+    const { readRegistrationPage } = await import('./apps/auth/src/registration-page.ts');
+    const { loadPasswordChangeLimits, reviewPasskeyRegistration } = await import('./apps/auth/src/security.ts');
     expect((await loadSecurityPage()).kind).toBe('ready');
     const list = await loadPasskeyInventory();
     expect(list.ok && list.body.passkeys.length === 32).toBe(true);
