@@ -277,9 +277,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   }),
   loader: async ({ params, deps, location, context, abortController }) => {
     const signal = abortController.signal;
-    const reader = await awaitSubjectRoute(signal, () =>
-      subjectRequestReader({ data: { realm: deps.realm }, signal }),
-    );
+    const reader = await awaitSubjectRoute(signal, () => subjectRequestReader({ data: { realm: deps.realm }, signal }));
     const data = await awaitSubjectRoute(signal, () =>
       readSubject({
         data: {

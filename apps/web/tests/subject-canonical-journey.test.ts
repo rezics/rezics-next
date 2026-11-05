@@ -107,9 +107,7 @@ test('retired canonical reads abort native stages and never schedule survivor or
   const firstRead = loadSubject(firstClient, original, 'en', firstController.signal);
   await firstStarted.promise;
   firstController.abort();
-  firstReply.resolve(
-    Response.json({ redirect: { from: original, to: recordedSubject.subject.id } }, { status: 308 }),
-  );
+  firstReply.resolve(Response.json({ redirect: { from: original, to: recordedSubject.subject.id } }, { status: 308 }));
   await expect(firstRead).rejects.toMatchObject({ name: 'AbortError' });
   expect(firstCalls).toHaveLength(1);
   expect(firstCalls[0]?.signal.aborted).toBe(true);

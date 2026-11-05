@@ -71,7 +71,9 @@ test('an ignored retired read cannot satisfy a fresh same-address return', async
   await expect(obsoleteRead).rejects.toMatchObject({ name: 'AbortError' });
   expect(retiredNativeSignal?.aborted).toBe(true);
   obsoleteReply.resolve({ revision: 1 });
-  await expect(readSubjectCanonicalQuery(client, options, new AbortController().signal)).resolves.toEqual({ revision: 2 });
+  await expect(readSubjectCanonicalQuery(client, options, new AbortController().signal)).resolves.toEqual({
+    revision: 2,
+  });
   expect(reads).toBe(2);
 });
 

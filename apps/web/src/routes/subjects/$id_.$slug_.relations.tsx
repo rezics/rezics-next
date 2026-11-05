@@ -119,9 +119,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
   }),
   loader: async ({ params, deps, location, context, abortController }) => {
     const signal = abortController.signal;
-    const reader = await awaitSubjectRoute(signal, () =>
-      subjectRequestReader({ data: { realm: deps.realm }, signal }),
-    );
+    const reader = await awaitSubjectRoute(signal, () => subjectRequestReader({ data: { realm: deps.realm }, signal }));
     const cursor = validateViewCursor(deps.cursor);
     let canonical = await awaitSubjectRoute(signal, () =>
       readRelations({

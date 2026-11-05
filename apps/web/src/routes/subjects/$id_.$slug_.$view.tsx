@@ -170,9 +170,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   }),
   loader: async ({ params, location, context, deps, abortController }) => {
     const signal = abortController.signal;
-    const reader = await awaitSubjectRoute(signal, () =>
-      subjectRequestReader({ data: { realm: deps.realm }, signal }),
-    );
+    const reader = await awaitSubjectRoute(signal, () => subjectRequestReader({ data: { realm: deps.realm }, signal }));
     if (!isView(params.view) || params.view === 'overview') throw notFound();
     const view = params.view as View;
     const cursor = validateViewCursor(deps.cursor);
@@ -247,9 +245,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     }
     const type = subjectPageType(loaded.overview);
     const typeData = type
-      ? await awaitSubjectRoute(signal, () =>
-          context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())),
-        )
+      ? await awaitSubjectRoute(signal, () => context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())))
       : {};
     const nextHref =
       loaded.next !== undefined
