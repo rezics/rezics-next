@@ -24,6 +24,8 @@ export type Change = {
 };
 export type WriteResult = { status: 'saved' | 'denied' | 'conflict' | 'refused' | 'uncertain' | 'preparing' };
 export type AccessIO = {
+  /** The route's original session observation, checked again after every await. */
+  isCurrent?(): boolean;
   read(cursor?: string, signal?: AbortSignal): Promise<AccessState>;
   save(change: Change, signal?: AbortSignal): Promise<WriteResult>;
   /** Null confirms no eligible recipient; unavailable reads reject for the form's retry path. */

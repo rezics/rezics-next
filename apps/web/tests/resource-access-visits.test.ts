@@ -14,6 +14,30 @@ const change: Omit<Change, 'key'> = {
   valid: '[,)',
 };
 
+test('a caller replacement before a dispatched response returns cannot publish a receipt or private readback', async () => {
+  const visits = new AccessRecoveryVisits();
+  const response = Promise.withResolvers<WriteResult>();
+  let current = true;
+  let reads = 0;
+  const controller = visits.resume('original', ready, {
+    isCurrent: () => current,
+    read: async () => {
+      reads++;
+      return ready;
+    },
+    lookup: async () => null,
+    save: () => response.promise,
+  });
+  const dispatched = controller.submit(change);
+  current = false;
+  response.resolve({ status: 'saved' });
+  await dispatched;
+  visits.release('original', controller);
+  expect(reads).toBe(0);
+  expect(controller.snapshot()).toMatchObject({ phase: 'uncertain', page: { status: 'unavailable' } });
+  expect(controller.snapshot().pending?.key).toBeString();
+});
+
 test('return keeps the original uncertain command and transport; a new session gets no old command or rows', async () => {
   const visits = new AccessRecoveryVisits();
   const sent: Change[] = [];

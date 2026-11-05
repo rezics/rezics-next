@@ -79,9 +79,9 @@ export class AccessRecovery {
     this.active = true;
     this.update({ pending: null, busy: false, reconciling: false, phase: 'idle' });
   };
-  isCurrentLifetime = () => this.active;
+  isCurrentLifetime = () => this.active && (this.io.isCurrent?.() ?? true);
   private owns(generation: number) {
-    return this.active && generation === this.generation;
+    return this.isCurrentLifetime() && generation === this.generation;
   }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
