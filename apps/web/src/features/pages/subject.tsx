@@ -1,7 +1,7 @@
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
-import { GameProfileEntry } from '../catalogue/game-profile-entry';
+import { GameProfileEntry, gameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from '../catalogue/game-reader/entry';
 import { gameReaderEntry } from '../catalogue/game-reader/model';
 import { EditorialEntry } from '../catalogue/editorial-entry';
@@ -62,7 +62,7 @@ import {
   type PageContinuation,
 } from '@rezics/composition';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { useMemo, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
 import { accountOf } from './account-read';
@@ -76,7 +76,7 @@ import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld
 import { holderItems } from './overview';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender, type PageDocument } from './render';
-import { linkClass, linkColor, PlainLink, type PageLink } from './shared';
+import { linkClass, linkColor, PlainLink, spoilerLevel, type PageLink } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import { boundedProfileRelations, profileRelationWindows, type ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
@@ -96,6 +96,13 @@ import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
 import { WorkFranchiseOverview } from './showcase-work/overview';
 import { showcaseWorkKind } from './showcase-work/model';
 import { WorkConceptTagsRoute } from './showcase-work/tags-view';
+import {
+  consumeGameClassificationReturn,
+  gameClassificationReturn,
+  gameClassificationReturnStorageKey,
+  type GameClassificationReturn,
+} from '../catalogue/game-current-visit-descriptor';
+import { gameGroups } from '../catalogue/game-profile';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -555,6 +562,63 @@ function hasOnlyTitle(page: SubjectPageData): boolean {
 /** The view's name and a way back to the subject, above the tabs of every view but the overview. */
 export type ViewHeading = { title: string; label: string; href: string };
 
+type GameReturnStatus = 'lost' | 'changed' | 'removed' | 'concealed' | 'unavailable' | 'unknown' | 'no-value' | 'unsupported';
+type GameReturnCheck = { selection?: GameClassificationReturn; status?: GameReturnStatus };
+
+/** Re-admit a return locator against the current public Subject before mounting the reader intent. */
+function currentGameReturn(
+  page: SubjectPageData,
+  descriptor: GameClassificationReturn,
+  locale: string,
+  realm: string | undefined,
+  reader: Reader | undefined,
+): GameReturnCheck {
+  const read = subjectBody(page);
+  if (!read || read.subject.id !== descriptor.holder) return { status: 'changed' };
+  if (page.catalogue?.state === 'unavailable') return { status: 'unavailable' };
+  const release = page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined;
+  if (!release || !page.catalogue?.digest) return { status: 'unsupported' };
+  if (
+    descriptor.locale !== locale ||
+    descriptor.source !== `${new URL(descriptor.source, 'https://rezics.invalid').pathname}${new URL(descriptor.source, 'https://rezics.invalid').search}` ||
+    descriptor.context !== (page.context?.id ?? read.subject.context) ||
+    descriptor.realm !== realm ||
+    descriptor.type !== read.subject.type ||
+    descriptor.release !== page.catalogue.digest ||
+    descriptor.reader !== (page.requestedReader ?? null) ||
+    !gameReaderEntry(read.subject.type, read.summary?.types)
+  )
+    return { status: 'changed' };
+  if (!release.properties[descriptor.property]) return { status: 'unknown' };
+  if (!gameGroups(release, read.subject.type).classification.includes(descriptor.property))
+    return { status: 'unsupported' };
+  const statements = read.subject.statements[descriptor.property] ?? [];
+  if (!statements.length) return { status: 'no-value' };
+  const statement = statements.find((row) => row.id === descriptor.statement);
+  if (!statement) return { status: 'removed' };
+  if (spoilerLevel(statement as never) > (reader ?? defaultReader).spoilerLevel) return { status: 'concealed' };
+  return { selection: descriptor };
+}
+
+function gameReturnMessage(status: GameReturnStatus, locale: string) {
+  const o = { locale: locale as never };
+  return status === 'lost'
+    ? m.game_visit_return_lost({}, o)
+    : status === 'changed'
+      ? m.game_visit_selection_changed({}, o)
+      : status === 'removed'
+        ? m.game_visit_selection_removed({}, o)
+        : status === 'concealed'
+          ? m.game_visit_selection_concealed({}, o)
+          : status === 'unavailable'
+            ? m.game_visit_selection_unavailable({}, o)
+            : status === 'unknown'
+              ? m.game_visit_selection_unknown({}, o)
+              : status === 'no-value'
+                ? m.game_visit_selection_no_value({}, o)
+                : m.game_visit_selection_unsupported({}, o);
+}
+
 /**
  * The template document for one view of a subject, then schema.org JSON-LD for the overview. The host places the
  * view tabs right after the overview's header, or under the view's own heading, and invites the first facts when the
@@ -686,6 +750,64 @@ export function SubjectPage({
   const returnSource = catalogueFileSourceId(fileSource);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
   const realm = subjectPageRealm(page);
+  const currentAddress = currentHref
+    ? (() => {
+        const url = new URL(currentHref, 'https://rezics.invalid');
+        return `${url.pathname}${url.search}${url.hash}`;
+      })()
+    : '';
+  const returnDescriptor = currentAddress
+    ? gameClassificationReturn(new URL(currentAddress, 'https://rezics.invalid').hash)
+    : undefined;
+  const descriptorKey = returnDescriptor ? JSON.stringify(returnDescriptor) : '';
+  const [receivedGameReturn, setReceivedGameReturn] = useState<
+    { address: string; descriptor: GameClassificationReturn; received: boolean } | undefined
+  >();
+  useEffect(() => {
+    if (!currentAddress || !returnDescriptor) {
+      if (currentAddress) window.sessionStorage.removeItem(gameClassificationReturnStorageKey);
+      setReceivedGameReturn(undefined);
+      return;
+    }
+    setReceivedGameReturn({
+      address: currentAddress,
+      descriptor: returnDescriptor,
+      received: consumeGameClassificationReturn(window.sessionStorage, currentAddress),
+    });
+  }, [currentAddress, descriptorKey]);
+  const received = receivedGameReturn?.address === currentAddress ? receivedGameReturn : undefined;
+  const returnCheck: GameReturnCheck | undefined = received
+    ? !received.received
+      ? { status: 'lost' }
+      : received.descriptor.source !== currentAddress.split('#', 1)[0]
+        ? { status: 'changed' }
+        : currentGameReturn(page, received.descriptor, locale, realm, reader)
+    : undefined;
+  const gameReturnStatus = returnCheck?.status;
+  const gameRestart =
+    gameReturnStatus && read && !page.account
+      ? gameProfileEntry({
+          id: read.subject.id,
+          type: read.subject.type,
+          label: subjectPageTitle(page, locale),
+          locale,
+          context: page.context?.id ?? read.subject.context,
+          realm,
+          release: page.catalogue?.state === 'released' ? page.catalogue.digest : undefined,
+          reader: page.requestedReader ?? null,
+        })
+      : undefined;
+  useLayoutEffect(() => {
+    if (!gameReturnStatus) return;
+    const target =
+      document.querySelector<HTMLElement>('[data-game-return-restart]') ??
+      document.querySelector<HTMLElement>('[data-game-correction-entry]') ??
+      document.querySelector<HTMLElement>('[data-slot="game-reader"] h2') ??
+      document.querySelector<HTMLElement>('main h1');
+    if (!target) return;
+    if (!target.matches('input, select, textarea, button, a')) target.tabIndex = -1;
+    target.focus();
+  }, [currentAddress, gameReturnStatus]);
   const showcaseWork = read && !page.account ? showcaseWorkKind(read.subject.type, read.summary?.types) : undefined;
   const workAddress =
     read && !page.account
@@ -793,6 +915,7 @@ export function SubjectPage({
             context={page.context?.id ?? read.subject.context}
             realm={realm}
             release={page.catalogue?.digest}
+            reader={page.requestedReader ?? null}
           />
           <CreateSubjectEntry locale={locale} />
           {read.subject.type === 'wd:Q209163' ? (
@@ -904,6 +1027,7 @@ export function SubjectPage({
               context={page.context?.id ?? read.subject.context}
               realm={realm}
               release={page.catalogue?.digest}
+              reader={page.requestedReader ?? null}
             />
             {read.subject.type === 'schema:MusicAlbum' && (
               <AlbumProfileEntry
@@ -1179,6 +1303,20 @@ export function SubjectPage({
                 realm={realm}
               />
             ) : null}
+            {overview && gameReturnStatus ? (
+              <div className="space-y-2" data-game-return-status="">
+                <p role="status">{gameReturnMessage(gameReturnStatus, locale)}</p>
+                {gameRestart?.href ? (
+                  <a
+                    data-game-return-restart=""
+                    className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
+                    href={gameRestart.href}
+                  >
+                    {m.game_visit_restart({}, { locale: locale as never })}
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
             {overview && read && !page.account && gameReaderEntry(read.subject.type, read.summary?.types) ? (
               <GameOverview
                 source={page}
@@ -1189,6 +1327,8 @@ export function SubjectPage({
                 locale={locale}
                 realm={realm}
                 spoiler={reader?.spoilerLevel}
+                {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
+                sessionObservation={readingAdmission ?? ''}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (

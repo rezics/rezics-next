@@ -26,6 +26,7 @@ import { useEditionWindow } from './reading/window';
 import { useReaderFocus } from './reading/focus';
 import { EditionInspection, type EditionSelection } from './reading/edition';
 import { RetiredReading, SafeNavigation } from './reading/recovery';
+import type { GameClassificationReturn } from '../game-current-visit-descriptor';
 
 type Props = GameReaderAddress & {
   locale: string;
@@ -33,6 +34,8 @@ type Props = GameReaderAddress & {
   source: object | string;
   reader: string | null;
   spoiler?: number | undefined;
+  returnSelection?: GameClassificationReturn | undefined;
+  sessionObservation?: string | undefined;
   transport: GameReaderTransport;
   initial?: GameReaderRead;
   refresh?: () => Promise<void>;
@@ -69,12 +72,54 @@ export function GameReader(props: Props) {
   const reading = useSubjectCommunityReading({
     source: props.source,
     reader: props.reader,
-    descriptor: JSON.stringify([props.id, props.context, props.type, props.locale, props.realm, props.spoiler]),
+    descriptor: JSON.stringify([
+      props.id,
+      props.context,
+      props.type,
+      props.locale,
+      props.realm,
+      props.spoiler,
+      props.sessionObservation,
+      props.returnSelection,
+    ]),
   });
+  const returnKey = props.returnSelection ? JSON.stringify(props.returnSelection) : '';
+  const returnFocus = useRef({ key: '', active: false });
+  if (returnFocus.current.key !== returnKey) {
+    const superseded = returnFocus.current.active;
+    returnFocus.current = { key: returnKey, active: !!returnKey && !superseded };
+  }
+  useLayoutEffect(() => {
+    const intent = returnFocus.current;
+    if (!intent.active || intent.key !== returnKey) return;
+    const cancel = () => {
+      intent.active = false;
+    };
+    const focusMoved = (event: FocusEvent) => {
+      if (event.target !== document.body && !section.current?.contains(event.target as Node)) cancel();
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    document.addEventListener('focusin', focusMoved, true);
+    return () => {
+      intent.active = false;
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+      document.removeEventListener('focusin', focusMoved, true);
+    };
+  }, [returnKey]);
   useLayoutEffect(() => {
     if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
       heading.current?.focus();
   }, [reading.key, reading.available]);
+  useLayoutEffect(() => {
+    if (reading.available || !props.returnSelection) return;
+    const intent = returnFocus.current;
+    if (intent.active && intent.key === returnKey) {
+      intent.active = false;
+      heading.current?.focus();
+    }
+  }, [reading.key, reading.available, returnKey, props.returnSelection]);
   const o = { locale: props.locale as never };
   return (
     <section
@@ -100,12 +145,97 @@ export function GameReader(props: Props) {
           {...props}
           current={reading.isCurrent}
           focusHeading={() => heading.current?.focus()}
+          focusAssertion={(statement) => {
+            const target = [...(section.current?.querySelectorAll<HTMLElement>('[data-game-current-assertion]') ?? [])].find(
+              (node) => node.dataset.gameCurrentAssertion === statement,
+            );
+            if (!target) return false;
+            target.focus();
+            return true;
+          }}
+          returnFocusActive={() => returnFocus.current.active && returnFocus.current.key === returnKey}
+          completeReturnFocus={() => {
+            returnFocus.current.active = false;
+          }}
         />
       ) : (
-        <RetiredReading {...props} />
+        <>
+          {props.returnSelection ? <p role="status">{m.game_visit_selection_unavailable({}, o)}</p> : null}
+          <RetiredReading {...props} />
+        </>
       )}
     </section>
   );
+}
+
+type GameReaderReturnResult =
+  | { kind: 'pending' | 'changed' | 'removed' | 'concealed' | 'unavailable' | 'withheld' | 'unknown' | 'no-value' | 'unsupported' }
+  | { kind: 'current'; statement: GameStatement };
+
+function resolveGameReaderReturn(
+  props: Pick<Props, 'id' | 'context' | 'type' | 'locale' | 'realm' | 'reader' | 'spoiler'>,
+  selection: GameClassificationReturn,
+  page: GameReaderReady | undefined,
+  failure: GameReaderRead | undefined,
+): GameReaderReturnResult {
+  if (
+    selection.holder.toLowerCase() !== props.id.toLowerCase() ||
+    selection.context !== props.context ||
+    selection.type !== props.type ||
+    selection.locale !== props.locale ||
+    selection.realm !== props.realm ||
+    selection.reader !== props.reader
+  )
+    return { kind: 'changed' };
+  if (!page) {
+    if (!failure) return { kind: 'pending' };
+    if (failure.ok) return { kind: 'pending' };
+    return failure.reason === 'withheld'
+      ? { kind: 'withheld' }
+      : failure.reason === 'invalid'
+        ? { kind: 'unknown' }
+        : failure.reason === 'restart'
+          ? { kind: 'changed' }
+          : { kind: 'unavailable' };
+  }
+  if (
+    page.public.subject.id !== props.id ||
+    page.public.subject.context !== props.context ||
+    page.public.subject.type !== props.type ||
+    page.digest !== selection.release
+  )
+    return { kind: 'changed' };
+  if (!page.admitted) return { kind: 'unsupported' };
+  if (!page.labels[selection.property]) return { kind: 'unknown' };
+  const classification = page.groups.find((group) => group.id === 'classification');
+  const field = classification?.fields.find((candidate) => candidate.property === selection.property);
+  if (!field) return { kind: 'unsupported' };
+  if (!field.statements.length) return { kind: 'no-value' };
+  const statement = field.statements.find((candidate) => candidate.id === selection.statement);
+  if (!statement) return { kind: 'removed' };
+  if (spoilerLevel(statement) > (props.spoiler ?? 0)) return { kind: 'concealed' };
+  return { kind: 'current', statement };
+}
+
+function gameReaderReturnMessage(
+  kind: Exclude<GameReaderReturnResult['kind'], 'pending' | 'current'>,
+  o: { locale: never },
+) {
+  return kind === 'changed'
+    ? m.game_visit_selection_changed({}, o)
+    : kind === 'removed'
+      ? m.game_visit_selection_removed({}, o)
+      : kind === 'concealed'
+        ? m.game_visit_selection_concealed({}, o)
+        : kind === 'unavailable'
+          ? m.game_visit_selection_unavailable({}, o)
+          : kind === 'withheld'
+            ? m.game_visit_selection_withheld({}, o)
+            : kind === 'unknown'
+              ? m.game_visit_selection_unknown({}, o)
+              : kind === 'no-value'
+                ? m.game_visit_selection_no_value({}, o)
+                : m.game_visit_selection_unsupported({}, o);
 }
 
 function GameWindow({
@@ -114,12 +244,23 @@ function GameWindow({
   type,
   locale,
   realm,
+  reader,
   spoiler = 0,
+  returnSelection,
   transport,
   initial,
   current,
   focusHeading,
-}: Props & { current: () => boolean; focusHeading: () => void }) {
+  focusAssertion,
+  returnFocusActive,
+  completeReturnFocus,
+}: Props & {
+  current: () => boolean;
+  focusHeading: () => void;
+  focusAssertion: (statement: string) => boolean;
+  returnFocusActive: () => boolean;
+  completeReturnFocus: () => void;
+}) {
   const o = { locale: locale as never };
   const [selected, setSelected] = useState<EditionSelection | undefined>(undefined);
   const focus = useReaderFocus(current, focusHeading);
@@ -169,6 +310,36 @@ function GameWindow({
     ) : (
       body
     );
+  const returnState = returnSelection
+    ? resolveGameReaderReturn({ id, context, type, locale, realm, reader, spoiler }, returnSelection, page, failure)
+    : undefined;
+  const [missingReturnTarget, setMissingReturnTarget] = useState(false);
+  const returnKey = returnSelection ? JSON.stringify(returnSelection) : '';
+  const settledReturn = useRef('');
+  useLayoutEffect(() => {
+    const selection = returnSelection;
+    if (
+      !selection ||
+      settledReturn.current === returnKey ||
+      !returnFocusActive() ||
+      !current() ||
+      !returnState ||
+      returnState.kind === 'pending'
+    )
+      return;
+    if (returnState.kind === 'current') {
+      const isFocused = selection.focus === 'keyboard' && focusAssertion(returnState.statement.id);
+      if (!isFocused && selection.focus === 'keyboard') {
+        setMissingReturnTarget(true);
+        focusHeading();
+      }
+      // A pointer return selects the current row without moving focus.
+    } else {
+      focusHeading();
+    }
+    settledReturn.current = returnKey;
+    completeReturnFocus();
+  }, [page, failure, returnKey, returnState?.kind, returnState?.kind === 'current' ? returnState.statement.id : '']);
   const failureNotice =
     failure && !failure.ok ? (
       <div role="alert">
@@ -226,6 +397,11 @@ function GameWindow({
         </nav>
       </div>
       {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
+      {missingReturnTarget ? (
+        <p role="status">{m.game_visit_selection_changed({}, o)}</p>
+      ) : returnState && returnState.kind !== 'current' && returnState.kind !== 'pending' ? (
+        <p role="status">{gameReaderReturnMessage(returnState.kind, o)}</p>
+      ) : null}
       {!page ? <SafeNavigation id={id} locale={locale} realm={realm} /> : null}
       {!page ? failureNotice : null}
       {page ? (
@@ -267,14 +443,29 @@ function GameWindow({
                             <div key={statement.id}>
                               {gate(
                                 statement,
-                                <GameFact
-                                  statement={statement}
-                                  page={page}
-                                  related={page.public.related}
-                                  locale={locale}
-                                  date={field.date}
-                                  link={Link}
-                                />,
+                                <div
+                                  tabIndex={-1}
+                                  data-game-current-assertion={statement.id}
+                                  data-current-return-selection={
+                                    returnState?.kind === 'current' && returnState.statement.id === statement.id
+                                      ? ''
+                                      : undefined
+                                  }
+                                  className={
+                                    returnState?.kind === 'current' && returnState.statement.id === statement.id
+                                      ? 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                                      : undefined
+                                  }
+                                >
+                                  <GameFact
+                                    statement={statement}
+                                    page={page}
+                                    related={page.public.related}
+                                    locale={locale}
+                                    date={field.date}
+                                    link={Link}
+                                  />
+                                </div>,
                               )}
                             </div>
                           ))}

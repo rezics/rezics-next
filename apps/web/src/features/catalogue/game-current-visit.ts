@@ -2,14 +2,21 @@ import { candidateContext } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from '../pages/subject-visit-navigation';
 import { contextHref } from '../pages/context-navigation';
+import {
+  gameClassificationReturnFragment,
+  type GameClassificationLocator,
+  type GameClassificationReturn,
+} from './game-current-visit-descriptor';
 
-/** Public navigation intent. This carries neither a reader nor native editing authority. */
+/** Public navigation intent and reader identity; neither is native editing authority. */
 export type GameCurrentVisit = {
   context: string;
   realm?: string;
   source?: string;
   type?: string;
   release?: string;
+  reader?: string | null;
+  selection?: GameClassificationLocator;
 };
 export type GameVisitInput = { valid: true; visit: GameCurrentVisit } | { valid: false };
 export const gameVisitLimit = 2048;
@@ -35,21 +42,48 @@ function sourceAddress(value: string, id: string, locale: string, realm?: string
 
 /** HTTP boundary. For example, realm=A with source ?realm=B is invalid, never a Global visit. */
 export function parseGameVisit(search: string, id: string, locale: string): GameVisitInput {
-  if (search.length > gameVisitLimit || new TextEncoder().encode(search).byteLength > gameVisitLimit)
+  if (
+    search.length > gameVisitLimit ||
+    new TextEncoder().encode(search).byteLength > gameVisitLimit ||
+    encodeURIComponent(search).length > gameVisitLimit
+  )
     return { valid: false };
   const params = new URLSearchParams(search);
-  const keys = ['context', 'realm', 'source', 'type', 'release'];
+  const keys = ['context', 'realm', 'source', 'type', 'release', 'reader', 'holder', 'property', 'statement'];
   for (const key of params.keys()) if (!keys.includes(key) || params.getAll(key).length !== 1) return { valid: false };
   const context = params.get('context') ?? candidateContext;
   const realm = params.get('realm') ?? undefined;
   const source = params.get('source') ?? undefined;
   const type = params.get('type') ?? undefined;
   const release = params.get('release') ?? undefined;
+  const readerInput = params.has('reader') ? (params.get('reader') ?? '') : undefined;
+  const hasSelection = ['holder', 'property', 'statement'].some((key) => params.has(key));
+  const selection = hasSelection
+    ? {
+        holder: params.get('holder') ?? '',
+        property: params.get('property') ?? '',
+        statement: params.get('statement') ?? '',
+      }
+    : undefined;
   if (
     !uuid.test(context) ||
     (realm !== undefined && (!uuid.test(realm) || !params.has('context') || !source)) ||
     (type !== undefined && !propertyId.test(type)) ||
     (release !== undefined && !digest.test(release)) ||
+    (readerInput !== undefined && readerInput !== 'anonymous' && !uuid.test(readerInput)) ||
+    (readerInput !== undefined && !source) ||
+    (selection !== undefined &&
+      (!params.has('holder') ||
+        !params.has('property') ||
+        !params.has('statement') ||
+        !uuid.test(selection.holder) ||
+        selection.holder.toLowerCase() !== id.toLowerCase() ||
+        !propertyId.test(selection.property) ||
+        !uuid.test(selection.statement) ||
+        !source ||
+        !type ||
+        !release ||
+        readerInput === undefined)) ||
     (source !== undefined &&
       (!params.has('context') || !type || sourceAddress(source, id, locale, realm) !== source)) ||
     (context !== candidateContext && !realm && source !== undefined)
@@ -63,6 +97,8 @@ export function parseGameVisit(search: string, id: string, locale: string): Game
       ...(source ? { source } : {}),
       ...(type ? { type } : {}),
       ...(release ? { release } : {}),
+      ...(readerInput !== undefined ? { reader: readerInput === 'anonymous' ? null : readerInput } : {}),
+      ...(selection ? { selection } : {}),
     },
   };
 }
@@ -71,6 +107,12 @@ export function gameVisitSearch(visit: GameCurrentVisit): string {
   const params = new URLSearchParams({ context: visit.context });
   for (const key of ['realm', 'source', 'type', 'release'] as const)
     if (visit[key] !== undefined) params.set(key, visit[key]);
+  if (visit.reader !== undefined) params.set('reader', visit.reader ?? 'anonymous');
+  if (visit.selection) {
+    params.set('holder', visit.selection.holder);
+    params.set('property', visit.selection.property);
+    params.set('statement', visit.selection.statement);
+  }
   return `?${params}`;
 }
 
@@ -83,6 +125,8 @@ export function gameCorrectionHref(input: {
   context: string;
   realm?: string | undefined;
   release?: string | undefined;
+  reader?: string | null | undefined;
+  selection?: GameClassificationLocator | undefined;
 }): string | undefined {
   const root = subjectHref(input, input.locale).href;
   const visit: GameCurrentVisit = {
@@ -91,7 +135,47 @@ export function gameCorrectionHref(input: {
     source: contextHref(root, input.realm),
     ...(input.realm ? { realm: input.realm } : {}),
     ...(input.release ? { release: input.release } : {}),
+    ...(input.reader !== undefined ? { reader: input.reader } : {}),
+    ...(input.selection ? { selection: input.selection } : {}),
   };
   const search = gameVisitSearch(visit);
   return parseGameVisit(search, input.id, input.locale).valid ? `${root}/game${search}` : undefined;
+}
+
+/** Compose one current occurrence into the original public source, never into a command. */
+export function gameClassificationReturnHref(input: {
+  visit: GameCurrentVisit;
+  holder: string;
+  type: string;
+  locale: string;
+  release: string;
+  reader: string | null;
+  selection: GameClassificationLocator;
+  focus: GameClassificationReturn['focus'];
+}): string | undefined {
+  const source = input.visit.source;
+  if (!source || sourceAddress(source, input.holder, input.locale, input.visit.realm) !== source) return;
+  if (input.selection.holder.toLowerCase() !== input.holder.toLowerCase()) return;
+  const fragment = gameClassificationReturnFragment({
+    source,
+    holder: input.selection.holder,
+    context: input.visit.context,
+    ...(input.visit.realm ? { realm: input.visit.realm } : {}),
+    type: input.type,
+    locale: input.locale,
+    release: input.release,
+    reader: input.reader,
+    property: input.selection.property,
+    statement: input.selection.statement,
+    focus: input.focus,
+  });
+  if (!fragment) return;
+  const href = `${source}${fragment}`;
+  if (
+    href.length > gameVisitLimit ||
+    new TextEncoder().encode(href).byteLength > gameVisitLimit ||
+    encodeURIComponent(href).length > gameVisitLimit
+  )
+    return;
+  return subjectVisitReturn(href, input.locale) === href ? href : undefined;
 }

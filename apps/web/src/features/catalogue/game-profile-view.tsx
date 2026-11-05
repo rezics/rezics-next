@@ -1,6 +1,9 @@
 import { candidateContext } from '../../subject/candidates';
-import { gameVisitSearch, type GameCurrentVisit } from './game-current-visit';
+import { gameClassificationReturnHref, gameVisitSearch, type GameCurrentVisit } from './game-current-visit';
+import type { GameClassificationLocator } from './game-current-visit-descriptor';
+import { gameClassificationReturnStorageKey } from './game-current-visit-descriptor';
 import { GameVisitNotice } from './game-current-visit-view';
+import { GameClassificationAssertion } from './game-classification-view';
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +15,8 @@ import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import { relationFields, type RelationTransport } from '../../subject/relation-candidates';
 import { ViewHeading } from '../pages/view-heading';
+import { SpoilerGate } from '../pages/values';
+import { spoilerLevel } from '../pages/shared';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreatedReader, CreateResult } from './create-subject';
@@ -26,7 +31,7 @@ import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { EditorFailure } from './statement-editor-view';
-import type { StatementInput } from './statement-editor';
+import { statementInput, type StatementInput } from './statement-editor';
 import { gameCreationAddress } from './game-creation-address';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
 import {
@@ -59,7 +64,7 @@ export type GameProfileTransport = {
 };
 const GameProfileEditor = catalogueEditor(GameProfileLive);
 export function GameProfile(props: Parameters<typeof GameProfileLive>[0]) {
-  return <GameProfileEditor {...props} address={JSON.stringify([props.address, props.visit])} />;
+  return <GameProfileEditor {...props} address={JSON.stringify([props.address, props.visit, props.reader])} />;
 }
 type ReadyGame = Extract<GameRead, { ok: true }> & {
   public: NonNullable<Extract<GameRead, { ok: true }>['public']>;
@@ -74,10 +79,12 @@ function GameProfileLive({
   onNavigate,
   visit,
   address,
+  reader,
 }: {
   id?: string;
   visit?: GameCurrentVisit | undefined;
   address?: string | undefined;
+  reader?: string | null | undefined;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: GameProfileTransport;
@@ -85,6 +92,29 @@ function GameProfileLive({
   onNavigate: (href: string) => void;
 }) {
   const lifetime = useEditorLifetime();
+  const [closedSelection, setClosedSelection] = useState('');
+  const selectionKey = visit?.selection
+    ? JSON.stringify([
+        visit.source,
+        visit.context,
+        visit.realm,
+        visit.type,
+        visit.release,
+        visit.reader,
+        visit.selection,
+      ])
+    : '';
+  const inspectionVisit =
+    visit && selectionKey && closedSelection === selectionKey
+      ? {
+          context: visit.context,
+          ...(visit.realm !== undefined ? { realm: visit.realm } : {}),
+          ...(visit.source !== undefined ? { source: visit.source } : {}),
+          ...(visit.type !== undefined ? { type: visit.type } : {}),
+          ...(visit.release !== undefined ? { release: visit.release } : {}),
+          ...(visit.reader !== undefined ? { reader: visit.reader } : {}),
+        }
+      : visit;
   const query = useQuery({
     queryKey: ['game-profile', id ?? 'new', locale, address, visit ? gameVisitSearch(visit) : '', lifetime.generation],
     queryFn: transport.load,
@@ -291,8 +321,19 @@ function GameProfileLive({
         {privateReading.current && (
           <AuthoringDepartureBoundary>
             <GameCorrection
+              key={JSON.stringify([
+                privateReading.current.public.subject.id,
+                privateReading.current.public.subject.context,
+                privateReading.current.digest,
+                locale,
+                session,
+                reader,
+                readingRevision,
+              ])}
               read={privateReading.current}
-              visit={visit}
+              visit={inspectionVisit}
+              onCloseInspection={() => setClosedSelection(selectionKey)}
+              reader={reader ?? null}
               visible={!!admitted}
               locale={locale}
               session={session}
@@ -428,6 +469,8 @@ function GameProfileLive({
 function GameCorrection({
   read,
   visit,
+  onCloseInspection,
+  reader,
   locale,
   session,
   transport,
@@ -445,6 +488,8 @@ function GameCorrection({
   visible: boolean;
   read: ReadyGame;
   visit?: GameCurrentVisit | undefined;
+  onCloseInspection: () => void;
+  reader: string | null;
   locale: string;
   session: string;
   transport: GameProfileTransport;
@@ -457,6 +502,66 @@ function GameCorrection({
   const title = pickText(subject.labels, locale);
   const type = pickText(read.release.types[subject.type]!.labels, locale);
   const href = visit?.source ?? subjectHref({ id: subject.id, label: title.text }, locale).href;
+  const incoming = resolveGameSelection(read, visit, reader, locale);
+  const incomingSelection = incoming?.kind === 'current' ? incoming.selection : undefined;
+  const projection = useRef({ public: read.public, revision: 0 });
+  if (projection.current.public !== read.public)
+    projection.current = { public: read.public, revision: projection.current.revision + 1 };
+  const [inspection, setInspection] = useState<{
+    owner: ReadyGame['public'];
+    selection: GameClassificationLocator | null;
+    closed: boolean;
+  }>(() => ({ owner: read.public, selection: incomingSelection ?? null, closed: false }));
+  if (inspection.owner !== read.public)
+    setInspection({
+      owner: read.public,
+      selection: inspection.closed ? null : (incomingSelection ?? null),
+      closed: inspection.closed,
+    });
+  const selected = inspection.owner === read.public ? inspection.selection : incomingSelection ?? null;
+  const selectedStatement = selected
+    ? subject.statements[selected.property]?.find((statement) => statement.id === selected.statement)
+    : undefined;
+  const correctionReturn = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!visit?.source) return;
+    const link = event.currentTarget;
+    const sameTab =
+      event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+    if (!sameTab) return;
+    const focus = event.detail === 0 && link.ownerDocument.activeElement === link ? 'keyboard' : 'none';
+    if (!selected) {
+      link.ownerDocument.defaultView?.sessionStorage.removeItem(gameClassificationReturnStorageKey);
+      return;
+    }
+    const target = gameClassificationReturnHref({
+      visit,
+      holder: subject.id,
+      type: subject.type,
+      locale,
+      release: read.digest,
+      reader,
+      selection: selected,
+      focus,
+    });
+    if (!target) {
+      link.ownerDocument.defaultView?.sessionStorage.removeItem(gameClassificationReturnStorageKey);
+      return;
+    }
+    link.ownerDocument.defaultView?.sessionStorage.setItem(gameClassificationReturnStorageKey, target);
+    link.href = target;
+  };
+  const selectedReturnHref = selected && visit?.source
+    ? gameClassificationReturnHref({
+        visit,
+        holder: subject.id,
+        type: subject.type,
+        locale,
+        release: read.digest,
+        reader,
+        selection: selected,
+        focus: 'none',
+      }) ?? href
+    : href;
   const groups = gameGroups(read.release, subject.type);
   const fields = useMemo(
     () => relationFields(read.release, subject.type, locale),
@@ -499,7 +604,7 @@ function GameCorrection({
               {visit.realm ? ` · ${m.game_visit_realm({ realm: visit.realm }, o)}` : ''}
             </p>
           )}
-          <a className="inline-flex min-h-11 items-center underline" href={href}>
+          <a className="inline-flex min-h-11 items-center underline" href={selectedReturnHref} onClick={correctionReturn}>
             {m.game_visit_return({}, o)}
           </a>
           <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
@@ -552,7 +657,28 @@ function GameCorrection({
                         )}
                         <ol className="space-y-3">
                           {(subject.statements[property] ?? []).map((statement) => (
-                            <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
+                            group === 'classification' ? (
+                              <li key={statement.id} className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
+                                <Button
+                                  className={gameActionClass}
+                                  type="button"
+                                  variant="outline"
+                                  aria-label={m.game_visit_inspect_assertion({ property: label.text || property }, o)}
+                                  data-game-inspect-assertion={statement.id}
+                                  onClick={() =>
+                                    setInspection({
+                                      owner: read.public,
+                                      selection: { holder: subject.id, property, statement: statement.id },
+                                      closed: false,
+                                    })
+                                  }
+                                >
+                                  {m.game_visit_inspect({}, o)}
+                                </Button>
+                              </li>
+                            ) : (
+                              <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
+                            )
                           ))}
                         </ol>
                       </dd>
@@ -562,6 +688,63 @@ function GameCorrection({
               </dl>
             </section>
           ))}
+      {visible && selected && selectedStatement ? (
+        <section
+          key={`${projection.current.revision}:${read.public.subject.id}:${read.public.subject.context}:${read.digest}:${selected.property}:${selected.statement}`}
+          className="space-y-4 rounded-xl border border-border p-4"
+          aria-labelledby="game-current-assertion-heading"
+          data-game-inspected-assertion={selected.statement}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 id="game-current-assertion-heading" className="font-sans text-xl font-semibold">
+              {m.game_visit_inspection_title({}, o)}
+            </h2>
+            <Button
+              className={gameActionClass}
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setInspection({ owner: read.public, selection: null, closed: true });
+                onCloseInspection();
+              }}
+            >
+              {m.game_visit_close_inspection({}, o)}
+            </Button>
+          </div>
+          {spoilerLevel(selectedStatement as never) > 0 ? (
+            <SpoilerGate label={m.thread_reveal_spoiler({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+              <GameClassificationAssertion
+                statement={statementInput(selectedStatement)}
+                rank={selectedStatement.rank}
+                read={{ ...read, source: null } as never}
+                locale={locale}
+                missing={m.facts_no_value({}, o)}
+              />
+            </SpoilerGate>
+          ) : (
+            <GameClassificationAssertion
+              statement={statementInput(selectedStatement)}
+              rank={selectedStatement.rank}
+              read={{ ...read, source: null } as never}
+              locale={locale}
+              missing={m.facts_no_value({}, o)}
+            />
+          )}
+        </section>
+      ) : null}
+      {visible && !selected && visit?.selection && incoming && incoming.kind !== 'current' ? (
+        <p role="status">
+          {incoming.kind === 'unsupported'
+            ? m.game_visit_selection_unsupported({}, o)
+            : incoming.kind === 'unknown'
+              ? m.game_visit_selection_unknown({}, o)
+              : incoming.kind === 'removed'
+                ? m.game_visit_selection_removed({}, o)
+                : incoming.kind === 'no-value'
+                  ? m.game_visit_selection_no_value({}, o)
+                  : m.game_visit_selection_changed({}, o)}
+        </p>
+      ) : null}
       {session !== 'signed-in' ? (
         visible &&
         (session === 'unavailable' ? (
@@ -704,6 +887,39 @@ function GameCorrection({
       )}
     </article>
   );
+}
+
+type GameSelectionResult =
+  | { kind: 'current'; selection: GameClassificationLocator }
+  | { kind: 'changed' | 'removed' | 'unsupported' | 'unknown' | 'no-value' };
+
+/** Match only the exact occurrence in this newly admitted projection. */
+function resolveGameSelection(
+  read: ReadyGame,
+  visit: GameCurrentVisit | undefined,
+  reader: string | null,
+  locale: string,
+): GameSelectionResult | undefined {
+  const selection = visit?.selection;
+  if (!selection) return;
+  const subject = read.public.subject;
+  if (
+    !visit?.source ||
+    selection.holder.toLowerCase() !== subject.id.toLowerCase() ||
+    visit.context !== subject.context ||
+    visit.type !== subject.type ||
+    visit.release !== read.digest ||
+    visit.reader !== reader ||
+    new URL(visit.source, 'https://rezics.invalid').pathname.split('/')[1] !== locale
+  )
+    return { kind: 'changed' };
+  if (!read.release.properties[selection.property]) return { kind: 'unknown' };
+  if (!gameGroups(read.release, subject.type).classification.includes(selection.property))
+    return { kind: 'unsupported' };
+  const statements = subject.statements[selection.property] ?? [];
+  if (!statements.length) return { kind: 'no-value' };
+  if (!statements.some((statement) => statement.id === selection.statement)) return { kind: 'removed' };
+  return { kind: 'current', selection };
 }
 
 /** Keep the assertion, qualifier meaning and each individually labelled citation together. */

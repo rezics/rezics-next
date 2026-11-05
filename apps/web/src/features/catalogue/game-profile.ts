@@ -16,7 +16,7 @@ export type GameItem = InitialSubject & { statements: Record<string, StatementIn
 export type GameCommand = { item: GameItem; key: string };
 export type GameRead =
   | { ok: false; reason: 'denied' | 'invalid' | 'stale' | 'unavailable' }
-  | { ok: true; release: Release; public: SubjectRead | null };
+  | { ok: true; digest: string; release: Release; public: SubjectRead | null };
 export type GameGroup = 'credits' | 'classification' | 'relations' | 'facts';
 const terms = new Set(['schema:name', 'schema:alternateName', 'schema:description']);
 
@@ -92,7 +92,7 @@ export async function readGameProfile(client: KernelClient, id?: string, visit?:
     const release = bundle.data.release as Release;
     if (!release.types || !release.properties) return { ok: false, reason: 'unavailable' };
     if (subject?.data && !gameType(release, subject.data.subject.type)) return { ok: false, reason: 'invalid' };
-    return { ok: true, release, public: subject?.data ?? null };
+    return { ok: true, digest: bundle.data.digest, release, public: subject?.data ?? null };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }
