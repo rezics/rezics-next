@@ -8,6 +8,19 @@ import { inventoryExample, detailExample, organization, human, automation } from
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 import { isSignedInPath } from '../src/session/guard';
+import { managedAccountHref } from '../src/settings/managed-accounts-read';
+import { managedAccountsBackHref } from '../src/settings/managed-account-detail-read';
+
+test('Settings directory/detail return preserves the locale and unrelated repeated query operands', () => {
+  for (const locale of locales) {
+    const directory = `/${locale}/settings?panel=compact&filter=a%2Bb&filter=c%26d#account`;
+    const target = managedAccountHref(directory, organization.id);
+    expect(managedAccountsBackHref(target)).toBe(directory);
+    expect(managedAccountsBackHref(`${target.replace('#account', '')}&managedAccount=${human.id}#account`)).toBe(
+      directory,
+    );
+  }
+});
 
 // Focused transport tests. Native and real served journey review runs at integration, not in this fixture.
 test('management adapters use generated native paths and the current caller credential without a target identity override', async () => {

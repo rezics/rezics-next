@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useSyncExternalStore, type MouseEventHandler, type ReactNode } from 'react';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -196,9 +196,11 @@ function Paging({
 export function ManagedAccountDetailCard({
   reader,
   backHref,
+  onBack,
 }: {
   reader: ManagedAccountReader | null;
   backHref: string;
+  onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
 }) {
   const state = useSyncExternalStore(
     reader?.subscribe ?? noSubscribe,
@@ -216,6 +218,7 @@ export function ManagedAccountDetailCard({
         <a
           className="flex min-h-11 min-w-11 w-fit max-w-full items-center py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           href={backHref}
+          onClick={onBack}
         >
           {m.managed_back()}
         </a>
@@ -398,7 +401,15 @@ const invalidState: DetailSnapshot = {
 };
 const unavailable = () => invalidState;
 
-export function ManagedAccountDetail({ accountId, backHref }: { accountId: string | null; backHref: string }) {
+export function ManagedAccountDetail({
+  accountId,
+  backHref,
+  onBack,
+}: {
+  accountId: string | null;
+  backHref: string;
+  onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
+}) {
   const session = useSession();
   const viewerId = session.state === 'signed-in' ? session.subject : null;
   const owner = useManagedSessionReader(viewerId, accountId, session.csrfToken);
@@ -419,7 +430,7 @@ export function ManagedAccountDetail({ accountId, backHref }: { accountId: strin
   useEffect(() => {
     if (reader) void reader.load();
   }, [reader]);
-  return <ManagedAccountDetailCard reader={owner.isCurrent() ? reader : null} backHref={backHref} />;
+  return <ManagedAccountDetailCard reader={owner.isCurrent() ? reader : null} backHref={backHref} onBack={onBack} />;
 }
 
 const noDispose = () => {};

@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type MouseEvent,
   type ReactNode,
@@ -535,16 +536,23 @@ export function ManagedAccounts(props: {
 export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
   const session = useSession();
   const location = useLocation();
+  const selected = !new URL(location.publicHref, 'https://rezics.local').searchParams.has('managedAccount');
   const owner = useManagedSessionReader(session.subject, session.subject, session.csrfToken);
+  const [visited, setVisited] = useState<ManagedSessionReader | null>(() => (selected ? owner : null));
+  if (selected && visited !== owner) setVisited(owner);
   if (!owner.isCurrent()) return null;
   if (session.state !== 'signed-in' || !session.subject) return null;
+  // A direct detail URL does not fetch the directory to guess admission. Once visited, keep its bounded reader.
+  if (visited !== owner) return null;
   return (
-    <ViewerInventory
-      key={session.subject}
-      viewerId={session.subject}
-      settingsHref={location.publicHref}
-      io={io}
-      owner={owner}
-    />
+    <div hidden={!selected} inert={!selected}>
+      <ViewerInventory
+        key={session.subject}
+        viewerId={session.subject}
+        settingsHref={location.publicHref}
+        io={io}
+        owner={owner}
+      />
+    </div>
   );
 }

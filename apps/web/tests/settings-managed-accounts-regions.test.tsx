@@ -97,7 +97,11 @@ function associations(host: HTMLElement) {
       expect(status.getAttribute('aria-labelledby')).toBe(heading.id);
   }
 }
-async function mounted(sources: ReturnType<typeof source>[], dir?: 'rtl') {
+async function mounted(
+  sources: ReturnType<typeof source>[],
+  dir?: 'rtl',
+  initialHref = '/en/settings?panel=compact#account',
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: managedViewer, csrfToken: 'story-csrf' });
   const route = createRootRoute({
@@ -113,7 +117,7 @@ async function mounted(sources: ReturnType<typeof source>[], dir?: 'rtl') {
   });
   const router = createRouter({
     routeTree: route,
-    history: createMemoryHistory({ initialEntries: ['/en/settings?panel=compact#account'] }),
+    history: createMemoryHistory({ initialEntries: [initialHref] }),
   });
   await router.load();
   const host = document.createElement('main');
@@ -132,6 +136,11 @@ async function mounted(sources: ReturnType<typeof source>[], dir?: 'rtl') {
   return {
     host,
     client,
+    navigate: (href: string) =>
+      act(async () => {
+        await router.navigate({ href });
+        await tick();
+      }),
     inventory: (index = 1) => within(host).getByRole('region', { name: `Inventory ${index}` }),
     click: (control: HTMLElement) =>
       act(async () => {
@@ -498,6 +507,71 @@ test('keyboard terminal movement owns focus only until another feed or Settings 
     ]);
   } finally {
     outside.remove();
+    await view.close();
+  }
+});
+
+test('detail selection retains the current directory windows without rereading, while a hidden viewer replacement retires them', async () => {
+  const feed = source();
+  const view = await mounted([feed]);
+  const directoryHref = '/en/settings?panel=compact&safe=a%2Bb#account';
+  const detailHref = `/en/settings?panel=compact&safe=a%2Bb&managedAccount=${managedViewer}#account`;
+  try {
+    const initial = managedAccountsExample();
+    await feed.answer(ready(initial));
+    const org = region(view.inventory(), m.managed_organizations_title());
+    await view.click(button(org, m.managed_next()));
+    const next = managedAccountsExample();
+    next.organizations.items[0]!.account.displayName = 'Retained current page';
+    await feed.answer(ready(next));
+    const currentRow = within(org).getByRole('heading', { name: 'Retained current page' });
+    const resp = region(view.inventory(), m.managed_operated_title());
+    await view.click(button(resp, m.managed_next()));
+    await view.navigate(detailHref);
+    expect(within(view.inventory()).queryByRole('region', { name: m.managed_organizations_title() })).toBeNull();
+    expect(currentRow.isConnected).toBe(true);
+    expect(currentRow.closest('[hidden]')?.hasAttribute('inert')).toBe(true);
+    await feed.answer(managedAccountsFailure(503));
+    await view.navigate(directoryHref);
+    expect(within(org).getByRole('heading', { name: 'Retained current page' })).toBe(currentRow);
+    expect(button(org, m.prq_previous())).toBeDefined();
+    await view.click(button(resp, m.settings_retry()));
+    expect(feed.calls).toEqual([
+      {},
+      { organizationsCursor: initial.organizations.next! },
+      { operatorsCursor: initial.responsibilities.next! },
+      { operatorsCursor: initial.responsibilities.next! },
+    ]);
+    await view.navigate(detailHref);
+    await act(async () => {
+      view.client.setQueryData(sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: managedViewer,
+        csrfToken: 'replacement',
+      });
+      await tick();
+    });
+    await feed.answer(ready(initial)); // Retired retry cannot install into the hidden replacement viewer.
+    expect(currentRow.isConnected).toBe(false);
+    expect(feed.calls).toHaveLength(4);
+    await view.navigate(directoryHref);
+    expect(feed.calls).toHaveLength(5);
+    await feed.answer(ready(initial));
+    expect(within(view.inventory()).queryByRole('heading', { name: 'Retained current page' })).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+test('a direct detail selection starts no directory read until deliberate return', async () => {
+  const feed = source();
+  const view = await mounted([feed], undefined, `/en/settings?panel=compact&managedAccount=${managedViewer}#account`);
+  try {
+    expect(feed.calls).toEqual([]);
+    await view.navigate('/en/settings?panel=compact#account');
+    expect(feed.calls).toEqual([{}]);
+    await feed.answer(ready(managedAccountsExample()));
+  } finally {
     await view.close();
   }
 });
