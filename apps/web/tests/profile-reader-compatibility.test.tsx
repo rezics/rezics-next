@@ -560,9 +560,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
 
     // The production avatar component owns and cancels its own upload promise on credential replacement.
     const fileInput = host.querySelector<HTMLInputElement>('input[type="file"]');
-    expect(fileInput?.disabled).toBe(false);
     const gif = new window.File(['gif bytes'], 'selected-avatar.gif', { type: 'image/gif' });
     if (!fileInput) throw new Error('The connected profile avatar chooser was not rendered.');
+    await until(() => !fileInput.disabled, 'current avatar-upload advice after profile recovery');
+    expect(fileInput.disabled).toBe(false);
     Object.defineProperty(fileInput, 'files', { configurable: true, value: [gif] });
     await act(async () => fileInput!.dispatchEvent(new window.Event('change', { bubbles: true })));
     await until(
