@@ -263,8 +263,7 @@ export async function readBoundOwnerFilterPage(
   const limit = options.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const plan =
-    nativeOwnerFilterPagePlan(binding) ??
-    ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
+    nativeOwnerFilterPagePlan(binding) ?? ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
   const work = new NativeCollectionWork(binding.input.allowance, binding.input.deadline);
   return withNativeOwnerFilterSource(binding, work, () =>
     readWorkingOwnerFilterPage(deps, admission, options, binding, work, plan),

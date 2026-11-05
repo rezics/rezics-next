@@ -33,13 +33,7 @@ export type OwnerQueryDependencies = {
 
 class OwnerQueryWork extends ScopeWork {
   constructor(readonly plan: OrdinaryCollectionPagePlan) {
-    super(
-      scopeAllowance(
-        plan.candidateLimit,
-        crypto.randomUUID(),
-        ordinaryPageWorkDimensions(plan.total),
-      ),
-    );
+    super(scopeAllowance(plan.candidateLimit, crypto.randomUUID(), ordinaryPageWorkDimensions(plan.total)));
   }
 
   override consume(used: WorkDimensions): void {
@@ -112,9 +106,7 @@ export async function openOwnerQuery(
   const context = { actor: input.actor, at, deadline: input.deadline };
   const sourceAllowance = (): WorkAllowance => ({
     reservationId: input.work.receipt().reservationId,
-    remaining: planned
-      ? ordinaryPageWorkDimensions(planned.sourceBound)
-      : input.work.remaining().remaining,
+    remaining: planned ? ordinaryPageWorkDimensions(planned.sourceBound) : input.work.remaining().remaining,
   });
   try {
     let prepared;

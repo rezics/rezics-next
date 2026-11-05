@@ -1034,7 +1034,15 @@ export function createCollectionReads(
       options.limit ?? DEFAULT_PAGE_SIZE,
       options.view === 'FULL' ? 'FULL' : 'BASIC',
     );
-    const bound = await bindOwnerFilterRead(dependencies, viewer, collectionId, admission, deadline, undefined, pagePlan);
+    const bound = await bindOwnerFilterRead(
+      dependencies,
+      viewer,
+      collectionId,
+      admission,
+      deadline,
+      undefined,
+      pagePlan,
+    );
     if (bound.status !== 'bound') throw new ProblemError('dependency_unavailable');
     const { binding } = bound;
     try {

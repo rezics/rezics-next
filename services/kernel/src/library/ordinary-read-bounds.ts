@@ -79,10 +79,7 @@ export function ordinaryCollectionPagePlan(
     throw new RangeError('Ordinary Collection page limit must be 1..100');
   const candidateLimit = Math.min(600, 6 * limit + 3);
   const sourceBound = sumBounds(fixedPageWork, repeatBound(candidateWork, candidateLimit));
-  const total = sumBounds(
-    sourceBound,
-    ...(view === 'FULL' ? [repeatBound(fullFactsPerMember, limit)] : []),
-  );
+  const total = sumBounds(sourceBound, ...(view === 'FULL' ? [repeatBound(fullFactsPerMember, limit)] : []));
   if (!withinCeiling(total, maximumBound)) throw new TypeError('Ordinary Collection page exceeds its static ceiling');
   return Object.freeze({
     limit,

@@ -246,7 +246,11 @@ type Prepared = {
   /** Mechanical handles cannot be reused through a different episode or the ordinary reader branch. */
   workBinding?: Readonly<{ kind: ScopeWorkContext['kind']; locator: ScopeWorkContext['locator'] }>;
 };
-function canonicalAllowance(a: WorkAllowance, rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT, fixed = false): CanonicalAllowance {
+function canonicalAllowance(
+  a: WorkAllowance,
+  rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT,
+  fixed = false,
+): CanonicalAllowance {
   return {
     reservationId: a.reservationId,
     rawKeys: fixed ? rawLimit : Math.min(rawLimit, a.remaining.candidateKeys),
@@ -459,11 +463,9 @@ function createCollectionSourceRuntime(
         : null,
       work: l.receipt(),
     });
-    const raw =
-      fixedPageWork
-        ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
-        :
-      input.work && current
+    const raw = fixedPageWork
+      ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
+      : input.work && current
         ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
         : Math.min(COLLECTION_SOURCE_WORK_GROUP_LIMIT, Math.floor(l.allowance().remaining.candidateKeys / 4));
     if (!raw) return partial('allowance');
