@@ -319,24 +319,30 @@ test('an interrupted claim whose dispatch already committed archives onto the ex
   const f = fixture();
   const text = `${markdown}\n\nCommitted brief\n`;
   const id = 'existing-task';
-  task(f.db, id, 'ready', { goal: 'web', manager: 'web', markdown: text }, 1);
+  task(f.db, id, 'ready', { goal: 'web', manager: 'web', markdown: text, lintWarnings: ['stored warning'] }, 1);
   task(f.db, 'older', 'integrated', { goal: 'web', manager: 'web', markdown: text }, 2);
   task(f.db, 'other-goal', 'ready', { goal: 'search', manager: 'search', markdown: text }, 3);
   mkdirSync(join(f.state, 'backlog', 'web', 'dispatched'), { recursive: true });
   writeFileSync(join(f.state, 'backlog', 'web', 'dispatched', 'older-prior.md'), text);
   const claims = join(f.state, 'backlog', 'web', '.dispatching');
   mkdirSync(claims, { recursive: true });
-  writeFileSync(join(claims, 'work.md'), text);
+  const claim = join(claims, 'work.md');
+  writeFileSync(claim, text);
+  utimesSync(claim, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
 
   const sweep = await sweepBacklog(f.runtime);
 
   expect(f.dispatched).toEqual([]);
-  expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: id, brief: 'work.md' }]);
+  expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: id, brief: 'work.md', lintWarnings: ['stored warning'] }]);
   expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched')).sort()).toEqual([
     `${id}-work.md`,
     'older-prior.md',
   ]);
   expect(readFileSync(join(f.state, 'backlog', 'web', 'dispatched', `${id}-work.md`), 'utf8')).toBe(text);
+  expect(f.db.query("SELECT last_dispatch_at, last_written_at FROM backlog_goals WHERE goal='web'").get()).toEqual({
+    last_dispatch_at: NOW,
+    last_written_at: NOW - 60_000,
+  });
   expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
   expect(f.dispatched).toEqual([]);
 });

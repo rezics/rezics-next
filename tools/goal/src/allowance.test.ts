@@ -1,0 +1,75 @@
+import { expect, test } from 'bun:test';
+import { burnPerHour, choosePool, choosePoolWithFallback, poolBurnStatus } from './allowance.ts';
+import { fixturePool, reading } from './test-support.ts';
+import type { Pool, PoolReading, Profile } from './types.ts';
+
+const hour = 3_600_000;
+const span = 90 * 60 * 1000;
+const now = Date.parse('2026-11-05T12:00:00.000Z');
+const profile: Profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' };
+const cursorProfile: Profile = { cli: 'cursor', model: 'gpt-5.6-luna', effort: 'high', poolClass: 'cursor' };
+
+function observed(pool: Pool, usedPercent: number, at: number, resetsAt = now + 8 * hour): PoolReading {
+  const result = reading(pool, usedPercent);
+  result.observedAt = new Date(at).toISOString();
+  result.at = result.observedAt;
+  result.windows[0]!.resetsAt = resetsAt;
+  result.windows[0]!.minutes = 10080;
+  return result;
+}
+
+test('A pool whose window used percent rose 2 points over the last 90 minutes, with maxBurnPerHour 0.8, admits no new task, and a task routed to it goes to its next allowed fallback profile or waits', () => {
+  const base = fixturePool();
+  const codex = { ...base, policy: { ...base.policy, maxBurnPerHour: 0.8, allowUnknown: false } };
+  const cursor = {
+    ...codex,
+    name: 'cursor',
+    cli: 'cursor' as const,
+    classes: ['cursor'],
+    command: 'cursor-agent',
+    allowanceKey: 'cursor',
+    policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 60_000 },
+  };
+  const history = [observed(codex, 10, now - span)];
+  const current = observed(codex, 12, now);
+  const cursorReading = observed(cursor, 5, now);
+  expect(burnPerHour(current, history, { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
+  expect(() => choosePool(profile, [codex], [current], { now, history, spanMs: span })).toThrow('no allowed pool');
+  const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [current, cursorReading], {
+    now,
+    history,
+    spanMs: span,
+  });
+  expect(chosen.profile).toBe(cursorProfile);
+  expect(chosen.pool.name).toBe('cursor');
+  expect(() => choosePoolWithFallback(profile, [], [codex], [current], { now, history, spanMs: span })).toThrow(
+    'no allowed pool',
+  );
+  expect(poolBurnStatus([codex, cursor], [...history, current, cursorReading], now, span)).toEqual([
+    { name: 'fixture', allowanceKey: 'fixture', burnPerHour: 2 / 1.5, maxBurnPerHour: 0.8 },
+    { name: 'cursor', allowanceKey: 'cursor', burnPerHour: 0 },
+  ]);
+});
+
+test('Integer percent readings taken every few minutes, where most consecutive readings are equal, still yield the true rate over the measurement span', () => {
+  const pool = fixturePool();
+  const used = [10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12];
+  const history = used.map((percent, index) => observed(pool, percent, now - span + index * 5 * 60_000));
+  const current = history.at(-1)!;
+  expect(burnPerHour(current, history.slice(-2, -1), { now, spanMs: span })).toBe(0);
+  expect(burnPerHour(current, history.slice(0, -1), { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
+});
+
+test('A window reset between readings is not counted as burn', () => {
+  const pool = fixturePool();
+  const before = observed(pool, 90, now - span, now - span + 1000);
+  const after = observed(pool, 5, now, now + 8 * hour);
+  expect(burnPerHour(after, [before], { now, spanMs: span })).toBe(0);
+  expect(
+    choosePool(profile, [{ ...pool, policy: { ...pool.policy, maxBurnPerHour: 0.8 } }], [after], {
+      now,
+      history: [before],
+      spanMs: span,
+    }).name,
+  ).toBe(pool.name);
+});

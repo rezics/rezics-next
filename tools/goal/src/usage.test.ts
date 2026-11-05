@@ -46,11 +46,11 @@ test('pacing measures only matching quota windows and never mistakes a reset for
     after = reading(pool, 30);
   before.observedAt = new Date(Date.now() - 3600000).toISOString();
   after.windows[0]!.resetsAt = before.windows[0]!.resetsAt;
-  expect(burnPerHour(after, before)).toBeCloseTo(20, 1);
+  expect(burnPerHour(after, [before])).toBeCloseTo(20, 1);
   const limited = { ...pool, policy: { ...pool.policy, maxBurnPerHour: 5 } };
   expect(() => choosePool(profile, [limited], [after], { history: [before] })).toThrow('no allowed pool');
   after.windows[0]!.resetsAt! += 3600000;
-  expect(burnPerHour(after, before)).toBe(0);
+  expect(burnPerHour(after, [before])).toBe(0);
 });
 
 test('allowance indexing preserves reverse history predecessors across shared aliases', () => {
