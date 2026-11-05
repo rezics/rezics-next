@@ -58,11 +58,18 @@ test('selected work source responses refresh only after the current media outcom
     sourceReads += 1;
     const image = version === 1 ? sourceUrl : changedUrl;
     return new Response(
-      JSON.stringify({ ...apiSubject, images: { large: image, common: image, medium: image, small: image, grid: image } }),
+      JSON.stringify({
+        ...apiSubject,
+        images: { large: image, common: image, medium: image, small: image, grid: image },
+      }),
       { status: 200, headers: { etag: `"subject-101-v${version}"`, 'content-type': 'application/json' } },
     );
   }) as typeof globalThis.fetch;
-  const seal = (digest: string, status: 'pending' | 'available', source: NonNullable<CrossMediaPlan['coverSources']>[number]) =>
+  const seal = (
+    digest: string,
+    status: 'pending' | 'available',
+    source: NonNullable<CrossMediaPlan['coverSources']>[number],
+  ) =>
     journal.sealIntent({
       version: 1,
       digest,
@@ -293,9 +300,7 @@ test(
       const pendingIntentDb = new Database(journalPath);
       try {
         const stored = pendingIntentDb
-          .query<{ intent_json: string }, [string]>(
-            'SELECT intent_json FROM showcase_intent WHERE intent_digest=?',
-          )
+          .query<{ intent_json: string }, [string]>('SELECT intent_json FROM showcase_intent WHERE intent_digest=?')
           .get(pendingManifest.digest)!;
         expect(JSON.parse(stored.intent_json).media[0]).toMatchObject({ status: 'pending', mediaState: 'reserved' });
       } finally {

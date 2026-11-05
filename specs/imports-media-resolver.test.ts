@@ -311,9 +311,7 @@ test('journal exact portable request before POST and actual 202 before first GET
     const result = resolved(await h.run());
     const job = h.posts[0]!;
     expect(result.mediaIds).toEqual({ [URL]: job.accepted.media.id });
-    expect(result.assets).toEqual([
-      { sourceUrl: URL, key: job.key, outcome: 'available', mediaState: 'available' },
-    ]);
+    expect(result.assets).toEqual([{ sourceUrl: URL, key: job.key, outcome: 'available', mediaState: 'available' }]);
     expect(h.store.mediaPending(h.owner, job.key)).toMatchObject({
       bytes: job.bytes,
       accepted: job.accepted,
