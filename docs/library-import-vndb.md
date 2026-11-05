@@ -49,7 +49,8 @@ Unmatched rows accept an explicit readable target obtained through ordinary cata
 No absent value clears native facts. Existing entries are preserved by default; `replace:true` captures the current
 revision and incarnation for explicit review. Confirmation names that immutable `reviewId`. Apply rechecks current
 account authority, chosen identity, readability, release, cancellation and native admission. A changed basis returns
-`stale`; refresh review. Native commands freeze target, state, revision, incarnation, review guard and command key.
+`stale`; refresh review. The source fingerprint is identity epoch, accepting type and profile pin, not the
+observation cursor position. Native commands freeze target, state, revision, incarnation, review guard and command key.
 An unknown failure retries that original command; it cannot be re-reviewed into different operands. Exact native
 receipt replay remains possible after an acknowledgement is lost. Applied rows are never applied again.
 
