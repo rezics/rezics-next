@@ -304,7 +304,7 @@ test('mounted manager callbacks keep their originating controller state and port
 
     const title = host.querySelector<HTMLInputElement>('#collection-edit-title');
     const description = host.querySelector<HTMLTextAreaElement>('#collection-edit-description');
-    if (!title || !description) throw new Error('Expected the mounted metadata editor');
+    if (!title || !description) throw new Error(`Expected the mounted metadata editor; rendered: ${host.textContent}`);
     setField(title, 'Draft title');
     setField(description, 'Draft description');
     await settle();
