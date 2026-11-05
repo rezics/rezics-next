@@ -7207,8 +7207,9 @@ export class MergeTrain {
       if (devLanding && targetBranch === devLanding.snapshot.devBranch) {
         let changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
         const schemaOwner =
-          devLanding.owners.find((owner) => owner.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS))) ??
-          devLanding.owners[0]!;
+          devLanding.owners.find((owner) =>
+            owner.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS)),
+          ) ?? devLanding.owners[0]!;
         const schema = await regenerateLandingSchema({
           cwd: tree,
           changedFiles: changed,
@@ -7231,13 +7232,7 @@ export class MergeTrain {
         if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
         if (schema.outcome === 'diagnostic')
           return {
-            transpileHandoff: schemaHandoff(
-              schemaOwner.entry,
-              schemaOwner.sourceCommit,
-              targetHead,
-              changed,
-              schema,
-            ),
+            transpileHandoff: schemaHandoff(schemaOwner.entry, schemaOwner.sourceCommit, targetHead, changed, schema),
           };
         if (transpiled.outcome === 'diagnostic') {
           const location = transpiled.diagnostic?.file;

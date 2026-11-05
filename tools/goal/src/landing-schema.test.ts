@@ -11,7 +11,7 @@ const GENERATOR = [
   "import { appendFileSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';",
   "appendFileSync(process.env.DERIVED_RUN_LOG, process.argv.slice(2).join(' ') + ' in ' + process.cwd() + '\\n');",
   "const migrations = readdirSync('db/access/migrations').sort().map((name) => readFileSync('db/access/migrations/' + name, 'utf8'));",
-  'const failure = migrations.join(\'\').match(/^-- fail: (.+)$/m);',
+  "const failure = migrations.join('').match(/^-- fail: (.+)$/m);",
   'if (failure) {',
   "  console.error('ERROR: ' + failure[1]);",
   '  process.exit(1);',
@@ -44,7 +44,11 @@ function kernelFixture() {
   git(root, 'config', 'user.name', 'Fixture');
   git(root, 'config', 'user.email', 'fixture@example.invalid');
   put(root, '.gitignore', '.temp/\n');
-  put(root, 'services/kernel/package.json', JSON.stringify({ private: true, scripts: { derived: 'bun scripts/derived.ts' } }));
+  put(
+    root,
+    'services/kernel/package.json',
+    JSON.stringify({ private: true, scripts: { derived: 'bun scripts/derived.ts' } }),
+  );
   put(root, 'services/kernel/scripts/derived.ts', GENERATOR);
   put(root, 'services/kernel/db/access/migrations/001_accounts.sql', FIRST_MIGRATION);
   put(root, 'services/kernel/db/access/schema.sql', `-- derived\n${FIRST_MIGRATION}`);
@@ -81,7 +85,9 @@ test('a candidate that changes a migration regenerates its schema dumps and comm
       'services/kernel/db/access/schema.sql',
     );
     expect(readFileSync(join(root, 'services/kernel/db/access/schema.sql'), 'utf8')).toContain(RECOVERY_MIGRATION);
-    expect(readFileSync(join(root, '.temp', 'derived-runs.log'), 'utf8')).toBe('schema in ' + join(root, 'services/kernel') + '\n');
+    expect(readFileSync(join(root, '.temp', 'derived-runs.log'), 'utf8')).toBe(
+      'schema in ' + join(root, 'services/kernel') + '\n',
+    );
     expect(readFileSync(join(root, '.temp', 'landing.log'), 'utf8')).toContain(
       '$ bun run --cwd services/kernel derived schema',
     );
@@ -115,7 +121,11 @@ test('a failed regeneration returns its first error as a handback and commits no
   const fixture = kernelFixture();
   try {
     const { root, base } = fixture;
-    put(root, 'services/kernel/db/access/migrations/002_broken.sql', '-- fail: relation "accounts_missing" does not exist\n');
+    put(
+      root,
+      'services/kernel/db/access/migrations/002_broken.sql',
+      '-- fail: relation "accounts_missing" does not exist\n',
+    );
     const candidate = commit(root, 'Add a migration that does not apply');
 
     const result = await regenerate(root, git(root, 'diff', '--name-only', base, candidate).split('\n'));
@@ -126,9 +136,7 @@ test('a failed regeneration returns its first error as a handback and commits no
       message: 'ERROR: relation "accounts_missing" does not exist',
     });
     expect(git(root, 'rev-parse', 'HEAD')).toBe(candidate);
-    expect(readFileSync(join(root, '.temp', 'landing.log'), 'utf8')).toContain(
-      'Schema dump regeneration failed in',
-    );
+    expect(readFileSync(join(root, '.temp', 'landing.log'), 'utf8')).toContain('Schema dump regeneration failed in');
   } finally {
     fixture.close();
   }
