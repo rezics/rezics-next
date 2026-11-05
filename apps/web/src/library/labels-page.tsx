@@ -115,6 +115,7 @@ type Attempt = {
 
 export function LabelsPageView({
   page: initial,
+  sendLabel = manageLabel,
   isCurrent = alwaysCurrent,
   refresh,
   originating,
@@ -127,6 +128,7 @@ export function LabelsPageView({
   locale = getLocale(),
 }: {
   page: LabelsPage;
+  sendLabel?: typeof manageLabel;
   isCurrent?: () => boolean;
   refresh?: () => Promise<LabelsPage | null>;
   originating?: ManagementGuard | undefined;
@@ -343,7 +345,7 @@ export function LabelsPageView({
           renderedKey: supplied.idempotencyKey,
           unresolved: true,
           headers: new Headers(headers),
-          send: manageLabel,
+          send: sendLabel,
         };
     attempts.current.set(slot, attempt);
     const lock = { current: () => admitted(input) };

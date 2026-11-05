@@ -449,7 +449,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect((document.querySelector('[role="dialog"] input[name="name"]') as HTMLInputElement).value).toBe('B draft');
       await submit('rename');
       expect(writes[2]!.data).toEqual(uncertain);
-      expect(writes[2]!.csrf).toBe('prepared-B-rotated');
+      expect(writes[2]!.csrf).toBe('session-B');
       initial = response('B', search, 23);
       await show(session('B', 'another-nonempty-csrf'));
       busy(); // Ordinary same-viewer loader/CSRF refresh preserves the outstanding attempt.
