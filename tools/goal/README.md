@@ -946,6 +946,12 @@ owner/rerere/replay resolution. Owner-landing capability is therefore `unavailab
 conflict-to-landed duration, total open conflicts and their age, and resolution-method counters remain unknown.
 An empty recorded window does not establish zero conflicts or zero conflict-created attempts.
 
+Decision: Resolver prompts use stdin; each dev conflict is counted once per accepted attempt as landed, returned to the worker with a reason, or still in progress in the trailing-hour flow report.
+
+A clean replay of the resolution onto a moved dev head lands without another resolver session; a replay conflict starts
+another bounded resolver attempt. These source-level outcomes do not change the broader conflict totals or make
+historical snapshots complete. Returned reasons are one-line excerpts capped at 160 characters.
+
 `conflicts.recordedOutcomes` counts complete Git contexts from failed `gate-outcome` rebase events in the trailing
 hour. A task/attempt contributes once, using the first persisted rebase outcome; replay cannot add a count or move it
 into a later hour. Legacy outcomes without a complete context remain unclassified. Its observation-to-landed

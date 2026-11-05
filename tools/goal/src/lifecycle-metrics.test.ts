@@ -9,6 +9,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { WorkerStore } from './store.ts';
 import { harness } from './test-support.ts';
+import { formatLifecycleMetrics } from './report.ts';
 
 const root = join(process.cwd(), '.temp', `lifecycle-metrics-${crypto.randomUUID()}`);
 mkdirSync(root, { recursive: true });
@@ -524,6 +525,58 @@ test('Hourly report measures conflict count, conflict-to-landed time and attempt
   expect(lifecycleMetrics(db, now).conflicts).toEqual(metrics.conflicts);
   expect(emitHourlyLifecycleMetrics(db, lifecycleMetrics(db, now), now)).toBe(false);
   expect(readHourlyLifecycleMetrics(db, now)?.metrics.conflicts).toEqual(metrics.conflicts);
+});
+
+test('flow metrics classify dev resolver conflicts by landed, returned with reason and in-progress outcomes', () => {
+  const { db } = database('dev-resolver-outcomes.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12);
+  const at = (minutes: number) => stamp(now, minutes * 60_000);
+  const started = (taskId: string, sourceCommit: string) =>
+    recordFlow(db, {
+      taskId,
+      attempt: 1,
+      stage: 'landing',
+      action: 'dev-conflict',
+      at: at(-10),
+      detail: JSON.stringify({ sourceCommit, targetHead: 'd'.repeat(40), paths: ['source.ts'] }),
+    });
+  started('landed-dev-conflict', 'a'.repeat(40));
+  recordFlow(db, {
+    taskId: 'landed-dev-conflict',
+    attempt: 1,
+    stage: 'landing',
+    action: 'dev-conflict-landed',
+    at: at(-1),
+    detail: JSON.stringify({ sourceCommit: 'a'.repeat(40), commit: 'b'.repeat(40) }),
+  });
+  started('returned-dev-conflict', 'c'.repeat(40));
+  recordFlow(db, {
+    taskId: 'returned-dev-conflict',
+    attempt: 1,
+    stage: 'landing',
+    action: 'dev-conflict-returned',
+    at: at(-2),
+    detail: JSON.stringify({
+      sourceCommit: 'c'.repeat(40),
+      reason: 'Train resolver attempt bound reached (2)',
+    }),
+  });
+  started('active-dev-conflict', 'e'.repeat(40));
+
+  const metrics = lifecycleMetrics(db, now);
+  expect(metrics.conflicts.devResolverOutcomes).toEqual({
+    available: true,
+    complete: true,
+    resolvedAndLanded: 1,
+    returnedToWorker: {
+      count: 1,
+      reasons: [{ reason: 'Train resolver attempt bound reached (2)', count: 1 }],
+    },
+    inProgress: 1,
+  });
+  expect(formatLifecycleMetrics(metrics).join('\n')).toContain(
+    'Dev resolver conflicts in trailing hour: 1 resolved and landed; 1 returned to worker (reasons: 1 × Train resolver attempt bound reached (2)); 1 still in progress; complete recorded window.',
+  );
 });
 
 test('missing conflict sources and historical snapshots remain unavailable instead of acquiring zero counters', () => {

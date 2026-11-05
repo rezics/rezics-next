@@ -37,6 +37,14 @@ export type ConflictMetrics = {
     unknownCauseCount: number | null;
     totalCount: null;
   };
+  /** Source-level dev resolver conflicts, classified by their eventual landing, worker return or live state. */
+  devResolverOutcomes: {
+    available: boolean;
+    complete: boolean;
+    resolvedAndLanded: number | null;
+    returnedToWorker: { count: number | null; reasons: { reason: string; count: number }[] | null };
+    inProgress: number | null;
+  };
 };
 
 export const lifecycleMetricMigrations = [
@@ -454,6 +462,13 @@ function unavailableConflicts(reason: string): ConflictMetrics {
       unknownCauseCount: null,
       totalCount: null,
     },
+    devResolverOutcomes: {
+      available: false,
+      complete: false,
+      resolvedAndLanded: null,
+      returnedToWorker: { count: null, reasons: null },
+      inProgress: null,
+    },
   };
 }
 
@@ -466,11 +481,73 @@ function objectBody(body: string): Record<string, unknown> {
   }
 }
 
+function devResolverOutcomes(
+  db: Database,
+  start: string,
+  end: string,
+  limit: number,
+): ConflictMetrics['devResolverOutcomes'] {
+  const unavailable: ConflictMetrics['devResolverOutcomes'] = {
+    available: false,
+    complete: false,
+    resolvedAndLanded: null,
+    returnedToWorker: { count: null, reasons: null },
+    inProgress: null,
+  };
+  if (!hasColumns(db, 'flow_events', ['sequence', 'task_id', 'attempt', 'stage', 'action', 'at', 'detail']))
+    return unavailable;
+  const starts = db
+    .query(`
+    SELECT task_id, attempt, at, detail FROM flow_events INDEXED BY flow_events_launch_window
+    WHERE stage='landing' AND action='dev-conflict' AND at >= ? AND at <= ?
+    ORDER BY at, sequence LIMIT ?
+  `)
+    .all(start, end, limit + 1) as { task_id: string; attempt: number; at: string; detail: string }[];
+  let resolvedAndLanded = 0;
+  let returnedCount = 0;
+  let inProgress = 0;
+  const reasons = new Map<string, number>();
+  for (const row of starts.slice(0, limit)) {
+    const { sourceCommit } = JSON.parse(row.detail) as { sourceCommit: string };
+    const terminal = db
+      .query(`
+      SELECT action, json_extract(detail, '$.reason') AS reason FROM flow_events INDEXED BY flow_events_task
+      WHERE task_id=? AND attempt=? AND stage='landing'
+        AND action IN ('dev-conflict-landed', 'dev-conflict-returned')
+        AND json_extract(detail, '$.sourceCommit')=? AND at <= ?
+      ORDER BY at, sequence LIMIT 1
+    `)
+      .get(row.task_id, row.attempt, sourceCommit, end) as { action: string; reason: string | null } | null;
+    if (!terminal) {
+      inProgress++;
+    } else if (terminal.action === 'dev-conflict-landed') {
+      resolvedAndLanded++;
+    } else {
+      returnedCount++;
+      const reason = terminal.reason!;
+      reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
+    }
+  }
+  return {
+    available: true,
+    complete: starts.length <= limit,
+    resolvedAndLanded,
+    returnedToWorker: {
+      count: returnedCount,
+      reasons: [...reasons]
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a, b) => a.reason.localeCompare(b.reason)),
+    },
+    inProgress,
+  };
+}
+
 /** Read existing producer facts only. No resolution event or historical occurrence time is synthesized. */
 function conflictMetrics(db: Database, start: string, end: string, limit: number): ConflictMetrics {
   const result = unavailableConflicts(
     'The producer records rebase outcomes and retry setup, but not all conflicts, conflict occurrence times or owner/rerere/replay resolution identities.',
   );
+  result.devResolverOutcomes = devResolverOutcomes(db, start, end, limit);
   if (!hasColumns(db, 'worker_events', ['sequence', 'task_id', 'attempt', 'kind', 'at', 'body'])) return result;
   // These reader-owned indexes are installed only when the optional source exists, not by a cross-module migration.
   // Window reads must not repeatedly parse settled event/attempt history on host sweeps.

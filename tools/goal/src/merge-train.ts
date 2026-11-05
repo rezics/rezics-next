@@ -3,6 +3,7 @@ import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readd
 import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } from './train-resolver.ts';
+import { policyOwnerConflictGit } from './owner-conflict.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -2764,6 +2765,15 @@ export class MergeTrain {
           continue;
         }
         committed = true;
+        for (const member of prepared) {
+          const request = member.entry.request;
+          if (request.devResolution && o.trainResolver)
+            o.trainResolver.devConflictLanded(
+              request,
+              request.workerCommit ?? this.git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`),
+              head,
+            );
+        }
         pushDevInBackground(
           o.mainCheckout,
           o.stateDirectory,
@@ -3108,6 +3118,13 @@ export class MergeTrain {
         this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
       canonical,
     );
+    o.trainResolver?.devConflictStarted(
+      entry.request,
+      entry.request.workerCommit ??
+        this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
+      targetHead,
+      canonical,
+    );
     if (conflict) outcome.rebaseConflict = conflict;
     outcome.firstFailure ??= firstFailure(
       `Rebase conflicts with dev: ${canonical.join(', ')}`,
@@ -3192,22 +3209,67 @@ export class MergeTrain {
           failure = String(error);
           tokens = addTokens(tokens, newResolverTokens());
           attempts++;
-          if (this.git(o.mainCheckout, 'rev-parse', targetRef) !== lastTarget) continue;
           break;
         }
         attempts++;
         tokens = addTokens(tokens, conflict?.tokens ?? newResolverTokens());
         if (conflict?.conflictFiles.length) paths = canonicalConflictPaths(conflict.conflictFiles);
-        const currentTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
-        if (currentTarget !== lastTarget) {
-          failure = `dev moved from ${lastTarget} to ${currentTarget} during resolution`;
-          continue;
-        }
         if (conflict && !conflict.resolvedCommit) {
           failure = conflict.detail ?? 'Train resolver did not produce a resolved commit';
           break;
         }
-        const resolved = conflict?.resolvedCommit ?? this.git(tree, 'rev-parse', 'HEAD');
+        let resolved = conflict?.resolvedCommit ?? this.git(tree, 'rev-parse', 'HEAD');
+        const currentTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
+        if (currentTarget !== lastTarget) {
+          failure = `dev moved from ${lastTarget} to ${currentTarget} during resolution`;
+          if (isAncestor(o.mainCheckout, sourceCommit, currentTarget, o.policy?.merge)) {
+            candidate = currentTarget;
+            lastTarget = currentTarget;
+            alreadyRepresented = true;
+            method = conflict?.method ?? method;
+            break;
+          }
+          this.git(tree, 'reset', '--hard', currentTarget);
+          const replay = policyOwnerConflictGit(
+            tree,
+            ['cherry-pick', '--no-commit', '-m', '1', resolved],
+            o.policy?.merge,
+          );
+          if (replay.status !== 0) {
+            const replayConflicts = unmergedFiles(tree, o.policy?.merge);
+            if (!replayConflicts.length)
+              throw new TrainResolverInfrastructureError(
+                replay.stderr.trim() || replay.error?.message || 'Cannot reapply train resolution onto moved dev',
+              );
+            paths = canonicalConflictPaths(replayConflicts);
+            failure = `reapplying the resolved commit onto moved dev conflicts in ${paths.join(', ')}`;
+            appendFileSync(outcome.logPath, `Train resolution replay conflicts: ${paths.join(', ')}\n`);
+            continue;
+          }
+          const replayTree = this.git(tree, 'write-tree');
+          this.git(tree, 'cherry-pick', '--quit');
+          const replayTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
+          if (replayTarget !== currentTarget) {
+            failure = `dev moved from ${currentTarget} to ${replayTarget} while reapplying the resolved commit`;
+            continue;
+          }
+          resolved = this.git(
+            tree,
+            'commit-tree',
+            replayTree,
+            '-p',
+            currentTarget,
+            '-p',
+            sourceCommit,
+            '-m',
+            'Resolve dev landing conflict',
+          );
+          lastTarget = currentTarget;
+          appendFileSync(
+            outcome.logPath,
+            `Train resolution replayed cleanly from ${failure.slice('dev moved from '.length)}; commit=${resolved}\n`,
+          );
+        }
         if (resolved === lastTarget && isAncestor(o.mainCheckout, sourceCommit, lastTarget, o.policy?.merge)) {
           candidate = lastTarget;
           alreadyRepresented = true;
@@ -3296,6 +3358,7 @@ export class MergeTrain {
       o.queue.acknowledge(entry.id);
       return;
     }
+    resolver?.devConflictReturned(request, sourceCommit, lastTarget, paths, failure, attempts);
     o.queue.finish(entry.id, outcome);
   }
 
@@ -4489,6 +4552,8 @@ export class MergeTrain {
           if (controlPlane) retryMovedControlPlaneRefs();
           continue;
         }
+        if (integratesIntoDev && request.devResolution && o.trainResolver)
+          o.trainResolver.devConflictLanded(request, workerCommit, candidate);
         if (targetBranch === (o.integrationBranch ?? 'dev'))
           pushDevInBackground(o.mainCheckout, o.stateDirectory, targetBranch, logPath, this.options.policy?.merge);
         if (workspace) {

@@ -243,7 +243,7 @@ function command(options: AgentLaunchOptions): [string, string[]] {
         : []),
       ...(options.resumeSession ? [] : ['-C', worktree]),
       '--',
-      prompt,
+      options.promptViaStdin ? '-' : prompt,
     ],
   ];
 }

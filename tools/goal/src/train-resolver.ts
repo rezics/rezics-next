@@ -649,6 +649,7 @@ export class TrainResolver {
       pool,
       worktree: tree,
       prompt,
+      promptViaStdin: true,
       consultation: true,
       resolver: true,
       codex: this.tasks.settings.codex,
@@ -676,9 +677,13 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         child = spawn('python3', ['-c', wrapper, identityPath, command, ...args], {
           cwd: tree,
           detached: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['pipe', 'pipe', 'pipe'],
           env: workerEnvironment(pool),
         });
+        child.stdin!.on('error', (error) => {
+          failure ??= `Train resolver prompt input failed: ${error.message}`;
+        });
+        child.stdin!.end(prompt);
         identity = child.pid ? processIdentity(child.pid) : null;
         this.event(request, 'train-resolver-process', { ...run, process: identity });
       });
@@ -857,6 +862,87 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         action: 'conflict-landed',
         at,
         detail: JSON.stringify(detail),
+      });
+    });
+  }
+
+  devConflictStarted(
+    request: LandingRequest,
+    sourceCommit: string,
+    targetHead: string,
+    paths: readonly string[],
+  ): void {
+    this.store.write(request, () => {
+      if (
+        this.store.events(request.taskId, request.attempt).some(
+          (event) =>
+            event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
+        )
+      )
+        return;
+      const at = new Date().toISOString();
+      const detail = { sourceCommit, targetHead, paths, startedAt: at };
+      this.event(request, 'dev-conflict-started', detail);
+      recordFlow(this.store.db, {
+        ...request,
+        stage: 'landing',
+        action: 'dev-conflict',
+        at,
+        detail: JSON.stringify(detail),
+      });
+    });
+  }
+
+  devConflictReturned(
+    request: LandingRequest,
+    sourceCommit: string,
+    targetHead: string,
+    paths: readonly string[],
+    reason: string,
+    attempts: number,
+  ): void {
+    this.devConflictOutcome(request, sourceCommit, 'dev-conflict-returned', {
+      targetHead,
+      paths,
+      reason,
+      attempts,
+    });
+  }
+
+  devConflictLanded(request: LandingRequest, sourceCommit: string, commit: string): void {
+    this.devConflictOutcome(request, sourceCommit, 'dev-conflict-landed', { commit });
+  }
+
+  private devConflictOutcome(
+    request: LandingRequest,
+    sourceCommit: string,
+    action: 'dev-conflict-returned' | 'dev-conflict-landed',
+    detail: Record<string, unknown>,
+  ): void {
+    this.store.write(request, () => {
+      const events = this.store.events(request.taskId, request.attempt);
+      const started = events.some(
+        (event) =>
+          event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
+      );
+      if (!started) return;
+      if (
+        events.some(
+          (event) =>
+            (event.kind === 'dev-conflict-landed' || event.kind === 'dev-conflict-returned') &&
+            JSON.parse(event.body).sourceCommit === sourceCommit,
+        )
+      )
+        return;
+      const at = new Date().toISOString();
+      const body = { sourceCommit, ...detail, endedAt: at };
+      this.event(request, action, body);
+      recordFlow(this.store.db, {
+        ...request,
+        stage: 'landing',
+        action,
+        at,
+        detail: JSON.stringify(body),
       });
     });
   }
