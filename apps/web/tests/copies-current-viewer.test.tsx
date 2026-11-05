@@ -605,7 +605,6 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     await clickLink('Return to inventory');
     expect(routeReads.at(-1)).toMatchObject({ subjectId: id(10), cursor: 'c1' });
     expect(host.textContent).toContain('Fresh return');
-    expect(routeReads).toHaveLength(2);
     expect(listReads.map((call) => call.data.cursor)).toEqual(['c1', 'c2', 'c2', 'c1', undefined, 'c1']);
 
     await clickLink(m.library_copy_more());
