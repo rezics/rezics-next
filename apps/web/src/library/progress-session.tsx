@@ -385,13 +385,11 @@ export function CurrentProgressDetail({
             enrolled.identity === boundary.identity &&
             store.current(enrolled, detailReads, true);
           if (!current()) return { signedIn: false, idempotencyKey: '' };
-          const accepted = client.getQueryData<ProgressDetail>(queryKey);
-          if (!matchingDetail(accepted, viewer, address)) return { signedIn: false, idempotencyKey: '' };
           const admittedAddress = { ...address };
           delete admittedAddress.changes;
           delete admittedAddress.units;
-          if (accepted.progress.changesCursor !== undefined) admittedAddress.changes = accepted.progress.changesCursor;
-          if (accepted.progress.unitsCursor !== undefined) admittedAddress.units = accepted.progress.unitsCursor;
+          if (visit.paths.changes.current !== undefined) admittedAddress.changes = visit.paths.changes.current;
+          if (visit.paths.units.current !== undefined) admittedAddress.units = visit.paths.units.current;
           const fresh = await readDetail(admittedAddress, current);
           if (!current() || !matchingDetail(fresh, viewer, admittedAddress))
             return { signedIn: false, idempotencyKey: '' };
