@@ -18,15 +18,12 @@ import {
 import {
   AGENT_IDENTITY_HISTORY_GUARD_COST,
   AGENT_IDENTITY_HISTORY_ABSENCE_COST,
-} from '../history/agent-identity-sdk-fence.ts';
+} from '../history/agent-identity-history-costs.ts';
 import type { HistoryReceivingContext } from '../history/receiving.ts';
 import type { Pool } from 'pg';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import {
-  agentIdentitySourceKey,
-  MAX_AGENT_IDENTITY_SOURCE_KEYS,
-  type AgentIdentitySourceKey,
-} from '../history/agent-identity-source.ts';
+import { agentIdentitySourceKey, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
+import { MAX_AGENT_IDENTITY_SOURCE_KEYS } from '../history/agent-identity-source-limits.ts';
 import {
   verifyIdentitySourceConsumerCustody,
   type IdentitySourceConsumerCustody,

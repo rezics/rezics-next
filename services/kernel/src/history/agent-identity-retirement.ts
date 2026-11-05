@@ -31,8 +31,8 @@ import {
   type AgentIdentityReceipt,
   type AgentIdentityWorkSource,
 } from './agent-identity-source.ts';
+import { AGENT_IDENTITY_SDK_FENCE_CONSUMER } from './agent-identity-sdk-fence-consumer.ts';
 import {
-  AGENT_IDENTITY_SDK_FENCE_CONSUMER,
   IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
   readAgentIdentitySDKFence,
   readAgentIdentitySDKReceivingBinding,

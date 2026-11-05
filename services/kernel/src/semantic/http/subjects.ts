@@ -1073,7 +1073,7 @@ function subjectRoutes(
           503: problemSchema('overloaded', 'partition_unavailable', 'deadline_exceeded'),
         },
         detail: {
-          operationId: 'subjectIdentityOperation.get',
+          operationId: 'subject.read_identity_operation',
           'x-exposure': 'gate:subject_identity',
           'x-action': 'subject:merge',
           security: [{ bearerAuth: [] }],

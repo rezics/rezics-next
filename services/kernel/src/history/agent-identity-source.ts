@@ -10,6 +10,7 @@ import type { AccountIdentitySource } from '../access/agent-verification-identit
 import { ACCOUNT_ROLE_BITS } from './contracts.ts';
 import { currentCommand, currentCommandReceipt, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { MAX_AGENT_IDENTITY_SOURCE_KEYS } from './agent-identity-source-limits.ts';
 import { withConnection } from '../database/pool.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import { decodeLocator, encodeLocator, validateScope, type AccountReference } from './locator.ts';
@@ -36,7 +37,7 @@ type Declaration = Readonly<{
 }>;
 const declarations = new WeakMap<CommandTransaction, Declaration>();
 const serializing = new WeakSet<CommandTransaction>();
-export const MAX_AGENT_IDENTITY_SOURCE_KEYS = 8;
+export { MAX_AGENT_IDENTITY_SOURCE_KEYS };
 
 export function agentIdentitySourceKey(key: AgentIdentitySourceKey): string {
   if (

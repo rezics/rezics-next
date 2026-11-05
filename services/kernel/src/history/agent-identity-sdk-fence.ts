@@ -24,16 +24,14 @@ import { partitionOf } from '../route/route.ts';
 import { encodeLocator } from './locator.ts';
 import { historyDeadline, lockHistoryBarrier, type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
-import { unpricedIdentityHistoryWork, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
+import { IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
+import { AGENT_IDENTITY_SDK_FENCE_CONSUMER } from './agent-identity-sdk-fence-consumer.ts';
+import {
+  AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+  AGENT_IDENTITY_HISTORY_GUARD_COST,
+} from './agent-identity-history-costs.ts';
 
-/** Published producer vocabulary. Availability is checked on the genuine runtime client;
- * a source declaration does not prove migration coverage or grant source discharge. */
-export const AGENT_IDENTITY_SDK_FENCE_CONSUMER = Object.freeze({
-  binding: 'access.agent-identity.sdk-retirement/v1',
-  nativeAPI: ['retireWorkflow', 'getWorkflowWriterFence'],
-  nativeReceipt: ['workflowID', 'generation', 'closureID', 'closedAt'],
-  gap: 'identity-source-terminal-transfer-unavailable',
-} as const);
+export { AGENT_IDENTITY_HISTORY_ABSENCE_COST, AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_SDK_FENCE_CONSUMER };
 
 /** Exact receiving request binding. This is metadata, never cleanup permission. */
 export type AgentIdentitySDKReceivingBinding = Readonly<{
@@ -529,21 +527,6 @@ export async function lockAgentIdentityHistoryHandoff(
   history.assertAgentIdentityHistoryUnit(currentCommandResources(tx).pool, currentCommandResources(tx), client);
   return answer;
 }
-
-// Native check: m(1), partition/domain(2), work(1), bounded roles(65), aggregate(1),
-// barrier(1), original Source wrapper/function(17), SDK current lock(4). Each physical role
-// is charged as a visible key. The outer SELECT/write is charged separately.
-export const AGENT_IDENTITY_HISTORY_GUARD_COST = unpricedIdentityHistoryWork(
-  'source-native-history-guard',
-  Object.freeze({
-    rows: 92,
-    points: 87,
-    statements: 11,
-    bytes: 40960,
-    engineRequests: 0,
-  }),
-);
-export const AGENT_IDENTITY_HISTORY_ABSENCE_COST = IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAbsence;
 
 export async function lockRecordedAgentIdentityHistory(
   tx: CommandTransaction,
