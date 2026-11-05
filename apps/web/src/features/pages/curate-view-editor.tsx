@@ -174,12 +174,6 @@ type FreshAdmissionResult = {
   lease?: CurationAdmissionLease;
 };
 
-type AdmissionReadRequest = {
-  reader: string;
-  version: number;
-  source: CurationEditorTransport;
-  work: CurationOpeningRead<CurationRead | undefined>;
-};
 type CurationAdviceLease = {
   reader: string;
   locale: string;
@@ -268,50 +262,26 @@ function ActualPresentationViewEditor({
   const retainedPublication = useRef<RetainedPublication | null>(null);
   const retainedDrafts = useRef(new Map<string, PresentationDraft>());
   const previewFocusHandoff = useRef(new Set<string>());
-  const readRequest = useRef<AdmissionReadRequest | null>(null);
   const openingSource = useRef(transport);
   openingSource.current = transport;
   useLayoutEffect(() => {
-    if (readRequest.current?.source !== transport) readRequest.current?.work.retire();
-  }, [transport]);
+    admission.retireOtherOpening(transport);
+  }, [admission, transport]);
 
   const readCurrent = (expectedReader: string, version: number, invocationTransport: CurationEditorTransport) => {
     if (!admission.canRead(expectedReader, version)) return () => {};
     const owner = { reader: expectedReader, generation: version };
     if (!canDispatchCurationRead(waitRef.current, owner)) return () => {};
 
-    let request = readRequest.current;
-    if (
-      !request ||
-      request.reader !== expectedReader ||
-      request.version !== version ||
-      request.source !== invocationTransport ||
-      request.work.signal.aborted
-    ) {
-      request?.work.retire();
-      const work = startCurationOpeningRead(async (signal) => {
-        if (!canDispatchCurationRead(waitRef.current, owner)) return;
-        return admission.canRead(expectedReader, version)
-          ? readCurationOpening(invocationTransport, expectedReader, signal)
-          : undefined;
-      });
-      const release = admission.ownOpeningRead(expectedReader, version, work.retire);
-      request = { reader: expectedReader, version, source: invocationTransport, work };
-      readRequest.current = request;
-      void work.promise.then(
-        () => {
-          release();
-          if (readRequest.current === request) readRequest.current = null;
-        },
-        () => {
-          release();
-          if (readRequest.current === request) readRequest.current = null;
-        },
-      );
-    }
+    const work = admission.readOpening(expectedReader, version, invocationTransport, async (signal) => {
+      if (!canDispatchCurationRead(waitRef.current, owner)) return;
+      return admission.canRead(expectedReader, version)
+        ? readCurationOpening(invocationTransport, expectedReader, signal)
+        : undefined;
+    });
+    if (!work) return () => {};
 
     let live = true;
-    const work = request.work;
     work.promise.then(
       (result) => {
         if (

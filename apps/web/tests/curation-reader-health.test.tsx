@@ -311,7 +311,10 @@ test('mounted curation retires every stale cache owner and recovers only an expl
       oldReload?.();
     });
     expect(publishes).toHaveLength(2);
-    expect(reads).toHaveLength(1);
+    expect(
+      reads,
+      JSON.stringify(reads.map(({ reader, signal }) => ({ reader, aborted: signal?.aborted }))),
+    ).toHaveLength(1);
     await settle(() => reads.length === 1, 'fresh A admission after batched ABA');
     await act(async () => reads[0]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'retained original after A recovery');
