@@ -27,4 +27,4 @@ Checked source commit/tree: UNKNOWN (no retained source provenance at this bound
 remote-check: returned empty directory differs from its manifest: services/kernel/.temp/schema-diagnostics/schema-3aQitT
 ```
 
-The independent current read must confirm the actual Release/Work identities, example-of-work relation, language, date, platform and medium after later vocabulary reseeds. The same CLI journey must confirm exact reopen and a refreshed platform source while preserving those identities. No native acceptance result or check ID is claimed.
+The independent current read must confirm the actual Release/Work identities, example-of-work relation, language, cited date, platform and medium after later vocabulary reseeds. The same CLI journey must confirm exact reopen and a refreshed platform source while preserving those identities. No native acceptance result or check ID is claimed.
