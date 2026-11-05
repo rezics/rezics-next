@@ -6,12 +6,16 @@ import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { runCommand } from '../../src/command/command.ts';
+import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { factDataTypes, itemFacts } from '../../src/semantic/item.ts';
+import { linkChanges } from '../../src/semantic/link-changes.ts';
+import { holderFacts } from '../../src/semantic/link-keys.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { writeFacts } from '../../src/semantic/subject.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -42,17 +46,9 @@ const real = await createRealAccess(admin, accounts, actions);
 const kernel = createKernel({
   pool,
   access: real.access,
-  writeRate: createWriteRateLimiter({
-    secret: 'semantic-real-access-test-secret',
-    overrides: JSON.stringify({
-      'new-account': { write: { maximum: 100000, seconds: 60 } },
-      member: { write: { maximum: 100000, seconds: 60 } },
-      trusted: { write: { maximum: 100000, seconds: 60 } },
-    }),
-  }),
+  writeRate: real.writeRate,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(113)]]) },
   routeKey: new Uint8Array(32).fill(114),
-  receiptKeys: testReceiptKeys(),
   requestDeadlineMs: 30_000,
 });
 const projection = linkProjection(pool);
@@ -256,7 +252,9 @@ beforeAll(async () => {
   ][]) {
     for (const action of granted) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, persona, action);
   }
-  expect(await bootstrapRelease(pool, release)).toBe(digest);
+  const published = await call('POST', '/v1/definitions/releases', 'editor', { release });
+  expect(published.digest).toBe(digest);
+  await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: null });
   role = (await call('POST', '/v1/subjects', 'editor', { type: 'ex:Role', labels: { en: 'Lead', ja: '主役' } })).subject
     .id;
   partitions.add(partitionOf(routeOf(role)!));
@@ -300,34 +298,45 @@ beforeAll(async () => {
   await real.grant(workResource, 'outsider', 'subject:read');
   await real.grant(workResource, 'steward', 'subject:read');
   await real.grant(workResource, 'steward', 'moderation:hide');
-  for (const [index, target] of people.entries()) {
-    if (index < 4) continue;
-    const proposed = await handle('POST', `/v1/subjects/${work}/candidates`, 'editor', {
-      statement: appearance(target, index + 1),
-    });
-    if (proposed.status !== 201)
-      throw new Error(`POST /v1/subjects/${work}/candidates: ${proposed.status} ${JSON.stringify(proposed.body)}`);
-    expect(proposed.status).toBe(201);
-    const accepted = await handle(
-      'POST',
-      `/v1/subjects/${work}/candidates/${proposed.body.candidate}:accept`,
-      'acceptor',
-      {
-        context: GLOBAL_CONTEXT,
-        expected_head: null,
-      },
+  const remainder = people.slice(4).map((target, index) => appearance(target, index + 5));
+  const facts = itemFacts(
+    work,
+    { labels: { en: 'Journey work', ja: '旅程の作品' }, statements: { 'ex:appearance': remainder } },
+    'ex:Work',
+    release,
+  ).filter((fact) => fact.kind === 'statement');
+  const seededRoute = routeOf(work)!;
+  await runCommand(pool, { partition: partitionOf(seededRoute) }, async (tx, { transactionId }) => {
+    await tx.query(
+      `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
+       VALUES ($1,$2,2,'adopt',$3,$4)`,
+      [seededRoute, work, digest, transactionId],
     );
-    expect(accepted.status).toBe(200);
-    const adopted = await handle('POST', `/v1/subjects/${work}:adopt`, 'acceptor', {
-      context: GLOBAL_CONTEXT,
-      property: 'ex:appearance',
-      target,
-      mode: 'replace',
-      selection: [{ candidate: proposed.body.candidate, rank: 'normal' }],
-      expected_head: null,
+    await writeFacts(tx, {
+      route: seededRoute,
+      subject_id: work,
+      transaction_id: transactionId,
+      facts: facts.map((fact) => ({ ...fact, release: digest })),
     });
-    expect(adopted.status).toBe(200);
-  }
+    const identity = await holderFacts(tx, work, release);
+    const changes = linkChanges([], facts, factDataTypes(release, facts), {
+      subject: work,
+      release,
+      type: 'ex:Work',
+      identityFacts: identity.facts,
+    });
+    return {
+      value: null,
+      events: [
+        { type: SUBJECT_REVISED, subject: work, data: { id: work, revision: 2, kind: 'adopt' } },
+        {
+          type: LINKS_CHANGED,
+          subject: work,
+          data: { subject: work, revision: 2, security_revision: 0, changes },
+        },
+      ],
+    };
+  });
   await drain();
 }, 120_000);
 
