@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import type { SubjectRead } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
@@ -16,6 +17,8 @@ const serverFns: CapturedServerFn[] = [];
 let queryContexts: string[] = [];
 let responseContext = '00000000-0000-4000-8000-000000000906';
 let nativeSubject: SubjectRead;
+let echoContext = false;
+let pendingNative: (() => Promise<SubjectRead>) | undefined;
 const digest = definitions.digest;
 const subjectId = '00000000-0000-4000-8000-000000000901';
 const realmId = '00000000-0000-4000-8000-000000000902';
@@ -26,14 +29,15 @@ const fakeClient = {
   subjects: ({ id }: { id: string }) => ({
     get: async (options?: { query?: { context?: string }; fetch?: RequestInit }) => {
       queryContexts.push(options?.query?.context ?? 'missing-context');
+      const snapshot = pendingNative && options?.query?.context ? await pendingNative() : nativeSubject;
       return {
         status: 200,
         data: {
-          ...nativeSubject,
+          ...snapshot,
           subject: {
-            ...nativeSubject.subject,
+            ...snapshot.subject,
             id,
-            context: responseContext,
+            context: echoContext ? (options?.query?.context ?? responseContext) : responseContext,
             release: digest,
           },
         },
@@ -116,6 +120,11 @@ async function browser() {
     'Text',
     'Document',
     'MutationObserver',
+    'DocumentFragment',
+    'HTMLInputElement',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
     'IS_REACT_ACT_ENVIRONMENT',
   ];
   const previous = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -306,5 +315,114 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     expect(ui.host.textContent).not.toContain('00000000-0000-4000-8000-000000000999');
   } finally {
     await ui.cleanup();
+  }
+});
+
+
+test('installed correction route rereads selected Contexts, retires A/B/A results and returns to fresh public focus', async () => {
+  const ui = await browser();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const [{ createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet },
+    { ScreenProfileOverview }, { Route: installed }, contract, { screenProfileFixture }] = await Promise.all([
+    import('@tanstack/react-router'),
+    import('../src/features/catalogue/screen-profile-reader'),
+    import('../src/routes/subjects/$id_.$slug_.screen'),
+    import('../src/features/catalogue/screen-current-visit'),
+    import('../src/kernel/fake/catalogue-screen-profile'),
+  ]);
+  const fixture = screenProfileFixture('partial', 'en', true);
+  nativeSubject = structuredClone(fixture.facts.date.publicRead);
+  nativeSubject.subject.id = subjectId;
+  nativeSubject.subject.type = 'schema:Movie';
+  nativeSubject.subject.context = contextId;
+  nativeSubject.subject.release = digest;
+  nativeSubject.subject.labels = { en: 'The observatory' };
+  echoContext = true;
+  responseContext = contextId;
+  queryContexts = [];
+  const property = 'schema:datePublished';
+  const statement = nativeSubject.subject.statements[property]![0]!;
+  const occurrence = { holder: subjectId, property, statement: statement.id };
+  const source = `/en/subjects/${subjectId}/the-observatory?realm=${realmId}`;
+  const visit: ScreenCurrentVisit = {
+    version: 1, subject: subjectId, type: 'schema:Movie', context: contextId,
+    realm: realmId, locale: 'en', definition: digest, source, occurrence,
+  };
+  const rootRoute = createRootRoute({ component: Outlet });
+  const publicRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/subjects/$id/$slug',
+    component: () => h(ScreenProfileOverview, {
+      locale: 'en', public: nativeSubject, context: contextId, realm: realmId,
+    }),
+  });
+  const correctionRoute = installed.update({
+    getParentRoute: () => rootRoute, path: '/en/subjects/$id/$slug/screen',
+  } as never);
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([publicRoute, correctionRoute]),
+    history: createMemoryHistory({ initialEntries: [source] }),
+  });
+  const settle = async () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  const go = async (href: string) => {
+    await act(async () => { await router.navigate({ href }); });
+    await settle();
+  };
+  const link = (text: string) => [...ui.host.querySelectorAll('a')].find((a) => a.textContent === text);
+  try {
+    await act(async () => {
+      await router.load();
+      ui.root.render(h(QueryClientProvider, { client }, h(RouterProvider, { router })));
+    });
+    await settle();
+    const inspect = link(ui.m.screen_visit_inspect());
+    expect(inspect).toBeDefined();
+    const entry = new URL(inspect!.getAttribute('href')!, 'https://site.invalid');
+    expect(contract.screenCurrentRouteVisit(entry.search)).toMatchObject({
+      kind: 'current', visit: { context: contextId, realm: realmId },
+    });
+    await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_unsupported());
+    expect(ui.host.querySelector('input, textarea')).toBeNull();
+    expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).not.toBeNull();
+    const global = new URL(link(ui.m.screen_visit_global())!.getAttribute('href')!, 'https://site.invalid');
+    expect(global.searchParams.has('screenVisit')).toBe(false);
+    expect(global.searchParams.has('realm')).toBe(false);
+
+    // Each route admission owns its pending read, even when the address returns to A.
+    let resolveOld!: (read: SubjectRead) => void;
+    pendingNative = () => new Promise((resolve) => { resolveOld = resolve; });
+    const contextB = '00000000-0000-4000-8000-000000000907';
+    await go(contract.screenCurrentVisitHref(entry.pathname, { ...visit, context: contextB })!);
+    expect(ui.host.textContent).toContain(ui.m.candidate_loading());
+    expect(ui.host.querySelector('input, textarea')).toBeNull();
+    pendingNative = undefined;
+    await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_unsupported());
+    const obsolete = structuredClone(nativeSubject);
+    obsolete.subject.labels = { en: 'Obsolete Context B' };
+    await act(async () => { resolveOld(obsolete); });
+    await settle();
+    expect(ui.host.textContent).not.toContain('Obsolete Context B');
+
+    const returnHref = link(ui.m.screen_visit_return())!.getAttribute('href')!;
+    const beforeReturn = queryContexts.length;
+    await go(returnHref);
+    expect(queryContexts.length).toBeGreaterThan(beforeReturn);
+    expect(router.state.location.searchStr).toContain(`realm=${realmId}`);
+    expect(ui.window.document.activeElement?.id).toBe(contract.screenCurrentInspectionId(statement.id));
+
+    // Withheld evidence cannot be reconstructed from a previously valid locator.
+    nativeSubject = structuredClone(nativeSubject);
+    nativeSubject.subject.statements[property] = [];
+    await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_occurrence_missing());
+    expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).toBeNull();
+    expect(ui.host.innerHTML).not.toContain(statement.id);
+  } finally {
+    pendingNative = undefined;
+    echoContext = false;
+    await ui.cleanup();
+    client.clear();
   }
 });
