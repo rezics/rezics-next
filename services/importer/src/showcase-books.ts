@@ -462,7 +462,13 @@ export async function planShowcaseBooks(input: {
   volumes.sort(
     (left, right) =>
       Number(left.family.seriesId) - Number(right.family.seriesId) ||
-      (left.ordinal === undefined ? 1 : right.ordinal === undefined ? -1 : left.ordinal - right.ordinal) ||
+      (left.ordinal === undefined
+        ? right.ordinal === undefined
+          ? 0
+          : 1
+        : right.ordinal === undefined
+          ? -1
+          : left.ordinal - right.ordinal) ||
       asId(left.row.id)! - asId(right.row.id)!,
   );
 

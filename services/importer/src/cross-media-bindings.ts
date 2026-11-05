@@ -201,6 +201,9 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
     draft.property,
     sourceDigest(draft.record),
     ...(draft.relation ? [draft.relation.mappingRevision, sourceDigest(draft.relation.evidence)] : []),
+    // Another member can invalidate this volume's ordinal without changing its own source rows.
+    // Retain a new proposal when that family-wide decision changes, including known to unknown.
+    ...(draft.relation && draft.property === 'wdt:P179' ? [String(draft.relation.order ?? 'unknown')] : []),
     ...(draft.producerParent
       ? [draft.producerParent.mappingRevision, sourceDigest(draft.producerParent.evidence)]
       : []),

@@ -601,6 +601,34 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       sourceEndpoint: '233',
       code: 1,
     });
+    // Only the lower volume row changes; the upper volume must also lose its now-ambiguous position.
+    const changed = await importShowcaseBooks({
+      ...input,
+      port: captureShowcaseCommands(world.rawPort, journal),
+      journal,
+      prior: publication,
+      tables: {
+        async *rows(provider, table, limits) {
+          for await (const row of sourceTables().rows(provider, table, limits))
+            yield table === 'subject-relations' && row.subject_id === 2815 && row.related_subject_id === 10862
+              ? { ...row, order: 1 }
+              : row;
+        },
+      },
+    });
+    for (const key of ['5329', '10862']) {
+      expect(changed.identities[key]?.id).toBe(first.identities[key]?.id);
+      const original = first.workRelations?.find((edge) => edge.draft.holder === key);
+      const refreshed = changed.workRelations?.find((edge) => edge.draft.holder === key);
+      expect(refreshed?.status).toBe('proposed');
+      expect(refreshed?.command?.key).not.toBe(original?.command?.key);
+      const command = refreshed?.command;
+      expect(command?.op).toBe('propose');
+      if (command?.op === 'propose')
+        expect(command.statement.qualifiers?.some((part) => part.property.id === 'schema:position') ?? false).toBe(
+          false,
+        );
+    }
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
