@@ -41,7 +41,7 @@ function GraphBrowserSessionLive({
   const expectedReader = state === 'signed-in' ? work.reader : null;
   const transport = useMemo(
     () => ({
-      read: (query: GraphBrowserQuery) =>
+      read: (query: GraphBrowserQuery, signal: AbortSignal) =>
         readSubjectGraphBrowser({
           data: {
             id,
@@ -50,6 +50,7 @@ function GraphBrowserSessionLive({
             ...query,
           },
           headers: csrfHeaders(),
+          signal,
         }),
     }),
     [id, locale, expectedReader],

@@ -9,6 +9,7 @@ import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import { ViewHeading } from '../view-heading';
 import {
   GRAPH_LIMIT,
+  type GraphBrowserTransport,
   type GraphEdge,
   type GraphBrowserRouteState,
   type GraphNode,
@@ -22,20 +23,7 @@ const actionClass =
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-export type GraphBrowserTransport = {
-  read: (query: {
-    property?: string | readonly string[] | undefined;
-    direction?: string | undefined;
-    depth?: number | undefined;
-    node?: string | undefined;
-    edge?: string | undefined;
-    from?: string | undefined;
-    to?: string | undefined;
-    edgeProperty?: string | undefined;
-    expansion?: GraphTruncation | undefined;
-    session?: string | undefined;
-  }) => Promise<GraphRead>;
-};
+export type { GraphBrowserTransport } from './index';
 
 function option(locale: string) {
   return { locale: locale as never };
@@ -445,6 +433,7 @@ export function GraphBrowserPage({
   );
   const propsRouteKey = routeKey(route);
   const sequenceRef = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<{ source: GraphSource; token?: string | undefined }>({
     source,
     token: initial?.ok ? initial.session : undefined,
@@ -481,6 +470,9 @@ export function GraphBrowserPage({
       baseRouteKey(previous.route) === baseRouteKey(record.route)
         ? previous.read
         : undefined;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     const requestId = ++sequenceRef.current;
     const pending: GraphPageState = {
       source: record.source,
@@ -498,8 +490,8 @@ export function GraphBrowserPage({
     publish(pending);
     void (async () => {
       try {
-        const result = await record.source.transport.read(record.query);
-        if (sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
+        const result = await record.source.transport.read(record.query, controller.signal);
+        if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
         if (!result.ok) {
           if (result.clearPrivate || result.reason === 'denied') sessionRef.current = { source: record.source };
           publish({
@@ -532,7 +524,7 @@ export function GraphBrowserPage({
           localOnly: false,
         });
       } catch {
-        if (sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
+        if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
         publish({
           ...pending,
           status: 'failure',
@@ -555,8 +547,10 @@ export function GraphBrowserPage({
   useEffect(
     () => () => {
       sequenceRef.current += 1;
+      requestRef.current?.abort();
+      focusIntentRef.current = null;
     },
-    [],
+    [source],
   );
 
   const stateMatchesRoute =

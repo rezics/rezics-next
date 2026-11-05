@@ -163,8 +163,11 @@ function typeDescriptor(value: unknown): value is GuideTypeDescriptor {
 export async function fetchGuideActiveDigest(
   client: KernelClient,
   headers: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<string> {
-  const active = await client.definitions.active.get({ headers });
+  signal?.throwIfAborted();
+  const active = await client.definitions.active.get({ headers, fetch: { signal } });
+  signal?.throwIfAborted();
   requireSuccess(active.status);
   const selected = active.data?.digest;
   if (!isGuideDigest(selected)) throw new DefinitionReadError('invalid');
@@ -176,10 +179,14 @@ export async function fetchGuideRelease(
   client: KernelClient,
   digest?: string,
   headers: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<GuideRelease> {
+  signal?.throwIfAborted();
   if (digest !== undefined && !isGuideDigest(digest)) throw new DefinitionReadError('invalid');
-  const selected = digest ?? (await fetchGuideActiveDigest(client, headers));
-  const response = await client.definitions.releases({ digest: selected }).get({ headers });
+  const selected = digest ?? (await fetchGuideActiveDigest(client, headers, signal));
+  signal?.throwIfAborted();
+  const response = await client.definitions.releases({ digest: selected }).get({ headers, fetch: { signal } });
+  signal?.throwIfAborted();
   requireSuccess(response.status);
   if (response.data?.digest !== selected || !releasedMetadata(response.data.release))
     throw new DefinitionReadError('invalid');
