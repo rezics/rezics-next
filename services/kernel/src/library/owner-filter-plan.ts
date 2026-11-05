@@ -136,7 +136,14 @@ async function prepareSparsePage(
   const result = await createMembersPreparation({ pool: deps.pool, access: deps.access, workClient }).reserve(
     binding.input.actor,
     binding.input.collectionId,
-    [{ filter: admission.filter, sort: 'id', release: { digest: admission.releaseDigest, value: admission.release } }],
+    [
+      {
+        filter: admission.filter,
+        sort: 'id',
+        source: { kind: admission.source },
+        release: { digest: admission.releaseDigest, value: admission.release },
+      },
+    ],
     { deadline: binding.input.deadline },
   );
   if (result.episodes.length !== 1 || result.episodes[0]!.state !== 'preparing') throw unavailable();

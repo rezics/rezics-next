@@ -404,6 +404,7 @@ and accepted release; Library-origin saves retain Commerce's native private OWNE
 separately from the predicate tree and must survive direct reads, retained preparation, replay and catalogue refresh.
 Decision: saved catalogue Members reuse Search's installed complete public consumer and retained preparation,
 with the accepted release and saved identity bound to continuation; Commerce's private OWNER capture is never its population.
+Decision: the saved rule's Source selector reaches the Library Source header, working observation and preparation key. Owner keys keep their retained six-part basis; a catalogue key adds one element. A catalogue save has no Library working population, so its Source authority is `unavailable_output`, never the owner capture.
 Decision: Web reads ordinary saved identities through the existing Dynamic Collection reader and members GET;
 owner-only rule edit stays off the public page, and 202/empty 200/503/stale-cursor recovery follow
 [saved-query results](../apps/web/src/library/saved-query-results.md).

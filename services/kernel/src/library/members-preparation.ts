@@ -72,6 +72,8 @@ export type PreparationDefinition = Readonly<{
   filter: FilterDocument;
   sort: 'id' | 'ordinal';
   release: Readonly<{ digest: string; value: FilterRelease }>;
+  /** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
+  source: Readonly<{ kind: 'owner' | 'catalogue' }>;
 }>;
 export type PreparationDefinitionBasis = Readonly<{
   definition: PreparationDefinition;
@@ -98,6 +100,7 @@ export function preparationDefinitionBases(
         definition: {
           filter: prepared.filter,
           sort: prepared.sort,
+          source: prepared.source,
           release: { digest: prepared.releaseDigest, value: prepared.release },
         },
         canonicalBasis,
@@ -178,6 +181,7 @@ type Basis = Readonly<{
   digest: Buffer;
   filter: FilterDocument;
   sort: PreparationDefinition['sort'];
+  source: PreparationDefinition['source'];
   releaseDigest: string;
   release: FilterRelease;
 }>;
@@ -214,18 +218,26 @@ function prepareBasis(ownerAccountId: string, collectionId: string, input: Prepa
       typeof input.release.digest !== 'string' ||
       !/^sha256:[0-9a-f]{64}$/.test(input.release.digest) ||
       !input.release.value ||
+      !input.source ||
+      (input.source.kind !== 'owner' && input.source.kind !== 'catalogue') ||
       releaseDigest(input.release.value as Release) !== input.release.digest
     )
       throw unsupported();
     const release = structuredClone(input.release.value) as FilterRelease;
     const filter = admitFilter(parseFilter(input.filter), release, { owner: true });
-    const basis = canonicalize([BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest]);
+    // Owner keys keep the six-part basis; a catalogue source adds one element.
+    const basis = canonicalize(
+      input.source.kind === 'catalogue'
+        ? [BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest, 'catalogue']
+        : [BASIS_VERSION, ownerAccountId, collectionId, filter, input.sort, input.release.digest],
+    );
     if (!basis || Buffer.byteLength(basis) > 196_608) throw unsupported();
     return Object.freeze({
       basis,
       digest: createHash('sha256').update(basis).digest(),
       filter,
       sort: input.sort,
+      source: { kind: input.source.kind },
       releaseDigest: input.release.digest,
       release,
     });
@@ -257,7 +269,7 @@ export async function restorePreparationDefinition(
     parts = JSON.parse(canonicalBasis);
     if (
       !Array.isArray(parts) ||
-      parts.length !== 6 ||
+      (parts.length !== 6 && (parts.length !== 7 || parts[6] !== 'catalogue')) ||
       parts[0] !== BASIS_VERSION ||
       parts[1] !== ownerAccountId ||
       parts[2] !== collectionId ||
@@ -270,7 +282,7 @@ export async function restorePreparationDefinition(
   } catch {
     throw unsupported();
   }
-  const tuple = parts as [number, string, string, FilterDocument, PreparationDefinition['sort'], string];
+  const tuple = parts as [number, string, string, FilterDocument, PreparationDefinition['sort'], string, ...string[]];
   const release = await loadRelease(tuple[5]);
   if (!release) throw new ProblemError('dependency_unavailable');
   // Reapply shared admission and recompute the whole key. This also checks the actual release bytes
@@ -278,12 +290,14 @@ export async function restorePreparationDefinition(
   const basis = prepareBasis(ownerAccountId, collectionId, {
     filter: tuple[3],
     sort: tuple[4],
+    source: { kind: tuple.length === 7 ? 'catalogue' : 'owner' },
     release: { digest: tuple[5], value: release },
   });
   if (basis.basis !== canonicalBasis) throw unsupported();
   return {
     filter: basis.filter,
     sort: basis.sort,
+    source: basis.source,
     release: { digest: basis.releaseDigest, value: basis.release },
   };
 }
@@ -399,7 +413,7 @@ export function createMembersPreparation(config: {
         return key;
       });
 
-      const deadline = options.deadline ?? options.history?.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
       if (options.runtime && !options.history) {
         options = {
           ...options,
@@ -834,12 +848,12 @@ export function createMembersPreparation(config: {
         current.scope.captureId.length === 0 ||
         current.scope.committedRevision < 0n ||
         !identity ||
+        identity.scope !== 'curated' ||
         identity.route !== locator.route ||
         identity.collectionId !== locator.collectionId ||
         identity.accountId !== locator.ownerAccountId ||
         identity.incarnation !== state.incarnation ||
         identity.generation !== state.generation ||
-        identity.scope !== 'curated' ||
         identity.ownerEpoch !== current.source.stamp.epoch ||
         !identity.receivingEpoch ||
         !identity.effectKey
@@ -1064,7 +1078,7 @@ async function bindPreparationRead(
   const admission = await admitSavedCollectionMemberQuery(
     deps,
     input.actor,
-    { filter, sort: 'id', source: { kind: 'owner' }, releaseDigest: input.definition.release.digest },
+    { filter, sort: 'id', source: input.definition.source, releaseDigest: input.definition.release.digest },
     {},
     input.deadline,
   );
