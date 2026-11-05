@@ -1,15 +1,19 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import recorded from '../src/kernel/recorded/subject-page.json';
 import missing from '../src/kernel/recorded/missing-subject-page.json';
-import { loadSubjectPage, SubjectPage, subjectBody, type SubjectPageData } from '../src/features/pages/subject';
-import { subjectHead } from '../src/features/pages/subject-head';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Stmt } from '../src/features/pages/shared';
 import type { Related } from '../src/subject/types';
 import { subjectHref } from '../src/subject/subject-href';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadSubjectPage, SubjectPage, subjectBody } = await import('../src/features/pages/subject');
+const { subjectHead } = await import('../src/features/pages/subject-head');
+const { QUESTION } = await import('../src/features/pages/subject-ratings');
 
 const origin = 'https://public.example.test';
 const id = recorded.subject;
@@ -184,6 +188,15 @@ test('identity, rank, native ratings and related failures retain the public disc
     locale: 'en',
     path: '/subjects/current',
     ratings: {
+      figure: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: { min: 0, max: 40, displayStep: 4 },
+        state: 'ready',
+        count: 4,
+        mean: null,
+        score: null,
+      },
       figures: [
         { population: GLOBAL, count: 4, remaining: 1 },
         { population: 'private', count: 60, mean: 18 },

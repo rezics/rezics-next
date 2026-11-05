@@ -1,3 +1,5 @@
+export { timePresentation } from './time-presentation';
+
 /** What the reader chose about spoilers and withheld covers; the page applies it, the kernel only stores it. */
 export type Reader = { spoilerLevel: 0 | 1 | 2; suitability: 'blur' | 'show' };
 
