@@ -12,7 +12,7 @@ export type SelectedSynopsisInput = {
   pageRelease?: string;
 };
 export type SelectedSynopsisResult =
-  | { kind: 'matched'; fact: Statement; context: string; release: string }
+  | { kind: 'matched'; fact: Omit<Statement, 'rezics'>; context: string; release: string }
   | { kind: 'changed' | 'missing' | 'unsupported' | 'unavailable' };
 
 /** HTTP transport only. The original comparison operands never enter the result. */
@@ -21,6 +21,9 @@ export function parseSelectedSynopsis(value: string): SelectedSynopsisInput | un
   let input: unknown;
   try { input = JSON.parse(value); } catch { return; }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return;
+  const tokens = value.match(/"(?:\\.|[^"\\])*"|[{}:,]/g) ?? [];
+  const names = tokens.flatMap((token, index) => tokens[index + 1] === ':' ? [JSON.parse(token) as string] : []);
+  if (new Set(names).size !== names.length) return;
   const row = input as Record<string, unknown>;
   const keys = ['statement', 'document', 'digest', 'language', 'context', 'release', 'realm', 'pageRelease'];
   if (Object.keys(row).some((key) => !keys.includes(key))) return;
@@ -45,10 +48,11 @@ export function selectedSynopsisFact(subject: Item, input: SelectedSynopsisInput
 }
 
 /** Redact every locator, including locator-valued qualifier and reference parts. */
-export function redactSynopsisFact(fact: Statement): Statement {
+export function redactSynopsisFact(fact: Statement): Omit<Statement, 'rezics'> {
   const redact = <T extends Snak>(snak: T): T =>
     snak.property.data_type === 'document' || snak.property.data_type === 'media'
       ? { ...snak, value: { type: 'somevalue' } } : snak;
-  return { ...redact(fact), qualifiers: fact.qualifiers.map(redact),
+  const { rezics: _revision, ...redacted } = redact(fact);
+  return { ...redacted, qualifiers: fact.qualifiers.map(redact),
     references: fact.references.map((reference) => ({ ...reference, parts: reference.parts.map(redact) })) };
 }
