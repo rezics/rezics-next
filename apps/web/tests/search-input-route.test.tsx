@@ -195,8 +195,9 @@ test('the mounted Search route retains multiple errors and a protected filter th
       { statement: { property: 'schema:genre', in: ['fantasy'] } },
     ],
   });
-  const cursorRestart = host.querySelector('[data-search-input-key="cursor"] button')!;
-  expect(document.activeElement).toBe(cursorRestart);
+  const firstRemainingInput = host.querySelector('[data-search-input-first] textarea');
+  expect(document.activeElement).toBe(firstRemainingInput);
+  expect(router.state.location.search.cursor).toBeUndefined();
 
   router.history.back();
   await act(async () => {
@@ -205,11 +206,12 @@ test('the mounted Search route retains multiple errors and a protected filter th
   });
   const returnedLanguage = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"] textarea')!;
   expect(returnedLanguage.value).toBe('bad_tag');
+  expect(document.activeElement).not.toBe(returnedLanguage);
   expect(reads).toHaveLength(0);
 
+  await removeIssue('cursor');
   const languageAgain = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"]')!;
   await replaceValue(languageAgain, 'zh-CN');
-  await removeIssue('cursor');
   const orderIssue = host.querySelector('[data-search-input-key="sort"]')!;
   await replaceValue(orderIssue, 'rating');
   const conditionIssue = host.querySelector('[data-search-input-key="condition"]')!;
