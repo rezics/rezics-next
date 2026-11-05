@@ -16,7 +16,7 @@ The public subpaths are defined in [package.json](package.json).
 | @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                         |
 | @rezics/conversion/open-library         | Open Library converter, revision and result                                                   |
 | @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                               |
-| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection |
+| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                    |
 
 Current exports: Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Registration imports revisions; source records cannot choose them. Selected Bangumi entities compose cross-media-entities@15+bangumi@15.
 
