@@ -21,7 +21,12 @@ import {
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
 import { CollectionSourceLedger, NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkAllowance } from './collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import {
+  COLLECTION_KIND_PREPARATION_OBSERVATION,
+  COLLECTION_KIND_PREPARATION_TERMS,
+  collectionKindInputWorkDimensions,
+} from './collection-kind-input-bounds.ts';
 import type {
   CollectionKindCapture,
   CollectionKindPreparation,
@@ -36,7 +41,12 @@ import { collectionKindConsentAdoptionCurrent } from './collection-kind-consent.
 const anonymous: Actor = Object.freeze({ kind: 'anonymous' });
 const publicAudience = 'anonymous';
 const unavailable = () => ({ status: 'unavailable', reason: 'source_unready' }) as const;
-/** These native metadata/Access dimensions are separate from the raw100/4096-byte vote page. */
+const preparation = COLLECTION_KIND_PREPARATION_TERMS;
+const scopeBound = collectionKindInputWorkDimensions(preparation.scope);
+const observationBound = collectionKindInputWorkDimensions(preparation.observation);
+const retiredBound = collectionKindInputWorkDimensions(preparation.retired);
+const clockBound = collectionKindInputWorkDimensions(preparation.clock);
+/** Access-heavy metadata reads keep their producer charging; adopt/retire use the shared observation plan. */
 function allowance(): WorkAllowance {
   return {
     reservationId: crypto.randomUUID(),
@@ -51,6 +61,23 @@ function allowance(): WorkAllowance {
       witnessKeys: 0,
     },
   };
+}
+function observationAllowance(deadline: number): CollectionSourceLedger {
+  return new CollectionSourceLedger(
+    {
+      reservationId: crypto.randomUUID(),
+      remaining: collectionKindInputWorkDimensions(COLLECTION_KIND_PREPARATION_OBSERVATION),
+    },
+    deadline,
+  );
+}
+/** Current Summary does not retain complete original-plus-terminal Type/privacy/negative/writer-before-visibility. */
+export async function readCollectionKindPreparationType(request: {
+  allowance: WorkAllowance;
+  deadline: number;
+}): Promise<{ status: 'unavailable'; work: WorkReceipt }> {
+  const work = new NativeCollectionWork(request.allowance, request.deadline);
+  return { status: 'unavailable', work: work.receipt() };
 }
 function audience(actor: Actor): string {
   if (actor.kind === 'anonymous') return publicAudience;
@@ -136,7 +163,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
     );
     const metadata = read.metadata;
     if (!metadata || metadata.state !== 'active') return null;
-    const at = await work.bounded({ statements: 1, nativeRows: 1, nativePoints: 1, bytes: 256 }, () =>
+    const at = await work.bounded(clockBound, () =>
       withConnection(deps.pool, (client) => mintReadTime(deadlineClient(client, deadline), deps.clock)),
     );
     const authorized = await work.run((allowance) =>
@@ -147,7 +174,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
 
   /** Exact current native Source, including population/excluded/order dependencies; no capture is minted here. */
   async function retained(metadata: NativeCollectionMetadata, work: CollectionSourceLedger, deadline: number) {
-    const rows = await work.bounded({ statements: 1, nativeRows: 16, nativePoints: 3, bytes: 12_288 }, () =>
+    const rows = await work.bounded(scopeBound, () =>
       withConnection(deps.pool, (client) =>
         scopeQuery.run(deadlineClient(client, deadline), {
           route: metadata.route,
@@ -248,7 +275,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           }),
         );
         if (completed.status !== 'complete') return unavailable();
-        const previous = await read.work.bounded({ statements: 1, nativeRows: 1, nativePoints: 1, bytes: 8192 }, () =>
+        const previous = await read.work.bounded(observationBound, () =>
           withConnection(deps.pool, (client) =>
             readObservation.run(deadlineClient(client, input.deadline), {
               route: read.metadata.route,
@@ -321,14 +348,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
             deadline: input.deadline,
             source: prepared.source,
             allowance: read.work.allowance(),
-            readType: async (request) => {
-              const work = new NativeCollectionWork(request.allowance, request.deadline);
-              // The existing Summary reader does not retain original+terminal Type, privacy, negative,
-              // and writer-before-visibility dependencies for this Kind episode. Refuse before any
-              // subject read; exposing a point-in-time Type here would turn an unclosed dependency into
-              // a false match and could not establish a complete prefix.
-              return { status: 'unavailable' as const, work: work.receipt() };
-            },
+            readType: async (request) => readCollectionKindPreparationType(request),
           },
         };
       });
@@ -361,8 +381,8 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
             return { status: 'stale' as const };
         }
         // SAME home only. No Source/Access/identity callback or foreign checkout while Core is held.
-        const work = new CollectionSourceLedger(allowance(), Math.min(input.deadline, resources.deadline));
-        const row = await work.bounded({ statements: 1, nativeRows: 16, nativePoints: 3, bytes: 12_288 }, () =>
+        const work = observationAllowance(Math.min(input.deadline, resources.deadline));
+        const row = await work.bounded(scopeBound, () =>
           scopeQuery.run(input.tx, {
             route: routeOf(input.capture.collectionId)!,
             collection_id: input.capture.collectionId,
@@ -421,7 +441,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           },
           async (tx) => {
             const work = new CollectionSourceLedger(allowance(), input.deadline);
-            const retired = await work.bounded({ statements: 1, nativeRows: 1, nativePoints: 1, bytes: 256 }, () =>
+            const retired = await work.bounded(retiredBound, () =>
               retiredCapture.run(tx, {
                 route,
                 collection_id: input.collectionId,
@@ -430,7 +450,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
               }),
             );
             if (!retired) return unavailable();
-            const row = await work.bounded({ statements: 1, nativeRows: 16, nativePoints: 3, bytes: 12_288 }, () =>
+            const row = await work.bounded(scopeBound, () =>
               scopeQuery.run(tx, { route, collection_id: input.collectionId, source_fence: key.fence }),
             );
             if (!row || row.nativeCaptureId !== key.captureId) return unavailable();

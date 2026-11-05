@@ -20,6 +20,7 @@ import {
   type WorkReceipt,
 } from './collection-source.ts';
 import { createCollectionKindPreparation } from './collection-kind-preparation.ts';
+export { COLLECTION_KIND_INPUT_DECLARATION } from './collection-kind-input-bounds.ts';
 import type { KindAudienceAccess } from '../access/kind-audience.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { KindConsentConsumer, KindConsentReference } from '@rezics/auth-contract';

@@ -7,11 +7,17 @@ import { ProblemError } from '../http/problem.ts';
 import { nativeSourceFence, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadata, readNativeCollectionRawPage } from './collection-source-native.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkDimensions } from './collection-source.ts';
 import type { NativeSourceIdentity, NativeSourceCustody } from './native-source-custody.ts';
 import {
+  COLLECTION_KIND_INPUT_BYTE_LIMIT,
+  COLLECTION_KIND_INPUT_QUANTUM,
+  COLLECTION_KIND_INPUT_TERMS,
+  collectionKindInputAdmitted,
+  collectionKindInputWorkDimensions,
+  invokeCollectionKindInput,
+} from './collection-kind-input-bounds.ts';
+import {
   admitCollectionKindPreparationStep,
-  collectionKindInputAdmissionWork,
   currentCollectionKindInputAdmission,
   type CollectionKindPreparationLocator,
 } from './collection-kind-work-admission.ts';
@@ -20,11 +26,14 @@ import readInput from './collection-kind-input-read.sql';
 import insertInput from './collection-kind-input-insert.sql';
 import retireInput from './collection-kind-input-retire.sql';
 
-export const COLLECTION_KIND_INPUT_RAW_LIMIT = 100;
-export const COLLECTION_KIND_INPUT_BYTE_LIMIT = 4096;
-// One raw original leaves room for the COMPLETE original/source/progress envelope.
-// An exact-limit page is not EOF; the next charged seek establishes that boundary.
-const quantum = 1;
+export {
+  COLLECTION_KIND_INPUT_BYTE_LIMIT,
+  COLLECTION_KIND_INPUT_DECLARATION,
+  COLLECTION_KIND_INPUT_QUANTUM,
+  COLLECTION_KIND_INPUT_RAW_LIMIT,
+  collectionKindInputWork,
+} from './collection-kind-input-bounds.ts';
+const quantum = COLLECTION_KIND_INPUT_QUANTUM;
 type Progress = Readonly<{ driver: CanonicalRawKey['driver'] | 'done'; after: CanonicalRawKey | null }>;
 export type CollectionKindRawInputBody = Readonly<{
   format: 1;
@@ -51,77 +60,7 @@ export type CollectionKindInputBinding = Readonly<{
 }>;
 type State = NonNullable<(typeof readState)['~reylo']['element']>;
 type Row = (typeof readInput)['~reylo']['element'];
-const zero: WorkDimensions = Object.freeze({
-  candidateKeys: 0,
-  nativeRows: 0,
-  nativePoints: 0,
-  identityMetadataRows: 0,
-  witnessKeys: 0,
-  emptySeeks: 0,
-  statements: 0,
-  bytes: 0,
-});
-function plan(sql: string, keys: number, rows: number, points: number, projection: number): WorkDimensions {
-  // All private scalar parameters together fit 4096; the sole text body adds 4096
-  // UTF8 bytes and at most six-fold JSON escaping. No unbounded projection is read.
-  return Object.freeze({
-    ...zero,
-    candidateKeys: keys,
-    nativeRows: rows,
-    nativePoints: points,
-    emptySeeks: 1,
-    statements: 1,
-    bytes: Buffer.byteLength(sql) + 4096 + 6 * 4096 + projection,
-  });
-}
-const statePlan = plan(readState.sql, 3, 3, 3, 6 * 4096);
-const readPlan = plan(readInput.sql, 2, 2, 1, 2 * (6 * 4096 + 512));
-// The deferred commit fence adds four exact control/owner joins and two index probes.
-const insertPlan: WorkDimensions = Object.freeze({
-  ...plan(insertInput.sql, 9, 12, 9, 128),
-  // INSERT and its deferred SELECT fence, including both possible empty probes.
-  statements: 2,
-  emptySeeks: 2,
-  // The fixed commit function's SQL/control text is below 4096 UTF8 bytes.
-  bytes: plan(insertInput.sql, 9, 12, 9, 128).bytes + 4096,
-});
-const retirePlan = plan(retireInput.sql, 1, 3, 2, 0);
-// Two Source observations: header/partition-size/partition/fact-fence, followed
-// by the native raw limit-1 range (8*1+8 rows). The byte ceiling also funds the
-// producer's size point: a larger partition projection refuses BEFORE that read.
-const sourcePlan: WorkDimensions = Object.freeze({
-  ...zero,
-  candidateKeys: quantum,
-  nativeRows: 48,
-  nativePoints: 9,
-  emptySeeks: 9,
-  statements: 9,
-  bytes: 64 * 1024,
-});
-export function collectionKindInputWork(): WorkDimensions {
-  const result = { ...zero };
-  // Read twice even on a collision; retire at most the one locked predecessor.
-  for (const p of [
-    collectionKindInputAdmissionWork(),
-    statePlan,
-    readPlan,
-    sourcePlan,
-    insertPlan,
-    readPlan,
-    retirePlan,
-  ])
-    for (const axis of Object.keys(result) as (keyof WorkDimensions)[]) result[axis] += p[axis];
-  return Object.freeze(result);
-}
-async function query<T>(work: NativeCollectionWork, bound: WorkDimensions, run: () => Promise<T>): Promise<T> {
-  const reservation = work.reserve(bound);
-  reservation.dispatch();
-  try {
-    return await reservation.query(run);
-  } finally {
-    reservation.settle();
-  }
-}
+const terms = COLLECTION_KIND_INPUT_TERMS;
 function immutable<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     for (const child of Object.values(value)) immutable(child);
@@ -200,9 +139,7 @@ export async function resolveCollectionKindRawInput(
 ): Promise<CollectionKindInputResult> {
   if (!(work instanceof NativeCollectionWork)) throw new ProblemError('semantic_not_ready');
   work.assertReady();
-  const declaration = collectionKindInputWork();
-  for (const axis of Object.keys(declaration) as (keyof WorkDimensions)[])
-    if (work.available(axis) < declaration[axis]) throw new ProblemError('semantic_not_ready');
+  if (!collectionKindInputAdmitted(work)) throw new ProblemError('semantic_not_ready');
   if (!(await admitCollectionKindPreparationStep(tx, locator, work)))
     return { status: 'unavailable', reason: 'Collection Kind exact enrolled Source episode is not current' };
   const held = currentCollectionKindInputAdmission(tx, locator, work);
@@ -216,7 +153,7 @@ export async function resolveCollectionKindRawInput(
     )
       throw new ProblemError('semantic_not_ready');
   }
-  const state = await query(work, statePlan, () =>
+  const state = await invokeCollectionKindInput(work, terms.state, () =>
     readState.run(tx, {
       route: locator.route,
       origin_id: originId,
@@ -228,7 +165,7 @@ export async function resolveCollectionKindRawInput(
   current();
   if (!state) return { status: 'unavailable', reason: 'Collection Kind original, consent or preparation changed' };
   const key = { route: locator.route, origin_id: originId, preparation_id: locator.preparationId };
-  const rows = await query(work, readPlan, () => readInput.run(tx, key));
+  const rows = await invokeCollectionKindInput(work, terms.read, () => readInput.run(tx, key));
   current();
   if (rows.length > 1) throw new ProblemError('dependency_unavailable');
   const previous = rows[0];
@@ -238,15 +175,7 @@ export async function resolveCollectionKindRawInput(
   // Structural reads only: actual Source producer owns all population decisions.
   const read = await work.compose(
     (allowance) => readNativeCollectionMetadata(held.pool, locator, { tx, allowance, deadline: held.deadline }),
-    {
-      ...sourcePlan,
-      candidateKeys: 0,
-      nativeRows: 16,
-      nativePoints: 4,
-      emptySeeks: 4,
-      statements: 4,
-      bytes: 32 * 1024,
-    },
+    collectionKindInputWorkDimensions(terms.sourceMetadata),
   );
   current();
   const metadata = read.metadata;
@@ -296,7 +225,7 @@ export async function resolveCollectionKindRawInput(
         after: before.after,
         limit: quantum,
       }),
-    { ...sourcePlan, nativeRows: 32, nativePoints: 5, emptySeeks: 5, statements: 5, bytes: 32 * 1024 },
+    collectionKindInputWorkDimensions(terms.sourcePage),
   );
   current();
   const index = sequence.indexOf(driver);
@@ -332,7 +261,7 @@ export async function resolveCollectionKindRawInput(
   const inputId = digest(encoded);
   if (encodedBytes(inputId, body) > COLLECTION_KIND_INPUT_BYTE_LIMIT)
     return { status: 'unavailable', reason: 'Collection Kind complete raw input/progress envelope exceeds 4096 bytes' };
-  await query(work, insertPlan, () =>
+  await invokeCollectionKindInput(work, terms.insert, () =>
     insertInput.run(tx, {
       ...key,
       version: state.version,
@@ -342,7 +271,7 @@ export async function resolveCollectionKindRawInput(
     }),
   );
   current();
-  const adopted = await query(work, readPlan, () => readInput.run(tx, key));
+  const adopted = await invokeCollectionKindInput(work, terms.read, () => readInput.run(tx, key));
   current();
   const exact = adopted.find((row) => row.version === state.version);
   if (
@@ -353,7 +282,7 @@ export async function resolveCollectionKindRawInput(
   )
     throw new ProblemError('dependency_unavailable');
   if (previous)
-    await query(work, retirePlan, () =>
+    await invokeCollectionKindInput(work, terms.retire, () =>
       retireInput.run(tx, { route: locator.route, origin_id: originId, input_id: previous.inputId }),
     );
   current();
