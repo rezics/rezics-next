@@ -68,7 +68,7 @@ test('generated Web label methods reopen actual admitted rows, preserve source d
   );
   const occurrence = await sessions.startSession(
     f.owner.actor,
-    { subjectId, mode: 'scalar_amount', unit: 'page' },
+    { subjectId, mode: 'scalar_amount', unit: 'minute' },
     crypto.randomUUID(),
   );
   await sessions.recordProgress(f.owner.actor, occurrence.value.id, { revision: 1, amount: '3' }, crypto.randomUUID());
