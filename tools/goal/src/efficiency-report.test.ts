@@ -118,22 +118,26 @@ test('guard endings use the record timestamp and an indexed bucket despite growi
   try {
     task(h.db, 'guarded', 'stopped', 'fixture');
     const record = h.db.query('INSERT INTO worker_records(task_id,attempt,body) VALUES (?,?,?)');
-    h.db.query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,?,?)').run(
-      'guarded',
-      1,
-      JSON.stringify({ taskId: 'guarded', attempt: 1, endedAt: end }),
-    );
+    h.db
+      .query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,?,?)')
+      .run('guarded', 1, JSON.stringify({ taskId: 'guarded', attempt: 1, endedAt: end }));
     record.run(
       'guarded',
       1,
       JSON.stringify({ taskId: 'guarded', attempt: 1, endedAt: '2026-10-31T01:30:00.000Z', guardIds: ['environment'] }),
     );
     record.run('guarded', 1002, 'not json');
-    h.db.exec("DROP INDEX worker_records_ended_at; DELETE FROM schema_migrations WHERE module='worker' AND version=12;");
+    h.db.exec(
+      "DROP INDEX worker_records_ended_at; DELETE FROM schema_migrations WHERE module='worker' AND version=12;",
+    );
     new WorkerStore(h.db);
     const before = await renderHourlyEfficiencyReport(h.db, { bucket });
     for (let attempt = 2; attempt < 1002; attempt++)
-      record.run('guarded', attempt, JSON.stringify({ endedAt: '2020-01-01T00:00:00.000Z', guardIds: ['new-failure'] }));
+      record.run(
+        'guarded',
+        attempt,
+        JSON.stringify({ endedAt: '2020-01-01T00:00:00.000Z', guardIds: ['new-failure'] }),
+      );
     record.run('guarded', 1003, JSON.stringify({ endedAt: 'invalid', guardIds: ['question'] }));
     record.run('guarded', 1004, JSON.stringify({ endedAt: '2026-10-31T01:45:00.000Z' }));
     const after = await renderHourlyEfficiencyReport(h.db, { bucket });
