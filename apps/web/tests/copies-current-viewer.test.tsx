@@ -453,7 +453,7 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
       return inventory(search, search.cursor === 'c1' ? 2 : search.cursor === 'c2' ? 3 : 1,
         routeReads.length > 1 ? 'Fresh return' : undefined);
     },
-    shouldReload: () => false,
+    shouldReload: ({ cause }) => cause === 'enter',
     component: () => {
       const routeState = useRouterState({
         select: (state) => ({
@@ -617,11 +617,10 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     await act(async () => router.navigate({ to: '/subject', search: { via } }));
     await tick();
     await clickLink('Return to inventory');
-    expect(listReads.at(-1)?.data).toMatchObject({ subjectId: id(10), cursor: 'c1' });
-    await accept(6, { subjectId: id(10), cursor: 'c1' }, 'Fresh return');
+    expect(routeReads.at(-1)).toMatchObject({ subjectId: id(10), cursor: 'c1' });
     expect(host.textContent).toContain('Fresh return');
-    expect(routeReads).toHaveLength(1);
-    expect(listReads.map((call) => call.data.cursor)).toEqual(['c1', 'c2', 'c2', 'c1', undefined, 'c1', 'c1']);
+    expect(routeReads).toHaveLength(2);
+    expect(listReads.map((call) => call.data.cursor)).toEqual(['c1', 'c2', 'c2', 'c1', undefined, 'c1']);
 
     await clickLink(m.library_copy_more());
     expect(listReads.at(-1)?.data.cursor).toBe('c2');

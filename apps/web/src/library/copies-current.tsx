@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { CancelledError, useQuery } from '@tanstack/react-query';
+import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
@@ -128,13 +128,14 @@ function CurrentCopiesRead({
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
+  const queryClient = useQueryClient();
   const input = {
     subjectId: address.subjectId ?? undefined,
     kind: address.kind ?? undefined,
     status: address.status ?? undefined,
     cursor: address.cursor ?? undefined,
   };
-  const queryKey = ['copies-current', subject, address, lifetime] as const;
+  const queryKey = useMemo(() => ['copies-current', subject, address, lifetime] as const, [subject, address, lifetime]);
   const query = useQuery({
     ...personalRead,
     queryKey,
@@ -170,8 +171,10 @@ function CurrentCopiesRead({
   useEffect(() => {
     if (previousLoader.current === initial) return;
     previousLoader.current = initial;
-    if (origin.isCurrent()) void query.refetch();
-  }, [initial, origin, query.refetch]);
+    if (!origin.isCurrent()) return;
+    if (matches(initial, subject, address)) queryClient.setQueryData(queryKey, initial);
+    else void query.refetch();
+  }, [address, initial, origin, query.refetch, queryClient, queryKey, subject]);
   const accepted = !query.isError && matches(query.data, subject, address) ? query.data : undefined;
   // Page provenance comes from the admitted envelope, never from rows or the next cursor.
   const page = useMemo(
