@@ -139,7 +139,10 @@ export async function readReadingPageDocumentMedia(
   if (selection.state === 'overflow')
     return {
       state: 'overflow',
-      documents: selection.documents.map((document) => ({ ...unavailableDocument(document), state: 'overflow' })),
+      documents: selection.documents.map((document) => ({
+        ...unavailableDocument(document),
+        state: 'overflow' as const,
+      })),
     };
   if (!selection.documents.length) return { state: 'available', documents: [] };
   let presentations: readonly DocumentImagePresentation[];
