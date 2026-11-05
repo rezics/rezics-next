@@ -2,6 +2,7 @@ import { m } from '../../paraglide/messages.js';
 
 /** This button lives in ContentItem's independent trailing control region. */
 export function CopyInventorySelect({
+  controlId,
   selected,
   disabled,
   title,
@@ -9,6 +10,7 @@ export function CopyInventorySelect({
   controls,
   onSelect,
 }: {
+  controlId: string;
   selected: boolean;
   disabled: boolean;
   title: string;
@@ -18,6 +20,7 @@ export function CopyInventorySelect({
 }) {
   return (
     <button
+      id={controlId}
       type="button"
       aria-pressed={selected}
       aria-controls={controls}

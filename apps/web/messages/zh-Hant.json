@@ -10445,5 +10445,11 @@
   "library_copy_compare_reselect": "部分選取的記錄已與此頁不符。請明確重新選擇目前的列。",
   "library_copy_compare_changed": "某個選取副本的修訂編號已改變，其原先的記錄已從比較中移除。",
   "library_copy_compare_missing": "某個選取副本已不在目前接收頁面中，已從比較中移除；未尋找後續頁面。",
-  "library_copy_compare_dismiss": "關閉選擇提示"
+  "library_copy_compare_dismiss": "關閉選擇提示",
+  "library_copy_compare_changed_position": "原先選取的記錄目前位於第 {position} 列。請重新選擇該列，以比較目前的記錄。",
+  "library_copy_compare_missing_record": "原先選取的記錄不在此頁中。",
+  "library_copy_compare_previous_identity": "先前選取的記錄識別碼",
+  "library_copy_compare_previous_revision": "先前接收時的修訂編號",
+  "library_copy_compare_current_revision": "目前接收的修訂編號",
+  "library_copy_compare_find_row": "前往目前列重新選擇"
 }

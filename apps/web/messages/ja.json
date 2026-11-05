@@ -10445,5 +10445,11 @@
   "library_copy_compare_reselect": "選択した記録の一部が、このページと一致しなくなりました。現在の行を改めて選んでください。",
   "library_copy_compare_changed": "選択したコピーのリビジョンが変わりました。以前の記録は比較対象から外しました。",
   "library_copy_compare_missing": "選択したコピーは、この受信済みページにありません。比較対象から外しました。後続ページは検索していません。",
-  "library_copy_compare_dismiss": "選択に関する通知を閉じる"
+  "library_copy_compare_dismiss": "選択に関する通知を閉じる",
+  "library_copy_compare_changed_position": "選択していた記録は現在{position}行目にあります。現在の記録を比較するには、その行を改めて選んでください。",
+  "library_copy_compare_missing_record": "選択していた記録はこのページにありません。",
+  "library_copy_compare_previous_identity": "以前選択した記録の識別子",
+  "library_copy_compare_previous_revision": "以前確認したリビジョン",
+  "library_copy_compare_current_revision": "現在受信しているリビジョン",
+  "library_copy_compare_find_row": "現在の行に移動して選び直す"
 }

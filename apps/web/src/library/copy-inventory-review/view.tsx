@@ -8,7 +8,7 @@ import { withSubjectVisitReturn } from '../../features/pages/subject-visit-navig
 import { CopyReadingContextView } from '../copy-reading-context/view';
 import { CopyInventoryHistory } from './history';
 import { CopyTextReader, dateText } from './text-reader';
-import type { CopyInventorySelection } from './selection';
+import type { CopyInventorySelection, RetiredCopy } from './selection';
 
 const control =
   'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center rounded-lg border border-border px-3 py-2 text-center text-sm whitespace-normal [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-60';
@@ -230,6 +230,66 @@ function ReceivedCopy({
   );
 }
 
+/** Retirement preserves identity and the observed revision, never an old private title or note. */
+function RetiredObservation({
+  observation,
+  copies,
+  selection,
+  regionId,
+}: {
+  observation: RetiredCopy;
+  copies: CopyItem[];
+  selection: CopyInventorySelection;
+  regionId: string;
+}) {
+  const current = copies.find((copy) => copy.id === observation.id);
+  return (
+    <div className="min-w-0 space-y-2 border-t border-border pt-3">
+      <p className="font-medium">
+        {current
+          ? m.library_copy_compare_changed_position({ position: copies.indexOf(current) + 1 })
+          : m.library_copy_compare_missing_record()}
+      </p>
+      <details>
+        <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_copy_compare_previous_identity()}
+        </summary>
+        <dl className="space-y-2 py-2">
+          <div>
+            <dt className="font-medium">{m.library_copy_compare_id()}</dt>
+            <dd className="break-all">
+              <code>{observation.id}</code>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium">{m.library_copy_compare_previous_revision()}</dt>
+            <dd>
+              <code>{observation.revision}</code>
+            </dd>
+          </div>
+          {current ? (
+            <div>
+              <dt className="font-medium">{m.library_copy_compare_current_revision()}</dt>
+              <dd>
+                <code>{current.revision}</code>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      </details>
+      {current ? (
+        <button
+          type="button"
+          className={control}
+          onClick={() => selection.returnToRow(current, `${regionId}-select-${current.id}`)}
+        >
+          {m.library_copy_compare_find_row()}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /** A reading region, deliberately independent of the editor shell and all native writers. */
 export function CopyInventoryReview({
   id,
@@ -325,6 +385,15 @@ export function CopyInventoryReview({
           {selection.retired.some((item) => item.reason === 'missing') ? (
             <p>{m.library_copy_compare_missing()}</p>
           ) : null}
+          {selection.retired.map((observation) => (
+            <RetiredObservation
+              key={`${observation.id}:${observation.revision}`}
+              observation={observation}
+              copies={copies}
+              selection={selection}
+              regionId={id}
+            />
+          ))}
           <button type="button" className={control} onClick={selection.dismissRetired}>
             {m.library_copy_compare_dismiss()}
           </button>

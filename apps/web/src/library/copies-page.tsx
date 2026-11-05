@@ -821,6 +821,7 @@ export function CopyRow({
   ratio: CoverRatio;
   returnTo?: string | undefined;
   comparison?: {
+    controlId: string;
     selected: boolean;
     disabled: boolean;
     position: number;
@@ -1186,6 +1187,7 @@ function LoadedCopiesPage({
                 ratio={rowRatio([copy.subject])}
                 returnTo={returnTo}
                 comparison={{
+                  controlId: `${comparisonId}-select-${copy.id}`,
                   selected: comparison.selected(copy),
                   disabled: !comparison.canSelect(copy),
                   position: position + 1,
