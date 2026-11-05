@@ -451,6 +451,10 @@ async function createNativeContentSystemWithOptions(
          VALUES ($1,$2,$3,$4,'(,)',$3)`,
         [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, governance.actor.accountId, action],
       );
+    console.error('[dbg-fixture] holdings', JSON.stringify((await pool.query(
+      'SELECT action, valid::text AS valid, subject_kind, subject_role, route FROM access.resource_grant WHERE resource_id=$1 AND subject_id=$2',
+      [PLATFORM_RESOURCE.id, governance.actor.accountId],
+    )).rows));
     const [author, other, moderator, suspended] = await Promise.all([
       person('author'),
       person('other'),
