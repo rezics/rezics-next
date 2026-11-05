@@ -121,7 +121,7 @@ test('real absent-session refusal closes Collection and personal navigation entr
 
     preparation = 'unavailable';
     for (const read of reads)
-      await expect(read()).rejects.toMatchObject({ problem: { status: 502, code: 'dependency_unavailable' } });
+      await expect(read()).rejects.toMatchObject({ problem: { status: 502, code: 'session_unavailable' } });
     currentRequest = request('POST');
     preparation = 'active';
     expect(await prepareSession(currentRequest, sessionEnv)).toBe(false);
@@ -306,17 +306,16 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     }
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer current-viewer')).toBe(true);
 
-    // Pins permit an explicit Authorization without a cookie or cached subject; owner-filtered reads do not.
+    // A bare Authorization does not establish the prepared viewer required by the private page readers.
     currentRequest = new Request(`${origin}/en/library/collections`, { headers: { authorization: 'Bearer explicit' } });
     start = calls.length;
     expect(await loadMineCollectionsPage(client, currentRequest, {}, {})).toEqual(signedOut);
     expect(await loadLibraryNavigation(client, currentRequest, {})).toEqual(closedNavigation);
     expect(calls).toHaveLength(start);
     pinsStatus = 202;
-    expect(await readLibraryPinsPage({ data: 8 })).toEqual({ state: 'preparing' });
-    expect(queries(start)).toEqual([{}, { limit: '8' }]);
-    expect(calls.slice(start).every((call) => call.headers.get('authorization') === 'Bearer explicit')).toBe(true);
-    expect(credentialReads).toBe(preparations + 5);
+    expect(await readLibraryPinsPage({ data: 8 })).toEqual({ state: 'closed', origin: closedOrigin8 });
+    expect(queries(start)).toEqual([]);
+    expect(credentialReads).toBe(preparations + 2);
     pinsStatus = 403;
     expect(await readLibraryPins(client, 'Bearer authenticated', 100)).toEqual({ state: 'unavailable' });
     pinsStatus = 200;
