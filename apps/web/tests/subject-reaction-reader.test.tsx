@@ -86,7 +86,9 @@ mock.module('../src/features/pages/subject-reactions', () => ({
     return response.promise;
   },
 }));
+const reactions = await import('../src/threads/reactions');
 mock.module('../src/threads/reactions', () => ({
+  ...reactions,
   changeReaction: ({ data, headers }: { data: ChangeReactionInput; headers: HeadersInit }) => {
     const call = { ...deferred<WriteResult>(), data, headers: new Headers(headers) };
     writes.push(call);
