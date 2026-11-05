@@ -219,7 +219,9 @@ test('the mounted Search route retains multiple errors and a protected filter th
   await replaceValue(orderIssue, 'rating');
   const conditionIssue = host.querySelector('[data-search-input-key="condition"]')!;
   await replaceValue(conditionIssue, JSON.stringify({ statement: { property: 'schema:genre', in: ['mystery'] } }));
-  expect(host.querySelector('[data-search-input-recovery]')).toBeNull();
+  expect(
+    Array.from(host.querySelectorAll<HTMLElement>('[data-search-input-key]'), (element) => element.dataset.searchInputKey),
+  ).toEqual([]);
   expect(reads).toHaveLength(1);
   expect(reads[0]?.languages).toEqual(['ja', 'zh-CN', 'zh-Hant']);
   expect(reads[0]?.kinds).toEqual(['schema:Book', 'catalogue:Atlas']);
