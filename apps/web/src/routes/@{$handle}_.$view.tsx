@@ -1,5 +1,6 @@
 import { PublicAccountState, PublicRealmsPage } from '../accounts/public-profile/view';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
@@ -44,6 +45,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
   staticData: { publicCache: true },
   // Cursor replacements retain the local visit; account/view/locale changes retire it in the receiver.
   remountDeps: () => null,
+  gcTime: 0,
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
   }),
@@ -106,7 +108,15 @@ function AgentViewRoute() {
   const locale = getLocale();
   const router = useRouter();
   const { searchStr, hash } = useLocation();
-  const { data, dataUpdatedAt } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
+  const queryClient = useQueryClient();
+  const query = agentViewQuery(handle, locale, view, cursor, searchStr);
+  const { data, dataUpdatedAt } = useSuspenseQuery(query);
+  const queryIdentity = JSON.stringify(query.queryKey);
+  useEffect(() => {
+    if (view !== 'collections') return;
+    // Cursor coordinates survive; predecessor response bodies do not become a second page cache.
+    return () => { queryClient.removeQueries({ queryKey: JSON.parse(queryIdentity), exact: true }); };
+  }, [queryClient, queryIdentity, view]);
   const reading = useProfileReading({
     handle,
     locale,
