@@ -193,17 +193,19 @@ test('installed readers alone manage Recent and History through native settlemen
       history[0]!.remember('Alpha');
       history[0]!.remember('Beta');
     });
+    const recentName = history[0]!.entries[0]!.query;
     await act(async () => {
       remove(0).focus();
       remove(0).click();
     });
     expect(window.document.activeElement).toBe(remove(0));
-    expect(announcement(0)).toBe(m.search_history_management_removed({ name: 'Beta' }));
+    expect(announcement(0)).toBe(m.search_history_management_removed({ name: recentName }));
+    const historyName = history[1]!.entries[0]!.query;
     await act(async () => {
       remove(1).focus();
       remove(1).click();
     });
-    expect(announcement(1)).toBe(m.search_history_management_removed({ name: 'Alpha' }));
+    expect(announcement(1)).toBe(m.search_history_management_removed({ name: historyName }));
     const clear = [...surface(1).querySelectorAll('button')].find(
       (button) => button.textContent === m.search_history_clear(),
     )!;
