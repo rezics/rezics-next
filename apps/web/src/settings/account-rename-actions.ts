@@ -35,8 +35,8 @@ export function serializeAccountRenameResult(result: AccountRenameResult): Accou
   return JSON.parse(JSON.stringify(result)) as AccountRenameResult;
 }
 
-/** Browser-only region read; POST uses the ordinary Origin and session CSRF checks. */
-export const readAccountRename = createServerFn({ method: 'POST' }).handler(async (): Promise<AccountRenameResult> => {
+/** Setup and native faults stay in this envelope; createServerFn only supplies the POST/CSRF boundary. */
+export async function runAccountRenameHandler(): Promise<AccountRenameResult> {
   try {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('cache-control', 'private, no-store');
@@ -57,4 +57,7 @@ export const readAccountRename = createServerFn({ method: 'POST' }).handler(asyn
   } catch (error) {
     return serializeAccountRenameResult(accountRenameSetupFailure(error));
   }
-});
+}
+
+/** Browser-only region read; POST uses the ordinary Origin and session CSRF checks. */
+export const readAccountRename = createServerFn({ method: 'POST' }).handler(runAccountRenameHandler);

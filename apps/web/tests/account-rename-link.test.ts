@@ -6,7 +6,7 @@ import { authManagementPageHref } from '../src/session/auth-page-routes';
 import {
   accountRenameNavigation,
   accountRenameSetupFailure,
-  readAccountRename,
+  runAccountRenameHandler,
   serializeAccountRenameResult,
 } from '../src/settings/account-rename-actions';
 import {
@@ -315,7 +315,7 @@ test('thrown setup yields a serializable unavailable result rather than an escap
   const setup = serializeAccountRenameResult(accountRenameSetupFailure(new Error(leaked)));
   expect(setup).toEqual({ context: null, failures: [{ kind: 'unavailable', status: null }] });
   expect(JSON.stringify(setup)).not.toContain(leaked);
-  const result = JSON.parse(JSON.stringify(await readAccountRename()));
+  const result = JSON.parse(JSON.stringify(await runAccountRenameHandler()));
   expect(result).toEqual(setup);
   expect(JSON.stringify(result)).not.toContain(leaked);
   expect(headers).toEqual(['cache-control: private, no-store']);
