@@ -2959,6 +2959,7 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       vndbCreditVocabularyUnavailable: vndbCredits?.vocabularyUnavailable ?? [],
+      ...(vndbCredits ? { vndbCreditCandidateKeys: [...vndbCreditCandidateKeys].sort() } : {}),
       ...(vocabulary ? { creditRoles: vocabulary.roles, creditVocabularyRequirements: vocabulary.requirements } : {}),
       vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
       vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],
