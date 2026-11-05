@@ -723,6 +723,193 @@ Native account-context reading brackets anonymous hydration with two repeatable-
 Mapping and publication retain opaque proofs, exact hash and custody rules, pre-arm, independently observed native state, and resumable jobs. Participant classification remains O(N) for N≤100. Cross-home enrollment, movement and abort remain deferred wherever atomic_guard_unavailable applies; no partial protocol is promised. Detailed execution, SQL and publication custody remain in the [identity epoch contract](identity-epoch-contract.md).
 
 Library owns its canonical Source participant and cost: the raw-key page remains capped at 100, the aggregate input is independently capped at 256, and native row and identity-metadata bounds remain separate. See the [Library identity participant](../library/README.md#native-identity-scope-planning-and-current-seals). A same-query aggregate does not expand its Source page cap.
+`stepIdentityEpochMapping(pool, job)` in `identity-epoch-mapping.ts` is the native mapping step. It retains
+immutable input generations, bounded link/member phases and released per-home effect receipt custody. It
+accepts no caller page, frontier, affected-ID vector or completion callback. Terminal repoint retains the smallest
+remaining live original from the admitted generation, then maps the remainder directly to that saved root;
+singleton detachment has no remainder. The public intent is unchanged. Mapping completion remains a
+receipt locator: it cannot publish without the two fixed participant receipts. Accounts source intents,
+full positive undo/publication, generation minimization/erasure and inclusive native cost evidence remain
+pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
+
+Subject IDs permanently name catalogue records and are never reused. Creation requires Global `subject:create`
+(and import batch authority where applicable), writes revision 1 and is independent of Search. Compact facts do not create a separate revision target. Merging requires `subject:merge` and asserts
+duplicate identity only; [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition)
+adds an optional atomic precondition. Distinct editions, translations and formats remain separate subjects linked by relations.
+Native revision-1 creation installs the self mapping in its source transaction. Asynchronous merge completion requires mapping and both fixed participants.
+
+### Durable publication and caller contract
+
+Merge, unmerge, repoint, `verifyAccountAgent` and `unverifyAccountAgent` use the same native durable mechanism.
+Jobs with disjoint changed group sets run concurrently; claims, production partition-local capacity P=1 and reclaim pressure
+are partition-local. PREPARING is affected pending/overlap-busy. No global sole pending job, whole-job lock,
+active marker or universal page gate is allowed. Coherent immutable non-ABA double collection checks at most
+4,096 originals per resulting group before ALL new admission effects. Missing/moved/incomplete evidence is
+unavailable. Later drift after durable preparation retains recovery, never effect-free overflow/not_applied.
+
+Ordinary `POST /v1/subjects:merge` keeps its native body, Global authorization and quoted Idempotency-Key.
+Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`.
+Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
+unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
+
+Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
+uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
+before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
+same intent, never denies review. Access now records immutable account-home decision/reversal intents in the
+original native transaction/receipt and verifies them before releasing the home for admission. The original
+wrappers use the typed native coordinator adapter and require actual mapping and both participant publication.
+The coordinator module is absent in this checkout, so its absence retains retryable work without a successful DTO.
+Historical missing custody and consumer-aware source minimization remain pending owner obligations; exact keys,
+delivered guards and integration debt are in the owning contract.
+No queue, public pending DTO, permission change or second operation protocol is introduced.
+
+### Lists, point reads and personal references
+
+Canonical lists use maintained canonical-ID indexes and unique prepared rows. Observation, publication and cursor
+currentness are scoped to the ACTUAL source and its COMPLETE expanded query dependencies, including excluded,
+NOT and order-only originals. A finite unchanged owner source must make useful-page progress while disjoint jobs
+run continuously. A genuinely all-group catalogue can have broad dependencies without stalling that owner source.
+Partition summaries carry committed scoped reader revisions, never max allocated epoch or global job history.
+
+`createIdentityScopedObservations(pool)` publishes the native `register`, `arm`, `finish`, `revalidate`,
+`repair` and `retire` declarations in `identity-scope-types.ts`. Registration retains complete Source capture
+frontiers and inverse enrollment; pre-arm receiving commits the exact attempt obligation and reader revision
+together. The existing maintenance queue revisits one pending scope per selected home, with retained circular
+cursors so an unavailable scope does not prevent another scope's repair. Public structural capture is owned
+by `identity-scoped-public-source.ts`; the opaque handle only locates its committed native records.
+
+Library completion pages the original `library/identity-scope-effects.ts` native expected selections, one
+bounded page per step. Caller `records`/`receiving` arrays are optional lookup hints. Each selected committed
+receiving binding, applied effect and exact control custody must resolve before the Source retains its frontier.
+The completion head binds registration, capture, source generation, immutable attempt and the complete native
+seal/version/frontier. Changed or unsealed input cannot inherit an earlier prefix. Exhaustion closes the active
+attempt only after `verifyLibraryScopeEffectsSeal` succeeds on the live Source command and current native
+owner/capture/attempt guards hold. That transaction increments the committed revision; it leaves Source repair
+to establish the next clean observation. Enumeration and native hold guards share the caller's original
+`WorkAllowance` through `NativeCollectionWork.compose`; native receipts are charged without resetting dimensions.
+Maintenance uses the retained caller or registration step ceiling for a fresh bounded reservation per step.
+A fresh registration after retirement gets a new registration ID and increments the existing revision; it
+cannot inherit the earlier attempt's completion prefix. Upgrade rows with unknown preexisting send outcomes
+stay unavailable unless their exact committed directory locator is retained; absence is never rollback.
+
+Retirement first makes the summary unsafe, finishes real outstanding attempts, then retires one directory ticket
+at a time under its original bridge. A durable source-local sending intent precedes every directory enrollment.
+Directory release retains a native receipt and tombstone, so a lost reply or delayed enrollment cannot resurrect
+a removed ticket. Closed bridges retain tickets until their preparation custody reopens them. After the final
+local unresolved seek, actual native `releaseHold` and the retired summary commit together. Immutable old cursor
+bases fail the retiring summary; retiring a registration creates no authority to purge its native business Source
+or another owner's capture/history. Attempt and retirement tombstones remain against delayed messages.
+
+Library public-output identity is separate from account-owned identity: its Source address binds Collection,
+incarnation, output generation and immutable activation transaction/decimal position/source generation. Current
+source generation is independently checked. No account ID is inferred from a Collection. The old Library native
+factory is untouched; its current rejection of an unsupported public-output locator remains unavailable until
+its owner delivers the discriminated runtime.
+
+Foreign runtime readiness remains explicit. The exact original-module Library expected-effect declarations
+are provisional unavailable adapters until the native producer arrives. The additive
+`identity-receiving-effects.ts:readIdentityReceivingSelection(pool, selection, {deadline})` is loaded read-only
+when delivered; no hint can substitute for its committed record. The admission ticket reader and FAA binding
+also remain provisional in this base. Public catalogue completion retains its own capture/attempt-bound expected
+state and never consumes a Library seal. Its remaining foreign ABI is a public-catalogue native expected
+projection/effect page, current Source-local final seal verifier, and exact committed projection/receiving lookup
+bound to `(NativePublicSource, captureId, registration, scopeId, job, attempt)`. No such export exists in
+`public-filter-source-binding.ts`; its public read/repair declarations do not certify identity-effect exhaustion.
+Until that producer is available the public active obligation is retained and cannot advance the reader revision
+as completed. These boundaries are native readiness limits, not a claim that this implementation passed native proof.
+The focused `identity-scoped-observation-outcomes.test.ts` scenarios remain integration acceptance, unexecuted
+at this implementation stage.
+
+The [owning contract](identity-epoch-contract.md#scoped-reader-publication-and-complete-query-dependencies)
+derives native registration, arm/finish custody, reordered lower-job publication/cancel handling and start/final/
+current cursor checks from existing source keys/observations. Actual complete native Collection/owner/Search
+bindings remain missing. Returned-hit samples, broad owner-fact mutation alarms and unavailable source stubs are
+not completeness proof. No new cursor vector/crypto, source ABI or hidden source-wide global marker is assumed.
+
+No request-time alias walk, 4,096-home sweep or separate per-page readMapping prerequisite is allowed. Pages use
+existing shared batched owner/epoch reads plus two probes and existing candidate source points, with no extra
+snapshot/client/control statements or per-ID loop, inside filtered-list budgets. Current original AND terminal
+eligibility and full excluded/order/FOREIGN physical-query admission remain independent of identity metadata.
+
+Unaffected and fresh self point reads remain useful; source basis routes ONE relevant current control home per
+original. Missing/moved/retired state is unavailable, never self/zero or a guessed terminal route. Same-backend
+standalone mapping uses one RR/eight statements; cross-backend released observations use source<=10/control<=6,
+16 total or 11 pending. Original/terminal privacy is separately charged. Existing one-anchor readSubjectReference,
+item metadata and type reads retain their native anchor/client/time contracts; no permission cache is created.
+
+Stored personal original IDs, notes, dates, order and multiplicity remain. Canonical views choose the highest live
+native owner_write_seq with conflict visible, union labels and keep copies/sessions distinct. Undo is a new owner
+write. Library's [native sequence prerequisite](../library/owner-write-sequence.md) already delivers the authorized
+allocator, private owner counter and nullable live/archive sequence columns. The missing boundary is production
+set/clear/Undo integration and bounded legacy cutover/readiness, not the primitive's existence. Null legacy values
+cannot select a canonical winner; timestamps/UUIDs do not substitute. Allocation adds its actual two body
+statements to the owner command, replay does not allocate, and failed allocation rolls back with the fact. Collection
+browsing shows one canonical card while editing preserves every stored occurrence. New writes address current
+terminals and corrections preserve unrelated later edits.
+
+### Native cutover and retained evidence
+
+The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) requires locked native absence
+custody for a fresh installation or all 4096 legacy homes, including empty/unselected homes and actual owner epochs.
+Both paths retain every birth/writer/queued continuation, native source export,
+receiving custody BEFORE exact-head ACK, and home barrier plus deferred SAME-TX final guard. Ordinary/import
+births initialize self at the SUBJECT source home; account-agent births use account home. Real scheduler/bootstrap
+or actual locked absence installation must close coverage; readEpoch side effects, seeded rows or preset readiness are insufficient. Actual guard races
+cover verify AND reversal in flight; an owner move proves retryable availability, not the final guard.
+
+Immutable input refs plus a constant transform form the affected index before effect gates run. Current generations
+are flat. At EVERY durable/crash/replay/abandon state, each partition q retains at most Gq+4P full generations and
+Aq+4P·4096 memberships, including bootstrap/unsealed/export/partial-delete/abandoned/move copies. Native ref locks,
+minimized undo/reversal/move/cursor custody and locked empty-range reclaim proof are required. Unreclaimed local
+copies block new local admission; other partitions progress. R/L/H obligations remain history-proportional storage,
+not hidden full groups. General physical owner transfer is a named missing bounded native custody/storage proof.
+
+Ordered capacity begins at the FIRST ordered resource INCLUDING actual job home. Compact receipt-to-job binding
+is indexed actor/account-home history with retention/erasure accounting. Every claim generation, native confirmation,
+accepted pointer, planned-home close proof, receiving handoff and source hold/validation copy is included in the
+[owning inventory](identity-epoch-contract.md#native-home-binding-inventory-and-recovery-cost). No extra P slot,
+full membership vector or resource allowance is added. Sole-owner Ad1 ledger minimization/shared-copy custody is
+named pending coverage. Native attempt locks close
+EVERY planned home against delayed/uncertain acquire; job-home CAS selects admitted versus cancelling. P=1 progress
+follows strictly ordered waits, not leases or try/unwind timing. See the contract for costs and required schedules.
+
+### Library canonical publication participant
+
+The SAME version-1 `library-private-follow-counts` identity participant covers ALL six member/entry/label/session/
+copy/output canonical drivers, directory/candidates/support, first apply, follows/totals, OLD withdrawal/NEW add,
+fences and exact prior custody. A follow-only ACK cannot publish; no third participant or Library A5 transfer.
+Directory proof is ONE `(owner,canonical)` candidate plus structural `(original,scope)` existence/extrema with
+indexed inverse discovery. A million same-original/profile/lifecycle sessions cannot create a million directory
+rows. No per-fact witness/copy or required legacy canonical_source_fact write is adopted as directory proof.
+
+Support per `(canonical target,follower)` changes totals at 0-to-1/1-to-0; derived data stays in target home and
+stored follows in source home. Legitimate first apply versus gate installation is serialized in the same native
+transaction; stale delivery rereads current source, account eligibility and mapping. Complete prior effect custody,
+crash/replay and terminal no-resurrection remain required. [Private follow counts](../../../../docs/private-follow-counts.md)
+owns that store. Missing native adapters/locators cannot supply a noData ACK.
+
+Core OP is the actual `command/operational.ts:runOperationalTransaction` and `enqueueIntent`, with native fencing
+and atomic DBOS intent. It has no Core receipt/event/outbox/write-basis/position/intent table/relay. Access owns its
+separate account-home verify/reversal intent TABLE; shared-history owns operational DBOS history; Library A5 owns
+derived Library data. Semantic inventories its physical identity stores and receiving cleanup locators; exhausting
+Semantic refs does not certify Library purge. Fixed A5 participants are distinct from identity publication ones.
+Participant-own erasure ACK is acyclic; overall completion separately waits frontier/no-open-late/allACK.
+
+### Specification closure and remaining native acceptance
+
+This document and the [sole native owner](identity-epoch-contract.md) adopt scoped concurrency with production
+partition-local capacity P=1. The native STORE, bounded all-home bootstrap, ordered preparation/cancellation and
+Library identity binding implement that route; their TypeScript contracts describe the same actual producers.
+The old global-control proposal is superseded. Native evidence for these producers does not establish complete
+publication or freeze the remaining Cost obligations.
+
+The contract retains REQUIRED admission/publication/HTTP/cutover native schedules, scoped finite-owner progress,
+complete excluded/order dependencies, coherent cap/ABA, P=1 claims, uncertain cancellation, legitimate first apply,
+all-home bootstrap, all-table overflow, physical retention/ref/reclaim every step, verify/reversal in flight and
+actual late/failed locator/custody. Primitive negatives are separate from full Search/Library completion; no
+consumer cycle or fake ACK. No formatter or earlier setup red is native performance or publication proof.
+Old identity-basis/home-sweep/sealed-repair scaffolding supplies neither readiness nor a revived certificate ABI.
+Unrelated core/graph/history/command/lifecycle and existing concurrent CPU-validation adoption remain unchanged.
 
 ## Definition publication preparation
 

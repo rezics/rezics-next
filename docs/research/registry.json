@@ -1901,7 +1901,8 @@
       "path": "docs/research/merge-reviewed-identity-atomic-boundary.md",
       "topic": "merge-reviewed-identity-atomic-boundary",
       "researcher": "codex",
-      "state": "open"
+      "state": "adopted",
+      "decision": "services/kernel/src/semantic/identity-epoch-contract.md#reviewed-person-identity-precondition"
     }
   ]
 }

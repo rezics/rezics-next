@@ -8,8 +8,7 @@ This document adopts scoped concurrent publication. It is **not a formatted-byte
 type delivery, runtime delivery, publication completion or root-gate completion**. Native growth and receipt evidence remain required for implementation closure.
 The initial production capacity is P=1: one admitted or PREPARING job reservation per native control partition, charged once per (home, job). Capacity is local; recovery, cancellation and reclamation require no new reservation.
 
-The adjacent `identity-epoch-contract.ts` exposes the scoped native storage protocol. `controlPartition` identifies
-bootstrap topology only; job IDs encode their native control home. `readEpoch(client, partition)` observes that
+`identity-epoch-contract.ts` exposes storage; controlPartition is bootstrap topology, while job IDs encode home. `readEpoch(client, partition)` observes that
 home independently. The earlier globally serialized proposal is superseded. Existing native cases remain evidence and required outcomes; they are not the new
 frozen boundary. Missing producers below mean actual missing native implementation and proof, never permission
 to manufacture a callable, receipt, ready state or successful adapter from this prose.
@@ -48,48 +47,54 @@ certificate, per-ID positive sample, new cursor vector/cryptography or replaceme
 
 ## Existing caller compatibility
 
-`merges.ts` exports `mergeSubjects(pool, options)` with subjects, optional survivor, actual AccountActor,
-idempotencyKey, Uint8Array digest, `{digest, release: Release}`, CommandAuthorization and optional deadline/clock.
-Its completed native fields remain `{survivor, redirected, revision, component}` with component
-`{partition: number, epoch: number, position: bigint}`. `mergeSubjectsInCommand` shares revision/redirect work
-with verification; that effect helper is not concurrent job admission. Native bigint JSON is canonical decimal
-text, never Number. Native transactionId AND component identify effects; a noEffect position can be reused.
+[Exact callable compatibility](#exact-existing-callable-compatibility) owns native merge/AccountAgent signatures,
+replay and authority. [Asynchronous HTTP](#ordinary-http-asynchronous-identity-operation) owns admission,
+polling, suspension and publication. Retained HTTP200 does not deliver HTTP202 admission.
 
-`ensureAccountAgent(pool, {account, kind, name, language?})` keeps `{subject, created}`. Deterministic
-`accountAgentId(account)` and person/organization/software creation rules remain. `verifyAccountAgent(pool,
-{account, catalogue, receipt})` and `unverifyAccountAgent(pool, {account, receipt})` keep exactly
-`{survivor, redirected, revision, subject: Item, component}`. Every successful path, including already-verified
-same-receipt and reversal replay, waits for its actual job publication. Current catalogue revision/component on
-replay need not equal the historic response byte for byte. Matching Person/Organization, catalogue survivor,
-reciprocal backlink, verification receipt and software rejection remain unchanged. Reversal restores only exact
-verification-scoped moved links, including Context/filter identity, and preserves unrelated subsequent facts.
+### Reviewed Person identity precondition
 
-Ordinary merge keeps `POST /v1/subjects:merge`, body `{subjects: [id, id]}`, actual Global `subject:merge` via
-`authorizeSemanticWrite`/`globalContextAnchor`, quoted structured-field Idempotency-Key and current anchor checks.
-Only ACTUAL ADMISSION returns `202 {operation: {id}}` and
-`Location: /v1/subjectIdentityOperations/{id}`. PREPARING alone is not a 202. Lost response or request deadline
-retains durable preparation/admission and replay recovery; it cannot create a second operation or claim no effect.
-Authorized identical replay returns the same operation/Location after publication too. Different body under the
-same key remains `422 idempotency_conflict`. Authorization precedes receipt lookup, including replay.
+Decision: paired evidence uses the existing native merge/original Subject read; preserve asynchronous
+admission/publication and refuse unsupported coverage. Adopted evidence:
+[reviewed identity atomic boundary](../../../../docs/research/merge-reviewed-identity-atomic-boundary.md).
 
-`GET /v1/subjectIdentityOperations/{id}` reauthorizes CURRENT native merge authority and original/terminal
-visibility. Unknown and denied are the same concealed `404 not_found`, without result or session component.
-Authorized responses remain `200 {operation: {id, done: false}}` or, only after durable publication,
-`200 {operation: {id, done: true, result: {survivor, redirected, revision}}}`. No participant/frontier/vector leaks.
-Existing deadlines, evidence TTL and Problem effect_status vocabulary remain unchanged. Recovery is through the
-original locator/receipt; no fake successful completion or new public cancellation protocol is added.
+Optional expectedIdentity.endpoints is a strict pair bound to subjects BEFORE sorting/hashing. Endpoint has
+subject UUID, positive safe all-kind revision, positive decimal securityRevision, source bangumi/vndb,
+externalId, claimTransactionId UUID, property and value. Bangumi person:N maps to wdt:P6298=N; VNDB sN to
+wdt:P3180=sN, using canonical positive numbers. externalId/value each spend at most 255 UTF-8 bytes;
+expectation spends at most 4096 bytes. Same/cross-provider pairs are legal. Evidence fixes Person/Global,
+grants no authority and leaves equivalence to the reviewer.
 
-Actual suspension revokes pre-suspension bearers: held-token requests return `401 invalid_credentials` with
-`WWW-Authenticate: Bearer error="invalid_token"`. Invalid required credentials never become anonymous. Auth
-cannot mint a valid suspended bearer; correct-password suspended sign-in is `403 {"error":"account_suspended"}` without a
-session. Kernel `403 account_suspended` remains defensive only. Native suspension is the revocation producer;
-SQL token/account fabrication is not acceptance evidence.
+Subject GET accepts paired reviewIdentitySource/reviewIdentityExternalId; partial/malformed pairs fail.
+Optional reviewedIdentity is Endpoint|null; null means incomplete/ineligible evidence. Read claim, latest
+all-kind revision/security and selected Global identifier in the final authorized transaction, preserving
+freshness/disclosure, sessions, documents/viewerActions and private/no-store. Redirect following cannot yield
+positive original evidence. Only positive original claims expose their transaction identifier.
 
-`runCommand` authorizes before readReceipt and exposes currentCommand only on the live transaction. Do not
-serialize that binding as permission. Admitted immutable internal work resumes its persisted job and native
-home fences, not a fabricated user. Existing platform verify/reversal requires `currentCommand(tx).basis === null`;
-this is a specific owner path, not a generic actor bypass. User response replay still reauthorizes. Account and
-follow effects retain active/terminal account locks independently of identity publication.
+After authorization, exact replay and saved preflight errors, BEFORE terminal capture/effects, resolve both
+tuple homes with server routeKey and both Subject homes. All four must share the admitted partition;
+foreign/fenced/moved/unresolved incarnation or unsupported coverage is atomic_guard_unavailable via native
+HTTP503. Lock positive claims FOR SHARE in tuple order, then Subjects FOR UPDATE in ID order. Compare claim
+binding/transaction, visible Person, absent redirect, security and all-kind revision. Missing claims fail
+without gap locking. Reuse effectiveGlobalSlotFacts: require complete selection, at least one nondeprecated
+string and exact agreement of every nondeprecated value. Display/rejected candidates never count.
+
+Editorial/type/moderation/disclosure writers update Subjects. Erasure independently mutates claims,
+fact/candidate payload and adoption heads: hold selected-row/head SHARE locks too. Hold exclusions through
+effects/receipt/outbox COMMIT or ROLLBACK; drain/restart reacquires and compares. Retain SERIALIZABLE,
+200ms lock timeout, bounded retries/deadline. Exact replay wins before comparison after mutation/redirect;
+current authority/erased results remain. Digest the whole validated ordered body with actor/operation.
+Changed evidence, omission/presence or swaps conflict. AccountAgent gets no implicit Person guard.
+
+Price prevents redirecting an unreviewed identity: four primary locks, two claim/Subject/latest-revision/
+redirect seeks and two slots. Compact slots have at most 32 assertions (33rd expands), expanded slots at most
+32 candidate points. Up to 64 selected-row plus two head locks yield 70 locks. Oversized/incomplete evidence
+is unavailable, never sliced. Evidence is 4KiB, digest 32 bytes, no ledger. Logical bounds are not measured Cost.
+
+The first-effect runtime covers unpending legacy self mappings in one partition; installed closure
+incarnations require concurrent admission composition. Guard success proves no publication. Imports retains
+original bindings and withholds credits until independent current canonical Person and mapping/Search/Library
+publication. Content keeps its sole publisher; Rating/Content retain original COMMIT/ROLLBACK obligations.
+Native races/growth and integration acceptance remain required.
 
 ## Concurrent control and coherent admission
 
@@ -357,12 +362,12 @@ No arbitrary callbacks, caller booleans, request-selected participant or default
 
 ## Exact existing callable compatibility
 
-`merges.ts` exports `mergeSubjects(pool: Pool, options)` with `subjects: string[]`, optional `survivor`, actual
+`merges.ts` exports `mergeSubjects(pool: Pool, options)` with `subjects: string[]`, optional `survivor` and expectedIdentity, actual
 `AccountActor`, `idempotencyKey`, `Uint8Array digest`, `{digest, release: Release}`, `CommandAuthorization`, optional
 `deadline` and `clock`. It returns `{survivor, redirected, revision, component}`; component is
 `{partition: number, epoch: number, position: bigint}`. `mergeSubjectsInCommand(tx, transactionId, options)` shares
 revision/redirect work with account verification; its options are survivor, redirected, release, optional
-verificationReceiptId and allowAccountAgent. That existing helper is evidence of effects, not the new job admission.
+verificationReceiptId and allowAccountAgent. The helper performs effects, not admission.
 The type aliases `MergeSubjects`, `VerifyAccountAgent` and `UnverifyAccountAgent` reference actual exports so their
 callable types cannot silently diverge in this specification.
 

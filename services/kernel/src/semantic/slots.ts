@@ -18,6 +18,7 @@ import readHiddenCandidates from './slots-read-hidden.sql';
 import readSlotOperation from './slots-read-operation.sql';
 import readRejectedCandidates from './slots-read-rejected.sql';
 import readSelectionFacts from './slots-read-selection.sql';
+import lockReviewedSelection from './reviewed-person-identity-lock-selection.sql';
 
 export type Candidate = {
   candidate_id: string;
@@ -241,9 +242,18 @@ export async function effectiveGlobalSlotFacts(
   subject: string,
   property: string,
   slot = slotId(subject, property),
+  lockSelected = false,
 ): Promise<{ facts: FactRow[]; basis: unknown }> {
   const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
+  if (lockSelected) {
+    const locked = (await lockReviewedSelection.run(tx, {
+      route: routeOf(subject)!, subject_id: subject, slot_id: slot,
+      expanded: state.expanded, selection, context_id: GLOBAL_CONTEXT, head: state.adoption?.head ?? 0,
+    }))!;
+    if (state.expanded && (locked.candidates !== selection.length || locked.adoption !== (state.adoption ? 1 : 0)))
+      throw new AccessUnavailableError('contention');
+  }
   const facts = state.expanded
     ? await selectionFacts(tx, subject, property, selection)
     : state.compact.map((candidate) => candidateFact(property, candidate));

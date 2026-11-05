@@ -1,3 +1,4 @@
+import { observeReviewedPersonIdentity, type ReviewedPersonEndpoint, type ReviewedPersonSource } from './reviewed-person-identity.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import {
   beginSemanticRecordSourceSet,
@@ -527,6 +528,7 @@ export async function readSubject(
   context = GLOBAL_CONTEXT,
   routeKey: Uint8Array,
   summaries: {
+    reviewIdentity?: ReviewedPersonSource;
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
     seen?: readonly { partition: number; epoch: number; position: bigint }[];
@@ -536,6 +538,7 @@ export async function readSubject(
     readAs?: <T>(read: () => Promise<T>) => Promise<T>;
   } = {},
 ): Promise<{
+  reviewedIdentity?: ReviewedPersonEndpoint | null;
   subject: Item;
   account: { id: string } | null;
   summary: SubjectSummary | null;
@@ -714,6 +717,9 @@ export async function readSubject(
           if (!allowed) return null;
           return {
             freshnessRetry: false as const,
+            reviewedIdentity: summaries.reviewIdentity && subjectId === id && !terminal
+              ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
+              : null,
             rows,
             supported: await supportedFacts(client, routeKey, subjectId, [
               ...currentTerms(asFacts(rows)),
@@ -832,6 +838,7 @@ export async function readSubject(
     requireAccessDeadline(deadline);
   }
   return {
+    ...(summaries.reviewIdentity ? { reviewedIdentity: snapshot.reviewedIdentity } : {}),
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
     summary,
     subject,

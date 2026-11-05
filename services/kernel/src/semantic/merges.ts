@@ -1,3 +1,4 @@
+import { guardReviewedPersonIdentity, type ReviewedPersonExpectation } from './reviewed-person-identity.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { retainSubjectPageContinuation } from './subject-page-publication-store.ts';
 import { invalidateSubjectPage } from './subject-page-publication-native.ts';
@@ -45,6 +46,8 @@ export async function mergeSubjects(
   options: {
     subjects: string[];
     survivor?: string;
+    expectedIdentity?: ReviewedPersonExpectation;
+    routeKey?: Uint8Array;
     actor: AccountActor;
     idempotencyKey: string;
     digest: Uint8Array;
@@ -89,6 +92,9 @@ export async function mergeSubjects(
     },
     async (tx, { transactionId }) => {
       if (kept instanceof Error) throw kept;
+      if (options.expectedIdentity) {
+        await guardReviewedPersonIdentity(tx, options.expectedIdentity, options.routeKey!, options.release.release);
+      }
       return mergeSubjectsInCommand(tx, transactionId, {
         survivor,
         redirected,

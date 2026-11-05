@@ -1,3 +1,4 @@
+import { ReviewedPersonEndpointSchema, ReviewedPersonExpectationSchema, validReviewedPersonExpectation, isReviewedPersonSource } from '../reviewed-person-identity.ts';
 import { correctTerms, termRevision, StaleTermsRevisionError } from '../terms.ts';
 import {
   changeStatementDisclosure,
@@ -310,6 +311,7 @@ const viewerActionEntry = t.Object(
 const readResponse = t.Object(
   {
     subject: ItemSchema,
+    reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
     account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     related: t.Record(t.String(), LabelsSchema),
@@ -945,7 +947,8 @@ function subjectRoutes(
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: t.Object(
-          { subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }) },
+          { subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }),
+            expectedIdentity: t.Optional(ReviewedPersonExpectationSchema) },
           { additionalProperties: false },
         ),
         response: {
@@ -984,6 +987,8 @@ function subjectRoutes(
       },
       async ({ body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (body.expectedIdentity && !validReviewedPersonExpectation(body.subjects, body.expectedIdentity))
+          throw new ProblemError('invalid_request');
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
         const [, redirected] = [...body.subjects].sort();
@@ -1003,6 +1008,8 @@ function subjectRoutes(
           const { component, ...result } = await admission.run('normal', job, () =>
             mergeSubjects(pool, {
               subjects: body.subjects,
+              expectedIdentity: body.expectedIdentity,
+              routeKey,
               actor,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
               digest: requestDigest('subject.merge', actor, body),
@@ -1028,10 +1035,13 @@ function subjectRoutes(
           language: t.Optional(t.String()),
           includeViewerActions: t.Optional(t.Boolean()),
           includeDocuments: t.Optional(t.Boolean()),
+          reviewIdentitySource: t.Optional(t.Union([t.Literal('bangumi'), t.Literal('vndb')])),
+          reviewIdentityExternalId: t.Optional(t.String({ maxLength: 255 })),
         }),
         response: {
           200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
           308: withHeaders(redirectResponse, { location: t.String() }),
+          400: problemSchema('invalid_request'),
           401: unauthorized,
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
@@ -1044,6 +1054,10 @@ function subjectRoutes(
         },
       },
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
+        const reviewIdentity = query.reviewIdentitySource !== undefined && query.reviewIdentityExternalId !== undefined
+          ? { source: query.reviewIdentitySource, externalId: query.reviewIdentityExternalId } : undefined;
+        if ((query.reviewIdentitySource !== undefined || query.reviewIdentityExternalId !== undefined) &&
+            (!reviewIdentity || !isReviewedPersonSource(reviewIdentity))) throw new ProblemError('invalid_request');
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const languages = languageRanges(request.headers.get('accept-language'), query.language);
@@ -1054,6 +1068,7 @@ function subjectRoutes(
         const result = await admission.run('normal', job, () =>
           readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
             languages,
+            ...(reviewIdentity ? { reviewIdentity } : {}),
             authorize: authorizeSummary,
             seen: [...session.components],
             deadline: job.deadline,
@@ -1180,9 +1195,10 @@ function subjectRoutes(
           session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
-        set.headers['cache-control'] = query.includeViewerActions || documentRead ? 'private, no-store' : 'no-cache';
+        set.headers['cache-control'] = query.includeViewerActions || documentRead || reviewIdentity ? 'private, no-store' : 'no-cache';
         return {
           subject: result.subject,
+          ...(reviewIdentity ? { reviewedIdentity: result.reviewedIdentity ?? null } : {}),
           account: result.account,
           summary: result.summary,
           related,
