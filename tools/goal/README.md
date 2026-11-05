@@ -2592,6 +2592,9 @@ quota-parser exports remain available for historical imports. Test an adapter th
 Codex keeps launch argv construction in `src/agents/codex-command.ts`, event normalization and incremental usage
 interpretation in `src/agents/codex-events.ts`, and adapter composition plus provider filesystem access in
 `src/agents/codex.ts`. The composition module retains the `parseCodexSessionUsage` and `parseCodexAllowance` exports.
+Claude keeps launch argv, event/session parsing and worker token accounting in `src/agents/claude.ts`; allowance
+parsing, streamed rate-limit observations and OAuth/cache I/O live in `src/agents/claude-usage.ts`, with the three
+public allowance functions re-exported from `claude.ts`.
 
 ## Baseline findings and release gates
 
