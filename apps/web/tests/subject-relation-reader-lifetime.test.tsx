@@ -268,6 +268,7 @@ async function settle() {
 // Authored UNRUN: one mounted campaign for actual reader-cache health, transition, request ownership and recovery.
 test('private unmount cannot bless borrowed relation rows after unobserved session recovery', async () => {
   heldRelations = [];
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   mock.module('@tanstack/react-start', () => ({ ...start, createServerFn }));
   mock.module('@tanstack/react-start/server', () => ({ ...start, createServerFn }));
 
