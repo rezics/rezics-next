@@ -36,7 +36,7 @@ test('synthetic selected Person and Organization images use the common authorize
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   const mediaIds = new Map<string, string>();
-  const requireMediaId = (key: string) => {
+  const requireMediaId = (key: string): string => {
     const mediaId = mediaIds.get(key);
     if (mediaId === undefined) throw new Error(`Missing media receipt for ${key}`);
     return mediaId;
@@ -175,7 +175,11 @@ test('synthetic selected Person and Organization images use the common authorize
       sourceUrl: organizationImageUrl,
       mediaId: requireMediaId('person:27'),
     });
-    for (const [key, outcome] of outcomes) expect(outcome.containerId).toBe(initialSubjects.get(key));
+    for (const [key, outcome] of outcomes) {
+      const initialSubject = initialSubjects.get(key);
+      if (initialSubject === undefined) throw new Error(`Missing initial subject binding for ${key}`);
+      expect(outcome.containerId).toBe(initialSubject);
+    }
     expect(mediaRequests).toBe(3);
     expect(statusReads).toBe(3);
     const subjects = new Map([...outcomes].map(([key, outcome]) => [key, outcome.containerId!]));

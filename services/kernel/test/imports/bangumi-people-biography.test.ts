@@ -52,6 +52,18 @@ const emptyPerson = { id: 8103, type: 1, name: '空欄の人物', summary: '' };
 const absentPerson = { id: 8104, type: 1, name: '紹介のない人物' };
 const fixturePeople = [personOne, organization, emptyPerson, absentPerson];
 
+function jsonValue(value: unknown): Json {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number')
+    return value;
+  if (Array.isArray(value)) return value.map(jsonValue);
+  if (typeof value === 'object') {
+    const result: { [key: string]: Json } = {};
+    for (const [key, part] of Object.entries(value)) result[key] = jsonValue(part);
+    return result;
+  }
+  throw new TypeError('Candidate reference content is not JSON');
+}
+
 const bangumiTables = [
   'subject',
   'subject-relations',
@@ -428,7 +440,12 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         fieldGroup: source.field_group,
         kind: 'value',
         statement: candidate.statement as unknown as Statement,
-        references: candidate.statement.references ?? [],
+        references: (candidate.statement.references ?? []).map((reference) => ({
+          parts: reference.parts.map((part) => ({
+            property: { id: part.property.id },
+            value: { type: 'value', content: jsonValue(part.value.content) },
+          })),
+        })),
       };
       expect(proposal.references[0]?.parts).toContainEqual({
         property: { id: 'schema:url' },

@@ -294,6 +294,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
         },
       });
     importer = open();
+    let registrationForObservation: ReturnType<typeof createSourceRegistration> | null = null;
     return {
       identity: runtime.identity,
       issue: (scopes) => support.issue(runtime.identity.bulk.accountId, scopes),
@@ -302,6 +303,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
         const registration = createSourceRegistration('vndb', {
           ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
         });
+        registrationForObservation = registration;
         credential = options.credential ?? runtime.identity.bulk;
         const exchanges = capture.begin(options.loseStatisticResponse);
         const sourceRecords: Awaited<ReturnType<VndbStatisticsDriver['run']>>['sourceRecords'] = [];
@@ -364,7 +366,9 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
         );
       },
       observe() {
-        const source = importer!.session.store.source(registration.source);
+        if (!registrationForObservation)
+          throw new Error('VNDB statistics observation requires a completed run registration');
+        const source = importer!.session.store.source(registrationForObservation.source);
         // The port's fingerprint reports the maintained generation pointer, not a content hash.
         return capture.observe({ fingerprint: source.generation, records: source.count });
       },
