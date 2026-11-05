@@ -538,6 +538,39 @@ share the native `/signin` attempt budget. Errors use fixed codes.
 | `GET /passkeys`                   | Session cookie; returns `{ passkeys: [{ id, name, created_at, last_used_at }] }` for this person only, limited to 32. `last_used_at` is null before the first sign-in.                                                                                                  |
 | `POST /passkeys/remove`           | Session cookie and `{ id }`; stages, approves and applies `remove-passkey`, with a committed credential floor receipt and bounded session revocation, returning `{ success: true }`.                                                                                    |
 
+Enrollment responses use `packages/auth-contract/src/passkey-enrollment-response-bounds.ts`.
+Decision: bound the pinned complete creation DTO and exact credential-effect acknowledgement; stop malformed
+preparation before the browser prompt and retain unknown custody after ambiguous dispatch, without retries or new calls.
+Sources are the installed Better Auth passkey 1.8.0-beta.3 registration producer, SimpleWebAuthn server 13.3.3
+`generateRegistrationOptions`/`generateChallenge`/`parseAuthenticatorData`, native `registrationInput`, credential effects,
+and the passkey/user SQL schema. RP ID/name are the literals `rezics.com`/`REZICS`; issuer origin is verification
+configuration, not an emitted creation label. The plugin generates 32 random ASCII characters for the user handle
+(base64url ≤43), independently of the account ID, and a 32-byte challenge (base64url ≤43). Native owners have an empty
+name, so both user labels fall back to their existing Security-bounded account ID (≤1024 UTF-16 units).
+Historical nonempty user names/display names are PostgreSQL text without a database length constraint: only values
+within that same label allowance are qualified, with no clipping or fallback to a different identity.
+
+The supported configured DTO preserves algorithms `[-8,-7,-257]`, timeout 60000, attestation `none`, required resident
+key/UV with `requireResidentKey: true`, `extensions: { credProps: true }`, and empty hints. No custom extensions,
+authenticator attachment or alternate algorithm policy is configured. Exclusion retains ≤32 credentials and the
+seven pinned transport spellings; absent transports and the native empty-string storage default mean no hint.
+Credential IDs are base64url. The authenticator length field is uint16; the tighter existing 16384-byte native
+registration request ceiling also bounds each admitted ID's encoded length by 16384. SQL text alone gives no such
+bound: larger imported IDs, unknown/repeated transport lists beyond seven, excess historical owner rows and
+unconfigured options remain unqualified and make preparation unavailable, never a partial ceremony.
+
+Budgets use `S(n)=2+6n` for a JSON string (including escaping), `A(k,b)=2+kb+max(0,k−1)` for arrays, and the sum
+of quoted field names, colons, commas and values for closed objects. Base64url uses `2+n` rather than `S(n)`.
+The exported options formula includes every supported field and 32 maximum exclusion descriptors. Actual plugin
+success bytes are counted before fatal UTF-8/JSON decoding, then completely projected before JSON publication;
+invalid output publishes no challenge cookie. Valid output forwards the existing Set-Cookie unchanged. No query,
+challenge count, service deadline, freshness proof, effect digest/replay, approval, cap or epoch fence changes.
+The closed 201 has the exact effect ID, name and created_at: new IDs are UUIDs; retained receipt IDs use the existing
+1024-unit Security ID allowance, names are trimmed 1–128 units or null when absent, and dates use the 27-unit ISO
+allowance. Its formula is the closed three-field object; fixed native errors have a separate closed envelope.
+Native authenticator tests remain the verification authority; finite projection tests and mocked browser transport
+alone do not qualify real authenticator behavior or establish the outstanding native growth bound.
+
 The closed `CredentialPurpose` and `CredentialEffect` contracts retain the four
 operator-manageable purposes: `set-password`, `remove-password`, `add-key` and
 `remove-key`. The separate own-human `PasskeyPurpose` is `add-passkey` or

@@ -1,3 +1,4 @@
+import { enrollmentOptionsFixture } from './passkey-enrollment-fixture';
 import { afterAll, expect, test } from 'bun:test';
 import { creationFixture, open, flush, fill, button, leave, dom } from './creation-page-fixture';
 import { SecurityPage } from '../src/routes/security';
@@ -77,17 +78,7 @@ test.each(['password', 'prompt'])('departure retires %s and reloads private revi
   } else {
     await flush(() => host.querySelectorAll('form')[1]!.requestSubmit());
   }
-  if (kind === 'prompt')
-    await flush(() =>
-      calls[0]!.resolve(
-        Response.json({
-          challenge: 'Y2hhbGxlbmdl',
-          rp: { id: 'auth.test', name: 'REZICS' },
-          user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-        }),
-      ),
-    );
+  if (kind === 'prompt') await flush(() => calls[0]!.resolve(Response.json(enrollmentOptionsFixture())));
   await flush(leave);
   expect(host.querySelector('form')).toBeNull();
   expect(host.textContent).not.toContain('Reading companion');

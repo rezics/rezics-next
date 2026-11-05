@@ -15,7 +15,13 @@ import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
 import { InvalidKeyAssertion, verifyKeyAssertion } from './key-credentials.ts';
-import { passkeyPlugin, passkeyCeremonies, registrationInput, type PasskeyAssertion } from './passkeys.ts';
+import {
+  passkeyPlugin,
+  passkeyCeremonies,
+  registrationInput,
+  receiveRegistrationOptions,
+  type PasskeyAssertion,
+} from './passkeys.ts';
 import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
@@ -2539,7 +2545,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               });
           if (response.status >= 500) throw new APIError('SERVICE_UNAVAILABLE');
           if (!response.ok) throw new Denied();
-          const result = await response.json();
+          const result = registering ? await receiveRegistrationOptions(response) : await response.json();
           if (!registering) result.userVerification = 'required';
           return json(result, 200, response.headers.getSetCookie());
         }

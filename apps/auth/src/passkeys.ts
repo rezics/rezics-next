@@ -5,7 +5,6 @@ import {
   startAuthentication,
   startRegistration,
   WebAuthnAbortService,
-  type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser';
 import { AUTH_POST_TIMEOUT_MS, authPost, failureMessage, type AuthPostResult } from './api';
@@ -14,7 +13,18 @@ import { securityDevice, type SecurityPasskey } from './security';
 import { performSecurityAction, type SecurityActionResult } from './security-reconciliation';
 import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 import { SIGN_IN_CLIENT_ID, SIGN_IN_SCOPE, signInResult, type SignInResult } from './sign-in';
-import { managementOperationProfile, type ManagementOperationKind } from '@rezics/auth-contract';
+import {
+  managementOperationProfile,
+  type ManagementOperationKind,
+  parsePasskeyEnrollmentOptions,
+  parsePasskeyEnrollmentCreated,
+  parsePasskeyEnrollmentError,
+  passkeyEnrollmentResponseBytes,
+  type PasskeyEnrollmentCreated,
+  type PasskeyEnrollmentOptions,
+} from '@rezics/auth-contract';
+import { readJsonBounded } from './private-auth-json';
+import { privateAuthRead } from './private-auth-read';
 
 export const passkeysSupported = browserSupportsWebAuthn;
 export const passkeyAutofillSupported = browserSupportsWebAuthnAutofill;
@@ -119,13 +129,54 @@ function observePasskeyAdd(callback: PasskeyAddPhaseCallback | undefined, phase:
   }
 }
 
+// Preparation issues a fresh challenge. It is never shared, cached or retried.
+async function enrollmentOptions(caller?: AbortSignal): Promise<AuthPostResult<PasskeyEnrollmentOptions>> {
+  try {
+    return await privateAuthRead(async (signal) => {
+      const response = await fetch('/passkeys/register/options', {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const value = await readJsonBounded(
+        response,
+        response.status === 200 ? passkeyEnrollmentResponseBytes.options : passkeyEnrollmentResponseBytes.error,
+        signal,
+      );
+      if (response.status === 200) {
+        const options = parsePasskeyEnrollmentOptions(value);
+        if (!options) throw new Error('Enrollment options unavailable');
+        return { ok: true, body: options };
+      }
+      const error = parsePasskeyEnrollmentError(value);
+      return {
+        ok: false,
+        status: response.status,
+        code: error?.error ?? 'unavailable',
+        retryAfter: retryAfter(response),
+      };
+    }, caller);
+  } catch {
+    return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+  }
+}
+
+function retryAfter(response: Response): string | null {
+  const header = response.headers.get('Retry-After');
+  return header && /^\d+$/.test(header) ? header : null;
+}
+
 // Registration accepts 201 and cannot treat a lost acknowledgement as a refusal.
-async function postCreated<Body>(
+async function postCreated(
   path: string,
   body: unknown,
   caller?: AbortSignal,
   dispatch?: () => void,
-): Promise<AuthPostResult<Body> | UnknownRegistration | PreDispatchCancellation> {
+): Promise<AuthPostResult<PasskeyEnrollmentCreated> | UnknownRegistration | PreDispatchCancellation> {
   if (caller?.aborted) return { ok: false, reason: 'cancelled' };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -141,24 +192,24 @@ async function postCreated<Body>(
   });
   try {
     // The race also ends a transport that ignores abort, through body completion.
-    return await Promise.race([sendCreated<Body>(path, body, controller.signal, dispatch), stopped]);
+    return await Promise.race([sendCreated(path, body, controller.signal, dispatch), stopped]);
   } finally {
     clearTimeout(timer);
     caller?.removeEventListener('abort', cancel);
   }
 }
 
-async function sendCreated<Body>(
+async function sendCreated(
   path: string,
   body: unknown,
   signal: AbortSignal,
   dispatch?: () => void,
-): Promise<AuthPostResult<Body> | UnknownRegistration | PreDispatchCancellation> {
+): Promise<AuthPostResult<PasskeyEnrollmentCreated> | UnknownRegistration | PreDispatchCancellation> {
   let dispatched = false;
   try {
     signal.throwIfAborted();
-    dispatch?.();
     dispatched = true;
+    dispatch?.();
     const response = await fetch(path, {
       method: 'POST',
       credentials: 'same-origin',
@@ -168,26 +219,23 @@ async function sendCreated<Body>(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (response.status === 201) return { ok: true, body: (await response.json()) as Body };
-    const errorBody: unknown = await response.json();
-    const code =
-      errorBody && typeof errorBody === 'object' && 'error' in errorBody && typeof errorBody.error === 'string'
-        ? errorBody.error
-        : '';
-    const notApplied =
-      errorBody &&
-      typeof errorBody === 'object' &&
-      'effect_status' in errorBody &&
-      errorBody.effect_status === 'not_applied';
-    if (!code || (!notApplied && ![400, 401, 403, 404, 409, 413, 415, 429].includes(response.status)))
+    const value = await readJsonBounded(
+      response,
+      response.status === 201 ? passkeyEnrollmentResponseBytes.created : passkeyEnrollmentResponseBytes.error,
+      signal,
+    );
+    if (response.status === 201) {
+      const created = parsePasskeyEnrollmentCreated(value);
+      return created ? { ok: true, body: created } : { ok: false, reason: 'unknown' };
+    }
+    const error = parsePasskeyEnrollmentError(value);
+    // Only the native explicit refusal and its pre-dispatch rate limiter prove no effect.
+    if (
+      !error ||
+      !(error.effect_status === 'not_applied' || (response.status === 429 && error.error === 'authentication_denied'))
+    )
       return { ok: false, reason: 'unknown' };
-    const header = response.headers.get('Retry-After');
-    return {
-      ok: false,
-      status: response.status,
-      code,
-      retryAfter: header && /^\d+$/.test(header) ? header : null,
-    };
+    return { ok: false, status: response.status, code: error.error, retryAfter: retryAfter(response) };
   } catch {
     return dispatched ? { ok: false, reason: 'unknown' } : { ok: false, reason: 'cancelled' };
   }
@@ -228,7 +276,7 @@ export async function addPasskey(
     return { ok: false, reason: 'cancelled' };
   }
   observe('options');
-  const options = await authPost<PublicKeyCredentialCreationOptionsJSON>('/passkeys/register/options', {});
+  const options = await enrollmentOptions(signal);
   if (signal?.aborted) {
     observe('cancelled');
     return { ok: false, reason: 'cancelled' };
@@ -258,7 +306,7 @@ export async function addPasskey(
     return { ok: false, reason: 'cancelled' };
   }
   const chosen = name.trim() || defaultPasskeyName();
-  const created = await postCreated<{ id?: unknown; name?: unknown; created_at?: unknown }>(
+  const created = await postCreated(
     '/passkeys/register',
     chosen ? { response, name: chosen } : { response },
     signal,
@@ -272,17 +320,9 @@ export async function addPasskey(
     observe('failure');
     return addFailure(created);
   }
-  if (!created.body || typeof created.body !== 'object') {
-    observe('unknown');
-    return { ok: false, reason: 'unknown' };
-  }
   const { id, name: savedName, created_at: createdAt } = created.body;
-  if (typeof id !== 'string' || typeof savedName !== 'string' || typeof createdAt !== 'string') {
-    observe('unknown');
-    return { ok: false, reason: 'unknown' };
-  }
   observe('confirmed');
-  return { ok: true, passkey: { id, name: savedName, created_at: createdAt, last_used_at: null } };
+  return { ok: true, passkey: { id, name: savedName ?? '', created_at: createdAt, last_used_at: null } };
 }
 
 export type PasskeyRemoveResult = SecurityActionResult;

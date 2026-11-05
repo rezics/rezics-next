@@ -1,3 +1,4 @@
+export * from './passkey-enrollment-response-bounds';
 export * from './rename-response-bounds';
 export * from './organization-deletion-response-bounds';
 export * from './consent-response-bounds';

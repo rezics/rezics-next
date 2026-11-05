@@ -1,3 +1,4 @@
+import { enrollmentOptionsFixture } from './passkey-enrollment-fixture';
 import { afterAll, expect, test } from 'bun:test';
 import { creationFixture, dom, flush, open, fill, button, leave } from './creation-page-fixture';
 import { SecurityPage } from '../src/routes/security';
@@ -15,12 +16,7 @@ afterAll(() => {
   else Reflect.deleteProperty(globalThis, 'PublicKeyCredential');
 });
 
-const optionBody = {
-  challenge: 'Y2hhbGxlbmdl',
-  rp: { id: 'auth.test', name: 'REZICS' },
-  user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-  pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-};
+const optionBody = enrollmentOptionsFixture();
 const identitySource = async () => ({ kind: 'unavailable' as const });
 const tick = () => flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
 const restore = () => window.dispatchEvent(new dom.Event('pageshow') as unknown as Event);
@@ -291,5 +287,51 @@ test.each(['failure', 'signed-out'] as const)(
     expect(host.textContent).not.toContain('Private registration label');
     expect(host.textContent).not.toContain('native-row-id');
     expect(button(host, m.auth_security_passkey_dismiss_history())).toBeDefined();
+  },
+);
+
+test.each(['malformed', 'excess', 'refused-status'] as const)(
+  '%s acknowledgement retains original unknown custody through current inventory and cached return',
+  async (reply) => {
+    const { passkeyEnrollmentResponseBytes: budgets } = await import('@rezics/auth-contract');
+    Object.defineProperty(navigator, 'credentials', {
+      configurable: true,
+      value: {
+        create: async () =>
+          ({
+            id: 'browser-credential',
+            rawId: new ArrayBuffer(1),
+            type: 'public-key',
+            getClientExtensionResults: () => ({}),
+            response: { attestationObject: new ArrayBuffer(1), clientDataJSON: new ArrayBuffer(1) },
+          }) as unknown as Credential,
+      },
+    });
+    const { host, calls, reads, reviews, reviewedAccounts } = await mount();
+    await flush(() => host.querySelectorAll('form')[1]!.requestSubmit());
+    await flush(() => calls[0]!.resolve(Response.json(optionBody)));
+    await tick();
+    await tick();
+    await flush(() =>
+      calls[1]!.resolve(
+        reply === 'refused-status'
+          ? Response.json({ error: 'credential_effect_denied' }, { status: 409 })
+          : new Response(reply === 'excess' ? ' '.repeat(budgets.created + 1) : '{', { status: 201 }),
+      ),
+    );
+    await tick();
+    expect(host.textContent).toContain(m.auth_security_passkey_registration_unknown());
+    expect(reads).toHaveLength(0);
+    await flush(leave);
+    await flush(restore);
+    await flush(() => reads[0]!.resolve(initial));
+    expect(host.textContent).toContain(m.auth_security_passkey_registration_unknown());
+    await flush(() => button(host, m.auth_security_passkey_check_current())!.click());
+    await flush(() => reviews[0]!.resolve({ kind: 'ready', passkeys: [], truncated: false }));
+    expect(reviewedAccounts).toEqual([initial.kind === 'ready' ? initial.accountId : '']);
+    expect(host.textContent).toContain(m.auth_security_passkey_registration_reviewed());
+    expect(host.textContent).toContain(m.auth_security_passkey_history_unknown());
+    expect(button(host, m.auth_security_passkey_add())?.disabled ?? true).toBe(true);
+    expect(calls.map(({ path }) => path)).toEqual(['/passkeys/register/options', '/passkeys/register']);
   },
 );

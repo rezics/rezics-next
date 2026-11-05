@@ -1,3 +1,4 @@
+import { parsePasskeyEnrollmentOptions, passkeyEnrollmentResponseBytes } from '@rezics/auth-contract';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { passkey, type PasskeyOptions } from '@better-auth/passkey';
@@ -78,4 +79,38 @@ export function registrationInput(response: unknown, name: unknown) {
       .update(JSON.stringify([response, label]))
       .digest('hex'),
   };
+}
+
+/** Plugin HTTP response boundary: no partial options or challenge cookie is published. */
+export async function receiveRegistrationOptions(response: Response) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new APIError('SERVICE_UNAVAILABLE');
+  let complete = false;
+  try {
+    const announced = response.headers.get('content-length');
+    if (announced && /^\d+$/.test(announced) && Number(announced) > passkeyEnrollmentResponseBytes.options)
+      throw new APIError('SERVICE_UNAVAILABLE');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        complete = true;
+        break;
+      }
+      if (value.byteLength > passkeyEnrollmentResponseBytes.options - size) throw new APIError('SERVICE_UNAVAILABLE');
+      size += value.byteLength;
+      chunks.push(value);
+    }
+    const bytes = Buffer.concat(chunks, size);
+    const options = parsePasskeyEnrollmentOptions(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+    if (!options || options.rp.id !== 'rezics.com' || options.rp.name !== 'REZICS')
+      throw new APIError('SERVICE_UNAVAILABLE');
+    return options;
+  } catch {
+    throw new APIError('SERVICE_UNAVAILABLE');
+  } finally {
+    if (!complete) void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }

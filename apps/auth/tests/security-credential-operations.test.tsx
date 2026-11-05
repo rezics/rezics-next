@@ -1,3 +1,4 @@
+import { enrollmentOptionsFixture } from './passkey-enrollment-fixture';
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -79,13 +80,7 @@ async function mount() {
   window.confirm = () => true;
   globalThis.fetch = (async (path, init) => {
     calls.push(String(path));
-    if (path === '/passkeys/register/options')
-      return Response.json({
-        challenge: 'Y2hhbGxlbmdl',
-        rp: { id: 'auth.test', name: 'REZICS' },
-        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-      });
+    if (path === '/passkeys/register/options') return Response.json(enrollmentOptionsFixture());
     if (String(path).startsWith('/credential-effects/')) requestBodies.push(JSON.parse(String(init?.body)));
     return response.promise;
   }) as typeof fetch;
@@ -128,16 +123,7 @@ test('a passkey prompt holds the boundary while password review and duplicate pr
   });
   expect(writes().every((control) => control.disabled)).toBe(true);
   expect(calls).toEqual(['/passkeys/register/options']);
-  await flush(() =>
-    response.resolve(
-      Response.json({
-        challenge: 'Y2hhbGxlbmdl',
-        rp: { id: 'auth.test', name: 'REZICS' },
-        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-      }),
-    ),
-  );
+  await flush(() => response.resolve(Response.json(enrollmentOptionsFixture())));
   await flush(() => {
     submit(1);
     submit(0);
