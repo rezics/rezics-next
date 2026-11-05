@@ -14,7 +14,15 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/guard', () => ({ requireSignedIn: async () => {} }));
-mock.module('../src/kernel/exposure', () => ({ prepareExposure: async () => {} }));
+mock.module('../src/kernel/exposure', () => ({
+  prepareExposure: async () => {},
+  readAdmittedResult: async () => ({ admitted: ['personal_library'], state: 'ready' }),
+}));
+mock.module('../src/session/request', () => ({
+  prepareSession: async () => {},
+  sessionSubject: () => 'viewer',
+  viewerCredential: () => 'Bearer viewer',
+}));
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -224,6 +232,9 @@ test('production route replaces three windows, retries exact reads independently
     expect(reads.at(-1)?.cursor).toBe('c');
     await click(m.library_window_previous());
     expect(reads.at(-1)?.cursor).toBe('b');
+    await click(m.library_window_previous());
+    expect(reads.at(-1)?.cursor).toBeUndefined();
+    await click(m.library_bulk_recovery_read_more());
     changed = true;
     await click(m.library_vndb_browse_refresh());
     expect(host.textContent).toContain(m.library_bulk_recovery_outcome_success());
