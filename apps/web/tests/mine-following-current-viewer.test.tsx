@@ -437,7 +437,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
     });
     await refetch(null);
     await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
-    expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('false');
+    expect(host.textContent).toContain(m.error_message());
     await settle(uncertain, { ok: false, reason: 'unavailable' });
     await remove();
     const retry = writes.at(-1)!;
