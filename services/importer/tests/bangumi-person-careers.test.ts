@@ -93,7 +93,8 @@ test('ordinary Person refresh follows current career bindings and retains names 
     expect((await run(['writer'])).status).toBe('committed');
     expect(careers()).toEqual([]);
     const names = effects.filter(
-      (command) => command.op === 'propose' && command.statement.property.id === 'schema:name',
+      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+        command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
     visible = true;
     expect(await run(['writer'])).toMatchObject({ status: 'committed', counts: { unchanged: 1 } });
@@ -125,7 +126,7 @@ test('ordinary Person refresh follows current career bindings and retains names 
           command.op === 'propose' && command.statement.property.id === 'schema:name',
       );
     expect(currentNames.map((command) => command.statement)).toEqual(
-      names.map((command) => command.op === 'propose' && command.statement),
+      names.map((command) => command.statement),
     );
     expect(
       currentNames.every(
