@@ -56,3 +56,19 @@ export function collectionTransferReceipt(
     state,
   };
 }
+
+/** Keep each successful side's current revision; a miss leaves that side's captured revision unchanged. */
+export function collectionTransferReceiptUpdate(
+  receipt: CollectionTransferReceipt,
+  source: { id: string; revision: number } | undefined,
+  destination: { id: string; revision: number } | undefined,
+): CollectionTransferReceipt {
+  const sourceMatch = source?.id === receipt.sourceId ? source : undefined;
+  const destinationMatch = destination?.id === receipt.destinationId ? destination : undefined;
+  return {
+    ...receipt,
+    sourceRevision: sourceMatch?.revision ?? receipt.sourceRevision,
+    destinationRevision: destinationMatch?.revision ?? receipt.destinationRevision,
+    state: collectionTransferReadback(receipt.sourceId, receipt.destinationId, sourceMatch, destinationMatch),
+  };
+}

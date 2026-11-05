@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   collectionTransferReadback,
   collectionTransferReceipt,
+  collectionTransferReceiptUpdate,
   type CollectionTransferReview,
 } from '../src/library/collection-placement-journey/transfer';
 import { CollectionTransferReceiptPanel } from '../src/library/collection-transfer-receipt';
@@ -67,4 +68,21 @@ test('source and destination readbacks settle independently without inventing a 
   expect(html).toContain(m.library_collection_move_source_link({ title: 'Source shelf' }));
   expect(html).toContain(m.library_collection_move_destination_link({ title: 'Later shelf' }));
   expect(html).toContain(m.library_collection_move_read_current());
+});
+
+test('receipt reread keeps a successful side and does not invent ready from one miss', () => {
+  const receipt = collectionTransferReceipt(review, 8, 5, 'unavailable');
+  expect(
+    collectionTransferReceiptUpdate(receipt, { id: 'source', revision: 9 }, undefined),
+  ).toEqual({ ...receipt, sourceRevision: 9, state: 'unavailable' });
+  expect(
+    collectionTransferReceiptUpdate(receipt, undefined, { id: 'dest', revision: 6 }),
+  ).toEqual({ ...receipt, destinationRevision: 6, state: 'unavailable' });
+  expect(
+    collectionTransferReceiptUpdate(
+      receipt,
+      { id: 'source', revision: 9 },
+      { id: 'dest', revision: 6 },
+    ),
+  ).toEqual({ ...receipt, sourceRevision: 9, destinationRevision: 6, state: 'ready' });
 });
