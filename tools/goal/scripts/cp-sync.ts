@@ -212,6 +212,26 @@ function refTransactionContext(checkout: string): CpSyncRefTransactionContext {
   };
 }
 
+/** Stops processes left running inside a worktree, such as detached test fixtures in their own process groups. */
+function stopProcessesIn(directory: string): number {
+  let stopped = 0;
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry) || Number(entry) === process.pid) continue;
+    let cwd: string;
+    try {
+      cwd = readlinkSync(`/proc/${entry}/cwd`).replace(/ \(deleted\)$/, '');
+    } catch {
+      continue;
+    }
+    if (cwd !== directory && !cwd.startsWith(`${directory}/`)) continue;
+    try {
+      process.kill(Number(entry), 'SIGTERM');
+      stopped++;
+    } catch {}
+  }
+  return stopped;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Root files the control plane reaches outside tools/goal
 
