@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { CHECK_RESULT_SCHEMA, CheckResults, checkResultKey, reusableCommand } from './check-results.ts';
 import { gateRunner } from './merge.ts';
@@ -50,6 +50,106 @@ afterEach(() => {
 });
 
 describe('check result reuse keys', () => {
+  test('keeps exact workspace, root, and unrecognized-cwd keys', () => {
+    const commit = command('rev-parse', 'HEAD');
+    const toolchain = {
+      bun: 'test-bun',
+      bunRevision: 'test-revision',
+      os: 'test-os',
+      arch: 'test-arch',
+      postgres: 'test-postgres',
+      opensearch: 'test-opensearch',
+      playwright: 'test-playwright',
+    };
+    const result = (cwd: string) =>
+      checkResultKey({ root, commit, cwd, command: ['bun', 'test'], env: {}, toolchain });
+    expect(result(join(root, 'apps/app'))).toEqual({
+      key: 'ae7dc1b625bdb1620010dc3153b02344b1c6627ceb6226e8d7b9e1a54c3bddb9',
+      unit: 'apps/app,packages/a',
+    });
+    expect(result(root)).toEqual({
+      key: '1cc09821b6a7050089832d082fbfc4ae1dc73aaa93a145c60a3a10ed750e2919',
+      unit: '.',
+    });
+    expect(result(join(root, 'docs'))).toEqual({
+      key: '76a465d6a9628a6bc4ad573ee382bb75bcca6f200dbf4f0bb8ae50186ef90b32',
+      unit: 'docs',
+    });
+  });
+
+  test('projects growing cyclic workspace closures with a fixed number of Git subprocesses', () => {
+    write(
+      'packages/a/package.json',
+      JSON.stringify({ name: '@fixture/a', dependencies: { '@fixture/b': 'workspace:*' } }),
+    );
+    write(
+      'packages/b/package.json',
+      JSON.stringify({ name: '@fixture/b', dependencies: { '@fixture/a': 'workspace:*' } }),
+    );
+    commit();
+
+    const gitPath = process.env.PATH!.split(delimiter).map((dir) => join(dir, 'git')).find(existsSync)!;
+    const bin = join(root, 'git-bin');
+    mkdirSync(bin);
+    const wrapper = join(bin, 'git');
+    const log = join(root, 'git-calls.log');
+    writeFileSync(
+      wrapper,
+      '#!/bin/sh\nprintf "git\\n" >> "$CHECK_RESULTS_TEST_GIT_LOG"\nexec "$CHECK_RESULTS_TEST_REAL_GIT" "$@"\n',
+    );
+    chmodSync(wrapper, 0o755);
+    const originalPath = process.env.PATH;
+    const measure = (commit: string, cwd = join(root, 'apps/app')) => {
+      process.env.PATH = `${bin}${delimiter}${originalPath}`;
+      process.env.CHECK_RESULTS_TEST_GIT_LOG = log;
+      process.env.CHECK_RESULTS_TEST_REAL_GIT = gitPath;
+      try {
+        return checkResultKey({ root, commit, cwd, command: ['bun', 'test'], env: {} });
+      } finally {
+        if (originalPath === undefined) delete process.env.PATH;
+        else process.env.PATH = originalPath;
+        delete process.env.CHECK_RESULTS_TEST_GIT_LOG;
+        delete process.env.CHECK_RESULTS_TEST_REAL_GIT;
+      }
+    };
+
+    const smallCommit = command('rev-parse', 'HEAD');
+    const small = measure(smallCommit);
+    expect(small.unit).toBe('apps/app,packages/a,packages/b');
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(2);
+
+    const extraNames = Array.from({ length: 12 }, (_, index) => `@fixture/extra-${String(index).padStart(2, '0')}`);
+    write(
+      'packages/b/package.json',
+      JSON.stringify({
+        name: '@fixture/b',
+        dependencies: { '@fixture/a': 'workspace:*', [extraNames[0]]: 'workspace:*' },
+      }),
+    );
+    for (const [index, name] of extraNames.entries())
+      write(
+        `packages/extra-${String(index).padStart(2, '0')}/package.json`,
+        JSON.stringify({
+          name,
+          dependencies: { [extraNames[index + 1] ?? '@fixture/a']: 'workspace:*' },
+        }),
+      );
+    commit();
+    const largeCommit = command('rev-parse', 'HEAD');
+    const large = measure(largeCommit);
+    const expectedUnit = ['apps/app', 'packages/a', 'packages/b', ...extraNames.map((_, index) => `packages/extra-${String(index).padStart(2, '0')}`)].join(',');
+    expect(large.unit).toBe(expectedUnit);
+    expect(large.key).not.toBe(small.key);
+    expect(measure(largeCommit)).toEqual(large);
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(4);
+
+    write('packages/no-manifest/src.ts', 'export const outsideWorkspace = true;');
+    commit();
+    const missingManifest = measure(command('rev-parse', 'HEAD'), join(root, 'packages/no-manifest'));
+    expect(missingManifest.unit).toBe('packages/no-manifest');
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(6);
+  });
+
   test('a passing check records its result under command, allowlisted environment, workspace closure, global inputs, and toolchain', () => {
     const k = checkResultKey({
       root,
