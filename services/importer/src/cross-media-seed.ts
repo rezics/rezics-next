@@ -30,8 +30,11 @@ import {
   observePersonIdentity,
   personIdentityForSource,
   personReviewSource,
+  selectPersonReviewPair,
+  showcasePersonReview,
   type CurrentPersonIdentity,
   type PersonReviewSource,
+  type PersonReviewPair,
 } from './showcase-person-identity.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
@@ -2088,6 +2091,7 @@ export type CrossMediaSeedResult = {
   personIdentities: CrossMediaPersonIdentity[];
   /** Private comparison inputs from actual admitted records, independent of canonical read availability. */
   personReviewSources?: readonly PersonReviewSource[];
+  personReview?: typeof showcasePersonReview & { pair: PersonReviewPair };
   mediaOutcomes: CrossMediaMediaOutcome[];
   workLinks: ShowcaseWorkLinkHandoff[];
   gaps: CrossMediaGap[];
@@ -2931,6 +2935,7 @@ export async function seedCrossMedia(
       readings,
       personIdentities,
       personReviewSources,
+      personReview: { ...showcasePersonReview, pair: selectPersonReviewPair(personReviewSources, showcasePersonReview.selection) },
       mediaOutcomes: [],
       workLinks: [],
       gaps: [

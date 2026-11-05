@@ -229,6 +229,21 @@ composition receives that same result. `selectPersonReviewPair` selects exact pr
 reports absent records; it neither infers a human bridge nor confirms a merge. Only current exact identifier reads
 enable credits. The handoff does not claim pinned archive verification or coherent native review evidence.
 
+The selected acquisition pair is Bangumi `person:1916` and VNDB `s224` (Jun Maeda). The independently retrieved
+[CDJournal profile](https://artist.cdjournal.com/a/maeda-jun/842760) corroborates the pinned records' birth date
+(1975-01-03), Mie birthplace, legal name and Key affiliation. This supports choosing one human for deliberate
+review; names or overlapping credits alone do not. The source retains Bangumi `麻枝准`, VNDB preferred alias
+`28069` (`前田 純`, `Maeda Jun`) and credited alias `386` (`麻枝 准`, `Maeda Jun`) separately.
+
+Pinned acquisition uses the existing dump operator/cache: Bangumi `dump-2026-10-20.210332Z.zip`
+(`9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93`) and VNDB `vndb-db-2026-11-04.tar.zst`
+(`fadbe611c4d6475ef63a0c1861512bc9ff64d21c6c9804a988522c7c65f6fa85`). Selected rows are Bangumi person1916 and
+subject-persons `(1851,1916)` positions32/31/10/6/3/1, plus VNDB staff s224, staff_alias386/28069 and
+vn_staff `(v4,386)` scenario/music/staff. The scenario note remains
+`Common route, Nagisa, Fuuko, Tomoyo, Misae, first half of Yukine, After Story routes`.
+The sole seed result's `personReview` returns the selected pair or exact missing keys, with the independent citation;
+`sourceDigests` retains actual table digests. Original UUIDs come only from acknowledged native bindings.
+
 ### Import authored VNDB contributor, producer and release websites
 
 At most 32 admitted links per owner and a 64 KiB projection; public website URL rules still apply.

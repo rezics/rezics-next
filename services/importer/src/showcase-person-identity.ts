@@ -39,6 +39,12 @@ export type PersonReviewSelection = Readonly<{
   vndb: string;
 }>;
 
+/** Acquisition selects this human; native review still requires fresh evidence and explicit consent. */
+export const showcasePersonReview = {
+  selection: { bangumi: 'person:1916', vndb: 's224' },
+  independentEvidence: 'https://artist.cdjournal.com/a/maeda-jun/842760',
+} as const;
+
 export type PersonReviewPair =
   | Readonly<{ state: 'selected'; sources: readonly [PersonReviewSource, PersonReviewSource] }>
   | Readonly<{
