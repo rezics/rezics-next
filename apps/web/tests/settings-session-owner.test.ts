@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, StrictMode } from 'react';
+import { act, createElement, Fragment, StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
@@ -35,8 +35,13 @@ const { SettingsSessionOwner } = await import('../src/settings/settings-session-
 const { accountPreferenceIO, SettingsPageView } = await import('../src/settings/settings-page');
 const { collectionPrivacyIO } = await import('../src/settings/collection-privacy');
 const { verificationRecoveryIO } = await import('../src/settings/verification');
+const { useOperationAdmission } = await import('../src/kernel/exposure');
 const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
 const { m } = await import('../src/paraglide/messages.js');
+
+function CollectionsAdmissionProbe() {
+  return <output id="collections-admission">{useOperationAdmission('account.collections')}</output>;
+}
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'original-token' };
 const notifications = { reply: true, mention: false, thread_watch: true, board_activity: true };
@@ -496,7 +501,13 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
     },
   };
   const route = createRootRoute({
-    component: () => createElement(SettingsPageView, { page, csrfToken: identity.csrfToken, preferenceIO }),
+    component: () =>
+      createElement(
+        Fragment,
+        null,
+        createElement(SettingsPageView, { page, csrfToken: identity.csrfToken, preferenceIO }),
+        createElement(CollectionsAdmissionProbe),
+      ),
   });
   const router = createRouter({
     routeTree: route,
@@ -519,15 +530,18 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
       );
     });
     expect(host.querySelector('a[href="#privacy"]')).not.toBeNull();
+    expect(host.querySelector('#collections-admission')?.textContent).toBe('available');
     expect(host.textContent).not.toContain(m.settings_sections_loading());
     await act(async () => {
       client.setQueryData(currentExposureKey, { subject: 'alice', admitted: [], state: 'denied' });
     });
     expect(host.querySelector('a[href="#privacy"]')).toBeNull();
+    expect(host.querySelector('#collections-admission')?.textContent).toBe('denied');
     expect(host.textContent).toContain(m.settings_closed_title());
     await act(async () => {
       client.setQueryData(currentExposureKey, { subject: 'alice', admitted: [], state: 'unavailable' });
     });
+    expect(host.querySelector('#collections-admission')?.textContent).toBe('unavailable');
     expect(host.textContent).toContain(m.settings_unavailable_title());
     const toggle = host.querySelector('[role="switch"]');
     expect(toggle).not.toBeNull();
