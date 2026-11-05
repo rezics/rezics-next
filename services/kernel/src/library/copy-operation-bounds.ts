@@ -581,9 +581,6 @@ function commandEnvelope(input: {
   commandInput: unknown;
   eventType: string;
   responseBytes: number;
-  clientId: string;
-  requestedBy: string | null;
-  durationMs: number;
 }) {
   const route = input.route;
   const partition = partitionOf(route);
