@@ -968,9 +968,9 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
     replyResult = { ok: true, post: { id: 'created-reply' } };
     const threadId = id;
     const boardId = '00000000-0000-4000-8000-000000000005';
-    const openingPostId = '00000000-0000-4000-8000-000000000006';
+    const openingPostId = '00000000-0000-7000-8000-000000000006';
     const openingRevision = '00000000-0000-4000-8000-000000000003';
-    const postId = '00000000-0000-4000-8000-000000000002';
+    const postId = '00000000-0000-7000-8000-000000000002';
     const postRevision = '00000000-0000-4000-8000-000000000004';
     const publicState = { availability: 'available', visibility: 'published' };
     const thread = {
