@@ -1,17 +1,16 @@
-import type { ProgressChoices } from '../progress-profile';
 import type { Application, Holdings, Occurrences, Reply, Result, Review, ReviewInput, Units, Upload } from './native';
 import { UPLOAD_BYTES } from './native';
-import type { Port } from './port';
+import type { ProgressRecoveryPort, NativePort } from './native';
 
 export type Occurrence = Occurrences['occurrences'][number]['evidence'];
-export type Snapshot = {
+export type Snapshot<Choices = unknown> = {
   upload: Upload | null;
   holdings: Holdings | null;
   occurrences: Occurrences | null;
   units: Units | null;
   unitSupport: Review['completedUnits'];
   selected: Occurrence | null;
-  choices: ProgressChoices;
+  choices: Choices | undefined;
   mappedSubject: string | null;
   review: Review | null;
   operands: ReviewInput | null;
@@ -25,15 +24,16 @@ export type Snapshot = {
   notice: 'ready' | 'uncertain' | 'recoverable' | 'refused' | 'expired' | 'oversize' | 'cancelled' | 'removed';
   refusal: number | null;
 };
-type Pending = { port: Port; upload: Upload | null } & (
+type Sender = Omit<NativePort, 'subject'>;
+type Pending = { port: Sender; upload: Upload | null } & (
   | { kind: 'upload'; base64: string; key: string }
   | { kind: 'review'; body: ReviewInput; key: string; inspection: boolean }
   | { kind: 'apply'; review: Review; body: ReviewInput; key: string }
 );
 /** Protected unresolved commands outlive a React visit. Only an identical private binding can recover them. */
 const unresolved = new Map<string, Pending>();
-const cancellations = new Map<string, { port: Port; upload: Upload }>();
-const empty = (): Snapshot => ({
+const cancellations = new Map<string, { port: Sender; upload: Upload }>();
+const empty = <Choices>(): Snapshot<Choices> => ({
   upload: null,
   holdings: null,
   occurrences: null,
@@ -60,13 +60,13 @@ export function archiveBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export class ProgressRecoveryJourney {
-  #state = empty();
+export class ProgressRecoveryJourney<Choices = unknown> {
+  #state = empty<Choices>();
   #retired = false;
   #working = false;
   #selection = 0;
   constructor(
-    readonly port: Port,
+    readonly port: ProgressRecoveryPort<Choices>,
     readonly binding: string,
     readonly current: () => boolean,
     readonly changed: () => void = () => {},
@@ -91,8 +91,8 @@ export class ProgressRecoveryJourney {
   #live() {
     return !this.#retired && this.current();
   }
-  snapshot(): Snapshot {
-    if (!this.#live()) return empty();
+  snapshot(): Snapshot<Choices> {
+    if (!this.#live()) return empty<Choices>();
     if (this.#state.upload && Date.now() >= Date.parse(this.#state.upload.expiresAt)) this.#expire();
     return this.#state;
   }
@@ -124,7 +124,7 @@ export class ProgressRecoveryJourney {
   retire() {
     this.#retired = true;
     this.#selection++;
-    this.#state = empty();
+    this.#state = empty<Choices>();
   }
   #accept<T>(reply: Reply<T>): T | null {
     if (!this.#live()) return null;
@@ -171,7 +171,8 @@ export class ProgressRecoveryJourney {
       // Store the exact request and original sender before delivery. No JSON parse/re-encode occurs.
       unresolved.set(this.binding, { kind: 'upload', base64, key: crypto.randomUUID(), port: this.port, upload: null });
       await this.#deliver();
-      if (this.#state.upload && !unresolved.has(this.binding)) await this.#inspect();
+      if (this.#state.upload && !unresolved.has(this.binding) && !cancellations.has(this.binding))
+        await this.#inspect();
     });
   }
   async #inspect() {
@@ -332,13 +333,15 @@ export class ProgressRecoveryJourney {
       }
     }
     if (!this.#live()) return;
-    // Definitive refusals cannot have accepted this Web command; a recoverable native reply is still pending.
-    if (this.#state.notice === 'refused' || this.#state.notice === 'expired') unresolved.delete(this.binding);
-    this.#state.pending = unresolved.has(this.binding);
+    // A later authorization/expiry refusal cannot acknowledge an earlier lost native apply.
+    if (command.kind !== 'apply' && (this.#state.notice === 'refused' || this.#state.notice === 'expired'))
+      unresolved.delete(this.binding);
+    this.#state.pending = unresolved.has(this.binding) || cancellations.has(this.binding);
+    if (cancellations.has(this.binding)) this.#state.notice = 'uncertain';
     if (!this.#state.pending && !['refused', 'expired'].includes(this.#state.notice))
       this.#state.notice = this.#state.cancelled ? 'cancelled' : 'ready';
   }
-  async #result(port: Port, id: string, reviewId: string) {
+  async #result(port: Sender, id: string, reviewId: string) {
     const value = this.#accept(await port.result(id, reviewId));
     if (value) this.#state.result = value;
   }
@@ -351,7 +354,8 @@ export class ProgressRecoveryJourney {
     await this.#work(async () => {
       if (cancellations.has(this.binding)) await this.#cancel();
       if (unresolved.has(this.binding)) await this.#deliver();
-      if (this.#state.upload && !unresolved.has(this.binding)) await this.#inspect();
+      if (this.#state.upload && !unresolved.has(this.binding) && !cancellations.has(this.binding))
+        await this.#inspect();
     });
   }
   async #cancel() {
@@ -408,7 +412,7 @@ export class ProgressRecoveryJourney {
         this.#emit();
       }
       if (this.#live() && complete) {
-        this.#state = { ...empty(), notice: 'removed' };
+        this.#state = { ...empty<Choices>(), notice: 'removed' };
       } else this.#state.removing = false;
     });
   }

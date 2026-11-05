@@ -7,7 +7,8 @@ import { PageHeading } from '../../shell/page-heading';
 import { IndependentMeasuresReadout } from '../independent-measures/editor';
 import { measureValueKind } from '../independent-measures/contract';
 import { EpisodeChecklistEditor } from '../episode-checklist/editor';
-import { readyVisit } from '../episode-checklist/controller';
+import { preparingVisit } from '../episode-checklist/controller';
+import type { ProgressChoices } from '../progress-profile';
 import { ArchiveRecoveryDeparture } from '../archive-collection-recovery/departure';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';
@@ -16,12 +17,14 @@ import { RecoveryReview, RecoveryResult, Evidence } from './review';
 
 export const action =
   'min-h-11 min-w-11 max-w-full rounded-md border px-3 py-2 whitespace-normal [overflow-wrap:anywhere] disabled:opacity-50';
+type Journey = ProgressRecoveryJourney<ProgressChoices>;
+type View = Snapshot<ProgressChoices>;
 const uuid = '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}';
 
 export function ArchiveProgressRecoveryPage() {
   const client = useContext(QueryClientContext);
   const [, update] = useReducer((n) => n + 1, 0);
-  const [journey, setJourney] = useState<ProgressRecoveryJourney | null>(null);
+  const [journey, setJourney] = useState<Journey | null>(null);
   const identity = () =>
     JSON.stringify([
       client?.getQueryData(sessionQuery.queryKey),
@@ -39,7 +42,7 @@ export function ArchiveProgressRecoveryPage() {
     );
     if (session?.state !== 'signed-in' || !session.subject || !session.csrfToken) return;
     let active = true,
-      mounted: ProgressRecoveryJourney | undefined;
+      mounted: Journey | undefined;
     const address = window.location.pathname + window.location.search;
     const current = () =>
       active && binding === identity() && address === window.location.pathname + window.location.search;
@@ -65,7 +68,7 @@ export function ArchiveProgressRecoveryPage() {
   return <RecoveryJourney key={binding} journey={journey} snap={snap} />;
 }
 
-function RecoveryJourney({ journey, snap }: { journey: ProgressRecoveryJourney; snap: Snapshot }) {
+function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
   const [consent, setConsent] = useState('');
   const locked = snap.busy || snap.pending;
   useEffect(() => {
@@ -256,7 +259,7 @@ export function Pager({
   );
 }
 
-function Mapping({ journey, snap }: { journey: ProgressRecoveryJourney; snap: Snapshot }) {
+function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
   const source = snap.selected!;
   const [subject, setSubject] = useState('');
   const [pair, setPair] = useState('');
@@ -281,20 +284,20 @@ function Mapping({ journey, snap }: { journey: ProgressRecoveryJourney; snap: Sn
           unitIds: choice.mode === 'completed_units' ? ids : [],
         }
       : null;
-  const visit = readyVisit(
-    null,
-    (snap.units?.units ?? []).map(({ evidence }) => {
-      const admission = snap.unitSupport.find((unit) => unit.unitId === evidence.unit_id)?.admission;
-      return {
-        episodeSubjectId: evidence.unit_id,
-        completed: false,
-        membership: admission ?? 'unavailable',
-        ordinal: null,
-        label: evidence.unit_id,
-        source: 'inspect',
-      };
-    }),
-  );
+  const visit = preparingVisit(null);
+  visit.kind = 'ready';
+  visit.membership = 'admitted';
+  visit.rows = (snap.units?.units ?? []).map(({ evidence }) => {
+    const admission = snap.unitSupport.find((unit) => unit.unitId === evidence.unit_id)?.admission;
+    return {
+      episodeSubjectId: evidence.unit_id,
+      completed: false,
+      membership: admission ?? 'unavailable',
+      ordinal: null,
+      label: evidence.unit_id,
+      source: 'inspect',
+    };
+  });
   visit.selection = { add: ids, remove: [] };
   const changed = () => journey.invalidateReview();
   const measures = [

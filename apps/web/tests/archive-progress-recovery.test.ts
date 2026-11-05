@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { archiveBase64, ProgressRecoveryJourney } from '../src/library/archive-progress-recovery/controller';
 import { progressRecoveryNative, type Review, type ReviewInput } from '../src/library/archive-progress-recovery/native';
-import type { Port } from '../src/library/archive-progress-recovery/port';
+import type { ProgressRecoveryPort as Port } from '../src/library/archive-progress-recovery/native';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const input: ReviewInput = {
@@ -170,4 +170,41 @@ test('lost review response retains normalized operands; refreshed review uses a 
   await journey.review(input);
   expect(keys[2]).not.toBe(keys[0]);
   expect(journey.snapshot().review?.reviewId).toBe('3');
+});
+
+test('a refusal after response loss preserves apply custody, and lost cancellation remains pending after apply acknowledgement', async () => {
+  const sent: unknown[][] = [];
+  let acknowledgeCancel = false;
+  const native = port(async (...args) => {
+    sent.push(args);
+    if (sent.length === 1) return { kind: 'uncertain' };
+    if (sent.length === 2) return { kind: 'refused', status: 403 };
+    return {
+      kind: 'ok',
+      value: {
+        uploadId: id,
+        reviewId: id,
+        state: 'partial',
+        sessionId: id,
+        acceptedSteps: 1,
+        totalSteps: 3,
+        error: null,
+      },
+    };
+  });
+  native.cancel = async () =>
+    acknowledgeCancel ? { kind: 'ok', value: { uploadId: id, cancelled: true } } : { kind: 'uncertain' };
+  const journey = new ProgressRecoveryJourney(native, crypto.randomUUID(), () => true);
+  await prepare(journey);
+  await journey.confirm(id);
+  await journey.retry();
+  expect(journey.snapshot()).toMatchObject({ pending: true, refusal: 403, result: null });
+  await journey.cancel();
+  expect(journey.snapshot()).toMatchObject({ pending: true, notice: 'uncertain', application: { state: 'partial' } });
+  expect(sent).toHaveLength(3);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[2]).toEqual(sent[0]);
+  acknowledgeCancel = true;
+  await journey.retry();
+  expect(journey.snapshot()).toMatchObject({ pending: false, cancelled: true });
 });

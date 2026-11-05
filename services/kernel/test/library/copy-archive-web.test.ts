@@ -16,7 +16,7 @@ import {
   type Reply,
   type ReviewInput,
 } from '../../../../apps/web/src/library/archive-progress-recovery/native';
-import type { Port } from '../../../../apps/web/src/library/archive-progress-recovery/port';
+import type { ProgressRecoveryPort as Port } from '../../../../apps/web/src/library/archive-progress-recovery/native';
 import { createCopyArchive } from '../../src/library/copy-archive';
 import { createWorkClient } from '../../src/work/client';
 import { routeOf } from '../../src/route/route';
