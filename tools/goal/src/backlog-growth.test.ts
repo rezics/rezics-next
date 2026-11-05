@@ -255,7 +255,14 @@ test(
   GROWTH_SCENARIO,
   async () => {
     const empty = await run({ settled: 0, stopped: 0, ready: 0 });
-    expect(empty.sweeps[0]).toEqual({ dispatched: [], continued: [], refused: [], expired: [], woken: [] });
+    expect(empty.sweeps[0]).toEqual({
+      dispatched: [],
+      continued: [],
+      refused: [],
+      returned: [],
+      expired: [],
+      woken: [],
+    });
 
     const history: Awaited<ReturnType<typeof run>>[] = [];
     for (const settled of [100, 1_000, 5_000])

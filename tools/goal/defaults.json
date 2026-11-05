@@ -152,7 +152,8 @@
     },
     "termspacesCommand": "termspaces",
     "devPrelandingTypecheck": false,
-    "devLandingBootCheck": false
+    "devLandingBootCheck": false,
+    "devKernelImport": false
   },
   "codex": {
     "serviceTier": "default",
@@ -181,6 +182,7 @@
       "stoppedTaskLimitMs": 3600000,
       "stoppedTasksPerGoalPerRun": 20,
       "dispatchesPerSweep": 4,
+      "allowanceWaitingBound": 10,
       "settleMs": 10000,
       "refusalBriefs": 4,
       "refusalReasonCharacters": 160,
@@ -337,7 +339,9 @@
       "alertUnusedPercent": 20,
       "alertResetHours": 24,
       "alertEveryMs": 10800000,
-      "burnSpanMs": 5400000
+      "burnSpanMs": 5400000,
+      "nearCeilingPercent": 25,
+      "nearCeilingStarts": 2
     },
     "manager": {
       "sleepAlarmPerHour": 10,
@@ -582,6 +586,8 @@
       "bytes": 12288,
       "pathCharacters": 65536,
       "pathMatchStates": 1000000,
+      "minimumEstimateLines": 1200,
+      "maximumBodyCharacters": 4000,
       "sharedPaths": [
         "**/README.md",
         "docs/**",

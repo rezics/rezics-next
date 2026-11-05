@@ -1,2 +1,3 @@
 [test]
+# Isolated parallel runs go through scripts/test-timings.ts, one process per file.
 preload = ["./src/test-environment.ts"]

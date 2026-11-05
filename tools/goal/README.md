@@ -20,6 +20,8 @@ does not start an unprotected worker.
 ```sh
 bun install --cwd tools/goal --frozen-lockfile
 bun run --cwd tools/goal check
+bun tools/goal/scripts/test-timings.ts
+bun tools/goal/scripts/test-timings.ts --fast
 bun tools/goal/src/cli.ts dispatch .temp/goal/brief.md
 bun tools/goal/src/cli.ts status
 bun tools/goal/src/cli.ts attempts --json
@@ -33,6 +35,20 @@ one task, `attempts --task <task> [--after <attempt>] [--limit <count>] [--json]
 include `hasMore`; when more records remain, `nextAfter` is the attempt number to pass to the next `--after` request.
 The text form also prints whether more attempts remain and the continuation attempt number.
 Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
+
+## Testing
+
+`bun tools/goal/scripts/test-timings.ts` runs this package's tests in isolated processes, at most sixteen files at
+once (`GOAL_TEST_PARALLEL` raises or lowers that). It prints wall time per file and per test, slowest first, and the
+total. Git fixtures are built once per file and cloned with `git clone --shared`. Tests that wait for time to pass use
+an injected clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
+
+Before this runner the suite took about 15 minutes or more; three files for one change took 5 to 8 minutes. After, the
+full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal test:fast` is the seconds-scale set for
+ordinary edits.
+
+Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
+integration split.
 
 `goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
@@ -439,7 +455,7 @@ failures exclude all aliases of that allowance immediately. There is no credit p
 
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
 minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A reset is not burn. `status` lists
-each pool's rate.
+each pool's rate and the ready tasks waiting on it.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
@@ -505,7 +521,7 @@ explicit helper output bounds retain precedence. All path-matching consumers for
 Launch smoke forwards its startup policy snapshot to its inner process. Its UUID shapes, two provider invocations,
 fixture command delays, evidence traversal accounting, JSON syntax costs and UTF-8 shrink factor are fixed protocol
 or fixture constants. Owner-decision IDs retain their fixed 128-character persisted identity format; input and
-manager-message limits use the caller policy. Brief estimate defaults remain guidance, without estimate caps.
+manager-message limits use the caller policy. Brief estimate defaults remain guidance.
 Merge helpers append an optional command policy after existing brief arguments; pool-selection options carry the
 provider policy through fallbacks. Pool-local freshness and explicit routing still take precedence. Completed Git
 output that exceeds the byte bound fails instead of becoming successful partial evidence or ancestry.
@@ -598,6 +614,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
+| `policy.brief.minimumEstimateLines`                   | `1200`                               | Estimate floor at backlog dispatch.                                                                                                                                                         |
+| `policy.brief.maximumBodyCharacters`                  | `4000`                               | Body ceiling at backlog dispatch.                                                                                                                                                           |
 | `policy.workerPrompt.characters`                      | `20000`                              | Total worker prompt characters when delivering an owner decision.                                                                                                                           |
 | `policy.workerPrompt.gitBufferBytes`                  | `16777216`                           | Worker prompt changed-path Git output buffer (bytes).                                                                                                                                       |
 | `policy.history.attemptPageSize`                      | `100`                                | Maximum attempt or attempt-record page size.                                                                                                                                                |
@@ -637,6 +655,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.backlog.stoppedTaskLimitMs`                   | `3600000`                            | Stopped product task age before cancellation into failed backlog (ms).                                                                                                                      |
 | `policy.backlog.stoppedTasksPerGoalPerRun`            | `20`                                 | Maximum stopped tasks cancelled per Goal per sweep.                                                                                                                                         |
 | `policy.backlog.dispatchesPerSweep`                   | `4`                                  | Maximum briefs dispatched by one synchronous sweep.                                                                                                                                         |
+| `policy.backlog.allowanceWaitingBound`                | `10`                                 | Ready tasks waiting only on allowance count toward the dispatch cap only past this many.                                                                                                    |
 | `policy.backlog.settleMs`                             | `10000`                              | Minimum unchanged brief age before dispatch (ms).                                                                                                                                           |
 | `policy.backlog.refusalBriefs`                        | `4`                                  | Maximum refused briefs listed in a notification.                                                                                                                                            |
 | `policy.backlog.refusalReasonCharacters`              | `160`                                | Maximum characters per listed refusal reason.                                                                                                                                               |
@@ -737,6 +756,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.pacing.alertUnusedPercent`                    | `20`                                 | Unused allowance percentage triggering a near-reset pacing alert.                                                                                                                           |
 | `policy.pacing.alertResetHours`                       | `24`                                 | Remaining reset hours qualifying for an unused-allowance alert.                                                                                                                             |
 | `policy.pacing.alertEveryMs`                          | `10800000`                           | Minimum interval between pacing alerts for the same allowance (ms).                                                                                                                         |
+| `policy.pacing.nearCeilingPercent`                    | `25`                                 | Burn-rate proximity to a pool ceiling that starts gradual admission (%).                                                                                                                    |
+| `policy.pacing.nearCeilingStarts`                     | `2`                                  | Maximum new starts per sweep on a pool in the near-ceiling band.                                                                                                                            |
 | `policy.manager.sleepAlarmPerHour`                    | `10`                                 | Sleep calls allowed per manager per UTC hour before one alarm.                                                                                                                              |
 | `policy.manager.sleepHistoryHours`                    | `24`                                 | UTC-hour sleep-counter history retained per manager.                                                                                                                                        |
 | `policy.manager.inboxPollMs`                          | `2000`                               | Manager inbox filesystem watcher fallback interval (ms).                                                                                                                                    |
@@ -2193,15 +2214,26 @@ process, like promotion: dispatch runs Git and dependency installation synchrono
 host's socket. The host skips the minute while the previous child is still running, and the run holds the
 `leases/backlog` lease, so only one run exists even across a host restart. Each run:
 
-- **Dispatch.** While running and ready tasks are fewer than the cap (`maxWorkers` in `<state>/capacity.json`, else
-  32), the sweep dispatches up to four of the oldest `*.md` briefs, by modification time, round-robin across Goals,
-  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next run. It uses
+- **Dispatch.** While running tasks and ready tasks that are not waiting only on allowance, plus ready tasks waiting
+  only on allowance beyond `policy.backlog.allowanceWaitingBound`, are fewer than the cap (`maxWorkers` in
+  `<state>/capacity.json`, else 32), the sweep dispatches up to four `*.md` briefs. Before claiming, it routes each
+  candidate and prefers briefs whose profile or a fallback has an allowed pool now; oldest-first within each group,
+  round-robin across Goals, starting with the Goal served longest ago. A pool whose burn is within
+  `policy.pacing.nearCeilingPercent` of its ceiling admits at most `policy.pacing.nearCeilingStarts` new starts that
+  sweep. Ready tasks waiting only on allowance never occupy slots used to dispatch a brief that can start now. A brief
+  changed in the last ten seconds waits for the next run. It uses
   the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
   next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
   `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
   beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
   the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
   matches.
+  A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters` moves to `returned/` with a
+  reason; urgent, research, mechanical, specification and continuation briefs are exempt. One manager instruction
+  lists path-prefix merge candidates; status and hourly reports count them.
+  Decision: omitted estimates on ordinary product briefs count as 1,500 lines, matching parseBrief. Interface, claim and
+  bulk-text are product. Merge candidates are the closest same-Goal ready or returned briefs by declared-path prefix
+  overlap, at most three. Invalid YAML in a backlog file is untrusted input and is not a size return.
   A brief
   left in `.dispatching/` by a host that stopped after creating the task is archived once as
   `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
@@ -2236,13 +2268,14 @@ host's socket. The host skips the minute while the previous child is still runni
   one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
   directory count as ready; at eight or more, no low-backlog event is sent.
 
-`goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
+`goal backlog status [--json]` prints ready, dispatched, failed and returned brief counts per Goal. It reads only the
 directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
 
 #### Cost: backlog run
 
-- **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
-  latest-event lookup each, the running manager rows, and the backlog directories' entries.
+- **Touches:** one indexed count of running tasks, current ready-task bodies to classify allowance waiters when routing
+  is configured, the stopped tasks through the task-state index with one latest-event lookup each, the running manager
+  rows, and the backlog directories' entries.
 - **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
   is proportional to stopped tasks, not task history.
 - **Growth check:** `tools/goal/src/backlog-growth.test.ts`: `backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps`. It scales settled task/event history with fixed selected work, stopped tasks, and ready entries independently; it records SQLite executions and returned rows, JSON-decoded bytes, and actual backlog-directory enumerations and returned entries. Query plans and returned rows are not physical scan counts. The scenario includes empty backlog and cap continuation; `backlog.test.ts` covers interrupted uncommitted claims and replay after committed dispatch.

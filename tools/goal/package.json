@@ -8,8 +8,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "test": "bun test",
-    "check": "tsc -p . && bun test"
+    "test": "bun scripts/test-timings.ts",
+    "test:fast": "bun scripts/test-timings.ts --fast",
+    "check": "tsc -p . && bun scripts/test-timings.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",

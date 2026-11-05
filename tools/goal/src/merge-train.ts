@@ -1251,6 +1251,7 @@ export type TrainOptions = {
     devLandingChecks?: boolean;
     devPrelandingTypecheck?: boolean;
     devLandingBootCheck?: boolean;
+    devKernelImport?: boolean;
     gateTimeoutMs?: number;
   };
   queue: SqliteLandingQueue;
@@ -2534,13 +2535,17 @@ export class MergeTrain {
           existsSync(join(trainTree, 'package.json'))
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
+        // Off by default: a cold throwaway database and SQL analysis took 265-448 s per candidate (2026-11-05) and
+        // held every landing behind it. Turn it on once it reuses warm state.
         if (lane === 'dev') {
           const importedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          // Off unless integration.devKernelImport: a cold throwaway database and SQL analysis took 265-448 s per
+          // candidate on 2026-11-05 and held every landing behind it. Re-enable once it reuses warm state.
           const imported = await importLandingKernelCandidate({
             cwd: trainTree,
             base,
             candidate: finalCandidate,
-            changedFiles: importedFiles,
+            changedFiles: this.kernelImportFiles(importedFiles),
             logPath: batchLog,
           });
           let staleDuringImport: LandingEntry | undefined;
@@ -4061,11 +4066,13 @@ export class MergeTrain {
             existsSync(join(trainTree, 'package.json'))
           )
             installShared(trainTree, undefined, undefined, this.options.policy);
+          // Off unless integration.devKernelImport: a cold throwaway database and SQL analysis took 265-448 s per
+          // candidate on 2026-11-05 and held every landing behind it. Re-enable once it reuses warm state.
           const imported = await importLandingKernelCandidate({
             cwd: trainTree,
             base,
             candidate,
-            changedFiles: result.changedFiles,
+            changedFiles: this.kernelImportFiles(result.changedFiles),
             logPath,
           });
           o.fence.assertCurrent(request);
@@ -7269,6 +7276,11 @@ export class MergeTrain {
     throw new Error(result.stderr?.trim() || result.error?.message || `Cannot read ${branch}`);
   }
 
+  /** The changed files the dev-landing Kernel import sees; none (so it skips) unless integration.devKernelImport is on. */
+  private kernelImportFiles(files: readonly string[]): readonly string[] {
+    return this.options.integration?.devKernelImport === true ? files : [];
+  }
+
   private controlPlaneSnapshotMatches(snapshot: ControlPlaneReleaseSnapshot): boolean {
     return (
       this.refHead(snapshot.mainBranch) === snapshot.mainHead &&
@@ -7447,7 +7459,7 @@ export class MergeTrain {
           cwd: tree,
           base: targetHead,
           candidate: commit,
-          changedFiles: changed,
+          changedFiles: this.kernelImportFiles(changed),
           logPath,
         });
         for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);

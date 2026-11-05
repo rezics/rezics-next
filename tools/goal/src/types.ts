@@ -149,6 +149,7 @@ export type Settings = {
     devLandingChecks: boolean;
     devPrelandingTypecheck?: boolean;
     devLandingBootCheck?: boolean;
+    devKernelImport?: boolean;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;

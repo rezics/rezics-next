@@ -777,6 +777,7 @@ function seedKernelImportFixture(h: ReturnType<typeof integrationHarness>, serve
 
 test('a Kernel-source TDZ on a dev landing returns to the original session and publishes after repair', async () => {
   const h = integrationHarness();
+  h.settings.integration.devKernelImport = true;
   const file = 'services/kernel/src/cycle-a.ts';
   let resumedSession: string | undefined;
   let repairPrompt = '';
@@ -845,6 +846,7 @@ test('a Kernel-source TDZ on a dev landing returns to the original session and p
 
 test('a combined Kernel-source candidate runs one import phase, and a replayed candidate is imported again', async () => {
   const h = integrationHarness();
+  h.settings.integration.devKernelImport = true;
   try {
     h.settings.integration.devLandingChecks = false;
     h.settings.integration.batchSize = 2;
