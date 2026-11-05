@@ -5,6 +5,7 @@ import { VoteReviewStaleError, VoteReviewUnavailableError } from '../rating/own-
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   classifyIdentityRatingReviewEvidence,
+  identityRatingReviewEvidence,
   readIdentityRatingEvidenceInTransaction,
   type IdentityRatingControlLocator,
   type IdentityRatingNativeEvidence,
@@ -514,6 +515,14 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         native.evidence,
       );
       if (reviewed.state === 'changed') throw new VoteReviewStaleError('subject_changed');
+      // A withdrawn/replaced directory can make the new cut unclassifiable while
+      // its source epoch stays unchanged. It still invalidates this exact review.
+      if (
+        reviewed.state === 'unavailable' &&
+        reviewed.reason !== 'missing-owner' &&
+        identityRatingReviewEvidence(native.evidence) !== operand.evidence
+      )
+        throw new VoteReviewStaleError('identity_epoch_changed');
       if (reviewed.state !== 'reviewed') throwUnavailable(reviewed);
       if (
         reviewed.operand.evidence !== operand.evidence ||
