@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { candidateContext } from '../src/subject/candidates';
 import {
@@ -28,13 +27,10 @@ const origin: MangaPublicOrigin = {
 const parse = (href: string) => parseMangaPublicVisit(new URL(href, 'https://site.test').search, id, 'en', base);
 
 test('actual Manga entry and contribution collector retain observed origin without reading producers or changing creation', async () => {
-  const { MangaProfileEntry } = await import('../src/features/catalogue/manga-profile-entry');
   const { catalogueEntries } = await import('../src/features/catalogue/catalogue-entry');
-  const entry = <MangaProfileEntry id={id} label="Comic" locale="en" origin={origin} />;
   const href = catalogueEntries.manga({ id, label: 'Comic', locale: 'en', origin }).href;
-  expect(renderToStaticMarkup(entry)).toContain('origin=');
   expect(parse(href)).toEqual({ kind: 'origin', origin });
-  expect(renderToStaticMarkup(<MangaProfileEntry locale="en" />)).toContain('/en/catalogue/manga');
+  expect(catalogueEntries.manga({ locale: 'en' }).href).toBe('/en/catalogue/manga');
   expect(parse(base)).toBeUndefined();
 });
 
@@ -140,6 +136,8 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   try {
     const { MangaProfileEntry } = await import('../src/features/catalogue/manga-profile-entry');
     const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
+    await renderNode(<MangaProfileEntry id={id} label="Comic" locale="en" origin={origin} />);
+    expect(host.querySelector('a')!.getAttribute('href')).toBe(href);
     expect(
       collectEditorialEntries(<MangaProfileEntry id={id} label="Comic" locale="en" origin={origin} />).entries[0]!.href,
     ).toBe(href);
