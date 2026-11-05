@@ -85,3 +85,21 @@ test('reviewed scalar and classification facts use their ordinary unkeyed candid
     });
   }
 });
+
+// A batch HTTP success can contain a refused command; it must never become a successful journal ACK.
+test('reviewed inventory exposes the native proposal refusal before acknowledging it', async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), 'reviewed-refusal-'));
+  const unused = async (): Promise<never> => { throw new Error('Review preceded proposal delivery'); };
+  const port: ReviewedCataloguePort = {
+    readReviewedSubject: unused, reviewedCandidates: unused, acceptReviewedCandidate: unused,
+    adoptReviewedCandidates: unused, fence: async () => ({ fenced: false, securityRevision: null }),
+    setSourceRecordMetadata: async ({ command }) => ({ record: command.metadata, metadata_revision: 1, effect: 'filled' }),
+    batch: async ({ commands }) => ({ results: commands.map((command) => command.op === 'create'
+      ? { key: command.key, status: 201 as const, value: { id: crypto.randomUUID(), revision: 1 } }
+      : { key: command.key, status: 422, problem: { type: 'urn:test:refused', title: 'Native proposal refused', status: 422 } }) }),
+  };
+  try {
+    await expect(seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port }))
+      .rejects.toThrow('Native proposal refused');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
