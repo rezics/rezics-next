@@ -387,11 +387,9 @@ async function checkPreparedPermission(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const policyResourceType =
-      page?.resourceType ?? uniqueNativePolicyResourceType(facts.policyCatalogue, action);
+    const policyResourceType = page?.resourceType ?? uniqueNativePolicyResourceType(facts.policyCatalogue, action);
     const policyCore =
-      policyResourceType !== undefined &&
-      hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
+      policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
       permissionRead.run(client, formula.input),

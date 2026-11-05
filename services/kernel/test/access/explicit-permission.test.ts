@@ -38,7 +38,8 @@ function publicResource(f: ActorFixture): Resource {
 async function decide(f: ActorFixture, actor = f.actor, resource: Resource = f.resource, access?: Access) {
   const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
   const permissions =
-    access ?? f.permissions({ actions: new Map([[action, { anonymous: true, 'x-resource-types': ['fixture.page'] }]]) });
+    access ??
+    f.permissions({ actions: new Map([[action, { anonymous: true, 'x-resource-types': ['fixture.page'] }]]) });
   const context = { pool, deadline: Date.now() + 10_000, account };
   const check = await accessExplicitCheck(permissions, actor, action, resource, context);
   const ordinary = await accessCheck(accessRoot(permissions), actor, action, resource, context);
