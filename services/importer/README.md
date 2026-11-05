@@ -89,7 +89,7 @@ native/mounted publication circuit remain a continuation; consumer tests do not 
 
 The consumer adds no read while unsupported. With a producer it invokes one operation and optional definitions
 after admission, within the [existing exact Sources budgets](../../docs/subject-pages.md#cost-and-acceptance-bounds);
-it neither enumerates candidates nor fetches document bodies. Retry focus belongs to the current visit and is
+it neither enumerates candidates nor fetches document bodies. Retry awaits the completed route read rather than background invalidation. Focus belongs to the current visit and is
 retired on pointer departure as well as reader/address/navigation replacement. Focused receiving, empty-citation
 and mounted retry tests supplement the unchanged native and browser acceptance assertions.
 

@@ -133,7 +133,7 @@ export function useSourcesRetry({
     void (async () => {
       try {
         reset?.();
-        await router.invalidate();
+        await router.invalidate({ sync: true });
       } finally {
         retry.pending = false;
         if (!retry.listeners.size) retire();
