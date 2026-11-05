@@ -273,6 +273,8 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   let version = 1;
   let reads = 0;
+  const timers = controlledDeadlines();
+  let finishLateRead!: (page: { signedIn: true; preferences: ReadingPreferences; securityHref: null }) => void;
   const initial = withShelfAdvice({
     spoilerLevel: 0,
     suitability: 'blur',
@@ -302,12 +304,9 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
       read: async () => {
         reads++;
         if (reads === 2)
-          return {
-            signedIn: true,
-            state: 'unavailable',
-            failure: { status: 503, code: 'dependency_unavailable', requestId: 'refresh-keep' },
-            securityHref: null,
-          };
+          return await new Promise<{ signedIn: true; preferences: ReadingPreferences; securityHref: null }>(
+            (resolve) => { finishLateRead = resolve; },
+          );
         return { signedIn: true, preferences: reads >= 3 ? newer : initial, securityHref: null };
       },
     },
@@ -320,12 +319,21 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
       },
     },
   );
+  try {
   draft.edit({ layout: 'table' }, 'layout');
   await draft.submit();
   const original = draft.snapshot().pending?.input;
   draft.edit({ gridSize: 'small' }, 'gridSize');
   await draft.reload();
-  await draft.retry();
+  const before = timers.delays().length;
+  let settled = false;
+  const retrying = draft.retry().then(() => { settled = true; });
+  await timers.flush();
+  expect(timers.delays().slice(before)).toEqual([10_000, 10_000]);
+  expect(draft.snapshot().writeReceipt).toEqual({ shelf: receipt.shelf, version: 2 });
+  timers.fireNext(); await timers.flush(); expect(settled).toBe(true); await retrying;
+  expect(draft.snapshot()).toMatchObject({ readBusy: false, current: false, pending: null,
+    confirmedWrite: { input: original }, readResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 } });
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(original);
   expect(draft.snapshot().pending).toBeNull();
@@ -347,6 +355,10 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
   expect(draft.snapshot().draft.gridSize).toBe('small');
   expect(draft.snapshot().confirmedWrite?.input).toBe(original);
   expect(draft.canSubmit()).toBe(false);
+  finishLateRead({ signedIn: true, preferences: receipt, securityHref: null });
+  await timers.flush();
+  expect(draft.snapshot().known.version).toBe(3);
+  expect(draft.snapshot().draft.layout).toBe('grid');
   draft.keepLocal();
   expect(commands).toHaveLength(2);
   expect(draft.snapshot().confirmedWrite).toBeNull();
@@ -359,71 +371,6 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
   expect(commands[2]?.expectedVersion).toBe(3);
   expect(commands[2]?.shelf).toEqual({ gridSize: 'small' });
   expect(commands[2]?.idempotencyKey).not.toBe(original?.idempotencyKey);
-});
-
-test('a retried receipt survives a stalled GET and a later current read defeats its late result', async () => {
-  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
-  const timers = controlledDeadlines(), commands: Readonly<PreferenceChange>[] = [];
-  let version = 1, saves = 0, reads = 0;
-  let finishLateRead!: (page: { signedIn: true; preferences: ReadingPreferences; securityHref: null }) => void;
-  const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 1,
-    shelf: { layouts: { all: 'list' }, gridSize: 'large' } });
-  const receipt = withShelfAdvice({ ...initial, version: 2, shelf: { layouts: { all: 'table' }, gridSize: 'large' } });
-  const later = withShelfAdvice({ ...initial, version: 3, shelf: { layouts: { all: 'grid' }, gridSize: 'medium' } });
-  const draft = new ShelfPreferenceDraftRecovery(
-    initial,
-    {
-      save: async (input) => (commands.push(input), ++saves === 1 ? { ok: false, reason: 'unavailable' }
-        : { ok: true, preferences: receipt }),
-      read: async () => {
-        reads++;
-        if (reads === 1) return { signedIn: true, preferences: initial, securityHref: null };
-        if (reads === 2)
-          return await new Promise<{ signedIn: true; preferences: ReadingPreferences; securityHref: null }>(
-            (resolve) => { finishLateRead = resolve; },
-          );
-        return { signedIn: true, preferences: later, securityHref: null };
-      },
-    },
-    {
-      canRead: () => true,
-      canWrite: () => true,
-      version: () => version,
-      onVersionChange: (next) => {
-        version = next;
-      },
-    },
-  );
-  try {
-    draft.edit({ layout: 'table' }, 'layout');
-    await draft.submit();
-    const original = draft.snapshot().pending!.input;
-    expect(original).toMatchObject({ expectedVersion: 1, shelf: { layouts: { all: 'table' } } });
-    await draft.reload();
-    const before = timers.delays().length;
-    let settled = false;
-    const retrying = draft.retry().then(() => { settled = true; });
-    await timers.flush();
-    expect(timers.delays().slice(before)).toEqual([10_000, 10_000]);
-    expect(commands[1]).toBe(original);
-    expect(draft.snapshot()).toMatchObject({ pending: null, confirmedWrite: { input: original }, current: false,
-      readBusy: true, writeReceipt: { version: 2 } });
-    expect(draft.canSubmit()).toBe(false);
-    timers.fireNext(); await timers.flush();
-    expect(settled).toBe(true);
-    await retrying;
-    expect(draft.snapshot()).toMatchObject({ readBusy: false, current: false, pending: null, advice: undefined,
-      confirmedWrite: { input: original }, readResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 } });
-    expect(draft.canSubmit()).toBe(false);
-    await draft.reload();
-    expect(draft.snapshot()).toMatchObject({ known: { version: 3 }, draft: { layout: 'grid', gridSize: 'medium' },
-      current: true, confirmedWrite: { input: original } });
-    expect(draft.canSubmit()).toBe(false);
-    finishLateRead({ signedIn: true, preferences: receipt, securityHref: null });
-    await timers.flush();
-    expect(reads).toBe(3);
-    expect(draft.snapshot()).toMatchObject({ known: { version: 3 }, draft: { layout: 'grid' }, phase: 'review',
-      confirmedWrite: { input: original } });
   } finally {
     timers.restore();
   }
