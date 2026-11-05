@@ -166,8 +166,9 @@ for (const transport of transports) {
       await expect(client.request('test/after-late', {})).resolves.toBe('test/after-late');
 
       const pending = client.request('test/never', {});
+      const closed = expect(pending).rejects.toThrow('App-server client closed');
       await client.close();
-      await expect(pending).rejects.toThrow('App-server client closed');
+      await closed;
     } finally {
       await client.close();
       temporary.close();
