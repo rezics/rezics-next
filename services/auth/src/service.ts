@@ -1,3 +1,5 @@
+import { securityScopeLimit, securityResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
+import { securityId, securityDisplay, securityPasskey } from './security-response-bounds.ts';
 import { AuthRestoreAdmissionError, requireRestoredAuthAdmission } from './restore-admission.ts';
 import { configureClientLabel, scrubMetadataConfigurationPage } from './metadata-scrub.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -209,9 +211,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
     return Math.floor(milliseconds / 1000);
   };
-  const scopeLimit = options.siteActions
-    ? new Set(['openid', 'offline_access', 'media:complete', ...options.siteActions.keys()]).size
-    : 1000;
+  const scopeLimit = securityScopeLimit(options.siteActions?.keys());
+  securityResponseByteBudgets(scopeLimit);
   const scopes = (value: unknown) => normalizeScopes(value, scopeLimit);
   const authority = clientAuthority(
     options.database,
@@ -223,7 +224,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     kindConsent.writer,
   );
   const { database, withIssuance, withConsent, afterIssuance, materialize } = authority;
-  const inventory = securityInventory(database, options.secret, options.issuer, trustedNowSeconds);
+  const inventory = securityInventory(database, options.secret, options.issuer, trustedNowSeconds, scopeLimit);
   issuerOrigin(options.issuer);
   const audience = new URL(options.audience);
   if (audience.protocol !== 'https:') throw new Error('The API audience must be an HTTPS URL');
@@ -565,6 +566,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 return {
                   data: {
                     ...session,
+                    userAgent: securityDisplay(session.userAgent, securityResponseLimits.userAgent),
                     clientId: selected.clientId,
                     grantedScope: selected.scopes.join(' '),
                     authnEpoch: account.authnEpoch,
@@ -616,8 +618,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const granted = session.grantedScope ? scopes(session.grantedScope.split(' ')) : [];
     await allowed(account.accountId, { clientId: session.clientId, scopes: granted });
     const proof: SessionProof = {
-      account_id: account.accountId,
-      client_id: session.clientId,
+      account_id: securityId(account.accountId),
+      client_id: securityId(session.clientId),
       scope: granted,
       authn_epoch: session.authnEpoch,
       auth_time: session.authTime,
@@ -2165,7 +2167,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             'SELECT id,name,"createdAt" AS created_at,last_used_at FROM passkey WHERE "userId"=$1 ORDER BY id LIMIT 32',
             [human.account_id],
           );
-          return json({ passkeys: result.rows });
+          return json({ passkeys: result.rows.map(securityPasskey) });
         }
         if (request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname)) {
           const human = await humanProof(request.headers);
