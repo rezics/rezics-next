@@ -39,6 +39,7 @@ const globals = {
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -59,6 +60,8 @@ const operator = '019a0000-0000-7000-8000-000000000003';
 const withheld = '019a0000-0000-7000-8000-000000000099';
 const longName = 'InternationaleLesegemeinschaftFürUnabhängigeVeröffentlichungen'.repeat(5);
 const settingsHref = '/de/settings?panel=compact&managedAccount=old#profile';
+// A direct detail URL does not start a directory read, so connected sections begin on the directory.
+const directoryHref = '/de/settings?panel=compact#account';
 function page(size = 1): ManagedAccountsPage {
   return {
     account: { id: viewer, kind: 'actor', displayName: longName, handle: longName.toLowerCase() },
@@ -151,7 +154,7 @@ function button(host: Element, label: string): HTMLButtonElement {
 function feed(host: Element, label: string) {
   const list = [...host.querySelectorAll('ul')].find((node) => node.getAttribute('aria-label') === label);
   expect(list).toBeDefined();
-  return list!.parentElement!;
+  return list!.closest<HTMLElement>('[role="region"]')!;
 }
 function geometryContract(host: Element) {
   for (const control of host.querySelectorAll<HTMLButtonElement>('button')) {
@@ -272,7 +275,7 @@ test('mounted independent inventories retain native controls, long and unavailab
     await settle(() => a.replies[4]!.resolve(ready(exhausted)));
     expect(a.calls[4]).toEqual({ organizationsCursor: 'sparse continuation +/=' });
     expect(organizations.textContent).toContain(m.managed_no_organizations());
-    expect(organizations.querySelector('button')).toBeNull();
+    expect(button(organizations, m.managed_next()).disabled).toBe(true);
     await settle(() => b.replies[1]!.resolve(ready()));
     geometryContract(view.host);
   } finally {
@@ -361,7 +364,7 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
       const route = createRootRoute({ component: () => <ManagedAccountsSection io={source.io} /> });
       const router = createRouter({
         routeTree: route,
-        history: createMemoryHistory({ initialEntries: [settingsHref] }),
+        history: createMemoryHistory({ initialEntries: [directoryHref] }),
       });
       await router.load();
       const view = await mount(
@@ -373,8 +376,9 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
         expect(source.calls).toEqual([{}]);
         await settle(() => source.replies[0]!.resolve(ready()));
         const links = [...view.host.querySelectorAll('a')];
-        await settle(() => button(feed(view.host, m.managed_operated_title()), m.settings_managed_load_more()).click());
+        // The feed read starts in the same act as the transition: its admission retirement is not yet committed.
         await settle(() => {
+          button(feed(view.host, m.managed_operated_title()), m.settings_managed_load_more()).click();
           if (transition === 'error')
             client
               .getQueryCache()
@@ -432,7 +436,8 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       const siblingLabel = selected === 'organizations' ? m.managed_operated_title() : m.managed_organizations_title();
       const region = feed(view.host, label);
       const sibling = feed(view.host, siblingLabel);
-      const rows = region.querySelector('ul')!.innerHTML;
+      // A sibling read retires link admission across feeds; the retained rows keep their identities and text.
+      const rows = [...region.querySelectorAll('li')].map((row) => [row.dataset.managedKey, row.querySelector('h4')?.textContent]);
       await settle(() => button(region, m.settings_managed_load_more()).click());
       await settle(() => source.replies[1]!.resolve(managedAccountsFailure(400, { code: 'invalid_cursor' })));
       await settle(() => button(sibling, m.settings_managed_load_more()).click());
@@ -440,7 +445,7 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       expect(source.calls[3]).toEqual({});
       expect(button(region, m.settings_retry()).disabled).toBe(true);
       expect(button(region, m.settings_managed_restart_list()).disabled).toBe(true);
-      expect(region.querySelector('ul')!.innerHTML).toBe(rows);
+      expect([...region.querySelectorAll('li')].map((row) => [row.dataset.managedKey, row.querySelector('h4')?.textContent])).toEqual(rows);
       await settle(() =>
         source.replies[3]!.resolve(managedAccountsFailure(429, { code: 'rate_limited' }, { 'Retry-After': '1' })),
       );
