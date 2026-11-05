@@ -2,13 +2,17 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as start from '../.storybook/react-start';
 import type { OrganizationFact } from '../src/features/catalogue/organization-reader';
-import { organizationHistoryVisitReturn, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
-import { subjectHref } from '../src/subject/subject-href';
-import { peopleOrganizationId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
-import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+// Install the browser host before loading readers shared with the routed Producer test.
+const { organizationHistoryVisitReturn, subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+const { subjectHref } = await import('../src/subject/subject-href');
+const { peopleOrganizationId, peopleProfileFixture } = await import('../src/kernel/fake/catalogue-people-profile');
+const { m } = await import('../src/paraglide/messages.js');
 const { OrganizationReader } = await import('../src/features/catalogue/organization-reader/view');
 
 const context = '00000000-0000-4000-8000-00000000d811';
