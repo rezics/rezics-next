@@ -26,9 +26,36 @@ const flushPromiseJobs = async () => {
   for (let index = 0; index < 8; index++) await Promise.resolve();
 };
 
-test('a stalled Reading save keeps its original for deliberate retry and ignores a late receipt', async () => {
-  mock.timers.enable({ apis: ['setTimeout'] });
+const withControlledTimeout = async (
+  run: (expire: () => void, delay: () => number | undefined) => Promise<void>,
+) => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let callback: (() => void) | undefined;
+  let timeout: number | undefined;
+  globalThis.setTimeout = ((handler: Parameters<typeof setTimeout>[0], delay?: number) => {
+    timeout = delay;
+    callback = handler as unknown as () => void;
+    return 1 as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
   try {
+    await run(
+      () => {
+        const current = callback;
+        callback = undefined;
+        current?.();
+      },
+      () => timeout,
+    );
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+};
+
+test('a stalled Reading save keeps its original for deliberate retry and ignores a late receipt', async () => {
+  await withControlledTimeout(async (expire, delay) => {
     const fixture = readingFixture();
     let releaseSave!: (result: Awaited<ReturnType<typeof fixture.io.save>>) => void;
     let startSave!: () => void;
@@ -49,7 +76,8 @@ test('a stalled Reading save keeps its original for deliberate retry and ignores
     const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
     const saving = editor.edit({ spoilerLevel: 1 });
     await saveStarted;
-    mock.timers.tick(managedReadTimeout);
+    expect(delay()).toBe(managedReadTimeout);
+    expire();
     await flushPromiseJobs();
 
     expect(editor.snapshot().phase).toBe('uncertain');
@@ -71,9 +99,7 @@ test('a stalled Reading save keeps its original for deliberate retry and ignores
     expect(reads).toBe(1);
     expect(editor.snapshot()).toMatchObject({ phase: 'review', pending: null, draft: { spoilerLevel: 1, suitability: 'show' } });
     await saving;
-  } finally {
-    mock.timers.restore();
-  }
+  });
 });
 
 test('Reading changes preserve the exact in-flight key and payload across response loss and reload actual current preference version', async () => {
