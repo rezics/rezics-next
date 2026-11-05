@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { migrate } from './database.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
+import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -64,7 +65,7 @@ export const localClientIds = {
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
 export function localShowcaseClientRegistration() {
-  return { clientId: showcaseClient, firstParty: true, scopes: [...DEVELOPMENT_SHOWCASE_SCOPES] };
+  return { clientId: showcaseClient, firstParty: true, scopes: [...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes])] };
 }
 export type DevelopmentKeys = {
   secret: string;
