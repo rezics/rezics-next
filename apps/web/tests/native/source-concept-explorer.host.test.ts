@@ -1,3 +1,4 @@
+import '../../../../services/kernel/node_modules/reylo/src/register.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
