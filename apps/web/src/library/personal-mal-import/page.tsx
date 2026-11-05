@@ -1,3 +1,5 @@
+import { useLocation } from '@tanstack/react-router';
+import { getLocale } from '../../paraglide/runtime';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
@@ -38,6 +40,8 @@ function noticeText(notice: Notice): string | null {
 
 export function PersonalMalImportPage({ visit }: { visit?: MalVisit | null }) {
   const observed = useMalVisit();
+  const address = useLocation({ select: (location) => location.href });
+  const locale = getLocale();
   const current = visit === undefined ? observed : visit;
   useOperation('library_entry.put');
   if (!current) {
@@ -48,7 +52,7 @@ export function PersonalMalImportPage({ visit }: { visit?: MalVisit | null }) {
       </main>
     );
   }
-  return <MalImportSession key={`${current.subject}:${current.csrfToken}`} visit={current} />;
+  return <MalImportSession key={`${current.subject}:${current.csrfToken}:${address}:${locale}`} visit={current} />;
 }
 
 function MalImportSession({ visit }: { visit: MalVisit }) {
@@ -396,7 +400,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         <MalAction
           type="button"
           variant="outline"
-          disabled={busy}
+          disabled={locked}
           onClick={async () => {
             const id = uploadId.current!;
             const command = { kind: 'cancel' as const, id, key: newCommandKey() };

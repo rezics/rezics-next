@@ -55,7 +55,7 @@ test('native evidence indices and reviewed identities survive explicit selection
   await act(() => save.click());
   expect(saved?.labels).toEqual(row.review!.labels!.selections.map((s) => ({ value: s.value, target: s.target! })));
   expect(admittedFields(row)).toEqual(['status', 'tags']);
-  expect(admittedFields({ ...row, review: { ...row.review!, labels: undefined } })).toEqual(['status']);
+  expect(admittedFields({ ...row, review: (({ labels, ...review }) => review)(row.review!) })).toEqual(['status']);
   expect(admittedFields({ ...row, review: { ...row.review!, skip: true } })).toEqual([]);
 });
 
@@ -103,12 +103,20 @@ test('confirmation shows exact native version and normalized target; unsupported
 test('partial receipt results read current exact Subject assignments independently and ignore departed read', async () => {
   const reads: string[] = [];
   const assignment = { id: 'native-assignment', labelId: 'native-label', subjectId: row.target!, revision: 2 };
-  const port = {
+  const unavailable = async () => ({ kind: 'unavailable' as const });
+  const port: MalImportPort = {
+    preview: unavailable,
+    page: unavailable,
+    review: unavailable,
+    apply: unavailable,
+    admitSource: unavailable,
+    cancel: unavailable,
+    delete: unavailable,
     assignments: async (subjectId: string) => {
       reads.push(subjectId);
       return { kind: 'assignments' as const, assignments: [assignment] };
     },
-  } as MalImportPort;
+  };
   await act(async () =>
     root.render(
       <MalImportPortContext.Provider value={port}>
