@@ -454,9 +454,8 @@ test('a delayed move superseded at the same cursor retires its path before a fre
   let fail = false;
   let routeLoad = 0;
   const requested: (string | undefined)[] = [];
-  const firstDelayed = deferred();
-  const replacementDelayed = deferred();
-  const delayed = [firstDelayed, replacementDelayed];
+  const delayedNavigation = deferred<void>();
+  let delayNextNavigation = false;
   const native = (cursor?: string): CreatorSalesCurrentRead => {
     const value = page(A, cursor ?? null);
     value.page = {
@@ -469,7 +468,6 @@ test('a delayed move superseded at the same cursor retires its path before a fre
   };
   const read = spyOn(reads, 'readCreatorSalesCurrent').mockImplementation(async ({ data }) => {
     requested.push(data.cursor);
-    if (data.cursor === 'second+/=' && delayed.length) return delayed.shift()!.promise;
     const value = native(data.cursor);
     if (fail) value.page = { kind: 'unavailable' };
     return value;
@@ -501,7 +499,15 @@ test('a delayed move superseded at the same cursor retires its path before a fre
           locationKey={router.state.location.key}
           cursor={cursor}
           locale="en"
-          navigate={(href, started) => navigateCreatorSales(router, salesRouteId, href, started)}
+          navigate={(href, started) =>
+            navigateCreatorSales(router, salesRouteId, href, started).then(async (result) => {
+              if (delayNextNavigation && result) {
+                delayNextNavigation = false;
+                await delayedNavigation.promise;
+              }
+              return result;
+            })
+          }
         />
       );
     },
@@ -534,20 +540,16 @@ test('a delayed move superseded at the same cursor retires its path before a fre
         </QueryClientProvider>,
       );
     });
+    delayNextNavigation = true;
     await click('Older sales');
     expect(requested.at(-1)).toBe('second+/=');
-    let replacement!: Promise<void>;
+    expect(host.textContent).not.toContain('Previous sales');
     await act(async () => {
-      replacement = router.invalidate({ filter: (match) => match.routeId === salesRouteId });
-      await Promise.resolve();
+      await router.invalidate({ filter: (match) => match.routeId === salesRouteId });
     });
     expect(requested.filter((cursor) => cursor === 'second+/=')).toHaveLength(2);
     await act(async () => {
-      replacementDelayed.resolve(native('second+/='));
-      await replacement;
-    });
-    await act(async () => {
-      firstDelayed.resolve(native('second+/='));
+      delayedNavigation.resolve();
     });
     await tick();
     expect(router.state.location.search).toEqual({ cursor: 'second+/=' });
