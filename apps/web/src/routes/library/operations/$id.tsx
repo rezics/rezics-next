@@ -8,6 +8,7 @@ import {
 } from '../../../library/bulk-operation-recovery-server';
 import {
   appendBulkOutcomePage,
+  BulkOutcomeWindows,
   canCancelBulkOperation,
   isCurrentBulkRecoveryAddress,
   type LibraryBulkCancelIntent,
@@ -73,7 +74,9 @@ function RecoveryReader({
   const readOwnerRef = useRef(readOwner);
   const live = useRef(true);
   const busy = useRef(false);
-  const firstReadStarted = useRef(false);
+  const firstReadStarted = useRef('');
+  const windows = useRef(new BulkOutcomeWindows());
+  const [readFailed, setReadFailed] = useState(false);
   const uncertainIntent = useRef<LibraryBulkCancelIntent | null>(null);
   const currentLease = origin.capture('personal_library');
   const authorized = hydrated && currentLease();
@@ -86,6 +89,28 @@ function RecoveryReader({
     },
     [],
   );
+
+  useEffect(() => {
+    const version = () => JSON.stringify([origin.version('personal_library'), origin.read().csrfToken]);
+    let admitted = version();
+    return origin.watch(() => {
+      const next = version();
+      if (next === admitted) return;
+      admitted = next;
+      windows.current = new BulkOutcomeWindows();
+      busy.current = false;
+      readRef.current = { state: 'unavailable', operationId };
+      readOwnerRef.current = '';
+      firstReadStarted.current = '';
+      uncertainIntent.current = null;
+      setReadOwner('');
+      setCancelIntent(null);
+      setCancelCsrf(null);
+      setCancelOwner('');
+      setCancelState('idle');
+      setReadFailed(false);
+    });
+  }, [origin, operationId]);
 
   function addressCurrent(path: string, owner: string, lease: () => boolean): boolean {
     return (
@@ -112,61 +137,44 @@ function RecoveryReader({
     setReadOwner(owner);
   }
 
-  async function readAgain(id: string) {
+  async function readWindow(kind: 'next' | 'previous' | 'first' | 'refresh' | 'retry', id = operationId, cursor?: string) {
     const owner = ownerKey;
     const lease = origin.capture('personal_library');
     if (!addressCurrent(pathname, owner, lease) || id !== operationId || busy.current) return;
-    busy.current = true;
-    setReadBusy(true);
-    try {
-      const next = await readBulkOperationRecovery({ data: { operationId: id } });
-      if (!addressCurrent(pathname, owner, lease)) return;
-      updateRead(next, owner);
-      if (next.state === 'forbidden') {
-        uncertainIntent.current = null;
-        setCancelIntent(null);
-        setCancelCsrf(null);
-        setCancelOwner('');
-        setCancelState('idle');
-      }
-    } catch {
-      if (addressCurrent(pathname, owner, lease)) updateRead({ state: 'unavailable', operationId: id }, owner);
-    } finally {
-      busy.current = false;
-      if (live.current) setReadBusy(false);
-    }
-  }
-
-  async function readMore(id: string, cursor: string) {
-    const owner = ownerKey;
-    const lease = origin.capture('personal_library');
+    const path = windows.current;
     const previous = readRef.current;
-    if (
-      !current(pathname, owner, lease) ||
-      id !== operationId ||
-      previous.state !== 'available' ||
-      previous.next !== cursor ||
-      busy.current
-    )
-      return;
+    if (kind === 'next' && (previous.state !== 'available' || previous.next !== cursor)) return;
+    if (kind === 'previous' && !path.predecessors.length) return;
+    const target = kind === 'retry' ? path.target : path.stage(kind, cursor);
+    if (!target) return;
     busy.current = true;
     setReadBusy(true);
+    setReadFailed(false);
     try {
-      const result = await readBulkOperationRecoveryPage({ data: { operationId: id, cursor } });
-      if (!current(pathname, owner, lease)) return;
+      // Refresh includes the bounded operation read so progress and deadlines remain native facts.
+      const result = target.cursor === undefined || target.kind === 'refresh'
+        ? await readBulkOperationRecovery({ data: { operationId: id, ...(target.cursor === undefined ? {} : { cursor: target.cursor }) } })
+        : await readBulkOperationRecoveryPage({ data: { operationId: id, cursor: target.cursor } });
+      if (!addressCurrent(pathname, owner, lease) || windows.current !== path || path.target !== target) return;
       if (result.state === 'available') {
-        updateRead(
-          appendBulkOutcomePage({
-            addressOperationId: requestedId ?? '',
-            authorized: lease(),
-            requestedOperationId: id,
-            requestedCursor: cursor,
-            current: readRef.current,
-            page: result.page,
-          }),
-          owner,
-        );
+        const next = 'operation' in result ? result : previous.state === 'available'
+          ? target.kind === 'next'
+            ? appendBulkOutcomePage({ addressOperationId: requestedId ?? '', authorized: lease(), requestedOperationId: id,
+                requestedCursor: target.cursor!, current: previous, page: result.page })
+            : { ...previous, outcomes: result.page.outcomes, next: result.page.next }
+          : previous;
+        path.commit(target);
+        updateRead(next, owner);
+      } else if (result.state === 'invalid' && target.cursor !== undefined) {
+        // Native cursor retirement is the only automatic path restart.
+        windows.current = new BulkOutcomeWindows();
+        busy.current = false;
+        await readWindow('first');
+      } else if (result.state === 'unavailable') {
+        // Keep the accepted DTO and exact staged target independently of an uncertain command.
+        setReadFailed(true);
       } else {
+        windows.current = new BulkOutcomeWindows();
         updateRead({ state: result.state, operationId: id }, owner);
         if (result.state === 'forbidden') {
           uncertainIntent.current = null;
@@ -177,10 +185,12 @@ function RecoveryReader({
         }
       }
     } catch {
-      if (current(pathname, owner, lease)) updateRead({ state: 'unavailable', operationId: id }, owner);
+      if (addressCurrent(pathname, owner, lease) && windows.current === path) setReadFailed(true);
     } finally {
-      busy.current = false;
-      if (live.current) setReadBusy(false);
+      if (windows.current === path) {
+        busy.current = false;
+        if (live.current) setReadBusy(false);
+      }
     }
   }
 
@@ -315,11 +325,12 @@ function RecoveryReader({
   }
 
   useEffect(() => {
-    if (authorized && !firstReadStarted.current) {
-      firstReadStarted.current = true;
-      void readAgain(operationId);
+    if (authorized && firstReadStarted.current !== ownerKey) {
+      firstReadStarted.current = ownerKey;
+      windows.current = new BulkOutcomeWindows();
+      void readWindow('first');
     }
-  }, [authorized, operationId]);
+  }, [authorized, operationId, ownerKey]);
 
   if (
     requestedId !== operationId ||
@@ -334,8 +345,12 @@ function RecoveryReader({
       addressOperationId={operationId}
       authorized={authorized}
       read={visibleRead}
-      readAgain={(id) => void readAgain(id)}
-      readMore={(id, cursor) => void readMore(id, cursor)}
+      readAgain={() => void readWindow('refresh')}
+      readRetry={() => void readWindow('retry')}
+      readFailed={readFailed}
+      previous={windows.current.predecessors.length > 0 ? () => void readWindow('previous') : undefined}
+      first={windows.current.cursor !== undefined ? () => void readWindow('first') : undefined}
+      readMore={(id, cursor) => void readWindow('next', id, cursor)}
       cancel={() => void cancel()}
       retryCancel={retryCancel}
       cancelState={visibleCancelState}

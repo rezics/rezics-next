@@ -11003,5 +11003,6 @@
   "library_anilist_score_outcome_unsupported": "不支援原生投票",
   "library_anilist_score_outcome_failed": "原生投票失敗",
   "library_anilist_score_outcome_unavailable": "原生投票無法使用",
-  "library_anilist_replace_vote_and_state": "取代現有原生投票和狀態"
+  "library_anilist_replace_vote_and_state": "取代現有原生投票和狀態",
+  "library_bulk_recovery_invalid": "此結果位址無效。"
 }

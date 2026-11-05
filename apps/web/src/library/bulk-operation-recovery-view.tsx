@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+import { searchWindowFocus } from '../search/search-window/focus';
 import {
   bulkRecoveryStatus,
   canCancelBulkOperation,
@@ -17,6 +19,10 @@ type Props = {
   cancelState?: 'idle' | 'capturing' | 'pending' | 'uncertain' | 'refused' | 'accepted';
   cancelAvailable?: boolean;
   busy?: boolean;
+  previous?: (() => void) | undefined;
+  first?: (() => void) | undefined;
+  readRetry?: () => void;
+  readFailed?: boolean;
 };
 
 function actionLabel(action: string): string {
@@ -78,12 +84,14 @@ function outcomeLabel(outcome: LibraryBulkOutcome): string {
   }
 }
 
-function unavailableLabel(state: 'expired' | 'forbidden' | 'unavailable'): string {
+function unavailableLabel(state: 'expired' | 'forbidden' | 'invalid' | 'unavailable'): string {
   switch (state) {
     case 'expired':
       return m.library_bulk_recovery_expired();
     case 'forbidden':
       return m.library_bulk_recovery_forbidden();
+    case 'invalid':
+      return m.library_bulk_recovery_invalid();
     case 'unavailable':
       return m.library_bulk_recovery_unavailable();
   }
@@ -100,7 +108,22 @@ export function LibraryBulkOperationRecoveryView({
   cancelState = 'idle',
   cancelAvailable = true,
   busy = false,
+  previous, first, readRetry, readFailed = false,
 }: Props) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focus = useRef(searchWindowFocus());
+  const sequence = useRef(0);
+  useEffect(() => {
+    if (!authorized) focus.current.retire();
+    else if (!busy && !readFailed && read.state === 'available')
+      focus.current.settle(String(sequence.current), null, null, heading.current);
+  }, [authorized, busy, readFailed, read]);
+  useEffect(() => () => focus.current.retire(), []);
+  function activate(event: React.MouseEvent<HTMLButtonElement>, run: () => void) {
+    if (event.detail === 0) focus.current.capture(String(++sequence.current), null, 'read', event.currentTarget);
+    else focus.current.retire();
+    run();
+  }
   if (!authorized) return <p role="status">{m.library_bulk_recovery_forbidden()}</p>;
   if (read.state === 'available' && read.operation.id !== addressOperationId)
     return <p role="status">{m.library_bulk_recovery_unavailable()}</p>;
@@ -111,7 +134,7 @@ export function LibraryBulkOperationRecoveryView({
       <section aria-live="polite">
         <p role="status">{unavailableLabel(read.state)}</p>
         {read.state === 'unavailable' ? (
-          <button type="button" disabled={busy} onClick={() => readAgain(addressOperationId)}>
+          <button className="min-h-11 min-w-11" type="button" disabled={busy} onClick={() => readFailed && readRetry ? readRetry() : readAgain(addressOperationId)}>
             {m.library_bulk_recovery_read_again()}
           </button>
         ) : null}
@@ -121,7 +144,7 @@ export function LibraryBulkOperationRecoveryView({
   const operation = read.operation;
   return (
     <main>
-      <h1>{m.library_bulk_recovery_heading()}</h1>
+      <h1 ref={heading} tabIndex={-1}>{m.library_bulk_recovery_heading()}</h1>
       <dl>
         <dt>{m.library_bulk_recovery_action()}</dt>
         <dd>{actionLabel(operation.action)}</dd>
@@ -172,23 +195,25 @@ export function LibraryBulkOperationRecoveryView({
         ))}
       </ol>
       {read.outcomes.length === 0 ? <p>{m.library_bulk_recovery_empty()}</p> : null}
-      {read.next ? (
-        <button type="button" disabled={busy} onClick={() => readMore(addressOperationId, read.next!)}>
-          {m.library_bulk_recovery_read_more()}
-        </button>
-      ) : null}
+      <nav className="flex flex-wrap gap-2" aria-label={m.library_bulk_recovery_heading()}>
+        {previous ? <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, previous)}>{m.library_window_previous()}</button> : null}
+        {first ? <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, first)}>{m.library_window_first()}</button> : null}
+        {read.next ? <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, () => readMore(addressOperationId, read.next!))}>{m.library_bulk_recovery_read_more()}</button> : null}
+        <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, () => readAgain(addressOperationId))}>{m.library_vndb_browse_refresh()}</button>
+        {readFailed ? <><p role="status">{m.library_bulk_recovery_unavailable()}</p><button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, () => readRetry?.())}>{m.library_bulk_recovery_read_again()}</button></> : null}
+      </nav>
       {cancelState === 'uncertain' ? <p role="status">{m.library_bulk_recovery_cancel_uncertain()}</p> : null}
       {cancelState === 'refused' ? <p role="status">{m.library_bulk_recovery_cancel_refused()}</p> : null}
       {cancelState === 'accepted' ? <p role="status">{m.library_bulk_recovery_cancel_accepted()}</p> : null}
       {cancelState === 'uncertain' && cancelAvailable ? (
-        <button type="button" disabled={busy} onClick={retryCancel}>
+        <button className="min-h-11 min-w-11" type="button" disabled={busy} onClick={retryCancel}>
           {m.library_bulk_recovery_cancel_retry()}
         </button>
       ) : cancelAvailable &&
         canCancelBulkOperation(operation) &&
         cancelState !== 'refused' &&
         cancelState !== 'accepted' ? (
-        <button type="button" disabled={busy} onClick={cancel}>
+        <button className="min-h-11 min-w-11" type="button" disabled={busy} onClick={cancel}>
           {cancelState === 'capturing' || cancelState === 'pending'
             ? m.library_bulk_recovery_cancel_pending()
             : m.library_bulk_recovery_cancel()}

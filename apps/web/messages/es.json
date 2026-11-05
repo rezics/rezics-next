@@ -10904,5 +10904,6 @@
   "library_anilist_score_outcome_unsupported": "El voto nativo no es compatible",
   "library_anilist_score_outcome_failed": "El voto nativo ha fallado",
   "library_anilist_score_outcome_unavailable": "El voto nativo no está disponible",
-  "library_anilist_replace_vote_and_state": "Reemplazar el voto nativo y el estado existentes"
+  "library_anilist_replace_vote_and_state": "Reemplazar el voto nativo y el estado existentes",
+  "library_bulk_recovery_invalid": "Esta dirección de resultados no es válida."
 }

@@ -10904,5 +10904,6 @@
   "library_anilist_score_outcome_unsupported": "Native Stimme wird nicht unterstützt",
   "library_anilist_score_outcome_failed": "Native Stimme fehlgeschlagen",
   "library_anilist_score_outcome_unavailable": "Native Stimme nicht verfügbar",
-  "library_anilist_replace_vote_and_state": "Vorhandene native Stimme und Status ersetzen"
+  "library_anilist_replace_vote_and_state": "Vorhandene native Stimme und Status ersetzen",
+  "library_bulk_recovery_invalid": "Diese Ergebnisadresse ist ungültig."
 }
