@@ -159,7 +159,7 @@ describe('Search Concept conditions', () => {
             conceptScheme: label,
           }}
         />,
-      );
+      ).replace(/<[^>]*>/g, '');
     };
     expect(describe(false)).toContain('Scheme Film genres: Exact Concept');
     expect(describe(true)).toContain('Scheme Film genres: This Concept and its admitted descendants');

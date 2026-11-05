@@ -45,7 +45,9 @@ function conceptDescription(scheme: ReactNode, match: string, locale: string): R
   return m
     .condition_concept_predicate({ scheme: schemeToken, match }, options)
     .split(schemeToken)
-    .flatMap((part, index) => (index === 0 ? [part] : [<span key={index}>{scheme}</span>, part]));
+    .flatMap((part, index) => (index === 0 ? [part] : [<span key={index}>{scheme}</span>, part]))
+    .map((part, index) => (index === 0 ? ` (${part}` : part))
+    .concat(')');
 }
 
 /** Labels enter by their meaning; statement values are admitted only for their property/value pair. */
@@ -173,15 +175,13 @@ export function PredicateDescription({
         {inverseDescription ? <p>{inverseDescription}</p> : null}
         {'in' in statement && statement.concept
           ? (
-              <p>
-                {conceptDescription(
-                  presentation.conceptScheme(statement.concept.scheme),
-                  statement.concept.includeChildren
-                    ? m.condition_concept_descendants({}, options)
-                    : m.condition_concept_exact({}, options),
-                  locale,
-                )}
-              </p>
+              conceptDescription(
+                presentation.conceptScheme(statement.concept.scheme),
+                statement.concept.includeChildren
+                  ? m.condition_concept_descendants({}, options)
+                  : m.condition_concept_exact({}, options),
+                locale,
+              )
             )
           : null}
         {(previewNodes ? statement.qualifiers?.slice(0, 2) : statement.qualifiers)?.map((qualifier, i) => (
