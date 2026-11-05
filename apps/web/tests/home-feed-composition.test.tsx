@@ -10,7 +10,6 @@ import {
   type FeedInput,
   type HomeFeedResult,
 } from '../src/features/pages/home-feed-read';
-import { HomeFeed, HomeFeedConsumer } from '../src/features/pages/home-feed';
 import type { QuestionPointResult } from '../src/features/pages/home-feed-questions';
 import {
   homeFeedStoryPage,
@@ -50,6 +49,7 @@ mock.module('@tanstack/react-start/server', () => ({
     headers[name] = value;
   },
 }));
+const { HomeFeed, HomeFeedConsumer } = await import('../src/features/pages/home-feed');
 const { homePageQuery, readPrivateHomePage, readPublicHomePage, readHomeQuestions } =
   await import('../src/features/pages/home-queries');
 const { Home } = await import('../src/routes/index');
