@@ -247,9 +247,7 @@ const postSummary = t.Unsafe<
 const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' | 'description'>>(
   t.Object({ id: uuid, title: t.String(), description: nullable }, closed),
 );
-const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
-  CollectionDiscoverySummarySchema,
-);
+const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(CollectionDiscoverySummarySchema);
 const discoveryReviewSummary = t.Unsafe<
   PublicReviewDiscoverySummary &
     Pick<

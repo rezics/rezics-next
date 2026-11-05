@@ -54,4 +54,7 @@ const collectionCard = t.Union([
     closed,
   ),
 ]);
-export const CollectionDiscoverySummarySchema = t.Object({ ...collectionSummary.properties, card: collectionCard }, closed);
+export const CollectionDiscoverySummarySchema = t.Object(
+  { ...collectionSummary.properties, card: collectionCard },
+  closed,
+);
