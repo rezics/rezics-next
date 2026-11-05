@@ -194,7 +194,7 @@ beforeAll(async () => {
   const seller = personas.orgOwner;
   await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
   await grant(seller, PLATFORM_RESOURCE, ['offer:create', 'board:create', 'subject:create']);
-  const editionPublisher = createNativeEditionFixture(async (method, path, body, headers = {}) =>
+  const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) =>
     kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
