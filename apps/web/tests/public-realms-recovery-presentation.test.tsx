@@ -31,7 +31,7 @@ test('failed Previous and cursor-free First retry the requested coordinate witho
     expect(app.host.textContent).not.toContain('Loading');
     app.state(400);
     await act(async () => {
-      await app.router.invalidate();
+      await app.router.invalidate({ sync: true });
     });
     expect(app.host.textContent).toContain(m.public_account_cursor_expired());
     expect(app.link(m.public_account_start_again())).toBeDefined();
@@ -51,13 +51,13 @@ test('later direct entry, equal-address replacement, ignored cancellation and mo
     expect(app.link(m.public_account_start_again())).toBeDefined();
     const first = app.visit();
     await act(async () => {
-      await app.router.invalidate();
+      await app.router.invalidate({ sync: true });
     });
     expect(first.active).toBe(false);
     expect(first.coordinates).toEqual([]);
     const second = app.visit();
     await act(async () => {
-      await app.router.invalidate();
+      await app.router.invalidate({ sync: true });
     });
     expect(second.active).toBe(false);
     expect(app.visit()).not.toBe(first);
@@ -88,7 +88,7 @@ test('later direct entry, equal-address replacement, ignored cancellation and mo
     app.publish(false);
     const calls = app.calls.length;
     await act(async () => {
-      await app.router.invalidate();
+      await app.router.invalidate({ sync: true });
     });
     expect(app.calls).toHaveLength(calls);
     expect(app.link('Current Realm')).toBeUndefined();

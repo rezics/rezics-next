@@ -185,7 +185,7 @@ test('production route remounts reread Next, Previous and First with bounded adm
     expect(app.link(m.public_account_next())).toBeUndefined();
     await app.click(m.public_account_start_again());
     expect(app.calls.at(-1)).toBeNull();
-    expect(app.router.state.location.href).toBe('/en/@mira/realms?keep=a%20b&keep=%2f#reading');
+    expect(app.router.history.location.href).toBe('/en/@mira/realms?keep=a%20b&keep=%2f#reading');
     expect(app.link('Current Realm')?.getAttribute('href')).toBe('/en/realms/current');
     expect(app.visit().coordinates).toEqual([undefined]);
     expect(app.queryClient.getQueryCache().getAll()).toHaveLength(0);
