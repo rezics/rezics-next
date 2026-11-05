@@ -1,6 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from '../dynamic-collection';
-import { readCollectionRule } from '../collection-rule-actions';
 import type { RulePage } from '../collection-rule-read';
 import { useCollectionOwnerCurrent } from '../collection-owner-current';
 import { RuleEditLink } from '../saved-query-results';
@@ -36,7 +35,10 @@ export function DynamicRuleResultsReview({
   page,
   viewerId,
   resultsHref,
-  read = (id) => readCollectionRule({ data: id }),
+  read = async (id) => {
+    const { readCollectionRule } = await import('../collection-rule-actions');
+    return readCollectionRule({ data: id });
+  },
 }: {
   page: ResultsPage;
   viewerId: string | null;
