@@ -242,6 +242,8 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   const { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
   const { PersonalLibraryCurrent } = await import('../src/library/personal-library-current');
+  const { EntriesWindowNavigation } = await import('../src/library/entries-window-navigation');
+  const windows = new EntriesWindowNavigation();
   const { Route } = await import('../src/routes/library/index');
   expect(String(Route.options.component)).toContain('PersonalLibraryCurrent');
   const actions = await import('../src/library/entries-actions');
@@ -320,7 +322,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     <StrictMode>
       <QueryClientProvider client={client}>
         <RouterContextProvider router={router}>
-          <PersonalLibraryCurrent initial={initial} search={search} locale="en" display={display} />
+          <PersonalLibraryCurrent windows={windows} initial={initial} search={search} locale="en" display={display} />
         </RouterContextProvider>
       </QueryClientProvider>
     </StrictMode>
@@ -557,6 +559,62 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     expect(assign.mock.calls[1]![0].data).toEqual(exactLabel);
     expect(new Headers(assign.mock.calls[1]![0].headers).get('X-CSRF-Token')).toBe('csrf-rotated-again');
     expect(controls.rows[0]!.unknownLabelIntent).toBeUndefined();
+    // Three real current-reader windows; sparse and empty pages retain native navigation.
+    const navigation = spyOn(router, 'navigate').mockResolvedValue(undefined);
+    const link = (label: string) => [...host.querySelectorAll('a')].find((a) => a.textContent === label);
+    const moveWindow = async (label: string, cursor?: string, fail = false) => {
+      await act(async () => link(label)!.click());
+      expect(windows.pending).toBeDefined();
+      search = { type: 'core:Book', state: 'planned', ...(cursor ? { cursor } : {}) };
+      const index = pendingReads.length;
+      await show(session('C', 'csrf-rotated-again'));
+      if (fail) {
+        await act(async () => pendingReads[index]!.reject(new Error('target unavailable')));
+        await tick();
+      } else {
+        const value = response('C', search);
+        value.page = { ...value.page, entries: [], next: cursor === 'third+/==' ? null : 'third+/==' };
+        await settle(index, value);
+      }
+    };
+    try {
+      search = { type: 'core:Book', state: 'planned' };
+      let index = pendingReads.length;
+      await show(session('C', 'csrf-rotated-again'));
+      await settle(index, response('C', search));
+      const destination = host.querySelector(`a[href*="${id(1)}"]`)?.getAttribute('href');
+      expect(destination).toBeTruthy();
+      await moveWindow(m.library_next_page(), 'next-C');
+      expect(link(m.library_window_previous())).toBeDefined();
+      await moveWindow(m.library_next_page(), 'third+/==', true);
+      expect(windows.previous).toBeNull();
+      const retry = [...host.querySelectorAll('button')].find((b) => b.textContent === m.library_window_retry())!;
+      index = pendingReads.length;
+      await act(async () => retry.click());
+      expect(transport.mock.calls.at(-1)![0].data.cursor).toBe('third+/==');
+      const terminal = response('C', search);
+      terminal.page = { ...terminal.page, entries: [], next: null };
+      await settle(index, terminal);
+      expect(link(m.library_next_page())).toBeUndefined();
+      expect(link(m.library_window_first())).toBeDefined();
+      expect(windows.previous).toBe('next-C');
+      display = { layout: 'grid' as 'list', size: 'm' };
+      await show(session('C', 'csrf-rotated-again'));
+      expect(windows.previous).toBe('next-C');
+      await moveWindow(m.library_window_previous(), 'next-C');
+      await moveWindow(m.library_window_first());
+      expect(link(m.library_window_previous())).toBeUndefined();
+      // Fresh later address has no invented predecessor, then private replacement cancels a staged move.
+      search = { ...search, cursor: 'fresh-later' };
+      index = pendingReads.length;
+      await show(session('C', 'csrf-rotated-again'));
+      await settle(index, response('C', search));
+      expect(link(m.library_window_previous())).toBeUndefined();
+      await act(async () => link(m.library_next_page())!.click());
+      await show(session('D'));
+      expect(windows.pending).toBeUndefined();
+      expect(windows.previous).toBeUndefined();
+    } finally { navigation.mockRestore(); }
     await show({ state: 'unavailable', csrfToken: null });
     retired('C');
     expect(hydrationErrors).toEqual([]);

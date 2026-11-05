@@ -184,3 +184,35 @@ test('personal chronological reads send native sort and preserve the historical 
     state: 'preparing',
   });
 });
+
+
+test('tracked window coordinates cap predecessors, reset predicates, and preserve opaque address bytes', async () => {
+  const { EntriesWindowNavigation, entriesWindowHref } = await import('../src/library/entries-window-navigation');
+  const { personalLibraryAddress } = await import('../src/library/personal-library-server');
+  const windows = new EntriesWindowNavigation();
+  const first = personalLibraryAddress({}, 'en');
+  windows.bind('viewer', first);
+  windows.admit(null, false);
+  for (let i = 0; i < 12; i++) {
+    expect(windows.stage('next', String(i), false)).toBe(true);
+    expect(windows.stage('next', 'duplicate', false)).toBe(false);
+    windows.admit(String(i), false);
+  }
+  for (let i = 10; i >= 3; i--) {
+    expect(windows.previous).toBe(String(i));
+    windows.stage('previous', String(i), false);
+    windows.admit(String(i), false);
+  }
+  expect(windows.previous).toBeUndefined();
+  windows.stage('next', 'stale', true);
+  windows.admit('stale', true);
+  expect(windows.pending).toBeUndefined();
+  expect(windows.previous).toBeUndefined();
+  windows.stage('next', 'later', false);
+  windows.admit('later', false);
+  windows.bind('viewer', { ...first, state: 'completed' });
+  expect(windows.previous).toBeUndefined();
+  expect(entriesWindowHref('/en/library?x=a%20b&cursor=old&size=m#heading', 'raw+/=='))
+    .toBe('/en/library?x=a%20b&size=m&cursor=raw%2B%2F%3D%3D#heading');
+  expect(entriesWindowHref('/en/library?x=a%20b&cursor=old#heading', null)).toBe('/en/library?x=a%20b#heading');
+});
