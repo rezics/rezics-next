@@ -132,6 +132,10 @@ await mkdir(evidence, { recursive: true, mode: 0o700 });
 await mkdir(privateLogs, { recursive: true, mode: 0o700 });
 assert.equal(await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']), 0);
 assert.equal(await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']), 0);
+const kernelEnvironmentFile = resolve(root, 'services/kernel/.env');
+await writeFile(kernelEnvironmentFile, (await readFile(kernelEnvironmentFile, 'utf8'))
+  .replace(/^AUTH_ISSUER=.*$/m, `AUTH_ISSUER=${issuer}`)
+  .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuer}/.well-known/jwks.json`), { mode: 0o600 });
 assert.equal(await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']), 0);
 assert.equal(await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']), 0);
 const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
