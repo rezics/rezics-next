@@ -11,15 +11,27 @@ const privateLogs = resolve(root, '.temp/local-stack/journey');
 await mkdir(evidence, { recursive: true, mode: 0o700 });
 await mkdir(privateLogs, { recursive: true, mode: 0o700 });
 const suffix = crypto.randomUUID().slice(0, 8);
+const reservations = Array.from({ length: 6 }, () => Bun.serve({
+  hostname: '127.0.0.1', port: 0, fetch: () => new Response(),
+}));
+const [databasePort, searchPort, webPort, issuerPort, nativePort, kernelPort] = reservations.map((server) => server.port!);
+const webOrigin = `http://127.0.0.1:${webPort}`;
+const issuerOrigin = `http://127.0.0.1:${issuerPort}`;
+const kernelOrigin = `http://127.0.0.1:${kernelPort}`;
+for (const server of reservations) await server.stop(true);
 const env: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: 'development',
   KERNEL_DATABASE_CONTAINER: `rezics-vndb-${suffix}`,
   KERNEL_DATABASE_VOLUME: `rezics-vndb-${suffix}`,
-  KERNEL_DATABASE_PORT: '54329',
+  KERNEL_DATABASE_PORT: String(databasePort),
   KERNEL_SEARCH_CONTAINER: `rezics-vndb-search-${suffix}`,
   KERNEL_SEARCH_VOLUME: `rezics-vndb-search-${suffix}`,
-  KERNEL_SEARCH_PORT: '59200',
+  KERNEL_SEARCH_PORT: String(searchPort),
+  REZICS_LOCAL_STACK_WEB_ORIGIN: webOrigin,
+  REZICS_LOCAL_STACK_ISSUER_ORIGIN: issuerOrigin,
+  REZICS_LOCAL_STACK_NATIVE_ORIGIN: `http://127.0.0.1:${nativePort}`,
+  REZICS_LOCAL_STACK_KERNEL_ORIGIN: kernelOrigin,
   REZICS_DATASETS_DUMP_CACHE: resolve(root, '.temp/vndb-dumps'),
 };
 delete env.REZICS_TEST_RUNTIME;
@@ -58,6 +70,10 @@ let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
   await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']);
   await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']);
+  const kernelEnvFile = resolve(root, 'services/kernel/.env');
+  await writeFile(kernelEnvFile, (await readFile(kernelEnvFile, 'utf8'))
+    .replace(/^AUTH_ISSUER=.*$/m, `AUTH_ISSUER=${issuerOrigin}`)
+    .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuerOrigin}/.well-known/jwks.json`), { mode: 0o600 });
   await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']);
   await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
   const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8'));
@@ -66,8 +82,8 @@ try {
   stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
     cwd: root, env, stdout: stackLog, stderr: stackLog,
   });
-  await ready('http://127.0.0.1:4200/.well-known/jwks.json', stack);
-  await ready('http://127.0.0.1:3000/en', stack);
+  await ready(`${issuerOrigin}/.well-known/jwks.json`, stack);
+  await ready(`${webOrigin}/en`, stack);
   report.phases.push('stack-ready');
   const seedEnv = Object.fromEntries(
     (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8')).trim().split('\n').map((line) => {
@@ -99,7 +115,7 @@ try {
     const selected = result.readings.find((row) => row.source === 'vndb' && row.externalId === key);
     assert(selected, `Missing selected VNDB ${key}`);
     assert.equal(selected.selection, 'selected', `${key} must be selected independently of proposals`);
-    const url = `http://127.0.0.1:3000/en${selected.route}`;
+    const url = `${webOrigin}/en${selected.route}`;
     const response = await page.goto(url);
     assert.equal(response?.status(), 200);
     await page.screenshot({ path: resolve(evidence, `anonymous-${key}.png`), fullPage: true });
