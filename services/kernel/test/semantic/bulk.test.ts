@@ -1,4 +1,3 @@
-import { fixtureFetch } from '../imports/native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';

@@ -7,7 +7,6 @@ import {
   crossMediaAliases,
   planCrossMediaSeed,
   seedCrossMedia,
-  type CrossMediaPlan,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';

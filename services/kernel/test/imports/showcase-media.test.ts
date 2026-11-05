@@ -1,6 +1,4 @@
-import { adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

@@ -64,9 +64,10 @@ test('the installed appeal command sends the statement and request credentials',
     return Response.json({ id: 'appeal-1' }, { status: 201 });
   }) as typeof globalThis.fetch;
   const client = createKernelClient('https://kernel.test', { fetch });
+  const headers = { authorization: 'Bearer access-token', 'idempotency-key': 'appeal-key' };
   const result = await client['moderation-decisions']({ id: 'decision-1' }).$appeal.post(
     { statement: 'Please reconsider' },
-    { headers: { authorization: 'Bearer access-token', 'idempotency-key': 'appeal-key' } },
+    { headers },
   );
   expect(result.error).toBeNull();
   expect(result.data).toEqual({ id: 'appeal-1' });

@@ -4,7 +4,6 @@ import { listSubjectThreads } from '../../src/content/subject-threads.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
-import { testRouteKey } from '../support/test-kernel.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
