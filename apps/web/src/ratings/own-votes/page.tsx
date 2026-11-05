@@ -40,7 +40,7 @@ export function CurrentViewerOwnVotesPage({
   const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const locale = getLocale();
   const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
-  const pendingCoordinate = useOwnVotesPendingCoordinate(cursor, responseVersion);
+  const pendingCoordinate = useOwnVotesPendingCoordinate(cursor);
   const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt || pendingCoordinate, responseVersion);
   const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
   const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);

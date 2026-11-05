@@ -740,7 +740,7 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
     await view.click(findButton(m.library_my_ratings_save()));
     await view.click(findLink(m.library_my_ratings_continue()));
     expect(await waitForBodyText(view, m.library_my_ratings_departure_locked())).toBe(true);
-    expect(view.window.document.body.textContent).not.toContain(m.library_my_ratings_leave());
+    expect(document.body.textContent).not.toContain(m.library_my_ratings_leave());
     await view.click(bodyButton(view, m.library_my_ratings_stay()));
     expect(view.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:first');
     pendingCommand.resolve({ kind: 'uncertain' });
@@ -749,7 +749,7 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
 
     await view.click(findLink(m.library_my_ratings_continue()));
     expect(await waitForBodyText(view, m.library_my_ratings_departure_locked())).toBe(true);
-    expect(view.window.document.body.textContent).not.toContain(m.library_my_ratings_leave());
+    expect(document.body.textContent).not.toContain(m.library_my_ratings_leave());
     await view.click(bodyButton(view, m.library_my_ratings_stay()));
     expect(view.host.querySelector('[data-test-route-cursor]')?.textContent).toBe('route:first');
     await view.click(findButton(m.library_my_ratings_retry_original()));
