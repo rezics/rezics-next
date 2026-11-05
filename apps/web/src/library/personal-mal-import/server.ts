@@ -206,3 +206,7 @@ export const deleteMalImport = createServerFn({ method: 'POST' })
     return { kind: 'delete', id: requireId(input.id), key: requireKey(input.key) };
   })
   .handler(async ({ data }): Promise<MalMutateResult> => port().delete(data));
+
+export const readMalSource = createServerFn({ method: 'GET' })
+  .validator((input: { id: string }) => ({ id: requireId(input.id) }))
+  .handler(async ({ data }) => port().source!(data.id));

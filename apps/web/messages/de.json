@@ -10945,5 +10945,8 @@
   "library_mal_label_remaining": "Verbleibende Quellindizes: {values}",
   "library_mal_label_current": "Aktuelle native Zuordnungen",
   "library_mal_label_none": "Keine aktuellen Zuordnungen",
-  "library_mal_label_cancel": "Weitere Importaktionen stoppen"
+  "library_mal_label_cancel": "Weitere Importaktionen stoppen",
+  "library_mal_label_upload_id": "ID des aufbewahrten privaten Uploads",
+  "library_mal_label_reopen": "Aufbewahrten Import öffnen",
+  "library_mal_label_source": "Aufbewahrte native XML-Daten"
 }

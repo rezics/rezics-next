@@ -339,3 +339,41 @@ test('a changed account retires the upload and former-account callbacks', async 
   expect(host.textContent).toContain(m.library_mal_upload());
   expect(pages).toBe(seen);
 });
+
+test('retained upload reopens private native evidence and results without a second upload', async () => {
+  const opened: string[] = [];
+  const unavailable = async () => ({ kind: 'unavailable' as const });
+  const current = row({
+    outcome: {
+      row: 0,
+      status: 'applied',
+      applied: ['tags'],
+      retained: [],
+      reason: null,
+      labels: [{ value: 0, status: 'accepted', labelId: id, assignment: { id: subject, revision: 1 }, reason: null }],
+    },
+  });
+  await mount({
+    preview: async () => {
+      throw new Error('Must not upload');
+    },
+    review: unavailable,
+    apply: unavailable,
+    admitSource: unavailable,
+    cancel: unavailable,
+    delete: unavailable,
+    page: async (command) => {
+      opened.push(command.id);
+      return { kind: 'page', page: pageOf([current]) };
+    },
+    source: async () => ({ kind: 'source', xml: '<myanimelist><my_tags>A &amp; B</my_tags></myanimelist>' }),
+  });
+  const input = host.querySelector('input[autocomplete=off]') as HTMLInputElement;
+  input.value = id;
+  await act(() => input.form!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  await settle();
+  expect(opened).toEqual([id]);
+  await click(m.library_mal_label_results());
+  expect(host.textContent).toContain('accepted');
+  expect(host.textContent).toContain(subject);
+});

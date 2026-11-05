@@ -11044,5 +11044,8 @@
   "library_mal_label_remaining": "剩餘來源索引：{values}",
   "library_mal_label_current": "目前原生指派",
   "library_mal_label_none": "目前沒有指派",
-  "library_mal_label_cancel": "停止後續匯入操作"
+  "library_mal_label_cancel": "停止後續匯入操作",
+  "library_mal_label_upload_id": "保留的私人上傳 ID",
+  "library_mal_label_reopen": "重新開啟保留的匯入",
+  "library_mal_label_source": "保留的原生 XML 證據"
 }

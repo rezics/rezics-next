@@ -10957,5 +10957,8 @@
   "library_mal_label_remaining": "剩余来源索引：{values}",
   "library_mal_label_current": "当前原生分配",
   "library_mal_label_none": "当前没有分配",
-  "library_mal_label_cancel": "停止后续导入操作"
+  "library_mal_label_cancel": "停止后续导入操作",
+  "library_mal_label_upload_id": "保留的私人上传 ID",
+  "library_mal_label_reopen": "重新打开保留的导入",
+  "library_mal_label_source": "保留的原生 XML 证据"
 }

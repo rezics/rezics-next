@@ -10945,5 +10945,8 @@
   "library_mal_label_remaining": "Indices sources restants : {values}",
   "library_mal_label_current": "Affectations natives actuelles",
   "library_mal_label_none": "Aucune affectation actuelle",
-  "library_mal_label_cancel": "Arrêter les opérations d’import suivantes"
+  "library_mal_label_cancel": "Arrêter les opérations d’import suivantes",
+  "library_mal_label_upload_id": "ID de l’import privé conservé",
+  "library_mal_label_reopen": "Rouvrir l’import conservé",
+  "library_mal_label_source": "Preuve XML native conservée"
 }

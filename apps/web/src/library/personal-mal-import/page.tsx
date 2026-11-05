@@ -25,7 +25,8 @@ import { MalResultPage } from './results';
 import { MalReviewPage } from './review';
 import type { RowDraft } from './row';
 import { malSourcePreview } from './source';
-import { MalUploadForm } from './upload';
+import { MalRetainedSource } from './labels';
+import { MalUploadForm, MalRetainedUpload } from './upload';
 import { useMalVisit, type MalVisit } from './visit';
 
 type Stage = 'upload' | 'review' | 'confirm' | 'results';
@@ -327,7 +328,26 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           {m.library_mal_retry_command()}
         </MalAction>
       ) : null}
-      {stage === 'upload' ? <MalUploadForm busy={busy} onUpload={(xml) => void upload(xml)} /> : null}
+      {stage === 'upload' ? (
+        <>
+          <MalUploadForm busy={locked} onUpload={(xml) => void upload(xml)} />
+          <MalRetainedUpload
+            busy={locked}
+            onOpen={(id) => {
+              uploadId.current = id;
+              void loadPage(id, 0);
+            }}
+          />
+        </>
+      ) : null}
+      {page ? (
+        <>
+          <p className="break-all">
+            {m.library_mal_label_upload_id()}: {page.id}
+          </p>
+          <MalRetainedSource key={page.id} id={page.id} />
+        </>
+      ) : null}
       {stage === 'review' && page ? (
         <MalReviewPage
           page={page}
