@@ -279,11 +279,14 @@ async function until(predicate: () => boolean) {
     predicate(),
     JSON.stringify({
       text: host.textContent,
+      session: cache.getQueryData(sessionQuery.queryKey),
+      renderedSession,
       queries: directoryQueries().map((query) => ({ key: query.queryKey, state: query.state })),
       requests: requests.map((request) => request.url),
     }),
   ).toBe(true);
 }
+let renderedSession: unknown;
 function PopulationOwner({
   id = subjectId,
   q = question,
@@ -294,6 +297,7 @@ function PopulationOwner({
   enabled?: boolean;
 }) {
   const { data } = useQuery({ ...sessionQuery, enabled: false });
+  renderedSession = data;
   return (
     <SubjectRatingPopulations
       subjectId={id}

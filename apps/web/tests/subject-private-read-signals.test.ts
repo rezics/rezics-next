@@ -70,7 +70,8 @@ mock.module('@tanstack/react-start', () => ({
 }));
 mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => requests.getStore()! }));
 mock.module('cloudflare:workers', () => ({ env }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => native }));
+const kernel = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => native }));
 const {
   subjectRatingQuery,
   subjectReactionsQuery,
