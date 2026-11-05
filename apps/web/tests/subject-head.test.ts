@@ -6,11 +6,11 @@ import platform from '@rezics/composition/profiles/platform.json';
 import type { SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
 import type { PagePaths } from '../src/shell/head.ts';
-import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectPage, subjectPageTitle } = await import('../src/features/pages/subject.tsx');
 const { subjectHead } = await import('../src/features/pages/subject-head.ts');
+const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings');
 
 const id = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const context = '00000000-0000-8000-8000-000000000000';
