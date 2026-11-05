@@ -292,6 +292,7 @@ test('three windows return through exact Previous and failed Restart retry witho
   let held: Promise<void> | undefined;
   let release: (() => void) | undefined;
   const requested: (string | undefined)[] = [];
+  const firstMovementRead = deferred<void>();
   const read = spyOn(reads, 'readCreatorSalesCurrent').mockImplementation(async ({ data }) => {
     requested.push(data.cursor);
     if (held) await held;
@@ -316,6 +317,7 @@ test('three windows return through exact Previous and failed Restart retry witho
               initial = await reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
               loadId = `loaded-${requested.length}`;
               show();
+              firstMovementRead.resolve(undefined);
               return { locationKey, loadId };
             }}
           />
@@ -349,6 +351,8 @@ test('three windows return through exact Previous and failed Restart retry witho
     );
     expect(requested).toHaveLength(0);
     await click('Older sales', true);
+    await firstMovementRead.promise;
+    await tick();
     expect(host.textContent).toContain('Previous sales');
     expect(document.activeElement?.id).toBe('creator-sales-heading');
     await click('Inspect sale');
@@ -457,6 +461,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
   const requested: (string | undefined)[] = [];
   const delayedNavigation = deferred<void>();
   let delayNextNavigation = false;
+  const admissions: ReturnType<typeof deferred<Awaited<ReturnType<typeof navigateCreatorSales>>>>[] = [];
   const native = (cursor?: string): CreatorSalesCurrentRead => {
     const value = page(A, cursor ?? null);
     value.page = {
@@ -500,15 +505,18 @@ test('a delayed move superseded at the same cursor retires its path before a fre
           locationKey={router.state.location.key}
           cursor={cursor}
           locale="en"
-          navigate={(href, started) =>
-            navigateCreatorSales(router, salesRouteId, href, started).then(async (result) => {
+          navigate={(href, started) => {
+            const admission = deferred<Awaited<ReturnType<typeof navigateCreatorSales>>>();
+            admissions.push(admission);
+            return navigateCreatorSales(router, salesRouteId, href, started).then(async (result) => {
+              admission.resolve(result);
               if (delayNextNavigation && result) {
                 delayNextNavigation = false;
                 await delayedNavigation.promise;
               }
               return result;
-            })
-          }
+            });
+          }}
         />
       );
     },
@@ -543,6 +551,8 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     });
     delayNextNavigation = true;
     await click('Older sales');
+    const delayedAdmission = await admissions[0]!.promise;
+    expect(delayedAdmission?.locationKey).toBe(router.state.location.key);
     expect(requested.at(-1)).toBe('second+/=');
     expect(host.textContent).not.toContain('Previous sales');
     await act(async () => {
@@ -556,10 +566,16 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     expect(router.state.location.search).toEqual({ cursor: 'second+/=' });
     expect(host.textContent).not.toContain('Previous sales');
     expect(host.textContent).toContain('Older sales');
-    await click('Older sales');
+    await click('Older sales', true);
+    const freshAdmission = await admissions[1]!.promise;
+    expect(freshAdmission?.locationKey).toBe(router.state.location.key);
+    await tick();
     expect(host.textContent).toContain('Previous sales');
+    expect(document.activeElement?.id).toBe('creator-sales-heading');
     fail = true;
     await click('Previous sales');
+    await admissions[2]!.promise;
+    await tick();
     expect(host.textContent).toContain('Retry this window');
     fail = false;
     await click('Retry this window');
