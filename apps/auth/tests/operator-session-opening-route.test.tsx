@@ -104,12 +104,14 @@ async function open(
   return Object.assign(
     { host, requests, read, respond, click, submit },
     {
-      async review() {
+      async review(wait = true) {
         await flush(() => {
           fill(host.querySelector('#opening-subject')!, subject);
           fill(host.querySelector('#opening-operator')!, operator);
         });
-        await submit();
+        const pendingReview = submit();
+        if (wait) await pendingReview;
+        else void pendingReview;
         await flush(() => Promise.resolve());
       },
       confirm: () => flush(() => host.querySelector<HTMLInputElement>('#opening-confirm')!.click()),
@@ -161,6 +163,7 @@ test('failed initial and review reads recover the exact identity and key through
     await p.respond(0, new Response(null, { status: 503 }));
     expect(pending.readPendingManagementOperationStepUp()).toMatchObject({ ...selected, phase: 'submitted' });
     await p.click('Check current session');
+    expect(p.requests.map((request) => request.path)).toEqual(['/operator-sessions/open', '/session']);
     await p.respond(1, Response.json(proof(true)));
     expect(p.host.querySelector('[role=status]')!.textContent).toContain(subject);
     expect(p.host.querySelector('a[href="https://rezics.com/en/"]')).not.toBeNull();
@@ -200,13 +203,29 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
     try {
       const late = Promise.withResolvers<OpeningRead>();
       const lateApproval = Promise.withResolvers<Awaited<ReturnType<typeof managementOperations.approveManagementOperation>>>();
-      if (stage === 'review') p.read.mockReturnValueOnce(late.promise);
-      await p.review();
+      const reviewStarted = Promise.withResolvers<void>();
+      const approvalStarted = Promise.withResolvers<OpeningInput>();
+      if (stage === 'review')
+        p.read.mockImplementationOnce(() => {
+          reviewStarted.resolve();
+          return late.promise;
+        });
+      await p.review(stage !== 'review');
+      if (stage === 'review') await reviewStarted.promise;
       if (stage !== 'review') {
         await p.confirm();
-        if (stage === 'approval') p.approve.mockReturnValueOnce(lateApproval.promise);
-        await p.submit();
-        await flush(() => Promise.resolve());
+        if (stage === 'approval')
+          p.approve.mockImplementationOnce((input) => {
+            approvalStarted.resolve(input as OpeningInput);
+            return lateApproval.promise;
+          });
+        if (stage === 'approval') {
+          void p.submit();
+          await approvalStarted.promise;
+        } else {
+          await p.submit();
+          await flush(() => Promise.resolve());
+        }
       }
       if (stage === 'readback') {
         await p.respond(0, new Response(null, { status: 503 }));
@@ -219,7 +238,7 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
       if (stage === 'review') await flush(() => late.resolve(metadata));
       else if (stage === 'approval') {
         lateApproval.resolve({
-          kind: 'approved', input: p.approve.mock.calls.at(-1)![0], reference: 'approval-reference',
+          kind: 'approved', input: await approvalStarted.promise, reference: 'approval-reference',
           expiresAt: new Date(Date.now() + 60000).toISOString(),
         });
       }
