@@ -937,17 +937,15 @@ test('selected rating evidence survives response loss and reopen before terminal
   });
   try {
     await expect(importShowcaseTags(input())).rejects.toThrow('Durable operations remain unresolved');
-    console.error({loseResponse, commands:commands.length, fetches, prepared:journal.preparedCommands().map(r=>r.command.key)});
+    expect(loseResponse).toBe(false);
     const sealed = journal.preparedCommands().filter((row) => row.command.op === 'propose');
+    const receipt = journal.vndbTagRatingSource('v410')!;
     expect(sealed.length).toBeGreaterThan(0);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const nextInput = input();
-    const captured = nextInput.port.batch;
-    nextInput.port.batch = async request => { try { return await captured(request); } catch (error) { console.error(error); throw error; } };
-    const reopened = await importShowcaseTags(nextInput);
+    const reopened = await importShowcaseTags(input());
     expect(fetches).toBe(1);
-    expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(sealed[0]!.command.source.digest);
+    expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(receipt.snapshot!.digest);
     for (const row of sealed)
       expect(commands.filter((command) => command.key === row.command.key)).toEqual([row.command, row.command]);
   } finally {
