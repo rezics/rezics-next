@@ -620,12 +620,10 @@ type CandidateRead = {
 type CandidatePage = {
   candidates: CandidateRead[];
   next: unknown;
-  adoption:
-    | {
-        head?: number | null;
-        selection?: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
-      }
-    | null;
+  adoption: {
+    head?: number | null;
+    selection?: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
+  } | null;
 };
 type AdoptionSnapshot = Readonly<{
   head: number;
@@ -2658,7 +2656,11 @@ export async function publishShowcase(input: {
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
     if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
-      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: priorAction.error_code! });
+      omissions.push({
+        provider: group.record.provider,
+        sourceKey: group.record.sourceKey,
+        code: priorAction.error_code!,
+      });
       if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }

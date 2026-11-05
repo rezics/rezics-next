@@ -71,7 +71,9 @@ function sourcePublicationFailure(showcase?: ShowcasePublicationResult): Develop
       ['review-http-401', 'review-http-403', 'review-http-409', 'review-http-412', 'review-http-423'].includes(code),
   );
   const code =
-    refusal?.code ?? showcase?.omissions[0]?.code ?? (showcase ? 'publication-incomplete' : 'publication-result-missing');
+    refusal?.code ??
+    showcase?.omissions[0]?.code ??
+    (showcase ? 'publication-incomplete' : 'publication-result-missing');
   return {
     state: refusal ? 'refused' : 'unavailable',
     operation: 'source.publication',
