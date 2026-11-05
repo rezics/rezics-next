@@ -1,15 +1,47 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { failure, issuerPage, loadDetail, loadInventory, readCursors } from '../src/accounts/management/data';
-import { AccountManagementPage } from '../src/accounts/management/pages';
-import { inventoryExample, detailExample, organization, human, automation } from '../src/accounts/management/story-api';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
-import { m } from '../src/paraglide/messages.js';
-import { isSignedInPath } from '../src/session/guard';
-import { managedAccountHref } from '../src/settings/managed-accounts-read';
-import { managedAccountsBackHref } from '../src/settings/managed-account-detail-read';
+
+// Paraglide reads the locale from the document URL only when a window exists before its runtime loads.
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.test/en/settings' });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  location: window.location,
+  HTMLElement: window.HTMLElement,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const { failure, issuerPage, loadDetail, loadInventory, readCursors } = await import('../src/accounts/management/data');
+const { AccountManagementPage } = await import('../src/accounts/management/pages');
+const { inventoryExample, detailExample, organization, human, automation } = await import(
+  '../src/accounts/management/story-api'
+);
+const { getLocale, locales, setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
+const { isSignedInPath } = await import('../src/session/guard');
+const { managedAccountHref } = await import('../src/settings/managed-accounts-read');
+const { managedAccountsBackHref } = await import('../src/settings/managed-account-detail-read');
+
+afterAll(() => {
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
 
 test('Settings directory/detail return preserves the locale and unrelated repeated query operands', () => {
   for (const locale of locales) {
@@ -112,6 +144,7 @@ test('Legacy account and organization management reaches the current selected Se
       const page = await loadDetail(client, 'Bearer current-viewer', value.account.id, {});
       const requestCount = requests.length;
       for (const locale of locales) {
+        window.history.replaceState(null, '', `/${locale}/settings`);
         setLocale(locale, { reload: false });
         const html = renderToStaticMarkup(
           createElement(AccountManagementPage, {
