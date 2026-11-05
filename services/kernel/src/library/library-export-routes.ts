@@ -38,9 +38,9 @@ function sectionTuple<const Sections extends readonly string[]>(sections: Sectio
   return t.Tuple<{
     -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
   }>(
-    sections.map((section) => t.Literal(section)) as {
+    sections.map((section) => t.Literal(section)) as [...{
       -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
-    },
+    }],
   );
 }
 const sectionsV1 = sectionTuple(exportSections);

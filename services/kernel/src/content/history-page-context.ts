@@ -277,10 +277,14 @@ async function readReviewQuestions(
   return new Map(questions);
 }
 
+type HistoryActionInput =
+  | Readonly<{ type: 'content.thread'; id: string }>
+  | Readonly<{ type: 'content.post'; id: string; sourceRevisionId: string }>;
+
 function actionReferences(
   actor: Actor,
   runtime: ReadingPageViewerActionRuntime,
-  refs: readonly Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>[],
+  refs: readonly HistoryActionInput[],
   results: readonly Readonly<{
     type: string;
     id: string;
@@ -318,7 +322,7 @@ async function readHistoryActions(
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
   }
-  const refs: Array<Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>> = [
+  const refs: HistoryActionInput[] = [
     { type: 'content.thread', id: thread.id },
   ];
   if ('revisionId' in head && head.availability === 'available')
@@ -334,7 +338,7 @@ async function readHistoryActions(
         }),
       ))
   )
-    return { state: 'unavailable' as const, retryable: true, references: [] as const };
+    return { state: 'unavailable' as const, retryable: true, references: [] };
   try {
     const result = await readViewerActions(
       { pool: dependencies.pool, ...runtime },
@@ -349,7 +353,7 @@ async function readHistoryActions(
     };
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
-    return { state: 'unavailable' as const, retryable: true, references: [] as const };
+    return { state: 'unavailable' as const, retryable: true, references: [] };
   }
 }
 
