@@ -21,6 +21,19 @@ export {
 } from './work-release-cards.ts';
 export type { WorkReleaseCard, WorkReleaseCardField, WorkReleaseCards } from './work-release-cards.ts';
 export { readListPresentationFacts } from './list-presentation.ts';
+export { readIdentityRatingReview } from './identity-adapters/read.ts';
+export type {
+  IdentityRatingControlLocator,
+  IdentityRatingReviewOperand,
+  IdentityRatingReviewResult,
+  IdentityRatingReviewUnavailableReason,
+} from './identity-adapters/read.ts';
+export { createIdentityRatingCommitParticipant, IdentityRatingCommitUnavailableError } from './identity-rating-commit-participant.ts';
+export type {
+  IdentityRatingCommitHeld,
+  IdentityRatingCommitParticipant,
+  IdentityRatingCommitPreparation,
+} from './identity-rating-commit-participant.ts';
 export {
   readCopyWorkDisclosure,
   COPY_WORK_DISCLOSURE_LOOKAHEAD,

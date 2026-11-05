@@ -77,7 +77,7 @@ import {
 } from '../identity-epoch-admission.ts';
 import { withConnection } from '../../database/pool.ts';
 import { readPartition } from '../../partition/partition.ts';
-import { readIdentityMappings } from './identity-epoch-read.ts';
+import { readIdentityMappings, readIdentityRatingReview } from './read.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { GLOBAL_CONTEXT } from '../definitions.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../events.ts';
@@ -878,5 +878,11 @@ export const identityEpochStore: IdentityEpochStore = {
   },
 };
 
-export { readIdentityMappings };
+export { readIdentityMappings, readIdentityRatingReview };
+export type {
+  IdentityRatingControlLocator,
+  IdentityRatingReviewOperand,
+  IdentityRatingReviewResult,
+  IdentityRatingReviewUnavailableReason,
+} from './read.ts';
 export type * from './identity-epoch-contract.ts';
