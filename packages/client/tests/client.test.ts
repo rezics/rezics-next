@@ -232,7 +232,23 @@ test('the generated account client reads the Inbox and unread summary', async ()
 });
 
 test('profile and managed-account readers expose the mounted account responses', async () => {
-  const { sent, fetch } = kernel([() => json(200, { profile: { avatar: null } }), () => json(200, {})]);
+  const organizationAccount = { id: `${ID}-org`, kind: 'organization', handle: 'club', displayName: 'Club' } as const;
+  const { sent, fetch } = kernel([
+    () => json(200, { profile: { avatar: null } }),
+    () =>
+      json(200, {
+        account: { id: ID, kind: 'actor', handle: 'reader', displayName: 'Reader' },
+        organizations: {
+          state: 'ready',
+          items: [{ account: organizationAccount, role: 'owner' }],
+          next: null,
+        },
+        responsibilities: {
+          items: [{ reservationId: `${ID}-reservation`, accountId: ID, account: organizationAccount, state: 'current' }],
+          next: null,
+        },
+      }),
+  ]);
   const client = createKernelClient(ORIGIN, { fetch });
   const profile = await client.accounts({ accountId: ID }).profile.get();
   const managed = await client.me.managedAccounts.get({ query: { organizationsCursor: 'selected-page' } });
@@ -248,6 +264,9 @@ test('profile and managed-account readers expose the mounted account responses',
   expectTypeOf(page.account.id).toEqualTypeOf<string>();
   expectTypeOf(organization).toEqualTypeOf<ManagedAccountOrganization | undefined>();
   expectTypeOf(responsibility).toEqualTypeOf<ManagedAccountResponsibility | undefined>();
+  expect(page.account.id).toBe(ID);
+  expect(organization?.account.kind).toBe('organization');
+  expect(responsibility?.state).toBe('current');
   expect(sent.map(({ url, method }) => [url, method])).toEqual([
     [`${ORIGIN}/v1/accounts/${ID}/profile`, 'GET'],
     [`${ORIGIN}/v1/me/managedAccounts?organizationsCursor=selected-page`, 'GET'],
