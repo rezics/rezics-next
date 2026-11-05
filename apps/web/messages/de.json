@@ -8517,7 +8517,7 @@
   "release_search_invalid": "Die markierten Felder korrigieren und erneut suchen.",
   "release_search_apply": "Veröffentlichungen suchen",
   "release_search_terminal": "Keine weiteren passenden Veröffentlichungen.",
-  "release_search_pagination": "Veröffentlichungsseiten",
+  "release_search_pagination": "Fenster für Werk- und Veröffentlichungsgruppen",
   "release_search_continue": "Weitere Veröffentlichungen",
   "release_search_page_empty": "Keine passenden Veröffentlichungen auf dieser Seite. Auf der nächsten Seite weitersuchen.",
   "release_search_related_releases": "Zugehörige Veröffentlichungen",
@@ -10468,5 +10468,12 @@
   "library_destination_member_count": "{count} erfasste Mitglieder",
   "library_destination_member_meaning": "Gezählt werden Einträge; dasselbe Thema kann mehrfach vorkommen.",
   "library_destination_add_meaning": "Das Hinzufügen erstellt einen eigenen Sammlungseintrag. Deine privaten Notizen und Bewertungen werden nicht veröffentlicht.",
-  "library_destination_choose": "Diese Sammlung wählen"
+  "library_destination_choose": "Diese Sammlung wählen",
+  "release_search_window_current": "Gruppenfenster {number}",
+  "release_search_window_address": "Aktuelles Gruppenfenster",
+  "release_search_window_previous": "Vorheriges Gruppenfenster",
+  "release_search_window_first": "Erstes Gruppenfenster",
+  "release_search_window_limit": "Es werden nur die letzten 12 geladenen Gruppenfenster gespeichert. Beginne beim ersten Gruppenfenster neu.",
+  "release_search_window_repeated": "Diese Fortsetzung wiederholt ein früheres Gruppenfenster. Beginne beim ersten Gruppenfenster neu.",
+  "release_search_window_results": "Aktuelle Werk- und Veröffentlichungsgruppen"
 }

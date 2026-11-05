@@ -71,8 +71,8 @@ const { createBrowserHistory, createRootRouteWithContext, createRoute, createRou
   await import('@tanstack/react-router');
 const { useSearchQuery } = await import('../src/search/use-search-query');
 const { searchQueryOptions } = await import('../src/search/search-queries');
-const { searchLoaderDeps, searchParams } = await import('../src/search/search-params');
-const { useSearchWindow } = await import('../src/search/search-window/use-search-window');
+const { discoverySearchHref, searchLoaderDeps, searchParams } = await import('../src/search/search-params');
+const { useSearchWindow } = await import('../src/search/search-window');
 const { SearchResultsRegion } = await import('../src/search/search-regions/results');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -116,7 +116,8 @@ async function show(search = '/en/search?q=Mira') {
       const params = route.useLoaderDeps();
       const { data } = useSearchQuery('en', params);
       const navigation = useSearchWindow({
-        state: params,
+        cursor: params.cursor,
+        href: (cursor) => discoverySearchHref('en', { ...params, cursor }),
         locale: 'en',
         session: 'anonymous',
         ready: data.recovery?.status === 'ready',

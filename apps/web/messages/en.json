@@ -8597,7 +8597,7 @@
   "release_search_invalid": "Repair the marked fields, then search again.",
   "release_search_apply": "Search releases",
   "release_search_terminal": "No more matching releases.",
-  "release_search_pagination": "Release pages",
+  "release_search_pagination": "Work and release group windows",
   "release_search_continue": "Next releases",
   "release_search_page_empty": "No matching releases on this page. Continue to search the next page.",
   "release_search_related_releases": "Related releases",
@@ -10655,5 +10655,12 @@
   "library_destination_member_count": "{count} recorded members",
   "library_destination_member_meaning": "Counts member occurrences; the same subject may appear more than once.",
   "library_destination_add_meaning": "Adding creates a separate collection occurrence. Your private notes and ratings are not published.",
-  "library_destination_choose": "Choose this collection"
+  "library_destination_choose": "Choose this collection",
+  "release_search_window_current": "Group window {number}",
+  "release_search_window_address": "Current group window",
+  "release_search_window_previous": "Previous group window",
+  "release_search_window_first": "First group window",
+  "release_search_window_limit": "Only the last 12 admitted group windows are kept. Use First group window to start again.",
+  "release_search_window_repeated": "This continuation repeats an earlier group window. Start again from the first group window.",
+  "release_search_window_results": "Current work and release groups"
 }

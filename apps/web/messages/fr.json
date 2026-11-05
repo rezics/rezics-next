@@ -8517,7 +8517,7 @@
   "release_search_invalid": "Corrigez les champs signalés, puis relancez la recherche.",
   "release_search_apply": "Rechercher des éditions",
   "release_search_terminal": "Il n’y a plus d’éditions correspondantes.",
-  "release_search_pagination": "Pages d’éditions",
+  "release_search_pagination": "Fenêtres de groupes d’œuvres et d’éditions",
   "release_search_continue": "Éditions suivantes",
   "release_search_page_empty": "Aucune édition correspondante sur cette page. Poursuivez la recherche sur la page suivante.",
   "release_search_related_releases": "Éditions associées",
@@ -10468,5 +10468,12 @@
   "library_destination_member_count": "{count} membres enregistrés",
   "library_destination_member_meaning": "Compte les occurrences ; un même sujet peut apparaître plusieurs fois.",
   "library_destination_add_meaning": "L’ajout crée une occurrence indépendante dans la collection. Vos notes et évaluations privées ne sont pas publiées.",
-  "library_destination_choose": "Choisir cette collection"
+  "library_destination_choose": "Choisir cette collection",
+  "release_search_window_current": "Fenêtre de groupes {number}",
+  "release_search_window_address": "Fenêtre de groupes actuelle",
+  "release_search_window_previous": "Fenêtre de groupes précédente",
+  "release_search_window_first": "Première fenêtre de groupes",
+  "release_search_window_limit": "Seules les 12 dernières fenêtres de groupes admises sont conservées. Reprenez à la première pour recommencer.",
+  "release_search_window_repeated": "Cette suite répète une fenêtre de groupes précédente. Reprenez à la première.",
+  "release_search_window_results": "Groupes actuels d’œuvres et d’éditions"
 }

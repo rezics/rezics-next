@@ -8520,7 +8520,7 @@
   "release_search_invalid": "請修正標記的欄位，再重新搜尋。",
   "release_search_apply": "搜尋發行版本",
   "release_search_terminal": "沒有更多符合條件的發行版本。",
-  "release_search_pagination": "發行版本分頁",
+  "release_search_pagination": "作品與發行版本分組頁面",
   "release_search_continue": "下一頁發行版本",
   "release_search_page_empty": "本頁沒有符合條件的發行版本。請繼續搜尋下一頁。",
   "release_search_related_releases": "相關發行版本",
@@ -10562,5 +10562,12 @@
   "library_destination_member_count": "已記錄 {count} 個成員",
   "library_destination_member_meaning": "統計成員項目；同一主題可以多次出現。",
   "library_destination_add_meaning": "新增會在收藏集中建立獨立項目，不會公開你的私密筆記或評分。",
-  "library_destination_choose": "選擇此收藏集"
+  "library_destination_choose": "選擇此收藏集",
+  "release_search_window_current": "第 {number} 個分組頁面",
+  "release_search_window_address": "目前分組頁面",
+  "release_search_window_previous": "上一個分組頁面",
+  "release_search_window_first": "第一個分組頁面",
+  "release_search_window_limit": "僅保留最近 12 個已讀取的分組頁面。可選擇第一個分組頁面重新開始。",
+  "release_search_window_repeated": "此接續位置重複了先前的分組頁面。請從第一個分組頁面重新開始。",
+  "release_search_window_results": "目前作品與發行版本分組"
 }

@@ -8517,7 +8517,7 @@
   "release_search_invalid": "请修正标记的字段，然后重新搜索。",
   "release_search_apply": "搜索发行版本",
   "release_search_terminal": "没有更多符合条件的发行版本。",
-  "release_search_pagination": "发行版本分页",
+  "release_search_pagination": "作品与发行版本分组页面",
   "release_search_continue": "下一页发行版本",
   "release_search_page_empty": "本页没有符合条件的发行版本。请继续搜索下一页。",
   "release_search_related_releases": "相关发行版本",
@@ -10475,5 +10475,12 @@
   "library_destination_member_count": "已记录 {count} 个成员",
   "library_destination_member_meaning": "统计成员条目；同一主题可以多次出现。",
   "library_destination_add_meaning": "添加会在收藏集中创建独立条目，不会公开你的私密笔记或评分。",
-  "library_destination_choose": "选择此收藏集"
+  "library_destination_choose": "选择此收藏集",
+  "release_search_window_current": "第 {number} 个分组页面",
+  "release_search_window_address": "当前分组页面",
+  "release_search_window_previous": "上一个分组页面",
+  "release_search_window_first": "第一个分组页面",
+  "release_search_window_limit": "仅保留最近 12 个已读取的分组页面。可选择第一个分组页面重新开始。",
+  "release_search_window_repeated": "此接续位置重复了先前的分组页面。请从第一个分组页面重新开始。",
+  "release_search_window_results": "当前作品与发行版本分组"
 }

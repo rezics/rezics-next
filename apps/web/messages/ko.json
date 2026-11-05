@@ -8517,7 +8517,7 @@
   "release_search_invalid": "표시된 항목을 수정한 후 다시 검색하세요.",
   "release_search_apply": "출시판 검색",
   "release_search_terminal": "조건에 맞는 출시판이 더 없습니다.",
-  "release_search_pagination": "출시판 페이지",
+  "release_search_pagination": "작품 및 출시판 그룹 페이지",
   "release_search_continue": "다음 출시판",
   "release_search_page_empty": "이 페이지에는 조건에 맞는 출시판이 없습니다. 다음 페이지에서 검색을 계속하세요.",
   "release_search_related_releases": "관련 출시판",
@@ -10468,5 +10468,12 @@
   "library_destination_member_count": "기록된 멤버 {count}개",
   "library_destination_member_meaning": "등록된 항목 수이며 같은 대상이 여러 번 포함될 수 있습니다.",
   "library_destination_add_meaning": "추가하면 컬렉션에 독립된 항목이 생성됩니다. 비공개 메모와 평가는 공개되지 않습니다.",
-  "library_destination_choose": "이 컬렉션 선택"
+  "library_destination_choose": "이 컬렉션 선택",
+  "release_search_window_current": "그룹 페이지 {number}",
+  "release_search_window_address": "현재 그룹 페이지",
+  "release_search_window_previous": "이전 그룹 페이지",
+  "release_search_window_first": "첫 그룹 페이지",
+  "release_search_window_limit": "최근에 승인된 그룹 페이지 12개만 유지됩니다. 첫 그룹 페이지에서 다시 시작하세요.",
+  "release_search_window_repeated": "이어서 볼 위치가 이전 그룹 페이지와 중복됩니다. 첫 그룹 페이지에서 다시 시작하세요.",
+  "release_search_window_results": "현재 작품 및 출시판 그룹"
 }

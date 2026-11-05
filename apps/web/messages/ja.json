@@ -8520,7 +8520,7 @@
   "release_search_invalid": "印の付いた項目を修正して、もう一度検索してください。",
   "release_search_apply": "リリースを検索",
   "release_search_terminal": "条件に合うリリースはこれ以上ありません。",
-  "release_search_pagination": "リリースのページ",
+  "release_search_pagination": "作品とリリースのグループページ",
   "release_search_continue": "次のリリース",
   "release_search_page_empty": "このページには条件に合うリリースがありません。次のページで検索を続けてください。",
   "release_search_related_releases": "関連するリリース",
@@ -10562,5 +10562,12 @@
   "library_destination_member_count": "記録されたメンバー数：{count}",
   "library_destination_member_meaning": "登録された件数です。同じ対象が複数回含まれることがあります。",
   "library_destination_add_meaning": "追加すると、このコレクションに独立した登録が作られます。非公開のメモや評価は公開されません。",
-  "library_destination_choose": "このコレクションを選ぶ"
+  "library_destination_choose": "このコレクションを選ぶ",
+  "release_search_window_current": "グループ {number} ページ目",
+  "release_search_window_address": "現在のグループページ",
+  "release_search_window_previous": "前のグループページ",
+  "release_search_window_first": "最初のグループページ",
+  "release_search_window_limit": "読み込んだ直近12ページのグループを保持します。最初のグループページからやり直せます。",
+  "release_search_window_repeated": "この続きは前のグループページと重複しています。最初のグループページからやり直してください。",
+  "release_search_window_results": "現在の作品とリリースのグループ"
 }
