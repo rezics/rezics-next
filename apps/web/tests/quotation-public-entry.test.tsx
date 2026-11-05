@@ -98,6 +98,7 @@ test('SubjectFrame carries its observed Context through the installed quotation 
   setLocale('en', { reload: false });
   nativeReads.length = 0;
   const origin = `/en/subjects/${work}/the-harbor/relations?context=${contextB}`;
+  const acceptedOrigin = `${origin}#connections`;
   const rootRoute = createRootRoute({ component: Outlet });
   const sourceRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -143,7 +144,7 @@ test('SubjectFrame carries its observed Context through the installed quotation 
     const entryAddress = new URL(entry!.href);
     expect(entryAddress.pathname).toBe(`/en/subjects/${work}/the-harbor/quotations`);
     expect(entryAddress.searchParams.get('context')).toBe(contextB);
-    expect(entryAddress.searchParams.get('returnTo')).toBe(origin);
+    expect(entryAddress.searchParams.get('returnTo')).toBe(acceptedOrigin);
     expect(entryAddress.searchParams.has('quote')).toBe(false);
     await act(async () => {
       await router.navigate({ href: entry!.getAttribute('href')! } as never);
@@ -177,9 +178,9 @@ test('SubjectFrame carries its observed Context through the installed quotation 
     expect(new URL(link(realm, m.quotation_entry_general())!.href, window.location.origin).search).toBe('');
 
     const validOrigin = slot({ context: contextB, returnTo: origin });
-    expect(new URL(link(validOrigin, m.quotation_title())!.href, window.location.origin).searchParams.get('returnTo')).toBe(
-      origin,
-    );
+    expect(
+      new URL(link(validOrigin, m.quotation_title())!.href, window.location.origin).searchParams.get('returnTo'),
+    ).toBe(acceptedOrigin);
     const conflictingOrigin = slot({ context: contextB, returnTo: `${origin.split('?')[0]}?context=${contextA}` });
     expect(conflictingOrigin.querySelector('[role="status"]')?.textContent).toBe(
       m.quotation_entry_origin_unsupported(),
