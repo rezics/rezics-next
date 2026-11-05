@@ -1852,7 +1852,9 @@ export function RealmCatalogueSearch({
     return `${url.pathname}${url.search}${url.hash}`;
   };
   const currentHref = hrefForState(queryState);
-  const heading = <h2 className="text-xl font-semibold">{m.realm_catalogue_heading({}, messageOptions(locale))}</h2>;
+  const heading = (
+    <h2 className="text-xl font-semibold">{m.realm_catalogue_works_heading({}, messageOptions(locale))}</h2>
+  );
   if (searchRequiresCurrentReader(queryState) && (browserSession.state !== 'signed-in' || !reader))
     return (
       <SearchPage

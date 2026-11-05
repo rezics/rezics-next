@@ -1304,6 +1304,7 @@ language through the client's `accept-language`.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
 
 Decision: when the Realm is unavailable, the page shows its own unavailable state and never substitutes Global boards or publications.
+Decision: `RealmCommunityBoards` is the one community shelf and shows native recent discussion prefixes when home or board-shelf admits them; membership completion restores the header control rather than a shelf heading.
 
 ### Realm claim review
 
