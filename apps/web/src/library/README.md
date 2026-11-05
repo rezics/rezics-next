@@ -336,8 +336,9 @@ Mode selection has distinct action labels, and completion/return links retain th
 
 Saved population remains explicit: owner rules use Library facts; catalogue rules include matching Subjects
 without curator facts. Current catalogue membership and properties change fresh private results B, while shared
-last-complete A stays until explicit publication commits. Native catalogue binding is still required; a listing,
-private fact insertion or successful save cannot substitute for it.
+last-complete A stays until explicit publication commits. Kernel preparation binds catalogue selections to the
+installed native Search population at the saved release; a listing, private fact insertion or successful save cannot
+substitute for that binding.
 
 The page reviews at most 100 disclosed canonical subjects, preserves first canonical occurrence and explicitly
 confirms even an empty set. The Kernel retains one complete nine-axis declaration for Source preparation/currentness,
