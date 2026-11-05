@@ -112,6 +112,23 @@ mock.module('../src/threads/actions', () => ({
   startThread: async () => ({ ok: false, reason: 'unavailable' }),
 }));
 
+const nativeWatchCommands: { data: { threadId: string; viewerId: string; watching: boolean }; headers: HeadersInit }[] = [];
+mock.module('../src/threads/thread-watch-transport', () => ({
+  readThreadWatch: async () => ({ kind: 'confirmed', state: { watching: true } }),
+  setThreadWatch: async (command: typeof nativeWatchCommands[number]) => {
+    nativeWatchCommands.push(command);
+    return { kind: nativeWatchCommands.length === 1 ? 'unknown' : 'confirmed' };
+  },
+}));
+const nativeReactionCommands: { data: object; headers: HeadersInit }[] = [];
+mock.module('../src/threads/reactions', () => ({
+  changeReaction: async (command: typeof nativeReactionCommands[number]) => {
+    nativeReactionCommands.push(command);
+    return nativeReactionCommands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true };
+  },
+  readReaction: async () => ({ ok: true, value: 'like', counts: { like: 2 }, reactionsAsOf: { epoch: 1, position: '2' } }),
+}));
+
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -681,6 +698,8 @@ test('prepared current advice keeps native watch custody through uncertain readb
     );
     expect(node.textContent).toContain('Retry the same action');
     expect(commands).toHaveLength(1);
+    await render(<ContributionWatch presentation={{ ...scope, source: { ...source, actions: { ...source.actions, references: [{ ...source.actions.references[0]!, operations: [{ action: 'thread:watch', operationId: 'thread.unwatch', state: 'denied' }] }] } } }} watching returnTo="/en/accounts/author/discussion" native={native} />);
+    expect(node.textContent).toContain('This action is currently not allowed.');
     await click('Retry the same action');
     expect(commands).toHaveLength(2);
     expect(commands[1]).toBe(commands[0]);
@@ -840,6 +859,8 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       await paint({ ...source }, 2);
       expect(reads).toBe(0);
       expect(commands).toHaveLength(1);
+      await paint({ ...source, actions: { ...source.actions, references: [{ ...source.actions.references[0]!, operations: operations.map((operation) => ({ ...operation, state: 'denied' as const })) }] } }, 3);
+      expect(node.querySelector('[data-advice-state]')?.getAttribute('data-advice-state')).toBe('denied');
       const retry = [...node.querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry());
       expect(retry).toBeDefined();
       await act(async () => retry!.click());
@@ -1103,3 +1124,97 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
     }
   },
 );
+
+const { ContributionRow } = await import('../src/accounts/public-profile/contributions/row');
+const { validateContributionActionsResponse } = await import('../src/accounts/public-profile/contribution-actions/response');
+type ContributionInput = import('../src/accounts/public-profile/contribution-actions/receiver').ContributionActionsInput;
+type ContributionResponse = import('../src/accounts/public-profile/contribution-actions/receiver').ContributionActionsResponse;
+
+function installedResponse(input: ContributionInput): ContributionResponse {
+  const references = input.references.flatMap((reference) => reference.type === 'content.post'
+    ? [reference, { type: 'content.thread' as const, id: reference.threadId, placeId: reference.placeId, sourceRevisionId: reference.threadRevisionId }]
+    : [reference]);
+  return {
+    viewer: { kind: 'account', id },
+    selected: input.references.map((reference) => ({ reference, state: 'current', reply: { state: 'available' } })),
+    actions: { state: 'current', retryable: false, references: references.map((reference) => ({
+      type: reference.type, id: reference.id, sourceRevisionId: reference.sourceRevisionId!, state: 'current',
+      operations: [
+        { action: 'thread:watch', operationId: 'thread.watch', state: 'available' },
+        { action: 'thread:watch', operationId: 'thread.unwatch', state: 'available' },
+        { action: 'reaction:set', operationId: `${reference.type === 'content.post' ? 'post' : 'thread'}.set_reaction`, state: 'available' },
+        { action: 'reaction:set', operationId: `${reference.type === 'content.post' ? 'post' : 'thread'}.clear_reaction`, state: 'available' },
+        { action: 'report:create', operationId: 'report.create', state: 'available' },
+        { action: 'post:create', operationId: 'post.create', state: 'available' },
+      ],
+    })) },
+    reactions: { state: 'current', retryable: false, items: references.map((reference) => ({ type: reference.type, id: reference.id, state: 'current', counts: { like: 1 }, viewerSelection: null })), reactionsAsOf: { epoch: 1, position: '1' } },
+    watch: { state: 'current', retryable: false, items: [{ threadId: references.find((reference) => reference.type === 'content.thread')!.id, state: 'current', watching: false }] },
+    currentness: { source: 'current', place: 'current', authors: 'current', reactions: 'current', watch: 'current', actions: 'current' },
+  };
+}
+
+test.each(['discussion', 'reviews', 'posts'] as const)('installed %s row composes native owners, retains denied uncertain commands and preserves the original destination', async (view) => {
+  const dom = await installDom();
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: id, csrfToken: 'original-credential' });
+  nativeWatchCommands.length = 0;
+  nativeReactionCommands.length = 0;
+  replyWrites.length = 0;
+  replyResult = { ok: true, post: { id: 'created-reply' } };
+  const visible = { availability: 'available', visibility: 'published' };
+  const first = { ...visible, id: '00000000-0000-7000-8000-000000000002', threadId: id, revisionId: id };
+  const thread = { ...visible, id, authorId: id, boardId: id, title: 'Original native destination', kind: view === 'reviews' ? 'review' : 'discussion', firstPost: first };
+  const row = view === 'posts' ? { ...visible, id: first.id, threadId: id, revisionId: id, authorId: id, thread, parentId: null } : thread;
+  const reference = view === 'posts' ? { type: 'content.post' as const, id: row.id, placeId: id, threadId: id, threadRevisionId: id, sourceRevisionId: id } : { type: 'content.thread' as const, id, placeId: id, sourceRevisionId: id };
+  const input = { accountId: id, view, cursor: 'original+/=', proof: 'native-proof', references: [reference] };
+  let response = installedResponse(input);
+  let refresh: (() => Promise<void>) | undefined;
+  const requests: ContributionInput[] = [];
+  const wire = { read: async (selection: ContributionInput) => {
+    requests.push(selection);
+    return { response: validateContributionActionsResponse(selection, structuredClone(response)), verification: { sitekey: '', scriptUrl: '' } };
+  } };
+  const source = { actionSelection: { proof: input.proof, references: input.references } };
+  const page = {}, read = {}, publication = {};
+  const value = { locale: 'en', reader: {}, labels: {} } as never;
+  function Probe() { refresh = useContributionActionsHost()!.retry; return null; }
+  const route = createRootRoute({ component: () => <QueryClientProvider client={client}>
+    <ContributionActionsHost accountId={id} view={view} cursor={input.cursor} locale="en" page={page} read={read} source={source} selection={source.actionSelection} publication={publication} postsPublished reviewsPublished rows={[row]} wire={wire}>
+      <Probe /><ul><li><ContributionRow item={row} kind={view === 'posts' ? 'reply' : view === 'reviews' ? 'review' : 'discussion'} value={value} /></li></ul>
+    </ContributionActionsHost>
+  </QueryClientProvider> });
+  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  const node = document.createElement('div'); document.body.append(node); const root = createRoot(node);
+  const click = async (text: string) => act(async () => {
+    const button = [...node.querySelectorAll('button')].find((item) => item.textContent === text);
+    expect(button).toBeDefined(); button!.click();
+  });
+  try {
+    await router.load(); await act(async () => root.render(<RouterProvider router={router} />));
+    expect(requests).toHaveLength(1);
+    expect(node.querySelectorAll('[data-slot="mounted-contribution-actions"]')).toHaveLength(1);
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-target-id')).toBe(row.id);
+    expect(mountedComposerProps.at(-1)!.replyTargetId).toBe(first.id);
+    const destination = node.querySelector<HTMLAnchorElement>('a[href*="/threads/"]')!.getAttribute('href');
+    await click('Watch');
+    await act(async () => node.querySelector<HTMLButtonElement>('[data-slot="reaction-chip"]')!.click());
+    expect(nativeWatchCommands).toHaveLength(1); expect(nativeReactionCommands).toHaveLength(1);
+    response.actions.references.forEach((reference) => reference.operations.forEach((operation) => { operation.state = 'denied'; }));
+    response.selected[0]!.reply.state = 'denied';
+    response.watch.items[0]!.watching = true;
+    response.reactions.reactionsAsOf = { epoch: 1, position: '2' };
+    await act(async () => { await refresh!(); });
+    expect(requests).toHaveLength(2); expect(requests[1]).toEqual(requests[0]);
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-report-allowed')).toBe('false');
+    expect(node.textContent).toContain('Retry the same action');
+    expect(node.textContent).toContain(m.editorial_retry());
+    await click('Retry the same action'); await click(m.editorial_retry());
+    expect(nativeWatchCommands[1]).toEqual(nativeWatchCommands[0]);
+    expect(nativeReactionCommands[1]).toEqual(nativeReactionCommands[0]);
+    expect(new Headers(nativeReactionCommands[1]!.headers).get('X-CSRF-Token')).toBe('original-credential');
+    expect(node.querySelector('a[href*="/threads/"]')!.getAttribute('href')).toBe(destination);
+    expect(dom.window.location.search).toBe('?cursor=original%2B%2F%3D');
+    expect(dom.window.location.hash).toBe('#reply');
+  } finally { await act(async () => root.unmount()); client.clear(); node.remove(); await dom.close(); }
+});

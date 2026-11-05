@@ -107,6 +107,7 @@ export type ThreadReactionsProps = {
   allowedKinds?: readonly ReactionKind[];
   /** Home can deliberately forget an uncertain command, then refresh its source. */
   allowDiscard?: boolean;
+  onDiscard?: () => void;
   commandRecovery?: ReactionCommandRecovery;
   /** Native advice can withhold the signed-out entry without granting a writable viewer slot. */
   signInAllowed?: boolean;
@@ -222,7 +223,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.personalReady ?? true,
     props.signInAllowed ?? true,
     props.reactionOrigin?.key ?? null,
-    props.sourceWatermark,
+    props.reactionOrigin ? null : props.sourceWatermark,
     props.optimistic ?? true,
     props.allowedKinds,
     hydrated,
@@ -273,6 +274,7 @@ function ReactionCaller({
   allowedKinds,
   canStart = true,
   allowDiscard,
+  onDiscard,
   commandRecovery,
   requireWatermark,
 }: ThreadReactionsProps & {
@@ -612,6 +614,7 @@ function ReactionCaller({
                 setDiscarded(true);
                 setRecovery(null);
                 setFailed(null);
+                onDiscard?.();
                 if (current()) void onMutation?.(value);
               }}
             >
