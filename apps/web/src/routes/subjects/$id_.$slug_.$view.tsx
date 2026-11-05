@@ -268,6 +268,7 @@ function SubjectViewRoute() {
     <SubjectViewPage
       page={page}
       currentHref={currentHref}
+      readingAdmission={JSON.stringify([browserSession.state, browserSession.subject, browserSession.csrfToken])}
       {...(search.via ? { returnTo: search.via } : {})}
       subjectLabel={frame.title.text}
       curation={

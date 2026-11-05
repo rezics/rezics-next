@@ -10,6 +10,7 @@ import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { candidateContext } from '../../subject/candidates';
 import { canonicalRedirect, subjectUrlForView } from '../../subject/subject-href';
+import { subjectVisitReturn, subjectRouteSearchLimit } from '../../features/pages/subject-visit-navigation';
 
 const readEditorPage = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; slug: string; locale: string; realm?: string; search: string }) => {
@@ -20,7 +21,7 @@ const readEditorPage = createServerFn({ method: 'GET', strict: false })
       typeof input.locale !== 'string' ||
       input.locale.length > 35 ||
       typeof input.search !== 'string' ||
-      input.search.length > 2048
+      input.search.length > subjectRouteSearchLimit(input.search)
     )
       throw notFound();
     return { ...input, realm: validatePageRealm(input.realm) };
@@ -52,6 +53,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relation-edit')({
   staticData: { publicCache: false },
   validateSearch: (search: Record<string, unknown>) => ({
     realm: validatePageRealm(search.realm),
+    via: subjectVisitReturn(search.via, getLocale()),
     creditHandoff:
       typeof search.creditHandoff === 'string' && /^[0-9a-f-]{36}$/i.test(search.creditHandoff)
         ? search.creditHandoff
@@ -77,9 +79,16 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relation-edit')({
 });
 function RelationEditRoute() {
   const { page, frame, supported } = Route.useLoaderData();
-  const { creditHandoff, relatedWorkHandoff } = Route.useSearch();
+  const { creditHandoff, relatedWorkHandoff, via } = Route.useSearch();
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8">
+      {via ? (
+        <p>
+          <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={via}>
+            {m.recording_reader_return({}, { locale: getLocale() as never })}
+          </a>
+        </p>
+      ) : null}
       <SubjectFrame
         frame={frame}
         locale={getLocale()}

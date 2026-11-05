@@ -1,11 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
 import { defaultReader } from '../src/subject/reader';
 import type { Subject } from '../src/subject/types';
-import { MangaReader } from '../src/features/catalogue/manga-reader/view';
 import { dateText } from '../src/features/pages/overview';
 import {
   mangaReaderMeasures,
@@ -16,6 +15,9 @@ import {
 } from '../src/features/catalogue/manga-reader/model';
 import type { ProfileRelationWindow } from '../src/features/pages/views';
 import type { RelationDefinition } from '../src/subject/relations';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { MangaReader } = await import('../src/features/catalogue/manga-reader/view');
 
 const seriesId = '0192f3a0-6c1e-7b2a-9d4e-000000000901';
 const volumeTwoId = '0192f3a0-6c1e-7b2a-9d4e-000000000902';
@@ -39,6 +41,7 @@ function assertion(id: string, property: string, target: string, position?: stri
       ? [{ property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } }]
       : [],
     references: [],
+    rezics: { release: 'current-release', revision: 1 },
   };
 }
 
@@ -257,9 +260,13 @@ test('replacement of the current source, release, viewer, context, locale, view 
     { viewer: 'viewer-2' },
     { view: 'contents' },
     { window: 'parts\u0000opaque-next' },
+    { realm: 'another-realm' },
+    { admission: 'rotated-credential' },
+    { reader: 'changed-reader' },
+    { address: 'another-address' },
   ])
-    expect(mangaReaderRetired(captured, observation(replacement))).toBe(true);
-  expect(mangaReaderRetired(captured, observation())).toBe(false);
+    expect(mangaReaderRetired(captured, { ...captured, ...replacement })).toBe(true);
+  expect(mangaReaderRetired(captured, { ...captured })).toBe(false);
 });
 
 test('a changed viewer or source hides old links and returning to the prior observation does not revive them', async () => {
@@ -319,4 +326,167 @@ test('a changed viewer or source hides old links and returning to the prior obse
       descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
     await browser.happyDOM.close();
   }
+});
+
+// Mount the public consumer; authored native-shaped rows are not a seeded/browser acceptance claim.
+test('one selected occurrence keeps its original inverse holder, qualifiers and separate reference groups', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const browser = new Window({ url: 'https://rezics.test/' });
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    MutationObserver: browser.MutationObserver,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const host = browser.document.createElement('div');
+  browser.document.body.append(host);
+  const root = createRoot(host);
+  const part = (text: string) => ({
+    property: { id: 'schema:description', data_type: 'string' },
+    value: { type: 'value', content: text },
+  });
+  const first = inverseRow(volumeOneId, 'Repeated volume', 'schema:PublicationVolume', 'schema:isPartOf', 'first', '1');
+  const second = inverseRow(
+    volumeOneId,
+    'Repeated volume',
+    'schema:PublicationVolume',
+    'schema:isPartOf',
+    'second',
+    '2',
+  );
+  const rows = [
+    first,
+    {
+      ...second,
+      assertion: {
+        ...second.assertion,
+        references: [
+          { hash: 'source-a', parts: [part('First citation'), part('Same group detail')] },
+          { hash: 'source-b', parts: [part('Second citation')] },
+        ],
+      },
+    },
+  ];
+  const props = {
+    subject: mangaSubject(seriesId, 'schema:ComicSeries', 'The Harbour Atlas'),
+    locale: 'en',
+    view: 'contents',
+    windows: [
+      window('parts', 'schema:isPartOf', 'inverse', rows),
+      window('another-node', 'schema:isPartOf', 'inverse', [second]),
+    ],
+    definitions,
+    reader: defaultReader,
+    observation: observation({ view: 'contents' }),
+    recoveryHref: `/en/subjects/${seriesId}/the-harbour-atlas/contents?node=parts&cursor=opaque#manga-reader`,
+  };
+  try {
+    await act(async () => root.render(createElement(MangaReader, props)));
+    expect(host.querySelector('[data-slot="manga-occurrence-evidence"]')).toBeNull();
+    const buttons = [...host.querySelectorAll('button')];
+    expect(buttons).toHaveLength(3);
+    await act(async () => buttons[1]!.click());
+    expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['false', 'true', 'false']);
+    const evidence = host.querySelector('[data-slot="manga-occurrence-evidence"]')!;
+    expect(evidence.textContent).toContain('Inverse to this subject');
+    expect(evidence.textContent).toContain('Original holderRepeated volume');
+    expect(evidence.querySelectorAll('[data-reference]')).toHaveLength(2);
+    expect(evidence.querySelector('[data-reference="source-a"]')?.textContent).toContain('Same group detail');
+    expect(evidence.querySelector('[data-reference="source-a"]')?.textContent).not.toContain('Second citation');
+    const correction = [...evidence.querySelectorAll('a')].find(
+      (anchor) => anchor.textContent === 'Propose correction',
+    )!;
+    const correctionUrl = new URL(correction.href);
+    expect(correctionUrl.pathname).toBe(`/en/subjects/${volumeOneId}/repeated-volume/relation-edit`);
+    const origin = new URL(correctionUrl.searchParams.get('via')!, 'https://rezics.test');
+    expect(origin.searchParams.get('node')).toBe('parts');
+    expect(origin.searchParams.get('cursor')).toBe('opaque');
+    expect(origin.hash).toContain('statement=second');
+    expect(origin.hash).toContain(`holder=${volumeOneId}`);
+    expect([...correctionUrl.searchParams.keys()]).toEqual(['via']);
+    await act(async () => buttons[2]!.click());
+    expect(host.querySelectorAll('[data-slot="manga-occurrence-evidence"]')).toHaveLength(1);
+    expect(host.textContent).not.toContain('First citation');
+    await act(async () => buttons[2]!.click());
+    expect(host.querySelector('[data-slot="manga-occurrence-evidence"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    for (const [key, descriptor] of previous)
+      descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
+    await browser.happyDOM.close();
+  }
+});
+
+test('withheld assertions, malformed evidence and full-assertion spoiler admission preserve their distinctions', () => {
+  const row = inverseRow(volumeOneId, 'Volume 1', 'schema:PublicationVolume', 'schema:isPartOf', 'original');
+  const withheld = { ...row, assertion: undefined };
+  const native = (rows: unknown[]) => [window('parts', 'schema:isPartOf', 'inverse', rows)];
+  const disclosed = mangaReaderRows(native([withheld]), definitions, 'en', defaultReader);
+  expect(disclosed).toHaveLength(1);
+  expect(disclosed[0]?.assertion).toBeUndefined();
+  expect(disclosed[0]?.notes).toEqual([]);
+  const foreign = { ...row, assertion: { ...row.assertion, value: { type: 'value', content: editionId } } };
+  expect(mangaReaderWindowStatus(native([foreign]), definitions, defaultReader, seriesId)).toBe('unavailable');
+  expect(
+    mangaReaderRows(
+      native([foreign]),
+      definitions,
+      'en',
+      defaultReader,
+      mangaSubject(seriesId, 'schema:ComicSeries', 'The Harbour Atlas'),
+    ),
+  ).toEqual([]);
+  for (const malformed of [
+    { ...row.assertion, references: [{ hash: 'broken', parts: [null] }] },
+    {
+      ...row.assertion,
+      qualifiers: Array.from({ length: 17 }, () => ({
+        property: { id: 'x', data_type: 'string' },
+        value: { type: 'novalue' },
+      })),
+    },
+    { ...row.assertion, references: Array.from({ length: 17 }, () => ({ hash: 'too-many', parts: [] })) },
+    {
+      ...row.assertion,
+      references: [
+        {
+          hash: 'too-wide',
+          parts: Array.from({ length: 17 }, () => ({
+            property: { id: 'x', data_type: 'string' },
+            value: { type: 'novalue' },
+          })),
+        },
+      ],
+    },
+    { ...row.assertion, id: 'different-association' },
+  ]) {
+    const page = native([{ ...row, assertion: malformed }]);
+    expect(mangaReaderWindowStatus(page, definitions)).toBe('unavailable');
+    expect(mangaReaderRows(page, definitions, 'en', defaultReader)).toEqual([]);
+  }
+  const spoiler = {
+    ...row,
+    assertion: {
+      ...row.assertion,
+      qualifiers: [
+        {
+          property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+          value: { type: 'value', content: { amount: '2', unit: '1' } },
+        },
+      ],
+    },
+  };
+  expect(mangaReaderRows(native([spoiler]), definitions, 'en', defaultReader)).toEqual([]);
+  expect(
+    mangaReaderRows(native([spoiler]), definitions, 'en', { ...defaultReader, spoilerLevel: 2 })[0]?.assertion,
+  ).toBe(spoiler.assertion);
 });

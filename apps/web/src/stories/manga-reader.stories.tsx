@@ -1,3 +1,4 @@
+import { mangaSelectedAddress } from '../features/catalogue/manga-reader/navigation';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { defaultReader } from '../subject/reader';
@@ -32,7 +33,8 @@ function inverseItem(
     property,
     label,
     type,
-    statement: {
+    statement: statementId,
+    assertion: {
       id: statementId,
       rank: 'normal',
       property: { id: property, data_type: 'wikibase-item' },
@@ -40,13 +42,27 @@ function inverseItem(
       qualifiers: position
         ? [{ property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } }]
         : [],
-      references: [],
-    },
-    assertion: {
-      id: statementId,
-      qualifiers: position
-        ? [{ property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } }]
-        : [],
+      references: [
+        {
+          hash: 'catalogue-source',
+          parts: [
+            {
+              property: { id: 'schema:url', data_type: 'url' },
+              value: { type: 'value', content: 'https://example.test/catalogue' },
+            },
+          ],
+        },
+        {
+          hash: 'printed-source',
+          parts: [
+            {
+              property: { id: 'schema:description', data_type: 'string' },
+              value: { type: 'value', content: 'Printed contents page' },
+            },
+          ],
+        },
+      ],
+      rezics: { release: 'current-release', revision: 1 },
     },
     summary: { id, type, label: { value: label, language: 'en' } },
     related: {},
@@ -65,6 +81,7 @@ function forwardItem(target: string, label: string, property: string, statementI
       value: { type: 'value', content: target },
       qualifiers: [],
       references: [],
+      rezics: { release: 'current-release', revision: 1 },
     },
     summary: { id: target, type, label: { value: label, language: 'en' } },
     related: {},
@@ -125,6 +142,14 @@ type Story = StoryObj<typeof meta>;
 
 export const SeriesWithVolumesAndGenericChapterRelation: Story = {
   args: {
+    currentHref: mangaSelectedAddress(recoveryHref, {
+      node: 'volumes',
+      direction: 'inverse',
+      property: 'schema:isPartOf',
+      holder: volumeId,
+      statement: 'assertion-volume-1',
+      target: volumeId,
+    }),
     subject: subject(seriesId, 'schema:ComicSeries', 'The Harbour Atlas'),
     locale: 'en',
     view: 'overview',

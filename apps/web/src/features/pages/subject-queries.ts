@@ -504,6 +504,8 @@ export const subjectPageQuery = (
 ) =>
   queryOptions({
     ...publicRead,
+    // A successful composition is a new admission even when all disclosed values compare equal.
+    structuralSharing: false,
     staleTime: 0,
     gcTime: 0,
     queryKey: [...key('subject-page', id, locale, view), realm ?? null, reader],
@@ -523,6 +525,7 @@ export const subjectViewPagesQuery = (
 ) =>
   queryOptions({
     ...publicRead,
+    structuralSharing: false,
     staleTime: 0,
     gcTime: 0,
     queryKey: ['subject-view-pages', id, locale, view, cursor ?? null, realm ?? null, node ?? null, reader] as const,
