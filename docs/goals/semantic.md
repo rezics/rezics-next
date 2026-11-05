@@ -26,6 +26,10 @@ production changes are limited to code that violates those contracts.
 Decision: the installed Character read contract admits includeDocuments and reuses Content's public document type;
 preserve native preview bounds and exact bindings, with typed anonymous and signed-in readback coverage.
 
+Decision: Character API fixtures drain the native link consumer before timed reads and erase authored documents
+through Content's command. Authored bodies remain immutable; HTTP fallback retains its actual language and mounted
+exact-binding cases cover unreadable previews without rewriting stored bodies.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.
