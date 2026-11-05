@@ -22,7 +22,7 @@ import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables.ts';
-import { ShowcaseJournal } from '../src/showcase-publication.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
 import {
@@ -871,3 +871,51 @@ test('reviewed tag association bounds let one association from each selected wor
   expect(associations.map((row) => row.vid)).toEqual(['v410', 'v999']);
   expect(projected.truncated).toBe(false);
 });
+
+
+test('selected rating evidence survives response loss and reopen before terminal refresh', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-tag-rating-reopen-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  const commands: BatchCommand[] = [];
+  let fetches = 0;
+  let loseResponse = true;
+  const transport = port(commands);
+  const known = {
+    schemes: [{ category: 'cont' as const, id: schemeIds.cont }],
+    concepts: [{ category: 'cont' as const, code: 'g311', id: conceptIds.g311 }],
+  };
+  const fetchRatings: VndbTagRatingFetch = async () => {
+    fetches++;
+    return new Response(`{"more":false,"results":[{"id":"v410","tags":[{"id":"g311","rating":${fetches === 1 ? '2.5000' : '1.2500'},"spoiler":1,"lie":false}]}]}`);
+  };
+  const input = () => ({
+    tables: authoredTables(), selectedVids: ['v410'], path: join(directory, 'state.sqlite'), known,
+    fetch: fetchRatings, journal,
+    port: captureShowcaseCommands({
+      ...transport,
+      async batch(request) {
+        const result = await transport.batch(request);
+        if (loseResponse && request.commands.some(command => command.op === 'propose' && command.statement.qualifiers?.some(term => term.property.id === 'rezics:sourceTagWeight'))) {
+          loseResponse = false;
+          throw new Error('Lost committed rating response');
+        }
+        return result;
+      },
+    }, journal),
+  });
+  try {
+    await expect(importShowcaseTags(input())).rejects.toThrow('Lost committed rating response');
+    const sealed = journal.preparedCommands().filter(row => row.command.op === 'propose');
+    expect(sealed.length).toBeGreaterThan(0);
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    const reopened = await importShowcaseTags(input());
+    expect(fetches).toBe(1);
+    expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(sealed[0]!.command.source.digest);
+    for (const row of sealed) expect(commands.filter(command => command.key === row.command.key)).toEqual([row.command, row.command]);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
