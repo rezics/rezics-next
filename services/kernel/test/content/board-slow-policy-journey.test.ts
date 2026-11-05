@@ -207,8 +207,8 @@ test('complete policy journey, fresh pending classification and bounded retained
     [routeOf(f.board.id), f.board.id, f.system.actors.moderator.actor.accountId],
   );
   const replay = await set(45, replayKey);
-  expect(replay.status).toBe(200);
-  expect(replay.value.intervalSeconds).toBe(45);
+  expect(replay.status).toBe(403);
+  expect(replay.value).not.toHaveProperty('intervalSeconds');
   expect((await read('moderator')).value).toMatchObject({ canChange: false, exempt: false });
   expect((await set(300)).status).toBe(403);
 

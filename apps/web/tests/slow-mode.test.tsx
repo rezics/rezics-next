@@ -53,9 +53,26 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
   const client = new QueryClient();
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'original' };
   client.setQueryData(sessionQuery.queryKey, owner);
+  let sourceCurrent = true;
+  let source = { identity: {}, current: () => sourceCurrent };
+  let selected: { parent: string; identity: object } = { parent: 'A', identity: {} };
+  const selectionOwner = (selection: typeof selected) => {
+    let admitted = false;
+    let retired = false;
+    return {
+      identity: selection.identity,
+      current: () => {
+        const current = selected === selection;
+        if (current) admitted = true;
+        else if (admitted) retired = true;
+        return current && !retired;
+      },
+    };
+  };
+  let selection = selectionOwner(selected);
   let visit: SlowModeVisit | null = null;
   function Probe() {
-    visit = useSlowModeVisit(recorded.thread.boardId);
+    visit = useSlowModeVisit(recorded.thread.boardId, 'inline-reply', 'session', source, selection);
     return null;
   }
   const root = createRoot(window.document.createElement('div'));
@@ -79,6 +96,26 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
       expect(visit!.id).not.toBe(original.id);
       expect(visit!.current()).toBe(true);
     }
+
+    const sourceVisit = visit!;
+    sourceCurrent = false;
+    expect(sourceVisit.current()).toBe(false);
+    sourceCurrent = true;
+    expect(sourceVisit.current()).toBe(false);
+    source = { identity: {}, current: () => sourceCurrent };
+    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
+    expect(visit!.id).not.toBe(sourceVisit.id);
+    expect(visit!.current()).toBe(true);
+
+    const selectionVisit = visit!;
+    const prior = selected;
+    selected = { parent: 'B', identity: {} };
+    selected = { parent: prior.parent, identity: {} };
+    expect(selectionVisit.current()).toBe(false);
+    selection = selectionOwner(selected);
+    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
+    expect(visit!.id).not.toBe(selectionVisit.id);
+    expect(visit!.current()).toBe(true);
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -123,6 +160,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useLocation } =
     await import('@tanstack/react-router');
   const { PostComposer } = await import('../src/threads/composer');
+  const { ThreadReplyComposer } = await import('../src/threads/reply-context-composer');
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
   const { sessionQuery } = await import('../src/session/query');
   const { SlowModePortProvider, SlowModeSetting } = await import('../src/threads/slow-mode');
@@ -132,6 +170,10 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const { default: userEvent } = await import(storybookRequire.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const body = fromPlainText('A draft that must survive a cooldown refusal.', 'blocks');
+  const replyBody = fromPlainText('An inline reply keeps its exact selected parent.', 'blocks');
+  const parentId = recorded.thread.firstPost.id;
+  const slowModeSource = { identity: {}, current: () => true };
+  const slowModeSelection = { identity: {}, current: () => true };
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'slow-mode-session' };
   let read: SlowModeRead = { kind: 'unavailable' };
   let readCalls = 0;
@@ -162,6 +204,8 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     },
   };
   const submits: { key: string; title: string }[] = [];
+  const replySubmits: { key: string; parentId?: string }[] = [];
+  let replyAttempts = 0;
   let nextSubmit: WriteFailure | { ok: true; value: { id: string } } = {
     ok: false,
     reason: 'rate-limited',
@@ -193,6 +237,31 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
                 }}
                 onSuccess={() => undefined}
               />
+              <section data-testid="inline-reply">
+                <ThreadReplyComposer
+                  initialKey="0192f3a0-6c1e-7b2a-9d4e-000000000092"
+                  initialBody={replyBody}
+                  containerId={recorded.thread.id}
+                  boardId={recorded.thread.boardId}
+                  credentialMode="session"
+                  parentId={parentId}
+                  parents={new Map([[parentId, { id: parentId, availability: 'available' as const }]])}
+                  pending={false}
+                  focusRequest={1}
+                  slowModeSource={slowModeSource}
+                  slowModeSelection={slowModeSelection}
+                  onPendingChange={() => undefined}
+                  onCancel={() => undefined}
+                  onSubmit={async ({ idempotencyKey, parentId: selectedParent }) => {
+                    replySubmits.push({ key: idempotencyKey, ...(selectedParent ? { parentId: selectedParent } : {}) });
+                    replyAttempts++;
+                    return replyAttempts === 1
+                      ? { ok: false as const, reason: 'unavailable' as const }
+                      : { ok: true as const, value: { id: parentId } as never };
+                  }}
+                  onSuccess={() => undefined}
+                />
+              </section>
             </SlowModePortProvider>
           </AuthoringDepartureProvider>
         );
@@ -296,6 +365,21 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     expect(submits).toHaveLength(2);
     expect(submits[1]!.key).toBe(submits[0]!.key);
     expect(host.textContent).toContain(m.slow_mode_saved());
+    const inline = host.querySelector('[data-testid="inline-reply"]')!;
+    const inlineSend = [...inline.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
+    await act(async () => {
+      await user.click(inlineSend!);
+    });
+    expect(replySubmits).toEqual([{ key: '0192f3a0-6c1e-7b2a-9d4e-000000000092', parentId }]);
+    expect(inline.textContent).toContain('An inline reply keeps its exact selected parent.');
+    const inlineRetry = [...inline.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_retry());
+    await act(async () => {
+      await user.click(inlineRetry!);
+    });
+    expect(replySubmits).toEqual([
+      { key: '0192f3a0-6c1e-7b2a-9d4e-000000000092', parentId },
+      { key: '0192f3a0-6c1e-7b2a-9d4e-000000000092', parentId },
+    ]);
     heldReads = 2;
     await act(async () => {
       await router.navigate({ to: '/en/other' as never });
