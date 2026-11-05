@@ -62,8 +62,7 @@ describe('check result reuse keys', () => {
       opensearch: 'test-opensearch',
       playwright: 'test-playwright',
     };
-    const result = (cwd: string) =>
-      checkResultKey({ root, commit, cwd, command: ['bun', 'test'], env: {}, toolchain });
+    const result = (cwd: string) => checkResultKey({ root, commit, cwd, command: ['bun', 'test'], env: {}, toolchain });
     expect(result(join(root, 'apps/app'))).toEqual({
       key: 'ae7dc1b625bdb1620010dc3153b02344b1c6627ceb6226e8d7b9e1a54c3bddb9',
       unit: 'apps/app,packages/a',
@@ -89,7 +88,10 @@ describe('check result reuse keys', () => {
     );
     commit();
 
-    const gitPath = process.env.PATH!.split(delimiter).map((dir) => join(dir, 'git')).find(existsSync)!;
+    const gitPath = process.env
+      .PATH!.split(delimiter)
+      .map((dir) => join(dir, 'git'))
+      .find(existsSync)!;
     const bin = join(root, 'git-bin');
     mkdirSync(bin);
     const wrapper = join(bin, 'git');
@@ -139,7 +141,12 @@ describe('check result reuse keys', () => {
     commit();
     const largeCommit = command('rev-parse', 'HEAD');
     const large = measure(largeCommit);
-    const expectedUnit = ['apps/app', 'packages/a', 'packages/b', ...extraNames.map((_, index) => `packages/extra-${String(index).padStart(2, '0')}`)].join(',');
+    const expectedUnit = [
+      'apps/app',
+      'packages/a',
+      'packages/b',
+      ...extraNames.map((_, index) => `packages/extra-${String(index).padStart(2, '0')}`),
+    ].join(',');
     expect(large.unit).toBe(expectedUnit);
     expect(large.key).not.toBe(small.key);
     expect(measure(largeCommit)).toEqual(large);

@@ -84,10 +84,14 @@ function sourceProjection(root: string, commit: string, policy: ControlPolicy['s
       const objectEnd = line.indexOf(' ');
       const typeEnd = line.indexOf(' ', objectEnd + 1);
       if (objectEnd < 0 || typeEnd < 0) return [];
-      return [{ object: line.slice(0, objectEnd), type: line.slice(objectEnd + 1, typeEnd), path: line.slice(typeEnd + 1) }];
+      return [
+        { object: line.slice(0, objectEnd), type: line.slice(objectEnd + 1, typeEnd), path: line.slice(typeEnd + 1) },
+      ];
     });
   const blobs = entries.filter((entry) => entry.type === 'blob');
-  const globalInputs = blobs.flatMap(({ object, path }) => (GLOBAL.test(path) ? [[path, object] as [string, string]] : []));
+  const globalInputs = blobs.flatMap(({ object, path }) =>
+    GLOBAL.test(path) ? [[path, object] as [string, string]] : [],
+  );
   const manifestPaths = blobs
     .map(({ object, path }) => ({ object, path }))
     .filter(({ path }) => /^(?:(?:apps|services|packages)\/[^/]+|tools\/goal)\/package\.json$/.test(path))
@@ -95,7 +99,10 @@ function sourceProjection(root: string, commit: string, policy: ControlPolicy['s
   const workspaceDirs = manifestPaths.map(({ path }) => path.replace(/\/package\.json$/, ''));
   const workspaceByName = new Map<unknown, string>();
   const workspaceManifests = new Map<string, WorkspaceManifest>();
-  const manifests = readBlobs(root, manifestPaths.map(({ object }) => object));
+  const manifests = readBlobs(
+    root,
+    manifestPaths.map(({ object }) => object),
+  );
   for (const [index, dir] of workspaceDirs.entries()) {
     try {
       const value: unknown = JSON.parse(manifests[index]!);
