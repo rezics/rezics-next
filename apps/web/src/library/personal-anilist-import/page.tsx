@@ -50,7 +50,11 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
 
   async function act(run: (current: AniListJourney) => Promise<AniListJourneySnapshot> | AniListJourneySnapshot) {
     if (!journey.current) return;
-    setSnap(await run(journey.current));
+    const result = run(journey.current);
+    // Publish in-flight custody before departure controls can allow the visit to leave.
+    setSnap(journey.current.snapshot());
+    const next = await result;
+    if (journey.current.live()) setSnap(next);
   }
 
   async function saveReview(draft: RowDraft) {
@@ -87,7 +91,11 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           onReopen={(importId) => void act((current) => current.loadPage(importId, -1))}
         />
       ) : null}
-      {snap.importId ? <p className="break-all text-sm">{m.library_anilist_retained_id()}: {snap.importId}</p> : null}
+      {snap.importId ? (
+        <p className="break-all text-sm">
+          {m.library_anilist_retained_id()}: {snap.importId}
+        </p>
+      ) : null}
       {snap.stage === 'review' ? (
         <AniListReviewPage
           snap={snap}

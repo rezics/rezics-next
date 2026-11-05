@@ -216,10 +216,18 @@ function recordingPort(
     }),
   );
   const port: AniListImportPort = {
-    async reviewLabels() { return { kind: 'unavailable' }; },
-    async applyLabels() { return { kind: 'unavailable' }; },
-    async readLabels() { return { kind: 'unavailable' }; },
-    async labelTargets() { return { kind: 'unavailable' }; },
+    async reviewLabels() {
+      return { kind: 'unavailable' };
+    },
+    async applyLabels() {
+      return { kind: 'unavailable' };
+    },
+    async readLabels() {
+      return { kind: 'unavailable' };
+    },
+    async labelTargets() {
+      return { kind: 'unavailable' };
+    },
     async preview(command) {
       previews.push({ upload: command.upload, ...(command.scoreFormat ? { scoreFormat: command.scoreFormat } : {}) });
       return { kind: 'previewed', importId: id, count: total };
@@ -657,8 +665,15 @@ test('clear is explicit and results replace the supplied current vote observatio
 
 test('the existing importer reopens a retained native upload without submitting another file', async () => {
   const { port } = recordingPort(1);
-  await mount({ ...port, async preview() { throw new Error('Reopening must not upload'); } });
-  const label = [...host.querySelectorAll('label')].find((item) => item.textContent === m.library_anilist_retained_id())!;
+  await mount({
+    ...port,
+    async preview() {
+      throw new Error('Reopening must not upload');
+    },
+  });
+  const label = [...host.querySelectorAll('label')].find(
+    (item) => item.textContent === m.library_anilist_retained_id(),
+  )!;
   const input = document.getElementById(label.htmlFor) as HTMLInputElement;
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, id);
