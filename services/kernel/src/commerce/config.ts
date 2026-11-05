@@ -1,14 +1,10 @@
+import { ConfigError } from '../config-error.ts';
 import { readCommerceMoneyPolicy } from './money.ts';
 import type { StripePortConfig } from './stripe.ts';
 
 export const MAX_WEBHOOK_SECRETS = 4;
 
-export class ConfigError extends Error {
-  constructor(variable: string) {
-    super(`Invalid or missing ${variable}`);
-    this.name = 'ConfigError';
-  }
-}
+export { ConfigError } from '../config-error.ts';
 
 export type CommerceConfig = {
   stripe: Omit<StripePortConfig, 'clock'>;

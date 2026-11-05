@@ -462,6 +462,7 @@
         "services/kernel/src/imports/**",
         "services/kernel/src/route/**",
         "services/kernel/src/clock.ts",
+        "services/kernel/src/config-error.ts",
         "services/kernel/db/migrations/**",
         "services/kernel/db/schema.sql"
       ],
@@ -479,7 +480,8 @@
         "services/kernel/src/history/operational-work.ts",
         "services/kernel/src/work/selected-runtime.ts",
         "services/kernel/src/http/kernel.ts",
-        "services/kernel/src/request/unavailable.ts"
+        "services/kernel/src/request/unavailable.ts",
+        "services/kernel/src/config-error.ts"
       ],
       "allowedDependencies": [
         "bounds",

@@ -1,5 +1,5 @@
 import { DBOS, type WorkflowStatusString } from '@dbos-inc/dbos-sdk';
-import { ConfigError } from '../commerce/config.ts';
+import { ConfigError } from '../config-error.ts';
 import { WORK_APPLICATION } from './client.ts';
 import type { WorkModule } from './registry.ts';
 import { createWorkflowRetentionSelector } from './retention-selector.ts';
