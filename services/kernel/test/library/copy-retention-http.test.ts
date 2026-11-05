@@ -38,7 +38,12 @@ test('private holding clear and exact Undo preserve identity and independent sib
   const deleted = await f.send(owner.bearer, 'DELETE', `${path}?revision=${original.revision}`, undefined, key);
   expect(deleted.status).toBe(204);
   expect(await deleted.text()).toBe('');
-  const deletionId = deleted.headers.get('Library-Copy-Deletion-Id');
+  // Discard the acknowledged deletion and recover its exact episode through the original request.
+  const recovered = await f.send(owner.bearer, 'DELETE', `${path}?revision=${original.revision}`, undefined, key);
+  expect(recovered.status).toBe(204);
+  expect(recovered.headers.get('Library-Copy-Deletion-Id')).toBe(deleted.headers.get('Library-Copy-Deletion-Id'));
+  expect(recovered.headers.get('Library-Copy-Deletion-Revision')).toBe(deleted.headers.get('Library-Copy-Deletion-Revision'));
+  const deletionId = recovered.headers.get('Library-Copy-Deletion-Id');
   const revision = Number(deleted.headers.get('Library-Copy-Deletion-Revision'));
   expect(deletionId).toMatch(/^[0-9a-f-]{36}$/);
   expect(revision).toBeGreaterThan(original.revision);

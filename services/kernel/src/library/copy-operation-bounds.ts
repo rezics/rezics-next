@@ -546,7 +546,7 @@ const COPY_ACCOUNT_ROW = {
   minimumAuthnEpoch: '9223372036854775807',
   transactionId: UUID,
 };
-const COPY_RESPONSE_BYTES = projectedBytes(COPY_STORE_ROW, 9) + 2;
+const COPY_RESPONSE_BYTES = projectedBytes(COPY_STORE_ROW, 9) + Buffer.byteLength('{"copy":{}}');
 const COPY_PAGE_RESPONSE_BYTES = projectedBytes(COPY_PAGE_ROW, 3) + 2;
 const COPY_PRESENTATION_SHAPE = {
   meaning: 'known',
@@ -744,7 +744,7 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
     engineRequests: 0,
   });
   return sumBounds(
-    copyRow,
+    repeatBound(copyRow, operation === 'insert' ? 1 : 2),
     profileMigration,
     operationSql(sourceHeadSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
     repeatBound(operationSql(nativeFenceSql, { ...input, owner_id: accountId }, {
@@ -753,7 +753,7 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
       points: 1,
       emptySeeks: 1,
     }), operation === 'insert' ? 2 : 4),
-    repeatBound(scope, operation === 'insert' ? 1 : 2),
+    repeatBound(scope, operation === 'insert' ? 1 : operation === 'update' ? 0 : 2),
   );
 }
 
@@ -809,6 +809,7 @@ export function copyMutationOperationPlan(
     component('command.terminal.commit-or-rollback', controls.terminal),
     component('command.receipt.lookup', controls.receipt),
     component('command.shelf', sessionShelfWork(input.route, input.accountId, false)),
+    component('copy.pre-profile-read-fences', repeatBound(sessionProfileMigrationWork(input.route, input.accountId), 3)),
     component('command.partition', controls.partition),
     component('command.retry.recovery', controls.retryRecovery),
     component('command.input.serialization', bytes(Buffer.byteLength(JSON.stringify(input.commandInput)))),
@@ -956,7 +957,6 @@ export function copyMutationOperationPlan(
     ...shared,
     ...(operation === 'update' || operation === 'delete' ? [component('command.preparation.copy-snapshot', sumBounds(prepareRead, read))] : []),
     ...(operation === 'create' || operation === 'update' ? [component('source.original', sourceInitial)] : []),
-    ...(operation === 'update' ? [component('copy.pre-profile-preparation-and-lock', repeatBound(sessionProfileMigrationWork(input.route, input.accountId), 2))] : []),
   ];
   return operationPlan(`command.${operation}`, 'native-attempt', {
     operation,
@@ -1109,8 +1109,8 @@ export function copyInventoryOperationPlan(input: CopyInventoryOperationInput): 
   const branches = {
     firstPage: observation,
     nextPage: observation,
-    maximumPageWithSentinel: maximumPage,
-    emptyPage: sumBounds(readonly, options),
+    maximumPageWithSentinel: sumBounds(maximumPage, options),
+    emptyPage: sumBounds(pageBranch, options),
   };
   return operationPlan('inventory', 'two-filtered-observations', {
     ...input,

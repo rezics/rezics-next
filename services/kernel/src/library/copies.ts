@@ -15,7 +15,7 @@ import { receiptKeysFor } from '../command/receipt-key.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
-import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -24,7 +24,6 @@ import {
   LibraryNotFoundError,
   requireRoute,
   sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
   workStepDeadline,
 } from './command-support.ts';
 import type { Copy, CopyChanges, CopyStatus } from './entry-model.ts';
@@ -712,12 +711,13 @@ export function createCopyCommands(config: Dependencies) {
   async function readCopy(actor: Actor, copyId: string): Promise<Copy> {
     const owner = requireActor(actor, 'copy:read');
     const route = sameAccountRoute(owner.accountId, copyId);
+    const deadline = workStepDeadline();
     return executeCopyOperation(copyReadOperationPlan(route, owner.accountId, copyId), () =>
       readOnly(owner, async (client) => {
         const copy = await store.readCopy(client, route, copyId);
         if (!copy || copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
         return copy;
-      }),
+      }, deadline),
     );
   }
 
@@ -741,7 +741,7 @@ export function createCopyCommands(config: Dependencies) {
   ): Promise<T | (Copy & { presentation: CopyPresentation })> {
     const owner = requireActor(actor, 'copy:read');
     const route = sameAccountRoute(owner.accountId, copyId);
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const deadline = workStepDeadline();
     return executeCopyOperation(copyPresentationOperationPlan(route, owner.accountId, copyId, copyId), () =>
       withRequestDeadline(deadline, () =>
       withinDeadline(deadline, async () => {
@@ -851,7 +851,7 @@ export function createCopyCommands(config: Dependencies) {
         basis: 'library.partition.epoch',
       },
     };
-    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const deadline = workStepDeadline();
     const readPage = () =>
       readOnly(
         owner,

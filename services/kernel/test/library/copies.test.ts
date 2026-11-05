@@ -226,6 +226,19 @@ test('an account records two private copies of one edition and changes each by r
   expect(page.copies.some((copy) => copy.id === second.value.id)).toBe(true);
 });
 
+test('an empty update advances the exact revision and emits one ordinary update event', async () => {
+  const made = await commands.createCopy(owner, { subjectId: edition, kind: 'physical', status: 'owned' }, key());
+  const before = await snapshot();
+  const requestKey = key();
+  const updated = await commands.updateCopy(owner, made.value.id, { revision: 1 }, requestKey);
+  expect(updated.value).toMatchObject({ ...made.value, revision: 2, transactionId: updated.transactionId });
+  expect((await snapshot()).updated).toBe(before.updated + 1);
+  expect(await commands.updateCopy(owner, made.value.id, { revision: 1 }, requestKey)).toEqual({
+    ...updated, replayed: true,
+  });
+  expect((await snapshot()).updated).toBe(before.updated + 1);
+});
+
 test('invalid fields, unknown subjects and unreadable subjects change nothing', async () => {
   const denied = await subject('Unreadable edition');
   await denyRead(denied);
