@@ -15,6 +15,7 @@ import type { FactsTransport } from './subject-facts';
 import type { CreateResult } from './create-subject';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { peopleBiographyGroups, peopleScalarFields, type PeopleRead, type PeopleTransport } from './people-profile';
+import type { PeopleCurrentVisitOrigin } from './people-current-visit';
 import { PeopleCreate } from './people-create';
 import { PeopleBiographyGroups } from './people-biography/groups';
 import {
@@ -106,7 +107,15 @@ const peopleRelationsSurface = [
   'md:pointer-fine:[&_details>summary]:py-1',
 ].join(' ');
 
-function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
+function ProfileIntro({
+  read,
+  locale,
+  returnHref,
+}: {
+  read: Current;
+  locale: string;
+  returnHref?: string;
+}) {
   const o = { locale: locale as never };
   const subject = read.public?.subject;
   const profile = read.profiles.find((entry) => entry.id === subject?.type);
@@ -118,9 +127,12 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
       {subject?.type === 'schema:Person' && (
         <a
           className={peopleLinkTarget + ' inline-flex items-center underline'}
-          href={`${subjectHref({ id: subject.id, label: definitionText(subject.labels, locale).text }, locale).href}#person-biography`}
+          href={
+            returnHref ??
+            `${subjectHref({ id: subject.id, label: definitionText(subject.labels, locale).text }, locale).href}#person-biography`
+          }
         >
-          {m.person_reader_return({}, o)}
+          {returnHref ? m.people_current_visit_return({}, o) : m.person_reader_return({}, o)}
         </a>
       )}
       {profile && <p lang={profile.descriptionLang ?? undefined}>{profile.description}</p>}
@@ -238,6 +250,14 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
   );
 }
 
+function CurrentVisitReturn({ locale, returnHref }: { locale: string; returnHref?: string }) {
+  return returnHref ? (
+    <a className={peopleLinkTarget + ' underline'} href={returnHref}>
+      {m.people_current_visit_return({}, { locale: locale as never })}
+    </a>
+  ) : null;
+}
+
 /** One guided surface composed from the existing creation, multi-field and exact native review controls. */
 export const PeopleProfileEditor = catalogueEditor(PeopleProfileEditorLive);
 
@@ -253,6 +273,9 @@ function PeopleProfileEditorLive({
   onNavigate,
   search,
   creditHandoffToken,
+  currentVisit,
+  returnHref,
+  returnAfterSignIn,
   handoffReader = '',
   handoffReaderLive = () => false,
 }: {
@@ -266,12 +289,16 @@ function PeopleProfileEditorLive({
   search?: EntityPickerSearch;
   relations?: ReactNode;
   onNavigate: (href: string) => void;
+  currentVisit?: PeopleCurrentVisitOrigin;
+  returnHref?: string;
+  returnAfterSignIn?: string;
   creditHandoffToken?: string;
   handoffReader?: string;
   handoffReaderLive?: () => boolean;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
+  const currentVisitKey = currentVisit ? JSON.stringify(currentVisit) : '';
   const client = useQueryClient();
   const [creditHandoff, setCreditHandoff] = useState<CreditTargetHandoff>();
   const returningToCreditDraft = useRef(false);
@@ -307,7 +334,14 @@ function PeopleProfileEditorLive({
   const [retryOrigin, setRetryOrigin] = useState(0);
   const [retryCompleted, setRetryCompleted] = useState(0);
   const correctionIntent = useRef<CorrectionReloadIntent | undefined>(undefined);
-  const correctionScope = JSON.stringify([id ?? null, work ?? null, locale, session, lifetime.generation]);
+  const correctionScope = JSON.stringify([
+    id ?? null,
+    work ?? null,
+    locale,
+    session,
+    ...(currentVisit ? [currentVisitKey] : []),
+    lifetime.generation,
+  ]);
   const correctionScopeRef = useRef(correctionScope);
   if (correctionScopeRef.current !== correctionScope) {
     correctionScopeRef.current = correctionScope;
@@ -377,7 +411,11 @@ function PeopleProfileEditorLive({
     window.location.assign(href);
   }
   const query = useQuery({
-    queryKey: [...['people-profile', id ?? 'new', work ?? '', locale], lifetime.generation],
+    queryKey: [
+      ...['people-profile', id ?? 'new', work ?? '', locale],
+      ...(currentVisit ? [currentVisitKey] : []),
+      lifetime.generation,
+    ],
     queryFn: async () => matching(await transport.load()),
     retry: false,
     refetchOnWindowFocus: false,
@@ -484,6 +522,7 @@ function PeopleProfileEditorLive({
             ) : (
               <EditorFailure reason={observed && !observed.ok ? observed.reason : 'unavailable'} locale={locale} />
             )}
+            <CurrentVisitReturn locale={locale} {...(returnHref ? { returnHref } : {})} />
             <Button
               ref={correctionRetryButton}
               type="button"
@@ -512,7 +551,9 @@ function PeopleProfileEditorLive({
               properties: (current) => peopleScalarFields(current.release, current.public.subject.type, locale),
             }}
             profileHeadingRef={retryHeading}
-            profileIntro={<ProfileIntro read={privateRead} locale={locale} />}
+            profileIntro={
+              <ProfileIntro read={privateRead} locale={locale} {...(returnHref ? { returnHref } : {})} />
+            }
             transport={{
               propose,
               read: async () => {
@@ -578,7 +619,7 @@ function PeopleProfileEditorLive({
         onCreated={recordCreditHandoffCreated}
         onReturnToCreditDraft={returnToCreditDraft}
         headingRef={retryHeading}
-        intro={<ProfileIntro read={retained.current} locale={locale} />}
+        intro={<ProfileIntro read={retained.current} locale={locale} {...(returnHref ? { returnHref } : {})} />}
         admittedProfiles={
           creditHandoff ? admittedCreditProfileTypes(retained.current, creditHandoff) : retained.current.profiles
         }
@@ -593,6 +634,7 @@ function PeopleProfileEditorLive({
         ) : (
           <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
         )}
+        <CurrentVisitReturn locale={locale} {...(returnHref ? { returnHref } : {})} />
         {!query.isPending && (
           <Button
             ref={retryButton}
@@ -616,7 +658,7 @@ function PeopleProfileEditorLive({
           headingRef={retryHeading}
           headingTabIndex={-1}
         />
-        <ProfileIntro read={read} locale={locale} />
+        <ProfileIntro read={read} locale={locale} {...(returnHref ? { returnHref } : {})} />
         <p role="status">
           {session === 'signed-out'
             ? m.catalogue_create_signed_out({}, o)
@@ -639,7 +681,8 @@ function PeopleProfileEditorLive({
             className={peopleLinkTarget + ' underline'}
             href={`/auth/sign-in?return_to=${encodeURIComponent(
               id && read.public
-                ? `${subjectHref({ id, label: definitionText(read.public.subject.labels, locale).text }, locale).href}/people`
+                ? (returnAfterSignIn ??
+                  `${subjectHref({ id, label: definitionText(read.public.subject.labels, locale).text }, locale).href}/people`)
                 : `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
             )}`}
           >

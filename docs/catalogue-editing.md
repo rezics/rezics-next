@@ -1043,9 +1043,16 @@ occupations from credits or hydrates related targets. Document text uses only th
 subject/candidate/document/digest/language binding and the existing authored-text renderer, spoiler controls and
 media/link policy. Missing native document presentation is explicitly unavailable. Each assertion retains its
 qualifiers and ordered citation groups; withheld item targets expose neither identity nor link. Partial dates keep
-the native precision. The existing People correction journey returns to the canonical overview's biography heading.
+the native precision. Legacy People correction returns to the canonical overview's biography heading.
 A changed source observation, locale, viewer/session, exposure or lifetime removes the complete old reader subtree,
 including expanded evidence and delayed definition results; a focused removed control returns to the stable heading.
+
+From a public Person page, the correction entry carries its resolved Context and optional resolved Realm as intent,
+along with the locale, effective definition observation, reader incarnation and one same-locale public return
+address. A non-Global Context or Realm that the native editor cannot select is explained before any Global profile read or editor
+mounts. A separate Global choice starts the existing fresh Global read and advice; it does not use public visibility
+as mutation permission. Return rereads the original public Person through its existing Subject reader and disclosure
+gates. Organization history, direct Global visits, creation and Work credit handoffs keep their existing entry paths.
 
 Decision: the ordinary reader shows admitted alternatives within each named group; when none are admitted it shows
 one unsupported notice, rather than repeating technical predicate alternatives.
@@ -1060,6 +1067,10 @@ the existing correction/Details owners. Page document selection retains its exis
 bounds; Web adds no hydration. Projection is O(admitted fields + current statements + rendered evidence), independent
 of catalogue size. The owner of the composition response retains its original transport bounds. Source stories
 exercise admitted, empty, withheld and unsupported states; they do not establish native or rendered acceptance.
+
+Entry and return add one descriptor capped at 2,048 query characters and UTF-8 bytes. An unsupported origin performs
+no profile read. An explicit Global choice uses the existing profile load and advice; return performs one existing
+public Subject read, with no per-field or per-assertion request.
 
 The Storybook page is **Pages/Catalogue/Person and organization catalogue editor**, with base ID
 `pages-catalogue-person-and-organization-catalogue-editor`. Its `create-route`, `person-route` and

@@ -12,13 +12,26 @@ import { relationTargetSearch } from './relation-editor-search';
 import { loadPeopleProfile, createCataloguePeopleProfile } from './people-profile-actions';
 import { PeopleProfileEditor } from './people-profile-view';
 import type { PeopleAddress } from './people-profile';
+import type { PeopleCurrentVisitOrigin } from './people-current-visit';
 
 function PeopleProfileSessionLive({
   id,
   work,
   locale,
   creditHandoffToken,
-}: PeopleAddress & { locale: string; creditHandoffToken?: string }) {
+  origin,
+  returnHref,
+  returnAfterSignIn,
+}: PeopleAddress & {
+  locale: string;
+  creditHandoffToken?: string;
+  address?: string;
+  origin?: PeopleCurrentVisitOrigin;
+  returnHref?: string;
+  returnAfterSignIn?: string;
+  context?: string;
+  realm?: string;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -33,6 +46,9 @@ function PeopleProfileSessionLive({
       handoffReader={editorWork.reader}
       handoffReaderLive={editorWork.live}
       locale={locale}
+      {...(origin ? { currentVisit: origin } : {})}
+      {...(returnHref ? { returnHref } : {})}
+      {...(returnAfterSignIn ? { returnAfterSignIn } : {})}
       session={state}
       transport={{
         load: () => loadPeopleProfile({ data: { ...(id ? { id } : {}), ...(work !== undefined ? { work } : {}) } }),
