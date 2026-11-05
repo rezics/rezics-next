@@ -1,13 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { GateOutcomeRefusal } from './contracts.ts';
-import {
-  FAILURE_GUARDS,
-  formatGuardLedger,
-  guardLedger,
-  GUARDS,
-  REFUSAL_GUARDS,
-  type GuardId,
-} from './guards.ts';
+import { FAILURE_GUARDS, formatGuardLedger, guardLedger, GUARDS, REFUSAL_GUARDS, type GuardId } from './guards.ts';
 import { harness } from './test-support.ts';
 import type { Attempt, AttemptRecord, FailureClass } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
@@ -107,7 +100,16 @@ test('guard ledger preserves its seven-day window and immediate-next attempt sem
       tokens: { input, cached: 99, output },
     }) as AttemptRecord;
   const records = [
-    makeRecord('duplicate', 1, at(lowerMs - hour), lower, 'gate-failed', ['environment', 'environment', 'unknown'] as GuardId[], 3, 5),
+    makeRecord(
+      'duplicate',
+      1,
+      at(lowerMs - hour),
+      lower,
+      'gate-failed',
+      ['environment', 'environment', 'unknown'] as GuardId[],
+      3,
+      5,
+    ),
     makeRecord('duplicate', 1, at(lowerMs - 2 * hour), lower, 'gate-failed', ['environment'], 7, 11),
     makeRecord('duplicate', 2, at(now), at(now + 3 * hour), 'gate-failed', []),
     makeRecord('duplicate', 2, at(now), at(now + hour), 'verified', []),
@@ -128,16 +130,29 @@ test('guard ledger preserves its seven-day window and immediate-next attempt sem
   const measuredIds = new Set<string>(['blocker', 'environment', 'new-failure', 'question']);
   const measured = rows.filter(({ id }) => measuredIds.has(id));
 
-  expect(measured.map(({ id, firings, attemptHours, nextAttemptHours, tokens, rewrittenShare, landedShare, action }) => [
-    id, firings, attemptHours, nextAttemptHours, tokens, rewrittenShare, landedShare, action,
-  ])).toEqual([
+  expect(
+    measured.map(({ id, firings, attemptHours, nextAttemptHours, tokens, rewrittenShare, landedShare, action }) => [
+      id,
+      firings,
+      attemptHours,
+      nextAttemptHours,
+      tokens,
+      rewrittenShare,
+      landedShare,
+      action,
+    ]),
+  ).toEqual([
     ['blocker', 2, 0, 0, 13, null, null, 'monitor'],
     ['environment', 2, 3, 2, 26, 0, 1, 'monitor'],
     ['new-failure', 1, 2, 0, 10, null, null, 'monitor'],
     ['question', 1, 0.5, 0, 5, null, null, 'monitor'],
   ]);
   expect(rows.map(({ id }) => id).sort()).toEqual((Object.keys(GUARDS) as GuardId[]).sort());
-  expect(rows.filter(({ firings }) => !firings).every((row) => !row.attemptHours && !row.tokens && row.rewrittenShare === null && row.landedShare === null)).toBe(true);
+  expect(
+    rows
+      .filter(({ firings }) => !firings)
+      .every((row) => !row.attemptHours && !row.tokens && row.rewrittenShare === null && row.landedShare === null),
+  ).toBe(true);
 
   const output = formatGuardLedger(rows);
   expect(output.slice(0, 2)).toEqual([
@@ -160,28 +175,32 @@ test('guard ledger record and date reads stay constant as catalog memberships gr
   const endedAt = new Date(now - 30 * 60 * 1000).toISOString();
   const guardIds = Object.keys(GUARDS) as GuardId[];
   const reads = { startedAt: 0, endedAt: 0, guardIds: 0 };
-  const records = Array.from({ length: size }, (_, index) =>
-    new Proxy(
-      {
-        taskId: `growing-${index}`,
-        attempt: 1,
-        startedAt,
-        endedAt,
-        outcome: 'gate-failed',
-        guardIds,
-        tokens: { input: 3, cached: 99, output: 4 },
-      } as unknown as AttemptRecord,
-      {
-        get(target, key, receiver) {
-          if (key in reads) reads[key as keyof typeof reads]++;
-          return Reflect.get(target, key, receiver);
+  const records = Array.from(
+    { length: size },
+    (_, index) =>
+      new Proxy(
+        {
+          taskId: `growing-${index}`,
+          attempt: 1,
+          startedAt,
+          endedAt,
+          outcome: 'gate-failed',
+          guardIds,
+          tokens: { input: 3, cached: 99, output: 4 },
+        } as unknown as AttemptRecord,
+        {
+          get(target, key, receiver) {
+            if (key in reads) reads[key as keyof typeof reads]++;
+            return Reflect.get(target, key, receiver);
+          },
         },
-      },
-    ),
+      ),
   );
 
   const rows = guardLedger(records, [], now);
   expect(guardIds.length).toBeGreaterThan(1);
-  expect(rows.every((row) => row.firings === size && row.attemptHours === size / 2 && row.tokens === size * 7)).toBe(true);
+  expect(rows.every((row) => row.firings === size && row.attemptHours === size / 2 && row.tokens === size * 7)).toBe(
+    true,
+  );
   expect(reads).toEqual({ startedAt: size, endedAt: size, guardIds: size });
 });
