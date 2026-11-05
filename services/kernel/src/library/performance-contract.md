@@ -463,7 +463,8 @@ Decision: retain the original native session, Continue and Feed assertions; add 
 reached by the seeded record/correct/journal/clear journey, and compare native responses with the same persona's pages.
 Native discovery fixture setup delegates through the installed grant command with a real Auth-issued grantor and
 the consumer's runtime pool. Session fixtures configure dedicated receipt keys independently of token sealing keys.
-Owner journal discovery passes the resolved request Access instance to current subject presentation.
+Owner journal discovery passes the resolved request Access instance and original absolute request deadline to
+current subject presentation.
 
 The existing Progress and Continue descriptors retain their native session commands and response contracts.
 An operation declaration describes work; it supplies neither owner authority nor evidence of execution.

@@ -25,7 +25,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -228,6 +228,7 @@ async function startDriver(
     await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     const kernelUrl = databaseUrl(source, kernelName);
     pool = createPool(kernelUrl);
+    configureTestReceiptKeys(pool);
     runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
     timer.mark('kernel database');
 

@@ -9,7 +9,6 @@ import { customMethod } from '../http/custom-method.ts';
 import { bindOperation } from '../http/operation-adapter.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { deadlineFor } from '../request/deadline.ts';
 import { IDEMPOTENCY_HEADER } from '../http/headers.ts';
 import { idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
@@ -18,7 +17,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { ProgressIntent, ProgressPresentation, ProgressScalarMeasure, ProgressSession } from './progress-model.ts';
 import { MAX_PROGRESS_MEASURES } from './progress.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
-import { LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { LibraryNotFoundError } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
@@ -699,7 +698,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
                   access: dependencies.access,
                   actor: viewer,
                   routeKey: runtimeDependencies.routeKey,
-                  deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+                  deadline: job.deadline,
                 },
                 subjectIds,
               ),
