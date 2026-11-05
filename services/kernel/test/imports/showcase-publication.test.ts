@@ -8,6 +8,7 @@ import {
   seedCrossMedia,
   planCrossMediaSeed,
   crossMediaAliases,
+  type CrossMediaPort,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
@@ -174,14 +175,30 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
   const edge = plan.edges.find((draft) => draft.source === 'vndb' && draft.table === 'vn_relations')!;
   expect(edge).toMatchObject({ holder: 'v7983', target: 'v4', property: 'wdt:P155' });
   const importPath = join(directory, 'import.sqlite');
-  const seed = () =>
+  const seed = (port: CrossMediaPort = runtime.importTransport) =>
     seedCrossMedia(
       plan,
       importPath,
-      captureShowcaseCommands(runtime.importTransport, journal),
+      captureShowcaseCommands(port, journal),
       { origin: runtime.origin },
       { providers: ['vndb'] },
     );
+  let loseRelationResponse = true;
+  const uncertainDeliveryPort: CrossMediaPort = {
+    ...runtime.importTransport,
+    async batch(request) {
+      const response = await runtime.importTransport.batch(request);
+      if (
+        loseRelationResponse &&
+        request.commands.some((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P155')
+      ) {
+        loseRelationResponse = false;
+        throw new Error('Simulated lost VNDB relation response');
+      }
+      return response;
+    },
+  };
+  const relationBodies = () => runtime.captures.filter((capture) => capture.body.includes('wdt:P155')).map(({ body }) => body);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
     fetch: async (input) => {
@@ -191,7 +208,14 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
   });
 
   try {
+    await expect(seed(uncertainDeliveryPort)).rejects.toThrow('Simulated lost VNDB relation response');
+    expect(relationBodies()).toHaveLength(1);
+    const pendingBody = relationBodies()[0]!;
+    journal.close();
+    journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     const first = await seed();
+    expect(relationBodies()).toHaveLength(2);
+    expect(relationBodies()[1]).toBe(pendingBody);
     const relation = first.vndbWorkRelations[0]!;
     expect(relation).toMatchObject({
       sourceRecordKey: 'v4',
