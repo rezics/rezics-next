@@ -316,9 +316,16 @@ test('hourly delivery preserves disabled, competing and interrupted-claim outcom
   try {
     const bucket = '2026-10-31T01:00:00.000Z';
     const disabled = await sendHourlyEfficiencyReport(h.db, bucket, 'not sent', undefined, 2000);
-    expect(disabled).toMatchObject({ disposition: 'disabled', bucket, reportRef: null, detail: 'notifier unconfigured' });
+    expect(disabled).toMatchObject({
+      disposition: 'disabled',
+      bucket,
+      reportRef: null,
+      detail: 'notifier unconfigured',
+    });
     expect(
-      Boolean(h.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='efficiency_report_deliveries'").get()),
+      Boolean(
+        h.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='efficiency_report_deliveries'").get(),
+      ),
     ).toBe(false);
 
     const capture = join(h.directory.path, 'competing-report.txt');
@@ -336,7 +343,7 @@ test('hourly delivery preserves disabled, competing and interrupted-claim outcom
       h.db,
       bucket,
       'replacement report',
-      [process.execPath, '-e', "process.exit(31)"],
+      [process.execPath, '-e', 'process.exit(31)'],
       2000,
       new Date('2026-10-31T02:15:01.000Z'),
     );
@@ -378,9 +385,11 @@ test('hourly delivery preserves disabled, competing and interrupted-claim outcom
     });
     expect(existsSync(attemptedResend)).toBe(false);
     expect(
-      (h.db.query('SELECT status FROM efficiency_report_deliveries WHERE hour_bucket=?').get(interruptedBucket) as {
-        status: string;
-      }).status,
+      (
+        h.db.query('SELECT status FROM efficiency_report_deliveries WHERE hour_bucket=?').get(interruptedBucket) as {
+          status: string;
+        }
+      ).status,
     ).toBe('unknown');
   } finally {
     h.close();
