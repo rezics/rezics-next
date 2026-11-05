@@ -148,6 +148,7 @@ test('current Person credit returns from work, Character and Sources with exact 
     expect(dialog!.textContent).toContain(labels['wdt:P1932']);
     expect(dialog!.textContent).toContain('Original credit');
     expect(dialog!.textContent).toContain('The traveler');
+    expect(dialog!.textContent).toContain(m.relation_sign_in());
     expect(dialog!.textContent).not.toContain('The narrator');
     const targets = [...dialog!.querySelectorAll('a')].filter((a) => a.pathname.includes('/subjects/'));
     expect(targets.length).toBeGreaterThanOrEqual(4);
