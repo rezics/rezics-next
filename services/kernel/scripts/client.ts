@@ -220,6 +220,7 @@ export function committedDeclarations(): Map<string, string> {
 
 if (import.meta.main) {
   const declarations = clientDeclarations();
+  console.log(`Kernel client declaration closure: ${declarations.size} members`);
   rmSync(CLIENT_DECLARATIONS, { recursive: true, force: true });
   mkdirSync(CLIENT_DECLARATIONS, { recursive: true });
   for (const [key, content] of declarations) {

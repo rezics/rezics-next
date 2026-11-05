@@ -6,7 +6,10 @@ import type { SearchHit } from './hits.ts';
 export type PublicSearchHit = SearchHit & { figure: PublicFigureView };
 
 /** Project only kept hits, on the backend that owns their native anchor partitions. */
-export async function publicHitFigures(pool: Pool, hits: readonly SearchHit[]): Promise<PublicSearchHit[]> {
+export async function publicHitFigures<T extends SearchHit>(
+  pool: Pool,
+  hits: readonly T[],
+): Promise<(T & { figure: PublicFigureView })[]> {
   const ids = [...new Set(hits.map((hit) => hit.id))];
   if (ids.length > 256) throw new RangeError('Public hit figures accept at most 256 subjects');
   if (ids.length === 0) return [];

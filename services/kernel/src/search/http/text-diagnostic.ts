@@ -4,7 +4,7 @@ import { TEXT_DIAGNOSTIC_REASONS, TEXT_LIMITS } from '@rezics/search-text';
 /** Additive producer input for Content's complete mounted-contract publication. */
 export const TextDiagnosticSchema = t.Object(
   {
-    reason: t.Union(TEXT_DIAGNOSTIC_REASONS.map((reason) => t.Literal(reason))),
+    reason: t.Enum(TEXT_DIAGNOSTIC_REASONS),
     unit: t.Literal('utf16'),
     start: t.Integer({ minimum: 0, maximum: TEXT_LIMITS.bytes }),
     end: t.Integer({ minimum: 0, maximum: TEXT_LIMITS.bytes + 2 }),

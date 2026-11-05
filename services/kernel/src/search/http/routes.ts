@@ -49,7 +49,6 @@ const subjectSearchResponse = t.Union([
   releaseChildrenResponse,
   QueryShareSchema,
 ]);
-type SubjectSearchResponse = Static<typeof subjectSearchResponse>;
 
 export function searchRoutes<App>(
   app: App,
@@ -212,7 +211,7 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ body, authorize, admission, job, actor, set }): Promise<SubjectSearchResponse> => {
+      async ({ body, authorize, admission, job, actor, set }) => {
         const { emptyRecoveryActions: _emptyRecoveryActions, ...nativeBody } = body;
         if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
@@ -423,11 +422,14 @@ export function searchRoutes<App>(
               ? prepareQueryShare(body, labels)
               : unavailableQueryShare('unsupported');
           projection.viewer = actor.kind === 'account' ? 'signed-in' : 'anonymous';
-          return projection;
+          return projection satisfies Static<typeof QueryShareSchema>;
         }
-        if (body.representation === 'discovery-v1') return mixed();
-        if (body.representation === 'release-groups-v1') return grouped();
-        return catalogue();
+        if (body.representation === 'discovery-v1') return (await mixed()) satisfies Static<typeof DiscoveryPageSchema>;
+        if (body.representation === 'release-groups-v1')
+          return (await grouped()) satisfies
+            | Static<typeof releaseGroupsResponse>
+            | Static<typeof releaseChildrenResponse>;
+        return (await catalogue()) satisfies Static<typeof searchResponse>;
       },
     )
     .post(

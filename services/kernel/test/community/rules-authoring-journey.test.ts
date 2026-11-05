@@ -1,6 +1,6 @@
+import { routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
-import { routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, checkGrowth, seed } from '../support/growth.ts';
 import {
   axes,

@@ -201,6 +201,7 @@ export function membersExecution(
     admission: {
       filter: definition.filter,
       sort: 'id',
+      source: 'owner',
       plan,
       releaseDigest: definition.release.digest,
       release,

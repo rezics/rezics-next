@@ -875,7 +875,7 @@ export function createCollectionCommands(config: {
           before: current,
           after: value,
           transactionId: command.transactionId,
-          time: authoritativeTimeValue(command.time),
+          time: command.time,
         });
         if (current.membershipKind === 'dynamic' && current.visibility !== value.visibility)
           await retireCollectionPublicationWork(tx, route, id);

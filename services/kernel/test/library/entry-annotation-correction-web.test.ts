@@ -90,7 +90,7 @@ test('generated mounted selected review crosses pages, reads native facts and re
     .libraryEntries({ subjectId: items[4]!.subjectId })
     .annotations.put(
       { revision: 0, note: { op: 'set', value: 'clear this note' }, priority: { op: 'set', value: 9 } },
-      { headers: { authorization: `Bearer ${f.owner.bearer}`, 'idempotency-key': JSON.stringify(entryKey()) } },
+      { headers: entryHeaders() },
     );
   expect(seed.status).toBe(200);
   await r.journey.create(items);
@@ -166,7 +166,7 @@ test('concurrent edits and removal/recreation require fresh deliberate native ep
     .libraryEntries({ subjectId: selected.subjectId })
     .annotations.put(
       { revision: 0, note: { op: 'set', value: 'other edit' }, priority: { op: 'unchanged' } },
-      { headers: { authorization: `Bearer ${f.owner.bearer}`, 'idempotency-key': JSON.stringify(entryKey()) } },
+      { headers: entryHeaders() },
     );
   expect(changed.status).toBe(200);
   await r.journey.confirm(0);
@@ -209,3 +209,7 @@ test('concurrent edits and removal/recreation require fresh deliberate native ep
   expect((await entry.json()).entry).toMatchObject({ state: 'planned', incarnationId: replacement.incarnationId });
   await old.journey.cancel();
 });
+
+function entryHeaders() {
+  return { authorization: `Bearer ${f.owner.bearer}`, 'idempotency-key': JSON.stringify(entryKey()) };
+}

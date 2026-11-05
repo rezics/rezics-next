@@ -241,11 +241,15 @@ const basisBindings: Readonly<Record<string, unknown>> = Object.freeze({
   collection_fence: boundDecimal,
   account_fence: boundDecimal,
 });
-const basisQueries = Object.freeze(
-  [nativeIdentityPartitionQuery, accountQuery, sourceQuery, outputQuery, fencesQuery, identityCapture, proofQuery].map(
-    (query) => Object.freeze({ sql: query.sql, params: Object.freeze([...query.params]) }),
-  ) satisfies readonly Query[],
-);
+const basisQueries = Object.freeze([
+  nativeIdentityPartitionQuery,
+  accountQuery,
+  sourceQuery,
+  outputQuery,
+  fencesQuery,
+  identityCapture,
+  proofQuery,
+] satisfies readonly Query[]);
 const currentCaptureProjectionBytes = Buffer.byteLength(
   JSON.stringify({
     captureId: boundId,

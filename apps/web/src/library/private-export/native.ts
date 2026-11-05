@@ -128,7 +128,7 @@ export function kernelExportPort(
     async create(command) {
       return call(
         command,
-        (surface, authorization) => surface.post({ headers: headers(authorization, command.key) }),
+        (surface, authorization) => surface.post(undefined, { headers: headers(authorization, command.key) }),
         (data) => (isExportStatus(data) ? ({ kind: 'status' as const, status: data } as const) : undefined),
       );
     },

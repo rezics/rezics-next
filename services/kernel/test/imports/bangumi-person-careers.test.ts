@@ -1,10 +1,11 @@
+import { retainedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { SourceVocabularyBindings } from '@rezics/conversion';
+import type { SourceVocabularyBindings } from '../../../../packages/conversion/src/index.ts';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
   crossMediaAliases,
@@ -47,30 +48,6 @@ function planFor(name: string, revision: string): CrossMediaPlan {
   });
   plan.members.push({ source: 'bangumi', key: 'person:8101', kind: 'person', membership: 'referenced' });
   return plan;
-}
-
-function bindingsFor(...codes: string[]): SourceVocabularyBindings {
-  const schemeId = '00000000-0000-4000-8000-000000000101';
-  return {
-    releaseDigest: bundledDigest,
-    schemes: [
-      {
-        taxonomy: 'bangumi.person.career',
-        id: schemeId,
-        uri: 'https://rezics.com/schemes/bangumi/careers',
-        type: 'skos:ConceptScheme',
-        releaseDigest: bundledDigest,
-      },
-    ],
-    concepts: codes.map((code, index) => ({
-      taxonomy: 'bangumi.person.career',
-      code,
-      id: `00000000-0000-4000-8000-${String(201 + index).padStart(12, '0')}`,
-      type: 'skos:Concept' as const,
-      schemeId,
-      releaseDigest: bundledDigest,
-    })),
-  };
 }
 
 function idOf(result: { readings: { externalId: string; subject: unknown }[] }, externalId: string): string {
@@ -349,13 +326,15 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: concepts.requirements,
     });
 
-    const stableCandidates = (
-      await runtime.importTransport.reviewedCandidates(personId, {
-        property: 'wdt:P106',
-        context: GLOBAL_CONTEXT,
-        limit: 100,
-      })
-    ).candidates;
+    const stableCandidates = retainedCandidates(
+      (
+        await runtime.importTransport.reviewedCandidates(personId, {
+          property: 'wdt:P106',
+          context: GLOBAL_CONTEXT,
+          limit: 100,
+        })
+      ).candidates,
+    );
     const restarted = await seedCrossMedia(
       plan,
       importPath,
@@ -365,13 +344,15 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     );
     expect(idOf(restarted, 'person:8101')).toBe(personId);
     expect(
-      (
-        await runtime.importTransport.reviewedCandidates(personId, {
-          property: 'wdt:P106',
-          context: GLOBAL_CONTEXT,
-          limit: 100,
-        })
-      ).candidates.map(({ id }) => id),
+      retainedCandidates(
+        (
+          await runtime.importTransport.reviewedCandidates(personId, {
+            property: 'wdt:P106',
+            context: GLOBAL_CONTEXT,
+            limit: 100,
+          })
+        ).candidates,
+      ).map(({ id }) => id),
     ).toEqual(stableCandidates.map(({ id }) => id));
 
     const changedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });

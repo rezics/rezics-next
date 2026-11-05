@@ -417,6 +417,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       await editor.adoptSubject(id, 'schema:abstract', content as unknown as Json, globalContext);
       const source = candidate.source;
       if (!source) throw new Error('Missing public biography attribution');
+      const nativeStatement = candidate.statement as unknown as Statement;
       const proposal: Proposal = {
         id: candidate.id,
         subjectId: id,
@@ -427,8 +428,8 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         converterRevision: source.converter_revision,
         fieldGroup: source.field_group,
         kind: 'value',
-        statement: candidate.statement as unknown as Statement,
-        references: candidate.statement.references ?? [],
+        statement: nativeStatement,
+        references: nativeStatement.references ?? [],
       };
       expect(proposal.references[0]?.parts).toContainEqual({
         property: { id: 'schema:url' },

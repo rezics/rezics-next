@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,7 +48,8 @@ test('local publication accepts only its acknowledged plan after authorization a
       limit: 100,
     });
     const selectedName = currentCandidates(selectedPage.candidates).find(
-      (candidate) => candidate.source?.external_id === '101',
+      (candidate) =>
+        candidate.source !== null && 'external_id' in candidate.source && candidate.source.external_id === '101',
     );
     if (!selectedName) throw new Error('Selected source name candidate is missing');
     const unrelated = await editor.http(`/v1/subjects/${workId}/candidates`, {
@@ -124,7 +124,7 @@ test('local publication accepts only its acknowledged plan after authorization a
     const publicRead = await publicClient.readSubject(workId);
     const subject = publicRead.subject as { id: string; type: string; statements: Record<string, BatchStatement[]> };
     expect(subject.id).toBe(workId);
-    expect(subject.type).toBe(publishedWork.nativeType);
+    expect(subject.type).toBe(publishedWork.nativeType!);
     const expected = publishedWork.assertions.map(({ property, statement }) => ({
       property,
       value: valueContent(statement.value),

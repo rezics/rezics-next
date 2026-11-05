@@ -4,7 +4,6 @@ import { listSubjectThreads } from '../../src/content/subject-threads.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
-import { testRouteKey } from '../support/test-kernel.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -50,9 +49,9 @@ test('subject thread page stays within its bound as the subject thread index gro
   });
   const dependencies = {
     pool: db.pool,
-    routeKey: testRouteKey(),
     access,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+    routeKey: new Uint8Array(32).fill(41),
     cursorNow: () => Date.UTC(2026, 9, 27),
   };
   const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 30_000 };

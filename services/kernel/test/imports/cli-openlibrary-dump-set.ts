@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
@@ -187,7 +188,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
               };
             },
           },
-          fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+          fetch: fixtureFetch(async (input: Request | string | URL, init?: RequestInit) => {
             const request = input instanceof Request ? input : new Request(input, init);
             const url = new URL(request.url);
             if (url.origin === auth) {
@@ -225,7 +226,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
               throw new DOMException('Interrupted after native commit before local ACK', 'AbortError');
             }
             return response;
-          }) as typeof fetch,
+          }),
         },
       );
       return result;

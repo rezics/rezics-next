@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
-import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
+import { converter_revision as bangumiRevision } from '../../../../packages/conversion/src/bangumi.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openProviderCli, type Candidate } from './provider-cli-native-fixture.ts';

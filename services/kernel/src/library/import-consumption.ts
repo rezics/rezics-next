@@ -291,7 +291,9 @@ function terminalFieldOutcomes(
   );
 }
 
-export async function executeImportConsumptionDateIntent(input: {
+export async function executeImportConsumptionDateIntent<
+  Outcome extends { value: ProgressSessionJournalWrite },
+>(input: {
   review: ImportConsumptionDateReview;
   fields: ImportDateField[];
   existing?: ImportConsumptionDateIntent;
@@ -305,8 +307,8 @@ export async function executeImportConsumptionDateIntent(input: {
     patch: ProgressSessionJournalPatch,
     requestKey: string,
     admission: ProgressSessionJournalAdmission,
-  ) => Promise<{ value: ProgressSessionJournalWrite }>;
-  record?: (value: unknown) => void;
+  ) => Promise<Outcome>;
+  record?: (value: Outcome) => void;
   signal?: AbortSignal;
   isStaleError: (error: unknown) => boolean;
   rethrowError?: (error: unknown) => boolean;

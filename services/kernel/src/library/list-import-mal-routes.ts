@@ -300,9 +300,13 @@ export function malImportRoutes(
             fields: t.Array(
               t.Object(
                 {
-                  field: t.Union(
-                    ['note', 'priority', 'privacy', 'sourceCreated', 'sourceUpdated'].map((v) => t.Literal(v)),
-                  ),
+                  field: t.Union([
+                    t.Literal('note'),
+                    t.Literal('priority'),
+                    t.Literal('privacy'),
+                    t.Literal('sourceCreated'),
+                    t.Literal('sourceUpdated'),
+                  ]),
                   action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
                   mapping: t.Optional(t.String({ maxLength: 64 })),
                 },

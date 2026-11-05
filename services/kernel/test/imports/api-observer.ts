@@ -1,3 +1,4 @@
+import { currentCandidates, valueContent } from './type-helpers.ts';
 import { randomUUID } from 'node:crypto';
 import type { BatchWriteResult, Rights, Source as SourceEnvelope } from '@rezics/definitions/bulk';
 import { parseDocument, serializeDocument } from '@rezics/document';
@@ -302,13 +303,13 @@ export async function openApiObserver(runtime: ApiRuntime) {
     const listing = await required(
       `/v1/subjects/${id}/candidates?${new URLSearchParams({ property, context, limit: '100' })}`,
     );
-    let candidate = (listing.candidates as Candidate[]).find(
+    let candidate = currentCandidates(listing.candidates as Candidate[]).find(
       (c) =>
-        JSON.stringify(c.statement.value.content) === JSON.stringify(value) ||
-        (property === 'schema:name' && (c.statement.value.content as { text?: string })?.text === value),
+        JSON.stringify(valueContent(c.statement.value)) === JSON.stringify(value) ||
+        (property === 'schema:name' && (valueContent(c.statement.value) as { text?: string })?.text === value),
     )?.id;
     if (!candidate) {
-      const cited = (listing.candidates as Candidate[]).find((c) => c.statement.references?.length);
+      const cited = currentCandidates(listing.candidates as Candidate[]).find((c) => c.statement.references?.length);
       if (!cited) throw new Error('Manual community proposal requires a retrieved source reference');
       candidate = (
         await required(

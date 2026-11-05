@@ -97,7 +97,7 @@ test('native persona Collections contain the actual admitted works and disclose 
     const request = createDevelopmentShowcaseRequest({
       origin: f.runtime.origin,
       token: async () => f.owner.bearer,
-      fetch: async (input, init) => f.runtime.replay(new Request(input, init)),
+      fetch: fixtureFetch(async (input, init) => f.runtime.replay(new Request(input, init))),
     });
     const first = await seedDevelopmentShowcase({ journal, request, result, selection, accountId: f.owner.accountId });
     expect(first.collections.map((row) => row.status)).toEqual(['current', 'current', 'current']);
@@ -145,7 +145,7 @@ test('exact reopen resolves a committed response loss and retains one native per
   const request = createDevelopmentShowcaseRequest({
     origin: f.runtime.origin,
     token: async () => f.owner.bearer,
-    fetch: async (input, init) => {
+    fetch: fixtureFetch(async (input, init) => {
       const sent = new Request(input, init);
       const body = sent.method === 'POST' ? await sent.clone().text() : '';
       if (interrupt && body.includes('Showcase grid')) sent.headers.set('authorization', `Bearer ${readOnly.bearer}`);
@@ -156,7 +156,7 @@ test('exact reopen resolves a committed response loss and retains one native per
         if (interrupt) throw new DOMException('Committed response lost at HTTP boundary', 'TimeoutError');
       }
       return response;
-    },
+    }),
   });
   try {
     const first = await seedDevelopmentShowcase({ journal, request, result, selection, accountId: f.owner.accountId });
