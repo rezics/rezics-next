@@ -167,7 +167,8 @@ function metaFromRow(
               [],
             review: previous?.labels?.invalidated ? null : (row.labelReview ?? null),
             invalidated: previous?.labels?.invalidated ?? false,
-            outcomes: previous?.labels?.outcomes?.reviewId === row.labelReview?.id ? previous.labels.outcomes : null,
+            outcomes:
+              previous?.labels?.outcomes?.reviewId === row.labelReview?.id ? (previous?.labels?.outcomes ?? null) : null,
           },
         }
       : {}),
