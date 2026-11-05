@@ -184,18 +184,42 @@ Commerce exports `publicCollectionDiscoverySource({pool})` from
 Active public curated Collections supply native index hints. Saved dynamic Collections require the installed
 selected complete Publication witness; a pending B does not replace selected complete A. Private, unlisted,
 deleted, missing and incomplete outputs never supply an indexable value. Unlisted remains direct-read only.
-The seam contains ordinary title/description/presentation, full Collection identity, revision, the actual native
-partition epoch/position and, for dynamic values, only the selected `CollectionOutputRef`. It contains no saved
-AST, expanded private terms, private facts/counts, working Source capture or unselected output.
+The source retains ordinary title/description hints, full Collection identity, revision, exact native
+`presentationKind`, the current curated header timestamp, the actual partition epoch/position and, for dynamic
+values, only the selected `CollectionOutputRef`. Its additive query operand is
+`{presentationKind?, curatorAccountId?, subjectId?, popularity?, order?}`. Each indexable value carries
+`presentationKind: {kind:'mixed'} | {kind:'owner',id}`, nullable exact curated recency as
+`[updatedAtEpochMicros|null,route,id]`, and query-specific Subject membership and public follower total when
+requested. It contains no saved AST, expanded private terms, private facts, working Source capture or unselected
+output. `membershipKind` (curated/dynamic) stays separate from the explicit presentation kind.
 
-`read(partition, fullKeys)` and `page(partition, after, limit)` observe one native repeatable-read snapshot,
-process at most 100 raw `(route,id)` keys and return them in that order. A page advances past every examined key,
+`read(partition, fullKeys, query, {deadline})` and `page(partition, after, limit, query, {deadline})` observe one
+native repeatable-read snapshot, process at most 100 raw `(route,id)` keys and return them in ascending full
+identity order. Search applies query eligibility and ordering to those native operands; popularity is descending,
+recency is newest first with nulls last, and both use ascending `(route,id)` for exact ties. The source page frontier
+remains the last raw identity examined, independent of that later ordering. A page advances past every examined key,
 including an unavailable dynamic witness. Decision: a full page returns its last raw key as `next`; a short page
 returns null, so an exact multiple can require one final empty page. The existing partial public-listing index
 bounds paging; no projection store or second clock is introduced. Snapshots are live indexing hints, not frozen
 membership or hydration authorization. Current rereads and monotonic `(epoch,position)` replacement ensure a
 delayed positive delivery cannot outrank withdrawal. Consumers use existing Collection updated/deleted/listing
 change notifications as key-only reread triggers, including title edits on an already-public Collection.
+
+The current query summary performs an indexed exact-Subject `EXISTS` against live curated members or the selected
+complete public output generation. It does not use the four-row card preview as a membership test. A dynamic
+build B never displaces selected A; selected complete-empty A is a known empty output, while a private live result
+is never a public source. Curator eligibility uses the current disclosed canonical account identity and retains
+deidentified versus withheld status. Popularity reads the existing public `follow_count_total` only after current
+health admission; it never enumerates followers, infers zero, or uses the owner-only count reader. The retained
+query observation combines the native partition position, selected publication and membership facts, current
+Account/Subject disclosure stamps, and follow-count health plus the exact aggregate values. Search binds it with
+the initiating catalogue observation and rechecks current disclosure before publishing a card.
+
+Decision: curated Collection recency is exact SQL decimal-text epoch microseconds from committed native header
+`updated_at`; dynamic recency is the selected public output's committed publication timestamp only when its owner
+supplies it, otherwise `null`. The current publication receipt supplies no timestamp, so dynamic recency is `null`
+and building B never replaces selected A. Rule edits, private working output, and pending publication B never set a
+public recency clock.
 
 `count(partition)` explicitly returns unavailable: Library has no maintained native Collection population census.
 It never scans, invents zero or supplies query-count evidence. Fenced/moved/missing partitions are unavailable;
@@ -205,10 +229,13 @@ a retained-output discovery witness is still needed from the native public-outpu
 changes terminal retention/de-identification nor evaluates a query during deletion.
 
 Search owns its Collection union registration, shared index/planner/query and stamp-ordered replacement. Content
-owns the mixed Home consumer. Their registration is a consumer seam, not a claim that discovery runs end to end.
-Current authorized hydration is a separate Commerce delivery:
-`collection-discovery-summaries.ts` / `readPublicCollectionDiscoverySummaries(dependencies, ids, context)`;
-this candidate producer does not import, implement or emulate it. See the
+owns the mixed Home consumer. The installed adapter composes
+`CollectionDiscoverySource.read/page(..., query, {deadline})` with
+`readPublicCollectionDiscoverySummaries(dependencies, ids, context, query)`. The latter returns current cards,
+per-id disclosed operands and an opaque `queryObservation`; the adapter checks source identity, selected generation,
+presentation, membership and popularity against final current hydration before forwarding the operand. Search
+translates the agreed tuples into its existing sort contract and keeps the native ascending identity continuation.
+See the
 [native owner inventory](../services/kernel/src/library/README.md#public-collection-discovery-source) for exact types
 and illustrative responses.
 

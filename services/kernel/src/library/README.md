@@ -2100,6 +2100,13 @@ candidates, exported with owner-local request/context/dependency/summary/result 
 native card before displaying a Collection. It has no candidate-source import or dependency. See the precise
 [consumer union and omission contract](../../../../docs/dynamic-collections.md#native-public-discovery-card-hydration).
 
+The optional fourth `query` argument adds private Search operands to the same two-snapshot hydration: explicit
+presentation kind, canonical curator account ID, exact Subject membership, public follow popularity and sort
+choice. Ready returns `summaries`, aligned `operands`, and an opaque `queryObservation`; public cards remain the
+disclosed card projection and do not expose counts or query state. Curator identity is included only when the
+existing anonymous Account disclosure reader admits it; deidentified and withheld remain distinct. A requested
+Subject uses current disclosure plus exact native membership, not the four-row preview.
+
 - Input: at most 100 full routed Collection keys in one explicit partition, explicit actor and deadline;
   optional borrowed native time. Validation precedes I/O; duplicate-inclusive limit, deduplicated work and
   first-requested output order preserve full identity. Bad requests throw `RangeError`.
@@ -2107,15 +2114,23 @@ native card before displaying a Collection. It has no candidate-source import or
   one bounded Access decision batch and one selected-output authority batch. The output batch reuses the
   exact native `collection-source-output-head.sql` formula through correlated full-key probes. Header revisions,
   source generations, incarnation, lifecycle evidence, presentation and publication/member fences are compared.
-  Access preparation is repeated outside owner checkout; native media reads run between the snapshots.
+  A requested Subject adds at most two indexed `EXISTS` probes over curated membership or the exact selected
+  public generation; it never materializes all members. Popularity adds one bounded aggregate batch and the
+  existing root health/currentness observation. Access preparation is repeated outside owner checkout; native
+  media reads run between the snapshots.
 - Disclosure: only active public, currently authorized rows. Missing, denied, private, unlisted and removed
   candidates are omitted. Final withdrawal wins. A changed still-eligible observation withholds the batch;
   output, retention or lifecycle uncertainty returns explicit unavailable rather than a successful empty list.
   Access/partition/deadline failures have discriminated unavailable reasons; unrelated errors propagate.
 - Public metadata: ordinary curated presentation and occurrence count; dynamic presentation only with the actual
   selected completed output A, including while B builds. No saved rule, private count, working population,
-  private curator identity or custody data. De-identified curated retention is native; dynamic terminal output
-  without native retention proof stays unavailable. Full IDs link to `/collections/<id>`.
+- private curator identity or custody data. Search operands carry explicit `presentationKind` (`mixed` or
+  `{kind:'owner', id}`), currently disclosed curator, optional exact Subject match, optional public follower
+  total as decimal text, and nullable recency tuple `(updatedAtEpochMicros, route, id)`. Curated recency is exact
+  SQL decimal-text Unix microseconds from committed Collection header `updated_at`; dynamic recency remains null
+  because the selected-publication owner currently supplies no committed timestamp. De-identified curated
+  retention is native; dynamic terminal output without native retention proof stays unavailable. Full IDs link
+  to `/collections/<id>`.
 - Ownership and bound: all owned connections and minted read times are released on every path; caller times
   are borrowed. Rows and bytes are `O(K)` and blocks `O(K log N)` for `K <= 100`; the number of Library batch
   statements is constant. Optional cover work is bounded by the supplied keys and the existing Content producer.
@@ -2855,22 +2870,38 @@ current curator discovery. This slice makes no terminal erasure or legacy rollou
 ### Public Collection discovery source
 
 `collection-discovery-source.ts` exports `publicCollectionDiscoverySource({pool}): CollectionDiscoverySource`
-and the local types `CollectionDiscoveryKey`, `CollectionDiscoveryPosition`,
+and the local types `CollectionDiscoveryKey`, `CollectionDiscoveryPosition`, `CollectionDiscoveryQuery`,
+`CollectionDiscoveryOperands`, `CollectionPresentationKind`, `CollectionDiscoveryRecency`,
 `CollectionDiscoveryIndexableValue`, `CollectionDiscoveryItem`, `CollectionDiscoverySnapshot`,
-`CollectionDiscoveryPage` and `CollectionDiscoveryCensus`. Search imports these directly without treating a
-Collection as a Subject. Content consumes the resulting Collection variant through Search's eventual union.
-No Search registration, index, Home engine or hydration authorization is implemented here.
+`CollectionDiscoveryPage` and `CollectionDiscoveryCensus`. Search imports these through the installed native
+adapter without treating a Collection as a Subject. Content consumes the resulting Collection variant through
+Search's existing union. Commerce owns native operands and disclosure; the Search adapter owns receiving and
+current-card readback.
 
-- `read(partition, ids)` accepts 0..100 full `{route,id}` keys in one partition, deduplicates and sorts `(route,id)`.
-  It returns `status:'available'`, a native `stamp:{partition,epoch,position}` and one item per distinct key.
-- `page(partition, after, limit)` accepts a full key or null and 1..100; it reads at most that many raw active-public
-  keys from `collection_sitemap_public_page`, in `(route,collection_id)` order. Every raw key consumes the bound,
-  even without an indexable witness. Decision: full pages continue after the last examined key; short pages end,
-  allowing one final empty page at an exact multiple. Rebuilding starts again at null using current native truth.
+- `read(partition, ids, query?, {deadline})` accepts 0..100 full `{route,id}` keys in one partition, deduplicates
+  and sorts `(route,id)`. It returns `status:'available'`, a native `stamp:{partition,epoch,position}` and one
+  item per distinct key. Query and deadline are optional native composition inputs from Search.
+- `page(partition, after, limit, query?, {deadline})` accepts a full key or null and 1..100; it reads at most
+  that many raw active-public keys from `collection_sitemap_public_page`, in `(route,collection_id)` order.
+  Every raw key consumes the bound, even without an indexable witness. Decision: full pages continue after the
+  last examined key; short pages end, allowing one final empty page at an exact multiple. Rebuilding starts again
+  at null using current native truth. Query ranking never changes the raw identity frontier.
 - Available items are `status:'indexable'` plus `value:{kind:'collection',key,revision,title,description,
-  presentationKind,coverMediaId,membershipKind,output}`. Curated output is null. Saved dynamic output is only
-  `{route,collectionId,generation}`, verified by the installed `collection-source-output-head.sql` Publication
-  witness, its Core commit and current source fence. No rule, personal population, private totals or members cross.
+  presentationKind,coverMediaId,membershipKind,output,operands}`. The explicit `operands.presentationKind` is
+  either `{kind:'mixed'}` or `{kind:'owner',id}` and is separate from curated/dynamic `membershipKind`. Curated
+  `output` is null. Saved dynamic output is only `{route,collectionId,generation}`, verified by the installed
+  `collection-source-output-head.sql` Publication witness, its Core commit and current source fence. No rule,
+  personal population, private totals or member lists cross.
+- `operands.subjectMembership` is null unless requested, then it tests the exact currently selected curated
+  membership or exact dynamic output generation with indexed `EXISTS`; `operands.popularity` is null unless
+  requested, then it contains the exact public follow aggregate as decimal text. Missing/stale aggregate authority
+  returns `follow_count_unavailable`, never an inferred zero. The root health observation and count values are
+  carried in the source stamp/operand observation for currentness. `operands.recency` is
+  `(updatedAtEpochMicros,route,id)`: curated committed `updated_at` is calculated as exact SQL integer microseconds
+  serialized to decimal text; dynamic is null until the publication authority supplies a committed timestamp.
+- Search orders recency newest first with nulls last, popularity descending, and all ties by ascending full
+  `(route,id)`. It preserves the source's raw ascending identity page frontier and can sort only admitted
+  candidates with the operands.
 - Hidden/deleted/absent keys return `status:'withdrawn'` with the key alone. Public dynamic rows without a current
   witness return `status:'unavailable',reason:'selected_publication_witness_unavailable'`, also without metadata.
   Built-ins without a saved output witness and de-identified retained dynamics remain unavailable: the installed
@@ -2881,15 +2912,17 @@ No Search registration, index, Home engine or hydration authorization is impleme
   There is no installed maintained native census producer. This performs no scan and certifies neither zero nor
   a query count.
 
-The raw-key limit also bounds the native publication probes: `read` and `page` use one read-only owner snapshot,
-one partition read and one key/page statement, then at most one installed selected-output point statement per
-eligible saved dynamic key (100 at the maximum). Returned candidate and publication rows remain input-bounded;
-publication join row visits and buffer blocks are not inferred from result cardinality. Search's installed mixed
-reader admits 200 identities total, groups by native partition and calls this source and card hydration in batches
-of at most 100 (two batches for a same-partition full lookahead). Each hydration repeats two current snapshots and
-two Access decision batches around presentation. Repeated caller retries repeat this work; the read-only discovery
-path creates no command, receipt, write lock, cleanup or background job. These are source-derived bounds, not
-measured growth results.
+The raw-key limit also bounds native publication probes: `read` and `page` use one read-only owner snapshot, one
+partition read and one key/page statement, then at most one installed selected-output point statement per
+eligible saved dynamic key (100 maximum). Optional exact Subject filtering adds at most two set-based indexed
+membership statements; popularity adds one aggregate batch and one root health/currentness observation. Returned
+candidate and publication rows remain input-bounded; publication join row visits and buffer blocks are not
+inferred from result cardinality. Search's installed mixed reader admits 200 identities total, groups by native
+partition and calls this source and card hydration in batches of at most 100 (two batches for a same-partition
+full lookahead). Each hydration repeats two current snapshots with two Access batches, bounded member-preview
+reads, optional exact membership and popularity operands, Account/Subject disclosure observations, and a final
+source currentness read. Repeated caller retries repeat this work; the read-only discovery path creates no command,
+receipt, write lock, cleanup or background job. These are source-derived bounds, not measured growth results.
 
 One repeatable-read native transaction supplies the existing public-listing stamp and values; the position is
 Core's actual partition position serialized as decimal text, never a timestamp/revision substitute. Work is
@@ -2905,7 +2938,8 @@ proof. For a curated public key `K`, a read can return:
 ```ts
 {status:'available', stamp:{partition:2,epoch:1,position:'42'}, items:[
   {key:K,status:'indexable',value:{kind:'collection',key:K,revision:3,title:'Books',description:null,
-    presentationKind:null,coverMediaId:null,membershipKind:'curated',output:null}}
+    presentationKind:null,coverMediaId:null,membershipKind:'curated',output:null,operands:{
+      presentationKind:{kind:'mixed'},subjectMembership:null,popularity:null,recency:['1793870400000000',K.route,K.id]}}}
 ]}
 ```
 
@@ -2918,13 +2952,13 @@ No member count accompanies it. Current viewer hydration belongs to the separate
 exclusions, selected A/pending B, replay/rebuild paging, bounds and delayed delivery after withdrawal.
 
 The receiving signatures are `publicCollectionDiscoverySource({pool}): CollectionDiscoverySource` and
-`readPublicCollectionDiscoverySummaries(dependencies, ids, context): Promise<PublicCollectionDiscoveryResult>`.
+`readPublicCollectionDiscoverySummaries(dependencies, ids, context, query): Promise<PublicCollectionDiscoveryResult>`.
 Only a current `status:'indexable'` candidate is eligible for Search indexing, and even then its full key is a hint;
-Content obtains a current `state:'ready'` summary before card disclosure. A `state:'unavailable'` batch has no
-cards and must retain its reason. The summary fixture also covers a withdrawal/re-publication crossing two fresh
-snapshots, where final disclosure returns `changed`, then a fresh read resolves the still-selected A while its new
-episode is pending. Retained dynamic output without its native witness remains unavailable; no second Home writer
-or output engine is introduced.
+the installed adapter obtains a current `state:'ready'` summary before returning a card. A `state:'unavailable'`
+batch has no cards and must retain its reason. The summary fixture also covers a withdrawal/re-publication crossing
+two fresh snapshots, where final disclosure returns `changed`, then a fresh read resolves the still-selected A
+while its new episode is pending. Retained dynamic output without its native witness remains unavailable; no
+second Home writer or output engine is introduced.
 
 ### Collection sitemap candidate discovery
 

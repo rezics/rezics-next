@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { readAccount, readPublicAccountByAgent } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
@@ -21,6 +21,7 @@ import type { FollowTarget } from './follows.ts';
 import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
 
 type Dependencies = { pool: Pool; access: Access };
+export type CollectionDiscoveryFollowCountKey = Readonly<{ route: number; id: string }>;
 const notFound = () => new ProblemError('not_found');
 const unavailable = () => new ProblemError('dependency_unavailable', { headers: { 'Retry-After': '1' } });
 function scalar(value: string | undefined): number {
@@ -28,6 +29,24 @@ function scalar(value: string | undefined): number {
   const integer = BigInt(value);
   if (integer > BigInt(Number.MAX_SAFE_INTEGER)) throw new FollowCountUnavailableError('Count exceeds DTO range');
   return Number(integer);
+}
+
+/** Public aggregate operand for an already-admitted public Collection batch. This is an internal
+ * native reader; owner-only follow-count management remains behind createFollowCountReads. */
+export async function readCollectionDiscoveryFollowCounts(
+  client: Pick<PoolClient, 'query'>,
+  keys: readonly CollectionDiscoveryFollowCountKey[],
+): Promise<ReadonlyMap<string, string | null>> {
+  if (keys.length === 0) return new Map();
+  const rows = await client.query<{ id: string; total: string | null }>(
+    `SELECT requested.id::text AS id, counts.total::text AS total
+     FROM unnest($1::integer[], $2::uuid[]) requested(route,id)
+     LEFT JOIN library.follow_count_total counts
+       ON counts.route=requested.route AND counts.target_type='collection' AND counts.target_id=requested.id
+     ORDER BY requested.route,requested.id`,
+    [keys.map((key) => key.route), keys.map((key) => key.id)],
+  );
+  return new Map(rows.rows.map(({ id, total }) => [id, total]));
 }
 
 /** Closed owner-only DTOs. This service consumes native Access; it carries no role/grant policy. */

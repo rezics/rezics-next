@@ -27,6 +27,7 @@ const context = (id: string, viewer: Actor = { kind: 'anonymous' }) => ({
   deadline: Date.now() + 120000,
 });
 const deps = (access = f.runtime.identity.access) => ({ pool: f.database.pool, access });
+const publicDeps = (access = f.runtime.identity.access) => ({ ...deps(access), routeKey: f.runtime.identity.routeKey });
 async function saved() {
   const response = await f.send('POST', '/v1/collections', {
     title: 'Public selection',
@@ -180,7 +181,7 @@ test('withdrawal, removal and native revision changes between admission and disc
             });
       expect(response.status).toBe(change === 'deleted' ? 204 : 200);
     });
-    expect(await hydrate(deps(access), [row.id], context(row.id))).toEqual(
+    expect(await hydrate(deps(access), [row.id], context(row.id))).toMatchObject(
       change === 'title' ? { state: 'unavailable', reason: 'changed' } : { state: 'ready', summaries: [] },
     );
   }
@@ -193,7 +194,7 @@ test('Access scope denial and a terminal curator fence never disclose a public c
     pool: f.database.pool,
     deadline: Date.now() + 30000,
   });
-  expect(await hydrate(deps(), [row.id], context(row.id, denied))).toEqual({ state: 'ready', summaries: [] });
+  expect(await hydrate(deps(), [row.id], context(row.id, denied))).toMatchObject({ state: 'ready', summaries: [] });
   const ownerId = f.runtime.identity.ordinary.accountId;
   const ownerKeys = [routeOf(ownerId), ownerId];
   const access = betweenRounds(async () => {
@@ -226,7 +227,7 @@ test('validation precedes native I/O, including full-key partition bounds and th
   const dependencies = { ...deps(), pool: unavailablePool };
   for (const ids of [['bad-key'], [newId(0x0130)], Array(101).fill(id)])
     await expect(hydrate(dependencies, ids, context(id))).rejects.toBeInstanceOf(RangeError);
-  expect(await hydrate(dependencies, [], context(id))).toEqual({ state: 'ready', summaries: [] });
+  expect(await hydrate(dependencies, [], context(id))).toMatchObject({ state: 'ready', summaries: [], operands: [] });
 
   const visible = await f.collection({ visibility: 'public' });
   const route = routeOf(f.runtime.identity.ordinary.accountId)!;
@@ -249,4 +250,50 @@ test('caller read times remain live and unrelated native infrastructure failures
   const failure = new Error('Native owner checkout failed');
   const broken: Access = { ...f.runtime.identity.access, prepareReadDecisions: async () => Promise.reject(failure) };
   await expect(hydrate(deps(broken), [row.id], context(row.id))).rejects.toBe(failure);
+}, 120000);
+
+test('selected A supplies exact dynamic Subject membership and null recency while private B builds', async () => {
+  const subjects: string[] = [];
+  for (let index = 0; index < 5; index++) {
+    const subjectId = await f.subject(`Published member ${index}`);
+    subjects.push(subjectId);
+    await f.entry(subjectId);
+  }
+  const collection = await saved();
+  const promoted = await f.send('POST', `/v1/collections/${collection.id}:publishSelected`, {
+    revision: collection.revision,
+    subjectIds: subjects,
+  });
+  expect(promoted.status).toBe(200);
+  const published = await promoted.json();
+  const target = subjects.toSorted().at(-1)!;
+  const episodes = createCollectionPublicationEpisodes(deps());
+  const begun = await episodes.begin(
+    actor,
+    { collectionId: collection.id, revision: published.collection.revision, visibility: 'public' },
+    randomUUID(),
+  );
+  expect(begun.value.locator.collectionId).toBe(collection.id);
+
+  const result = await hydrate(publicDeps(), [collection.id], context(collection.id), {
+    subjectId: target,
+  });
+  expect(result).toMatchObject({
+    state: 'ready',
+    summaries: [
+      { id: collection.id, membershipKind: 'dynamic', outputGeneration: published.publication.generation },
+    ],
+    operands: [
+      {
+        id: collection.id,
+        subjectMembership: { state: 'available', subjectId: target, matches: true },
+        recency: [null, routeOf(collection.id), collection.id],
+        eligible: { subject: true },
+      },
+    ],
+  });
+  if (result.state !== 'ready') throw new Error('Selected public A must remain current during B');
+  expect(result.summaries[0]?.preview).toMatchObject({ state: 'available', truncated: true });
+  if (result.summaries[0]?.preview.state === 'available')
+    expect(result.summaries[0].preview.members.map((member) => member.subject.id)).not.toContain(target);
 }, 120000);

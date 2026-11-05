@@ -98,6 +98,12 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
       description: 'Ordinary public description',
       presentationKind: null,
       coverMediaId: null,
+      operands: {
+        presentationKind: { kind: 'mixed' },
+        subjectMembership: null,
+        popularity: null,
+        recency: [null, routeOf(dynamic.id)!, dynamic.id],
+      },
       membershipKind: 'dynamic',
       output: { route: routeOf(dynamic.id)!, collectionId: dynamic.id, generation: output.publication.generation },
     },
@@ -184,6 +190,41 @@ test('full keys, one partition and a maximum of 100 raw keys are required before
   await expect(source.page(2, key(newId(48)), 1)).rejects.toThrow();
   await expect(source.count(4096)).rejects.toThrow();
 });
+
+test('native operands use explicit mixed presentation, exact curated time and indexed membership beyond the preview', async () => {
+  const collection = await f.collection({ visibility: 'public' });
+  const subjects: string[] = [];
+  for (let index = 0; index < 5; index++) subjects.push(await f.subject(`Subject operand ${index}`));
+  for (const subjectId of subjects)
+    expect((await f.send('POST', `/v1/collections/${collection.id}/members`, { subjectId })).status).toBe(201);
+
+  const source = publicCollectionDiscoverySource({ pool: f.database.pool });
+  const result = available(
+    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: subjects[4] }),
+  );
+  expect(result.items[0]).toMatchObject({
+    status: 'indexable',
+    value: {
+      membershipKind: 'curated',
+      presentationKind: null,
+      operands: {
+        presentationKind: { kind: 'mixed' },
+        subjectMembership: { subjectId: subjects[4], matches: true },
+        popularity: null,
+        recency: [expect.any(String), routeOf(collection.id), collection.id],
+      },
+    },
+  });
+  const micros = (
+    await f.database.admin.query<{ micros: string }>(
+      'SELECT trunc(extract(epoch FROM updated_at) * 1000000)::text AS micros FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [routeOf(collection.id), collection.id],
+    )
+  ).rows[0]!.micros;
+  expect(result.items[0]).toMatchObject({
+    value: { operands: { recency: [micros, routeOf(collection.id), collection.id] } },
+  });
+}, 120_000);
 
 test('native continuation preserves route before UUID order, including empty suffixes after rebuild', async () => {
   const partition = partitionOf(routeOf(f.runtime.identity.ordinary.accountId)!);

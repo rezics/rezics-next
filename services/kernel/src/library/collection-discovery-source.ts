@@ -1,5 +1,10 @@
 /** Native indexing hints only. Current viewer hydration is a separate Commerce boundary. */
 import type { Pool, PoolClient } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { FollowCountUnavailableError } from './follow-count-target.ts';
+import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
+import { readCollectionDiscoveryFollowCounts } from './follow-count-reads.ts';
+import { readDiscoverySubjectMembership } from './collection-discovery-context.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -8,7 +13,28 @@ import type { CollectionOutputRef } from './collection-source-output.ts';
 
 export type CollectionDiscoveryKey = Readonly<{ route: number; id: string }>;
 /** The existing public-listing stamp, observed in the same native snapshot as the values. */
-export type CollectionDiscoveryPosition = Readonly<{ partition: number; epoch: number; position: string }>;
+export type CollectionDiscoveryPosition = Readonly<{
+  partition: number;
+  epoch: number;
+  position: string;
+  followCountHealth?: FollowCountHealthObservation;
+}>;
+export type CollectionPresentationKind = Readonly<{ kind: 'mixed' } | { kind: 'owner'; id: string }>;
+export type CollectionDiscoveryRecency = readonly [updatedAtEpochMicros: string | null, route: number, id: string];
+export type CollectionDiscoveryQuery = Readonly<{
+  presentationKind?: CollectionPresentationKind;
+  curatorAccountId?: string;
+  subjectId?: string;
+  popularity?: boolean;
+  order?: 'identity' | 'popularity' | 'recency';
+}>;
+export type CollectionDiscoveryReadContext = Readonly<{ deadline: number }>;
+export type CollectionDiscoveryOperands = Readonly<{
+  presentationKind: CollectionPresentationKind;
+  subjectMembership: Readonly<{ subjectId: string; matches: boolean }> | null;
+  popularity: Readonly<{ followers: string }> | null;
+  recency: CollectionDiscoveryRecency;
+}>;
 export type CollectionDiscoveryIndexableValue = Readonly<{
   kind: 'collection';
   key: CollectionDiscoveryKey;
@@ -17,6 +43,7 @@ export type CollectionDiscoveryIndexableValue = Readonly<{
   description: string | null;
   presentationKind: string | null;
   coverMediaId: string | null;
+  operands: CollectionDiscoveryOperands;
 }> &
   ({ membershipKind: 'curated'; output: null } | { membershipKind: 'dynamic'; output: CollectionOutputRef });
 export type CollectionDiscoveryItem = Readonly<{ key: CollectionDiscoveryKey }> &
@@ -27,15 +54,26 @@ export type CollectionDiscoveryItem = Readonly<{ key: CollectionDiscoveryKey }> 
   );
 export type CollectionDiscoverySnapshot =
   | Readonly<{ status: 'available'; stamp: CollectionDiscoveryPosition; items: readonly CollectionDiscoveryItem[] }>
-  | Readonly<{ status: 'unavailable'; reason: 'native_partition_unavailable' }>;
+  | Readonly<{ status: 'unavailable'; reason: 'native_partition_unavailable' | 'follow_count_unavailable' }>;
 export type CollectionDiscoveryPage = CollectionDiscoverySnapshot & Readonly<{ next: CollectionDiscoveryKey | null }>;
 export type CollectionDiscoveryCensus = Readonly<{
   status: 'unavailable';
   reason: 'native_collection_population_evidence_unavailable';
 }>;
 export type CollectionDiscoverySource = Readonly<{
-  read(partition: number, ids: readonly CollectionDiscoveryKey[]): Promise<CollectionDiscoverySnapshot>;
-  page(partition: number, after: CollectionDiscoveryKey | null, limit: number): Promise<CollectionDiscoveryPage>;
+  read(
+    partition: number,
+    ids: readonly CollectionDiscoveryKey[],
+    query?: CollectionDiscoveryQuery,
+    context?: CollectionDiscoveryReadContext,
+  ): Promise<CollectionDiscoverySnapshot>;
+  page(
+    partition: number,
+    after: CollectionDiscoveryKey | null,
+    limit: number,
+    query?: CollectionDiscoveryQuery,
+    context?: CollectionDiscoveryReadContext,
+  ): Promise<CollectionDiscoveryPage>;
   count(partition: number): Promise<CollectionDiscoveryCensus>;
 }>;
 
@@ -52,11 +90,13 @@ type Row = {
   membershipKind: 'curated' | 'dynamic';
   saved: boolean;
   sourceGeneration: string;
+  updatedAtEpochMicros: string;
 };
 const metadata = `c.route,c.collection_id::text AS id,c.state,c.visibility,c.revision,c.title,c.description,
   c.presentation_kind AS "presentationKind",c.cover_media_id::text AS "coverMediaId",
   c.membership_kind AS "membershipKind",(c.builtin_kind IS NULL AND c.rule_revision>0) AS saved,
-  c.source_generation::text AS "sourceGeneration"`;
+  c.source_generation::text AS "sourceGeneration",
+  trunc(extract(epoch FROM c.updated_at) * 1000000)::text AS "updatedAtEpochMicros"`;
 
 function partitionKey(partition: number) {
   if (!Number.isSafeInteger(partition) || partition < 0 || partition >= PARTITIONS)
@@ -80,6 +120,12 @@ async function item(client: PoolClient, key: CollectionDiscoveryKey, row?: Row):
     description: row.description,
     presentationKind: row.presentationKind,
     coverMediaId: row.coverMediaId,
+    operands: {
+      presentationKind: row.presentationKind === null ? { kind: 'mixed' } : { kind: 'owner', id: row.presentationKind },
+      subjectMembership: null,
+      popularity: null,
+      recency: [row.membershipKind === 'curated' ? row.updatedAtEpochMicros : null, key.route, key.id],
+    },
   };
   if (row.membershipKind === 'curated')
     return { key, status: 'indexable', value: { ...common, membershipKind: 'curated', output: null } };
@@ -107,30 +153,83 @@ async function item(client: PoolClient, key: CollectionDiscoveryKey, row?: Row):
 export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): CollectionDiscoverySource {
   async function snapshot(
     partition: number,
+    query: CollectionDiscoveryQuery | undefined,
+    context: CollectionDiscoveryReadContext | undefined,
     rows: (client: PoolClient) => Promise<{ keys: readonly CollectionDiscoveryKey[]; rows: Row[] }>,
   ): Promise<CollectionDiscoverySnapshot> {
-    return withReadTransaction(pool, async (client) => {
-      const owner = await readPartition(client, partition);
-      if (!owner || owner.writeState !== 'active' || owner.movedTo !== null)
-        return { status: 'unavailable', reason: 'native_partition_unavailable' };
-      const found = await rows(client);
-      const byId = new Map(found.rows.map((row) => [row.id, row]));
-      const items: CollectionDiscoveryItem[] = [];
-      for (const key of found.keys) items.push(await item(client, key, byId.get(key.id)));
-      return {
-        status: 'available',
-        stamp: { partition, epoch: owner.epoch, position: owner.position.toString() },
-        items,
-      };
-    });
+    try {
+      return await withReadTransaction(pool, async (connection) => {
+        const client = context ? deadlineClient(connection, context.deadline) : connection;
+        const owner = await readPartition(client, partition);
+        if (!owner || owner.writeState !== 'active' || owner.movedTo !== null)
+          return { status: 'unavailable', reason: 'native_partition_unavailable' };
+        const found = await rows(client);
+        const byId = new Map(found.rows.map((row) => [row.id, row]));
+        const items: CollectionDiscoveryItem[] = [];
+        for (const key of found.keys) items.push(await item(client, key, byId.get(key.id)));
+        const values = items.flatMap((entry) => (entry.status === 'indexable' ? [entry.value] : []));
+        const sources = values.map((value) => ({
+          id: value.key.id,
+          route: value.key.route,
+          curatorAccountId: null,
+          membershipKind: value.membershipKind,
+          outputGeneration: value.membershipKind === 'dynamic' ? value.output.generation : null,
+        }));
+        const memberships =
+          query?.subjectId === undefined
+            ? new Map<string, boolean>()
+            : await readDiscoverySubjectMembership(client, sources, query.subjectId);
+        const followCountHealth = query?.popularity ? await readFollowCountHealthObservation(client) : undefined;
+        const counts = query?.popularity
+          ? await readCollectionDiscoveryFollowCounts(client, values.map(({ key }) => key))
+          : new Map<string, string | null>();
+        if (query?.popularity && values.some((value) => !counts.get(value.key.id)))
+          throw new FollowCountUnavailableError('A public Collection follow total is unavailable');
+        const decorated = items.map((entry): CollectionDiscoveryItem => {
+          if (entry.status !== 'indexable') return entry;
+          const value = entry.value;
+          return {
+            ...entry,
+            value: {
+              ...value,
+              operands: {
+                ...value.operands,
+                subjectMembership:
+                  query?.subjectId === undefined
+                    ? null
+                    : { subjectId: query.subjectId, matches: memberships.get(value.key.id) ?? false },
+                popularity:
+                  query?.popularity && followCountHealth
+                    ? { followers: counts.get(value.key.id)! }
+                    : null,
+              },
+            },
+          };
+        });
+        return {
+          status: 'available',
+          stamp: {
+            partition,
+            epoch: owner.epoch,
+            position: owner.position.toString(),
+            ...(followCountHealth ? { followCountHealth } : {}),
+          },
+          items: decorated,
+        };
+      });
+    } catch (error) {
+      if (error instanceof FollowCountUnavailableError)
+        return { status: 'unavailable', reason: 'follow_count_unavailable' };
+      throw error;
+    }
   }
   return {
-    async read(partition, ids) {
+    async read(partition, ids, query, context) {
       partitionKey(partition);
       if (ids.length > 100) throw new RangeError('Collection discovery reads at most 100 keys');
       for (const key of ids) keyIn(partition, key);
       const keys = [...new Map(ids.map(({ route, id }) => [id, { route, id }])).values()].sort(compare);
-      return snapshot(partition, async (client) => ({
+      return snapshot(partition, query, context, async (client) => ({
         keys,
         rows: (
           await client.query<Row>(
@@ -142,12 +241,12 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
         ).rows,
       }));
     },
-    async page(partition, after, limit) {
+    async page(partition, after, limit, query, context) {
       partitionKey(partition);
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
         throw new RangeError('Collection discovery pages require 1..100 keys');
       if (after !== null) keyIn(partition, after);
-      const result = await snapshot(partition, async (client) => {
+      const result = await snapshot(partition, query, context, async (client) => {
         // Existing partial public-listing index bounds raw work even if every dynamic witness is absent.
         const rows = (
           await client.query<Row>(
