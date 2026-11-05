@@ -61,12 +61,9 @@ function prepare(locale: string) {
       ),
     ],
   };
-  const identity = connectionStreams(
-    fixture.profile.release as GuideRelease,
-    'wd:Q95074',
-    character,
-    locale,
-  ).find((stream) => stream.property === identityProperty && stream.direction === 'out')!;
+  const identity = connectionStreams(fixture.profile.release as GuideRelease, 'wd:Q95074', character, locale).find(
+    (stream) => stream.property === identityProperty && stream.direction === 'out',
+  )!;
   const identitySection = {
     stream: identity,
     reading: 'd'.repeat(64),

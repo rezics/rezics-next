@@ -87,7 +87,9 @@ export function characterPublicExample(
   });
   const read: ConnectionRead = async (address) => {
     const cursorOf = (group: string) => address.selection?.[group as 'characters' | 'credits']?.cursor;
-    const result = visit(Boolean(address.only ? cursorOf(address.only) : cursorOf('characters') || cursorOf('credits')));
+    const result = visit(
+      Boolean(address.only ? cursorOf(address.only) : cursorOf('characters') || cursorOf('credits')),
+    );
     const apply = (group: 'characters' | 'credits') => {
       const section = result.sections[group];
       const cursor = cursorOf(group);
