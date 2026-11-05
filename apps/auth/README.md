@@ -901,6 +901,19 @@ its five-second bound through response-body completion. There is no list scan, r
 file replay, operation allocation, approval or execution in return/read Retry. Native command retries retain their
 original tuple, reference, operation key, deadlines, relation lock and explicit current-authorized confirmation.
 
+Decision: transfer review uses the public `@rezics/auth-contract` operator-page response bounds, composed from
+shared UUID36 and canonical nonnegative PostgreSQL bigint decimal fields; opening owns its separate endpoint budget.
+The source allowance is its empty-field closed JSON skeleton plus `3 × 36 + 19` bytes; destination uses its skeleton
+plus 36. All fixed viewer, continuation, stage and action branches are included. IDs and versions are unescaped ASCII,
+so punctuation is counted exactly and no arbitrary string can enlarge the projection. Error bodies use the maximum
+of the native refused/refused and ready/unavailable skeletons. These allowances are independent of catalogue C.
+The selected read-only POST uses `privateAuthRead` and `readJsonBounded`: one effective five-second lifetime covers
+headers and body even if abort is ignored; actual bytes are limited before fatal UTF-8 decoding and JSON parsing.
+Content-Length never raises the allowance. Invalid or excess advice is unavailable, retaining the original handoff,
+command stage and unknown history for deliberate exact Retry. It cannot approve, accept or acknowledge execution.
+This adds zero native calls to the one selected review; source consistency and destination preparation costs above
+remain unchanged. Native/browser acceptance and broader integration checks remain controller-owned qualifications.
+
 Departure protects meaningful input and unresolved review with Stay/Leave; only a review created here and never
 submitted is discarded, while restored attempts are conservatively retained because approval may already have reached
 native. Caller replacement and permission loss retire local authority without prompting away an unresolved send.

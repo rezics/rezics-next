@@ -1050,6 +1050,20 @@ at most one principal and assignment), with one released preparation and one
 final check. It does not read a source account or relation. No lists, profile
 fanout, writes, pool preflight or generated client publication are involved.
 
+Decision: transfer review publishes its finite UTF-8 success/error allowances through the shared
+`@rezics/auth-contract` operator-page bounds entry. The shared fields are routed lowercase UUID36 and canonical
+nonnegative PostgreSQL bigint decimal `0..9223372036854775807`, preserved as strings above the safe-integer limit.
+Provenance is Kernel `operator-transfer-page-source.ts`, `management-source.ts`, `management-source-operator.sql`
+(`operator_relation_version::text`) and `access.account.operator_relation_version bigint`. Source JSON costs its
+empty-field skeleton plus `3 × 36 + 19`; destination costs its skeleton plus 36. Every fixed viewer, continuation,
+stage and action branch is included; syntax is counted by serialization, and the variable alphabets need no JSON
+escaping. Non-200 bodies are exactly refused/refused or ready/unavailable, whose larger skeleton sets the error
+allowance. Native port projection validates these fields and closed branches before serialization; invalid versions,
+IDs, extra fields or mismatched selections become unavailable without inventing relation authority. Opening composes
+its separate endpoint allowance from the same shared fields. This adds no native read, command or deadline; the
+browser's selected POST has one five-second bounded-body lifetime. Native/browser and integration acceptance remain
+controller-owned qualifications.
+
 Decision: destination review displays the source tuple only as handoff-file data and does not make an optional source-native read; acceptance needs only destination admission.
 
 `POST /account-management/operators/relation` is the private native source for the

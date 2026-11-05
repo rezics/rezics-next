@@ -1,3 +1,4 @@
+import { isOperatorPageVersion } from '@rezics/auth-contract';
 import { authPost, type AuthPostResult } from './api';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
 import { managementOperationProfile } from '@rezics/auth-contract';
@@ -66,8 +67,7 @@ function isRelation(value: unknown): value is OperatorRelation & Record<string, 
     text(value.previous.subjectAccountId) &&
     text(value.previous.reservationId) &&
     value.previous.operatorAccountId !== value.previous.subjectAccountId &&
-    typeof value.expectedVersion === 'string' &&
-    /^(0|[1-9][0-9]*)$/.test(value.expectedVersion)
+    isOperatorPageVersion(value.expectedVersion)
   );
 }
 export function parseTransferRequest(input: string): TransferRequest | null {
@@ -222,6 +222,9 @@ export async function readOperatorTransferPage(
   if (!result.ok) return failure(result);
   if (!pageResponse(result.body)) return { kind: 'failure', reason: 'unavailable' };
   if (
+    (result.body.viewer.kind !== 'ready' && !['unavailable', 'refused'].includes(result.body.review.kind)) ||
+    (input.kind === 'source' && ['destination', 'readiness'].includes(result.body.review.kind)) ||
+    (input.kind === 'destination' && ['source', 'readiness'].includes(result.body.review.kind)) ||
     (input.kind === 'readiness' && result.body.viewer.kind === 'ready' && result.body.review.kind !== 'readiness') ||
     (input.kind === 'source' &&
       result.body.review.kind === 'source' &&
