@@ -581,6 +581,22 @@ test('delivered proof command provenance retains Kernel env prefixes and whole A
   ).toBe(false);
 });
 
+test('proof file unions keep explicit service files in source order under an identical raw env prefix', () => {
+  const prefix = ['env', '-u', 'KERNEL_CHECK_REMOTE', 'bun', 'run', '--cwd', 'services/kernel', 'check'];
+  const first = [...prefix, 'test/imports/identity-fixture.ts', 'test/imports/identity-outcomes.test.ts'];
+  const second = [...prefix, 'test/imports/growth-fixture.ts', 'test/imports/growth-outcomes.test.ts'];
+  const union = [...prefix, ...new Set([...first.slice(prefix.length), ...second.slice(prefix.length)])];
+  expect(originalCommandMatches(union, [first, second])).toBe(true);
+  expect(
+    originalCommandMatches(
+      [...prefix, ...second.slice(prefix.length), ...first.slice(prefix.length)],
+      [first, second],
+    ),
+  ).toBe(false);
+  const differentPrefix = ['env', 'CI=1', ...prefix.slice(3), ...second.slice(prefix.length)];
+  expect(originalCommandMatches(union, [first, differentPrefix])).toBe(false);
+});
+
 test('historical detached UUIDs consume proof capacity without acquiring source or token provenance', () => {
   const h = registeredFixture();
   try {

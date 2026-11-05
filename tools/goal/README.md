@@ -1185,6 +1185,9 @@ wrappers, host/integration/database tests, native routes, shell expansion and un
 focused runner uses `apps/web` as its working directory and prepares its local test runtime; it does not enter the Web
 host or native check routes.
 
+Decision: brief admission and proof registration share environment-prefix and Bun/test argv syntax parsing; each keeps
+its own allowlist and proof policy, and both preserve raw argv order.
+
 ```yaml
 acceptance:
   command:
