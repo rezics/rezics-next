@@ -241,14 +241,20 @@ test('real default worker reconciles a native replacement across interruption an
         })
       ).status,
     ).toBe(200);
+    const updated = compileFilter(
+      admitFilter(
+        parseFilter({
+          and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:author', in: [authorId] } }],
+        }),
+        bundledRelease,
+      ),
+      { prefix: 'f', relationOverflow: true },
+    );
+    // Observe the native update in the engine without opening an advanced HTTP scope.
     await eventually(
       async () =>
-        disclosed(
-          await api({
-            filter: {
-              and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:author', in: [authorId] } }],
-            },
-          }),
+        (await searchSubjects(search, target.name, { filter: updated.query, sort: 'id', size: 100 })).hits.map(
+          (hit) => hit.id,
         ),
       (value) => value.length === 1 && value[0] === ids[0],
     );
