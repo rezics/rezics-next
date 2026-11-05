@@ -79,6 +79,18 @@
       "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
     },
     {
+      "path": "packages/access/src",
+      "extensions": [".ts"]
+    },
+    {
+      "path": "packages/bounds/src",
+      "extensions": [".ts"]
+    },
+    {
+      "path": "packages/operations/src",
+      "extensions": [".ts"]
+    },
+    {
       "path": "packages/conversion/src",
       "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
       "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**", "**/examples/**"]
@@ -184,6 +196,7 @@
       "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
       "publicEntries": ["services/kernel/src/access/index.ts"],
       "allowedDependencies": [
+        "access-policy",
         "auth-contract",
         "auth-service",
         "kernel-commerce",
@@ -218,6 +231,7 @@
         "definitions",
         "document",
         "filter",
+        "operations",
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
@@ -286,7 +300,9 @@
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
       "publicEntries": [],
       "allowedDependencies": [
+        "access-policy",
         "auth-contract",
+        "bounds",
         "definitions",
         "filter",
         "kernel-access",
@@ -296,6 +312,7 @@
         "kernel-rating",
         "kernel-search",
         "kernel-semantic",
+        "operations",
         "progress"
       ],
       "capabilities": ["library"],
@@ -313,6 +330,7 @@
       ],
       "publicEntries": [],
       "allowedDependencies": [
+        "bounds",
         "composition",
         "definitions",
         "document",
@@ -399,6 +417,7 @@
       ],
       "publicEntries": [],
       "allowedDependencies": [
+        "bounds",
         "auth-contract",
         "definitions",
         "kernel-access",
@@ -409,6 +428,7 @@
         "kernel-rating",
         "kernel-search",
         "kernel-semantic",
+        "operations",
         "kernel-zones"
       ],
       "capabilities": ["kernel-runtime"],
@@ -703,6 +723,33 @@
       "publicEntries": ["@rezics/auth-contract"],
       "allowedDependencies": [],
       "capabilities": ["auth-contract"]
+    },
+    {
+      "id": "access-policy",
+      "kind": "core",
+      "owner": "accounts",
+      "paths": ["packages/access/src/**"],
+      "publicEntries": ["@rezics/access"],
+      "allowedDependencies": [],
+      "capabilities": ["permission-policy"]
+    },
+    {
+      "id": "bounds",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["packages/bounds/src/**"],
+      "publicEntries": ["@rezics/bounds"],
+      "allowedDependencies": [],
+      "capabilities": ["work-bounds"]
+    },
+    {
+      "id": "operations",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["packages/operations/src/**"],
+      "publicEntries": ["@rezics/operations", "@rezics/operations/protocol"],
+      "allowedDependencies": [],
+      "capabilities": ["operation-descriptors"]
     },
     {
       "id": "conversion",
