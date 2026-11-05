@@ -426,13 +426,12 @@ function executeDiscoverySearch(
       }
       if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
         throw new ProblemError('search_restart_required');
-      if (admitted.text !== undefined) {
-        if (!config.currentTextMatches) throw ready();
+      if (admitted.text !== undefined && config.currentTextMatches) {
         const physicalTarget = queried.consumer.physicalTarget;
-        context = {
-          ...context,
-          currentTextMatches: (subject, query) => config.currentTextMatches!(physicalTarget, subject, query),
-        };
+        const currentTextMatches = (subject: IndexedSubject, query: TextNode) =>
+          config.currentTextMatches!(physicalTarget, subject, query);
+        context = { ...context, currentTextMatches };
+        currentContext = { ...currentContext, currentTextMatches };
       }
       const hits: DiscoveryUnionHit[] = [];
       const seen = new Set<string>();

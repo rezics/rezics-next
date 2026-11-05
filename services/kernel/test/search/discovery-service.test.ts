@@ -124,8 +124,10 @@ function fixture(withCandidate = false) {
           };
         },
       },
-      async hydrate(ids) {
+      async hydrate(ids, readContext) {
         calls.push('hydrate');
+        if (readContext.textQuery !== undefined)
+          calls.push(readContext.currentTextMatches ? 'text-check-bound' : 'text-check-missing');
         return new Map(
           ids
             .filter((value) => value === id)
@@ -331,4 +333,18 @@ test('a current native result crosses the same closed transport admission before
   ])
     expect(() => admitDiscoveryPage(invalid)).toThrow('incomplete or malformed');
   expect(f.calls.indexOf('final')).toBeGreaterThan(f.calls.indexOf('hydrate'));
+});
+
+test('mixed Discovery carries its generation-bound current text checker into current owner reads', async () => {
+  const f = fixture(true);
+  const config = {
+    ...f.config,
+    currentTextMatches: async () => true,
+  };
+
+  const page = await createDiscoverySearch(config)('anonymous', { ...f.request, text: 'reader' }, f.context);
+
+  expect(page.hits).toHaveLength(1);
+  expect(f.calls).toContain('text-check-bound');
+  expect(f.calls).not.toContain('text-check-missing');
 });
