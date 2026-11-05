@@ -206,7 +206,9 @@ test('the Workers-safe vote reader accepts additive envelopes and keeps consumed
       votes: [{ ...vote, question: { ...vote.question, grain: 'creator' } }],
     }),
   ).toBeNull();
-  expect(decodeOwnVotesPage({ ...current, votes: [{ ...vote, actions: { ...vote.actions, replay: true } }] })).toBeNull();
+  expect(
+    decodeOwnVotesPage({ ...current, votes: [{ ...vote, actions: { ...vote.actions, replay: true } }] }),
+  ).toBeNull();
   expect(isOwnVoteActions({ state: 'unavailable', reason: 'read_only' })).toBe(true);
   expect(isOwnVoteActions({ state: 'unavailable', reason: 'read_only', put: '/forged' })).toBe(false);
 });

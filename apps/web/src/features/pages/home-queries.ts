@@ -48,10 +48,7 @@ const readHomePage = createServerFn({ method: 'GET' })
   .handler(async ({ data: locale }) => {
     const { env } = await import('cloudflare:workers');
     const client = kernelClient(locale);
-    const [feed, catalogue] = await Promise.all([
-      loadPublicHomeFeed(client),
-      loadRoutePage(client, '/', locale),
-    ]);
+    const [feed, catalogue] = await Promise.all([loadPublicHomeFeed(client), loadRoutePage(client, '/', locale)]);
     const origin = validatePublicOrigin(
       (env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN,
       getRequest().url,

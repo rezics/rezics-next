@@ -28,7 +28,12 @@ const editing = {
     displayName: { applicable: true as const, maxLength: 4096 as const },
     biography: { applicable: true as const, maxLength: 4096 as const },
     avatar: { applicable: true as const },
-    links: { applicable: true as const, maxItems: 5 as const, labelMaxLength: 64 as const, urlMaxLength: 2048 as const },
+    links: {
+      applicable: true as const,
+      maxItems: 5 as const,
+      labelMaxLength: 64 as const,
+      urlMaxLength: 2048 as const,
+    },
     publicViews: { applicable: true as const, flags: ['posts', 'reviews', 'collections', 'realms'] as const },
   },
 };
@@ -64,7 +69,10 @@ test('the editable source accepts additive envelope fields but rejects malformed
     { profile, editing: closedProfileEditing({ id: profile.id, kind: 'organization' }) },
     { profile, editing: { ...editing, viewer: { accountId: 'another-account' } } },
     { profile, editing: { ...editing, target: { ...editing.target, accountId: 'another-account' } } },
-    { profile, editing: { ...editing, fields: { ...editing.fields, links: { ...editing.fields.links, maxItems: 500 } } } },
+    {
+      profile,
+      editing: { ...editing, fields: { ...editing.fields, links: { ...editing.fields.links, maxItems: 500 } } },
+    },
     { profile, editing: { ...editing, fields: { ...editing.fields, extra: true } } },
     { accounts: [{ id: profile.id, handle: null }] },
   ]) {
@@ -115,8 +123,9 @@ test('the editable source accepts additive envelope fields but rejects malformed
   const disabledClient = createKernelClient('https://kernel.example.test', {
     fetch: (async () => Response.json({ profile, editing: advice })) as typeof fetch,
   });
-  expect((await loadProfileRecord(disabledClient, 'Bearer unchanged', profile.id)).editing?.fields.displayName)
-    .toEqual({ applicable: false, maxLength: 4096 });
+  expect((await loadProfileRecord(disabledClient, 'Bearer unchanged', profile.id)).editing?.fields.displayName).toEqual(
+    { applicable: false, maxLength: 4096 },
+  );
 });
 
 test('the official private GET supplies field advice and keeps unsupported local choices review-only', async () => {

@@ -63,10 +63,7 @@ const question = Type.Object(
     lifecycle: Type.Optional(
       Type.Object({ state: Type.Union([Type.Literal('active'), Type.Literal('retired')]), revision }, closed),
     ),
-    scale: Type.Object(
-      { min: Type.Integer(), max: Type.Integer(), displayStep: Type.Integer({ minimum: 1 }) },
-      closed,
-    ),
+    scale: Type.Object({ min: Type.Integer(), max: Type.Integer(), displayStep: Type.Integer({ minimum: 1 }) }, closed),
   },
   closed,
 );
@@ -87,11 +84,7 @@ const actions = Type.Union([
   Type.Object(
     {
       state: Type.Literal('unavailable'),
-      reason: Type.Union([
-        Type.Literal('merged_source'),
-        Type.Literal('identity_pending'),
-        Type.Literal('read_only'),
-      ]),
+      reason: Type.Union([Type.Literal('merged_source'), Type.Literal('identity_pending'), Type.Literal('read_only')]),
     },
     closed,
   ),

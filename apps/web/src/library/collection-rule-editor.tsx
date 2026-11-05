@@ -269,8 +269,7 @@ export function CollectionRuleEditor(props: EditorProps) {
   const { page, viewerId, collectionId, admitted } = props;
   const hasCredential = !!(props.currentCsrf ? props.currentCsrf() : props.csrfToken);
   const canRead =
-    !!viewerId &&
-    !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
+    !!viewerId && !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
   const canSave =
     hasCredential && !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
   const canLabel = !!admitted?.includes('library_label.list');

@@ -232,10 +232,8 @@ async function mounted() {
     exposureKey,
     expose: (subject = 'alice', admitted = ['collections', 'library_label.list']) =>
       perform(() => client.setQueryData(exposureKey(), { subject, admitted })),
-    settleExposure: async (
-      subject: string,
-      result: { subject: string | null; admitted: string[] },
-    ) => settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), result),
+    settleExposure: async (subject: string, result: { subject: string | null; admitted: string[] }) =>
+      settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), result),
     authorize: async (subject = 'alice', admitted = ['collections', 'library_label.list']) => {
       await settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), {
         subject,

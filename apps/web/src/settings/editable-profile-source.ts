@@ -66,8 +66,14 @@ const fields = {
   links: v.pipe(
     v.array(
       v.strictObject({
-        label: v.pipe(v.string(), v.check((value) => Array.from(value).length <= 64)),
-        url: v.pipe(v.string(), v.check((value) => Array.from(value).length <= 2048)),
+        label: v.pipe(
+          v.string(),
+          v.check((value) => Array.from(value).length <= 64),
+        ),
+        url: v.pipe(
+          v.string(),
+          v.check((value) => Array.from(value).length <= 2048),
+        ),
       }),
     ),
     v.maxLength(5),
@@ -81,7 +87,10 @@ const fields = {
         thumbhash: v.pipe(v.string(), v.maxLength(64)),
         color: v.pipe(v.string(), v.regex(/^#[0-9a-f]{6}$/)),
       }),
-      variants: v.pipe(v.array(v.strictObject({ format: v.picklist(['avif', 'webp']), width: dimension })), v.maxLength(12)),
+      variants: v.pipe(
+        v.array(v.strictObject({ format: v.picklist(['avif', 'webp']), width: dimension })),
+        v.maxLength(12),
+      ),
       focalPoint: v.nullable(v.strictObject({ x: coordinate, y: coordinate })),
       credit: v.null(),
     }),
@@ -195,7 +204,8 @@ export function parseEditableProfileRead(body: unknown, accountId: string): Edit
     editing.viewer.accountId !== accountId ||
     editing.target.accountId !== accountId ||
     editing.target.kind !== profile.kind
-  ) throw new Error('Profile unavailable');
+  )
+    throw new Error('Profile unavailable');
   return { profile, editing };
 }
 

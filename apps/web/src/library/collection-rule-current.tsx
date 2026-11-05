@@ -53,14 +53,15 @@ export function CollectionRuleCurrent({
       : owner.admissionState === 'unavailable'
         ? unavailablePage
         : page;
-  const operations = owner.admissionState === 'available'
-    ? [
-        'collection.create',
-        'collection_rule.get',
-        'collection_rule.update',
-        ...(owner.canLabel ? ['library_label.list'] : []),
-      ]
-    : undefined;
+  const operations =
+    owner.admissionState === 'available'
+      ? [
+          'collection.create',
+          'collection_rule.get',
+          'collection_rule.update',
+          ...(owner.canLabel ? ['library_label.list'] : []),
+        ]
+      : undefined;
   return (
     <CollectionRuleEditor
       key={owner.generation}

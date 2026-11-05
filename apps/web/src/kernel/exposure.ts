@@ -123,8 +123,8 @@ export const readAdmittedResult = createServerOnlyFn(async (authorization?: stri
     return closedResult;
   }
 });
-export const readAdmitted = createServerOnlyFn(async (authorization?: string): Promise<string[]> =>
-  (await readAdmittedResult(authorization)).admitted as string[],
+export const readAdmitted = createServerOnlyFn(
+  async (authorization?: string): Promise<string[]> => (await readAdmittedResult(authorization)).admitted as string[],
 );
 
 async function anonymousAdmitted(): Promise<ExposureResult> {
@@ -165,10 +165,7 @@ export function useOperationAdmission(operation: ExposureOperation): OperationAd
   useSession();
   const lifetime = viewerExposureLifetime(client);
   const admission = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot, lifetime.getServerSnapshot);
-  const publicQuery = useQuery(
-    { ...anonymousQuery, enabled: hydrated && admission.state === 'signed-out' },
-    client,
-  );
+  const publicQuery = useQuery({ ...anonymousQuery, enabled: hydrated && admission.state === 'signed-out' }, client);
   const observation = admission.state === 'signed-in' ? admission.observation : undefined;
   const viewerQuery = useQuery(
     { ...viewerExposureQuery(observation), enabled: hydrated && observation !== undefined },

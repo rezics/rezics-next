@@ -59,7 +59,9 @@ export function SavedQueryDirectory({
         </p>
       ) : capability === 'unavailable' ? (
         <div className="mt-3 space-y-2">
-          <p role="status" data-capability="unavailable">{m.library_saved_queries_unavailable()}</p>
+          <p role="status" data-capability="unavailable">
+            {m.library_saved_queries_unavailable()}
+          </p>
           <a href={currentHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
             {m.library_collections_retry()}
           </a>
