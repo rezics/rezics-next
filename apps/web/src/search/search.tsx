@@ -1020,17 +1020,13 @@ export function SearchPage({
   const revertStatus = useRef<HTMLParagraphElement>(null);
   const checkpoint = discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of;
   const requestOwnerKey = JSON.stringify([stateKey, locale, session]);
-  const lastCheckpoint = useRef<{ owner: string; value: string | undefined }>({ owner: requestOwnerKey, value: checkpoint });
-  if (lastCheckpoint.current.owner !== requestOwnerKey)
-    lastCheckpoint.current = { owner: requestOwnerKey, value: checkpoint };
-  else if (checkpoint !== undefined) lastCheckpoint.current.value = checkpoint;
-  const focusCheckpoint = checkpoint ?? lastCheckpoint.current.value;
   const recoveryOwnerKey = JSON.stringify([requestOwnerKey, checkpoint]);
   const retryFocus = useSearchRetryFocus(
     {
-      scope: JSON.stringify([requestOwnerKey, focusCheckpoint]),
+      scope: requestOwnerKey,
       locale,
       session,
+      checkpoint,
       ...(discovery?.status === 'ready' && discovery.page.emptyRecovery
         ? { observation: discovery.page.emptyRecovery }
         : result?.emptyRecovery
