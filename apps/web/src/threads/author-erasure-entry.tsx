@@ -4,11 +4,11 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, useId } from 'react';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import { authorErasureAdmissionReads, type AuthorErasureAdmission } from './author-erasure-admission';
 import { authorErasureRequest, type ErasureEnqueue, type ErasureIntent } from './author-erasure';
 import {
   dispatchAuthorErasure,
+  useAuthorErasureBrowserVisit,
   authorErasureSessionIsReady,
   authorErasureSessionSource,
   type AuthorErasureSessionSource,
@@ -60,7 +60,7 @@ export function AuthorErasureEntry(props: {
   viewerId?: string | null;
   admission?: AuthorErasureAdmission;
   readAdmission?: (threadId: string, isCurrent?: () => boolean) => Promise<AuthorErasureAdmission>;
-  send?: (intent: ErasureIntent) => Promise<ErasureEnqueue>;
+  send?: (intent: ErasureIntent, csrfToken: string, isCurrent: () => boolean) => Promise<ErasureEnqueue>;
   onAccepted?: (id: string) => void;
 }) {
   const client = useContext(QueryClientContext);
@@ -78,7 +78,7 @@ function AuthorErasureEntryVisit({
   viewerId,
   admission: suppliedAdmission,
   readAdmission = readNative,
-  send,
+  send = sendNative,
   onAccepted,
   source,
   revision,
@@ -87,7 +87,7 @@ function AuthorErasureEntryVisit({
   viewerId: string | null;
   admission?: AuthorErasureAdmission;
   readAdmission?: (threadId: string, isCurrent?: () => boolean) => Promise<AuthorErasureAdmission>;
-  send?: (intent: ErasureIntent) => Promise<ErasureEnqueue>;
+  send?: (intent: ErasureIntent, csrfToken: string, isCurrent: () => boolean) => Promise<ErasureEnqueue>;
   onAccepted?: (id: string) => void;
   source: AuthorErasureSessionSource;
   revision: number;
@@ -97,12 +97,50 @@ function AuthorErasureEntryVisit({
   const action = useId();
   const [open, setOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<ErasureEnqueue | null>(null);
+  const [pendingState, setPending] = useState(false);
+  const [resultState, setResult] = useState<ErasureEnqueue | null>(null);
   const [, updateAdmission] = useState(0);
-  const request = useRef<ErasureIntent | null>(null);
+  const browser = useAuthorErasureBrowserVisit();
+  const request = useRef<{
+    intent: ErasureIntent;
+    actor: string;
+    credential: string;
+    source: AuthorErasureSessionSource;
+  } | null>(null);
+  const lifetimeRef = useRef<{
+    source: AuthorErasureSessionSource;
+    revision: number;
+    admission: typeof suppliedAdmission;
+    read: typeof readAdmission;
+    send: typeof send;
+    accepted: typeof onAccepted;
+    epoch: number;
+  } | null>(null);
+  const previous = lifetimeRef.current;
+  if (
+    !previous ||
+    previous.source !== source ||
+    previous.revision !== revision ||
+    previous.admission !== suppliedAdmission ||
+    previous.read !== readAdmission ||
+    previous.send !== send ||
+    previous.accepted !== onAccepted
+  ) {
+    lifetimeRef.current = {
+      source,
+      revision,
+      admission: suppliedAdmission,
+      read: readAdmission,
+      send,
+      accepted: onAccepted,
+      epoch: previous ? previous.epoch + 1 : 0,
+    };
+  }
+  const lifetime = lifetimeRef.current!;
+  const resultLifetime = useRef(lifetime);
+  const pendingLifetime = useRef(lifetime);
   const busy = useRef(false);
-  const observedRevision = useRef(revision);
+
   const reads = useRef(authorErasureAdmissionReads());
   const mounted = useRef(false);
   const connection = useRef(0);
@@ -121,26 +159,36 @@ function AuthorErasureEntryVisit({
     if (open) document.getElementById(heading)?.focus();
   }, [heading, open]);
 
-  useEffect(() => {
-    if (observedRevision.current === revision) return;
-    observedRevision.current = revision;
-    if (!busy.current) return;
-    busy.current = false;
-    setPending(false);
-    setResult({ kind: 'uncertain' });
-  }, [revision]);
-
   const isCurrent = (ticket = connection.current) =>
     mounted.current &&
     ticket === connection.current &&
+    lifetimeRef.current === lifetime &&
+    browser.current() &&
     source.snapshot() === revision &&
     authorErasureSessionIsReady(source.read(), viewerId);
-  const admissionNow = reads.current.bind(threadId, viewerId, open, revision);
-  const admission = suppliedAdmission ?? admissionNow;
+  const admissionNow = reads.current.bind(threadId, viewerId, open, lifetime.epoch);
+  // Loader advice is a seed only; replacement needs an actual current authenticated read.
+  const seeded = lifetime.epoch === 0 && suppliedAdmission !== undefined;
+  const sessionReady =
+    browser.current() && authorErasureSessionIsReady(source.read(), viewerId) && source.snapshot() === revision;
+  const admission = sessionReady ? (seeded ? suppliedAdmission : admissionNow) : { kind: 'unavailable' as const };
+  const result =
+    resultLifetime.current === lifetime && browser.current()
+      ? resultState
+      : request.current
+        ? { kind: 'uncertain' as const }
+        : null;
+  const pending = pendingState && pendingLifetime.current === lifetime && browser.current();
+
+  useEffect(() => {
+    if (pendingLifetime.current === lifetime && browser.current()) return;
+    busy.current = false;
+    setPending(false);
+  }, [lifetime, browser, pending]);
 
   async function refresh(nextOpen = open) {
-    if (suppliedAdmission || !viewerId) return;
-    reads.current.bind(threadId, viewerId, nextOpen, revision);
+    if (seeded || !viewerId || !isCurrent()) return;
+    reads.current.bind(threadId, viewerId, nextOpen, lifetime.epoch);
     const ticket = connection.current;
     const current = () => isCurrent(ticket);
     const pendingRead = reads.current.refresh(viewerId, () => readAdmission(threadId, current), current);
@@ -150,45 +198,54 @@ function AuthorErasureEntryVisit({
   }
 
   function toggle(next: boolean) {
-    reads.current.bind(threadId, viewerId, next, revision);
+    reads.current.bind(threadId, viewerId, next, lifetime.epoch);
     setOpen(next);
     if (next) void refresh(true);
   }
 
-  const session = source.read();
-  const sessionReady = authorErasureSessionIsReady(session, viewerId) && source.snapshot() === revision;
   const allowed = admission.kind === 'current' && admission.mayErase;
   const unavailable = admission.kind === 'unavailable';
   const retrying = result?.kind === 'uncertain' && !!request.current;
-  const canSubmit = sessionReady && (allowed || retrying);
+  const recovery = request.current;
+  const canRecover = !recovery || (recovery.source === source && recovery.actor === viewerId);
+  const canSubmit = sessionReady && canRecover && (allowed || retrying);
   const accepted = result?.kind === 'accepted';
   const stopped = result && result.kind !== 'uncertain' && result.kind !== 'accepted';
 
   async function submit() {
     if (!canSubmit || !confirmed || busy.current || accepted || stopped) return;
     const sessionAtIntent = source.read();
-    if (!authorErasureSessionIsReady(sessionAtIntent, viewerId) || source.snapshot() !== revision) return;
+    if (!authorErasureSessionIsReady(sessionAtIntent, viewerId) || !isCurrent()) return;
     const ticket = connection.current;
     const current = () => isCurrent(ticket);
     busy.current = true;
+    pendingLifetime.current = lifetime;
     setPending(true);
-    if (!request.current) request.current = Object.freeze({ threadId, idempotencyKey: crypto.randomUUID() });
+    if (!request.current)
+      request.current = Object.freeze({
+        intent: Object.freeze({ threadId, idempotencyKey: crypto.randomUUID() }),
+        actor: sessionAtIntent.subject,
+        credential: sessionAtIntent.csrfToken,
+        source,
+      });
+    const command = request.current;
     let outcome: ErasureEnqueue;
     try {
-      outcome = await authorErasureRequest(request.current, (intent) => {
+      outcome = await authorErasureRequest(command.intent, (intent) => {
         if (!current()) return Promise.resolve({ kind: 'uncertain' });
-        return send ? send(intent) : sendNative(intent, sessionAtIntent.csrfToken, current);
+        return send(intent, command.credential, current);
       })();
     } catch {
       outcome = { kind: 'uncertain' };
     }
     if (!current()) return;
+    resultLifetime.current = lifetime;
     setResult(outcome);
     busy.current = false;
     setPending(false);
     if (outcome.kind === 'accepted') {
       if (onAccepted) onAccepted(outcome.operationId);
-      else window.location.assign(`/${getLocale()}/operations/${encodeURIComponent(outcome.operationId)}`);
+      else window.location.assign(`/${browser.locale}/operations/${encodeURIComponent(outcome.operationId)}`);
     }
   }
 

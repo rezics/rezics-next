@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, type ReactNode } from 'react';
-import type { ErasureOperation, ErasureRead } from '../src/threads/author-erasure';
+import type { ErasureIntent, ErasureEnqueue, ErasureOperation, ErasureRead } from '../src/threads/author-erasure';
 import type { AuthorErasureAdmission } from '../src/threads/author-erasure-admission';
 import type { AuthorErasureTransport } from '../src/threads/author-erasure-lifetime';
 
@@ -317,6 +317,136 @@ test('The complete author erasure caller retires private admission command callb
   });
 });
 
+for (const replacement of ['equal', 'invalidate', 'fetch'] as const) {
+  test(`${replacement} session replacement retires admission and command results while explicit retry keeps its credential`, async () => {
+    await withUi(async (ui) => {
+      const owner = { state: 'signed-in' as const, subject: authorA, csrfToken: 'original-command-token' };
+      ui.setSession(owner);
+      const replace = async () =>
+        act(async () => {
+          if (replacement === 'invalidate')
+            await ui.client.invalidateQueries({ queryKey: ['session'], refetchType: 'none' });
+          if (replacement === 'fetch')
+            await ui.client.fetchQuery({ queryKey: ['session'], queryFn: async () => owner, staleTime: 0 });
+          ui.setSession(owner);
+        });
+      const admission = gate<AuthorErasureAdmission>();
+      const acknowledgement = gate<ErasureEnqueue>();
+      const sent: { intent: ErasureIntent; token: string }[] = [];
+      let reads = 0;
+      const accepted: string[] = [];
+      await ui.render(
+        createElement(ui.AuthorErasureEntry, {
+          threadId: threadA,
+          viewerId: authorA,
+          readAdmission: async () =>
+            ++reads === 1 ? admission.promise : { kind: 'current', authorId: authorA, mayErase: true },
+          send: async (intent, token) => {
+            sent.push({ intent, token });
+            return sent.length === 1
+              ? acknowledgement.promise
+              : sent.length === 2
+                ? { kind: 'uncertain' }
+                : { kind: 'accepted', operationId: operationA };
+          },
+          onAccepted: (id) => {
+            accepted.push(id);
+          },
+        }),
+      );
+      await ui.click(ui.m.author_erasure_action());
+      await replace();
+      admission.resolve({ kind: 'current', authorId: authorA, mayErase: true });
+      await ui.flush();
+      await ui.confirm();
+      expect(ui.button(ui.m.author_erasure_confirm()).disabled).toBe(true);
+      await ui.click(ui.m.author_erasure_check_again());
+      await ui.click(ui.m.author_erasure_confirm());
+      expect(sent).toHaveLength(1);
+      await replace();
+      await act(async () => ui.setSession({ ...owner, csrfToken: 'replacement-token' }));
+      acknowledgement.resolve({ kind: 'accepted', operationId: operationA });
+      await ui.flush();
+      expect(accepted).toEqual([]);
+      expect(ui.host.textContent).not.toContain(ui.m.author_erasure_view_progress());
+      expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+      await ui.click(ui.m.author_erasure_retry());
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).toEqual(sent[0]);
+      await ui.click(ui.m.author_erasure_close());
+      await ui.click(ui.m.author_erasure_action());
+      await ui.click(ui.m.author_erasure_retry());
+      expect(sent[2]).toEqual(sent[0]);
+      expect(accepted).toEqual([operationA]);
+    });
+  });
+}
+
+test('browser away/back retires a queued entry import and a progress read without reviving them on return', async () => {
+  await withUi(async (ui) => {
+    ui.setSession({ state: 'signed-in', subject: authorA, csrfToken: 'csrf-a' });
+    const imported = gate<AuthorErasureTransport>();
+    let transported = 0;
+    const accepted: string[] = [];
+    await ui.render(
+      createElement(ui.AuthorErasureEntry, {
+        threadId: threadA,
+        viewerId: authorA,
+        admission: { kind: 'current', authorId: authorA, mayErase: true },
+        send: async (intent, token, current) =>
+          (await ui.dispatchAuthorErasure(intent, token, current, () => imported.promise)) ?? { kind: 'uncertain' },
+        onAccepted: (id) => {
+          accepted.push(id);
+        },
+      }),
+    );
+    const departAndReturn = async () =>
+      act(async () => {
+        const original = ui.window.location.href;
+        ui.window.history.pushState(null, '', '/fr/threads/another');
+        ui.window.dispatchEvent(new ui.window.PopStateEvent('popstate'));
+        ui.window.history.pushState(null, '', original);
+        ui.window.dispatchEvent(new ui.window.PopStateEvent('popstate'));
+      });
+    await ui.click(ui.m.author_erasure_action());
+    await ui.confirm();
+    await ui.click(ui.m.author_erasure_confirm());
+    await departAndReturn();
+    imported.resolve(async () => {
+      transported += 1;
+      return { kind: 'accepted', operationId: operationA };
+    });
+    await ui.flush();
+    expect(transported).toBe(0);
+    expect(accepted).toEqual([]);
+    expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+    expect(ui.button(ui.m.author_erasure_retry()).disabled).toBe(true);
+
+    await ui.render(null);
+    const progress = gate<ErasureRead>();
+    let reads = 0;
+    await ui.render(
+      createElement(ui.AuthorErasureOperationPage, {
+        initial: { kind: 'unavailable' },
+        operationId: operationA,
+        read: () => {
+          reads += 1;
+          return progress.promise;
+        },
+      }),
+    );
+    await ui.click(ui.m.author_erasure_check_again());
+    expect(reads).toBe(1);
+    await departAndReturn();
+    progress.resolve({ kind: 'available', operation: operation(operationA, authorA, 91234) });
+    await ui.flush();
+    expect(ui.host.querySelector('dl')).toBeNull();
+    expect(ui.host.textContent).not.toContain('91234');
+    expect(ui.button(ui.m.author_erasure_check_again()).disabled).toBe(true);
+    expect(reads).toBe(1);
+  });
+});
+
 test('operation initial, reader and session source replacements withhold prior private progress until a current read', async () => {
   await withUi(async (ui) => {
     ui.setSession({ state: 'signed-in', subject: authorA, csrfToken: 'csrf-a' });
@@ -491,7 +621,10 @@ test('operation refreshes stay visible-only and capped through authentication hy
       expect(pollCount).toBe(1);
       expect(reads).toBe(1);
 
-      await act(async () => ui.client.removeQueries({ queryKey: ['session'] }));
+      await act(async () => {
+        await ui.client.invalidateQueries({ queryKey: ['session'], refetchType: 'none' });
+        ui.client.removeQueries({ queryKey: ['session'] });
+      });
       await ui.flush();
       expect(ui.host.textContent).not.toContain('83377');
       await act(async () => ui.setSession(owner));

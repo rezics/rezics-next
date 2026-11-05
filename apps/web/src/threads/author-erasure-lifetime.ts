@@ -1,5 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { sessionQuery } from '../session/query';
+import { browserObservation } from '../session/observation';
+import { useRouter } from '@tanstack/react-router';
+import { useMemo, useRef, useSyncExternalStore } from 'react';
+import { getLocale } from '../paraglide/runtime.js';
 import type { ErasureEnqueue, ErasureIntent } from './author-erasure';
 
 export type AuthorErasureSession = {
@@ -29,34 +33,104 @@ export function authorErasureSessionSource(client: QueryClient | undefined): Aut
   const known = sources.get(client);
   if (known) return known;
 
-  const read = () => client.getQueryData<AuthorErasureSession>(sessionQuery.queryKey);
-  const identity = () => {
-    const session = read();
-    return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
+  const read = () => {
+    const state = client.getQueryState<AuthorErasureSession>(sessionQuery.queryKey);
+    return state?.status === 'success' && state.fetchStatus === 'idle' && !state.isInvalidated ? state.data : undefined;
   };
-  let previous = identity();
   let revision = 0;
   const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(({ query }) => {
-    if (query.queryKey.length !== sessionQuery.queryKey.length || query.queryKey[0] !== sessionQuery.queryKey[0])
-      return;
-    const next = identity();
-    if (next === previous) return;
-    previous = next;
-    revision += 1;
-    for (const listener of listeners) listener();
-  });
+  let stop: (() => void) | undefined;
   const source: AuthorErasureSessionSource = {
     read,
     snapshot: () => revision,
     serverSnapshot: () => 0,
     subscribe(listener) {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      stop ??= browserObservation(client).subscribeCache((event) => {
+        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        if (
+          event.type !== 'removed' &&
+          !(
+            event.type === 'updated' &&
+            ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type)
+          )
+        )
+          return;
+        // Even structurally shared successful data supplies a new authenticated observation.
+        revision += 1;
+        for (const notify of listeners) notify();
+      });
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) {
+          stop?.();
+          stop = undefined;
+        }
+      };
     },
   };
   sources.set(client, source);
   return source;
+}
+
+export type AuthorErasureBrowserVisit = {
+  locale: ReturnType<typeof getLocale>;
+  current: () => boolean;
+};
+
+/** Observe departure, including away/back before React gets a render. Never intercept navigation. */
+export function useAuthorErasureBrowserVisit(scope = ''): AuthorErasureBrowserVisit {
+  const router = useRouter({ warn: false });
+  const visit = useMemo(() => {
+    const locale = getLocale();
+    const address = typeof window === 'undefined' ? undefined : window.location.href;
+    const route = router?.state.location.href;
+    let active = true;
+    const listeners = new Set<() => void>();
+    const retire = () => {
+      if (!active) return;
+      active = false;
+      for (const notify of listeners) notify();
+    };
+    const current = () => {
+      if (getLocale() !== locale || (address !== undefined && window.location.href !== address)) retire();
+      return active;
+    };
+    return {
+      locale,
+      current,
+      retire,
+      subscribe(notify: () => void) {
+        listeners.add(notify);
+        const changed = () => {
+          current();
+        };
+        const stop = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          if (toLocation.href !== route) retire();
+        });
+        if (typeof window !== 'undefined') {
+          window.addEventListener('popstate', changed);
+          window.addEventListener('hashchange', changed);
+          window.addEventListener('pagehide', retire);
+        }
+        current();
+        return () => {
+          listeners.delete(notify);
+          stop?.();
+          if (typeof window !== 'undefined') {
+            window.removeEventListener('popstate', changed);
+            window.removeEventListener('hashchange', changed);
+            window.removeEventListener('pagehide', retire);
+          }
+        };
+      },
+    };
+  }, [router, scope]);
+  const previous = useRef(visit);
+  if (previous.current !== visit) previous.current.retire();
+  previous.current = visit;
+  useSyncExternalStore(visit.subscribe, visit.current, () => true);
+  return visit;
 }
 
 export function authorErasureSessionIsReady(

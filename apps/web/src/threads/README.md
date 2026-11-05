@@ -212,14 +212,19 @@ ownership of navigation, upload and rich-editor interactions.
 
 The mounted author-erasure entry binds its admission and command to the current thread, viewer, signed-in session,
 CSRF token and component lifetime. It reads the existing session query cache without adding a session request. Cache
-notifications record each identity transition, including away/back and same-account token replacement, before React
-can batch the visible render. Readiness loss retires the visit. Target changes and unmount do the same.
+notifications through Web's shared browser observation record equal successful replacement, invalidation, fetching,
+readiness, account and token transitions before React can batch the visible render. The actual browser address,
+router departure and locale also bind the mounted visit; leaving and returning cannot revive its callbacks.
+Target changes and unmount retire the old visit.
 
 Admission results are private to that visit. A queued command checks the original visit before and after its async
 server-function import and immediately before starting transport. It captures the visit's CSRF token before that
 boundary, so it cannot borrow a replacement session. Synchronous duplicate confirmation is suppressed. Confirmation
 and the immutable request/key remain available when the secondary action closes and reopens; an uncertain response
-can retry only that exact request from the same visit. A retired caller never presents late admission/progress,
+can retry only that exact request with its original actor and credential. Decision: explicit same-actor recovery
+creates a current callback attempt while retaining the original command, including after credential replacement;
+replacement QueryClients and departed browser visits retain uncertainty without dispatching recovery. Loader advice
+is only the original visit's seed; replacing its source requires an actual current admission read. A retired caller never presents late admission/progress,
 changes replacement state, calls success/navigation callbacks or claims the remote command was cancelled or not
 applied.
 
