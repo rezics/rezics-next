@@ -1729,9 +1729,13 @@ export class MergeTrain {
         return cached;
       }
       let baseline: GateResult = { passed: false, output: 'Boot check baseline did not run', timedOut: false };
-      const baselineWorkspace = this.trainWorkspace(resolve(this.options.worktreeRoot, `boot-baseline-${randomUUID()}`), base, {
-        cleanup: { onError: 'throw' },
-      });
+      const baselineWorkspace = this.trainWorkspace(
+        resolve(this.options.worktreeRoot, `boot-baseline-${randomUUID()}`),
+        base,
+        {
+          cleanup: { onError: 'throw' },
+        },
+      );
       const baselineTree = baselineWorkspace.tree;
       try {
         if (
