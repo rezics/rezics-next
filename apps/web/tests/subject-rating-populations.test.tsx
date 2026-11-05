@@ -640,7 +640,6 @@ for (const replacement of [
   'non-success-ABA',
   'non-success-source-ABA',
   'non-success-question-ABA',
-  'equal-question-success',
 ] as const) {
   test(`${replacement} retires queued choices and retries before React commit, rejects late responses/finally and permits fresh matching recovery`, async () => {
     cache.setQueryData(sessionQuery.queryKey, session(preparedReader, null));
@@ -714,7 +713,7 @@ for (const replacement of [
   });
 }
 
-test('ordinary invalidation/fetch/error/observer notifications preserve useful current data and selections', async () => {
+test('ordinary query notifications preserve current data and selection across question cache churn', async () => {
   await paint();
   await until(() => boxes().length === 20);
   await select(0);
@@ -722,10 +721,12 @@ test('ordinary invalidation/fetch/error/observer notifications preserve useful c
   const before = paths('/ratings/populations').length;
   const box = boxes()[0]!;
   const query = directoryQueries().find((query) => query.queryKey[6] === 'directory')!;
+  const questionKey = subjectRatingQuery(subjectId, 'en', 'question').queryKey;
   await act(async () => {
     await cache.invalidateQueries({ queryKey: query.queryKey, refetchType: 'none' });
     cache.getQueryCache().notify({ type: 'observerResultsUpdated', query });
     query.setState({ error: new Error('ordinary directory refresh failed'), fetchStatus: 'idle' });
+    cache.setQueryData(questionKey, cache.getQueryData(questionKey));
     cache
       .getQueryCache()
       .find({ queryKey: sessionQuery.queryKey })!

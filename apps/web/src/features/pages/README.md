@@ -4,8 +4,9 @@
 
 Decision: session preparation preserves an admitted public body; private controls bind to the first matching
 prepared `browserObservation` and retire on later identity, credential, disclosure, source, descriptor, Context or
-locale replacement. A new source establishes a new reading. Public DTOs may describe visible controls, but only the
-current prepared observation and native admission can make a private action current.
+locale replacement. A new source establishes a new reading. Equal question/cache successes preserve rating selection;
+actual source replacement retires it. Public DTOs may describe visible controls, but only the current prepared
+observation and native admission can make a private action current.
 
 ## Platform Home
 

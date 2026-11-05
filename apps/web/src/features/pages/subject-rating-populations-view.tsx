@@ -81,8 +81,7 @@ class PopulationRegistry {
       const replaced = this.dataReplaced(query);
       if (
         event.type === 'removed' ||
-        (replaced && previous !== undefined) ||
-        (previous !== undefined && event.type === 'updated' && event.action.type === 'success')
+        (replaced && previous !== undefined)
       ) {
         this.epoch++;
         this.notify();
