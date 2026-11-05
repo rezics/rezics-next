@@ -270,7 +270,8 @@ const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
     await tick();
   });
 
-const event = { preventDefault() {} };
+const dispatchSubmit = (form: HTMLFormElement) =>
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 const complete = (input: PublicationInput): PublicationResult => ({
   ok: true,
   collection: { id: input.collectionId, revision: input.revision + 1 },
@@ -293,14 +294,14 @@ describe('Complete saved rule and selected Publication owner authority preserves
       await settle(exposures.at(-1)!, { subject: 'foreign-viewer', admitted: ['collections', 'library_label.list'] });
       expect(h.host.querySelector('form')).toBeNull();
       await h.expose();
-      const oldSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
+      const oldForm = h.host.querySelector('form')!;
       const oldReload = handler(h.button(m.library_collection_reload()), 'onClick');
       const oldLabels = handler(h.button(m.search_apply()), 'onClick');
       await h.submit();
       expect(ruleWrites).toHaveLength(1);
       await h.perform(() => {
         h.client.setQueryData(sessionQuery.queryKey, session('bob', 'csrf-bob'));
-        oldSubmit(event);
+        dispatchSubmit(oldForm);
         oldReload();
         oldLabels();
         expect(ruleWrites).toHaveLength(1);
@@ -316,11 +317,11 @@ describe('Complete saved rule and selected Publication owner authority preserves
       expect(navigation).toEqual([]);
       expect(h.host.textContent).not.toContain('old-A-result');
       expect(h.button(m.library_collection_save_pending()).disabled).toBe(true);
-      const bSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
+      const bForm = h.host.querySelector('form')!;
       await h.perform(() => {
         h.client.setQueryData(sessionQuery.queryKey, session('alice'));
         h.client.setQueryData(sessionQuery.queryKey, session('bob', 'csrf-bob'));
-        bSubmit(event); // ABA is observed before React commits the final B again.
+        dispatchSubmit(bForm); // ABA is observed before React commits the final B again.
         expect(ruleWrites).toHaveLength(2);
       });
       await h.authorize('bob');
@@ -406,11 +407,11 @@ describe('Complete saved rule and selected Publication owner authority preserves
         await h.authorize();
         await h.expose('alice', ['collections']);
         expect(h.host.textContent).not.toContain(m.library_rule_label_search());
-        const retry = handler(h.host.querySelector('form')!, 'onSubmit');
+        const retryForm = h.host.querySelector('form')!;
         await h.perform(() => {
           const query = h.client.getQueryCache().find({ queryKey: h.exposureKey(), exact: true })!;
           query.setState({ status: 'error', error: new Error('Scoped exposure failed') });
-          retry(event);
+          dispatchSubmit(retryForm);
           expect(ruleWrites).toHaveLength(1);
         });
         expect(h.host.querySelector('form')).toBeNull();
