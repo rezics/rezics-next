@@ -65,6 +65,8 @@ import { SelectionReviewView, SelectionReviewList, type SelectionReviewItem } fr
 import { appendSelectionWithinLimit, selectionReviewSignature, selectionResultState } from './selection-review';
 import { SelectionResultView } from './selection-result-view';
 import { useReceivedEntryReading } from './received-entry-reading/use-reading';
+import { LibraryOwnScore } from './score.tsx';
+import type { LibraryScoreQuestion, LibraryViewerFacts } from './score';
 
 export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
   return state ? (label ?? m.library_other()) : undefined;
@@ -116,6 +118,8 @@ type Controls = ReturnType<typeof useShelfRows> & {
   layout: ShelfLayout;
   size: ShelfSize;
   columns?: string;
+  scoreQuestion?: LibraryScoreQuestion;
+  viewerFacts?: LibraryViewerFacts;
   readEntry: (row: ShelfRow) => ReactNode;
 };
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
@@ -486,6 +490,14 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
               secondary={
                 <>
                   <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
+                  <LibraryOwnScore
+                    subjectId={entry.subjectId}
+                    locale={locale}
+                    {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
+                    {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
+                    {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
+                    {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
+                  />
                   {readEntry ? <div className="mt-2 flex justify-center">{readEntry}</div> : null}
                 </>
               }
@@ -538,6 +550,14 @@ function ListView({ controls }: { controls: Controls }) {
               <>
                 <span>{entry.subject?.typeLabel}</span>
                 <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
+                <LibraryOwnScore
+                  subjectId={entry.subjectId}
+                  locale={locale}
+                  {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
+                  {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
+                  {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
+                  {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
+                />
                 {readEntry}
               </>
             }
@@ -598,7 +618,19 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
       ...selectionProps(entry, controls),
       selectLabel: title.text,
       href: entry.subject ? hrefOf(entry, locale) : '',
-      titleContext: <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />,
+      titleContext: (
+        <>
+          <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
+          <LibraryOwnScore
+            subjectId={entry.subjectId}
+            locale={locale}
+            {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
+            {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
+            {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
+            {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
+          />
+        </>
+      ),
       title: title.text,
       ...(title.lang ? { titleLang: title.lang } : {}),
       cover: coverOf(entry),
@@ -692,6 +724,8 @@ type ShelfEntriesProps = {
   refreshEntries?: () => Promise<void>;
   empty?: ReactNode;
   type?: string;
+  scoreQuestion?: LibraryScoreQuestion;
+  viewerFacts?: LibraryViewerFacts;
   entries: PersonalLibraryEntry[];
   locale: string;
   layout: ShelfLayout;
@@ -789,6 +823,8 @@ function ShelfEntriesPage({
   population,
   readingOrigin,
   refreshEntries,
+  scoreQuestion,
+  viewerFacts,
 }: ShelfEntriesProps & {
   mutationLease: ShelfMutationLease;
   onBulkRemovalLanded: (targets: readonly ShelfRemovalIdentity[]) => void;
@@ -836,6 +872,8 @@ function ShelfEntriesPage({
     ...(type ? { type } : {}),
     ...(sort ? { sort } : {}),
     ...(filterSort ? { filterSort } : {}),
+    ...(scoreQuestion ? { scoreQuestion } : {}),
+    ...(viewerFacts ? { viewerFacts } : {}),
     readEntry: reading.trigger,
   };
   const bulkRemoval = useBulkLibraryRemoval({
@@ -1309,7 +1347,7 @@ function LabelShelfTiles({
   return <ShelfTable rows={tableRows} columns={tableColumns} onSort={() => {}} />;
 }
 
-/** Personal-score ordering remains unavailable under its separate currentness contract. */
+/** Content currentness or voter standing refused this owner-wide score order. */
 export function ShelfScoreUnavailable({ locale, view }: { locale: string; view: ShelfSearch }) {
   const { cursor: _cursor, ...restart } = view;
   const dateOrder = shelfSort(view.state ? { state: view.state } : {});

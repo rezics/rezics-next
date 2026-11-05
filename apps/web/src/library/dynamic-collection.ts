@@ -7,7 +7,7 @@ import type { CollectionFilterProperty } from './collection-filters';
 import type { CollectionFilterParams } from './collection-filter-params';
 import type { LibraryPinsRead } from './pins-read';
 import type { MineCollection } from './mine-collections';
-import type { CollectionMember } from './reads';
+import type { CollectionMember, CollectionViewerFacts } from './reads';
 import type { CollectionViewerActions } from './collection-records';
 
 export type DynamicBuiltinKind = 'everything' | 'state' | 'liked' | (string & {});
@@ -42,7 +42,11 @@ export type DynamicMemberRead = {
   subject?: unknown | null;
   facts?: CollectionMember['facts'];
 };
-export type DynamicMembersPage = { members: DynamicMemberRead[]; next: string | null };
+export type DynamicMembersPage = {
+  members: DynamicMemberRead[];
+  next: string | null;
+  viewerFacts?: CollectionViewerFacts;
+};
 export type DynamicCollectionPage = CollectionPresentationData & {
   id: string;
   title: string;
@@ -55,7 +59,14 @@ export type DynamicCollectionPage = CollectionPresentationData & {
   viewerActions?: CollectionViewerActions;
   description: string | null;
   curator: { handle: string | null; displayName: string | null } | null;
-  members: { subjectId?: string; subject: LibrarySubject | null; facts?: CollectionMember['facts'] }[];
+  members: {
+    subjectId?: string;
+    viewerRowKey?: string;
+    subject: LibrarySubject | null;
+    facts?: CollectionMember['facts'];
+  }[];
+  viewerFacts?: CollectionViewerFacts;
+  provenance?: { mode: 'anonymous' | 'session'; viewerId: string | null };
   cursor?: string;
   next: string | null;
   preparing: boolean;

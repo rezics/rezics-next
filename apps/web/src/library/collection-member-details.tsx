@@ -6,6 +6,8 @@ import {
   CollectionMemberDetails as CollectionSubjectDetails,
   CollectionMemberViewerDetails,
 } from './collection-member-row';
+import { isLikedCollection } from './liked';
+import { LikedMemberScore } from './liked.tsx';
 import { CollectionNoteReader } from './collection-note-reader';
 import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import type { CollectionListPresentations } from './collection-presentation';
@@ -49,6 +51,7 @@ export function CollectionMemberOccurrenceDetails<Member extends CollectionReadM
   onReferenceNavigate,
   viewerProjection,
   actionHref,
+  collection,
 }: {
   member: Member;
   position: number;
@@ -63,6 +66,7 @@ export function CollectionMemberOccurrenceDetails<Member extends CollectionReadM
   onReferenceNavigate?: ((anchor: HTMLAnchorElement) => void) | undefined;
   viewerProjection?: CollectionViewerProjection;
   actionHref?: string;
+  collection?: { builtinKind?: string | null };
 }) {
   const locale = getLocale();
   const subject = member.subject;
@@ -104,11 +108,20 @@ export function CollectionMemberOccurrenceDetails<Member extends CollectionReadM
             </p>
           ) : null}
           {viewerProjection ? (
-            <CollectionMemberViewerDetails
-              member={member}
-              projection={viewerProjection}
-              {...(actionHref ? { actionHref } : {})}
-            />
+            collection && isLikedCollection(collection) ? (
+              <LikedMemberScore
+                collection={collection}
+                member={member}
+                projection={viewerProjection}
+                {...(actionHref ? { actionHref } : {})}
+              />
+            ) : (
+              <CollectionMemberViewerDetails
+                member={member}
+                projection={viewerProjection}
+                {...(actionHref ? { actionHref } : {})}
+              />
+            )
           ) : null}
         </>
       ) : (

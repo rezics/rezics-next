@@ -52,6 +52,9 @@ export type PersonalContinueRead = {
 export type ShelfTitlePreparationReceipt = NonNullable<
   Awaited<ReturnType<KernelClient['libraryShelfTitlePreparation']['post']>>['data']
 >;
+export type ShelfScorePreparationReceipt = NonNullable<
+  Awaited<ReturnType<KernelClient['libraryShelfScorePreparation']['post']>>['data']
+>;
 export async function prepareShelfTitleStep(
   client: KernelClient,
   authorization: string,
@@ -62,6 +65,18 @@ export async function prepareShelfTitleStep(
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
   if (response.error || !response.data) throw new Error('Library title preparation failed');
+  return response.data;
+}
+export async function prepareShelfScoreStep(
+  client: KernelClient,
+  authorization: string,
+  key: string,
+): Promise<ShelfScorePreparationReceipt> {
+  const response = await client.libraryShelfScorePreparation.post(undefined, {
+    headers: { authorization, 'idempotency-key': key },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (response.error || !response.data) throw new Error('Library score preparation failed');
   return response.data;
 }
 
@@ -76,6 +91,15 @@ function prepared(request: Request) {
   return subject && credential ? { subject, credential } : undefined;
 }
 
+function validatePreparationKey(value: unknown, label: string): string {
+  if (
+    typeof value !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  )
+    throw new Error(`Invalid ${label} key`);
+  return value;
+}
+
 function validateTitlePreparationInput(input: unknown): { search: ShelfSearch; key: string } {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid title preparation');
   const value = input as Record<string, unknown>;
@@ -85,12 +109,19 @@ function validateTitlePreparationInput(input: unknown): { search: ShelfSearch; k
   const search = validateInput(rawSearch);
   if (shelfAddressIssues(rawSearch as Record<string, unknown>).length || search.orderBy !== 'title')
     throw new Error('Invalid title preparation address');
-  if (
-    typeof value.key !== 'string' ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.key)
-  )
-    throw new Error('Invalid title preparation key');
-  return { search, key: value.key };
+  return { search, key: validatePreparationKey(value.key, 'title preparation') };
+}
+
+function validateScorePreparationInput(input: unknown): { search: ShelfSearch; key: string } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid score preparation');
+  const value = input as Record<string, unknown>;
+  const rawSearch = value.search;
+  if (!rawSearch || typeof rawSearch !== 'object' || Array.isArray(rawSearch))
+    throw new Error('Invalid score preparation address');
+  const search = validateInput(rawSearch);
+  if (shelfAddressIssues(rawSearch as Record<string, unknown>).length || search.orderBy !== 'personalScore')
+    throw new Error('Invalid score preparation address');
+  return { search, key: validatePreparationKey(value.key, 'score preparation') };
 }
 
 /** Each native reader prepares its own request. No WeakMap entry or asserted viewer is shared between readers. */
@@ -161,6 +192,23 @@ export const preparePersonalLibraryTitle = createServerFn({ method: 'POST' })
     const subject = sessionSubject(request);
     if (!authorization || !subject) throw new Error('Library session unavailable');
     const preparation = await prepareShelfTitleStep(kernelClient(locale), authorization, data.key);
+    const current = sessionSubject(request) === subject && viewerCredential(request) === authorization;
+    return { sessionSubject: current ? subject : null, requested, preparation };
+  });
+
+/** One explicit native score-preparation command, bound to its current address and viewer. */
+export const preparePersonalLibraryScore = createServerFn({ method: 'POST' })
+  .validator(validateScorePreparationInput)
+  .handler(async ({ data }) => {
+    const request = getRequest();
+    setResponseHeader('cache-control', 'private, no-store');
+    const locale = requestLocale(request) ?? 'en';
+    const requested = personalLibraryAddress(data.search, locale);
+    if (await prepareSession(request, env as Partial<SessionEnv>)) throw new Error('Library session unavailable');
+    const authorization = viewerCredential(request);
+    const subject = sessionSubject(request);
+    if (!authorization || !subject) throw new Error('Library session unavailable');
+    const preparation = await prepareShelfScoreStep(kernelClient(locale), authorization, data.key);
     const current = sessionSubject(request) === subject && viewerCredential(request) === authorization;
     return { sessionSubject: current ? subject : null, requested, preparation };
   });

@@ -62,9 +62,13 @@ export async function applyOptimisticRatingChange(input: {
   }
   operation.commit(optimistic);
 
-  // Public figures publish asynchronously; refresh them in the background after the vote succeeds.
-  if (binding.isCurrent())
+  if (binding.isCurrent()) {
+    void queryClient.invalidateQueries({ queryKey: ['personal-library-current'] });
+    void queryClient.invalidateQueries({ queryKey: ['own-votes'] });
+    void queryClient.invalidateQueries({ queryKey: ['collection-page'] });
+    // Public figures publish asynchronously; refresh them in the background after the vote succeeds.
     void queryClient.invalidateQueries({ queryKey: subjectRatingQuery(subjectId, locale).queryKey }).catch(() => {});
+  }
   return true;
 }
 

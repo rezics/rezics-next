@@ -33,3 +33,34 @@ export const unavailablePersonalScoreCurrentness: PersonalScoreCurrentness = asy
   status: 'unavailable',
   reason: 'Content native owner-wide score identity fence is not installed',
 });
+
+/** Content's owner-wide fence: identity repair work plus voter standing in this RR snapshot.
+ * Active repair is pending; ineligible standing is unavailable. The version is not inferred from vote rows.
+ */
+export const readPersonalScoreCurrentness: PersonalScoreCurrentness = async (client, owner) => {
+  const frame = await client.query<{ generation: string; state: string }>(
+    'SELECT generation::text,state FROM rating.identity_work_frame WHERE route=$1::integer AND voter_id=$2::uuid',
+    [owner.route, owner.accountId],
+  );
+  const work = frame.rows[0];
+  if (work?.state === 'active')
+    return { status: 'pending', reason: 'Content score identity repair is pending' };
+  const voter = await client.query<{ state: string; transitionId: string }>(
+    'SELECT state,transition_id::text AS "transitionId" FROM rating.voter_state WHERE route=$1::integer AND voter_id=$2::uuid',
+    [owner.route, owner.accountId],
+  );
+  const standing = voter.rows[0];
+  if (standing && standing.state !== 'eligible')
+    return { status: 'unavailable', reason: `Content voter standing ${standing.state} refuses score currentness` };
+  const version = [
+    owner.question.id,
+    owner.question.revision,
+    owner.question.lifecycleRevision,
+    work?.generation ?? '0',
+    work?.state ?? 'none',
+    standing?.transitionId ?? 'none',
+    standing?.state ?? 'eligible',
+  ].join(':');
+  if (!version || version.length > 256) return { status: 'unavailable', reason: 'invalid Content score currentness version' };
+  return { status: 'current', version };
+};
