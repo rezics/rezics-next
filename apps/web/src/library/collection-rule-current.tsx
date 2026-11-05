@@ -7,6 +7,9 @@ import { useCollectionOwnerCurrent } from './collection-owner-current';
 
 export { useCollectionOwnerCurrent } from './collection-owner-current';
 
+const deniedPage: RulePage = { state: 'denied' };
+const unavailablePage: RulePage = { state: 'unavailable' };
+
 function matches(page: RulePage, subject: string | null, collectionId: string | null) {
   return (
     (page.state === 'new' || page.state === 'ready') &&
@@ -42,12 +45,14 @@ export function CollectionRuleCurrent({
   const valid = matches(page, owner.subject, collectionId) && !history.current.retired.has(identity);
   if (valid && owner.admissionState === 'available') history.current.seen.add(identity);
   const currentPage: RulePage = !valid
-    ? { state: page.state === 'unavailable' ? 'unavailable' : 'denied' }
-    : owner.admissionState === 'available'
-      ? page
-      : owner.admissionState === 'denied'
-        ? { state: 'denied' }
-        : { state: 'unavailable' };
+    ? page.state === 'unavailable'
+      ? unavailablePage
+      : deniedPage
+    : owner.admissionState === 'denied'
+      ? deniedPage
+      : owner.admissionState === 'unavailable'
+        ? unavailablePage
+        : page;
   const operations = owner.admissionState === 'available'
     ? [
         'collection.create',
