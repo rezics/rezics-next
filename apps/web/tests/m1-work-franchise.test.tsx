@@ -226,7 +226,7 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
   const vn = read('wd:Q689445', '原作ビジュアルノベル', vnId, 'schema:TVSeries', '港のアニメ', animeId);
   const anime = read('schema:TVSeries', '港のアニメ', animeId, 'schema:Book', '港の小説', bookId, [
     { property: 'wdt:P725', id: id(11), type: 'schema:Person', label: '出演者' },
-    { property: 'schema:hasPart', id: id(14), type: 'schema:TVEpisode', label: '第一話' },
+    { property: 'schema:hasPart', id: id(14), type: 'schema:Episode', label: '第一話' },
   ]);
   const book = read('schema:Book', '港の小説', bookId, 'wd:Q689445', '原作ビジュアルノベル', vnId, [
     { property: 'schema:author', id: id(12), type: 'schema:Person', label: '作家' },
