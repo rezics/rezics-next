@@ -128,8 +128,8 @@ function expectCustodyQueue(
     subjectId: secondTarget,
     ordinal: 1,
     body: { provider, recordId: secondRecordId },
-    custody: { viewer: 'captured-viewer-2', csrfToken: 'captured-csrf-2', credential: 'captured-credential-2' },
   });
+  expect(second.custody).toBeUndefined();
   expect(second.key).not.toBe(first.key);
   expect(sourceAdmissionHarness.reads).toEqual([firstTarget, secondTarget]);
   const firstData = {
