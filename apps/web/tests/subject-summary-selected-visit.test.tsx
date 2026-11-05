@@ -15,7 +15,7 @@ import { fromPlainText } from '@rezics/document';
 import { authoredFixture } from '../src/kernel/fake/authored-field';
 import { readAuthoredField, type AuthoredAddress, type AuthoredRead } from '../src/features/catalogue/authored-field';
 import { candidateContext } from '../src/subject/candidates';
-import { summaryReadingFragment } from '../src/features/pages/subject-visit-navigation';
+import { subjectVisitReturn, summaryReadingFragment } from '../src/features/pages/subject-visit-navigation';
 import { synopsisVisitHref } from '../src/features/pages/subject-summary-reading/visit';
 import { subjectHref } from '../src/subject/subject-href';
 import definitions from '../src/kernel/recorded/definitions-release.json';
@@ -86,6 +86,8 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   }));
   const { createRoot } = await import('react-dom/client');
   const { PageData, dataComponents } = await import('../src/features/pages/data');
+  const { SubjectSourcesPage } = await import('../src/features/catalogue/subject-sources-page');
+  const { explainSubjectSources } = await import('../src/features/catalogue/subject-sources');
   const { CompositionRender } = await import('../src/features/pages/render');
   const { pageDefinitions } = await import('../src/features/pages/layout');
   const { Route: AuthoredRoute } = await import('../src/routes/subjects/$id_.$slug_.authored');
@@ -151,9 +153,21 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     getParentRoute: () => rootRoute,
     loader: () => ({ id: fixture.id }),
   } as never);
+  const sources = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/subjects/$id/$slug/sources',
+    validateSearch: (search: Record<string, unknown>) => ({ via: subjectVisitReturn(search.via, 'en') }),
+    component: () => (
+      <SubjectSourcesPage
+        result={{ kind: 'ready', page: explainSubjectSources(fixture.publicRead, 'en', definitions) }}
+        locale="en"
+        returnTo={sources.useSearch().via}
+      />
+    ),
+  });
   window.history.replaceState({}, '', href);
   const router = createRouter({
-    routeTree: rootRoute.addChildren([workRoute, destination]),
+    routeTree: rootRoute.addChildren([workRoute, destination, sources]),
     history: createBrowserHistory({ window }),
     defaultPendingMinMs: 0,
   });
@@ -201,6 +215,22 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     await act(async () => {
       await user.selectOptions(chooser, second.id);
     });
+    const evidence = host.querySelector('#subject-summary-evidence')!;
+    expect(evidence.querySelector('[role="status"]')?.textContent).toBe(m.subject_synopsis_sources_unsupported());
+    expect(evidence.textContent).toContain(m.sources_no_citations());
+    const general = [...evidence.querySelectorAll('a')].find(
+      (link) => link.textContent === m.subject_synopsis_general_sources(),
+    )!;
+    expect(general.getAttribute('href')).toContain('/sources?via=');
+    const beforeSources = fixture.calls.length;
+    await click(general);
+    expect(host.querySelector('[data-slot="subject-sources-detail"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('The exact second synopsis.');
+    expect(host.textContent).not.toContain(content.document);
+    expect(fixture.calls.length).toBe(beforeSources);
+    await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
+    expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
+    expect(window.document.activeElement?.id).toBe('subject-summary-evidence');
     const correction = [...host.querySelectorAll('a')].find((link) => link.textContent === m.correction_title())!;
     const selectedAddress = correction.getAttribute('href')!;
     expect(selectedAddress).toContain('via=');

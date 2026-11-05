@@ -9712,6 +9712,8 @@
   "subject_synopsis_choice": "Elegir un resumen proporcionado",
   "subject_synopsis_candidate": "Candidato {number}",
   "subject_synopsis_evidence": "Evidencia de este resumen",
+  "subject_synopsis_sources_unsupported": "No se puede abrir esta sinopsis exacta en Fuentes. Las fuentes generales muestran los datos actuales de la ficha; no verifican esta sinopsis ni sus citas.",
+  "subject_synopsis_general_sources": "Visitar las fuentes generales",
   "subject_synopsis_none": "No hay ningún resumen proporcionado de la obra.",
   "subject_synopsis_choices_unavailable": "La selección de resúmenes no está disponible.",
   "subject_synopsis_unavailable": "Este resumen no tiene ningún documento disponible.",

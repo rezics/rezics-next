@@ -2651,11 +2651,12 @@ documents remain successful reads. Unavailable references, missing bodies and fa
 description remains labeled as a separate fallback. Candidate qualifiers and references render only from the selected
 assertion; no page-level source record is attributed to synopsis text. Spoiler disclosure covers both text and evidence.
 
-Sources and the existing authored-field correction route receive a bounded `via` descriptor for the current
+General Sources and the existing authored-field correction route receive a bounded `via` descriptor for the current
 candidate, document digest, language, Subject context, Realm, locale and release when present. It retains only selection,
 expansion and a safe focus target; it contains no prose, body, credentials or editor state. Return restores only an exact
-current candidate match. Correction links use the page's bounded `statementPropose` advice and do not infer authority
-from public reading.
+current candidate match. For general Sources this descriptor is return intent only, never destination identity or
+native admission; exact selected-synopsis Sources receiving is unsupported. Correction links use the page's bounded
+`statementPropose` advice and do not infer authority from public reading.
 
 Decision: Keep same-language synopsis candidates separate and label them by native order unless disclosed citation
 metadata gives a clearer distinction; show evidence only for the selected assertion.
@@ -2689,12 +2690,20 @@ added: inspection replaces selection inside the existing authored Subject/releas
 The return reading announces a changed or unavailable selection and focuses the current synopsis when the saved
 binding no longer matches. Correction and sign-in hrefs are enclosed by the selected assertion's spoiler gate.
 
+Decision: show the unsupported exact synopsis Sources visit beside the selected evidence controls, with a separately
+named “Visit general Sources” link. The general visit shows independently admitted current Subject facts; it does not
+claim to reopen or verify the selected assertion, document, language or citations. The notice, link and accessible
+text share the whole-association spoiler gate; selected references, qualifiers and the no-citation notice remain.
+Use the existing same-locale Subject/Realm address and bounded immediate return without changing the Sources reader.
+
 Exact Sources receiving remains dependent on the Sources projection owner: `explainSubjectSources` currently
 redacts document values to `somevalue`, omits their document/digest/language binding and omits the Global resolved
 Context. Its language filter can also exclude a selected non-default-language assertion. `SubjectSourcesPage` cannot
 verify the required exact current binding from that result. The Sources reader and route remain unchanged until
 that owner supplies a compatible bounded projection; row indices, citation text and provider provenance cannot
-replace that seam. Native and browser acceptance, including complete Sources traversal, remains integration-owned.
+replace that seam. Future mounted exact receiving requires admitted Context/document/digest/language metadata from
+the existing public contract. Native and browser acceptance remains integration-owned; general navigation and return
+do not establish an exact receiving or native/browser pass.
 
 ## Person correction current visit
 

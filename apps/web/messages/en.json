@@ -9808,6 +9808,8 @@
   "subject_synopsis_choice": "Choose a supplied synopsis",
   "subject_synopsis_candidate": "Candidate {number}",
   "subject_synopsis_evidence": "Evidence for this synopsis",
+  "subject_synopsis_sources_unsupported": "Opening this exact synopsis in Sources is not supported. General Sources shows the subject’s current facts; it does not verify this synopsis or its citations.",
+  "subject_synopsis_general_sources": "Visit general Sources",
   "subject_synopsis_none": "No supplied work synopsis is available.",
   "subject_synopsis_choices_unavailable": "Synopsis choices are unavailable.",
   "subject_synopsis_unavailable": "This synopsis has no available document.",

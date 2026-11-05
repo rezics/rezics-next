@@ -9715,6 +9715,8 @@
   "subject_synopsis_choice": "選擇已提供的劇情簡介",
   "subject_synopsis_candidate": "候選項 {number}",
   "subject_synopsis_evidence": "此劇情簡介的證據",
+  "subject_synopsis_sources_unsupported": "目前不支援在來源頁面開啟所選的這篇簡介。一般來源頁面顯示此條目的目前事實，並不表示這篇簡介或其引用已獲核實。",
+  "subject_synopsis_general_sources": "查看一般來源",
   "subject_synopsis_none": "沒有可用的作品劇情簡介。",
   "subject_synopsis_choices_unavailable": "無法使用劇情簡介選項。",
   "subject_synopsis_unavailable": "此劇情簡介沒有可用的文件。",

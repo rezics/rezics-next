@@ -1538,6 +1538,9 @@ function SummaryContent({
     choiceSet.kind === 'ready' && selectedChoice && value.renderCandidateValue ? (
       <div id="subject-summary-evidence" tabIndex={-1} className="scroll-mt-32 space-y-2 focus-visible:outline-2">
         <h3 className="font-medium">{m.subject_synopsis_evidence({}, options)}</h3>
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.subject_synopsis_sources_unsupported({}, options)}
+        </p>
         {sourceReturn && (
           <p className="text-sm">
             <a
@@ -1548,7 +1551,7 @@ function SummaryContent({
                 value.locale,
               )}
             >
-              {m.sources_open_detail({}, options)}
+              {m.subject_synopsis_general_sources({}, options)}
             </a>
           </p>
         )}
