@@ -517,7 +517,7 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
     prepared = await prepare();
     expect(fetches).toBe(2);
     expect(journal.vndbTagRatingSource('v2002')!.snapshot!.bytes).toEqual(response);
-    const imported = await seed();
+    let imported = await seed();
     for (const command of sealed)
       expect(journal.acknowledgedCommands().find((row) => row.command.key === command.key)?.command).toEqual(command);
     const publish = () =>
@@ -576,20 +576,14 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
       expect(JSON.stringify(weight.references)).toContain(digest);
     }
     expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
-    const editorial = await editor.http(`/v1/subjects/${work.subjectId}/statements`, {
-      property: { id: 'schema:genre' },
-      value: { type: 'value', content: concepts[0]!.id },
+    const editorial = await editor.http(`/v1/subjects/${work.subjectId}/candidates`, {
+      statement: {
+        property: { id: 'schema:genre' },
+        value: { type: 'value', content: concepts[0]!.id },
+      },
     });
     expect(editorial.status).toBe(201);
     await acceptAdopt(work.subjectId, 'schema:genre');
-    const beforeFence = (await candidates(work.subjectId, 'schema:genre')).adoption;
-    const fence = await editor.http('/v1/sourceFences:takedown', {
-      source: crossMediaAliases.vndb,
-      externalId: 'v2002',
-      fieldGroup: 'facts',
-      reason: 'Rights complaint',
-    });
-    expect(fence.status).toBe(200);
     const changed = new TextDecoder().decode(response).replace(/"rating":([0-9.]+)/u, '"rating":1.5000');
     prepared = await prepare(
       async (_input, init) =>
@@ -600,7 +594,37 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
         ),
     );
     expect(prepared.tagWeightObservations.find((row) => row.workId === 'v2002')!.responseDigest).not.toBe(digest);
-    await seed();
+    imported = await seed();
+    const refreshed = await publish();
+    expect(refreshed.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
+    expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
+    expect(journal.vndbTagRatingSource('v2002')!.snapshot!.bytes).toEqual(new TextEncoder().encode(changed));
+    expect(journal.acknowledgedCommands().filter((row) => sealed.some((old) => old.key === row.command.key))).toHaveLength(
+      sealed.length,
+    );
+    prepared = await prepare(async () => new Response(null, { status: 503 }));
+    expect(prepared.tagWeightObservations.find((row) => row.workId === 'v2002')).toMatchObject({
+      state: 'unavailable',
+      code: 'kana-http',
+    });
+    imported = await seed();
+    await publish();
+    const unavailableRead = await publicClient.readSubject(work.subjectId);
+    const unavailableGenres = (unavailableRead.subject as { statements: Record<string, unknown[]> }).statements[
+      'schema:genre'
+    ];
+    expect(JSON.stringify(unavailableGenres)).not.toContain('rezics:sourceTagWeight');
+    expect(JSON.stringify(unavailableGenres)).toContain(concepts[0]!.id);
+    const beforeFence = (await candidates(work.subjectId, 'schema:genre')).adoption;
+    const fence = await editor.http('/v1/sourceFences:takedown', {
+      source: crossMediaAliases.vndb,
+      externalId: 'v2002',
+      fieldGroup: 'facts',
+      reason: 'Rights complaint',
+    });
+    expect(fence.status).toBe(200);
+    prepared = await prepare(async () => new Response(changed));
+    imported = await seed();
     const fenced = await publish();
     expect(fenced.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v2002', code: 'tag-weight-fenced' });
     expect((await candidates(work.subjectId, 'schema:genre')).adoption).toEqual(beforeFence);
