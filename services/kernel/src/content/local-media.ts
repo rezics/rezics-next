@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import type { MediaStorage } from './media-storage.ts';
 
-const REPOSITORY_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+const REPOSITORY_ROOT = resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
 const LOCAL_STACK_ROOT = resolve(REPOSITORY_ROOT, '.temp/local-stack');
 export const LOCAL_MEDIA_ROOT = resolve(LOCAL_STACK_ROOT, 'content-media');
 export const LOCAL_MEDIA_MAX_OBJECT_BYTES = 20 * 1024 * 1024;
