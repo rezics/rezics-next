@@ -70,7 +70,7 @@ test('mounted router windows reread exact native targets, retain failed movement
   session('A');
   const stop = browserObservation(client).subscribe(() => {});
   const calls: Cursors[] = [];
-  let fail = false;
+  let fail: boolean | 'signed-out' = false;
   let release: ((page: Page<Inventory | Detail>) => void) | undefined;
   let defer = false;
   let transition: Promise<unknown> = Promise.resolve();
@@ -90,13 +90,13 @@ test('mounted router windows reread exact native targets, retain failed movement
     loaderDeps: ({ search }) => search,
     gcTime: 0,
     loader: ({ deps }) =>
-      readManagementWindow(client, async () => {
+      readManagementWindow(client, detail ? organization.id : 'inventory', async () => {
         calls.push({ ...deps });
         if (defer)
           return new Promise<Page<Inventory | Detail>>((resolve) => {
             release = resolve;
           });
-        return fail ? { state: 'unavailable' } : ready(detail, deps);
+        return fail ? { state: fail === 'signed-out' ? 'signed-out' : 'unavailable' } : ready(detail, deps);
       }),
     component: View,
   });
@@ -146,6 +146,7 @@ test('mounted router windows reread exact native targets, retain failed movement
     const link = [...nav!.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.textContent === label)!;
     expect(link).toBeDefined();
     if (keyboard) link.focus();
+    const before = calls.length;
     await act(async () => {
       link.dispatchEvent(
         new window.MouseEvent('click', {
@@ -157,6 +158,7 @@ test('mounted router windows reread exact native targets, retain failed movement
       );
       await transition;
     });
+    expect(calls.length).toBe(before + 1);
   };
   const retry = async () =>
     act(async () => {
@@ -253,6 +255,11 @@ test('mounted router windows reread exact native targets, retain failed movement
     });
     expect(host.querySelector('[data-management-feed]')).toBeNull();
     await retry();
+    expect(host.querySelector('a[rel="prev"]')).toBeNull();
+    fail = 'signed-out';
+    await retry();
+    expect(host.textContent).toContain(m.managed_sign_in_title());
+    expect(host.querySelector('[data-management-feed]')).toBeNull();
     expect(host.querySelector('a[rel="prev"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
