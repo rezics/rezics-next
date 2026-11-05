@@ -43,7 +43,12 @@ const startWithServerFunctions = {
 mock.module('@tanstack/react-start', () => startWithServerFunctions);
 mock.module('@tanstack/react-start/server', () => ({ ...startWithServerFunctions, getRequest: request, setResponseHeader() {} }));
 mock.module('cloudflare:workers', () => ({ env }));
-afterAll(() => mock.restore());
+const { setLocale } = await import('../src/paraglide/runtime.js');
+await setLocale('fr', { reload: false });
+afterAll(async () => {
+  await setLocale('en', { reload: false });
+  mock.restore();
+});
 
 test('router and both server reads admit the same address and malformed input never reads lists or pins', async () => {
   const { Route } = await import('../src/routes/library/collections');
@@ -100,8 +105,6 @@ test('router and both server reads admit the same address and malformed input ne
 
 test('saved-address recovery escapes bounded context and offers localized explicit GET correction at the right boundary', async () => {
   const { MineCollectionsAddressRecovery: Recovery } = await import('../src/library/mine-collections-address-recovery');
-  const { setLocale } = await import('../src/paraglide/runtime.js');
-  await setLocale('fr', { reload: false });
   try {
     const cursor = 'opaque+/page==&return_to=https://example.test';
     for (const layout of ['rows', 'previews'] as const) {
@@ -126,6 +129,6 @@ test('saved-address recovery escapes bounded context and offers localized explic
     expect(html).toContain('href="/fr/library/collections?layout=rows"');
     expect(admit({ cursor, layout: 'previews' }).cursor).toBe(cursor);
   } finally {
-    await setLocale('en', { reload: false });
+    await setLocale('fr', { reload: false });
   }
 });
