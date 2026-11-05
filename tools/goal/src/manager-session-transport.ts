@@ -205,11 +205,7 @@ export class ManagerSessionTransport {
       if (activeTurnId) await client.request('turn/interrupt', { threadId, turnId: activeTurnId });
     }
   }
-  registerCodexViewer(
-    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
-    threadId: string,
-    client: AppServer,
-  ): void {
+  registerCodexViewer(spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>, threadId: string, client: AppServer): void {
     const viewer = [spec.pool.executable ?? 'codex', 'resume', threadId];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     this.services.windows.register(
@@ -231,12 +227,7 @@ export class ManagerSessionTransport {
       spec.cwd,
     );
   }
-  reviveClaude(
-    spec: ManagerSpec,
-    sessionId: string,
-    pending: boolean,
-    waking: { id: number }[],
-  ): number[] {
+  reviveClaude(spec: ManagerSpec, sessionId: string, pending: boolean, waking: { id: number }[]): number[] {
     if (!pending) return [];
     const alive = this.services.windows.alive?.(spec.id);
     if (alive === false) {

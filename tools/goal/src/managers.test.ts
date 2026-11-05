@@ -923,10 +923,12 @@ test('close flushes a pending wake and ignores later notifications', async () =>
     expect(s.inbox.notifications(manager.id)).toHaveLength(0);
     expect(s.requests().some((r) => r.method === 'turn/steer')).toBe(true);
     const turns = s.managers.get(manager.id).turns;
-    await s.notify({
-      method: 'turn/started',
-      params: { threadId: manager.threadId, turn: { id: 'after-close', status: 'inProgress' } },
-    }).catch(() => {});
+    await s
+      .notify({
+        method: 'turn/started',
+        params: { threadId: manager.threadId, turn: { id: 'after-close', status: 'inProgress' } },
+      })
+      .catch(() => {});
     expect(s.managers.get(manager.id).turns).toBe(turns);
   } finally {
     await s.close();
