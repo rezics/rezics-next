@@ -175,6 +175,10 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     selectedAddress.searchParams.set('depth', '2');
     selectedAddress.searchParams.set('node', otherSubject);
     const router = await mount(`${selectedAddress.pathname}${selectedAddress.search}`);
+    expect(parse(`${router.state.location.pathname}${router.state.location.searchStr}`)).toMatchObject({
+      kind: 'origin',
+      origin: { context, realm },
+    });
     expect(host.textContent).toContain('selected Context or Realm');
     expect(calls).toHaveLength(0);
 
