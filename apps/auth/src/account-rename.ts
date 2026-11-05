@@ -226,6 +226,7 @@ export function parseRenameContinuation(value: unknown): RenameContinuation | nu
     value.accountId.length > RENAME_CONTINUATION_MAX_ID_CODE_UNITS ||
     op.accountId !== value.accountId ||
     typeof value.operationKey !== 'string' ||
+    value.operationKey.length !== 32 ||
     !/^[a-f0-9]{32}$/.test(value.operationKey) ||
     typeof value.submitted !== 'boolean' ||
     op.kind !== 'rename' ||

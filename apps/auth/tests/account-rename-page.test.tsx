@@ -366,7 +366,7 @@ for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
     }
   });
 
-test('an exact live unknown survives failed persistence and unavailable current advice; a replacement never becomes its retry', async () => {
+test('a replacement command cannot become the original submitted command’s retry', async () => {
   const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
   selected.submitted = true;
   saveRenameContinuation(selected);
@@ -379,4 +379,37 @@ test('an exact live unknown survives failed persistence and unavailable current 
   expect(host.querySelector('form')).toBeNull();
   expect(host.textContent).toContain(m.auth_rename_unavailable());
   expect(readRenameContinuation()).toEqual(replacement);
+});
+
+test('failed submitted-marker persistence keeps the original live unknown through unavailable review', async () => {
+  let current = ready(),
+    writes = 0;
+  commandReplies(() => {
+    writes++;
+    return new Response(null, { status: 503 });
+  });
+  const { host, selected } = await savedReview(async () => current);
+  const slot = window.sessionStorage,
+    set = slot.setItem;
+  slot.setItem = () => {
+    throw Error('quota');
+  };
+  try {
+    await send(host);
+    expect(readRenameContinuation()?.submitted).toBe(false);
+    current = { kind: 'unavailable' };
+    const reload = () => flush(() => host.querySelector<HTMLButtonElement>('button[type=button]:last-child')!.click());
+    await reload();
+    expect(host.querySelector('form')).toBeNull();
+    current = ready();
+    await reload();
+    expect(host.querySelector<HTMLInputElement>('#rename-handle')!.disabled).toBe(true);
+    await flush(() => host.querySelector<HTMLInputElement>('#rename-confirm')!.click());
+    await send(host);
+    expect(writes).toBe(2);
+    expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
+    expect(host.textContent).toContain(m.auth_rename_unknown());
+  } finally {
+    slot.setItem = set;
+  }
 });
