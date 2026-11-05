@@ -308,6 +308,13 @@ Kernel SQL analysis uses the immutable host-local Reylo cache described in the [
 Phase receipts separate database image, migrations, SQL analysis and TypeScript checking so the measured cache effect
 can be compared without timing assertions.
 
+Observation: On 2026-11-06, source `4c0a85d9d68e785e298a445f0979b08e526d3d39` on check host a, a cold
+`bun run --cwd services/kernel typecheck` took 219.53s admitted-command time: database image 9.87s, migrations 6.85s,
+SQL analysis 182.75s for 1,994 files, and TypeScript 17.81s. The warm run on the same host and source reused all 1,994
+analyses and took 36.16s admitted-command time: database image 1.70s, migrations 6.70s, SQL analysis 3.51s, and
+TypeScript 22.35s. Its wrapper took 78.6s including 50.2s dependency setup. Both commands returned the unchanged
+Kernel diagnostics (exit 2); the focused cache test also asserts an identical cold/warm diagnostic string.
+
 Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
 root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.
 
