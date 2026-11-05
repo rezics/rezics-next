@@ -360,6 +360,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(fields()).toEqual(originalForms);
     expect(reading()).not.toBeNull(); // Display changes preserve the exact page observation.
     observe('signed-in', A, 'z'.repeat(22));
+    await settle(); // Credential rotation re-admits the viewer's exposure before retaining the captured payload.
     expect(fields()).toEqual(originalForms); // Rotation cannot rebuild an unresolved command or change its captured CSRF.
 
     // A's old IO is still pending when B becomes independently healthy.
