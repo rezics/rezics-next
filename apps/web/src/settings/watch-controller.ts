@@ -221,8 +221,7 @@ export class WatchController {
       if (!this.current() || this.state.command !== command) return;
       let writeRetryAt = 0;
       if (result.kind === 'uncertain') writeRetryAt = preferenceRetryDeadline(result.problem.retryAfter);
-      else if (replay && result.kind !== 'removed')
-        writeRetryAt = preferenceRetryDeadline(result.problem.retryAfter);
+      else if (replay && result.kind !== 'removed') writeRetryAt = preferenceRetryDeadline(result.problem.retryAfter);
       if (result.kind === 'removed') {
         const currentRevisionRemains = this.state.rows.some(
           (row) =>
