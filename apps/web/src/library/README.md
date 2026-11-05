@@ -338,6 +338,9 @@ without curator facts. Current catalogue membership and properties change fresh 
 last-complete A stays until explicit publication commits. Native catalogue binding is still required; a listing,
 private fact insertion or successful save cannot substitute for it.
 
+Decision: selected publication freezes the reviewed canonical Subject set; public readback requires a positive native
+`complete` generation, while absent or malformed DTO proof remains unavailable rather than appearing as an empty set.
+
 The page reviews at most 100 disclosed canonical subjects, preserves first canonical occurrence and explicitly
 confirms even an empty set. The Kernel retains one complete nine-axis declaration for Source preparation/currentness,
 positive and negative membership, complete original closure/disclosure, private leaves and native output, activation,
