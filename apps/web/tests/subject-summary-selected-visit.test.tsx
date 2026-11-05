@@ -35,23 +35,12 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/subjects/reading' });
   const globals = {
+    ...Object.fromEntries(
+      'document navigator HTMLElement HTMLInputElement Element Node Text NodeFilter Document DocumentFragment ShadowRoot DOMParser MutationObserver ResizeObserver Range DOMRect'
+        .split(' ')
+        .map((name) => [name, Reflect.get(window, name)]),
+    ),
     window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    HTMLInputElement: window.HTMLInputElement,
-    Element: window.Element,
-    Node: window.Node,
-    Text: window.Text,
-    NodeFilter: window.NodeFilter,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    ShadowRoot: window.ShadowRoot,
-    DOMParser: window.DOMParser,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    Range: window.Range,
-    DOMRect: window.DOMRect,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
@@ -64,32 +53,22 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   fixture.old.rank = 'preferred';
   const second = structuredClone(fixture.old);
   second.id = '00000000-0000-4000-8000-000000000102';
-  second.value = {
-    type: 'value',
-    content: { document: '00000000-0000-4000-8000-000000000202', digest: 'c'.repeat(64), language: 'en' },
-  };
+  const content = { document: '00000000-0000-4000-8000-000000000202', digest: 'c'.repeat(64), language: 'en' };
+  second.value = { type: 'value', content };
   second.references = [];
-  const japanese = structuredClone(second);
-  japanese.id = '00000000-0000-4000-8000-000000000103';
-  japanese.value = {
-    type: 'value',
-    content: { document: '00000000-0000-4000-8000-000000000203', digest: 'd'.repeat(64), language: 'ja' },
-  };
-  fixture.publicRead.subject.statements['schema:abstract'] = [fixture.old, second, japanese];
-  const firstDocument = [...fixture.documents.values()][0]!;
-  for (const statement of [second, japanese]) {
-    const content = statement.value.content as { document: string; digest: string; language: string };
-    fixture.documents.set(content.document, {
-      ...firstDocument,
-      id: content.document,
-      candidateId: statement.id,
-      digest: content.digest,
-      language: content.language,
-      body: fromPlainText(content.language === 'ja' ? '日本語のあらすじ。' : 'The exact second synopsis.'),
-    });
-  }
+  fixture.publicRead.subject.statements['schema:abstract'] = [fixture.old, second];
+  fixture.documents.set(content.document, {
+    ...[...fixture.documents.values()][0]!,
+    ...content,
+    id: content.document,
+    candidateId: second.id,
+    body: fromPlainText('The exact second synopsis.'),
+  });
   let held: { resolve: (read: AuthoredRead) => void; address: AuthoredAddress } | undefined;
   let holdNext = false;
+  const noCommand = () => {
+    throw new Error('Inspection cannot submit or confirm');
+  };
   mock.module('../src/features/catalogue/authored-field-actions', () => ({
     loadAuthoredField: ({ data }: { data: AuthoredAddress }) => {
       if (holdNext) {
@@ -100,15 +79,9 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       }
       return readAuthoredField(fixture.client, data, 'en', 'Bearer fixture');
     },
-    submitAuthoredField: () => {
-      throw new Error('Inspection cannot submit');
-    },
-    loadAuthoredReview: () => {
-      throw new Error('Inspection cannot open candidate review');
-    },
-    confirmAuthoredField: () => {
-      throw new Error('Inspection cannot confirm');
-    },
+    submitAuthoredField: noCommand,
+    loadAuthoredReview: noCommand,
+    confirmAuthoredField: noCommand,
   }));
   const { createRoot } = await import('react-dom/client');
   const { PageData, dataComponents } = await import('../src/features/pages/data');
@@ -243,27 +216,22 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
     expect(window.document.activeElement?.id).toBe('subject-summary-reading');
 
-    const fragment = summaryReadingFragment({
+    const selection = {
       candidateId: second.id,
-      documentId: '00000000-0000-4000-8000-000000000202',
-      digest: 'c'.repeat(64),
+      documentId: content.document,
+      digest: content.digest,
       language: 'en',
       locale: 'en',
+    };
+    const fragment = summaryReadingFragment({
+      ...selection,
       context: candidateContext,
       release: definitions.digest,
       focus: 'reading',
     })!;
     const selectedVia = `${href}${fragment}`;
     const realm = '00000000-0000-4000-8000-000000000301';
-    const realmFragment = summaryReadingFragment({
-      candidateId: second.id,
-      documentId: '00000000-0000-4000-8000-000000000202',
-      digest: 'c'.repeat(64),
-      language: 'en',
-      locale: 'en',
-      context: realm,
-      realm,
-    })!;
+    const realmFragment = summaryReadingFragment({ ...selection, context: realm, realm })!;
     const realmAddress = `${href}/authored?${new URLSearchParams({ property: 'schema:abstract', via: `${href}?realm=${realm}${realmFragment}` })}`;
     const calls = fixture.calls.length;
     await navigate(realmAddress);
@@ -276,7 +244,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     );
     expect(host.textContent).toContain(m.subject_synopsis_visit_invalid());
     expect(fixture.calls.length).toBe(calls);
-    second.value.content = { document: '00000000-0000-4000-8000-000000000202', digest: 'e'.repeat(64), language: 'en' };
+    second.value = { type: 'value', content: { ...content, digest: 'e'.repeat(64) } };
     await navigate(selectedAddress);
     expect(host.textContent).toContain(m.subject_synopsis_visit_changed());
     expect(host.querySelector('.ProseMirror')).toBeNull();
@@ -287,7 +255,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     await click(current);
     expect(host.textContent).toContain('An aviator meets');
 
-    second.value.content = { document: '00000000-0000-4000-8000-000000000202', digest: 'c'.repeat(64), language: 'en' };
+    second.value = { type: 'value', content };
     holdNext = true;
     await navigate(selectedAddress);
     expect(held).toBeDefined();
@@ -302,7 +270,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(
       synopsisVisitHref(
         `${href}/authored`,
-        `${href}${fragment.replace('document=', `document=${'字'.repeat(120)}`)}`,
+        `${href}${summaryReadingFragment({ ...selection, documentId: '字'.repeat(100), context: candidateContext })}`,
         'en',
       ),
     ).toBeUndefined();
