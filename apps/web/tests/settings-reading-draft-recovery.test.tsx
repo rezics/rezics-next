@@ -15,9 +15,7 @@ const owner = () => ({
 const flushPromiseJobs = async () => {
   for (let index = 0; index < 8; index++) await Promise.resolve();
 };
-const withControlledTimeout = async (
-  run: (expire: () => void, delay: () => number | undefined) => Promise<void>,
-) => {
+const withControlledTimeout = async (run: (expire: () => void, delay: () => number | undefined) => Promise<void>) => {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
   let callback: (() => void) | undefined;

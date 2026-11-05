@@ -26,9 +26,7 @@ const flushPromiseJobs = async () => {
   for (let index = 0; index < 8; index++) await Promise.resolve();
 };
 
-const withControlledTimeout = async (
-  run: (expire: () => void, delay: () => number | undefined) => Promise<void>,
-) => {
+const withControlledTimeout = async (run: (expire: () => void, delay: () => number | undefined) => Promise<void>) => {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
   let callback: (() => void) | undefined;
@@ -97,7 +95,11 @@ test('a stalled Reading save keeps its original for deliberate retry and ignores
     expect(fixture.calls).toEqual([original, original]);
     expect(fixture.calls[1]).toBe(original);
     expect(reads).toBe(1);
-    expect(editor.snapshot()).toMatchObject({ phase: 'review', pending: null, draft: { spoilerLevel: 1, suitability: 'show' } });
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      pending: null,
+      draft: { spoilerLevel: 1, suitability: 'show' },
+    });
     await saving;
   });
 });
