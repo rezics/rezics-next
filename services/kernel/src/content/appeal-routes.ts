@@ -1,5 +1,6 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -321,7 +322,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
           session.record(result.anchor);
           if (result.selectedAnchor) session.record(result.selectedAnchor);
           set.headers['cache-control'] = 'private, no-store';
-          return result.value;
+          return result.value satisfies Static<(typeof listOptions.response)[200]>;
         }),
       ),
   );
@@ -343,7 +344,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
           session.record(result.anchor);
           if (result.selectedAnchor) session.record(result.selectedAnchor);
           set.headers['cache-control'] = 'private, no-store';
-          return result.value;
+          return result.value satisfies Static<(typeof listOptions.response)[200]>;
         }),
       ),
   );

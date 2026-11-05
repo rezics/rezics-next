@@ -25,6 +25,7 @@ import { inspectReviewDestination, readReviewDestinationPage } from './review-de
 import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { softDeletePost } from './erase-post.ts';
@@ -1262,7 +1263,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               query.limit ?? 20,
             );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { revisions: page.revisions, next: page.next, page: page.page };
+            return { revisions: page.revisions, next: page.next, page: page.page } satisfies Static<typeof RevisionPageResponseSchema>;
           }),
         ),
     )
@@ -1381,7 +1382,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             }
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             const { anchors: _anchors, ...response } = page;
-            return response;
+            return response satisfies Static<typeof BoardPageResponseSchema>;
           }),
         );
       },
