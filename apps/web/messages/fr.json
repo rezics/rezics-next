@@ -8493,7 +8493,7 @@
   "release_search_invalid": "Corrigez les champs signalés, puis relancez la recherche.",
   "release_search_apply": "Rechercher des éditions",
   "release_search_terminal": "Il n’y a plus d’éditions correspondantes.",
-  "release_search_pagination": "Pages d’éditions",
+  "release_search_pagination": "Fenêtres de groupes d’œuvres et d’éditions",
   "release_search_continue": "Éditions suivantes",
   "release_search_page_empty": "Aucune édition correspondante sur cette page. Poursuivez la recherche sur la page suivante.",
   "release_search_related_releases": "Éditions associées",
@@ -10361,5 +10361,12 @@
   "library_rule_results_page_empty": "La règle est prête. Cette page ne contient aucun membre ; d’autres pages peuvent suivre.",
   "library_rule_results_incomplete": "Certaines conditions n’ont pas été appliquées ; cette réponse ne peut donc pas établir un résultat vide.",
   "library_rule_results_retry": "Relire la règle enregistrée",
-  "character_person_results": "Résultats des personnages et des personnes"
+  "character_person_results": "Résultats des personnages et des personnes",
+  "release_search_window_current": "Fenêtre de groupes {number}",
+  "release_search_window_address": "Fenêtre de groupes actuelle",
+  "release_search_window_previous": "Fenêtre de groupes précédente",
+  "release_search_window_first": "Première fenêtre de groupes",
+  "release_search_window_limit": "Seules les 12 dernières fenêtres de groupes admises sont conservées. Reprenez à la première pour recommencer.",
+  "release_search_window_repeated": "Cette suite répète une fenêtre de groupes précédente. Reprenez à la première.",
+  "release_search_window_results": "Groupes actuels d’œuvres et d’éditions"
 }

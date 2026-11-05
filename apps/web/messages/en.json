@@ -8573,7 +8573,7 @@
   "release_search_invalid": "Repair the marked fields, then search again.",
   "release_search_apply": "Search releases",
   "release_search_terminal": "No more matching releases.",
-  "release_search_pagination": "Release pages",
+  "release_search_pagination": "Work and release group windows",
   "release_search_continue": "Next releases",
   "release_search_page_empty": "No matching releases on this page. Continue to search the next page.",
   "release_search_related_releases": "Related releases",
@@ -10504,5 +10504,12 @@
   "library_rule_results_page_empty": "The rule is ready. This page has no members; more pages may remain.",
   "library_rule_results_incomplete": "Some conditions were not applied, so this response cannot establish an empty result.",
   "library_rule_results_retry": "Retry reading the saved rule",
-  "character_person_results": "Character and People results"
+  "character_person_results": "Character and People results",
+  "release_search_window_current": "Group window {number}",
+  "release_search_window_address": "Current group window",
+  "release_search_window_previous": "Previous group window",
+  "release_search_window_first": "First group window",
+  "release_search_window_limit": "Only the last 12 admitted group windows are kept. Use First group window to start again.",
+  "release_search_window_repeated": "This continuation repeats an earlier group window. Start again from the first group window.",
+  "release_search_window_results": "Current work and release groups"
 }

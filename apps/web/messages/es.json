@@ -8493,7 +8493,7 @@
   "release_search_invalid": "Corrige los campos marcados y vuelve a buscar.",
   "release_search_apply": "Buscar ediciones",
   "release_search_terminal": "No hay más ediciones que coincidan.",
-  "release_search_pagination": "Páginas de ediciones",
+  "release_search_pagination": "Ventanas de grupos de obras y ediciones",
   "release_search_continue": "Siguientes ediciones",
   "release_search_page_empty": "No hay ediciones que coincidan en esta página. Continúa buscando en la siguiente.",
   "release_search_related_releases": "Ediciones relacionadas",
@@ -10361,5 +10361,12 @@
   "library_rule_results_page_empty": "La regla está lista. Esta página no tiene miembros; puede haber más páginas.",
   "library_rule_results_incomplete": "No se aplicaron algunas condiciones, por lo que esta respuesta no confirma un resultado vacío.",
   "library_rule_results_retry": "Volver a leer la regla guardada",
-  "character_person_results": "Resultados de personajes y personas"
+  "character_person_results": "Resultados de personajes y personas",
+  "release_search_window_current": "Ventana de grupos {number}",
+  "release_search_window_address": "Ventana de grupos actual",
+  "release_search_window_previous": "Ventana de grupos anterior",
+  "release_search_window_first": "Primera ventana de grupos",
+  "release_search_window_limit": "Solo se conservan las últimas 12 ventanas de grupos admitidas. Vuelve a la primera para empezar de nuevo.",
+  "release_search_window_repeated": "Esta continuación repite una ventana de grupos anterior. Empieza de nuevo desde la primera.",
+  "release_search_window_results": "Grupos actuales de obras y ediciones"
 }

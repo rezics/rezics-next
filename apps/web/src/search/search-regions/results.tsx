@@ -13,8 +13,8 @@ import { discoverySearchHref, type SearchLoaderDeps } from '../search-params';
 import { ResultKindNavigation } from '../result-kind-navigation';
 import { DiscoveryResults } from '../discovery-results';
 import { realmCatalogueSubjectHref } from '../realm-catalogue-handoff';
-import { SearchWindowControls } from '../search-window/navigation';
-import type { SearchWindowNavigation } from '../search-window/use-search-window';
+import { SearchWindowControls } from '../search-window';
+import type { SearchWindowNavigation } from '../search-window';
 
 import type { SearchPageData } from '../search';
 import type { useSearchRetryFocus } from '../search-retry-focus';

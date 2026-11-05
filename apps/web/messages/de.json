@@ -8493,7 +8493,7 @@
   "release_search_invalid": "Die markierten Felder korrigieren und erneut suchen.",
   "release_search_apply": "Veröffentlichungen suchen",
   "release_search_terminal": "Keine weiteren passenden Veröffentlichungen.",
-  "release_search_pagination": "Veröffentlichungsseiten",
+  "release_search_pagination": "Fenster für Werk- und Veröffentlichungsgruppen",
   "release_search_continue": "Weitere Veröffentlichungen",
   "release_search_page_empty": "Keine passenden Veröffentlichungen auf dieser Seite. Auf der nächsten Seite weitersuchen.",
   "release_search_related_releases": "Zugehörige Veröffentlichungen",
@@ -10361,5 +10361,12 @@
   "library_rule_results_page_empty": "Die Regel ist bereit. Diese Seite enthält keine Mitglieder; weitere Seiten können folgen.",
   "library_rule_results_incomplete": "Einige Bedingungen wurden nicht angewendet. Diese Antwort kann daher kein leeres Ergebnis belegen.",
   "library_rule_results_retry": "Gespeicherte Regel erneut lesen",
-  "character_person_results": "Ergebnisse für Figuren und Personen"
+  "character_person_results": "Ergebnisse für Figuren und Personen",
+  "release_search_window_current": "Gruppenfenster {number}",
+  "release_search_window_address": "Aktuelles Gruppenfenster",
+  "release_search_window_previous": "Vorheriges Gruppenfenster",
+  "release_search_window_first": "Erstes Gruppenfenster",
+  "release_search_window_limit": "Es werden nur die letzten 12 geladenen Gruppenfenster gespeichert. Beginne beim ersten Gruppenfenster neu.",
+  "release_search_window_repeated": "Diese Fortsetzung wiederholt ein früheres Gruppenfenster. Beginne beim ersten Gruppenfenster neu.",
+  "release_search_window_results": "Aktuelle Werk- und Veröffentlichungsgruppen"
 }

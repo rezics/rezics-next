@@ -25,7 +25,7 @@ export function SearchWindowControls({
   const disabled = !enabled || visit?.busy;
   const link = (cursor: string | undefined, action: string, label: string) => (
     <a
-      href={discoverySearchHref(locale, { ...state, cursor })}
+      href={visit ? visit.href(cursor) : discoverySearchHref(locale, { ...state, cursor })}
       data-window-action={action}
       className={buttonVariants({ variant: 'outline' })}
       aria-disabled={disabled || undefined}

@@ -1,5 +1,5 @@
 import { QueryTextRecovery } from './query-text-recovery';
-import { useSearchWindow } from './search-window/use-search-window';
+import { useSearchWindow } from './search-window';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
@@ -724,7 +724,8 @@ export function SearchPage({
     ratingPopulation: data?.ratingPopulation,
   };
   const windowNavigation = useSearchWindow({
-    state: committedState,
+    cursor: committedState.cursor,
+    href: (cursor) => discoverySearchHref(locale, { ...committedState, cursor }),
     locale,
     session,
     ready: data?.recovery?.status === 'ready',

@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { admittedReleaseSearchTypes } from '@rezics/filter';
 import * as v from 'valibot';
 import { kernelClient } from '../kernel/client';
@@ -15,6 +15,8 @@ import {
   type ReleaseSearchSelections,
 } from './release-search';
 import type { ReleaseSearchType } from './release-search-page';
+import { browserObservation } from '../session';
+import { assertReaderCurrent } from '../session/reader';
 
 export type ReleaseSearchResult = {
   parsed?: ParsedReleaseSearch;
@@ -245,6 +247,7 @@ async function readSelections(parsed: ParsedReleaseSearch, locale: string): Prom
 const readReleaseSearch = createServerFn({ method: 'GET' })
   .validator(v.object({ locale: v.string(), rawJson: v.pipe(v.string(), v.maxLength(65536)) }))
   .handler(async ({ data }): Promise<ReleaseSearchResult> => {
+    setResponseHeader('Cache-Control', 'private, no-store');
     const release = await refreshRelease();
     const raw = v.parse(v.record(v.string(), v.unknown()), JSON.parse(data.rawJson));
     const parsed = parseReleaseSearch(raw, release, data.locale);
@@ -283,12 +286,22 @@ export const readReleaseSearchChildren = createServerFn({ method: 'POST' })
 export function releaseSearchQueryOptions(locale: string, raw: Record<string, unknown>, principal: string) {
   return queryOptions({
     queryKey: ['release-search', locale, principal, raw],
-    queryFn: async ({ signal }): Promise<ReleaseSearchResult> => {
+    queryFn: async ({ signal, client }): Promise<ReleaseSearchResult> => {
+      const store = browserObservation(client);
+      const stop = typeof window === 'undefined' ? undefined : store.subscribe(() => {});
+      const observation = store.getSnapshot();
+      const current = () => store.getSnapshot() === observation;
       try {
-        return await readReleaseSearch({ data: { locale, rawJson: JSON.stringify(raw) }, signal });
+        assertReaderCurrent(current, signal);
+        const result = await readReleaseSearch({ data: { locale, rawJson: JSON.stringify(raw) }, signal });
+        assertReaderCurrent(current, signal);
+        return result;
       } catch (error) {
+        assertReaderCurrent(current, signal);
         if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
         return { state: { status: 'unavailable' } };
+      } finally {
+        stop?.();
       }
     },
     staleTime: 0,
