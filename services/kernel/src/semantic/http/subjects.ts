@@ -1,3 +1,5 @@
+import { parseSelectedSynopsis } from '../selected-synopsis.ts';
+import { readDocument } from '../../content/document-read.ts';
 import {
   ReviewedPersonEndpointSchema,
   ReviewedPersonExpectationSchema,
@@ -316,6 +318,10 @@ const viewerActionEntry = t.Object(
 const readResponse = t.Object(
   {
     subject: ItemSchema,
+    selectedSynopsis: t.Optional(t.Union([
+      t.Object({ kind: t.Literal('matched'), fact: StatementSchema, context: t.String(), release: t.String() }, { additionalProperties: false }),
+      ...(['changed', 'missing', 'unsupported', 'unavailable'] as const).map((kind) => t.Object({ kind: t.Literal(kind) }, { additionalProperties: false })),
+    ])),
     reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
     account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
@@ -1043,6 +1049,7 @@ function subjectRoutes(
           language: t.Optional(t.String()),
           includeViewerActions: t.Optional(t.Boolean()),
           includeDocuments: t.Optional(t.Boolean()),
+          selectedSynopsis: t.Optional(t.String({ maxLength: 2048 })),
           reviewIdentitySource: t.Optional(t.Union([t.Literal('bangumi'), t.Literal('vndb')])),
           reviewIdentityExternalId: t.Optional(t.String({ maxLength: 255 })),
         }),
@@ -1062,6 +1069,8 @@ function subjectRoutes(
         },
       },
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
+        const selectedSynopsis = query.selectedSynopsis === undefined ? undefined : parseSelectedSynopsis(query.selectedSynopsis);
+        if (query.selectedSynopsis !== undefined && !selectedSynopsis) throw new ProblemError('invalid_request');
         const reviewIdentity =
           query.reviewIdentitySource !== undefined && query.reviewIdentityExternalId !== undefined
             ? { source: query.reviewIdentitySource, externalId: query.reviewIdentityExternalId }
@@ -1081,6 +1090,12 @@ function subjectRoutes(
         const result = await admission.run('normal', job, () =>
           readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
             languages,
+            ...(selectedSynopsis ? { selectedSynopsis: { input: selectedSynopsis, admit: async () => {
+              const admitted = await readDocument({ pool, access: access(), routeKey }, selectedSynopsis.document, { actor, deadline: job.deadline });
+              const document = admitted?.document;
+              return !!document && document.availability === 'available' && document.subjectId === params.id &&
+                document.candidateId === selectedSynopsis.statement && document.digest === selectedSynopsis.digest && document.language === selectedSynopsis.language;
+            } } } : {}),
             ...(reviewIdentity ? { reviewIdentity } : {}),
             authorize: authorizeSummary,
             seen: [...session.components],
@@ -1209,9 +1224,10 @@ function subjectRoutes(
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
         set.headers['cache-control'] =
-          query.includeViewerActions || documentRead || reviewIdentity ? 'private, no-store' : 'no-cache';
+          query.includeViewerActions || documentRead || reviewIdentity || selectedSynopsis ? 'private, no-store' : 'no-cache';
         return {
           subject: result.subject,
+          ...(result.selectedSynopsis ? { selectedSynopsis: result.selectedSynopsis } : {}),
           ...(reviewIdentity ? { reviewedIdentity: result.reviewedIdentity ?? null } : {}),
           account: result.account,
           summary: result.summary,
