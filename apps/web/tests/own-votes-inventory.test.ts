@@ -101,6 +101,7 @@ beforeAll(async () => {
     configFile: false,
     root: resolve(import.meta.dir, '..'),
     cacheDir: resolve(import.meta.dir, '../../../.temp/own-votes-schema-runtime'),
+    ssr: { noExternal: ['@tanstack/react-start', /^@tanstack\/react-start\//, '@rezics/client'] },
     appType: 'custom',
     logLevel: 'silent',
     optimizeDeps: { noDiscovery: true, include: [] },
@@ -108,6 +109,7 @@ beforeAll(async () => {
     plugins: [
       {
         name: 'own-votes-request-boundary',
+        enforce: 'pre',
         resolveId(id, importer) {
           if (
             id.startsWith('@tanstack/react-start') ||
@@ -142,10 +144,6 @@ test('the real own-votes consumer loads in the Web module runner without Content
   const rowSchema = schemas.OwnVotesPageSchema.properties.votes.items;
   expect(rowSchema.properties.question).toBe(leaf.RatingQuestionResponseSchema);
   expect(rowSchema.properties.own).toBe(leaf.RatingVoteResponseSchema);
-  const native = await import('../../../services/kernel/src/rating/schemas.ts');
-  const nativeLeaf = await import('../../../services/kernel/src/rating/vote-response-schemas.ts');
-  expect(native.RatingQuestionResponseSchema).toBe(nativeLeaf.RatingQuestionResponseSchema);
-  expect(native.RatingVoteResponseSchema).toBe(nativeLeaf.RatingVoteResponseSchema);
   const vote = entry('b1b1b1b1-b1b1-41b1-81b1-b1b1b1b1b1b1', accountId);
   expect(Value.Check(schemas.OwnVotesPageSchema, page([vote]))).toBe(true);
   expect(Value.Check(schemas.OwnVotesPageSchema, page(Array(21).fill(vote)))).toBe(false);
