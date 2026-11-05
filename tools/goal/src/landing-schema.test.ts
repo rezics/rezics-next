@@ -54,6 +54,7 @@ function kernelFixture() {
 }
 
 function regenerate(root: string, changedFiles: readonly string[]) {
+  mkdirSync(join(root, '.temp'), { recursive: true });
   process.env.DERIVED_RUN_LOG = join(root, '.temp', 'derived-runs.log');
   return regenerateLandingSchema({
     cwd: root,
