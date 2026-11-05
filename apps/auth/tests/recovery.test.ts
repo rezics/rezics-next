@@ -186,7 +186,6 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}, sto
   });
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
-  page.setDefaultNavigationTimeout(30_000);
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   await page.addInitScript((storageFailure) => {
@@ -256,18 +255,7 @@ async function startForm(page: Page) {
 
 async function completeForm(page: Page) {
   const password = page.getByLabel(/new password/i);
-  try {
-    await password.waitFor({ state: 'visible' });
-  } catch (cause) {
-    throw new Error(
-      `Recovery completion form unavailable: ${JSON.stringify({
-        url: page.url(),
-        body: (await page.locator('body').innerText()).slice(0, 800),
-        routes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
-      })}`,
-      { cause },
-    );
-  }
+  await password.waitFor({ state: 'visible' });
   expect(await password.count(), 'recovery completion has a labelled new password field').toBe(1);
   return { password, submit: page.getByRole('button', { name: 'Update password', exact: true }) };
 }
@@ -285,21 +273,8 @@ async function sendStart(page: Page, address: string) {
 async function sendComplete(page: Page, value = newPassword) {
   const controls = await completeForm(page);
   await controls.password.fill(value);
-  await controls.submit.waitFor({ state: 'visible' });
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/recovery/complete').catch(async (cause) => {
-      throw new Error(
-        `Recovery completion response missing: ${JSON.stringify({
-          url: page.url(),
-          submitEnabled: await controls.submit.isEnabled(),
-          passwordLength: (await controls.password.inputValue()).length,
-          alerts: await page.getByRole('alert').allTextContents(),
-          statuses: await page.getByRole('status').allTextContents(),
-          routes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
-        })}`,
-        { cause },
-      );
-    }),
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/recovery/complete'),
     controls.submit.click(),
   ]);
   return controls;
@@ -371,7 +346,7 @@ test(
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       try {
-        await sendComplete(page, newPassword);
+        await sendComplete(page);
         await page.waitForURL(`${origin}/login`);
         await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
         expect(await page.getByLabel(/email/i).isEditable()).toBe(true);
