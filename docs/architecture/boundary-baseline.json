@@ -46335,11 +46335,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/search.tsx",
-          "edge": "value import \"../search/search.tsx\" #1 => apps/web/src/search/search.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/search.tsx",
           "edge": "value import \"../search/use-search-query\" #1 => apps/web/src/search/use-search-query.ts"
         },
         {

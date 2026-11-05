@@ -1405,8 +1405,9 @@ export function SearchPage({
           key={JSON.stringify([stateKey, locale, session])}
           locale={locale}
           changed={editing || Object.keys(rangeDraftState.properties).length > 0}
-          prepare={() =>
+          prepare={(signal) =>
             prepareShareWithLocale({
+              signal,
               data: {
                 query: committedState.query,
                 locale,

@@ -221,3 +221,17 @@ survive Boolean wrapping and equivalent renders; property/mode, external request
 obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
 dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
 Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.
+
+Query sharing prepares the last executed request through the installed native portable-query projection. Draft
+edits are explained separately and never disable an otherwise allowed executed link. Native advice keeps private,
+unsupported, oversized and unavailable states distinct; filter detail is the bounded native document, not a second
+predicate presenter. Links use only the same-origin Search route and its current recipient admission and repair.
+
+The share visit retains Search's request/locale/session key and consumes Web's public retiring reader observation,
+including equal-principal replacement. Preparation and clipboard dispatch each capture synchronous ownership;
+preparation receives an AbortSignal, and close or replacement rejects completions even if cancellation is ignored.
+Decision: retry retains the current preview while preparing, and clipboard refusal offers deliberate link selection
+without automatic focus movement. Preparation waits for an issued clipboard command to settle. Copy captures the
+current allowed URL immediately before writing; an issued external write cannot be recalled. Opening focuses the
+panel only while its activation still owns focus; close/Escape restores the surviving trigger only from that panel.
+Prepared documents, labels and links remain in the mounted visit and never enter browser storage.
