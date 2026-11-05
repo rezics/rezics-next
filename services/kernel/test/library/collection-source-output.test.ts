@@ -277,15 +277,10 @@ test('the public output descriptor refuses unknown shapes and charges plan-node 
   expect(page.nativeRows).toBeGreaterThan(2);
   const eight = nativePublicOutputWorkDimensions(NATIVE_PUBLIC_OUTPUT_JOURNEYS.read);
   expect('engineRequests' in eight).toBe(false);
-  expect(() =>
-    nativePublicOutputWorkDimensions({ ...NATIVE_PUBLIC_OUTPUT_JOURNEYS.read, engineRequests: 1 }),
-  ).toThrow(/engine requests/);
-  const declared = declareLibraryIdentityStatement(
-    'native-public-output',
-    PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
-    [1],
-    work,
+  expect(() => nativePublicOutputWorkDimensions({ ...NATIVE_PUBLIC_OUTPUT_JOURNEYS.read, engineRequests: 1 })).toThrow(
+    /engine requests/,
   );
+  const declared = declareLibraryIdentityStatement('native-public-output', PUBLIC_OUTPUT_PARTITION_SIZE_SQL, [1], work);
   expect(declared?.engineRequests).toBe(0);
   expect(declared?.work).toEqual(nativePublicOutputFootprint(PUBLIC_OUTPUT_PARTITION_SIZE_SQL, [1], work));
 });

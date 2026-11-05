@@ -268,34 +268,26 @@ const transitionRow = Object.freeze({
   position: decimal,
 });
 
-const headerStatement = statement(
-  'header',
-  header,
-  headerBinds,
-  headerRow,
-  { nativeRows: 4, nativePoints: 1, relationBytes: 2048 },
-);
-const headStatement = statement(
-  'publication-head',
-  head,
-  publicationBinds,
-  publicationRow,
-  { nativeRows: 48, nativePoints: 7, relationBytes: 1024 },
-);
-const publicationStatement = statement(
-  'publication-lock',
-  publication,
-  publicationBinds,
-  publicationRow,
-  { nativeRows: 48, nativePoints: 7, relationBytes: 1024 },
-);
-const ownerStatement = statement(
-  'owner',
-  owner,
-  ownerBinds,
-  ownerRow,
-  { nativeRows: 16, nativePoints: 3, relationBytes: 512 },
-);
+const headerStatement = statement('header', header, headerBinds, headerRow, {
+  nativeRows: 4,
+  nativePoints: 1,
+  relationBytes: 2048,
+});
+const headStatement = statement('publication-head', head, publicationBinds, publicationRow, {
+  nativeRows: 48,
+  nativePoints: 7,
+  relationBytes: 1024,
+});
+const publicationStatement = statement('publication-lock', publication, publicationBinds, publicationRow, {
+  nativeRows: 48,
+  nativePoints: 7,
+  relationBytes: 1024,
+});
+const ownerStatement = statement('owner', owner, ownerBinds, ownerRow, {
+  nativeRows: 16,
+  nativePoints: 3,
+  relationBytes: 512,
+});
 const lifecycleStatement = statement(
   'lifecycle',
   lifecycle,
@@ -331,20 +323,16 @@ const partitionMetadataStatement = statement(
   partitionMetadataRow,
   { nativeRows: 4, nativePoints: 1, relationBytes: 128 },
 );
-const bindingStatement = statement(
-  'binding',
-  binding,
-  captureBinds,
-  bindingRow,
-  { nativeRows: 16, nativePoints: 3, relationBytes: 6144 },
-);
-const bindingLockStatement = statement(
-  'binding-lock',
-  bindingLock,
-  captureBinds,
-  bindingRow,
-  { nativeRows: 16, nativePoints: 3, relationBytes: 6144 },
-);
+const bindingStatement = statement('binding', binding, captureBinds, bindingRow, {
+  nativeRows: 16,
+  nativePoints: 3,
+  relationBytes: 6144,
+});
+const bindingLockStatement = statement('binding-lock', bindingLock, captureBinds, bindingRow, {
+  nativeRows: 16,
+  nativePoints: 3,
+  relationBytes: 6144,
+});
 const identityStatement = statement(
   'identity',
   identity,
@@ -401,13 +389,11 @@ const holdSuccessorStatement = statement(
   { present: 1 },
   { nativeRows: 96, nativePoints: 20, statements: 4, relationBytes: 4096 },
 );
-const transitionReadStatement = statement(
-  'transition-read',
-  transitionRead,
-  [partitionBind, id],
-  transitionRow,
-  { nativeRows: 4, nativePoints: 1, relationBytes: 9216 },
-);
+const transitionReadStatement = statement('transition-read', transitionRead, [partitionBind, id], transitionRow, {
+  nativeRows: 4,
+  nativePoints: 1,
+  relationBytes: 9216,
+});
 const transitionStatement = statement(
   'transition',
   transition,
@@ -517,9 +503,7 @@ export function nativePublicOutputPageStatement(limit: number): NativePublicOutp
   });
 }
 
-export function nativePublicOutputHoldStatement(
-  role: unknown,
-): NativePublicOutputStatement | undefined {
+export function nativePublicOutputHoldStatement(role: unknown): NativePublicOutputStatement | undefined {
   if (role !== 'predecessor' && role !== 'successor') return undefined;
   return role === 'successor' ? holdSuccessorStatement : holdPredecessorStatement;
 }
@@ -529,11 +513,12 @@ const partitionBindCount = bindCountOf(partition);
 const partitionRequestBytes = sqlBytes(partitionSql) + jsonBytes(partitionBinds);
 
 /** Same-snapshot size admission for the current partition node/moved_to projection. No fixed guess. */
-export function nativePublicOutputPartitionStatement(
-  bytes: number,
-): NativePublicOutputStatement | undefined {
+export function nativePublicOutputPartitionStatement(bytes: number): NativePublicOutputStatement | undefined {
   if (!Number.isSafeInteger(bytes) || bytes < 0) return undefined;
-  const resultBytes = Math.max(bytes, jsonBytes({ ...partitionNodeRow, node: text.repeat(1), movedTo: text.repeat(1) }));
+  const resultBytes = Math.max(
+    bytes,
+    jsonBytes({ ...partitionNodeRow, node: text.repeat(1), movedTo: text.repeat(1) }),
+  );
   return Object.freeze({
     name: 'partition',
     sql: partitionSql,
@@ -594,7 +579,10 @@ const staticStatements = Object.freeze([
 ]);
 
 export const NATIVE_PUBLIC_OUTPUT_STATEMENTS = Object.freeze(
-  Object.fromEntries(staticStatements.map((entry) => [entry.name, entry])) as Record<string, NativePublicOutputStatement>,
+  Object.fromEntries(staticStatements.map((entry) => [entry.name, entry])) as Record<
+    string,
+    NativePublicOutputStatement
+  >,
 );
 
 const normal = (sql: string) =>
@@ -676,11 +664,7 @@ export function nativePublicOutputWorkDimensions(bound: Bound): WorkDimensions {
   });
 }
 
-const observeCurrent = sumBounds(
-  headerStatement.bound,
-  partitionMetadataStatement.bound,
-  headStatement.bound,
-);
+const observeCurrent = sumBounds(headerStatement.bound, partitionMetadataStatement.bound, headStatement.bound);
 const committedProof = sumBounds(xminStatement.bound, provenanceStatement.bound);
 const byIdentity = (locked: boolean) =>
   sumBounds(identityStatement.bound, locked ? bindingLockStatement.bound : bindingStatement.bound);

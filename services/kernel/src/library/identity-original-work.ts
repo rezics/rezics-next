@@ -13,11 +13,7 @@ import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from './identity-native-planner-
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 
 /** Producer composition only. A component is neither an allowance nor an original grant. */
-export type LibraryIdentityStatementOwner =
-  | 'planner'
-  | 'native-collection'
-  | 'native-custody'
-  | 'native-public-output';
+export type LibraryIdentityStatementOwner = 'planner' | 'native-collection' | 'native-custody' | 'native-public-output';
 const component: unique symbol = Symbol('Library original work component');
 export type LibraryIdentityOriginalComponent = Readonly<{
   [component]: true;

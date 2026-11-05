@@ -58,9 +58,9 @@ function requestOf(config: string | QueryConfig, params: unknown[] = []) {
 function admitResult(entry: NativePublicOutputStatement, result: QueryResult | undefined) {
   if (!result) return;
   if (result.rows.length > entry.resultRows) throw new TypeError('Native public output result exceeds its plan');
-  const encoded = Buffer.byteLength(JSON.stringify(result.rows, (_key, value: unknown) =>
-    typeof value === 'bigint' ? value.toString() : value,
-  ));
+  const encoded = Buffer.byteLength(
+    JSON.stringify(result.rows, (_key, value: unknown) => (typeof value === 'bigint' ? value.toString() : value)),
+  );
   if (encoded > entry.resultBytes) throw new TypeError('Native public output projection exceeds its plan');
 }
 
