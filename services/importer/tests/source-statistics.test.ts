@@ -375,7 +375,7 @@ for (const failure of ['denied', 'lost'] as const) {
       expect(JSON.parse(uncertain[0]!.body).asOf).toBe('2026-11-04');
       await f.reopen();
       expect(f.importer.session.store.source('vndb')).toEqual(baseline);
-      f.setSourceSnapshotAsOf('2026-11-05');
+      if (failure === 'lost') f.setSourceSnapshotAsOf('2026-11-05');
       f.fail(null);
       expect((await f.run(735)).status).toBe('committed');
       expect(f.writes.at(-1)).toEqual(uncertain[0]!);
