@@ -300,7 +300,13 @@ test(
         const alert = page.getByRole('alert');
         await alert.waitFor({ state: 'visible' });
         expect(await alert.innerText()).toMatch(/invalid|expired/i);
-        expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
+        const focused = await page.evaluate(() => {
+          const active = document.activeElement;
+          return active instanceof HTMLElement
+            ? { tag: active.tagName, id: active.id, role: active.getAttribute('role'), text: active.textContent?.trim() }
+            : null;
+        });
+        expect(await alert.evaluate((element) => element === document.activeElement), JSON.stringify(focused)).toBe(true);
         expect(await page.getByLabel(/new password/i).count()).toBe(0);
         expect(await page.getByRole('button', { name: 'Update password', exact: true }).count()).toBe(0);
         expect(recoveryCalls('start')).toHaveLength(0);

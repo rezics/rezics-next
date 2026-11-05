@@ -248,7 +248,7 @@ async function open(path = '/signup', options: BrowserContextOptions = {}) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, urls };
@@ -520,7 +520,8 @@ test(
       await firstRequest;
       await page.waitForFunction(() => {
         const button = document.querySelector('button[type="submit"]');
-        return button instanceof HTMLButtonElement && button.disabled;
+        const password = document.querySelector('input[name="password"]');
+        return password instanceof HTMLInputElement && password.readOnly && button === null;
       });
       releaseFirstRequest();
       await page.waitForFunction(
@@ -689,6 +690,9 @@ test(
         ),
         page.getByRole('button', { name: 'Create an account', exact: true }).click(),
       ]);
+      await page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+      );
       await page.getByRole('status').filter({ hasText: 'Your account was created' }).waitFor();
       const registrations = signupCalls();
       expect(registrations).toHaveLength(2);
