@@ -207,6 +207,8 @@ enclosing work. Count and pair observations stay independent; no atomic snapshot
 
 ## Collection directory and preview SQL
 
+Decision: compose Directory and Subject reads as request-frozen nine-axis operations, carry the declaration through the existing presentation callback, and consume reached terms at the current Library/native owners.
+
 Decision: keep mounted FULL hydration inside reader currentness; require partition evidence even on a short first
 directory or Subject page. The original deadline reaches hydration and terminal native reads. A disappeared parent
 retains current 404; a withdrawn positive Subject pair remains dependency unavailable. Curator/public-view changes,
