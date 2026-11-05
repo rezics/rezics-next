@@ -37,7 +37,11 @@ independently of future source candidates or unfinished consumers.
 
 Decision: public client aliases retain their names while referencing native modules; provisional transports are removed
 when complete mounted declarations provide their callables. Reviewed Person transport stays unchanged until its
-native Semantic operands are admitted.
+native Semantic operands are admitted. The admitted producer now declares the guarded read/merge operands and a
+200 merge receipt (`survivor`, `redirected`, `revision`); callers bind that receipt when the complete output lands.
+Grouped release match evidence is optional because the native grouped reader omits it; ordinary catalogue evidence
+retains its explicit state. Focused publication tests exercise installed public-root callables and retained operational
+engine-request accounting; broader native/browser/root acceptance remains with integration.
 
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.

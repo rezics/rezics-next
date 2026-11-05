@@ -424,7 +424,7 @@ export function searchRoutes<App>(
           return projection satisfies Static<typeof QueryShareSchema>;
         }
         if (body.representation === 'discovery-v1') return (await mixed()) satisfies Static<typeof DiscoveryPageSchema>;
-        if (body.representation === 'release-groups-v1') return (await grouped()) satisfies Static<typeof releaseGroupsResponse>;
+        if (body.representation === 'release-groups-v1') return (await grouped()) satisfies Static<typeof releaseGroupsResponse> | Static<typeof releaseChildrenResponse>;
         return (await catalogue()) satisfies Static<typeof searchResponse>;
       },
     )
