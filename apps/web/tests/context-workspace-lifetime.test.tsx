@@ -162,6 +162,8 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -598,13 +600,13 @@ test('directory cursor replacements keep admitted history while query, deleted a
   const parent = createRootRoute();
   const route = createRoute({
     getParentRoute: () => parent,
-    path: '/my/contexts',
+    path: '/en/my/contexts',
     validateSearch: directoryInput,
     component: () => <ContextSession mode="directory" input={route.useSearch()} />,
   });
   const router = createRouter({
     routeTree: parent.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ['/my/contexts'] }),
+    history: createMemoryHistory({ initialEntries: ['/en/my/contexts'] }),
   });
   await act(async () => router.load());
   const host = window.document.createElement('div');
@@ -645,9 +647,9 @@ test('directory cursor replacements keep admitted history while query, deleted a
     expect(link(m.library_collections_previous())).toBeUndefined();
     for (const replacement of ['query', 'deleted', 'same', 'aba'] as const) {
       ready('second');
-      await act(async () => router.navigate({ href: '/my/contexts' }));
+      await act(async () => router.navigate({ href: '/en/my/contexts' }));
       // Reload through a fresh selection so the next coordinate is available.
-      await act(async () => router.navigate({ href: '/my/contexts?query=Readers' }));
+      await act(async () => router.navigate({ href: '/en/my/contexts?query=Readers' }));
       await until(() => !!link(m.ctxw_next()));
       ready(null);
       await move(m.ctxw_next());
@@ -657,8 +659,8 @@ test('directory cursor replacements keep admitted history while query, deleted a
           router.navigate({
             href:
               replacement === 'query'
-                ? '/my/contexts?query=Other&cursor=second'
-                : '/my/contexts?deleted=true&cursor=second',
+                ? '/en/my/contexts?query=Other&cursor=second'
+                : '/en/my/contexts?deleted=true&cursor=second',
           }),
         );
       else await act(async () => replace(client, replacement));
@@ -666,7 +668,7 @@ test('directory cursor replacements keep admitted history while query, deleted a
       expect(link(m.library_collections_previous())).toBeUndefined();
     }
     ready('late');
-    await act(async () => router.navigate({ href: '/my/contexts?query=Late' }));
+    await act(async () => router.navigate({ href: '/en/my/contexts?query=Late' }));
     await until(() => !!link(m.ctxw_next()));
     const gate = hold('directory');
     await move(m.ctxw_next());

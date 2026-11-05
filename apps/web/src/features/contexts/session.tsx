@@ -211,8 +211,10 @@ export function ContextSession(props: Mode) {
     locale,
     props.mode === 'directory' ? [props.mode, props.input.query, props.input.deleted] : props,
   ]);
-  return (
+  return props.mode === 'directory' ? (
     <DirectoryComposition key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />
+  ) : (
+    <VisitSession key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />
   );
 }
 export function ContextPending() {
