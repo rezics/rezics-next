@@ -1238,9 +1238,12 @@ export function createBangumiImport(deps: Dependencies) {
           }
         }
       }
-      if (outcome.score.status === 'stale') outcome.status = 'stale';
-      else if (outcome.score.status === 'unavailable' || outcome.score.status === 'unsupported') outcome.status = 'unsupported';
-      else if (outcome.score.status === 'applied' && outcome.status !== 'failed' && outcome.status !== 'stale') outcome.status = 'applied';
+      if (outcome.status !== 'failed') {
+        if (outcome.score.status === 'stale') outcome.status = 'stale';
+        else if (outcome.score.status === 'unavailable' || outcome.score.status === 'unsupported')
+          outcome.status = 'unsupported';
+        else if (outcome.score.status === 'applied' && outcome.status !== 'stale') outcome.status = 'applied';
+      }
       assertJsonBytes(outcome, BANGUMI_LIMITS.outcomeBytes);
       // An acknowledged row can be refreshed under a new token; an uncertain command keeps its original choice.
       await change(actor, 'ack', randomUUID(), { id, ordinal, outcome }, async (tx, a) => {
