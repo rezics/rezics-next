@@ -6,6 +6,7 @@ import { request as httpsRequest } from 'node:https';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { resolveBunCommand } from '../../../../scripts/gate.ts';
@@ -127,6 +128,9 @@ type WebProcess = {
 
 const webRoot = resolve(import.meta.dir, '../..');
 const repositoryRoot = resolve(webRoot, '../..');
+const reyloRegister = fileURLToPath(
+  new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url),
+);
 const nativeWebsiteHost = 'web.native.rezics.com';
 const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
 
@@ -557,7 +561,7 @@ async function startStack(): Promise<
   try {
     reportStackProgress('Native web stack startup: registering kernel SQL modules');
     // Match the kernel test preload before evaluating anything that imports SQL.
-    await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
+    await import(reyloRegister);
     reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');
@@ -1355,7 +1359,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     options.authClockOffsetSeconds === undefined ? undefined : String(options.authClockOffsetSeconds);
   const host = fork(import.meta.filename, [], {
     execPath: resolveBunCommand(['bun'], repositoryRoot)[0]!,
-    execArgv: [],
+    execArgv: ['--preload', reyloRegister],
     cwd: repositoryRoot,
     env: hostEnvironment,
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],

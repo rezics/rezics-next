@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
-import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
+import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/governance-reach.ts';
 import { routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startFakeStripe } from '../../../../services/kernel/test/commerce/support/fake-stripe.ts';
 import { createNativeEditionFixture } from '../../../../services/kernel/test/commerce/support/native-edition-fixture.ts';
@@ -172,10 +171,10 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
       await expectStatus(response, 201, `Grant ${actions.join(', ')}`);
     };
     for (const accountId of [creator.accountId, otherCreator.accountId]) {
-      await grant(accountId, { route: 0, id: GLOBAL_CONTEXT }, ['subject:create', 'board:create']);
-      await grant(accountId, { route: PLATFORM_RESOURCE.route, id: PLATFORM_RESOURCE.id }, ['offer:create']);
+      await grant(accountId, PLATFORM_RESOURCE, ['subject:create', 'board:create']);
+      await grant(accountId, PLATFORM_RESOURCE, ['offer:create']);
     }
-    await grant(payoutOperator.accountId, { route: 0, id: GLOBAL_CONTEXT }, ['payout_statement:mark_paid']);
+    await grant(payoutOperator.accountId, PLATFORM_RESOURCE, ['payout_statement:mark_paid']);
 
     const createOffer = async (persona: 'alice' | 'bob', currency: 'usd' | 'eur', title: string) => {
       const publisher = await createNativeEditionFixture((method, path, body, headers = {}) =>
