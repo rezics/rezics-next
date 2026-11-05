@@ -11,12 +11,10 @@ This file owns acceptance scenarios and evidence limits, not durable bounds or p
 and Profile owners are linked from the [Performance Goal](performance.md). This is an acceptance specification,
 not evidence that the capabilities have passed.
 
-Stages advance separately: **specified red** (validated failing specification), **driver registered** (native binding),
-**implementation exposed** (production boundary), **user-case acceptance passed** (all named cases at a recorded
-revision), **promoted** (that revision on main with recorded checks). “Not yet specified” precedes these stages.
-A reserved scenario name below becomes frozen with its executable acceptance; reserving it proves no stage.
-Existing frozen tests remain unchanged. Promotion requires every applicable cell and exact scenario execution,
-zero skips/todos, real native Access, production HTTP/default workers where relevant, and recorded revision evidence.
+Executable scenarios, user-case acceptance and promotion require separate evidence. A scenario name alone proves
+nothing; it becomes frozen with its executable acceptance. Existing frozen tests remain unchanged. Promotion requires
+every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
+workers where relevant, and recorded revision evidence.
 
 ## composed-discovery-cost
 
