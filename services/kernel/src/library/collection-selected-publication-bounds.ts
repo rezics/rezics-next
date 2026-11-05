@@ -1,7 +1,8 @@
 /** Static bounds for the retained finite selected-set publication command. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-native.ts';
-import { COLLECTION_SOURCE_WORK_COST, COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './collection-source-work-native.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST as COLLECTION_SOURCE_WORK_COST } from './canonical-source-bounds.ts';
+import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import {
   OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT,
   OWNER_FILTER_CLOSURE_REFERENCE_LIMIT,

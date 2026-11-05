@@ -13,7 +13,7 @@ import {
   type CollectionSourceContext,
 } from '../library/collection-source.ts';
 import { nativeCollectionOrdinalPageBound } from '../library/collection-source-native.ts';
-import { COLLECTION_SOURCE_WORK_COST } from '../library/collection-source-work-native.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST as COLLECTION_SOURCE_WORK_COST } from '../library/canonical-source-bounds.ts';
 import type {
   NativeOrdinalFrontier,
   NativeOrdinalKey,
