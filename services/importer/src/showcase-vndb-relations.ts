@@ -56,6 +56,7 @@ export function mapVndbWorkRelation(input: {
 
   const holder = mapping.inverse ? input.vid : input.id;
   const target = mapping.inverse ? input.id : input.vid;
+  const recordRevision = input.revisions.get(holder);
   const evidence: VndbWorkRelationEvidence = {
     path: '/vn_relations/' + input.id + '/' + input.vid,
     code: input.code,
@@ -80,7 +81,7 @@ export function mapVndbWorkRelation(input: {
       membership: 'family',
       record: input.record,
       fields: [...input.fields],
-      recordRevision: input.revisions.get(holder),
+      ...(recordRevision === undefined ? {} : { recordRevision }),
       converterRevision: vndbWorkRelationConverterRevision,
       vndbRelation: {
         sourceSubject: holder,
@@ -120,10 +121,11 @@ export function coalesceVndbWorkRelations(edges: readonly GraphEdgeDraft[]): Gra
     ]
       .sort()
       .join('+');
+    const recordRevision = prior.recordRevision ?? edge.recordRevision;
     groups.set(identity, {
       ...prior,
       record: evidence[0]!.record,
-      recordRevision: prior.recordRevision ?? edge.recordRevision,
+      ...(recordRevision === undefined ? {} : { recordRevision }),
       fields: [...new Set([...prior.fields, ...edge.fields])].sort(),
       vndbRelation: {
         sourceSubject: prior.holder,
