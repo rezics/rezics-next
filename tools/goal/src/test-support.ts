@@ -24,6 +24,7 @@ import {
   sameProcess,
   signalProcessIdentity,
   waitForWorkerExit,
+  installProcessOwnershipAdapter,
   type ProcessIdentity,
 } from './process.ts';
 import {
@@ -32,7 +33,10 @@ import {
   fixtureOwnedProcesses,
   hasUnsettledFixtureWaits,
   settleFixtureWaits,
+  fixtureProcessOwnershipAdapter,
 } from './fixture-process-ownership.ts';
+
+installProcessOwnershipAdapter(fixtureProcessOwnershipAdapter);
 
 const FIXTURE_TERM_GRACE_MS = 300;
 const FIXTURE_KILL_WAIT_MS = 1500;

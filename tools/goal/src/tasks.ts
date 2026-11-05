@@ -497,7 +497,11 @@ export class WorkerTasks {
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
       this.settings.policy?.brief,
     );
-    assertBriefDispatchable(markdown, this.settings.mainCheckout);
+    brief.lintWarnings = assertBriefDispatchable(
+      markdown,
+      this.settings.mainCheckout,
+      this.settings.policy?.brief.bytes ?? defaultPolicy.brief.bytes,
+    );
     if (excludingTask && Boolean(brief.urgent) !== Boolean(this.store.task(excludingTask).brief.urgent))
       throw new Error('urgent lane cannot change after dispatch');
     if (brief.goal === 'control-plane') {

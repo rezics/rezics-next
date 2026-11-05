@@ -50,8 +50,9 @@ memory limits even without `capacity.json`; ordinary admission retains the exist
 ordinary throughput. Resource usage totals still include urgent work.
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
-acceptance files. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
+must have main checked out. Workers commit source changes on their assigned branches and do not rebase. Ordinary dev
+product landings may repair contradictory frozen acceptance assertions; control-plane, stabilize and verification
+landings refuse those changes. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
 acceptance on its retained source, while dirty or changed source or contract and failed or unavailable acceptance stay
 non-green. When a contract changes a behaviour an existing test asserts, the worker updates that test.
 Historical empty commits and controller-frozen acceptance files alone count as unchanged: acceptance records the retained
@@ -122,9 +123,11 @@ Briefs can carry frozen acceptance files in fenced blocks whose info string incl
 ` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the
 configured `formatCommand` on exactly these files before committing them and records their formatted SHA-256 hashes. If
 the formatter rejects a file, the controller restores the brief's original bytes, commits those, and reports the
-formatter output so the manager can repair the brief. The train checks hashes before formatting a landing and refuses
-integration if a worker changes a frozen file. This immutable-input refusal names the changed paths and goes directly
-to the manager as a specification conflict; it does not enter the Git rebase conflict retry path.
+formatter output so the manager can repair the brief. The train checks hashes before formatting a landing. An
+ordinary dev product landing may change a frozen file to repair an assertion that contradicts the contract, an owner
+document or the delivered code. The landing log names the changed paths and the owning manager receives one `info`
+event. Control-plane, stabilize and verification landings still refuse frozen-file changes as immutable-input
+conflicts; they do not enter the Git rebase conflict retry path.
 When a retry reshapes a brief and drops a previously frozen path, the controller restores that file from the task's base
 commit when it existed there; it removes the file only when it was absent from the base. Paths still frozen by the new
 brief continue to be written and formatted from that brief.
@@ -564,13 +567,13 @@ protocol or representation meaning; they are not operator limits.
 | `policy.launchSmoke.launchErrors`                     | `8`                                  | Launch errors retained in a smoke evidence snapshot.                                                                                                                                        |
 | `policy.launchSmoke.resultCharacters`                 | `400`                                | Failed resumed-worker result excerpt characters.                                                                                                                                            |
 | `policy.launchSmoke.drainWaitMs`                      | `5000`                               | Wait for an owned worker start to settle during smoke cleanup (ms).                                                                                                                         |
-| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template budget (UTF-8 bytes).                                                                                                                                                  |
-| `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template body budget in one prompt (UTF-8 bytes).                                                                                                                        |
-| `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total budget (UTF-8 bytes).                                                                                                                                                   |
-| `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template budget (UTF-8 bytes).                                                                                                                                                 |
-| `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening budget (UTF-8 bytes); oversize openings warn until Goal files finish migrating.                                                                                             |
-| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template budget (UTF-8 bytes).                                                                                                                                                |
-| `policy.brief.bytes`                                  | `12288`                              | Maximum brief and owner-decision input size (UTF-8 bytes).                                                                                                                                  |
+| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                        |
+| `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template measurement budget in one prompt (UTF-8 bytes); overruns do not block launch.                                                                                   |
+| `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                         |
+| `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                       |
+| `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                             |
+| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                      |
+| `policy.brief.bytes`                                  | `12288`                              | Brief lint threshold (UTF-8 bytes); over-budget briefs dispatch with a warning.                                                                                                             |
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
@@ -817,53 +820,53 @@ protocol or representation meaning; they are not operator limits.
 Remaining operator bounds retain the package defaults below. Protocol widths, Git index modes,
 filesystem component sizes and systemd microsecond conversions are fixed representations.
 
-| Setting                                         | Default    | Purpose                                                                  |
-| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
-| `policy.evidence.manifestCharacters`            | `8000`     | Retry evidence capture and prompt manifest: manifest characters.         |
-| `policy.evidence.outputLines`                   | `60`       | Retry evidence capture and prompt manifest: output lines.                |
-| `policy.evidence.outputCharacters`              | `2800`     | Retry evidence capture and prompt manifest: output characters.           |
-| `policy.evidence.fieldCharacters`               | `500`      | Retry evidence capture and prompt manifest: field characters.            |
-| `policy.evidence.approaches`                    | `3`        | Retry evidence capture and prompt manifest: approaches.                  |
-| `policy.evidence.approachCharacters`            | `140`      | Retry evidence capture and prompt manifest: approach characters.         |
-| `policy.evidence.approachResultCharacters`      | `160`      | Retry evidence capture and prompt manifest: approach result characters.  |
-| `policy.evidence.pathCharacters`                | `800`      | Retry evidence capture and prompt manifest: path characters.             |
-| `policy.evidence.visiblePathCharacters`         | `700`      | Retry evidence capture and prompt manifest: visible path characters.     |
-| `policy.evidence.commandCharacters`             | `250`      | Retry evidence capture and prompt manifest: command characters.          |
-| `policy.evidence.statCharacters`                | `250`      | Retry evidence capture and prompt manifest: stat characters.             |
-| `policy.evidence.failureCharacters`             | `4000`     | Retry evidence capture and prompt manifest: failure characters.          |
-| `policy.evidence.gitBufferBytes`                | `33554432` | Retry evidence capture and prompt manifest: git buffer bytes.            |
-| `policy.evidence.commandTimeoutMs`              | `30000`    | Retry evidence capture and prompt manifest: command timeout ms.          |
-| `policy.merge.gitBufferBytes`                   | `33554432` | Merge Git, gate cleanup and failure excerpt: git buffer bytes.           |
-| `policy.merge.commandTimeoutMs`                 | `30000`    | Merge Git, gate cleanup and failure excerpt: command timeout ms.         |
-| `policy.merge.cleanupCommandTimeoutMs`          | `10000`    | Merge Git, gate cleanup and failure excerpt: cleanup command timeout ms. |
-| `policy.merge.terminationGraceMs`               | `12000`    | Merge Git, gate cleanup and failure excerpt: termination grace ms.       |
-| `policy.merge.killGraceMs`                      | `1000`     | Merge Git, gate cleanup and failure excerpt: kill grace ms.              |
-| `policy.merge.pollMs`                           | `50`       | Merge Git, gate cleanup and failure excerpt: poll ms.                    |
-| `policy.merge.gateTimeoutMs`                    | `600000`   | Merge Git, gate cleanup and failure excerpt: gate timeout ms.            |
-| `policy.merge.outsideScopePaths`                | `20`       | Maximum example paths reported when a squash exceeds brief scope.        |
-| `policy.merge.affectedFailureLines`             | `20`       | Output tail lines for an affected failure that names no test file.       |
-| `policy.merge.failureLines`                     | `60`       | Merge Git, gate cleanup and failure excerpt: failure lines.              |
-| `policy.merge.failureHeadCharacters`            | `4000`     | Merge Git, gate cleanup and failure excerpt: failure head characters.    |
-| `policy.merge.failureCharacters`                | `8000`     | Merge Git, gate cleanup and failure excerpt: failure characters.         |
-| `policy.trainResolver.devAttempts`              | `3`        | Bounded resolver attempts for repeated dev landing conflicts.            |
-| `policy.trainResolver.inputBytes`               | `262144`   | Isolated conflict resolver: input bytes.                                 |
-| `policy.trainResolver.outputBytes`              | `262144`   | Isolated conflict resolver: output bytes.                                |
-| `policy.trainResolver.timeoutMs`                | `240000`   | Isolated conflict resolver: timeout ms.                                  |
-| `policy.trainResolver.killGraceMs`              | `5000`     | Isolated conflict resolver: kill grace ms.                               |
-| `policy.trainResolver.sourceContracts`          | `4`        | Isolated conflict resolver: source contracts.                            |
-| `policy.trainResolver.sourceContractCharacters` | `16000`    | Isolated conflict resolver: source contract characters.                  |
-| `policy.toolIncidents.threshold`                | `3`        | Shared tool-blocker incident: threshold.                                 |
-| `policy.toolIncidents.windowMs`                 | `1200000`  | Shared tool-blocker incident: window ms.                                 |
-| `policy.toolIncidents.probeMs`                  | `600000`   | Shared tool-blocker incident: probe ms.                                  |
-| `policy.toolIncidents.exampleTasks`             | `5`        | Shared tool-blocker incident: example tasks.                             |
-| `policy.toolIncidents.sourceBufferBytes`        | `1048576`  | Shared tool-blocker incident: source buffer bytes.                       |
-| `policy.toolIncidents.sourceTimeoutMs`          | `30000`    | Shared tool-blocker incident: source timeout ms.                         |
-| `policy.localSettings.diagnosticCharacters`     | `300`      | Last-valid local settings error: diagnostic characters.                  |
-| `policy.service.logLines`                       | `50`       | Systemd service diagnostics and readiness: log lines.                    |
-| `policy.service.socketTimeoutMs`                | `1000`     | Systemd service diagnostics and readiness: socket timeout ms.            |
-| `policy.service.diagnosticCharacters`           | `4096`     | Systemd service diagnostics and readiness: diagnostic characters.        |
-| `policy.worker.blockerFingerprintCharacters`    | `300`      | Normalized tool-blocker fingerprint: blocker fingerprint characters.     |
-| `policy.backlog.expiredTaskExamples`            | `5`        | Expired task notification examples: expired task examples.               |
+| Setting                                         | Default    | Purpose                                                                                                                        |
+| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `policy.evidence.manifestCharacters`            | `8000`     | Retry evidence capture and prompt manifest: manifest characters.                                                               |
+| `policy.evidence.outputLines`                   | `60`       | Retry evidence capture and prompt manifest: output lines.                                                                      |
+| `policy.evidence.outputCharacters`              | `2800`     | Retry evidence capture and prompt manifest: output characters.                                                                 |
+| `policy.evidence.fieldCharacters`               | `500`      | Retry evidence capture and prompt manifest: field characters.                                                                  |
+| `policy.evidence.approaches`                    | `3`        | Retry evidence capture and prompt manifest: approaches.                                                                        |
+| `policy.evidence.approachCharacters`            | `140`      | Retry evidence capture and prompt manifest: approach characters.                                                               |
+| `policy.evidence.approachResultCharacters`      | `160`      | Retry evidence capture and prompt manifest: approach result characters.                                                        |
+| `policy.evidence.pathCharacters`                | `800`      | Retry evidence capture and prompt manifest: path characters.                                                                   |
+| `policy.evidence.visiblePathCharacters`         | `700`      | Retry evidence capture and prompt manifest: visible path characters.                                                           |
+| `policy.evidence.commandCharacters`             | `250`      | Retry evidence capture and prompt manifest: command characters.                                                                |
+| `policy.evidence.statCharacters`                | `250`      | Retry evidence capture and prompt manifest: stat characters.                                                                   |
+| `policy.evidence.failureCharacters`             | `4000`     | Retry evidence capture and prompt manifest: failure characters.                                                                |
+| `policy.evidence.gitBufferBytes`                | `33554432` | Retry evidence capture and prompt manifest: git buffer bytes.                                                                  |
+| `policy.evidence.commandTimeoutMs`              | `30000`    | Retry evidence capture and prompt manifest: command timeout ms.                                                                |
+| `policy.merge.gitBufferBytes`                   | `33554432` | Merge Git, gate cleanup and failure excerpt: git buffer bytes.                                                                 |
+| `policy.merge.commandTimeoutMs`                 | `30000`    | Merge Git, gate cleanup and failure excerpt: command timeout ms.                                                               |
+| `policy.merge.cleanupCommandTimeoutMs`          | `10000`    | Merge Git, gate cleanup and failure excerpt: cleanup command timeout ms.                                                       |
+| `policy.merge.terminationGraceMs`               | `12000`    | Merge Git, gate cleanup and failure excerpt: termination grace ms.                                                             |
+| `policy.merge.killGraceMs`                      | `1000`     | Merge Git, gate cleanup and failure excerpt: kill grace ms.                                                                    |
+| `policy.merge.pollMs`                           | `50`       | Merge Git, gate cleanup and failure excerpt: poll ms.                                                                          |
+| `policy.merge.gateTimeoutMs`                    | `600000`   | Merge Git, gate cleanup and failure excerpt: gate timeout ms.                                                                  |
+| `policy.merge.outsideScopePaths`                | `20`       | Maximum example paths reported when a squash exceeds brief scope.                                                              |
+| `policy.merge.affectedFailureLines`             | `20`       | Output tail lines for an affected failure that names no test file.                                                             |
+| `policy.merge.failureLines`                     | `60`       | Merge Git, gate cleanup and failure excerpt: failure lines.                                                                    |
+| `policy.merge.failureHeadCharacters`            | `4000`     | Merge Git, gate cleanup and failure excerpt: failure head characters.                                                          |
+| `policy.merge.failureCharacters`                | `8000`     | Merge Git, gate cleanup and failure excerpt: failure characters.                                                               |
+| `policy.trainResolver.devAttempts`              | `3`        | Bounded resolver attempts for repeated dev landing conflicts.                                                                  |
+| `policy.trainResolver.inputBytes`               | `262144`   | Compiler-output inline threshold before first/last lines and the full-log path are used; conflicts are never refused for size. |
+| `policy.trainResolver.outputBytes`              | `262144`   | Isolated conflict resolver: output bytes.                                                                                      |
+| `policy.trainResolver.timeoutMs`                | `240000`   | Isolated conflict resolver: timeout ms.                                                                                        |
+| `policy.trainResolver.killGraceMs`              | `5000`     | Isolated conflict resolver: kill grace ms.                                                                                     |
+| `policy.trainResolver.sourceContracts`          | `4`        | Isolated conflict resolver: source contracts.                                                                                  |
+| `policy.trainResolver.sourceContractCharacters` | `16000`    | Isolated conflict resolver: source contract characters.                                                                        |
+| `policy.toolIncidents.threshold`                | `3`        | Shared tool-blocker incident: threshold.                                                                                       |
+| `policy.toolIncidents.windowMs`                 | `1200000`  | Shared tool-blocker incident: window ms.                                                                                       |
+| `policy.toolIncidents.probeMs`                  | `600000`   | Shared tool-blocker incident: probe ms.                                                                                        |
+| `policy.toolIncidents.exampleTasks`             | `5`        | Shared tool-blocker incident: example tasks.                                                                                   |
+| `policy.toolIncidents.sourceBufferBytes`        | `1048576`  | Shared tool-blocker incident: source buffer bytes.                                                                             |
+| `policy.toolIncidents.sourceTimeoutMs`          | `30000`    | Shared tool-blocker incident: source timeout ms.                                                                               |
+| `policy.localSettings.diagnosticCharacters`     | `300`      | Last-valid local settings error: diagnostic characters.                                                                        |
+| `policy.service.logLines`                       | `50`       | Systemd service diagnostics and readiness: log lines.                                                                          |
+| `policy.service.socketTimeoutMs`                | `1000`     | Systemd service diagnostics and readiness: socket timeout ms.                                                                  |
+| `policy.service.diagnosticCharacters`           | `4096`     | Systemd service diagnostics and readiness: diagnostic characters.                                                              |
+| `policy.worker.blockerFingerprintCharacters`    | `300`      | Normalized tool-blocker fingerprint: blocker fingerprint characters.                                                           |
+| `policy.backlog.expiredTaskExamples`            | `5`        | Expired task notification examples: expired task examples.                                                                     |
 
 | Setting                                            | Default     | Purpose                                      |
 | -------------------------------------------------- | ----------- | -------------------------------------------- |
@@ -929,7 +932,11 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 `report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports
 stage totals and p50/p90 durations, Goal totals and percentiles, working-time efficiency from dispatch through
 integration, attempts per integrated task, and the length and oldest age of the start, check, landing, verification
-and promotion queues. Missing lifecycle events stay unknown; reports do not backfill old tasks. Check-slot request,
+and promotion queues. Its guard ledger prices registered attempt endings and landing refusals over seven days by
+firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
+firings and under 10% rewritten are marked `repairable in place`. The hourly report groups guard endings by GuardId.
+It also counts launched worker and manager prompts over budget by layer. Missing lifecycle
+events stay unknown; reports do not backfill old tasks. Check-slot request,
 acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
 most waiting is named as the bottleneck.
 
@@ -1217,11 +1224,15 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
 `research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
 modification time and size. Budgets are `policy.prompt` (worker role 3,500 bytes, conditions 1,500, worker total
-20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. A render
-over a budget refuses the launch and names each layer's measured size; a manager opening over its budget logs a
-warning until Goal files finish migrating. Each attempt records a prompt manifest: git blob SHAs of `AGENTS.md`, the
-role template, each condition and the brief; a hash of the policy object; and rendered bytes per layer.
-`attempts --json` exports it.
+20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. Worker
+and manager renders always launch when a size exceeds its budget. Their manifests retain per-layer sizes, budgets and
+over-budget layer names; hourly flow reports count over-budget launches by layer. The brief lints for byte size,
+`.temp/goal/`, main-checkout paths and superseded check instructions are stored on the task and included in backlog
+dispatch results. Committed-template golden renders still assert role and condition budgets so template growth is
+caught during development. Each worker attempt records the git blob SHAs of `AGENTS.md`, the role template, each
+condition and the brief, plus the policy hash and layer measurements; manager sessions retain their opening
+measurements. `attempts --json` exports worker manifests.
+Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 
 ### Research
 
@@ -1545,6 +1556,8 @@ integration head.
 
 Dev landing conflicts that rerere and the mechanical resolvers do not settle go to the bounded `TrainResolver` in its own worktree with the task brief, base and both sides. The train releases the dev lease while it runs; a resolved commit returns to the front of the dev queue. `policy.trainResolver.devAttempts` bounds repeated resolution (default `3`). If resolution fails, times out or reaches that bound, the same attempt returns to its worker. The landing outcome and log record the method (`rerere`, `mechanical`, `resolver` or `worker`) and resolver token totals.
 
+Resolver prompts include conflict hunks with context, source contracts and instructions for reading each Git stage; long compiler output includes its first and last lines plus the full log path.
+
 After rebasing a single or batched landing, the train checks every path changed by that task against the current dev tree. If the task changed a path but the landing leaves that path's dev content unchanged, the train returns the task to its worker at the merge stage and names the path; a task diff already empty against dev is treated as already represented. Markdown and configured JSON message conflict resolution also stays with the worker when the resolved file keeps only dev's content and discards a worker change. A landing with no net tree change against dev is never reported as integrated on an existing commit.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
@@ -1590,8 +1603,8 @@ conflict or tool blocker), or two consecutive attempts that end without a new co
 attempt records an `attempt-progress` event: whether its branch head moved from the head recorded at its first prompt,
 or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
 beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
-`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change, a specification
-conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
+`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change on lanes that retain
+the refusal, a specification conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
 every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
@@ -1709,13 +1722,17 @@ The supermanager sets direction and the managers own the work. This applies to e
 
 - **Workers own the how; managers own the what.** A brief states the outcome in user terms, its owner links and what
   done means. A product worker on dev verifies the brief's premises against its base, designs the change and writes
-  the acceptance tests the brief does not name; frozen files stay untouchable and only cross-Goal contracts are frozen
-  in advance. It decides ambiguities itself, including a product choice the brief does not make, by taking the
-  reversible option most consistent with the owner documents and decided references; it records each decision in its
+  the acceptance tests the brief does not name. If a frozen assertion contradicts the contract, an owner document or
+  delivered code, it changes the smallest side and lists the reason; ordinary dev product landings may carry that
+  repair, while control-plane, stabilize and verification landings retain the frozen refusal. Only cross-Goal
+  contracts are frozen in advance. It decides ambiguities itself, including a product choice the brief does not make,
+  by taking the reversible option most consistent with the owner documents and decided references; it records each decision in its
   summary and the owning document, tells its manager with
-  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. A blocker is only a
-  contradiction between existing specs or tests, or missing access; undelivered code from another Goal, absent
-  receipts and unfinished work are not blockers. The worker does its own research and stops only for a large survey.
+  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. When requirements
+  conflict, it follows the owner documents and delivered code and changes the smaller side. A blocker is only a
+  conflict where every choice breaks an owner-document rule, a tool or infrastructure failure, or a large survey of
+  products or sources. Undelivered code from another Goal, absent receipts and unfinished work are not blockers. The
+  worker does its own research and stops only for a large survey.
   It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
   lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
   build on their brief and the owner READMEs and do not read other workers' tasks.

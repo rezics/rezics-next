@@ -175,10 +175,15 @@ export interface LandingQueue {
 }
 
 export type GateStage = 'setup' | 'rebase' | 'scope' | 'gate' | 'merge';
-export type GateOutcomeRefusal = {
-  kind: 'frozen-acceptance-change';
-  paths: readonly string[];
-};
+export type GateOutcomeRefusal =
+  | { kind: 'acceptance-failed' }
+  | { kind: 'setup-failed' }
+  | { kind: 'rebase-conflict'; paths?: readonly string[] }
+  | { kind: 'scope-failed'; paths?: readonly string[] }
+  | { kind: 'undeclared-risk-area'; paths?: readonly string[] }
+  | { kind: 'frozen-acceptance-change'; paths: readonly string[] }
+  | { kind: 'no-effect'; paths: readonly string[] }
+  | { kind: 'merge-failed'; paths?: readonly string[] };
 
 export type LandingConflictMethod = 'rerere' | 'mechanical' | 'resolver' | 'worker';
 export type LandingConflictResolution = {
@@ -230,6 +235,8 @@ export type GateOutcome = AttemptRef & {
   conflictedFiles?: readonly string[];
   /** Typed train refusal for immutable inputs; not a Git rebase conflict. */
   refusal?: GateOutcomeRefusal;
+  /** Frozen acceptance files repaired by a dev product landing and reported after it integrates. */
+  frozenAcceptanceChanges?: readonly string[];
   /** Complete Git identity of an actual unresolved rebase conflict; absent on legacy or non-Git failures. */
   rebaseConflict?: RebaseConflictContext;
   /** A task repeated the same control-plane propagation conflict without source or target progress. */

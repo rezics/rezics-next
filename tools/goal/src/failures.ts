@@ -57,17 +57,9 @@ export function classifyFailure(
   if (attempt.failureKind === 'tool' || outcome.stage === 'setup' || outcome.failsOnMain || outcome.timedOut)
     return 'environment';
   if (attempt.exitCode !== null && attempt.exitCode !== 0) return 'environment';
-  // Product work on the integration branch may change files outside its declared paths and grow past its estimate:
-  // the attempt record lists both, and neither stops the task. A scope-stage refusal (an undeclared risk area) still
-  // stops every task.
+  // Declared paths and estimates describe expected work. Only an undeclared risk-area scope refusal stops landing.
   const devProduct = devProductBrief(task.brief);
-  if (
-    outcome.stage === 'scope' ||
-    (!devProduct &&
-      (outcome.changedFiles.some((path) => !matchesPath(path, task.brief.paths, policy)) ||
-        estimateOverrun(outcome, task, policy)))
-  )
-    return 'scope-growth';
+  if (outcome.stage === 'scope') return 'scope-growth';
   if (
     !hasCommit &&
     (record.steps > limits.maxSteps || Date.parse(record.endedAt) - Date.parse(record.startedAt) > limits.maxMs)

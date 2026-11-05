@@ -43,6 +43,30 @@ test('a passing worker branch runs its acceptance before integrating into dev an
   }
 });
 
+test('a main landing lists changes outside declared paths and integrates them', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    git(h.root, 'branch', 'stabilize', h.head('main'));
+    const task = h.dispatch('declared.txt', [], ['true'], 'fixture', 'stabilize');
+    await h.start(task);
+    writeFileSync(join(task.worktree, 'outside.txt'), 'required fix');
+    git(task.worktree, 'add', 'outside.txt');
+    git(task.worktree, 'commit', '-qm', 'Fix outside declared path');
+
+    await h.train();
+
+    expect(h.outcomes[0]?.passed).toBe(true);
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.outsidePaths).toEqual(['outside.txt']);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      'Changed outside declared paths (allowed): outside.txt',
+    );
+    expect(git(h.root, 'show', 'stabilize:outside.txt')).toBe('required fix');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('integration into dev refuses undeclared risk changes, unions Markdown and refuses other conflicts', async () => {
   const h = integrationHarness();
   try {

@@ -32,6 +32,7 @@ import type {
   LandingRequest,
   RebaseConflictContext,
 } from './contracts.ts';
+import { ensureGateOutcomeRefusal } from './guards.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -625,6 +626,21 @@ function changedWorkingFiles(cwd: string, policy = defaultPolicy.merge): string[
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
 
+function landingWorkingFiles(cwd: string, declaredPaths: readonly string[], policy = defaultPolicy.merge): string[] {
+  const changed = changedWorkingFiles(cwd, policy);
+  if (!declaredPaths.length) return changed;
+  const ignoredDeclared = mergeGit(
+    cwd,
+    ['ls-files', '--others', '--ignored', '--exclude-standard', '-z', '--', ...declaredPaths],
+    policy,
+  );
+  if (ignoredDeclared.error || ignoredDeclared.status !== 0)
+    throw new Error(
+      ignoredDeclared.stderr?.trim() || ignoredDeclared.error?.message || 'Cannot inspect declared ignored paths',
+    );
+  return [...new Set([...changed, ...ignoredDeclared.stdout.split('\0').filter(Boolean)])];
+}
+
 /** Refresh promotion outputs on a dev landing when its source changes require them. */
 /**
  * Derived generators need the workspace's dependencies (the pinned bun, dbmate for migrations), but a train worktree is
@@ -686,13 +702,41 @@ function regenerateLandingDerivedFiles(
 }
 
 /** A path gone from both the index and the worktree is an already staged deletion, and naming it fails `git add`. */
-export function stagePaths(cwd: string, paths: Iterable<string>, policy = defaultPolicy.merge): void {
+export function stagePaths(
+  cwd: string,
+  paths: Iterable<string>,
+  policy = defaultPolicy.merge,
+  declaredPaths: readonly string[] = [],
+  briefPolicy = defaultPolicy.brief,
+): string[] {
   const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   const all = [...paths];
-  if (!all.length) return;
+  if (!all.length) return [];
   const indexed = new Set(git(cwd, 'ls-files', '-z', '--', ...all).split('\0'));
-  const present = all.filter((path) => indexed.has(path) || existsSync(join(cwd, path)));
+  const trackedAtHead = new Set(git(cwd, 'ls-tree', '-r', '--name-only', '-z', 'HEAD', '--', ...all).split('\0'));
+  const present: string[] = [];
+  const force: string[] = [];
+  const dropped: string[] = [];
+  for (const path of all) {
+    if (!indexed.has(path) && !existsSync(join(cwd, path))) continue;
+    if (!trackedAtHead.has(path)) {
+      const ignored = mergeGit(cwd, ['check-ignore', '--no-index', '--quiet', '--', path], policy);
+      if (ignored.error || ignored.status === null || ignored.status > 1)
+        throw new Error(ignored.stderr?.trim() || ignored.error?.message || `Cannot inspect ignored path ${path}`);
+      if (ignored.status === 0) {
+        if (matchesPath(path, declaredPaths, briefPolicy)) force.push(path);
+        else {
+          if (indexed.has(path)) git(cwd, 'reset', '--quiet', 'HEAD', '--', path);
+          dropped.push(path);
+        }
+        continue;
+      }
+    }
+    present.push(path);
+  }
   if (present.length) git(cwd, 'add', '-A', '--', ...present);
+  if (force.length) git(cwd, 'add', '-f', '-A', '--', ...force);
+  return dropped;
 }
 
 function unmergedFiles(cwd: string, policy = defaultPolicy.merge): string[] {
@@ -739,7 +783,7 @@ function taskIntegrationTarget(
   stateDirectory: string,
   taskId: string,
   policy = defaultPolicy.storage,
-): { target?: string; manager?: string; goal?: string; base?: string; workspace?: Task['workspace'] } {
+): { target?: string; manager?: string; goal?: string; kind?: string; base?: string; workspace?: Task['workspace'] } {
   const path = join(stateDirectory, 'goal.sqlite');
   if (!existsSync(path)) return {};
   const db = new Database(path, { readonly: true, strict: true });
@@ -750,7 +794,7 @@ function taskIntegrationTarget(
     const task = JSON.parse(row.body) as {
       base?: unknown;
       workspace?: Task['workspace'];
-      brief?: { target?: unknown; manager?: unknown; goal?: unknown };
+      brief?: { target?: unknown; manager?: unknown; goal?: unknown; kind?: unknown };
     };
     const brief = task.brief;
     return {
@@ -758,6 +802,7 @@ function taskIntegrationTarget(
       ...(typeof brief?.target === 'string' ? { target: brief.target } : {}),
       ...(typeof brief?.manager === 'string' ? { manager: brief.manager } : {}),
       ...(typeof brief?.goal === 'string' ? { goal: brief.goal } : {}),
+      ...(typeof brief?.kind === 'string' ? { kind: brief.kind } : {}),
       ...(typeof task.base === 'string' ? { base: task.base } : {}),
     };
   } finally {
@@ -940,6 +985,16 @@ function refuseNoEffect(
 ): void {
   result.stage = 'merge';
   result.conflictedFiles = [...paths];
+  result.refusal = { kind: 'no-effect', paths: canonicalConflictPaths(paths) };
+  result.firstFailure = firstFailure(reason);
+  appendFileSync(logPath, `${reason}\n`);
+}
+
+function refuseRebaseConflict(result: GateOutcome, path: string, reason: string, logPath: string): void {
+  const paths = canonicalConflictPaths([path]);
+  result.stage = 'rebase';
+  result.conflictedFiles = paths;
+  result.refusal = { kind: 'rebase-conflict', paths };
   result.firstFailure = firstFailure(reason);
   appendFileSync(logPath, `${reason}\n`);
 }
@@ -950,6 +1005,35 @@ function refuseFrozenAcceptanceChange(result: GateOutcome, paths: readonly strin
   result.refusal = { kind: 'frozen-acceptance-change', paths: canonical };
   result.firstFailure = firstFailure(`Frozen acceptance file changed: ${canonical.join(', ')}`);
   appendFileSync(logPath, `Frozen acceptance files changed: ${canonical.join(', ')}\n`);
+}
+
+function acceptAlreadyPresent(result: GateOutcome, commit: string, paths: readonly string[], logPath: string): void {
+  result.passed = true;
+  result.stage = 'merge';
+  result.mergedCommit = commit;
+  delete result.conflictedFiles;
+  delete result.firstFailure;
+  delete result.refusal;
+  appendFileSync(
+    logPath,
+    `Already present on the integration target: ${canonicalConflictPaths(paths).join(', ') || 'no source changes'}\n`,
+  );
+}
+
+export function devMayRepairFrozenAcceptance(
+  target: IntegrationTarget,
+  taskKind?: string,
+  controlPlane = false,
+): boolean {
+  return target === 'integration' && !controlPlane && taskKind !== 'verification';
+}
+
+function recordFrozenAcceptanceChange(result: GateOutcome, paths: readonly string[], logPath: string): void {
+  const previous = new Set(result.frozenAcceptanceChanges ?? []);
+  const added = canonicalConflictPaths(paths).filter((path) => !previous.has(path));
+  if (!added.length) return;
+  result.frozenAcceptanceChanges = canonicalConflictPaths([...previous, ...added]);
+  appendFileSync(logPath, `Frozen acceptance file changed: ${added.join(', ')}\n`);
 }
 
 function treeDiffIsEmpty(cwd: string, base: string, candidate: string, policy = defaultPolicy.merge): boolean {
@@ -1935,7 +2019,7 @@ export class MergeTrain {
               batch.push(candidate);
             }
             if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
-              const integrated = await this.integrateBatch(batch);
+              const integrated = await this.integrateBatch(batch, lane);
               if (integrated.resolution) {
                 o.queue.beginResolution(integrated.resolution.entry.id);
                 pendingDevResolutions.push(integrated.resolution);
@@ -2078,7 +2162,7 @@ export class MergeTrain {
     return !recorded.workspace && recorded.target !== 'stabilize' && !controlPlaneReleaseBrief(recorded);
   }
 
-  private async integrateBatch(entries: readonly LandingEntry[]): Promise<BatchLandingResult> {
+  private async integrateBatch(entries: readonly LandingEntry[], lane: 'main' | 'dev'): Promise<BatchLandingResult> {
     const o = this.options;
     const outcomes = new Map<number, GateOutcome>();
     const deferred = new Set<number>();
@@ -2112,7 +2196,7 @@ export class MergeTrain {
     const orderedOutcomes = () =>
       entries.flatMap((entry) => {
         const outcome = outcomes.get(entry.id);
-        return outcome ? [{ entry, outcome }] : [];
+        return outcome ? [{ entry, outcome: ensureGateOutcomeRefusal(outcome) }] : [];
       });
     const discardIntegratedMembers = (): boolean => {
       const store = o.fence;
@@ -2160,9 +2244,11 @@ export class MergeTrain {
         prepareRemoval = captureTrainWorktreeRemoval(trainTree);
 
         for (const entry of pending) {
-          const request = entry.request;
+          const request = { ...entry.request };
           const logPath = logPaths.get(entry.id)!;
           const result = createResult(entry, logPath);
+          const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId, o.policy?.storage);
+          const mayRepairFrozen = devMayRepairFrozenAcceptance(lane === 'dev' ? 'integration' : 'main', recorded.kind);
           try {
             o.fence.assertCurrent(request);
           } catch (error) {
@@ -2170,38 +2256,77 @@ export class MergeTrain {
             stale = entry;
             break;
           }
-          const tip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-          const originalBase = this.git(o.mainCheckout, 'merge-base', tip, base);
+          let tip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+          let originalBase = this.git(o.mainCheckout, 'merge-base', tip, base);
           const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
-          this.git(trainTree, 'reset', '--hard', tip);
-          this.git(trainTree, 'clean', '-fdx');
           const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
-          const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
-          if (changedFrozenAtSource.length) {
-            const changedFrozenOnTarget = new Set(
-              frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart, this.options.policy?.merge),
+          const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
+          const sourcePaths = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
+          const sourceFrozenChanges = sourcePaths.filter((path) => frozenPaths.has(path));
+          const frozenNotOnTarget = sourceFrozenChanges.filter((path) => {
+            const difference = mergeGit(
+              o.mainCheckout,
+              ['diff', '--quiet', tip, previous, '--', path],
+              this.options.policy?.merge,
             );
-            refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
-            // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
-            // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
-            const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
-            if (workerOnlyFrozenChanges.length)
-              result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+            if (difference.error || difference.status === null || difference.status > 1)
+              throw new Error(
+                difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`,
+              );
+            return difference.status === 1;
+          });
+          if (frozenNotOnTarget.length) {
+            refuseFrozenAcceptanceChange(result, frozenNotOnTarget, logPath);
+            result.conflictedFiles = canonicalConflictPaths(frozenNotOnTarget);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
           }
-          const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
-          const worked = this.git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
-            .split('\n')
-            .some((path) => path && !frozenPaths.has(path));
+          let worked = sourcePaths.some((path) => !frozenPaths.has(path));
           if (!worked) {
-            result.stage = 'rebase';
-            result.firstFailure = firstFailure(
-              'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
-              this.options.policy?.merge,
-            );
-            appendFileSync(logPath, `${result.firstFailure.assertion}\n`);
+            const prepared = this.commitDirtySource(request, tip, frozenAtStart, logPath);
+            if (prepared.frozenPaths.length) {
+              refuseFrozenAcceptanceChange(result, prepared.frozenPaths, logPath);
+              result.conflictedFiles = canonicalConflictPaths(prepared.frozenPaths);
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+            if (prepared.committed) {
+              tip = prepared.tip;
+              originalBase = this.git(o.mainCheckout, 'merge-base', tip, base);
+              worked = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge).some(
+                (path) => !frozenPaths.has(path),
+              );
+            } else {
+              acceptAlreadyPresent(result, previous, [], logPath);
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+          }
+          this.git(trainTree, 'reset', '--hard', tip);
+          this.git(trainTree, 'clean', '-fdx');
+          const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
+          if (changedFrozenAtSource.length) {
+            if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+            else {
+              const changedFrozenOnTarget = new Set(
+                frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart, this.options.policy?.merge),
+              );
+              refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+              // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+              // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+              const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+              if (workerOnlyFrozenChanges.length)
+                result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
+          }
+          if (!worked) {
+            acceptAlreadyPresent(result, previous, [], logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -2245,7 +2370,8 @@ export class MergeTrain {
                   resolution,
                 };
               }
-              refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
+              if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+              else acceptAlreadyPresent(result, previous, [error.path], logPath);
               result.conflictResolution = {
                 method: 'worker',
                 tokens: request.devResolution?.tokens ?? emptyTokens(),
@@ -2309,10 +2435,13 @@ export class MergeTrain {
           const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
           const changedFrozen = changedFrozenFiles(trainTree, frozen);
           if (changedFrozen.length) {
-            refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
-            localOutcomes.set(entry.id, result);
-            resetTo(trainTree, previous);
-            continue;
+            if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozen, logPath);
+            else {
+              refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
           }
 
           result.stage = 'scope';
@@ -2405,7 +2534,7 @@ export class MergeTrain {
           const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
           const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
           if (treeDiffIsEmpty(trainTree, previous, candidate, this.options.policy?.merge)) {
-            refuseNoEffect(result, taskPaths, logPath);
+            acceptAlreadyPresent(result, previous, taskPaths, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -2419,7 +2548,7 @@ export class MergeTrain {
             this.options.policy?.merge,
           );
           if (noEffect.length) {
-            refuseNoEffect(result, noEffect, logPath);
+            acceptAlreadyPresent(result, previous, noEffect, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -3173,7 +3302,7 @@ export class MergeTrain {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
       assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);
-    const request = entry.request;
+    const request = { ...entry.request };
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId, o.policy?.storage);
     const sharedStore = recorded.workspace && o.fence instanceof WorkerStore ? o.fence : undefined;
@@ -3251,6 +3380,7 @@ export class MergeTrain {
       );
     };
     const finish = () => {
+      ensureGateOutcomeRefusal(result);
       if (!result.passed && !this.workspaceFailures.has(entry.id)) attributeFailure(result);
       return result;
     };
@@ -3356,8 +3486,8 @@ export class MergeTrain {
       }
       if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      const sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-      const tip = request.devResolution?.commit ?? sourceTip;
+      let sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      let tip = request.devResolution?.commit ?? sourceTip;
       workerCommit = request.workerCommit ?? sourceTip;
       if (workspace && sharedStore) {
         sharedSource = sourceTip;
@@ -3407,6 +3537,71 @@ export class MergeTrain {
         stabilize = false;
         integratesIntoDev = false;
       }
+      const mayRepairFrozen = devMayRepairFrozenAcceptance(integrationTarget, recorded.kind, controlPlane);
+      if (!workspace && !request.devResolution && !request.managerLanding) {
+        const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
+        const frozenPaths = new Set(frozen.map((file) => file.path));
+        const sourceBase = controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
+        const committedPaths = changedPathsBetween(o.mainCheckout, sourceBase, sourceTip, this.options.policy?.merge);
+        const frozenNotOnTarget = committedPaths.filter((path) => {
+          if (!frozenPaths.has(path)) return false;
+          const difference = mergeGit(
+            o.mainCheckout,
+            ['diff', '--quiet', sourceTip, target(), '--', path],
+            this.options.policy?.merge,
+          );
+          if (difference.error || difference.status === null || difference.status > 1)
+            throw new Error(
+              difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`,
+            );
+          return difference.status === 1;
+        });
+        if (frozenNotOnTarget.length && !mayRepairFrozen) {
+          stage = 'rebase';
+          refuseFrozenAcceptanceChange(result, frozenNotOnTarget, logPath);
+          result.conflictedFiles = canonicalConflictPaths(frozenNotOnTarget);
+          return finish();
+        }
+        const hasCommittedWork = committedPaths.some((path) => !frozenPaths.has(path));
+        if (!hasCommittedWork) {
+          const prepared = this.commitDirtySource(request, sourceTip, frozen, logPath);
+          if (prepared.frozenPaths.length) {
+            stage = 'rebase';
+            refuseFrozenAcceptanceChange(result, prepared.frozenPaths, logPath);
+            result.conflictedFiles = canonicalConflictPaths(prepared.frozenPaths);
+            return finish();
+          }
+          if (!prepared.committed) {
+            if (!request.unchangedClaim || request.sourceDirtyAtSettlement) {
+              delete request.unchangedClaim;
+              delete request.contractHash;
+              delete request.sourceDirtyAtSettlement;
+              acceptAlreadyPresent(result, target(), [], logPath);
+              return finish();
+            }
+          } else {
+            delete request.unchangedClaim;
+            delete request.contractHash;
+            delete request.sourceDirtyAtSettlement;
+            sourceTip = tip = prepared.tip;
+            workerCommit = prepared.tip;
+            request.workerCommit = prepared.tip;
+          }
+          if (prepared.committed && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
+            const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
+            const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
+            controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
+            controlPlaneFork = controlPlane ? fork : undefined;
+            if (controlPlane) {
+              integrationTarget = 'main';
+              targetBranch = mainBranch;
+              targetRef = `refs/heads/${targetBranch}`;
+              stabilize = false;
+              integratesIntoDev = false;
+            }
+          }
+        }
+      }
       // Recover an advance that committed before its outcome was saved.
       if (await recoverAlreadyIntegrated()) return finish();
       const originalBase = controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
@@ -3444,23 +3639,27 @@ export class MergeTrain {
             : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
         if (changedFrozenAtSource.length) {
-          const changedFrozenOnTarget = new Set(
-            frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart, this.options.policy?.merge),
-          );
-          refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
-          // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
-          // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
-          const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
-          if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
-          if (workspace) {
-            const owners = sharedTasks.filter((task) =>
-              taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
-                changedFrozenAtSource.includes(path),
-              ),
+          if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+          else {
+            const changedFrozenOnTarget = new Set(
+              frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart, this.options.policy?.merge),
             );
-            attributeFailure(result, owners.length ? owners : undefined);
+            refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+            // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+            // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+            const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+            if (workerOnlyFrozenChanges.length)
+              result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+            if (workspace) {
+              const owners = sharedTasks.filter((task) =>
+                taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
+                  changedFrozenAtSource.includes(path),
+                ),
+              );
+              attributeFailure(result, owners.length ? owners : undefined);
+            }
+            return finish();
           }
-          return finish();
         }
         const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
         const worked = this.git(trainTree, 'diff', '--name-only', '-z', originalBase, tip)
@@ -3609,7 +3808,9 @@ export class MergeTrain {
               result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
               return this.devResolutionHandoff(entry, result, base, [error.path]);
             }
-            refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
+            if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+            else if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, [error.path], logPath);
+            else refuseNoEffect(result, [error.path], logPath);
             if (integratesIntoDev && !stabilize && !controlPlane) {
               result.conflictResolution = {
                 method: 'worker',
@@ -3641,15 +3842,18 @@ export class MergeTrain {
           : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
         if (changedFrozen.length) {
-          stage = 'rebase';
-          refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
-          if (workspace) {
-            const owners = sharedTasks.filter((task) =>
-              taskChangedPaths(task, tip, this.options.policy?.merge).some((path) => changedFrozen.includes(path)),
-            );
-            attributeFailure(result, owners.length ? owners : undefined);
+          if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozen, logPath);
+          else {
+            stage = 'rebase';
+            refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
+            if (workspace) {
+              const owners = sharedTasks.filter((task) =>
+                taskChangedPaths(task, tip, this.options.policy?.merge).some((path) => changedFrozen.includes(path)),
+              );
+              attributeFailure(result, owners.length ? owners : undefined);
+            }
+            return finish();
           }
-          return finish();
         }
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base, this.options.policy?.merge);
@@ -3747,7 +3951,8 @@ export class MergeTrain {
           ? taskChangedPaths(sharedStore!.task(request.taskId), sourceTip, this.options.policy?.merge)
           : changedPathsBetween(o.mainCheckout, originalBase, sourceTip, this.options.policy?.merge);
         if (treeDiffIsEmpty(trainTree, base, candidate, this.options.policy?.merge)) {
-          refuseNoEffect(result, taskPaths, logPath);
+          if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, taskPaths, logPath);
+          else refuseNoEffect(result, taskPaths, logPath);
           return finish();
         }
         const noEffect = pathsChangedByTaskButUnchangedOnDev(
@@ -3759,7 +3964,8 @@ export class MergeTrain {
           this.options.policy?.merge,
         );
         if (noEffect.length) {
-          refuseNoEffect(result, noEffect, logPath);
+          if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, noEffect, logPath);
+          else refuseNoEffect(result, noEffect, logPath);
           return finish();
         }
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
@@ -4857,9 +5063,51 @@ export class MergeTrain {
   /** Combined main cohorts need separate exact-source owner authority for every additional file. */
   private checkControlPlaneScope(files: readonly string[], request: LandingRequest, logPath: string): void {
     this.checkScope(files, request, logPath);
-    const outside = outsideScope(files, request.declaredPaths);
-    if (outside.length)
-      throw new Error(`Control-plane source needs native owning-manager scope approval: ${outside.join(', ')}`);
+  }
+
+  private commitDirtySource(
+    request: LandingRequest,
+    tip: string,
+    frozen: readonly { path: string; hash: string }[],
+    logPath: string,
+  ): { tip: string; committed: boolean; frozenPaths: string[] } {
+    if (this.git(request.worktree, 'rev-parse', 'HEAD') !== tip)
+      throw new Error('Worker worktree HEAD no longer matches its source branch');
+    const frozenPaths = changedFrozenFiles(request.worktree, frozen);
+    if (frozenPaths.length) return { tip, committed: false, frozenPaths };
+    const paths = landingWorkingFiles(request.worktree, request.declaredPaths, this.options.policy?.merge);
+    const dropped = stagePaths(
+      request.worktree,
+      paths,
+      this.options.policy?.merge,
+      request.declaredPaths,
+      (this.options.policy ?? defaultPolicy).brief,
+    );
+    if (dropped.length)
+      appendFileSync(logPath, `Ignored paths not declared by the brief were dropped: ${dropped.join(', ')}\n`);
+    const staged = mergeGit(
+      request.worktree,
+      ['diff', '--cached', '--quiet', 'HEAD', '--'],
+      this.options.policy?.merge,
+    );
+    if (staged.error || staged.status === null || staged.status > 1)
+      throw new Error(staged.stderr?.trim() || staged.error?.message || 'Cannot inspect staged worker changes');
+    if (staged.status === 0) return { tip, committed: false, frozenPaths: [] };
+    this.git(
+      request.worktree,
+      '-c',
+      'user.name=REZICS Goal',
+      '-c',
+      'user.email=goal@rezics.invalid',
+      'commit',
+      '-m',
+      'goal: commit remaining worker changes',
+    );
+    const committedTip = this.git(this.options.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+    if (this.git(request.worktree, 'rev-parse', 'HEAD') !== committedTip)
+      throw new Error('Worker commit did not update its source branch');
+    appendFileSync(logPath, `Committed remaining worker changes before landing: ${paths.join(', ')}\n`);
+    return { tip: committedTip, committed: true, frozenPaths: [] };
   }
 
   /**

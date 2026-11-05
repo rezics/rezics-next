@@ -1,6 +1,5 @@
 import defaults from '../defaults.json';
 import { defaultPolicy } from './policy.ts';
-import { trackFixtureWait } from './fixture-process-ownership.ts';
 import {
   ProofCapacityQueuedError,
   ProofUnavailableError,
@@ -36,11 +35,13 @@ import {
   waitForProcessGroup,
   waitForWorkerExit,
   processIdentity,
+  getProcessOwnershipAdapter,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
+import { ensureGateOutcomeRefusal, guardIdsForFailure } from './guards.ts';
 import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
 import { checkHostsInOutage } from './watchdog.ts';
@@ -818,7 +819,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     const following = this.followAttempt(worker).catch((error) => this.endAsEnvironment(worker.attempt, error));
-    trackFixtureWait(worker.attempt.logPath, following);
+    getProcessOwnershipAdapter().trackWait(worker.attempt.logPath, following);
     await following;
   }
   private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
@@ -1851,6 +1852,7 @@ export class WorkerJob implements GateOutcomeSink {
       record.outcome = 'stopped';
       const stalledForSilence = attempt.result.startsWith('stalled: no output for ');
       record.escalation = stalledForSilence ? 'stalled' : failureClass;
+      record.guardIds = guardIdsForFailure(record.escalation as import('./types.ts').FailureClass);
       store.putRecord(record);
       store.event(ref, 'attempt-exit-classified', { kind: failureClass, detail: attempt.blocker ?? attempt.result });
       store.updateAttempt(ref, (a) => {
@@ -1988,6 +1990,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   onGateOutcome(outcome: GateOutcome): void {
     const store = this.tasks.store;
+    ensureGateOutcomeRefusal(outcome);
     // Stale gate results must be refused to their caller, not silently discarded.
     store.assertCurrent(outcome);
     const task = store.task(outcome.taskId),
@@ -2025,6 +2028,7 @@ export class WorkerJob implements GateOutcomeSink {
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null;
       record.outcome = outcome.passed ? 'passed' : 'gate-failed';
       if (outcome.passed) {
+        delete record.guardIds;
         if (outcome.mergedCommit) {
           const plan = store.integrationPlan(outcome);
           let alreadyOnMain = false;
@@ -2048,6 +2052,18 @@ export class WorkerJob implements GateOutcomeSink {
           });
           if (plan) store.clearIntegrationPlan(outcome);
           released = this.releaseMetDependents();
+          if (outcome.frozenAcceptanceChanges?.length) {
+            const paths = canonicalConflictPaths(outcome.frozenAcceptanceChanges);
+            const event = {
+              managerId: task.brief.manager,
+              taskId: task.id,
+              from: `worker:${task.id}`,
+              kind: 'info' as const,
+              summary: `Frozen acceptance file changed: ${paths.join(', ')}`,
+            };
+            store.event(outcome, 'manager-event', event);
+            this.inbox.deliver(event);
+          }
           // A manager waits for research to decide its next contract; an integration does not otherwise wake it.
           if (task.brief.kind === 'research') {
             const reports = (outcome.changedFiles ?? []).filter((path) => path.startsWith('docs/research/'));
@@ -2240,6 +2256,7 @@ export class WorkerJob implements GateOutcomeSink {
         this.hasCommit(outcome),
         this.policy.brief,
       );
+      record.guardIds = guardIdsForFailure(failureClass, outcome.refusal);
       record.escalation = failureClass;
       record.earlyStop = !attempt.blocker || /RESULT:\s*success/i.test(attempt.result);
       store.updateAttempt(outcome, (a) => {

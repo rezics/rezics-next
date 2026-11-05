@@ -968,7 +968,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           // so this short-lived process never waits for host capacity or a worker.
           const task = tasks.dispatch(brief, null);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
-          return task.id;
+          return { taskId: task.id, lintWarnings: task.brief.lintWarnings ?? [] };
         },
         async continueTask(goal: string, continuation: BriefContinuation, briefFile: string) {
           const task = store.task(continuation.taskId);
