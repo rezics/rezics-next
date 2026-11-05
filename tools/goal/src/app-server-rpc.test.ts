@@ -125,7 +125,10 @@ for (const transport of transports) {
     const temporary = temporaryDirectory();
     const client = await transport.connect(temporary.path);
     try {
-      const initialized = await client.request<{ params: unknown; initialized: boolean }>('test/initialization-state', {});
+      const initialized = await client.request<{ params: unknown; initialized: boolean }>(
+        'test/initialization-state',
+        {},
+      );
       expect(initialized).toEqual({
         params: {
           clientInfo: { name: 'rezics_goal', title: 'REZICS Goal', version: '0.1.0' },
