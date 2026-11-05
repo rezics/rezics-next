@@ -611,9 +611,10 @@ only identities disclosed by available posts; unavailable authors remain unknown
 Erased and withheld rows gain no author, date or document fields. Mentions, document media, Subjects and Board/Realm
 context retain their separate reads where this DTO supplies no replacement.
 
-Decision: current-thread images move to the exact installed `ReadingPageResponse.documentMedia` projection only after
-the official client declares it; retain the current separate read until then and preserve the shared Media adapter for
-its other consumers until their own callable is installed.
+Decision: the thread reader switches to the installed root `ReadingPageResponse` projections `documentMedia`,
+`mentions`, `reviewContext` and `conversationActivity` only when the public client declares them. Until then, keep the
+current document-media and mention reads and the existing unavailable review/activity display; do not cast, mirror or
+overlay generated types. The shared Media adapter remains for its other consumers until their callables are installed.
 
 Decision: Replace the thread byline account batch with composed authors; the no-slug, no-media, no-Subject cohort now
 uses K2/D1 (page plus Board context) instead of the retained split-reader K4/D1 baseline, with at most 21 disclosed
