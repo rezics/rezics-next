@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "上一页",
+  "buyer_history_first": "首页",
+  "buyer_history_next": "下一页",
+  "buyer_history_retry": "重试",
+  "buyer_history_ready": "已加载当前历史记录页。",
   "manga_origin_invalid": "修正地址无效，请从当前漫画阅读页面重新打开。",
   "manga_origin_unsupported": "Global 修正编辑器不支持此 Context 或 Realm。",
   "manga_origin_changed": "漫画或 Definition 已更改，请重新阅读或开始新的 Global 修正。",

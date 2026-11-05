@@ -17,9 +17,11 @@ export const Route = createFileRoute('/entitlements/')({
     address: entitlementHistoryAddress(search),
   }),
   loaderDeps: ({ search }) => search.address,
-  loader: ({ deps }) =>
+  loader: ({ deps, context }) =>
     loadEntitlementHistoryAddress(deps, (cursor) =>
-      readBuyerEntitlementsCurrent({ data: { locale: getLocale(), ...(cursor === undefined ? {} : { cursor }) } }),
+      typeof window !== 'undefined' && context.buyerHistory
+        ? Promise.resolve({ sessionSubject: null, requested: { kind: 'list' as const, locale: getLocale(), cursor: cursor ?? null }, page: { kind: 'preparing' as const } })
+        : readBuyerEntitlementsCurrent({ data: { locale: getLocale(), ...(cursor === undefined ? {} : { cursor }) } }),
     ),
   staleTime: 0,
   head: ({ match }) =>

@@ -15,6 +15,7 @@ function isSessionKey(key: readonly unknown[]) {
 class BrowserObservation {
   private snapshot: BrowserObservationSnapshot = closedObservation;
   private listeners = new Set<() => void>();
+  private retirements = new Set<() => void>();
   private stopQueryCache: (() => void) | undefined;
   private nextId = 0;
   private lastData?: unknown;
@@ -68,6 +69,16 @@ class BrowserObservation {
     };
   };
 
+  /** Navigation-only consumers clear coordinates in the same stack as authority replacement. */
+  subscribeRetirement = (listener: () => void): (() => void) => {
+    this.retirements.add(listener);
+    this.connect();
+    return () => {
+      this.retirements.delete(listener);
+      this.disconnectIfUnused();
+    };
+  };
+
   getServerSnapshot = (): BrowserObservationSnapshot => closedObservation;
 
   /** Snapshot subscribers consume the latest authority after the current stack. */
@@ -97,7 +108,7 @@ class BrowserObservation {
   }
 
   private disconnectIfUnused(): void {
-    if (this.listeners.size === 0 && this.cacheListeners.size === 0) this.retireMountedIncarnation();
+    if (this.listeners.size === 0 && this.cacheListeners.size === 0 && this.retirements.size === 0) this.retireMountedIncarnation();
   }
 
   private reconcile(forceFresh = false): void {
@@ -162,6 +173,7 @@ class BrowserObservation {
     if (same) return;
 
     this.snapshot = next;
+    this.retirements.forEach((retire) => retire());
     this.retireExposure(previousObservation);
     this.listeners.forEach((notify) => this.publish(notify));
   }
@@ -182,6 +194,7 @@ class BrowserObservation {
     const previous = this.snapshot;
     const previousObservation = previous.state === 'signed-in' ? previous.observation : undefined;
     this.snapshot = { state: 'inactive' };
+    this.retirements.forEach((retire) => retire());
     this.retireExposure(previousObservation);
   }
 }

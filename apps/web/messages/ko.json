@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "이전",
+  "buyer_history_first": "처음",
+  "buyer_history_next": "다음",
+  "buyer_history_retry": "다시 시도",
+  "buyer_history_ready": "현재 내역 페이지를 불러왔습니다.",
   "manga_origin_invalid": "잘못된 수정 주소입니다. 현재 읽기에서 다시 여세요.",
   "manga_origin_unsupported": "Global 수정 편집기는 이 Context 또는 Realm을 지원하지 않습니다.",
   "manga_origin_changed": "만화 또는 Definition이 변경되었습니다. 다시 읽거나 새 Global 수정을 시작하세요.",

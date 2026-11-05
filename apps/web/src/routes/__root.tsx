@@ -7,6 +7,7 @@ import {
   useRouter,
   useRouterState,
 } from '@tanstack/react-router';
+import type { BuyerHistoryVisit } from '../checkout/buyer-history-visit';
 import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest, getResponseStatus, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
@@ -108,6 +109,7 @@ const publicOrigin = createIsomorphicFn()
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
   credentialMode: ReadCredentialMode;
+  buyerHistory?: BuyerHistoryVisit;
 }>()({
   beforeLoad: ({ context, location }) =>
     isSignedInPath(location.pathname) ? undefined : prepareExposure(context.queryClient),
@@ -169,6 +171,7 @@ const clientLoadRecovery = String.raw`(() => {
 
 function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
+  useLayoutEffect(() => router.options.context.buyerHistory?.mount(router), [router]);
   const nonce = router.options.ssr?.nonce;
   const href = useRouterState({ select: (state) => state.location.publicHref });
   const locale = getLocale();

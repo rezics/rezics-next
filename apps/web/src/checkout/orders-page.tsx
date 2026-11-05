@@ -1,3 +1,5 @@
+import { BuyerHistoryControls } from './buyer-history-controls';
+import type { BuyerHistoryNavigation } from './buyer-history-visit';
 import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -33,10 +35,12 @@ export function OrdersPage({
   locale,
   continuation = false,
   history = {},
+  navigation,
 }: {
   page: BuyerOrderPage;
   locale: string;
   continuation?: boolean;
+  navigation?: BuyerHistoryNavigation | undefined;
   history?: PurchaseHistoryPosition;
 }) {
   return (
@@ -99,26 +103,9 @@ export function OrdersPage({
           ))}
         </ul>
       )}
-      {continuation || page.next ? (
-        <nav aria-label={m.orders_pagination()} className="flex flex-wrap gap-3">
-          {continuation ? (
-            <a
-              href={purchaseHistoryHref(locale, 'orders', { ...history, ordersCursor: undefined })}
-              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-            >
-              {m.entitlements_restart()}
-            </a>
-          ) : null}
-          {page.next ? (
-            <a
-              href={purchaseHistoryHref(locale, 'orders', { ...history, ordersCursor: page.next })}
-              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-            >
-              {m.orders_next()}
-            </a>
-          ) : null}
-        </nav>
-      ) : null}
+      <p className="sr-only" role="status" aria-live="polite">{m.buyer_history_ready()}</p>
+      <BuyerHistoryControls list="orders" locale={locale} history={history} continuation={continuation}
+        next={page.next} navigation={navigation} label={m.orders_pagination()} />
     </section>
   );
 }

@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "Précédente",
+  "buyer_history_first": "Première",
+  "buyer_history_next": "Suivante",
+  "buyer_history_retry": "Réessayer",
+  "buyer_history_ready": "La page actuelle de l’historique est chargée.",
   "manga_origin_invalid": "Adresse de correction invalide. Rouvrez depuis la lecture actuelle.",
   "manga_origin_unsupported": "Ce contexte ou Realm ne permet pas la correction Global.",
   "manga_origin_changed": "La bande dessinée ou sa Definition a changé. Relisez-la ou ouvrez une nouvelle correction Global.",

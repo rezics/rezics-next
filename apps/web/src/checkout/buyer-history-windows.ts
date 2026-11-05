@@ -46,7 +46,8 @@ export class BuyerHistoryWindows {
   /** A direct later entry has a current coordinate but no invented predecessor. */
   admitEntry(list: BuyerHistoryList, cursor: BuyerHistoryCursor): boolean {
     const path = this.paths[list];
-    if (this.retired || path.current !== undefined || path.pending) return false;
+    if (this.retired || path.pending || path.current === cursor) return false;
+    path.predecessors = [];
     path.current = cursor;
     return true;
   }

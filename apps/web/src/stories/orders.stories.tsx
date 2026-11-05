@@ -33,10 +33,10 @@ const order: BuyerOrder = {
   contentEdition: null,
 };
 const next = 'story-signed/+?=next&recorded';
-function OrdersStory({ page, continuation = false }: { page: BuyerOrderPage; continuation?: boolean }) {
+function OrdersStory({ page, continuation = false, previous }: { page: BuyerOrderPage; continuation?: boolean; previous?: string }) {
   return (
     <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
-      <OrdersPage page={page} locale={getLocale()} continuation={continuation} />
+      <OrdersPage page={page} locale={getLocale()} continuation={continuation} navigation={previous ? { previous, move: () => {} } : undefined} />
     </main>
   );
 }
@@ -51,11 +51,11 @@ export const History: Story = {
       `/${getLocale()}/orders/${order.id}`,
     );
     await expect(canvas.getByText(m.orders_status_paid(), { exact: true })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: m.orders_next() })).toHaveAttribute(
+    await expect(canvas.getByRole('link', { name: m.buyer_history_next() })).toHaveAttribute(
       'href',
       `/${getLocale()}/orders?cursor=${encodeURIComponent(next)}`,
     );
-    await expect(canvas.queryByRole('link', { name: m.entitlements_restart() })).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.buyer_history_first() })).toBeNull();
   },
 };
 export const FirstPageEmpty: Story = {
@@ -67,16 +67,17 @@ export const FirstPageEmpty: Story = {
   },
 };
 export const LaterPageEmpty: Story = {
-  render: () => <OrdersStory page={{ orders: [], next: null }} continuation />,
+  render: () => <OrdersStory page={{ orders: [], next: null }} continuation previous="supplied-previous/+?=" />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(m.orders_page_empty())).toBeVisible();
     await expect(canvas.queryByText(m.orders_empty())).toBeNull();
-    await expect(canvas.getByRole('link', { name: m.entitlements_restart() })).toHaveAttribute(
+    await expect(canvas.getByRole('link', { name: m.buyer_history_first() })).toHaveAttribute(
       'href',
       `/${getLocale()}/orders`,
     );
-    await expect(canvas.queryByRole('link', { name: m.orders_next() })).toBeNull();
+    await expect(canvas.getByRole('link', { name: m.buyer_history_previous() })).toHaveAttribute('href', `/${getLocale()}/orders?cursor=${encodeURIComponent('supplied-previous/+?=')}`);
+    await expect(canvas.queryByRole('link', { name: m.buyer_history_next() })).toBeNull();
   },
 };
 export const LaterPageEmptyWithNext: Story = {
@@ -84,11 +85,11 @@ export const LaterPageEmptyWithNext: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(m.orders_page_empty())).toBeVisible();
-    await expect(canvas.getByRole('link', { name: m.entitlements_restart() })).toHaveAttribute(
+    await expect(canvas.getByRole('link', { name: m.buyer_history_first() })).toHaveAttribute(
       'href',
       `/${getLocale()}/orders`,
     );
-    await expect(canvas.getByRole('link', { name: m.orders_next() })).toHaveAttribute(
+    await expect(canvas.getByRole('link', { name: m.buyer_history_next() })).toHaveAttribute(
       'href',
       `/${getLocale()}/orders?cursor=${encodeURIComponent(next)}`,
     );

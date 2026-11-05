@@ -12,9 +12,9 @@ export const Route = createFileRoute('/orders/')({
   beforeLoad: requireSignedIn,
   validateSearch: orderHistorySearch,
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ deps }) => {
+  loader: ({ deps, context }) => {
     const address = orderHistoryAddress(deps.cursor);
-    if (address.kind === 'malformed') return null;
+    if (address.kind === 'malformed' || (typeof window !== 'undefined' && context.buyerHistory)) return null;
     return readBuyerOrdersCurrent({
       data: { ...(address.cursor ? { cursor: address.cursor } : {}), locale: getLocale() },
     });

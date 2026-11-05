@@ -2,10 +2,10 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
-import type { BuyerOrder, BuyerOrdersCurrentRead } from '../src/checkout/orders';
+import type { BuyerOrdersCurrentRead } from '../src/checkout/orders';
 import type { OrderHistorySearch } from '../src/checkout/order-history-address';
 import type { SessionEnv } from '../src/session/client';
-import paid from '../src/kernel/recorded/order-paid.json';
+import { order } from './factories/buyer-history';
 
 // UNRUN at this source boundary. Mounted actual route and real prepared/generated server reads;
 // original acceptance, native services, receipt reconciliation and browser proof remain deferred.
@@ -79,23 +79,7 @@ const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-function order(viewer: string, n = viewer === 'A' ? 1 : 2): BuyerOrder {
-  return {
-    ...paid.order,
-    id: id(n),
-    entitlementId: id(n + 1000),
-    title: `Captured purchase ${viewer}`,
-    settlement: 'paid',
-    offerRevision: 1,
-    currency: 'usd',
-    unitAmountMinor: viewer === 'A' ? 123456 : 78901,
-    moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
-    taxBehavior: 'exclusive',
-    taxCode: 'txcd_10302000',
-    amountTaxMinor: null,
-    contentEdition: null,
-  };
-}
+
 function response(viewer: string, cursor: string | null = null, locale = 'en'): BuyerOrdersCurrentRead {
   return {
     sessionSubject: viewer,

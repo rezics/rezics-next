@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "前へ",
+  "buyer_history_first": "最初へ",
+  "buyer_history_next": "次へ",
+  "buyer_history_retry": "再試行",
+  "buyer_history_ready": "現在の履歴ページを読み込みました。",
   "manga_origin_invalid": "修正アドレスが無効です。現在の閲覧ページから開き直してください。",
   "manga_origin_unsupported": "このContextまたはRealmはGlobal修正エディターでは対応していません。",
   "manga_origin_changed": "作品またはDefinitionが変更されました。再度閲覧するか、新しいGlobal修正を開始してください。",

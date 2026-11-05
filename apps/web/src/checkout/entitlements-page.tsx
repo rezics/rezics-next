@@ -1,3 +1,5 @@
+import { BuyerHistoryControls } from './buyer-history-controls';
+import type { BuyerHistoryNavigation } from './buyer-history-visit';
 import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Cover } from '@rezics/ui/cover';
@@ -91,11 +93,12 @@ export function EntitlementsState({
             href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: undefined })}
             className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
           >
-            {m.entitlements_restart()}
+            {m.buyer_history_first()}
           </a>
-        ) : kind !== 'denied' ? (
+        ) : null}
+        {retry || (kind !== 'denied' && kind !== 'cursor-error') ? (
           <Button variant="outline" className="min-h-11" onClick={retry ?? (() => window.location.reload())}>
-            {m.entitlements_retry()}
+            {m.buyer_history_retry()}
           </Button>
         ) : null}
       </AlertDescription>
@@ -109,17 +112,19 @@ export function EntitlementsPage({
   retry,
   continuation = false,
   history = {},
+  navigation,
 }: {
   page: BuyerEntitlementsPage;
   locale: string;
   retry?: () => void;
   continuation?: boolean;
+  navigation?: BuyerHistoryNavigation | undefined;
   history?: PurchaseHistoryPosition | undefined;
 }) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
       <header className="space-y-3">
-        <PageHeading id="entitlements-heading">{m.entitlements_heading()}</PageHeading>
+        <PageHeading id="entitlements-heading" tabIndex={-1}>{m.entitlements_heading()}</PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
         <a
           href={purchaseHistoryHref(locale, 'orders', history)}
@@ -173,26 +178,11 @@ export function EntitlementsPage({
           })}
         </ul>
       )}
-      {page.kind === 'ready' && (continuation || page.data.next) ? (
-        <nav aria-label={m.entitlements_pagination()} className="flex flex-wrap gap-3">
-          {continuation ? (
-            <a
-              href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: undefined })}
-              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-            >
-              {m.entitlements_restart()}
-            </a>
-          ) : null}
-          {page.data.next ? (
-            <a
-              href={purchaseHistoryHref(locale, 'entitlements', { ...history, entitlementsCursor: page.data.next })}
-              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-            >
-              {m.entitlements_next()}
-            </a>
-          ) : null}
-        </nav>
-      ) : null}
+      {page.kind === 'ready' ? <>
+        <p className="sr-only" role="status" aria-live="polite">{m.buyer_history_ready()}</p>
+        <BuyerHistoryControls list="entitlements" locale={locale} history={history} continuation={continuation}
+          next={page.data.next} navigation={navigation} label={m.entitlements_pagination()} />
+      </> : null}
     </section>
   );
 }

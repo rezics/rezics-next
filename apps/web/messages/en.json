@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "Previous",
+  "buyer_history_first": "First",
+  "buyer_history_next": "Next",
+  "buyer_history_retry": "Retry",
+  "buyer_history_ready": "Current history window loaded.",
   "manga_origin_invalid": "Invalid correction address. Open correction from the current comic reading.",
   "manga_origin_unsupported": "This selected Context or Realm is unsupported by the Global correction editor.",
   "manga_origin_changed": "The comic or its Definition changed. Read it again or start a fresh Global correction.",

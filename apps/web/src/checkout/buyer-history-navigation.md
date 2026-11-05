@@ -26,21 +26,29 @@ current first or direct-entry reading; a URL alone never establishes admission.
 only its own cursor. Receipt/entitlement identity and the supplying fixed Edition origin retain their existing
 owners. This model neither settles uncertain commands nor changes payment or current Content Access meaning.
 
-## Receiving lifecycle handoff
+## Production receiving lifecycle
 
-Current `useBuyerCurrentOrigin` is intentionally address-bound: its `onBeforeNavigate` subscription retires
-origin and intent on every changed href, and unmount disposes both. It must retain this behavior. The existing
-session BrowserObservation can identify equal successful replacement and credential/A-B/A changes, but does not
-own a buyer Router visit that survives list/detail/Edition return. Neither current list exposes that retained
-visit to this model. Web's buyer navigation/lifecycle owner must supply that receiving seam within the eligible
-Router/QueryClient visit, without a second observer, root provider, registry or storage. The model is not wired
-into production until that custody exists.
+Decision: `BuyerHistoryVisit` carries only the two coordinate paths in the existing Router/QueryClient composition;
+current readers receive their exact ready responses and each address-bound `BuyerCurrentOrigin` still retires.
+The root's existing lifecycle mounts the carrier without another provider. It subscribes narrowly to retirement
+in the installed BrowserObservation, including equal-success and A/B/A transitions before React publication.
+Exposure replacement, locale replacement, unrelated departure and composition disposal clear both paths and focus.
+There is no second session observer, registry, global archive or storage. Private readers retain one current body.
 
-That receiver must retire both paths, callbacks and pending focus on source, session, account, credential,
-admission or locale replacement and unrelated departure. Eligible same-app ordinary clicks keep their canonical
-href while using router navigation; modified/new-tab clicks retain browser behavior. Keyboard focus is consumed
-once on admitted heading focus, failure, independent user focus, replacement, cancellation or disposal. Existing
-command departure decisions remain singular and recheck their original origin immediately before navigation.
+Canonical buyer links retain normal modified/new-tab behavior. An ordinary same-app click after the originating
+control's admitted departure decision uses the existing router; it does not invoke another command decision.
+List/detail/Edition return keeps coordinates only. Browser list loaders defer to the existing current reader in
+this composition, so deliberate movement makes one bounded read, with no loader admission, replay or prefetch.
+A successful direct coordinate change admits a new path without inferred predecessors. Malformed/stale First
+recovery stages First when a path exists and admits it only after the matching successful first-window read.
+Failed movements retain their exact ticket for the reader's explicit Retry. Non-ready entitlement pages cannot commit.
+
+Only a focused keyboard-initiated movement can transfer focus to the admitted current heading, once. Failure,
+independent focus/input, replacement, cancellation and disposal consume that pending focus. Empty terminal pages
+retain Previous and First. Actions wrap with a 44px minimum height; ready/error states announce their result.
+Existing receipt/Edition departure custody, current admission, no-store/noindex and command settlement remain owned
+by their existing readers. Synthetic typed consumer fixtures repair old recording shapes without amending recorded
+money evidence. Native, compiler, installed browser and original paired-journey acceptance remain integration work.
 
 Read before this decision: `docs/goals/web.md` buyer return outcome; `docs/commerce.md` buyer receipts;
 `buyer-current-origin.tsx`; `orders-current.tsx`; `entitlements-current.tsx`; both list pages and route receivers;
