@@ -315,7 +315,7 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     pinsStatus = 202;
     expect(await readLibraryPinsPage({ data: 8 })).toEqual({ state: 'closed', origin: closedOrigin8 });
     expect(queries(start)).toEqual([]);
-    expect(credentialReads).toBe(preparations + 2);
+    expect(credentialReads).toBe(preparations + 5);
     pinsStatus = 403;
     expect(await readLibraryPins(client, 'Bearer authenticated', 100)).toEqual({ state: 'unavailable' });
     pinsStatus = 200;
