@@ -15,6 +15,7 @@ import { recordFlow } from './flow.ts';
 import type { Database } from 'bun:sqlite';
 import { isTransportTimeout } from './check-failure.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
+import { selectAffectedChecks } from './check-plan.ts';
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { Database as SqliteDatabase } from 'bun:sqlite';
@@ -167,10 +168,12 @@ function createChecks(
   const checks: Check[] = [
     { command: ['env', `TYPECHECK_CHANGED=${files.join('\n')}`, ...typecheck], closure: ['**'] },
   ];
-  for (const affected of settings.verifierChecks ?? settings.affectedTests ?? []) {
-    const selected = files.some((file) => matches(file, affected.paths, settings.policy?.brief));
-    if (selected) checks.push({ command: [...affected.command], closure: [...affected.paths] });
-  }
+  for (const affected of selectAffectedChecks(
+    files,
+    settings.verifierChecks ?? settings.affectedTests ?? [],
+    settings.policy?.brief,
+  ))
+    checks.push({ command: [...affected.command], closure: [...affected.paths] });
   const tracked = trackedFilesAt(checkout, candidate);
   if (settings.siblingTests) {
     const nonSpecFiles = files.filter((file) => !file.startsWith('spec/') && !file.startsWith('specs/'));

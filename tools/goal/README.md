@@ -2557,6 +2557,8 @@ unknown rather than clean baseline results. Findings and exact run evidence are 
 unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
 three-check concurrency cap.
 
+Decision: the landing train and dev verifier share pure changed-path selection; each caller retains its configured order, closures, exclusions, workspace placement and execution authority.
+
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.
 Checks still require the installed pinned Bun; an actual installation failure remains infrastructure.
