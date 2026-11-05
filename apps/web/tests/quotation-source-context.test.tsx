@@ -11,6 +11,7 @@ import { projectQuotationFromPage, quotationTypeAdmitted } from '../src/features
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const quote = '00000000-0000-4000-8000-00000000c002';
+const context = '00000000-0000-4000-8000-000000000001';
 const work = '00000000-0000-4000-8000-00000000c001';
 const speaker = '00000000-0000-4000-8000-00000000c003';
 const credited = '00000000-0000-4000-8000-00000000c005';
@@ -40,7 +41,7 @@ function page(actions: { action: string; operationId: string; state: 'denied' | 
             type: 'schema:Quotation',
             revision: 1,
             release: recorded.digest,
-            context: '00000000-0000-4000-8000-000000000001',
+            context,
             labels: { en: 'I will return' },
             descriptions: {},
             aliases: {},
@@ -189,6 +190,7 @@ test('recorded native quotation page keeps exact text, work, speaker and denied 
           h(QuotationView, {
             id: quote,
             locale: 'en',
+            context,
             transport: { read: async () => initial },
             initial,
           }),
