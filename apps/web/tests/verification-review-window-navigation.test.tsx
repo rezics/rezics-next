@@ -133,6 +133,9 @@ test('review windows browse only admitted targets, retry exact failures, cap his
       reads[index]!.resolve(result);
       await Promise.resolve();
     });
+    await act(async () => {
+      await waitFor(() => expect(host.querySelector('[role="region"]')?.getAttribute('aria-busy')).toBe('false'));
+    });
     await flush();
   };
   const pageRow = (name: string) =>

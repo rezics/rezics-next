@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { act } from 'react';
+import { useState } from 'react';
 import type { AccountPage, Operation, OperationResult } from '../src/account-verification/transport';
 import { request } from '../src/stories/pages/accounts-verification/fixtures';
 
@@ -54,6 +55,7 @@ test('verification departures preserve all reviewed drafts and original commands
     page = 0,
     refreshes = 0,
     movements = 0;
+  let rerenderReview = () => {};
   const history: number[] = [];
   let caller = submit;
   const account: AccountPage = {
@@ -67,41 +69,45 @@ test('verification departures preserve all reviewed drafts and original commands
     operations: ['account.revoke_verification'],
   };
   const row = (id: string) => ({ request: { ...request, id }, account: null, subject: null });
-  const review = () => (
-    <ReviewPageView
-      viewerId={viewerId}
-      page={{
-        state: 'ready',
-        value: {
-          requests: page ? [row('next-target')] : [row(request.id), row('other-target')],
-          next: 'next',
-        },
-      }}
-      operations={allowed ? ['verification_request.approve', 'verification_request.reject'] : []}
-      submit={caller}
-      refresh={() => refreshes++}
-      canPrevious={history.length > 0}
-      next={() => {
-        movements++;
-        history.push(page);
-        page++;
-        void router.invalidate();
-      }}
-      previous={() => {
-        if (history.length) {
+  const review = () => {
+    const [, update] = useState(0);
+    rerenderReview = () => update((value) => value + 1);
+    return (
+      <ReviewPageView
+        viewerId={viewerId}
+        page={{
+          state: 'ready',
+          value: {
+            requests: page ? [row('next-target')] : [row(request.id), row('other-target')],
+            next: 'next',
+          },
+        }}
+        operations={allowed ? ['verification_request.approve', 'verification_request.reject'] : []}
+        submit={caller}
+        refresh={() => refreshes++}
+        canPrevious={history.length > 0}
+        next={() => {
           movements++;
-          page = history.pop()!;
-        }
-        void router.invalidate();
-      }}
-      first={() => {
-        movements++;
-        history.length = 0;
-        page = 0;
-        void router.invalidate();
-      }}
-    />
-  );
+          history.push(page);
+          page++;
+          rerenderReview();
+        }}
+        previous={() => {
+          if (history.length) {
+            movements++;
+            page = history.pop()!;
+          }
+          rerenderReview();
+        }}
+        first={() => {
+          movements++;
+          history.length = 0;
+          page = 0;
+          rerenderReview();
+        }}
+      />
+    );
+  };
   const base = createRootRoute({
     component: () => (
       <AuthoringDepartureProvider sessionBound={false}>
@@ -132,10 +138,6 @@ test('verification departures preserve all reviewed drafts and original commands
     act(async () => {
       await router.invalidate();
       root.render(<RouterProvider router={router} />);
-    });
-  const settleRoute = async () =>
-    act(async () => {
-      await router.invalidate();
     });
   const click = async (node: HTMLElement) =>
     act(async () => {
@@ -205,7 +207,6 @@ test('verification departures preserve all reviewed drafts and original commands
     expect(document.activeElement).toBe(next);
     await click(next);
     await choose(true, true);
-    await settleRoute();
     expect(page).toBe(1);
     expect(history).toEqual([0]);
     expect(movements).toBe(1);
@@ -235,7 +236,6 @@ test('verification departures preserve all reviewed drafts and original commands
     expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
     await click(await waitFor(() => button(m.av_previous_page(), host)));
     await choose(true, true);
-    await settleRoute();
     expect(page).toBe(0);
     expect(history).toEqual([]);
     expect(movements).toBe(beforePreviousLeave + 1);
