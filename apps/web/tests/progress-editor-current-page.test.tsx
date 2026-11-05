@@ -78,6 +78,8 @@ mock.module('@tanstack/react-start/server', () => import('../.storybook/react-st
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 // Grant exposure only; mount the real editor, router, forms, menu and dialog.
 mock.module('../src/kernel/exposure', () => ({
+  useOperation: () => true,
+  operationIsAdmitted: () => true,
   Exposure: ({ children }: { children: ReactNode }) => <Fragment>{children}</Fragment>,
 }));
 mock.module('../src/library/progress-server', () => ({
