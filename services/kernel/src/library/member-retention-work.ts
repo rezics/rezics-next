@@ -6,6 +6,7 @@ import {
   runMemberRetentionPage,
   runMemberRetentionSegment,
   runMemberRetentionContinuation,
+  runMemberRetentionContinuationStep,
   runMemberRetentionCutoff,
   retainedMemberPageDeadline,
   MEMBER_RETENTION_LIMITS,
@@ -116,7 +117,10 @@ export async function registerLibraryMemberRetentionWork({ pool, client, clock }
         cursor = (
           await runMemberRetentionPage(input.cutoff, cursor, () => page(input.cutoff, cursor), workStepDeadline())
         ).cursor;
-      if (cursor.partition < PARTITIONS) await continuation({ ...input, sequence: input.sequence + 1, cursor });
+      if (cursor.partition < PARTITIONS) {
+        const next = { ...input, sequence: input.sequence + 1, cursor };
+        await runMemberRetentionContinuationStep(next, () => continuation(next));
+      }
     });
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
   DBOS.registerWorkflow(

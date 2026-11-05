@@ -506,19 +506,31 @@ export function runMemberRetentionPage<T>(
   deadline: number,
 ): Promise<T> {
   const plan = memberRetentionPagePlan(cutoff, start);
-  return bindNative('page-sdk', plan.sdk, plan.sdk, () => pageDeadline.run(deadline, dispatch));
+  // The enclosing declaration includes discovery attempts. Those attempts consume
+  // their disjoint native terms at the actual registered-body dispatch below.
+  return bindNative('page-sdk', plan.total, plan.sdk, () => pageDeadline.run(deadline, dispatch));
 }
 export function memberRetentionSegmentPlan(input: { cutoff: string; cursor: MemberRetentionCursor }) {
   const page = memberRetentionPagePlan(input.cutoff, input.cursor);
   const sdk = durableSegmentPlan(input);
-  return Object.freeze({ page, sdk, total: sumBounds(sdk, repeatBound(page.total, MEMBER_RETENTION_LIMITS.pages)) });
+  const continuation = durableStepPlan([input], 4).total;
+  return Object.freeze({
+    page,
+    sdk,
+    continuation,
+    total: sumBounds(sdk, repeatBound(page.total, MEMBER_RETENTION_LIMITS.pages), continuation),
+  });
 }
 export function runMemberRetentionSegment<T>(
   input: { cutoff: string; cursor: MemberRetentionCursor },
   dispatch: () => Promise<T>,
 ): Promise<T> {
   const plan = memberRetentionSegmentPlan(input);
-  return bindNative('segment-sdk', plan.sdk, plan.sdk, dispatch);
+  return bindNative('segment-sdk', plan.total, plan.sdk, dispatch);
+}
+export function runMemberRetentionContinuationStep<T>(input: unknown, dispatch: () => Promise<T>): Promise<T> {
+  const plan = durableStepPlan([input], 4);
+  return bindNative('continuation-sdk', plan.total, plan.total, dispatch);
 }
 export function runMemberRetentionContinuation<T>(
   input: unknown,
