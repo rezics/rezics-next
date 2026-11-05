@@ -64,6 +64,8 @@ states the defect it prevents and is measured from its first firing.
 
 Decision: guard rewrite and landed shares use observed immediate next attempts for firings in the trailing seven days; hours are summed, and token totals add input and output because cached input is already included in input.
 
+Decision: the trailing-seven-day guard ledger builds call-local attempt indexes once and aggregates each record's distinct known guards in one pass; the firing window and immediate-next metrics remain unchanged.
+
 Guards are written into briefs before they are written into code: most control-plane refusals were specified by
 brief writers after one incident, and workers built exactly what they were asked. Prohibitions in briefs and prompts
 turn mismatches into stopped attempts. The evidence is in the
