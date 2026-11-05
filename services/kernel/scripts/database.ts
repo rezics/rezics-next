@@ -67,7 +67,7 @@ function databaseUrl(databasePort: number): string {
 }
 
 /** Keep these secrets stable across restarts; a new route key would orphan receipts of retried creates. */
-export function developmentEnv(existing: string, url: string): string {
+export function developmentEnv(existing: string, url: string, freshDatabase = false): string {
   const lines = existing.split('\n');
   if (lines.at(-1) === '') lines.pop();
   let hasDatabaseUrl = false;
@@ -75,6 +75,7 @@ export function developmentEnv(existing: string, url: string): string {
   let hasSessionKeys = false;
   let hasRatingCounterSecret = false;
   const defaults: Record<string, string> = {
+    KERNEL_SEARCH_PREFIX: `local-${randomBytes(12).toString('hex')}-`,
     KERNEL_RECEIPT_KEYS: `1:${randomBytes(32).toString('base64url')}`,
     KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
     KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000',
@@ -87,6 +88,11 @@ export function developmentEnv(existing: string, url: string): string {
     AUTH_JWKS_URL: 'http://127.0.0.1:4200/.well-known/jwks.json',
   };
   const updated = lines.map((line) => {
+    if (freshDatabase && line.startsWith('KERNEL_SEARCH_PREFIX=')) {
+      const prefix = defaults.KERNEL_SEARCH_PREFIX!;
+      delete defaults.KERNEL_SEARCH_PREFIX;
+      return `KERNEL_SEARCH_PREFIX=${prefix}`;
+    }
     delete defaults[line.split('=')[0]!];
     if (line.startsWith('DATABASE_URL=')) {
       hasDatabaseUrl = true;
@@ -225,7 +231,7 @@ function docker(args: string[]): string {
   return command('docker', args);
 }
 
-async function up(): Promise<void> {
+async function up(freshDatabase = false): Promise<void> {
   const refusal = await workerLocalContainerError(process.env, process.cwd());
   if (refusal) throw new Error(refusal);
   const existing = docker(['ps', '-aq', '--filter', `name=^${container}$`]).trim();
@@ -263,7 +269,7 @@ async function up(): Promise<void> {
   }
   const envFile = resolve(directory, '.env');
   const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
-  const generated = developmentEnv(existingEnv, url);
+  const generated = developmentEnv(existingEnv, url, freshDatabase);
   if (generated !== existingEnv) await Bun.write(envFile, generated, { mode: 0o600 });
 }
 
@@ -281,7 +287,7 @@ async function main(): Promise<void> {
     } catch {
       // A missing volume is already reset.
     }
-    await up();
+    await up(true);
   } else if (action === 'dump') {
     const url = databaseUrl(port);
     process.env.KERNEL_DATABASE_CONTAINER ??= container;

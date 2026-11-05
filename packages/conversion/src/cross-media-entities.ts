@@ -38,7 +38,7 @@ import {
 } from './bangumi-character-measurements.ts';
 import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './bangumi-person-birth-date.ts';
 
-export const converter_revision = 'cross-media-entities@13';
+export const converter_revision = 'cross-media-entities@14';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -1392,7 +1392,20 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'bangumi-character') {
     const nameInput = bangumiCharacterNameScalar(own(raw, 'name', '/name'));
     const chineseInput = bangumiCharacterNameScalar(own(raw, 'name_cn', '/name_cn'));
-    const infoboxNames = parseBangumiCharacterInfoboxNames(own(raw, 'infobox', '/infobox'));
+    const infobox = own(raw, 'infobox', '/infobox');
+    const infoboxNames = parseBangumiCharacterInfoboxNames(infobox);
+    const retainedSource = own(raw, 'infobox_source', '/infobox_source') as
+      | { kind?: unknown; bytes?: unknown }
+      | undefined;
+    if (
+      infobox === undefined &&
+      retainedSource?.kind === 'over-limit' &&
+      typeof retainedSource.bytes === 'number' &&
+      Number.isSafeInteger(retainedSource.bytes) &&
+      retainedSource.bytes > bangumiCharacterNameLimits.maxInfoboxBytes
+    ) {
+      infoboxNames.source = { kind: 'over-limit', bytes: retainedSource.bytes };
+    }
     const nameFacts: { language: string; text: string }[] = [];
     const alternateNames = [...infoboxNames.alternateNames];
     const labels: Record<string, string> = Object.create(null);
@@ -1422,6 +1435,13 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       ...(nameInput.status === 'invalid' ? { name_source: nameInput } : {}),
       ...(chineseInput.status === 'invalid' ? { name_cn_source: chineseInput } : {}),
       infobox_source: infoboxNames.source,
+      // The importer reconverts this bounded projection after durable staging. A fingerprint
+      // alone cannot reproduce source aliases or physical facts under the original digest.
+      ...(infobox !== undefined &&
+      (typeof infobox !== 'string' ||
+        Buffer.byteLength(infobox, 'utf8') <= bangumiCharacterMeasurementLimits.sourceBytes)
+        ? { infobox }
+        : {}),
     };
     const characterKind = own(raw, 'type', '/type');
     if (characterKind !== undefined) normalized.type = characterKind;
@@ -1659,7 +1679,7 @@ function convert(
       qualifiers: [
         {
           property: { id: 'rezics:spoilerLevel' },
-          value: { type: 'value' as const, content: name.spoilerLevel },
+          value: { type: 'value' as const, content: { amount: `+${name.spoilerLevel}`, unit: '1' } },
         },
       ],
     })),
