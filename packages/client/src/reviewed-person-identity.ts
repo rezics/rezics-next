@@ -5,7 +5,7 @@ export type ReviewedPersonEndpoint = {
   subject: string;
   revision: number;
   securityRevision: string;
-  source: 'bangumi' | 'vndb';
+  source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
   externalId: string;
   claimTransactionId: string;
   property: 'wdt:P6298' | 'wdt:P3180';
@@ -27,9 +27,9 @@ export function isReviewedPersonSource(value: unknown): value is ReviewedPersonS
   return (
     typeof v.externalId === 'string' &&
     bytes(v.externalId) <= 255 &&
-    (v.source === 'bangumi'
+    ((v.source === 'bangumi' || v.source === 'bangumi_cross_media')
       ? /^person:[1-9][0-9]*$(?![\s\S])/.test(v.externalId)
-      : v.source === 'vndb' && /^s[1-9][0-9]*$(?![\s\S])/.test(v.externalId))
+      : (v.source === 'vndb' || v.source === 'vndb_cross_media') && /^s[1-9][0-9]*$(?![\s\S])/.test(v.externalId))
   );
 }
 export function isReviewedPersonEndpoint(value: unknown): value is ReviewedPersonEndpoint {
@@ -47,7 +47,7 @@ export function isReviewedPersonEndpoint(value: unknown): value is ReviewedPerso
     uuid.test(v.claimTransactionId) &&
     typeof v.value === 'string' &&
     bytes(v.value) <= 255 &&
-    (v.source === 'bangumi'
+    ((v.source === 'bangumi' || v.source === 'bangumi_cross_media')
       ? v.property === 'wdt:P6298' && v.value === v.externalId.slice(7)
       : v.property === 'wdt:P3180' && v.value === v.externalId)
   );

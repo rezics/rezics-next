@@ -1135,7 +1135,7 @@ function subjectRoutes(
           language: t.Optional(t.String()),
           includeViewerActions: t.Optional(t.Boolean()),
           includeDocuments: t.Optional(t.Boolean()),
-          reviewIdentitySource: t.Optional(t.Union([t.Literal('bangumi'), t.Literal('vndb')])),
+          reviewIdentitySource: t.Optional(t.Union([t.Literal('bangumi'), t.Literal('vndb'), t.Literal('bangumi_cross_media'), t.Literal('vndb_cross_media')])),
           reviewIdentityExternalId: t.Optional(t.String({ maxLength: 255 })),
         }),
         response: {

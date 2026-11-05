@@ -139,9 +139,13 @@ export async function admitMergeSubjects(
   const survivor = requestedSurvivor ?? defaultSurvivor;
   const redirected = options.subjects.find((subject) => subject !== survivor) ?? defaultRedirected;
   if (survivor === redirected) throw new EditorialConflictError();
-  const kept = await withConnection(pool, (client) => mergeSubject(client, survivor));
-  const gone = await withConnection(pool, (client) => mergeSubject(client, redirected));
-  if (kept.type !== gone.type) throw new EditorialConflictError();
+  // The reviewed admission checks live identities on first execution. A completed
+  // receipt must remain replayable after its original has been redirected.
+  if (!options.expectedIdentity) {
+    const kept = await withConnection(pool, (client) => mergeSubject(client, survivor));
+    const gone = await withConnection(pool, (client) => mergeSubject(client, redirected));
+    if (kept.type !== gone.type) throw new EditorialConflictError();
+  }
   const route = routeOf(redirected);
   if (route === null) throw new SubjectNotFoundError();
   const receipt = {
@@ -194,8 +198,8 @@ export async function admitMergeSubjects(
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     },
     async (tx, { transactionId }) => {
-      if (options.expectedIdentity)
-        await guardReviewedPersonIdentity(tx, options.expectedIdentity, options.routeKey, options.release.release);
+      // prepareAdmission already compared and locked the paired evidence in its
+      // authorized first-effect transaction. Do not compare it again after admission.
       const merged = await mergeSubjectsInCommand(tx, transactionId, {
         survivor,
         redirected,
