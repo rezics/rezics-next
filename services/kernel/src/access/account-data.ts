@@ -1,4 +1,5 @@
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
+import { accountPublicViews } from './account-public-profile.ts';
 import type { PublicViews } from './public-views.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -118,6 +119,7 @@ export async function readPublicAccountByHandle(
   if (claim.state !== 'active' && !forwards) return [];
   const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
   if (!row || row.state === 'pending' || row.state === 'deleted') return [];
+  if (claim.state === 'active' && row.handle !== handle) return [];
   if (forwards && (row.state !== 'active' || row.handle === null || row.handle === handle)) return [];
   return publicIdentityForAccount(client, row, forwards ? row.handle! : undefined);
 }
@@ -193,7 +195,7 @@ async function publicIdentityForAccount(
       bio: row.biography,
       links: row.links as AccountLink[],
       avatar,
-      publicViews: row.publicViews as AccountPublicViews,
+      publicViews: accountPublicViews(row.publicViews),
       ...(row.kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
       subject,
       verified: row.agentVerified,

@@ -196,7 +196,7 @@ test('unfollow sends one authenticated native delete for the selected target', a
   expect(requests[0]?.method).toBe('DELETE');
   expect(new URL(requests[0]!.url).pathname).toBe('/v1/follows/collection-1');
   expect(requests[0]?.headers.get('authorization')).toBe('Bearer alice-page-token');
-  expect(requests[0]?.headers.get('idempotency-key')).toBe('123e4567-e89b-42d3-a456-426614174000');
+  expect(requests[0]?.headers.get('idempotency-key')).toBe(JSON.stringify('123e4567-e89b-42d3-a456-426614174000'));
 });
 
 test('Following management has a genuine discovery destination after the last unfollow and never claims a partial empty page proves an empty account', async () => {
@@ -410,7 +410,9 @@ test('Following management has a genuine discovery destination after the last un
     const deletes = requests.filter((request) => request.method === 'DELETE');
     expect(deletes).toHaveLength(5);
     expect(
-      deletes.every((request) => request.headers.get('idempotency-key') === initial.follows[0]!.idempotencyKey),
+      deletes.every(
+        (request) => request.headers.get('idempotency-key') === JSON.stringify(initial.follows[0]!.idempotencyKey),
+      ),
     ).toBe(true);
     expect(requests.filter((request) => request.method === 'GET')).toHaveLength(1);
 
