@@ -190,16 +190,16 @@ Source inventory: Bangumi `dump-2026-10-20.210332Z` subjects 10380, 51 and 84148
 provider identities, never title equality: the VN, anime and manga remain distinct works. Run each query for
 `en`, `zh-Hant` and `ja` readers; assert inclusion of the named identity, independent of other legitimate matches.
 
-| Source identity | Exact accepted text | Stored language | Queries |
-| --- | --- | --- | --- |
-| VNDB v2002 | 命運石之門; 命运石之门 | zh-Hant; zh-Hans | Each exact title and its quoted phrase |
-| VNDB v2002 | シュタインズ・ゲート; シュタゲ | und (source alias has no language) | Exact kana; しゅたいんず・げーと; しゅたげ |
-| VNDB v2002 | Shutage | und | Shutage; shutage; Ｓｈｕｔａｇｅ |
-| VNDB v2002 | Mingyun Shi zhi Men | zh-Latn for both Chinese source titles | `"Mingyun Shi zhi Men"`; `Shutage -CLANNAD` |
-| VNDB v4 | クラナド; 团子大家族 | und | クラナド; くらなど; 团子大家族; 團子大家族 |
-| Bangumi 10380 | 命运石之门; シュタインズ・ゲート; シュタゲ; 石头门; 斯坦因之门 | zh for title; und for aliases | Each exact value; 命運石之門; しゅたげ |
-| Bangumi 51 | CLANNAD -クラナド-; クラナド; 小镇家族 | und | クラナド; くらなど; 小镇家族; 小鎮家族 |
-| Bangumi 84148 | シュタインズ・ゲート | und (accepted schema:name) | Exact kana and Hiragana fold |
+| Source identity | Exact accepted text                                            | Stored language                        | Queries                                     |
+| --------------- | -------------------------------------------------------------- | -------------------------------------- | ------------------------------------------- |
+| VNDB v2002      | 命運石之門; 命运石之门                                         | zh-Hant; zh-Hans                       | Each exact title and its quoted phrase      |
+| VNDB v2002      | シュタインズ・ゲート; シュタゲ                                 | und (source alias has no language)     | Exact kana; しゅたいんず・げーと; しゅたげ  |
+| VNDB v2002      | Shutage                                                        | und                                    | Shutage; shutage; Ｓｈｕｔａｇｅ            |
+| VNDB v2002      | Mingyun Shi zhi Men                                            | zh-Latn for both Chinese source titles | `"Mingyun Shi zhi Men"`; `Shutage -CLANNAD` |
+| VNDB v4         | クラナド; 团子大家族                                           | und                                    | クラナド; くらなど; 团子大家族; 團子大家族  |
+| Bangumi 10380   | 命运石之门; シュタインズ・ゲート; シュタゲ; 石头门; 斯坦因之门 | zh for title; und for aliases          | Each exact value; 命運石之門; しゅたげ      |
+| Bangumi 51      | CLANNAD -クラナド-; クラナド; 小镇家族                         | und                                    | クラナド; くらなど; 小镇家族; 小鎮家族      |
+| Bangumi 84148   | シュタインズ・ゲート                                           | und (accepted schema:name)             | Exact kana and Hiragana fold                |
 
 These selected work records have no Japanese-language kanji title; do not relabel Chinese Han names or invent a
 Japanese spelling. Japanese kanji coverage uses an actual accepted title when the verifier's retained seed includes
