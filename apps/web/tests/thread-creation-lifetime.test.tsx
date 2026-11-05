@@ -5,7 +5,7 @@ import { act, StrictMode, useState } from 'react';
 import * as start from '../.storybook/react-start';
 import type { startThread } from '../src/threads/actions';
 
-// UNRUN: composed route regressions use the real fields, composer, session cache and deferred server seams.
+// Composed route regressions use the real fields, composer, session cache and deferred server seams.
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -30,6 +30,7 @@ type PageConfig = {
   purpose: 'discussion' | 'reviews';
   presetSubject: string;
   presetSubjectTitle: string;
+  returnTo?: string;
   key: string;
   visible: boolean;
 };
@@ -130,6 +131,7 @@ async function mountPage(initial: PageConfig) {
             readerAdmission={readerAdmission}
             {...(search.subject ? { presetSubject: search.subject } : {})}
             {...(search.subjectTitle ? { presetSubjectTitle: search.subjectTitle } : {})}
+            {...(search.returnTo ? { returnTo: search.returnTo } : {})}
           />
         ) : null}
         <button type="button" onClick={() => setConfig((current) => ({ ...current, visible: false }))}>
@@ -152,12 +154,15 @@ async function mountPage(initial: PageConfig) {
     path: '/boards/$id',
     component: () => <p>Board</p>,
   });
+  const initialSearch = new URLSearchParams({
+    subject: initial.presetSubject,
+    subjectTitle: initial.presetSubjectTitle,
+  });
+  if (initial.returnTo) initialSearch.set('returnTo', initial.returnTo);
   const router = createRouter({
     routeTree: rootRoute.addChildren([composeRoute, boardRoute]),
     history: createMemoryHistory({
-      initialEntries: [
-        `/boards/${initial.boardId}/new?${new URLSearchParams({ subject: initial.presetSubject, subjectTitle: initial.presetSubjectTitle })}`,
-      ],
+      initialEntries: [`/boards/${initial.boardId}/new?${initialSearch}`],
     }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -265,12 +270,16 @@ test('real new-thread composition preserves a selected review citation and retri
     purpose: 'reviews',
     presetSubject: id(2),
     presetSubjectTitle: 'Selected subject',
+    returnTo: `/en/subjects/${id(2)}/work/reviews?realm=${id(18)}#subject-community-reviews`,
     key: id(3),
     visible: true,
   });
   try {
     await page.render();
     await page.settle(() => page.voteReads.length === 1 && !!page.editor());
+    expect(page.host.querySelector('[data-slot="thread-create-return"]')?.getAttribute('href')).toBe(
+      `/en/subjects/${id(2)}/work/reviews?realm=${id(18)}#subject-community-reviews`,
+    );
     expect(page.voteReads.map(({ subjectId }) => subjectId)).toEqual([id(2)]);
     await act(async () => {
       page.voteReads[0]!.work.resolve(vote);

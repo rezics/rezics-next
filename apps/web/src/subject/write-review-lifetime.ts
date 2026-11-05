@@ -23,7 +23,13 @@ type SessionSource = {
   visits: Set<ReviewEntryVisit>;
 };
 
-export type ReviewEntryTarget = { subjectId: string; subjectTitle: string; locale: string; session: string };
+export type ReviewEntryTarget = {
+  subjectId: string;
+  subjectTitle: string;
+  locale: string;
+  returnTo?: string;
+  session: string;
+};
 export type ReviewEntryVisit = {
   readonly id: number;
   readonly client: QueryClient;
@@ -126,6 +132,7 @@ function sameTarget(left: ReviewEntryTarget, right: ReviewEntryTarget) {
     left.subjectId === right.subjectId &&
     left.subjectTitle === right.subjectTitle &&
     left.locale === right.locale &&
+    left.returnTo === right.returnTo &&
     left.session === right.session
   );
 }

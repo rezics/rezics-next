@@ -20,6 +20,7 @@ const laterRealm = {
 const recordedBoard = boardRecording.items.find((board) => board.purpose === 'reviews')!;
 const longTitle = `مراجعات الرحلة ${'عنوان'.repeat(60)}`;
 const spaceId = '0192f3a0-6c1e-7b2a-9d4e-000000000098';
+const returnTo = `/en/subjects/${subjectId}/work/reviews?realm=${firstRealm.realmId}#subject-community-reviews`;
 const headRevisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000097';
 const source = { partition: 2, epoch: 1, position: '18' };
 const candidate = {
@@ -203,7 +204,7 @@ async function surface(session: 'signed-in' | 'signed-out' | 'unavailable' = 'si
   host.dir = 'rtl';
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  let target = { subjectId, subjectTitle, locale: 'en', session };
+  let target = { subjectId, subjectTitle, locale: 'en', returnTo, session };
   async function render(next: Partial<typeof target> = {}) {
     target = { ...target, ...next };
     await act(async () =>
@@ -265,7 +266,7 @@ test('sign-in and unavailable states do not read private Realm or Board data', a
   try {
     expect(signedOut.host.querySelector('a')?.textContent).toBe(m.thread_review_sign_in());
     expect(signedOut.host.querySelector('a')?.getAttribute('href')).toBe(
-      `/auth/sign-in?return_to=${encodeURIComponent(`/en/subjects/${subjectId}/reviews`)}`,
+      `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`,
     );
     expect(unavailable.host.childElementCount).toBe(0);
     expect(calls).toHaveLength(0);
@@ -313,7 +314,7 @@ test('the later Realm page and exact Board require deliberate selection before t
     expect(calls.filter(({ path }) => path.endsWith('/review-destinations'))).toHaveLength(2);
     expect(calls[3]?.query).toContain(`subjectId=${subjectId}`);
     expect(calls[3]?.query).toContain(`boardId=${recordedBoard.id}`);
-    expect(navigations).toEqual([reviewThreadHref('en', recordedBoard.id, subjectId, subjectTitle)]);
+    expect(navigations).toEqual([reviewThreadHref('en', recordedBoard.id, subjectId, subjectTitle, returnTo)]);
     expect(
       calls.every(({ authorization, method }) => authorization === 'Bearer review-token' && method === 'GET'),
     ).toBe(true);

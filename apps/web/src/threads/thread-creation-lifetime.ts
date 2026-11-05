@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { sessionQuery } from '../session/query';
-import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
+import { subjectVisitReturn } from '../features/pages/subject-visit-navigation';
 import type { AuthoringLocation } from './authoring-departure';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,7 +27,10 @@ export function threadCreationPreset(
     subject && typeof search.subjectTitle === 'string' && search.subjectTitle.length <= 512
       ? search.subjectTitle
       : undefined;
-  const returnTo = subjectCommunityVisitReturn(search.returnTo, locale);
+  const returnTo =
+    typeof search.returnTo === 'string' && subjectVisitReturn(search.returnTo, locale) !== undefined
+      ? search.returnTo
+      : undefined;
   return {
     ...(subject ? { subject } : {}),
     ...(subjectTitle ? { subjectTitle } : {}),
