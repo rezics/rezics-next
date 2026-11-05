@@ -5,6 +5,25 @@ import { convertCrossMediaEntity } from '../src/cross-media-entities.ts';
 const subjectId = '00000000-0000-4000-8000-000000000004';
 const otherSubjectId = '00000000-0000-4000-8000-000000000005';
 
+test('every admitted alias spoiler level uses the released dimensionless quantity value', () => {
+  for (const level of [0, 1, 2]) {
+    const output = convertCrossMediaEntity(
+      record(
+        'c1',
+        [{ id: 'c1', lang: 'ja', name: 'Name', latin: null }],
+        [{ id: 'c1', spoil: String(level), name: 'Alias', latin: null }],
+      ),
+      { subjectId },
+    );
+    expect(facts(output, 'schema:alternateName').at(-1)?.qualifiers).toEqual([
+      {
+        property: { id: 'rezics:spoilerLevel' },
+        value: { type: 'value', content: { amount: `+${level}`, unit: '1' } },
+      },
+    ]);
+  }
+});
+
 function record(id: string, names: Record<string, unknown>[], aliases: Record<string, unknown>[]) {
   return {
     external_id: id,
@@ -73,8 +92,8 @@ test('VNDB character names retain language and romanization while aliases remain
       .slice(1)
       .map((statement) => statement.qualifiers),
   ).toEqual([
-    [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: 2 } }],
-    [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: 2 } }],
+    [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '+2', unit: '1' } } }],
+    [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '+2', unit: '1' } } }],
   ]);
   expect(facts(bound, 'schema:alternateName')[0]?.qualifiers).toBeUndefined();
   expect(bound.diagnostics).toEqual([]);
@@ -113,7 +132,7 @@ test('changed names and spoiler levels change identity-bound proposal keys; matc
     true,
   );
   expect(facts(otherOwner, 'schema:alternateName').at(-1)?.qualifiers).toEqual([
-    { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: 2 } },
+    { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '+2', unit: '1' } } },
   ]);
 });
 
