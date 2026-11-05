@@ -2,6 +2,7 @@
 goal: web
 manager: web
 ---
+
 # Complete paired buyer list receiving lifecycle and presentation
 
 The coordinate-only model and its tests are delivered in buyer-history-windows.ts and purchase-return.test.tsx.
