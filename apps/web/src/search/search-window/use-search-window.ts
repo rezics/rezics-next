@@ -52,7 +52,7 @@ export function useSearchWindow({
   enabled?: boolean;
 }) {
   const router = useRouter({ warn: false });
-  const { value: reader } = useWorkspaceAdmission(operations);
+  const { value: reader, store: admission } = useWorkspaceAdmission(operations);
   const address = useReaderAddress(null, undefined, locale);
   const firstHref = href();
   const request = JSON.stringify([firstHref, session, reader.subject, reader.viewer, reader.observation?.id]);
@@ -99,7 +99,11 @@ export function useSearchWindow({
     }
   }
   const current = visit.current;
-  const authoritative = address.isCurrent() && isCurrent();
+  const readerCurrent = () => {
+    const now = admission.read();
+    return now.subject === reader.subject && now.viewer === reader.viewer && now.observation === reader.observation;
+  };
+  const authoritative = address.isCurrent() && readerCurrent() && isCurrent();
   if (checkpoint && current.checkpoint && checkpoint !== current.checkpoint) {
     current.history = emptySearchWindows(firstHref);
     current.preparing = [];
@@ -186,7 +190,7 @@ export function useSearchWindow({
       return;
     if (!router) return; // The exact address remains a native link before hydration.
     event.preventDefault();
-    if (!enabled || pending.current || !address.isCurrent() || !isCurrent()) return;
+    if (!enabled || pending.current || !address.isCurrent() || !readerCurrent() || !isCurrent()) return;
     if ((target ?? null) === cursor && action !== 'retry' && action !== 'first') return;
     const to = target ?? null;
     focus.current?.capture(request, to, action, event.currentTarget);
@@ -197,11 +201,13 @@ export function useSearchWindow({
     const targetHref = href(target);
     void router.navigate({ href: targetHref }).then(
       () => {
-        // A route error can resolve navigation without ever rendering the requested address.
+        // Successful results settle in the layout effect. Route errors may resolve without that render.
         if (pending.current?.request !== request || pending.current.to !== to) return;
+        if (address.isCurrent() && readerCurrent() && !router.state.matches.some((match) => match.status === 'error'))
+          return;
         pending.current = undefined;
         setBusy(false);
-        focus.current?.settle(request, to, navigationRef.current, regionRef.current);
+        focus.current?.retire();
       },
       () => {
         if (pending.current?.request !== request || pending.current.to !== to) return;

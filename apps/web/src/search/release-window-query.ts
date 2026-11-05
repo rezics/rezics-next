@@ -70,6 +70,11 @@ export function useReleaseWindowQuery(locale: string, raw: Record<string, unknow
   const form = useRef<{ criteria: string; parsed: ParsedReleaseSearch } | undefined>(undefined);
   if (query.data?.parsed) form.current = { criteria, parsed: query.data.parsed };
   const retainedForm = form.current?.criteria === criteria ? form.current.parsed : undefined;
+  const retainedSearch = retainedForm ? { ...retainedForm.search } : undefined;
+  if (retainedSearch) {
+    delete retainedSearch.cursor;
+    if (typeof raw.cursor === 'string') retainedSearch.cursor = raw.cursor;
+  }
   const result =
     waiting || !query.data
       ? {
@@ -85,7 +90,7 @@ export function useReleaseWindowQuery(locale: string, raw: Record<string, unknow
             ...result,
             parsed: {
               ...retainedForm,
-              search: { ...retainedForm.search, cursor: typeof raw.cursor === 'string' ? raw.cursor : undefined },
+              search: retainedSearch!,
             },
           },
     reader: origin.current,
