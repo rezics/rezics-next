@@ -1368,9 +1368,7 @@ function ConditionEntityValues({
   const [resolved, setResolved] = useState<Record<string, { label: string; type: string }>>({});
   const [resolveFailure, setResolveFailure] = useState<ConditionEntityFailure>();
   const [suggestionFailure, setSuggestionFailure] = useState<ConditionEntityFailure>();
-  const [resolvingIds, setResolvingIds] = useState<string[]>(() =>
-    context.disabled ? [] : identifiers,
-  );
+  const [resolvingIds, setResolvingIds] = useState<string[]>(() => (context.disabled ? [] : identifiers));
   const [valueFailures, setValueFailures] = useState<Record<string, ConditionEntityValueFailure>>({});
   const [retry, setRetry] = useState(0);
   const attempted = useRef(new Set<string>());

@@ -77,7 +77,13 @@ test('reopening keeps successful siblings and distinguishes withheld, retryable,
     calls.push(url);
     const id = url.searchParams.get('id')!;
     if (id === first)
-      return Response.json({ state: 'ready', id, labels: { ja: '同名', 'zh-Hant': '同名' }, type: target, typeLabels: { ja: '作品' } });
+      return Response.json({
+        state: 'ready',
+        id,
+        labels: { ja: '同名', 'zh-Hant': '同名' },
+        type: target,
+        typeLabels: { ja: '作品' },
+      });
     if (id === second) return Response.json({ state: 'withheld', id });
     if (id === third) return Response.json({ code: 'temporarily_unavailable' }, { status: 503 });
     if (id === fourth) return Response.json({ code: 'semantic_not_ready' }, { status: 503 });

@@ -145,9 +145,7 @@ function Operand({
     .map((id) => currentLabels?.value?.failures[id.toLowerCase()])
     .find((value) => value !== undefined);
   const error =
-    failure ??
-    currentLabels?.error ??
-    (labelFailure ? new ConditionEntityLookupError(labelFailure) : undefined);
+    failure ?? currentLabels?.error ?? (labelFailure ? new ConditionEntityLookupError(labelFailure) : undefined);
   const unresolved = ids.length > 0 && !ready;
   const loading = available && ids.length > 0 && (!currentLabels || currentLabels.state === 'loading');
   const disabled = !available || (kind === 'work' && ids.length >= CHARACTER_PERSON_WORK_LIMIT);
