@@ -38,13 +38,13 @@ export function createSearchRealmDiscoveryPage(
   publish: (state: RealmDiscoveryState, progress: Pick<RealmDiscoveryWindow, 'pending' | 'retry' | 'restart'>) => void,
 ) {
   const page = createRealmPageProgress({
-    read: ({ cursor }) =>
+    read: ({ cursor, signal }) =>
       load({
         locale,
         sort: 'trending',
         limit: REALM_DISCOVERY_LIMIT,
         ...(cursor === undefined ? {} : { cursor }),
-      }),
+      }, signal),
     publish: (window) =>
       publish(window.state, {
         pending: window.pending,

@@ -194,3 +194,27 @@ test('the original Content adapter never adds per-row hydration and an absent pr
     expect(state).toEqual({ kind: 'ready', realms: [card], next: secondCursor });
   }
 });
+
+test('leaving a Content page read aborts the signal on its native GET', async () => {
+  let signal: AbortSignal | undefined;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => (entered = resolve));
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (_input, init) => {
+      signal = init?.signal;
+      entered();
+      return await new Promise<Response>((_resolve, reject) => {
+        const abort = () => reject(signal?.reason);
+        signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) abort();
+      });
+    },
+  });
+  const controller = new AbortController();
+  const read = loadRealmDiscovery(client, { sort: 'popular', signal: controller.signal });
+  await started;
+  expect(signal).toBe(controller.signal);
+  controller.abort();
+  expect(signal?.aborted).toBe(true);
+  await expect(read).rejects.toBeDefined();
+});

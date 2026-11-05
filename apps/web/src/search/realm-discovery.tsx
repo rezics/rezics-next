@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RealmDiscoverySection, type RealmDiscoverySort, type RealmDiscoveryState } from '../community/realm-discovery';
 import {
   readRealmDiscovery,
-  realmDiscoveryQueryOptions,
+  readRealmDiscoveryQuery,
   type RealmDiscoveryReader,
   type RealmDiscoveryWindow,
 } from './realm-discovery-loader';
@@ -47,13 +47,17 @@ function SearchRealmDiscoveryPage({
     const replacing = snapshotRef.current !== undefined && !sameRealmDiscoveryOwner(snapshotRef.current.owner, owner);
     const page = createRealmPageProgress({
       ...(initialState.kind !== 'loading' && !replacing ? { initial: initialState } : {}),
-      read: async ({ cursor }) => client.fetchQuery(realmDiscoveryQueryOptions(locale, sort, cursor, read)),
+      read: ({ cursor, signal }) => readRealmDiscoveryQuery(client, locale, sort, cursor, read, signal),
       publish: (next) => setSnapshot({ ...next, owner }),
     });
     active.current = page;
     setSnapshot({ ...page.snapshot(), owner });
-    void page.start();
+    let mounted = true;
+    queueMicrotask(() => {
+      if (mounted) void page.start();
+    });
     return () => {
+      mounted = false;
       page.dispose();
       if (active.current === page) active.current = null;
     };
