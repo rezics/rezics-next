@@ -6,7 +6,7 @@ import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { createLibraryExport, exportAuthorityTypes, type LibraryExportDependencies } from './library-export.ts';
-import { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
+import { exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
@@ -34,17 +34,31 @@ const sectionV2 = t.Union([
   t.Literal('provenance'),
   t.Literal('journals'),
 ]);
-function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
-  return t.Tuple(
-    sections.map((section) => t.Literal(section)) as {
-      -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
-    },
-  );
-}
-const sectionsV1 = sectionTuple(exportSections);
-const sectionsV2 = sectionTuple(exportSectionsV2);
-const sectionsV3 = sectionTuple(exportSectionsV3);
-const sectionsV4 = sectionTuple(exportSectionsV4);
+const sectionsV1 = t.Tuple([
+  t.Literal('entries'),
+  t.Literal('labels'),
+  t.Literal('assignments'),
+  t.Literal('sessions'),
+  t.Literal('holdings'),
+  t.Literal('collections'),
+  t.Literal('collectionPins'),
+  t.Literal('bangumiUploads'),
+  t.Literal('bangumiEvidence'),
+  t.Literal('malImports'),
+  t.Literal('units'),
+  t.Literal('history'),
+  t.Literal('occurrences'),
+  t.Literal('malEvidence'),
+]);
+const sectionsV2 = t.Tuple([...sectionsV1.items, t.Literal('annotations'), t.Literal('provenance'), t.Literal('journals')]);
+const sectionsV3 = t.Tuple([...sectionsV2.items]);
+const sectionsV4 = t.Tuple([
+  ...sectionsV3.items,
+  t.Literal('vndbUploads'),
+  t.Literal('vndbEvidence'),
+  t.Literal('anilistUploads'),
+  t.Literal('anilistEvidence'),
+]);
 const manifestV1Fields = {
   format: t.Literal('https://rezics.com/formats/library-export'),
   version: t.Literal(1),
@@ -248,33 +262,44 @@ const journalRecordV3 = t.Object(
   },
   closed,
 );
-const providerRecords = [
-  t.Object(
-    {
-      section: t.Literal('vndbUploads'),
-      upload_id: text,
-      state: t.Union([t.Literal('active'), t.Literal('cancelled')]),
-      expires_at: text,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      section: t.Literal('anilistUploads'),
-      upload_id: text,
-      cancelled: t.Union([t.Boolean(), t.Null()]),
-      score_format: nullable,
-      row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
-    },
-    closed,
-  ),
-  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) =>
-    t.Object(
-      { section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
-      closed,
-    ),
-  ),
-];
+const vndbUploadRecord = t.Object(
+  {
+    section: t.Literal('vndbUploads'),
+    upload_id: text,
+    state: t.Union([t.Literal('active'), t.Literal('cancelled')]),
+    expires_at: text,
+  },
+  closed,
+);
+const anilistUploadRecord = t.Object(
+  {
+    section: t.Literal('anilistUploads'),
+    upload_id: text,
+    cancelled: t.Union([t.Boolean(), t.Null()]),
+    score_format: nullable,
+    row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
+  },
+  closed,
+);
+const vndbEvidenceRecord = t.Object(
+  { section: t.Literal('vndbEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+  closed,
+);
+const anilistEvidenceRecord = t.Object(
+  { section: t.Literal('anilistEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+  closed,
+);
+const exportRecord = t.Union([
+  legacyRecord,
+  annotationRecord,
+  provenanceRecord,
+  journalRecordV2,
+  journalRecordV3,
+  vndbUploadRecord,
+  anilistUploadRecord,
+  vndbEvidenceRecord,
+  anilistEvidenceRecord,
+]);
 const finalManifest = t.Union([
   t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
   t.Object(
@@ -309,10 +334,7 @@ const pageSchema = t.Object(
   {
     exportId: text,
     state,
-    records: t.Array(
-      t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecordV2, journalRecordV3, ...providerRecords]),
-      { maxItems: 16 },
-    ),
+    records: t.Array(exportRecord, { maxItems: 16 }),
     next: nullable,
     manifest: t.Union([finalManifest, t.Null()]),
   },

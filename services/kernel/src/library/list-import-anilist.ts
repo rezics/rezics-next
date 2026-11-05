@@ -775,7 +775,7 @@ export function createAniListImport(deps: Dependencies) {
                   native.currentVote.state === 'absent'
                     ? null
                     : {
-                        voterId: actor.accountId,
+                        voterId: account.accountId,
                         questionId: question.id,
                         targetId: native.currentVote.originalTargetId,
                         units: native.currentVote.units,

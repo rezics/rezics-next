@@ -120,6 +120,16 @@ const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const personalRevision = t.Integer({ minimum: 0, maximum: 2_147_483_646 });
 const stateInput = libraryVocabularyIdSchema;
 const statusInput = libraryVocabularyIdSchema;
+const copyConditionValueSchema = t.Union([
+  t.Literal('unknown'),
+  t.Literal('mint'),
+  t.Literal('near_mint'),
+  t.Literal('very_good_plus'),
+  t.Literal('very_good'),
+  t.Literal('good'),
+  t.Literal('fair'),
+  t.Literal('poor'),
+]);
 const pageQuery = {
   ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
@@ -193,14 +203,9 @@ const copyFields = {
   acquiredOn: t.Optional(nullable),
   disposedOn: t.Optional(nullable),
   note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
-  mediaCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
-  ),
-  packagingCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
-  ),
+  mediaCondition: t.Optional(t.Union([copyConditionValueSchema, t.Null()])),
+  packagingCondition: t.Optional(t.Union([copyConditionValueSchema, t.Null()])),
 };
-const copyConditionValueSchema = t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value)));
 const copyConditionDisplaySchema = t.Union([
   t.Object({ state: t.Literal('not_recorded') }, closed),
   t.Object({ state: t.Literal('unavailable') }, closed),
@@ -762,10 +767,13 @@ function copyListContextView(context: CopyListContext): Static<typeof copyListCo
     case 'unsupported':
       return { state: 'unsupported', facts: { ...context.facts } };
     case 'scope':
+      return { state: 'scope' };
     case 'withheld':
+      return { state: 'withheld' };
     case 'missing':
+      return { state: 'missing' };
     case 'unavailable':
-      return { state: context.state };
+      return { state: 'unavailable' };
   }
 }
 function copyPresentationView(presentation: CopyPresentation): Static<typeof copyPresentationSchema> {
@@ -788,8 +796,9 @@ function loanView(
   copyAvailable = true,
 ): LoanResponse {
   const state = loanState(loan, boundary);
-  const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
-  const action = { allowed: reason === null, reason };
+  const reason: LoanResponse['actions']['extend']['reason'] =
+    state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
+  const action: LoanResponse['actions']['extend'] = { allowed: reason === null, reason };
   const counterparty =
     loan.counterparty.kind === 'name'
       ? { kind: 'name' as const, name: loan.counterparty.name }
