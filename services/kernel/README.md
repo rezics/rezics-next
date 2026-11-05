@@ -85,11 +85,6 @@ result refuses concurrent receiving. Missing/malformed lock custody fails closed
 checks the receipt and entire current catalogue without replacing it. The original foreground command, cancellation,
 parent-group closure, receiving fence and cleanup retain their existing lifetime; this profile adds no retry/launcher.
 
-Content owns one serial publisher for its declaration. It admits complete source inputs independently of future
-consumers and publishes only with compiler/construction evidence, official generation, an installed callable and
-composition-root evidence. Compatibility reflection, handwritten DTOs, casts, mirrors and source fixtures do not
-substitute for publication.
-
 ## Development database
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write
