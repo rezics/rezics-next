@@ -12,11 +12,12 @@ import { readableSubjects } from '../library/subject-anchor.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
-import { VOTE_SCOPE, VoteInvalidError } from './votes.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import countedVotes from './own-votes-counted.sql';
 import { readIdentityRatingEpochs } from '../semantic/identity-rating-admission.ts';
 import {
+  VOTE_SCOPE,
+  VoteInvalidError,
   ownVoteReviewWitness,
   readVoteReviewSlots,
   VoteReviewUnavailableError,

@@ -1250,6 +1250,17 @@ the protocol from private source; the account-page `createOwnVotesReader` remain
 `{vote: Vote | null, component: SessionComponent | null}`. Unconditional callers keep their existing writer,
 receipt and matching-no-op behavior. The HTTP vote body remains unchanged; the guard is an internal producer input.
 
+`createVoteCommands({pool, access, clock?}).readVoteReview(actor, questionId, targetId)` returns
+`{question: RatingQuestion, currentVote: OwnCountedVoteObservation, guard: VoteReviewGuard}` for the standard
+question. It obtains `currentVote` from the existing `createOwnCountedVoteReader` prepare/read/finish path, so
+counted zero, clear and proven absence stay distinct and current. The returned guard is closed, copied and recursively
+frozen. Consumers retain that exact guard and idempotency key through an uncertain write retry; they do not sample a
+new review or substitute `readOwnVotes`.
+
+Decision: Content exposes `readVoteReview` as the sole provider review entry over the bounded counted reader. This
+attempt defers guarded-write binding to the continuation until Semantic's same-home identity participant and actual
+provider caller heads are available; a local remapping query is not accepted as a commit fence.
+
 Each available counted-reader observation now includes `review: VoteReviewGuard`, with version 1,
 `question: {revision, lifecycleRevision}`, `subject: {canonicalId, epochs: [{partition, epoch}]}` and
 `ownVote: {state: 'absent' | 'present', observation}`. Epochs are native published unsigned decimal strings from
@@ -1318,6 +1329,12 @@ deterministically ordered native home fences held through the _same_ owner commi
 cleanup, before cross-home installation. Neither an arbitrary foreign checkout nor local SERIALIZABLE installs it.
 The original guarded vote journey remains unavailable until its writer integrates this participant and Semantic's
 separate exact-epoch participant. This source factory is not generated client delivery or provider adoption.
+
+#### Provider vote review Cost
+
+- **Touches:** One current account and disclosed question read, followed by the existing counted-reader preparation, one account-home snapshot, and finish confirmation for one requested Subject. Identity mappings and requested/canonical epochs use the reader's released bounded observations; the snapshot reads at most one counted row and two exact original/canonical slots.
+- **Bound:** One question and one raw Subject key. All identity, Access, account, row, statement and byte bounds are the existing one-key `createOwnCountedVoteReader` bounds plus one exact question disclosure; no vote-history scan, extra checkout, or second own-vote reader is introduced.
+- **Growth check:** `test/rating/vote-review.test.ts` pins absent, counted-zero and clear output through the owner export. `test/rating/growth-own-votes-counted.test.ts` retains the reader's independent 256/1024/4096 prefixes; the composed export's native measurement remains controller-owned.
 
 Within one home (including different routes in that home), admission takes a PostgreSQL share lock on the actual
 question, then reads its lifecycle head. Absence of that head means active revision 1 under the owning question

@@ -1,8 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createOwnCountedVoteReader } from '../../src/rating/own-votes-counted.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID, type VoteReviewGuard } from '../../src/rating/votes.ts';
 import { admitIdentityRatingEffect } from '../../src/semantic/identity-rating-admission.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import {
   createSourceStatisticLifecycleFixture,
@@ -21,21 +19,11 @@ afterAll(async () => {
   await fixture?.close();
 }, 180_000);
 
+async function reviewOutput(targetId: string) {
+  return commands.readVoteReview(actor, STANDARD_QUESTION_ID, targetId);
+}
 async function review(targetId: string) {
-  const reader = createOwnCountedVoteReader({ pool: fixture.database.pool, access: fixture.access });
-  const request = { actor, targetIds: [targetId] };
-  const deadline = Date.now() + 60_000;
-  const prepared = await reader.prepare(request, deadline);
-  if (prepared.status !== 'prepared') throw new Error(JSON.stringify(prepared));
-  const rows = await withReadTransaction(
-    fixture.database.pool,
-    (client) => reader.read(client, request, prepared.preparation),
-    deadline,
-  );
-  const result = await reader.finish(request, prepared.preparation, rows, deadline);
-  if (result.status !== 'current' || result.observations[0]?.state === 'unavailable')
-    throw new Error(JSON.stringify(result));
-  return result.observations[0]!.review;
+  return (await reviewOutput(targetId)).guard;
 }
 const input = (targetId: string, units: number | null, guard?: VoteReviewGuard) => ({
   questionId: STANDARD_QUESTION_ID,
@@ -69,7 +57,14 @@ async function refused(
 
 test('native absence and matching no-op remain unavailable without atomic owner fences; unchanged retries have no effects', async () => {
   const target = await fixture.createSubject();
-  const guard = await review(target);
+  const reviewed = await reviewOutput(target);
+  const guard = reviewed.guard;
+  expect(reviewed.question).toMatchObject({ id: STANDARD_QUESTION_ID, revision: 1 });
+  expect(reviewed.currentVote.state).toBe('absent');
+  expect(reviewed.currentVote.review).toBe(guard);
+  expect(Object.isFrozen(guard)).toBe(true);
+  expect(Object.isFrozen(guard.question)).toBe(true);
+  expect(Object.isFrozen(guard.subject.epochs)).toBe(true);
   expect(guard.ownVote.state).toBe('absent');
   expect(JSON.parse(guard.ownVote.observation).slice(5)).toEqual([null, null, null]);
   const key = crypto.randomUUID();
@@ -84,6 +79,14 @@ test('native absence and matching no-op remain unavailable without atomic owner 
     vote: written.vote,
     component: null,
   });
+}, 180_000);
+
+test('native review export returns counted zero and clear through the bounded reader', async () => {
+  const target = await fixture.createSubject();
+  await commands.putVoteOutcome(actor, input(target, 0), crypto.randomUUID());
+  expect(await reviewOutput(target)).toMatchObject({ currentVote: { state: 'counted', units: 0 } });
+  await commands.putVoteOutcome(actor, input(target, null), crypto.randomUUID());
+  expect(await reviewOutput(target)).toMatchObject({ currentVote: { state: 'clear', units: null } });
 }, 180_000);
 
 test('native write, clear, zero and ABA change the exact witness even when displayed units match', async () => {

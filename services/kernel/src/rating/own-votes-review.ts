@@ -2,6 +2,15 @@ import { partitionOf, routeOf, PARTITIONS } from '../route/route.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import reviewSlots from './own-votes-review.sql';
 
+export const VOTE_SCOPE = 'rating:vote';
+
+export class VoteInvalidError extends Error {
+  constructor(readonly field: string) {
+    super(`Invalid rating vote field: ${field}`);
+    this.name = 'VoteInvalidError';
+  }
+}
+
 export type VoteReviewEpoch = Readonly<{ partition: number; epoch: string }>;
 export type VoteReviewGuard = Readonly<{
   version: 1;
@@ -214,10 +223,13 @@ export function normalizeVoteReviewGuard(value: unknown, requestedTargetId: stri
     ownVote.state !== (witness.slice(5).some((row) => row !== null) ? 'present' : 'absent')
   )
     return invalid();
-  return {
+  return Object.freeze({
     version: 1,
-    question: { revision: question.revision, lifecycleRevision: question.lifecycleRevision },
-    subject: { canonicalId: subject.canonicalId, epochs },
-    ownVote: { state: ownVote.state, observation: ownVote.observation },
-  };
+    question: Object.freeze({ revision: question.revision, lifecycleRevision: question.lifecycleRevision }),
+    subject: Object.freeze({
+      canonicalId: subject.canonicalId,
+      epochs: Object.freeze(epochs.map((epoch) => Object.freeze(epoch))),
+    }),
+    ownVote: Object.freeze({ state: ownVote.state, observation: ownVote.observation }),
+  });
 }

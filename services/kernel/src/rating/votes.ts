@@ -5,12 +5,14 @@ import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } from '../command/command.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
+import { createOwnCountedVoteReader, type OwnCountedVoteObservation } from './own-votes-counted.ts';
 import {
   ratingQuestionHistogramIndex,
   ratingQuestionHistogramSize,
@@ -28,6 +30,8 @@ import {
   normalizeVoteReviewGuard,
   ownVoteReviewWitness,
   readVoteReviewSlots,
+  VOTE_SCOPE,
+  VoteInvalidError,
   VoteReviewStaleError,
   VoteReviewUnavailableError,
   type VoteReviewGuard,
@@ -36,7 +40,7 @@ import {
 } from './own-votes-review.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 export { STANDARD_QUESTION_ID } from './standard-question.ts';
-export { VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
+export { VOTE_SCOPE, VoteInvalidError, VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
 export type { VoteReviewGuard } from './own-votes-review.ts';
 import questionRead from './question-read.sql';
 import voteInsert from './vote-insert.sql';
@@ -52,8 +56,6 @@ import {
   requireVoteObservationProvider,
   type VoteObservation,
 } from './vote-observation.ts';
-
-export const VOTE_SCOPE = 'rating:vote';
 
 export type RatingQuestion = RatingQuestionScale & {
   id: string;
@@ -89,12 +91,12 @@ export type PutVoteOutcome = {
   component: SessionComponent | null;
 };
 
-export class VoteInvalidError extends Error {
-  constructor(readonly field: string) {
-    super(`Invalid rating vote field: ${field}`);
-    this.name = 'VoteInvalidError';
-  }
-}
+export type VoteReviewCurrentVote = Exclude<OwnCountedVoteObservation, { state: 'unavailable' }>;
+export type VoteReview = Readonly<{
+  question: RatingQuestion;
+  currentVote: VoteReviewCurrentVote;
+  guard: VoteReviewGuard;
+}>;
 
 export class RatingQuestionNotFoundError extends Error {
   constructor() {
@@ -268,6 +270,7 @@ export function createVoteCommands(config: Dependencies) {
     access: config.access,
     ...(clock === undefined ? {} : { clock }),
   });
+  const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access });
 
   async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
@@ -554,5 +557,52 @@ export function createVoteCommands(config: Dependencies) {
     return findQuestion(config, actor, questionId);
   }
 
-  return { putVote, putVoteOutcome, readOwnVote, readRatingQuestion };
+  async function readVoteReview(actor: Actor, questionId: string, targetId: string): Promise<VoteReview> {
+    const question = await readRatingQuestion(actor, questionId);
+    if (questionId !== STANDARD_QUESTION_ID) throw new VoteReviewUnavailableError('atomic_guard_unavailable');
+
+    const deadline = deadlineFor(5_000);
+    const request = Object.freeze({ actor, targetIds: Object.freeze([targetId]) });
+    const prepared = await countedVoteReader.prepare(request, deadline);
+    if (prepared.status !== 'prepared')
+      throw new VoteReviewUnavailableError(
+        prepared.reason === 'identity-pending'
+          ? 'identity_pending'
+          : prepared.reason === 'question-changed'
+            ? 'question_observation_unavailable'
+            : 'identity_observation_unavailable',
+      );
+    const preparation = prepared.preparation;
+    if (
+      !preparation.question ||
+      preparation.question.questionId !== question.id ||
+      preparation.question.revision !== question.revision ||
+      preparation.question.lifecycleRevision !== question.lifecycleRevision
+    )
+      throw new VoteReviewUnavailableError('question_observation_unavailable');
+
+    const readResult = await withReadTransaction(
+      pool,
+      (client) => countedVoteReader.read(client, request, preparation),
+      deadline,
+    );
+    const current = await countedVoteReader.finish(request, preparation, readResult, deadline);
+    if (current.status !== 'current')
+      throw new VoteReviewUnavailableError(
+        current.reason === 'question-changed'
+          ? 'question_observation_unavailable'
+          : current.reason === 'identity-changed'
+            ? 'identity_observation_unavailable'
+            : current.reason === 'vote-changed'
+              ? 'own_vote_observation_unavailable'
+              : 'own_vote_observation_unavailable',
+      );
+    const observation = current.observations[0]!;
+    if (observation.state === 'unavailable') throw new VoteReviewUnavailableError('identity_observation_unavailable');
+    const guard = normalizeVoteReviewGuard(observation.review, targetId);
+    const currentVote = Object.freeze({ ...observation, review: guard });
+    return Object.freeze({ question, currentVote, guard });
+  }
+
+  return { putVote, putVoteOutcome, readOwnVote, readRatingQuestion, readVoteReview };
 }
