@@ -182,7 +182,7 @@ test('history cleanup remains a bounded page over independent journal growth', a
     },
     async operation(db) {
       const removed = await metadataHistoryCleanup.run(db.pool, {
-        route: routeOf(cleanupTarget.id),
+        route: routeOf(cleanupTarget.id)!,
         collection_id: cleanupTarget.id,
       });
       expect(removed.length).toBe(25);
