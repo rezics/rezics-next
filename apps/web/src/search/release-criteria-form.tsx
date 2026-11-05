@@ -26,7 +26,17 @@ const subjectFields = ['platform', 'developer', 'publisher'] as const;
 type SubjectField = (typeof subjectFields)[number];
 type ReleaseCriteriaDraft = { form: ReleaseSearchForm; languageTags: string[] };
 type CriteriaField = keyof ReleaseSearchForm;
-const semanticFields = ['platform', 'releaseLanguage', 'gte', 'lte', 'ageGte', 'ageLte', 'ageUnit', 'developer', 'publisher'] as const;
+const semanticFields = [
+  'platform',
+  'releaseLanguage',
+  'gte',
+  'lte',
+  'ageGte',
+  'ageLte',
+  'ageUnit',
+  'developer',
+  'publisher',
+] as const;
 type SemanticField = (typeof semanticFields)[number];
 
 function languageTags(form: ReleaseSearchForm, invalid: boolean): string[] {
@@ -45,11 +55,7 @@ function draftInput(draft: ReleaseCriteriaDraft): Record<string, unknown> {
   };
 }
 
-function releaseLanguageMeaning(
-  subtype: string,
-  platform: string,
-  types: readonly ReleaseSearchType[],
-): string {
+function releaseLanguageMeaning(subtype: string, platform: string, types: readonly ReleaseSearchType[]): string {
   const controls = types.find((type) => type.id === subtype)?.controls;
   if (platform) {
     if (controls?.platform?.languageQualifier)
@@ -251,7 +257,11 @@ function ReleaseSearchSubjectPicker({
         {help}
       </span>
       {selection && (
-        <div role="group" aria-label={label} className="flex flex-wrap items-center gap-2 rounded-md border p-2 font-normal">
+        <div
+          role="group"
+          aria-label={label}
+          className="flex flex-wrap items-center gap-2 rounded-md border p-2 font-normal"
+        >
           <span>{selection.label ?? m.search_suggestions_unavailable({}, options)}</span>
           {selection.type && <span className="text-muted-foreground">{selection.type}</span>}
           <code className="text-xs text-muted-foreground">{selection.id}</code>
@@ -285,7 +295,12 @@ function ReleaseSearchSubjectPicker({
         {statusText}
       </p>
       {status === 'ready' && suggestions && (
-        <ul id={listId} role="listbox" aria-label={m.header_search_suggestions({}, options)} className="rounded-md border">
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={m.header_search_suggestions({}, options)}
+          className="rounded-md border"
+        >
           {suggestions.subjects.slice(0, HEADER_SUGGESTION_LIMIT).map((subject, index) => {
             const subjectLabel = localizedLabel(subject.labels, locale);
             const typeLabel = localizedLabel(suggestions.types[subject.type] ?? {}, locale);
@@ -325,19 +340,35 @@ export function ReleaseSearchFormView({
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const [draft, setDraft] = useState(() => draftFor(parsed));
   const [subjectSelections, setSubjectSelections] = useState<ReleaseSearchSelections>(() => ({
-    ...(selections?.platform ? { platform: selections.platform } : parsed.form.platform ? { platform: { id: parsed.form.platform } } : {}),
-    ...(selections?.developer ? { developer: selections.developer } : parsed.form.developer ? { developer: { id: parsed.form.developer } } : {}),
-    ...(selections?.publisher ? { publisher: selections.publisher } : parsed.form.publisher ? { publisher: { id: parsed.form.publisher } } : {}),
+    ...(selections?.platform
+      ? { platform: selections.platform }
+      : parsed.form.platform
+        ? { platform: { id: parsed.form.platform } }
+        : {}),
+    ...(selections?.developer
+      ? { developer: selections.developer }
+      : parsed.form.developer
+        ? { developer: { id: parsed.form.developer } }
+        : {}),
+    ...(selections?.publisher
+      ? { publisher: selections.publisher }
+      : parsed.form.publisher
+        ? { publisher: { id: parsed.form.publisher } }
+        : {}),
   }));
   const [pendingSubjects, setPendingSubjects] = useState<Set<SubjectField>>(() => new Set());
   const [serverErrors, setServerErrors] = useState<Set<keyof ReleaseSearchForm>>(
     () => new Set(parsed.invalid.filter((field): field is keyof ReleaseSearchForm => field !== 'cursor')),
   );
   const [corrections, setCorrections] = useState<Set<SemanticField>>(() => new Set());
-  const [meaningBaseline, setMeaningBaseline] = useState<Record<SemanticField, string>>(() =>
-    Object.fromEntries(
-      semanticFields.map((field) => [field, criteriaMeaning(field, parsed.form.subtype, parsed.form.platform, types)]),
-    ) as Record<SemanticField, string>,
+  const [meaningBaseline, setMeaningBaseline] = useState<Record<SemanticField, string>>(
+    () =>
+      Object.fromEntries(
+        semanticFields.map((field) => [
+          field,
+          criteriaMeaning(field, parsed.form.subtype, parsed.form.platform, types),
+        ]),
+      ) as Record<SemanticField, string>,
   );
   const [focusAttempt, setFocusAttempt] = useState(0);
   const summary = useRef<HTMLDivElement>(null);
@@ -449,10 +480,7 @@ export function ReleaseSearchFormView({
     setCorrections((currentCorrections) => {
       const next = new Set(currentCorrections);
       for (const field of semanticFields) {
-        if (
-          draft.form[field] &&
-          meaningBaseline[field] !== criteriaMeaning(field, subtype, draft.form.platform, types)
-        )
+        if (draft.form[field] && meaningBaseline[field] !== criteriaMeaning(field, subtype, draft.form.platform, types))
           next.add(field);
         else next.delete(field);
       }
@@ -661,8 +689,18 @@ export function ReleaseSearchFormView({
       )}
       {(controls?.ageRating || draft.form.ageGte || draft.form.ageLte || draft.form.ageUnit) && (
         <>
-          {fieldInput('ageGte', m.release_search_age_lower({}, options), m.release_search_age_help({}, options), 'decimal')}
-          {fieldInput('ageLte', m.release_search_age_upper({}, options), m.release_search_age_help({}, options), 'decimal')}
+          {fieldInput(
+            'ageGte',
+            m.release_search_age_lower({}, options),
+            m.release_search_age_help({}, options),
+            'decimal',
+          )}
+          {fieldInput(
+            'ageLte',
+            m.release_search_age_upper({}, options),
+            m.release_search_age_help({}, options),
+            'decimal',
+          )}
           <div className="grid gap-1 text-sm font-medium">
             <label htmlFor="release-search-ageUnit">{m.release_search_age_unit({}, options)}</label>
             <select
@@ -716,7 +754,9 @@ export function ReleaseSearchFormView({
           aria-describedby={errors.includes('sort') ? issueId('sort') : undefined}
           onChange={(event) => setField('sort', event.currentTarget.value)}
         >
-          {!['name', 'relevance'].includes(draft.form.sort) && <option value={draft.form.sort}>{draft.form.sort}</option>}
+          {!['name', 'relevance'].includes(draft.form.sort) && (
+            <option value={draft.form.sort}>{draft.form.sort}</option>
+          )}
           <option value="name">{m.release_search_sort_name({}, options)}</option>
           <option value="relevance">{m.release_search_sort_relevance({}, options)}</option>
         </select>
@@ -733,7 +773,9 @@ export function ReleaseSearchFormView({
           aria-describedby={errors.includes('threshold') ? issueId('threshold') : undefined}
           onChange={(event) => setField('threshold', event.currentTarget.value)}
         >
-          {!['0', '1', '2'].includes(draft.form.threshold) && <option value={draft.form.threshold}>{draft.form.threshold}</option>}
+          {!['0', '1', '2'].includes(draft.form.threshold) && (
+            <option value={draft.form.threshold}>{draft.form.threshold}</option>
+          )}
           <option value="0">{m.release_search_spoilers_0({}, options)}</option>
           <option value="1">{m.release_search_spoilers_1({}, options)}</option>
           <option value="2">{m.release_search_spoilers_2({}, options)}</option>
@@ -769,7 +811,13 @@ export function ReleaseSearchFormView({
         </div>
       )}
       {errors.length > 0 && (
-        <div ref={summary} id="release-search-errors" role="alert" tabIndex={-1} className="text-sm text-destructive sm:col-span-2">
+        <div
+          ref={summary}
+          id="release-search-errors"
+          role="alert"
+          tabIndex={-1}
+          className="text-sm text-destructive sm:col-span-2"
+        >
           <p>{m.release_search_invalid({}, options)}</p>
           <ul className="list-disc pl-5">
             {errors.map((field) => (

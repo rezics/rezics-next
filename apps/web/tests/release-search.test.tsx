@@ -15,11 +15,7 @@ const { ResultRow } = await import('../src/search/results');
 import { listKeyFacts } from '../src/media/type-presentation';
 const { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } = await import('../src/search/discovery');
 import { bundledRelease } from '@rezics/definitions/bundled';
-import {
-  admittedReleaseSearchControls,
-  admittedReleaseSearchTypes,
-  type FilterRelease,
-} from '@rezics/filter';
+import { admittedReleaseSearchControls, admittedReleaseSearchTypes, type FilterRelease } from '@rezics/filter';
 import {
   parseReleaseSearch,
   releaseSearchHref,
@@ -570,7 +566,8 @@ test('release criteria update on subtype change, retain repairs, and apply an or
       changeValue('releaseLanguage', 'ja, en');
     });
     const moveJapaneseUp = [...mounted.host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.getAttribute('aria-label') === m.condition_languages_move_up({ language: 'ja' }, { locale: 'en' }),
+      (button) =>
+        button.getAttribute('aria-label') === m.condition_languages_move_up({ language: 'ja' }, { locale: 'en' }),
     )!;
     await act(async () => moveJapaneseUp.click());
 
@@ -596,7 +593,8 @@ test('release criteria update on subtype change, retain repairs, and apply an or
     });
     expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
     const params = new URLSearchParams();
-    for (const [key, value] of new mounted.window.FormData(form)) if (typeof value === 'string') params.append(key, value);
+    for (const [key, value] of new mounted.window.FormData(form))
+      if (typeof value === 'string') params.append(key, value);
     expect(params.getAll('language')).toEqual(['ja', 'fr']);
     expect(params.has('cursor')).toBe(false);
     expect(params.get('condition')).toBe(condition);
@@ -659,7 +657,8 @@ test('withdrawn subtype and invalid URL language stay visible until focused corr
       subtype.dispatchEvent(new mounted.window.Event('change', { bubbles: true }));
     });
     const removeInvalidTag = [...mounted.host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.getAttribute('aria-label') === m.condition_languages_remove({ language: '??' }, { locale: 'en' }),
+      (button) =>
+        button.getAttribute('aria-label') === m.condition_languages_remove({ language: '??' }, { locale: 'en' }),
     )!;
     await act(async () => removeInvalidTag.click());
     expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
