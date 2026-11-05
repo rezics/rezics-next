@@ -214,6 +214,19 @@ beforeAll(async () => {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
+    if (method === 'POST' && path === '/v1/boards' && response.status !== 201) {
+      const title = (body as { title: string }).title;
+      const diagnostic = await pool.query(
+        `SELECT b.route,b.board_id,b.subject_id,b.visibility,
+          (SELECT array_agg(grant_role) FROM access.resource_role_grant r
+           WHERE r.route=b.route AND r.resource_id=b.board_id AND r.subject_id=$2) AS roles,
+          (SELECT array_agg(action) FROM access.resource_grant g
+           WHERE g.route=b.route AND g.resource_id=b.board_id AND g.subject_id=$2) AS actions
+         FROM content.board b WHERE b.title=$1 ORDER BY b.created_at DESC LIMIT 1`,
+        [title, seller.accountId],
+      );
+      console.error('Native board visibility diagnostic', JSON.stringify(diagnostic.rows));
+    }
     return response;
   });
   contentEdition = await editionPublisher.publish({
