@@ -95,7 +95,7 @@ function LiteraryProfileSessionLive({
   address,
   expectedType,
 }: {
-  id?: string;
+  id?: string | undefined;
   locale: string;
   address?: string | undefined;
   expectedType?: string | undefined;
