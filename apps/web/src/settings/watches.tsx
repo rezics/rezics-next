@@ -30,12 +30,16 @@ type WatchesSectionProps = {
 };
 
 function createController(io: WatchManagementIO, owner: NonNullable<ReturnType<typeof useSettingsSessionOwner>>) {
-  return new WatchController(io, {
-    subject: owner.subject ?? '',
-    readCurrent: owner.readCurrent,
-    credential: owner.credential,
-    subscribe: owner.subscribe,
-  }, owner);
+  return new WatchController(
+    io,
+    {
+      subject: owner.subject ?? '',
+      readCurrent: owner.readCurrent,
+      credential: owner.credential,
+      subscribe: owner.subscribe,
+    },
+    owner,
+  );
 }
 
 /** Visited Settings panels keep this controller and its unresolved command alive across category changes. */
