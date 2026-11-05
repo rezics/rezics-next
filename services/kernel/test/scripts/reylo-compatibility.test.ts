@@ -1,8 +1,7 @@
 import { Client } from 'pg';
-import transport from './reylo-transport.sql';
 import { jsonParameter } from '../../src/sql/json.ts';
 import { expect, test } from 'bun:test';
-import { defineQuery } from 'reylo';
+import { defineQuery, type Json } from 'reylo';
 import { resolve } from 'node:path';
 import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../../src/sql/statement-bytes.ts';
 
@@ -44,6 +43,12 @@ test('the server SQL import graph loads against the migrated check database', as
 
 // The runtime driver, SQL mapper and native engine must agree on JSON and parameter subscripts.
 test('JSON wire values and parameter subscripts survive a PostgreSQL round trip', async () => {
+  const transport = defineQuery<{ body: Json; index: number }, { body: Json; tag: string | null }, 'one', 'postgres'>({
+    dialect: 'postgres',
+    sql: "SELECT :body::jsonb AS body, (ARRAY['first', 'second'])[(:index::int)] AS tag;",
+    params: ['body', 'index'],
+    cardinality: 'one',
+  });
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
