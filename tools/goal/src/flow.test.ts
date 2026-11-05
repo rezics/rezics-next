@@ -173,10 +173,12 @@ test('one ordered interval index keeps equal-time reports and does linear work a
       const id = `live-${i}`;
       const cancelled = `stopped-${i}`;
       const reverse = `equal-${i}`;
+      const promo = `promo-${i}`;
       tasks.push(
-        { ...task(id), state: 'running' },
-        { ...task(cancelled), state: 'cancelled' },
-        { ...task(reverse), state: 'running' },
+        { ...task(id), terminalState: 'running' },
+        { ...task(cancelled), terminalState: 'cancelled' },
+        { ...task(reverse), terminalState: 'running' },
+        { ...task(promo), terminalState: 'running' },
       );
       add({ taskId: id, attempt: 1, stage: 'start', action: 'requested', at: date(1) });
       add({ taskId: id, attempt: 1, stage: 'start', action: 'started', at: date(1) });
@@ -186,9 +188,9 @@ test('one ordered interval index keeps equal-time reports and does linear work a
       add({ taskId: id, attempt: 1, stage: 'worker', action: 'started', at: date(3) });
       add({ taskId: id, attempt: 1, stage: 'landing', action: 'enqueued', at: date(5) });
       add({ taskId: id, attempt: 1, stage: 'landing', action: 'finished', at: date(8) });
-      add({ taskId: id, attempt: 1, stage: 'verification', action: 'requested', at: date(9) });
-      add({ taskId: id, attempt: 1, stage: 'integration', action: 'integrated', at: date(9) });
-      add({ taskId: id, attempt: 1, stage: 'promotion', action: 'requested', at: date(10) });
+      add({ taskId: promo, attempt: 1, stage: 'verification', action: 'requested', at: date(9) });
+      add({ taskId: promo, attempt: 1, stage: 'integration', action: 'integrated', at: date(9) });
+      add({ taskId: promo, attempt: 1, stage: 'promotion', action: 'requested', at: date(10) });
       add({ taskId: cancelled, attempt: 1, stage: 'check', action: 'requested', at: date(1) });
       add({ taskId: reverse, attempt: 1, stage: 'start', action: 'started', at: date(1) });
       add({ taskId: reverse, attempt: 1, stage: 'start', action: 'requested', at: date(1) });
