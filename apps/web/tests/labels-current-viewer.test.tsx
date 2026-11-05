@@ -591,10 +591,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(host.textContent).toContain(m.library_labels_invalid_cursor());
       expect(host.textContent).not.toContain('Private F');
       expect(host.querySelector('input[name="operation"][value="create"]')).toBeNull();
-      const recovery = [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_collections_first_page());
-      expect(recovery?.getAttribute('href')).toBe(
-        `/en/library/labels?${new URLSearchParams({ q: search.q! })}`,
+      const recovery = [...host.querySelectorAll('a')].find(
+        (link) => link.textContent === m.library_collections_first_page(),
       );
+      expect(recovery?.getAttribute('href')).toBe(`/en/library/labels?${new URLSearchParams({ q: search.q! })}`);
       const undoForm = [...host.querySelectorAll('form')].find((form) =>
         form.querySelector('input[name="operation"][value="restore"]'),
       )!;

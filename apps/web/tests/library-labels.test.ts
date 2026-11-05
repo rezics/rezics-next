@@ -169,9 +169,7 @@ test('a native 400 invalid_cursor preserves the prefix for explicit first-page r
     next: null,
     feedback: { ok: false, reason: 'invalid_cursor' },
   });
-  const recovery = renderToStaticMarkup(
-    createElement(LabelsPageView, { page, cursor: rejectedCursor, locale: 'fr' }),
-  );
+  const recovery = renderToStaticMarkup(createElement(LabelsPageView, { page, cursor: rejectedCursor, locale: 'fr' }));
   const firstPagePath = `/fr/library/labels?${new URLSearchParams({ q: prefix })}`;
   expect(recovery).toContain(m.library_labels_invalid_cursor());
   expect(recovery).toContain(`href="${firstPagePath.replaceAll('&', '&amp;')}"`);
