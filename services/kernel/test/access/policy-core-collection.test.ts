@@ -127,3 +127,28 @@ test('exact registered Global reach is the only alternate path, and unavailable 
   const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
   expect(unknown.decision).toBe('unavailable');
 });
+
+test('own-account Library writes keep the SQL live clock as deadline evidence', () => {
+  const ownAccountCatalogue = compileNativePolicyCatalogue(
+    new Map([['library_entry:update', { anonymous: false, authority: 'own-account' }]]),
+    { roles: new Map(), types: new Map() },
+  );
+  const ownAccount = {
+    action: 'library_entry:update',
+    resourceType: 'access.account',
+    anonymous: false,
+    hasPrincipal: false,
+    authenticatedBenefit: false,
+    scope: true,
+    floor: false,
+    mode: 'ordinary' as const,
+  };
+  const missingDeadline = projection({ actorOwnAccountGrant: true, deadlineLive: null });
+  expect(decideNativePermission(ownAccountCatalogue, ownAccount, missingDeadline).decision).toBe('unavailable');
+  expect(
+    decideNativePermission(ownAccountCatalogue, ownAccount, {
+      ...missingDeadline,
+      live: true,
+    }).decision,
+  ).toBe('allow');
+});

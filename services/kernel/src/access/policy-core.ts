@@ -17,6 +17,8 @@ const nativePolicyCatalogues = new WeakMap<ResolvedResourceRoles, PolicyCatalogu
 export type NativePermissionProjection = Readonly<{
   assignmentValid: boolean | null;
   deadlineLive: boolean | null;
+  /** Permission SQL also aliases this clock check as `live` for the policy-core row guard. */
+  live?: boolean | null;
   localDenied: boolean | null;
   actorActionGrant: boolean | null;
   actorResourceRoleGrant: boolean | null;
@@ -164,7 +166,7 @@ export function decideNativePermission(
   const facts: PolicyFacts = {
     standing: true,
     assignment: row.assignmentValid,
-    deadlineLive: row.deadlineLive,
+    deadlineLive: row.deadlineLive ?? row.live ?? null,
     scope: input.scope,
     localDenial: explicit ? row.explicitLocalDenied : row.localDenied,
     publicFloor: explicit ? false : input.floor,
