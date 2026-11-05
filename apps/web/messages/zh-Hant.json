@@ -11126,6 +11126,7 @@
   "library_mal_question_unavailable": "目前原生評分問題無法使用。",
   "library_mal_read_question": "讀取目前原生評分問題",
   "library_mal_reading_question": "正在讀取目前問題…",
+  "library_mal_native_score_question": "原生評分問題",
   "library_mal_question_details": "{label}，修訂版 {revision}，粒度：{grain}。{meaning} 原生單位範圍 {min} 至 {max}，步長 {step}。",
   "library_mal_current_vote_label": "目前自己的投票：{value}",
   "library_mal_vote_present": "原生單位 {units}，問題修訂版 {revision}，記錄時間 {at}",

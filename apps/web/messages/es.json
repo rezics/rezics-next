@@ -11027,6 +11027,7 @@
   "library_mal_question_unavailable": "La pregunta nativa de puntuación actual no está disponible.",
   "library_mal_read_question": "Leer la pregunta nativa actual",
   "library_mal_reading_question": "Leyendo la pregunta actual…",
+  "library_mal_native_score_question": "Pregunta de puntuación nativa",
   "library_mal_question_details": "{label}, revisión {revision}, nivel: {grain}. {meaning} Unidades nativas de {min} a {max}, paso {step}.",
   "library_mal_current_vote_label": "Voto propio actual: {value}",
   "library_mal_vote_present": "{units} unidades nativas, revisión de pregunta {revision}, registrado {at}",

@@ -11289,6 +11289,7 @@
   "library_mal_question_unavailable": "The current native score question is unavailable.",
   "library_mal_read_question": "Read the current native score question",
   "library_mal_reading_question": "Reading the current question…",
+  "library_mal_native_score_question": "Native score question",
   "library_mal_question_details": "{label}, revision {revision}, grain: {grain}. {meaning} Native units {min} to {max}, step {step}.",
   "library_mal_current_vote_label": "Current own vote: {value}",
   "library_mal_vote_present": "{units} native units, question revision {revision}, recorded {at}",

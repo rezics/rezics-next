@@ -11027,6 +11027,7 @@
   "library_mal_question_unavailable": "현재 네이티브 평가 질문을 사용할 수 없습니다.",
   "library_mal_read_question": "현재 네이티브 평가 질문 읽기",
   "library_mal_reading_question": "현재 질문을 읽는 중…",
+  "library_mal_native_score_question": "네이티브 점수 질문",
   "library_mal_question_details": "{label}, 개정 {revision}, 단위 수준: {grain}. {meaning} 네이티브 단위 {min}~{max}, 간격 {step}.",
   "library_mal_current_vote_label": "현재 내 투표: {value}",
   "library_mal_vote_present": "네이티브 단위 {units}, 질문 개정 {revision}, 기록 시각 {at}",
