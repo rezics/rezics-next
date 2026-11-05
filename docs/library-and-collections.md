@@ -202,6 +202,9 @@ review within that producer; default display groups and unsupported tags never i
 Selected private label consolidation is an explicit Labels action over supplied assignment identities. Its installed
 native review, confirmation, one-item apply/retry, cancel and result boundary is owned by
 [the consolidation contract](library-label-consolidation.md); both labels reopen through the native assignment readers.
+Commerce receives each refreshed Label shelf only against its captured exact request: the source cursor is retained,
+the target starts at its first page, and omitted result/Undo query fields stay omitted. Matching refreshes retain the
+supplied native Undo receipt; mismatches remain unavailable without replaying consolidation.
 Immutable Subject security-evidence binding, generated client declarations and full caller growth remain a continuation.
 
 The mounted [personal VNDB upload](library-import-vndb.md) supports private preview, identifier matching, explicit

@@ -1,7 +1,8 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
-import type { CurrentLabelShelfData } from '../src/library/label-shelf-read';
+import type { CurrentLabelShelfData, LabelShelfSource } from '../src/library/label-shelf-read';
+import type { ConsolidationWorkspaceProps } from '../src/library/label-consolidation/workspace';
 import type { SessionEnv } from '../src/session/client';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 
@@ -154,7 +155,23 @@ test('The actual named-label Library renders private FULL assignments and remove
   const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
-  const { loadCurrentLabelShelfPage, loadLabelShelfPage } = await import('../src/library/label-shelf-read');
+  const shelfReaders = await import('../src/library/label-shelf-read');
+  const { loadCurrentLabelShelfPage, loadLabelShelfPage } = shelfReaders;
+  let receive = (page: CurrentLabelShelfData): CurrentLabelShelfData => page;
+  mock.module('../src/library/label-shelf-read', () => ({
+    ...shelfReaders,
+    loadCurrentLabelShelfPage: async (...args: Parameters<typeof loadCurrentLabelShelfPage>) =>
+      receive(await loadCurrentLabelShelfPage(...args)),
+  }));
+  const { ConsolidationWorkspace } = await import('../src/library/label-consolidation/workspace');
+  let workspace: ConsolidationWorkspaceProps;
+  mock.module('../src/library/label-consolidation/workspace', () => ({
+    ConsolidationWorkspace: (props: ConsolidationWorkspaceProps) => {
+      workspace = props;
+      return createElement(ConsolidationWorkspace, props);
+    },
+  }));
+  const { m } = await import('../src/paraglide/messages.js');
   const { kernelClient } = await import('../src/kernel/client');
   const { Route } = await import('../src/routes/library/index');
   const { renderToString } = await import('react-dom/server');
@@ -521,6 +538,54 @@ test('The actual named-label Library renders private FULL assignments and remove
           return query.get('limit') === '100' && query.get('view') === 'FULL';
         }),
     ).toBe(true);
+
+    // Refresh receiving uses the actual wrapper and readers; the workspace keeps its native command authority.
+    const targetId = id(804);
+    const receipt = workspace!.page.undo;
+    const refresh = async (change: typeof receive) => {
+      const requested: LabelShelfSource[] = [];
+      receive = (page) => {
+        requested.push(page.provenance.source);
+        return change(page);
+      };
+      await act(async () => workspace!.refreshAssignments(labelId, targetId));
+      expect(requested).toEqual([
+        { labelId, cursor: 'source-one', undo: null, undoKey: null, labelResult: null },
+        { labelId: targetId, cursor: null, undo: null, undoKey: null, labelResult: null },
+      ]);
+      expect(workspace!.page.undo).toBe(receipt);
+      expect(workspace!.page.undoKey).toBe(undoKey);
+    };
+    const refreshed = (page: CurrentLabelShelfData): CurrentLabelShelfData =>
+      page.state === 'loaded' ? { ...page, label: { ...page.label, name: 'Refreshed bounded shelf' } } : page;
+    for (const side of [labelId, targetId]) {
+      for (const mismatch of [
+        { cursor: 'wrong-cursor' },
+        { labelId: id(899) },
+        { undo: input.undo },
+        { undoKey },
+        { labelResult: input.labelResult },
+      ]) {
+        const before = workspace!.page;
+        await refresh((page) => ({
+          ...refreshed(page),
+          provenance: {
+            ...page.provenance,
+            source: { ...page.provenance.source, ...(page.provenance.source.labelId === side ? mismatch : {}) },
+          },
+        }));
+        expect(host.textContent).toContain(m.library_consolidation_refresh_failed());
+        if (side === labelId) expect(workspace!.page).toBe(before);
+      }
+    }
+    await refresh(refreshed);
+    expect(host.textContent).toContain('Refreshed bounded shelf');
+    expect(host.textContent).not.toContain(m.library_consolidation_refresh_failed());
+    expect(workspace!.page.next).toContain(`private-next-${B}`);
+    await refresh(() => { throw new Error('Refresh unavailable'); });
+    expect(host.textContent).toContain(m.library_consolidation_refresh_failed());
+    expect(reads.every((req) => req.method === 'GET')).toBe(true);
+    receive = (page) => page;
   } finally {
     hold = null;
     for (const pending of held.splice(0)) pending.resolve(pending.response);
