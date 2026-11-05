@@ -393,10 +393,15 @@ test('a focused check compiles on the host analysis: a statement is analysed onc
     writeFileSync(join(workspace, 'src/first.sql'), 'select 1;\nselect 12;\n');
     // The new database keeps the entry of the unchanged `select 1` and writes only the changed statement.
     expect(await check(5434)).toEqual({ analyzed: 1, total: 2, written: 1, diagnostics: ['select 2 error'] });
+    // Publishing replaces the superseded snapshot, so each schema keeps one.
+    const snapshots = () =>
+      [...new Bun.Glob('reylo-kernel/*/*/snapshots/*').scanSync({ cwd: cacheRoot, onlyFiles: false })].length;
+    expect(snapshots()).toBe(1);
 
     dumps = { 'db/schema.sql': 'create table first (id bigint);' };
     const migrated = await check(5435);
     expect(migrated).toEqual({ analyzed: 2, total: 2, written: 3, diagnostics: ['select 2 error'] });
+    expect(snapshots()).toBe(2);
     expect(await check(5436)).toEqual({ analyzed: 0, total: 2, written: 0, diagnostics: ['select 2 error'] });
     expect(await check(5437, join(repository, 'cold-cache'))).toEqual(migrated);
   } finally {
