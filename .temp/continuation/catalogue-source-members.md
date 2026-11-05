@@ -28,4 +28,13 @@ changes that add and remove members, empty and paged results, edit/reopen, and t
 on the seeded running stack; inspect browser create/view/edit at 390/1440 in light and dark after integration.
 
 The contract-named Search acceptance, native and browser checks remain deferred to the controller's integration
-verifier. Search delivery and scoped checks were not run in this attempt yet.
+verifier. The one-use handoff is not the missing native execution contract, and the current member endpoint still
+reports Commerce's unavailable dependency for catalogue rules; this remains unfinished work, not an accepted result.
+
+## Verification in this attempt
+
+- `bun apps/web/scripts/focused.ts --private-network -- bun test tests/library-save-query.test.tsx tests/saved-query-editor.test.ts tests/search-saved-query-selection.test.ts` passed: 9 tests.
+- `bun run --cwd services/kernel check test/library/collection-rules.test.ts test/library/collection-rule-read-http.test.ts test/library/collection-rules-growth.test.ts test/library/released-library-population.test.ts test/library/saved-query-lifecycle.test.ts` stopped at the schema check. The Library snapshot now matches; the unchanged `services/kernel/db/semantic/schema.sql` differs from the database built from migrations, so kernel tests did not run.
+- `bun run --cwd services/kernel typecheck` failed on pre-existing repository diagnostics in producer/check-host files; the new rule-source and retained-preparation literals had no remaining diagnostics. The `collections.ts` time diagnostic is on an unchanged call site.
+- `bun run --cwd apps/web typecheck` failed on unchanged diagnostics in `search-regions/results.tsx`, verified against base. No diagnostics were reported in the new Search selection, handoff, rule DTO, or focused test files.
+- Seeded-stack, native, browser, refresh, empty/page, and catalogue entry/leave acceptance remain for the integration verifier after Commerce supplies the native Source/Members binding.
