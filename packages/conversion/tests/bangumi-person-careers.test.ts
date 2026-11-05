@@ -79,7 +79,8 @@ function mapCareers(result: ReturnType<typeof convert>, type = 'schema:Person', 
   });
 }
 
-test('selected Bangumi Person careers use current source Concepts and released occupation', () => {
+test('career mapping emits cited P106 only for the exact current source-backed Person Concept', () => {
+  // Conversion retains text; only the mapper binds the exact Person, source key, Scheme, Concept and P106.
   const valid = convert(1, ['producer']);
   const mapped = mapCareers(valid);
   const proposals = mapped.proposals.filter(
@@ -94,6 +95,7 @@ test('selected Bangumi Person careers use current source Concepts and released o
     type: 'value',
     content: concept,
   });
+  // Career assertions cite the exact Person record with the source-owned career field location.
   expect(proposals[0]?.op === 'propose' ? proposals[0].statement.references?.[0]?.parts : []).toContainEqual({
     property: { id: 'schema:url' },
     value: { type: 'value', content: 'https://bgm.tv/person/8101#/career' },
@@ -108,6 +110,7 @@ test('selected Bangumi Person careers use current source Concepts and released o
     mapCareers(valid, 'schema:Person', { releaseDigest: bundledDigest, schemes: [], concepts: [] }).gaps,
   ).toContainEqual(expect.objectContaining({ reason: 'missing_scheme', property: 'skos:ConceptScheme' }));
 
+  // A known valid item survives an independently malformed neighbor; no unsupported occupation is inferred.
   for (const value of [[], ['future-role'], { role: 'producer' }, ['producer', null]]) {
     const result = convert(1, value);
     const mappedResult = mapCareers(result);
