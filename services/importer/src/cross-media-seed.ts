@@ -1,8 +1,5 @@
 import { createHash } from 'node:crypto';
-import type {
-  DevelopmentShowcaseContext,
-  DevelopmentShowcaseResult,
-} from '../../../scripts/datasets/development-showcase.ts';
+import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
 import { createReadStream } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
