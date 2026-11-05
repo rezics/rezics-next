@@ -1,7 +1,7 @@
 /** Static bounds for the retained finite selected-set publication command. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-native.ts';
-import { CANONICAL_SOURCE_RECEIVING_COST as COLLECTION_SOURCE_WORK_COST } from './canonical-source-bounds.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import {
   OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT,
@@ -85,15 +85,15 @@ const compareHeaderRule = cost({
   bytes: 65536,
 });
 
-const sourcePrepare = COLLECTION_SOURCE_WORK_COST.state;
+const sourcePrepare = CANONICAL_SOURCE_RECEIVING_COST.state;
 const sourceMembership = sumBounds(
   repeatBound(sourcePrepare, 2),
-  COLLECTION_SOURCE_WORK_COST.group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+  CANONICAL_SOURCE_RECEIVING_COST.group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
   repeatBound(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST, COLLECTION_SOURCE_WORK_GROUP_LIMIT),
 );
 const closureAndOwnerFacts = sumBounds(
   MEMBERS_PREPARATION_SOURCE_COST,
-  COLLECTION_SOURCE_WORK_COST.group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
+  CANONICAL_SOURCE_RECEIVING_COST.group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
 );
 const ownerFilterMatch = MEMBERS_PREPARATION_SOURCE_COST;
 function canonicalDeduplicationFor(selectionCount: number) {
