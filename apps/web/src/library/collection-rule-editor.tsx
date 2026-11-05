@@ -532,6 +532,7 @@ function RuleForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const csrf = currentCsrf ? currentCsrf() : csrfToken;
+    console.log('rule submit gate', { current: isCurrent(), csrf: !!csrf, conflict, filter: !!filter, savedId: !!savedId });
     if (!isCurrent() || !csrf || conflict || !filter || savedId) return;
     if (!captured.current && base.state === 'new') {
       setTextSubmitted(true);
