@@ -16,6 +16,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { writeFacts } from '../../src/semantic/subject.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -49,6 +50,7 @@ const kernel = createKernel({
   writeRate: real.writeRate,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(113)]]) },
   routeKey: new Uint8Array(32).fill(114),
+  receiptKeys: testReceiptKeys(),
   requestDeadlineMs: 30_000,
 });
 const projection = linkProjection(pool);
