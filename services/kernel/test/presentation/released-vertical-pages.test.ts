@@ -257,7 +257,10 @@ for (const [vertical, types] of Object.entries(launch)) {
           const anonymous = await factualPage(driver, 'anonymous', type, id, factual, view);
           const editor = await factualPage(driver, 'editor', type, id, factual, view);
           expect(publicPage(editor)).toEqual(publicPage(anonymous));
-          if (view === 'overview' && ['wd:Q689445', 'schema:VideoGame', 'schema:Movie', 'schema:TVSeries'].includes(type)) {
+          if (
+            view === 'overview' &&
+            ['wd:Q689445', 'schema:VideoGame', 'schema:Movie', 'schema:TVSeries'].includes(type)
+          ) {
             expect(anonymous.catalogue).toMatchObject({ state: 'released', type, digest: bundledDigest });
             expect(anonymous.catalogue?.definitions?.types[type]).toBeDefined();
             expect(anonymous.catalogue?.definitions?.types['schema:CreativeWork']).toBeDefined();
