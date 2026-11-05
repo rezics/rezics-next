@@ -120,10 +120,22 @@ function currentScoreReadback(value: unknown): {
   const question = readback.question as Record<string, unknown>;
   const questionLabel = typeof question.label === 'string' ? question.label : undefined;
   const questionRevision = typeof question.revision === 'number' ? question.revision : undefined;
-  if (readback.vote === null) return { status: 'current', units: null, questionLabel, questionRevision };
+  if (readback.vote === null)
+    return {
+      status: 'current',
+      units: null,
+      ...(questionLabel === undefined ? {} : { questionLabel }),
+      ...(questionRevision === undefined ? {} : { questionRevision }),
+    };
   if (readback.vote && typeof readback.vote === 'object') {
     const vote = readback.vote as Record<string, unknown>;
-    if (typeof vote.units === 'number') return { status: 'current', units: vote.units, questionLabel, questionRevision };
+    if (typeof vote.units === 'number')
+      return {
+        status: 'current',
+        units: vote.units,
+        ...(questionLabel === undefined ? {} : { questionLabel }),
+        ...(questionRevision === undefined ? {} : { questionRevision }),
+      };
   }
   return null;
 }
