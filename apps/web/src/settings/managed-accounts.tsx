@@ -319,7 +319,7 @@ export function ManagedAccountsView({
         managedNavigationGuard(current)(event);
       }}
       onBlurCapture={(event) => {
-        if (event.target === handoff.current?.activator) handoff.current = null;
+        if ((event.target as EventTarget) === handoff.current?.activator) handoff.current = null;
       }}
       onAuxClickCapture={managedNavigationGuard(current)}
     >
