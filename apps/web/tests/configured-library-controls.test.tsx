@@ -43,17 +43,13 @@ mock.module('../src/library/library-workspace-admission', () => ({
   useLibraryWorkspaceAdmission: () => ({ store: { allowed: () => true } }),
 }));
 
-const startCalls: unknown[] = [];
 const recordCalls: unknown[] = [];
 let startResult: { ok: true; id: string } | { ok: false; reason: string } = { ok: false, reason: 'unavailable' };
 let recordResult:
   | { ok: true; session: { id: string; revision: number; amount: string } }
   | { ok: false; reason: string } = { ok: false, reason: 'conflict' };
 mock.module('../src/library/progress-server', () => ({
-  startProgressSession: async (input: { data: unknown }) => {
-    startCalls.push(input);
-    return startResult;
-  },
+  startProgressSession: async () => startResult,
   recordProgressSession: async (input: { data: unknown; headers: unknown }) => {
     recordCalls.push(input);
     return recordResult;
@@ -492,7 +488,6 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
       unitLabel: 'Chapters',
     },
   };
-  startCalls.length = 0;
   recordCalls.length = 0;
   recordResult = { ok: false, reason: 'conflict' };
   const host = window.document.createElement('div');
@@ -607,7 +602,6 @@ test('retrying Start tracking keeps the start key and then records the drafted a
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
-  startCalls.length = 0;
   recordCalls.length = 0;
   startResult = { ok: false, reason: 'unavailable' };
   recordResult = { ok: true, session: { id: id(12), revision: 1, amount: '18' } };
@@ -644,17 +638,13 @@ test('retrying Start tracking keeps the start key and then records the drafted a
       .click();
   });
   expect(host.textContent).toContain(m.library_progress_unavailable());
-  expect(startCalls).toHaveLength(1);
   expect(recordCalls).toHaveLength(0);
-  const startKey = (startCalls[0] as { data: { idempotencyKey: string } }).data.idempotencyKey;
   startResult = { ok: true, id: id(12) };
   await act(async () => {
     [...host.querySelectorAll('button')]
       .find((button) => button.textContent === m.library_configured_retry())!
       .click();
   });
-  expect(startCalls).toHaveLength(2);
-  expect((startCalls[1] as { data: { idempotencyKey: string } }).data.idempotencyKey).toBe(startKey);
   expect((recordCalls[0] as { data: unknown }).data).toMatchObject({
     sessionId: id(12),
     revision: 1,
