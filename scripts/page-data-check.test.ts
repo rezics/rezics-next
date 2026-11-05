@@ -33,7 +33,12 @@ const page = (partial: Partial<PageObservation>): PageObservation => ({
 
 test('a section that hides a successful native response is WEB', () => {
   expect(
-    classifySection(native(200, { relations: [{ id: '1' }] }), page({ text: 'This section could not be loaded.' }), '/relations', null),
+    classifySection(
+      native(200, { relations: [{ id: '1' }] }),
+      page({ text: 'This section could not be loaded.' }),
+      '/relations',
+      null,
+    ),
   ).toBe('WEB');
 });
 
@@ -59,14 +64,24 @@ test('a zero-count relation is SEED', () => {
 
 test('native data the page renders is DATA; stated empty, unauthorized and unavailable are not defects', () => {
   expect(
-    classifySection(native(200, { relations: [{ id: '1' }] }), page({ itemCount: 2, text: 'Steins;Gate' }), '/relations', 1),
+    classifySection(
+      native(200, { relations: [{ id: '1' }] }),
+      page({ itemCount: 2, text: 'Steins;Gate' }),
+      '/relations',
+      1,
+    ),
   ).toBe('DATA');
-  expect(classifySection(native(200, { threads: [] }), page({ text: 'No reviews yet', dataState: 'empty' }), '/threads', null)).toBe(
-    'EMPTY',
-  );
-  expect(classifySection(native(401, { code: 'unauthorized' }), page({ text: 'Sign in' }), '/libraryEntries', null)).toBe(
-    'UNAUTHORIZED',
-  );
+  expect(
+    classifySection(
+      native(200, { threads: [] }),
+      page({ text: 'No reviews yet', dataState: 'empty' }),
+      '/threads',
+      null,
+    ),
+  ).toBe('EMPTY');
+  expect(
+    classifySection(native(401, { code: 'unauthorized' }), page({ text: 'Sign in' }), '/libraryEntries', null),
+  ).toBe('UNAUTHORIZED');
   expect(
     classifySection(
       native(200, { feedItems: [], sources: { discovery: 'preparing' } }),
@@ -78,11 +93,16 @@ test('native data the page renders is DATA; stated empty, unauthorized and unava
 });
 
 test('an authenticated 403 is API; native empty with remaining seed candidates is API', () => {
-  expect(classifySection(native(403, { code: 'forbidden' }, true), page({ text: 'Forbidden' }), '/feedItems', null)).toBe(
-    'API',
-  );
   expect(
-    classifySection(native(200, { subject: { statements: {} } }), page({ text: 'No supplied work synopsis' }), '/subject/statements/schema:abstract', 1),
+    classifySection(native(403, { code: 'forbidden' }, true), page({ text: 'Forbidden' }), '/feedItems', null),
+  ).toBe('API');
+  expect(
+    classifySection(
+      native(200, { subject: { statements: {} } }),
+      page({ text: 'No supplied work synopsis' }),
+      '/subject/statements/schema:abstract',
+      1,
+    ),
   ).toBe('API');
 });
 
@@ -218,11 +238,17 @@ test('fixture pages reproduce WEB, API and SEED through the CLI runner', async (
       memberToken: 'secret-member-token',
       browser,
       queryCount: async () => 0,
-      stdout: { write(chunk) { lines.push(chunk); } },
+      stdout: {
+        write(chunk) {
+          lines.push(chunk);
+        },
+      },
     });
     const printed = lines.join('');
     expect(printed).not.toContain('secret-member-token');
-    expect(printed).toContain(formatLine({ page: 'web-hide', persona: 'anonymous', section: 'hidden', name: '', class: 'WEB' }));
+    expect(printed).toContain(
+      formatLine({ page: 'web-hide', persona: 'anonymous', section: 'hidden', name: '', class: 'WEB' }),
+    );
     expect(printed).toContain('api-400 anonymous bad-request API');
     expect(printed).toContain('api-503 anonymous down API');
     expect(printed).toContain('seed-gap anonymous relations SEED');

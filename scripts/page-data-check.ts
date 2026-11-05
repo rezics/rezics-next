@@ -13,7 +13,12 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, type Browser, type BrowserContext, type Page } from '../packages/ui/node_modules/playwright/index.mjs';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '../packages/ui/node_modules/playwright/index.mjs';
 
 export const CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 export type SectionClass = (typeof CLASSES)[number];
@@ -222,7 +227,8 @@ export function classifySection(
   const nativeState = nativeKind(native, items);
   const pageState = pageKind(page);
   if (nativeState === 'error') return 'API';
-  if (nativeState === 'unauthorized') return pageState === 'unauthorized' || pageState === 'missing' ? 'UNAUTHORIZED' : 'WEB';
+  if (nativeState === 'unauthorized')
+    return pageState === 'unauthorized' || pageState === 'missing' ? 'UNAUTHORIZED' : 'WEB';
   if (nativeState === 'unavailable') return pageState === 'unavailable' ? 'UNAVAILABLE' : 'WEB';
   if (nativeState === 'data') return pageState === 'data' ? 'DATA' : 'WEB';
   if (seedCount === 0) return 'SEED';
@@ -359,11 +365,20 @@ async function observeSection(page: Page, section: ManifestSection): Promise<Pag
         busy: node.getAttribute('aria-busy') === 'true',
       } satisfies SectionProbe;
     },
-    { selector: section.selector, heading: section.heading, itemSelector: section.itemSelector ?? '[data-slot="cover-card"], [data-feed-id], [data-slot="list-row"], [data-slot="rating-comparison"]' },
+    {
+      selector: section.selector,
+      heading: section.heading,
+      itemSelector:
+        section.itemSelector ??
+        '[data-slot="cover-card"], [data-feed-id], [data-slot="list-row"], [data-slot="rating-comparison"]',
+    },
   );
 }
 
-async function memberTokenFromAuth(signIn: { origin: string; email: string; password: string }, send: typeof fetch): Promise<string> {
+async function memberTokenFromAuth(
+  signIn: { origin: string; email: string; password: string },
+  send: typeof fetch,
+): Promise<string> {
   const origin = publicOrigin(signIn.origin, 'auth origin');
   const signin = await send(
     new Request(new URL('/signin', origin), {
@@ -396,7 +411,11 @@ async function memberTokenFromAuth(signIn: { origin: string; email: string; pass
   return body.access_token;
 }
 
-async function signInBrowser(page: Page, base: URL, signIn: { origin: string; email: string; password: string }): Promise<void> {
+async function signInBrowser(
+  page: Page,
+  base: URL,
+  signIn: { origin: string; email: string; password: string },
+): Promise<void> {
   await page.goto(new URL('/auth/sign-in', base).href, { waitUntil: 'domcontentloaded' });
   const email = page.getByLabel(/email/i);
   await email.waitFor({ state: 'visible', timeout: PAGE_WAIT_MS });
@@ -410,7 +429,11 @@ function localSignIn(): { origin: string; email: string; password: string } | un
   if (!existsSync(LOCAL_KEYS)) return undefined;
   const keys: unknown = JSON.parse(readFileSync(LOCAL_KEYS, 'utf8'));
   if (!isRecord(keys) || typeof keys.password !== 'string' || keys.password.length === 0) return undefined;
-  return { origin: process.env.AUTH_ORIGIN?.trim() || DEFAULT_AUTH_ORIGIN, email: MEMBER_EMAIL, password: keys.password };
+  return {
+    origin: process.env.AUTH_ORIGIN?.trim() || DEFAULT_AUTH_ORIGIN,
+    email: MEMBER_EMAIL,
+    password: keys.password,
+  };
 }
 
 export async function runPageDataCheck(options: RunOptions): Promise<{ results: SectionResult[]; defects: number }> {
@@ -467,7 +490,13 @@ export async function runPageDataCheck(options: RunOptions): Promise<{ results: 
             for (const section of sections) {
               if (section.property) vars.property = section.property;
               if (section.kind) vars.kind = section.kind;
-              const native = await nativeCall(kernel, section.native, vars, persona === 'member' ? token : undefined, send);
+              const native = await nativeCall(
+                kernel,
+                section.native,
+                vars,
+                persona === 'member' ? token : undefined,
+                send,
+              );
               let seedCount: number | null = null;
               if (section.sql) {
                 if (!queryCount) throw new Error(`Section ${section.id} needs a database URL for its seed count`);
@@ -519,7 +548,8 @@ export function parseArgs(argv: readonly string[]): {
     values[name] = value;
     index++;
   }
-  if (!values['base-url'] || !values.kernel) throw new Error('Usage: bun scripts/page-data-check.ts --base-url <web> --kernel <kernel>');
+  if (!values['base-url'] || !values.kernel)
+    throw new Error('Usage: bun scripts/page-data-check.ts --base-url <web> --kernel <kernel>');
   return {
     baseUrl: values['base-url'],
     kernel: values.kernel,
