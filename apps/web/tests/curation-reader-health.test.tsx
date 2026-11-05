@@ -102,6 +102,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     profile,
     digest: profileDigest(profile),
     head,
+    advice: { viewer: 'account', publish: 'allowed', activate: 'allowed' },
   });
   let profileA = profileFor('/private-a', 'A saved source');
   const profileB = profileFor('/private-b', 'B private source');
