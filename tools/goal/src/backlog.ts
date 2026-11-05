@@ -116,6 +116,7 @@ export type BacklogRuntime = {
     ownership: RiskOwnership;
     pools: Pool[];
     readings?: PoolReading[];
+    running?: Readonly<Record<string, number>>;
   };
 };
 
@@ -499,6 +500,7 @@ function candidatePool(
       history: readings,
       policy: (runtime.policy ?? defaultPolicy).provider,
       exclude,
+      ...(routing.running ? { running: routing.running } : {}),
     });
     return found ? { allowed: true, pool: found.pool } : { allowed: false };
   } catch {
@@ -519,7 +521,13 @@ function pickBriefs(
   if (!runtime.routing) return takeRoundRobin(queues, allowedNeed, true);
   const policy = runtime.policy ?? defaultPolicy;
   const readings = runtime.routing.readings ?? readRetainedPoolReadings(runtime.stateDirectory);
-  const burns = poolBurnStatus(runtime.routing.pools, readings, now, policy.pacing.burnSpanMs);
+  const burns = poolBurnStatus(
+    runtime.routing.pools,
+    readings,
+    now,
+    policy.pacing.burnSpanMs,
+    runtime.routing.running ?? {},
+  );
   const started = new Map<string, number>();
   const allowed: GoalQueue[] = queues.map((queue) => ({ goal: queue.goal, files: [] }));
   const waiting: GoalQueue[] = queues.map((queue) => ({ goal: queue.goal, files: [] }));

@@ -267,6 +267,7 @@ export class WorkerTasks {
       now,
       spanMs,
       history: retainPoolReadings(this.settings.stateDirectory, readings, now, spanMs),
+      running: this.store.runningAttemptsByPool(),
     };
   }
   /**
@@ -1565,6 +1566,7 @@ export class WorkerTasks {
           readings,
           {
             policy: this.settings.policy?.provider,
+            running: this.store.runningAttemptsByPool(),
             ...(old && !switched ? { preferred: old.pool } : {}),
             ...(options.excludePools ? { exclude: options.excludePools } : {}),
           },

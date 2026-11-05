@@ -577,6 +577,21 @@ export class WorkerStore implements AttemptFence {
   runningAttemptsCount(): number {
     return this.currentAttemptsCount();
   }
+  /** Current pending, running and waiting attempts on each pool, for `policy.maxConcurrent`. */
+  runningAttemptsByPool(): Record<string, number> {
+    const rows = this.db
+      .query(
+        `SELECT json_extract(a.body, '$.pool') AS pool, count(*) AS count
+         FROM worker_current_attempts AS c
+         JOIN worker_attempts AS a ON a.task_id = c.task_id AND a.attempt = c.current_attempt
+         WHERE c.attempt_state IN ('pending', 'running', 'waiting')
+         GROUP BY 1`,
+      )
+      .all() as { pool: string | null; count: number }[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) if (typeof row.pool === 'string' && row.pool) counts[row.pool] = row.count;
+    return counts;
+  }
   /** Count current attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
     return this.currentAttemptsCount(urgent, urgent, taskId, attempt);

@@ -199,6 +199,7 @@ export async function runWorkerCommand(
       const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
       const now = Date.now();
       const readings = readRetainedPoolReadings(settings.stateDirectory);
+      const running = store.runningAttemptsByPool();
       const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
       const waiting = table
         ? countAllowanceWaiting(
@@ -213,10 +214,16 @@ export async function runWorkerCommand(
             }),
             settings.pools ?? [],
             readings,
-            { now, spanMs, history: readings, policy: settings.policy?.provider },
+            {
+              now,
+              spanMs,
+              history: readings,
+              policy: settings.policy?.provider,
+              running,
+            },
           )
         : {};
-      const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs).map((pool) => ({
+      const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs, running).map((pool) => ({
         ...pool,
         waiting: waiting[pool.name] ?? 0,
       }));
