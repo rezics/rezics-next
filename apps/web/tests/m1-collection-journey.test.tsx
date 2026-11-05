@@ -352,7 +352,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
       members[0]!.subject!.label as string,
     );
     expect(moves).not.toHaveBeenCalled();
-    await click(button(m.collection_choice_review_open()));
+    await click(host.querySelector('[data-presentation-review-trigger]'));
     expect(
       [...host.querySelectorAll('[data-preview-occurrence]')].map((node) =>
         node.getAttribute('data-preview-occurrence'),
