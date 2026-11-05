@@ -520,7 +520,12 @@ test('a dev compile defect returns to the original worker session, repairs in pl
     expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile!.candidate);
     expect(outcome.devTranspile).toMatchObject({ outcome: 'passed', typescriptFileCount: 1 });
     const price = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
-    expect(price.devTranspile).toMatchObject({ successfulChecks: 1, repairHandbacks: 1, unavailable: 0, measuredChecks: 2 });
+    expect(price.devTranspile).toMatchObject({
+      successfulChecks: 1,
+      repairHandbacks: 1,
+      unavailable: 0,
+      measuredChecks: 2,
+    });
     expect(price.devTranspile.totalMs).toBeGreaterThanOrEqual(0);
   } finally {
     h.dispose();

@@ -3,7 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
-import { checkFlowAlarms, dispatchDailyStepAudit, ensureFlow, flowReport, readFlow, recordFlow, type FlowTask } from './flow.ts';
+import {
+  checkFlowAlarms,
+  dispatchDailyStepAudit,
+  ensureFlow,
+  flowReport,
+  readFlow,
+  recordFlow,
+  type FlowTask,
+} from './flow.ts';
 import type { Task } from './types.ts';
 import { readControlPolicy } from './policy.ts';
 
@@ -47,7 +55,12 @@ test('dev transpile reporting prices final checks and handbacks while keeping me
         stage: 'landing',
         action: 'dev-transpile',
         at: date(1),
-        detail: JSON.stringify({ outcome: 'repair-handback', elapsedMs: 0, changedFileCount: 2, typescriptFileCount: 1 }),
+        detail: JSON.stringify({
+          outcome: 'repair-handback',
+          elapsedMs: 0,
+          changedFileCount: 2,
+          typescriptFileCount: 1,
+        }),
       },
       {
         taskId: 'repair',
@@ -63,7 +76,12 @@ test('dev transpile reporting prices final checks and handbacks while keeping me
         stage: 'landing',
         action: 'dev-transpile',
         at: date(3),
-        detail: JSON.stringify({ outcome: 'unavailable', elapsedMs: null, changedFileCount: 1, typescriptFileCount: 1 }),
+        detail: JSON.stringify({
+          outcome: 'unavailable',
+          elapsedMs: null,
+          changedFileCount: 1,
+          typescriptFileCount: 1,
+        }),
       },
     ],
     [],

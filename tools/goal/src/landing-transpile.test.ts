@@ -36,7 +36,11 @@ test('the real Bun command compiles supported unbundled entry points and safely 
     git(root, 'commit', '-m', 'Seed compiler fixture');
     const base = git(root, 'rev-parse', 'HEAD');
     unlinkSync(join(root, 'src/deleted.ts'));
-    const trackedContents = new Map(files.filter(([path]) => path !== 'src/deleted.ts').map(([path]) => [path, readFileSync(join(root, path), 'utf8')]));
+    const trackedContents = new Map(
+      files
+        .filter(([path]) => path !== 'src/deleted.ts')
+        .map(([path]) => [path, readFileSync(join(root, path), 'utf8')]),
+    );
     const staged = git(root, 'diff', '--cached', '--binary');
     const changedFiles = files.map(([path]) => path);
     const logPath = join(root, '.temp', 'diagnostics.log');

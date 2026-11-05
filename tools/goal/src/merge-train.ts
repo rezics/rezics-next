@@ -2451,12 +2451,7 @@ export class MergeTrain {
         const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         this.git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
         if (lane === 'dev') {
-          const finalChangedFiles = changedPathsBetween(
-            trainTree,
-            base,
-            finalCandidate,
-            this.options.policy?.merge,
-          );
+          const finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
           const transpiled = await transpileLandingCandidate({
             cwd: trainTree,
             base,
@@ -3948,7 +3943,12 @@ export class MergeTrain {
               logPath,
               `Candidate ${candidate} was not published; returning its Bun diagnostic to task ${request.taskId} attempt ${request.attempt}.\n`,
             );
-            return transpileHandoff(entry, workerCommit ?? request.workerCommit ?? candidate, result.changedFiles, transpiled);
+            return transpileHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? candidate,
+              result.changedFiles,
+              transpiled,
+            );
           }
           if (transpiled.outcome === 'unavailable') {
             this.recordUnavailableDevTranspile(request, transpiled);
@@ -7220,7 +7220,14 @@ export class MergeTrain {
   }> {
     if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead, this.options.policy?.merge))
       return Promise.resolve({ commit: targetHead });
-    return this.mergeControlPlaneCandidateTree(sourceCommit, sourceBranch, targetBranch, targetHead, logPath, devLanding);
+    return this.mergeControlPlaneCandidateTree(
+      sourceCommit,
+      sourceBranch,
+      targetBranch,
+      targetHead,
+      logPath,
+      devLanding,
+    );
   }
 
   private async mergeControlPlaneCandidateTree(
@@ -7282,12 +7289,7 @@ export class MergeTrain {
                 )
               : undefined) ?? devLanding.owners[0]!;
           return {
-            transpileHandoff: transpileHandoff(
-              owner.entry,
-              owner.sourceCommit,
-              changed,
-              transpiled,
-            ),
+            transpileHandoff: transpileHandoff(owner.entry, owner.sourceCommit, changed, transpiled),
           };
         }
         if (transpiled.outcome === 'unavailable') {

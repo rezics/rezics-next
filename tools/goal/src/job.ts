@@ -1821,7 +1821,8 @@ export class WorkerJob implements GateOutcomeSink {
     ].join('\n');
     let schedule = false;
     store.write(ref, () => {
-      if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'dev-landing-transpile-returned')) return;
+      if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'dev-landing-transpile-returned'))
+        return;
       record.guardIds = [...new Set<GuardId>([...(record.guardIds ?? []), 'dev-landing-transpile'])];
       store.putRecord(record);
       store.event(ref, 'dev-landing-transpile-returned', {
@@ -1853,7 +1854,8 @@ export class WorkerJob implements GateOutcomeSink {
       if (task.state === 'landing') store.updateTask(ref, (current) => (current.state = 'ready'));
       const existing = store.retryIntent(ref);
       if (existing) {
-        if (existing.status !== 'pending') throw new Error('dev landing repair handback found a non-pending retry intent');
+        if (existing.status !== 'pending')
+          throw new Error('dev landing repair handback found a non-pending retry intent');
         store.updateRetryIntent(ref, (intent) => {
           intent.options.landingDiagnostic = diagnostic;
         });
@@ -1888,7 +1890,10 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       store.event(outcome, 'gate-outcome', outcome);
-      if (outcome.devTranspile && !store.events(outcome.taskId, outcome.attempt).some((event) => event.kind === 'dev-landing-transpile-recorded')) {
+      if (
+        outcome.devTranspile &&
+        !store.events(outcome.taskId, outcome.attempt).some((event) => event.kind === 'dev-landing-transpile-recorded')
+      ) {
         store.event(outcome, 'dev-landing-transpile-recorded', outcome.devTranspile);
         recordFlow(store.db, {
           taskId: outcome.taskId,

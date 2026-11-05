@@ -455,7 +455,9 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     view.testCommands,
     selected.includes('local-placement') ? [view.localRun, view.wrapperResult].filter(Boolean).join(' ') : '',
     input.evidence ? `Continue from this retry manifest:\n${view.evidenceManifest}` : '',
-    input.landingDiagnostic ? `Dev landing compiler diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}` : '',
+    input.landingDiagnostic
+      ? `Dev landing compiler diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}`
+      : '',
     renderLaunchContext(input.launchContext, policy.launchContext),
     view.consultation,
     deferredSentence(deferred),
