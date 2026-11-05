@@ -260,13 +260,30 @@ async function mounted(initialPath = '/library/ratings') {
 async function waitForCursor(view: Awaited<ReturnType<typeof mounted>>, cursor: string | null) {
   return waitForText(view.host, `route:${cursor ?? 'first'}`);
 }
+function hasLink(view: Awaited<ReturnType<typeof mounted>>, name: string) {
+  return [...view.host.querySelectorAll('a')].some((candidate) => candidate.textContent?.trim() === name);
+}
+async function waitForLink(view: Awaited<ReturnType<typeof mounted>>, name: string) {
+  if (hasLink(view, name)) return true;
+  return new Promise<boolean>((resolve) => {
+    const observer = new window.MutationObserver(() => {
+      if (!hasLink(view, name)) return;
+      clearTimeout(timeout);
+      observer.disconnect();
+      resolve(true);
+    });
+    observer.observe(view.host, { subtree: true, childList: true, characterData: true });
+    const timeout = setTimeout(() => {
+      observer.disconnect();
+      resolve(false);
+    }, 1000);
+  });
+}
 async function waitForBodyText(view: Awaited<ReturnType<typeof mounted>>, text: string) {
-  return waitForText(view.window.document.body, text);
+  return waitForText(document.body, text);
 }
 function bodyButton(view: Awaited<ReturnType<typeof mounted>>, name: string) {
-  const button = [...view.window.document.body.querySelectorAll('button')].find(
-    (candidate) => candidate.textContent?.trim() === name,
-  );
+  const button = [...document.body.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
   if (!button) throw new Error(`Expected ${name} button`);
   return button;
 }
@@ -543,11 +560,11 @@ test('real route pagination retries the exact cursor, preserves sparse and termi
     expect(retryRead.cursor).toBe('cursor-a');
     await act(async () => retryRead.promise);
     expect(await waitForText(view.host, m.library_my_ratings_sparse())).toBe(true);
-    expect(view.host.querySelector('a[href*="cursor-b"]')).not.toBeNull();
+    expect(await waitForLink(view, m.library_my_ratings_continue())).toBe(true);
 
     await moveAndRead(m.library_my_ratings_continue(), 'cursor-b', m.library_my_ratings_empty());
     await moveAndRead(m.library_my_ratings_previous(), 'cursor-a', m.library_my_ratings_sparse());
-    expect(view.host.querySelector('a[href*="cursor-c"]')).not.toBeNull();
+    expect(hasLink(view, m.library_my_ratings_continue())).toBe(true);
     await moveAndRead(m.library_my_ratings_continue(), 'cursor-c', m.library_my_ratings_empty());
     await moveAndRead(m.library_my_ratings_previous(), 'cursor-a', m.library_my_ratings_sparse());
     await moveAndRead(m.library_my_ratings_first(), null, 'Kokoro');
@@ -608,12 +625,16 @@ test('the route retains eight predecessor cursors and each Previous performs a f
     await act(async () => read.promise);
     expect(await waitForCursor(view, cursor)).toBe(true);
     if (number > 0) expect(await waitForText(view.host, `Page ${number}`)).toBe(true);
+    if (name === m.library_my_ratings_previous() && number > 2)
+      expect(await waitForLink(view, m.library_my_ratings_previous())).toBe(true);
   };
   try {
     for (let page = 1; page <= 10; page += 1) await moveAndRead(m.library_my_ratings_continue(), page);
-    expect(view.host.querySelector('a[href*="cursor-11"]')).toBeNull();
+    expect(hasLink(view, m.library_my_ratings_continue())).toBe(false);
+    expect(await waitForLink(view, m.library_my_ratings_previous())).toBe(true);
     for (let page = 9; page >= 2; page -= 1) await moveAndRead(m.library_my_ratings_previous(), page);
-    expect(view.host.querySelector('a[href*="cursor-1"]')).toBeNull();
+    await act(async () => tick());
+    expect(hasLink(view, m.library_my_ratings_previous())).toBe(false);
     expect(reads.map((read) => read.cursor)).toEqual([
       null,
       ...Array.from({ length: 10 }, (_, index) => `cursor-${index + 1}`),

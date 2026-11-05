@@ -195,10 +195,10 @@ export function useOwnVotesCurrentOrigin(
       client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0,
     ]);
   const coordinateAuthority = JSON.stringify([
-    origin.boundary.id,
-    origin.boundary.lifetime,
-    origin.lifetime(0),
-    origin.subject,
+    admission.subject,
+    admission.viewer,
+    admission.episodes[0],
+    admission.dispatch[0],
     locale,
     OWN_VOTES_SOURCE,
   ]);
