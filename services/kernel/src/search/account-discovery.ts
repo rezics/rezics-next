@@ -258,7 +258,12 @@ export async function nativeDiscoveryRegistry(
   pool: Pool,
   routeKey: Uint8Array,
   subjects: SubjectSource,
-  options?: { release?: Release; languages?: readonly string[]; ownerAdapters?: DiscoveryOwnerAdapterSlots },
+  options?: {
+    release?: Release;
+    languages?: readonly string[];
+    ownerAdapters?: DiscoveryOwnerAdapterSlots;
+    omittedKinds?: import('./discovery.ts').DiscoveryRegistryOptions['omittedKinds'];
+  },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
   if (!release) throw new Error('Discovery requires an active definition release');
@@ -276,6 +281,7 @@ export async function nativeDiscoveryRegistry(
       icon: 'user-round',
     },
     ...(options?.ownerAdapters ? { ownerAdapters: options.ownerAdapters } : {}),
+    ...(options?.omittedKinds ? { omittedKinds: options.omittedKinds } : {}),
   });
 }
 

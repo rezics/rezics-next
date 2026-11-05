@@ -14,11 +14,10 @@ import {
   discoveryGenerations,
   discoveryConsumer,
   DiscoveryProducerCoverageError,
-  SECOND_SCOPE_PUBLIC_METADATA_KINDS,
   type DiscoveryGeneration,
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
-import { createDefaultDiscoveryOwnerAdapters } from './default-discovery.ts';
+import { resolveDefaultDiscoveryOwnerAdapters } from './default-discovery.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
@@ -75,7 +74,7 @@ export async function startSearchIndexing(options: {
         ...(options.discovery.reviewSource ? { reviewSource: options.discovery.reviewSource } : {}),
         ...(options.discovery.access ? { access: options.discovery.access } : {}),
         ...(options.discovery.clock ? { clock: options.discovery.clock } : {}),
-        requiredKinds: options.discovery.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+        ...(options.discovery.requiredKinds ? { requiredKinds: options.discovery.requiredKinds } : {}),
       })
     : undefined;
   let current: ReturnType<typeof startRelays> | undefined;
@@ -347,7 +346,7 @@ export function startDiscoveryIndexing(options: {
   const step = async () => {
     if (stopped || paused) return;
     const ownerAdapters = options.access
-      ? createDefaultDiscoveryOwnerAdapters({
+      ? await resolveDefaultDiscoveryOwnerAdapters({
           pool: options.pool,
           routeKey: options.routeKey,
           access: options.access,
@@ -359,7 +358,9 @@ export function startDiscoveryIndexing(options: {
       options.pool,
       options.routeKey,
       options.source,
-      ownerAdapters ? { ownerAdapters } : undefined,
+      ownerAdapters
+        ? { ownerAdapters, omittedKinds: ownerAdapters.omittedKinds }
+        : undefined,
     );
     const metadataProducers = ownerAdapters?.metadataProducers;
     let readiness: Error | undefined;
@@ -367,8 +368,9 @@ export function startDiscoveryIndexing(options: {
       await advanceDiscovery({
         ...options,
         registry,
-        requiredKinds: options.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+        requiredKinds: options.requiredKinds ?? Object.keys(metadataProducers ?? {}),
         ...(metadataProducers ? { metadataProducers } : {}),
+        ...(ownerAdapters ? { capabilityWitnesses: ownerAdapters.capabilityWitnesses } : {}),
       });
     } catch (error) {
       if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))

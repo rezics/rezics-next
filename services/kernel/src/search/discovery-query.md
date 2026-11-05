@@ -9,6 +9,9 @@ Decision: Search owns the shared hit and summary union, ready kind directory and
 supply their native populations and current disclosure. A kind is queryable only when its native current reader is
 ready and cannot contribute a count otherwise.
 
+Decision: The response reports omitted metadata kinds with their localized labels and `preparing` or `unavailable`
+state. Facets and hits describe only the available kind directory; omission changes invalidate hit and kind cursors.
+
 Decision: Render current viewer entry state and rating inline on each admitted Subject card; when the one viewer-facts
 envelope is unavailable, suppress its private rows and show one localized page notice while keeping current public hits.
 

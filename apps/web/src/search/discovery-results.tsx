@@ -30,6 +30,31 @@ function viewerFactsUnavailable(page: Extract<DiscoveryState, { status: 'ready' 
   return page.viewerFacts !== undefined && page.viewerFacts !== null && page.viewerFacts.state === 'unavailable';
 }
 
+function OmittedKindsNotice({
+  omitted,
+  locale,
+}: {
+  omitted: Extract<DiscoveryState, { status: 'ready' }>['page']['kinds']['omitted'];
+  locale: string;
+}) {
+  if (!omitted?.length) return null;
+  const options = messageOptions(locale);
+  return (
+    <ul role="status" className="mb-2 space-y-1 text-sm text-muted-foreground">
+      {omitted.map(({ id, labels, state }) => {
+        const kind = localizedLabel(labels, locale).text || id;
+        return (
+          <li key={id}>
+            {state === 'preparing'
+              ? m.discovery_kind_preparing({ kind }, options)
+              : m.discovery_kind_unavailable({ kind }, options)}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function stateText(state: string, locale: string): string {
   const options = messageOptions(locale);
   switch (state) {
@@ -214,6 +239,7 @@ export function DiscoveryResults({
             {m.discovery_viewer_unavailable({}, options)}
           </p>
         ) : null}
+        {state.status === 'ready' ? <OmittedKindsNotice omitted={state.page.kinds.omitted} locale={locale} /> : null}
         {restartHref && state.status !== 'ready' && state.status !== 'loading' && (
           <a data-discovery-restart href={restartHref} className={buttonVariants({ variant: 'outline' })}>
             {state.status === 'restart' ? m.discovery_restart_action({}, options) : m.search_facet_retry({}, options)}
@@ -228,6 +254,7 @@ export function DiscoveryResults({
   const viewerQuestion = viewer?.state === 'current' ? viewer.question : null;
   return (
     <>
+      <OmittedKindsNotice omitted={state.page.kinds.omitted} locale={locale} />
       {viewerFactsUnavailable(state.page) ? (
         <p role="status" className="mb-2 text-sm text-muted-foreground">
           {m.discovery_viewer_unavailable({}, messageOptions(locale))}

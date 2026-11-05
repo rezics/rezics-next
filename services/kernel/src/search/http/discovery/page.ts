@@ -44,6 +44,19 @@ export const DiscoveryPageSchema = t.Object(
           ),
           { maxItems: 8 },
         ),
+        omitted: t.Optional(
+          t.Array(
+            t.Object(
+              {
+                id: t.String(),
+                labels: t.Record(t.String(), t.String()),
+                state: t.Union([t.Literal('preparing'), t.Literal('unavailable')]),
+              },
+              closed,
+            ),
+            { maxItems: 3 },
+          ),
+        ),
         next: continuation,
       },
       closed,
@@ -117,6 +130,11 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
     if (kinds.has(kind.id) || (kind.count && kind.count.kind !== kind.id)) unavailable();
     if (kind.count && 'value' in kind.count && !Number.isSafeInteger(kind.count.value)) unavailable();
     kinds.add(kind.id);
+  }
+  const omitted = new Set<string>();
+  for (const kind of page.kinds.omitted ?? []) {
+    if (omitted.has(kind.id) || kinds.has(kind.id)) unavailable();
+    omitted.add(kind.id);
   }
 }
 

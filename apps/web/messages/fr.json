@@ -2608,6 +2608,8 @@
   "discovery_loading": "Chargement des résultats…",
   "discovery_not_in_library": "Absent de votre bibliothèque.",
   "discovery_viewer_unavailable": "Les informations de votre bibliothèque et de vos évaluations sont indisponibles. Rechargez cette recherche pour réessayer.",
+  "discovery_kind_preparing": "Les résultats de {kind} sont en cours de préparation.",
+  "discovery_kind_unavailable": "Les résultats de {kind} sont actuellement indisponibles.",
   "discovery_not_ready": "La recherche se prépare. Réessayez dans un instant.",
   "discovery_unnamed_account": "Compte sans nom",
   "discovery_verified_as": "Identité vérifiée : {name}",

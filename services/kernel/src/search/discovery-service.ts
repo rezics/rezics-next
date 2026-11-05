@@ -306,12 +306,15 @@ function executeDiscoverySearch(
     const registryDigest = createHash('sha256')
       .update(
         canonicalize(
-          kindDirectory.map(({ kind, metadata }) => ({
-            kind,
-            domains: registry.domains?.(kind) ??
-              registry.entries.find((entry) => entry.kind === kind)?.domains ?? ['text', 'kind'],
-            metadata,
-          })),
+          {
+            directory: kindDirectory.map(({ kind, metadata }) => ({
+              kind,
+              domains: registry.domains?.(kind) ??
+                registry.entries.find((entry) => entry.kind === kind)?.domains ?? ['text', 'kind'],
+              metadata,
+            })),
+            omitted: registry.omittedKinds ?? [],
+          },
         )!,
       )
       .digest('hex');
@@ -509,7 +512,7 @@ function executeDiscoverySearch(
                   (hit.summary.kind === 'subject' ? { state: 'absent' as const } : { state: 'unsupported' as const }),
               })),
             ),
-            kinds: { values, next: null },
+            kinds: { values, next: null, omitted: [...(registry.omittedKinds ?? [])] },
             applicability: discoveryFilterApplicability(registry, selectedKindsForApplicability(admitted.filter)),
             next: null,
             ...(typeof observed === 'string'

@@ -174,12 +174,17 @@ export type DiscoveryFilterApplicability = Readonly<{
   type: DiscoveryApplicability;
   statement: DiscoveryApplicability;
 }>;
+export type DiscoveryOmittedKind = Readonly<{
+  id: string;
+  labels: Record<string, string>;
+  state: 'preparing' | 'unavailable';
+}>;
 export type DiscoveryPage = {
   accountFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   collectionFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   spaceEntries?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPage;
   hits: DiscoveryUnionHit[];
-  kinds: { values: DiscoveryKindMetadata[]; next: string | null };
+  kinds: { values: DiscoveryKindMetadata[]; next: string | null; omitted?: DiscoveryOmittedKind[] };
   applicability?: DiscoveryFilterApplicability;
   next: string | null;
   as_of: string;
@@ -319,9 +324,12 @@ export type DiscoveryRegistryOptions = {
   };
   /** Missing ports default to typed-unavailable slots and do not register a searchable kind. */
   ownerAdapters?: DiscoveryOwnerAdapterSlots;
+  /** Known metadata kinds whose native population producer is not currently ready. */
+  omittedKinds?: readonly DiscoveryOmittedKind[];
 };
 export interface DiscoveryRegistry {
   readonly entries: readonly DiscoveryRegistration[];
+  readonly omittedKinds?: readonly DiscoveryOmittedKind[];
   get(kind: string): DiscoveryRegistration;
   key(value: DiscoveryKey): DiscoveryKey;
 }
