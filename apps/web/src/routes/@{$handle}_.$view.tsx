@@ -91,7 +91,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
       if (typeof window !== 'undefined' && (view === 'posts' || view === 'reviews' || view === 'discussion'))
         forwardContributionWindow({
           owner: { accountId: canonicalAccount.id, view, locale, published: true },
-          cursor: deps.cursor ?? null,
+          cursor: (deps as { cursor: string | undefined }).cursor ?? null,
           fromHref: `${location.pathname}${location.searchStr}${location.hash}`,
           toHref: target.href,
         });
