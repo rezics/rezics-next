@@ -1917,6 +1917,11 @@ takes the same admission lock and refuses creation while this fence is held. Dis
 draining; neither an elapsed deadline nor an ordinary writer scan supplies missing Source proof. No native or
 public-runtime acceptance pass is inferred from compilation.
 
+Decision: Search accepts generation-publication completion only from Semantic's delivered original native
+Source completion for the persisted job and cut. Consumer checkpoints, counts, Account-erasure barriers and
+elapsed time do not satisfy the fence; activation stays pending until that callable is delivered, joined and
+verified.
+
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
 steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
 only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
