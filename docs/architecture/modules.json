@@ -184,7 +184,10 @@
       "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
       "publicEntries": [
         "services/kernel/src/access/index.ts",
-        "services/kernel/src/access/handle-policy.ts"
+        "services/kernel/src/access/handle-policy.ts",
+        "services/kernel/src/access/authenticate.ts",
+        "services/kernel/src/access/write-rate.ts",
+        "services/kernel/src/access/write-rate-stage.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -205,7 +208,7 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/commerce/config.ts"],
       "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic"],
       "capabilities": ["commerce"],
       "postgresPaths": ["services/kernel/src/commerce/**"]
@@ -410,6 +413,7 @@
         "services/kernel/db/schema.sql"
       ],
       "publicEntries": [
+        "services/kernel/src/command/receipt-key.ts",
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",
