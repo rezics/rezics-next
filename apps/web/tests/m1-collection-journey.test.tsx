@@ -227,6 +227,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
     publicExport: false,
     next: null,
     updatedAt: card.updatedAt,
+    typeRatios: { work: '1:1' },
     viewerActions: {
       state: 'ready',
       actions: [
@@ -351,6 +352,15 @@ test('current native actions govern create/add/reorder; review precedes sending 
       members[0]!.subject!.label as string,
     );
     expect(moves).not.toHaveBeenCalled();
+    await click(button(m.collection_choice_review_open()));
+    expect(
+      [...host.querySelectorAll('[data-preview-occurrence]')].map((node) =>
+        node.getAttribute('data-preview-occurrence'),
+      ),
+    ).toEqual([members[1]!.id, members[0]!.id, members[2]!.id]);
+    expect(host.querySelector('[data-local-occurrence-preview] [data-ratio]')?.getAttribute('data-ratio')).toBe(
+      '1:1',
+    );
     await act(async () => {
       host
         .querySelector('#collection-edit-form')!
