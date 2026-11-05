@@ -139,9 +139,9 @@ test('review windows browse only admitted targets, retry exact failures, cap his
     await act(async () => {
       await waitFor(() => {
         if (reads.length !== index + 1) {
-          const query = queryClient.getQueryCache().find({ queryKey: ['account-verification', 'review'] });
+          const queries = queryClient.getQueryCache().findAll({ queryKey: ['account-verification', 'review'] });
           throw new Error(
-            `Expected ${index + 1} reads, got ${reads.length}; query=${query?.state.status}/${query?.state.fetchStatus}; observation=${JSON.stringify(currentObservation)}`,
+            `Expected ${index + 1} reads, got ${reads.length}; queries=${JSON.stringify(queries.map((query) => [query.queryKey, query.state.status, query.state.fetchStatus]))}; session=${JSON.stringify(queryClient.getQueryData(sessionQueryKey))}; observation=${JSON.stringify(currentObservation)}`,
           );
         }
       });
