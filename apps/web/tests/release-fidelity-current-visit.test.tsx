@@ -87,6 +87,7 @@ async function mount(data: ReturnType<typeof fixture>, context = selectedContext
   let activeContext = context;
   const host = window.document.createElement('div');
   window.document.body.append(host);
+  host.addEventListener('click', (event) => event.preventDefault());
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -115,7 +116,7 @@ async function mount(data: ReturnType<typeof fixture>, context = selectedContext
   await eventually(() => expect(host.querySelector('[data-slot="release-related"] select')).not.toBeNull());
   const click = async (element: Element) => {
     await act(async () => {
-      element.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     });
   };
   const button = (label: string) => {
@@ -243,5 +244,40 @@ test('closed return intent rejects malformed addresses; changed native currentne
     expect(visit.host.querySelector('[data-slot="release-detail-facts"]')).toBeNull();
   } finally {
     await visit.close();
+  }
+});
+
+test('File visits use the disclosed Global handoff; a concealed return and a new tab never restore old evidence', async () => {
+  const data = fixture(candidateContext, 'rezics:AnimeRelease');
+  const visit = await mount(data, candidateContext);
+  let hash = '';
+  try {
+    await visit.stream('forward:schema:associatedMedia');
+    const link = visit.host.querySelector<HTMLAnchorElement>('[data-slot="release-related"] li a[href*="/file?"]')!;
+    expect(link).not.toBeNull();
+    const back = new URL(link.href).searchParams.get('via')!;
+    hash = new URL(back, 'https://site.test').hash;
+    expect(releaseVisitFromHash(hash)?.occurrence?.statementId).toBeTruthy();
+    await visit.click(link);
+    data.conceal();
+    await act(async () => {
+      visit.window.dispatchEvent(new visit.window.Event('popstate'));
+    });
+    await eventually(() => expect(visit.host.textContent).toContain(m.release_fidelity_visit_changed({}, o)));
+    expect(visit.host.querySelector('[data-slot="release-related"] li a')).toBeNull();
+    expect(visit.host.querySelector('[data-slot="release-occurrence-evidence"]')).toBeNull();
+    expect(visit.host.querySelector('[data-slot="release-detail-facts"]')).toBeNull();
+  } finally {
+    await visit.close();
+  }
+  const next = fixture(candidateContext, 'bf:Instance');
+  const tab = await mount(next, candidateContext);
+  try {
+    expect(tab.host.querySelector('[data-slot="release-detail"]')).toBeNull();
+    expect(next.calls.every((call) => call.cursor === null && call.session === null)).toBe(true);
+    expect(tab.host.querySelector('[data-slot="release-work"] a')).not.toBeNull();
+    expect(releaseVisitFromHash(hash)?.id).toBe(source);
+  } finally {
+    await tab.close();
   }
 });

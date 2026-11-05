@@ -268,7 +268,11 @@ export function relatedTarget(statement: Statement): string | undefined {
 export function relatedReadable(related: SubjectRead['related'], id: string): 'readable' | 'concealed' | 'unreadable' {
   if (!Object.hasOwn(related, id)) return 'unreadable';
   const labels = related[id]?.labels ?? {};
-  return Object.keys(labels).length ? 'readable' : 'concealed';
+  return Object.keys(labels).length
+    ? Object.values(labels).some((label) => label.trim())
+      ? 'readable'
+      : 'unreadable'
+    : 'concealed';
 }
 
 /** Directed release-to-release and file associations only. Work identity and anthology parts stay separate. */

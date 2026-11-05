@@ -259,8 +259,10 @@ export async function readReleaseFidelity(
     if (!isReleaseType(release, subject.data.subject.type)) return { ok: false, reason: 'invalid' };
     const groups = releaseGroups(release, subject.data.subject.type);
     const streams = releaseStreams(release, subject.data.subject.type, query.locale);
-    const stream = query.stream ? streams.find((item) => item.key === query.stream) : streams[0];
-    if (query.stream && !stream) return { ok: false, reason: 'invalid' };
+    const stream =
+      (query.stream ? streams.find((item) => item.key === query.stream) : streams[0]) ??
+      (query.returning ? streams[0] : undefined);
+    if (query.stream && !stream && !query.returning) return { ok: false, reason: 'invalid' };
     let rows: ReleaseRow[] = [];
     let next: string | null = null;
     let count: ForwardPage['count'] | undefined;
