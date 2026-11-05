@@ -4,18 +4,16 @@ The importer owns source acquisition, run and record state, candidate journals a
 
 ## Sources, grain and rights
 
-| Source       | Accepted input and identity                                                                       | Terms and exclusions                                                            |
-| ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Bangumi      | JSONL native subject IDs/grain; unsupported types remain source members and count as skipped.     | Metadata and attributed summaries use CC-BY-SA-3.0; no cover rights.            |
-| VNDB         | Public COPY with real headers/grouped native keys; supported API tables retain response revision. | Metadata uses ODbL-1.0 + LicenseRef-DbCL-1.0; no descriptions, posts or images. |
-| Open Library | Five-column TSV Work/Edition rows with distinct IDs.                                              | CC0-1.0 for bibliographic metadata only; no unknown-licensed prose or covers.   |
-| Wikidata     | JSONL Q-items with native revisions and exact claims.                                             | CC0-1.0 structured data; no user text, unsupported claims or Commons images.    |
+- **Bangumi:** JSONL native subject IDs/grain; unsupported types remain skipped members. CC-BY-SA-3.0 metadata and attributed summaries; covers have separate rights.
+- **VNDB:** Public COPY with real headers/grouped keys; API tables retain response revisions. ODbL-1.0 + LicenseRef-DbCL-1.0 metadata; no prose, posts or images.
+- **Open Library:** Five-column TSV Work/Edition rows with distinct IDs. CC0-1.0 bibliographic metadata only; no unknown-licensed prose or covers.
+- **Wikidata:** JSONL Q-items with native revisions and exact claims. CC0-1.0 structured data; no user text, unsupported claims or Commons images.
 
 Reviewed source registration fixes licences and attribution; dump fields and caller descriptors cannot. An alias cannot admit a source or default licence. Metadata terms do not grant summary, image or other creative-content rights.
 
 ## Registration, identity and ordinary writes
 
-The importer uses the converter revision exported by the registered converter. Current exports are Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@4, Wikidata wikidata-6 and cross-media-entities cross-media-entities@14. Selected Bangumi family conversion combines the current exports as cross-media-entities@14+bangumi@15. Vocabulary revisions are owned by the conversion package. See its [public exports and current mapping contract](../../packages/conversion/README.md#package-api).
+The importer uses the converter revision exported by the registered converter. Current exports are Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6 and cross-media-entities cross-media-entities@14. Selected Bangumi family conversion combines the current exports as cross-media-entities@14+bangumi@15. Vocabulary revisions are owned by the conversion package. See its [public exports and current mapping contract](../../packages/conversion/README.md#package-api).
 
 A configured source alias and exact external_id form the durable record tuple. Provider identity and converter revision come from registered code, not the source body. An alias binds to one normalized API origin before run or network effects; the same source state cannot silently move to another destination.
 
@@ -25,36 +23,34 @@ Each durable request keeps its original tuple, command key and bytes. If deliver
 
 ## Command line and recovery
 
-Run `bun services/importer/src/cli.ts` with --source/--dump/--state/--api/--account-key/--account/--client/--auth and one source, dump, state file and API/Auth origins. --help prints usage without credentials, SQLite or network. Sources: bangumi, vndb, openlibrary, wikidata.
+Run `bun services/importer/src/cli.ts` with --source, --dump, --state, --api, --account-key, --account, --client and --auth, plus API/Auth origins. --help needs no credentials, SQLite or network. Sources: bangumi, vndb, openlibrary, wikidata.
 
 --dump - accepts plain stdin. Compression is explicit: gzip is supported for Open Library and Wikidata streamed dumps; zstd is supported for VNDB archives and Wikidata dumps. It is not inferred from the filename. zstd requires one local regular file and a trusted executable. The decoded-byte ceiling defaults to 256 GiB; source records default to 256 KiB with a hard 1 MiB maximum, subject to tighter native limits. API and Auth values must be HTTPS origins with no path, query, fragment or credentials. The disappearance threshold is from zero through one. Progress is opt-in and goes to stderr.
 
-| Command                        | Purpose                                                                                              |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| preview                        | Decode a dump and compare it with a retained completed baseline without public writes.               |
-| compare / capture-comparison   | Compare bounded preview plans or pages of two retained complete captures.                            |
-| inspect / inspect-bindings     | Read one exact source generation, record binding or retained journal locally.                        |
-| disappearance-review           | Explain one sealed mass-disappearance stop and its bounded missing-key pages.                        |
-| diagnostics                    | Page stored conversion diagnostics or inspect one exact record; it has no publish or rewrite action. |
-| resume                         | Finish one sealed ready/finalizing generation from the state file without the original dump.         |
-| retention / staging-retirement | Review and retire only the exact eligible complete generation or unpublished staging capture.        |
-| backup / validate-snapshot     | Preserve and verify the SQLite database together with committed WAL state.                           |
+- `preview`: decode and compare with a completed baseline; no public writes.
+- `compare` / `capture-comparison`: compare bounded plans or pages of two complete captures.
+- `inspect` / `inspect-bindings`: read one exact generation, binding or local journal.
+- `disappearance-review`: explain a sealed mass-disappearance stop and bounded missing-key pages.
+- `diagnostics`: page stored diagnostics or inspect one record; never publish or rewrite.
+- `resume`: finish one sealed ready/finalizing generation without the dump.
+- `retention` / `staging-retirement`: review/retire the exact eligible generation or unpublished capture.
+- `backup` / `validate-snapshot`: preserve/verify SQLite with committed WAL state.
 
 Ordinary interrupted, unsealed acquisition is discarded and starts again. Optional staging checkpoints support large Bangumi, Open Library and Wikidata files; VNDB COPY acquisition has its own explicit checkpoint. Resume verifies the same source and bytes before continuing. A sealed generation is resumed from its journal; replacement input is never substituted for an unknown-delivery request. Concurrent operators use the same state file with exact alias ownership; one live operator cannot take another's lease.
 
 ## Retained source metadata
 
-The four built-in source descriptors identify the provider-native record URL, attribution and permitted metadata terms. Only a completely acquired, validated and sealed generation can send metadata through the public source-record API under current subject:batch_write authority. The exact source alias and external_id must already bind to the actual subject tuple.
+Built-in descriptors bind each provider's record URL, attribution and metadata terms. Only a complete, validated, sealed generation sends them through public source-record API under current subject:batch_write authority and the exact alias/external_id tuple.
 
-Metadata uses its own immutable request/result journal. A first write expects no prior metadata revision; a changed descriptor uses only the last returned revision. Response-loss replay uses the original bytes and key before any replacement. Acknowledged unchanged descriptors cause no new request. A metadata failure preserves the previous source baseline and native subject. The Sources reader uses the actual current subject.sourceRecords response; metadata never proves support for every field or permission to publish source prose or media.
+Metadata has an immutable request/result journal: first write expects no revision; changed descriptors use the last returned revision. Response-loss replay reuses original bytes/key; unchanged acknowledged descriptors are no-ops. Failure preserves the prior baseline and subject. The current subject.sourceRecords response does not prove field support or rights to publish prose/media.
 
-The staged descriptor is at most 8 KiB. An ordinary run adds at most one new metadata intent per bound record; an unresolved old intent followed by a changed descriptor may require two. Each coordinator attempt is bounded to eight attempts and each HTTP call to five attempts. These bounds are separate from semantic, source-statistic and media envelopes.
+Descriptors are ≤8 KiB. A run adds ≤1 intent per bound record, or two when an unresolved intent precedes a change. Each coordinator attempt is capped at eight and each HTTP call at five, independently of semantic, statistic and media bounds.
 
 ## Registered source vocabulary mapping
 
-The importer supplies already normalized graph rows and current public bindings to the pure mapper. The graph owner selects and traverses source rows, creates or resolves native identities and provides exact bindings. The mapper does not follow IDs, search labels or infer canonical equivalence. It verifies the current released descriptor, source path/code, target type, exact property and qualifiers. Missing, withdrawn, concealed, wrong-type or unavailable bindings yield addressable gaps; they do not fall back to a similarly named Concept. A valid row is independent of a malformed neighbor.
+The graph owner selects/traverses source rows, resolves native identities and supplies normalized rows plus exact public bindings. The pure mapper follows no IDs, searches no labels and infers no equivalence. It verifies the current release, source path/code, target type, property and qualifiers. Missing, withdrawn, concealed, wrong-type or unavailable bindings yield addressable gaps, never a similar-label fallback; valid rows survive malformed neighbors.
 
-Bangumi and VNDB vocabulary rows are capped at 128 per call; the mapper uses only remaining room in the 100-command batch after ordinary proposals. Scheme and Concept binding collections are bounded, unknown subtrees are not traversed, and diagnostics are finite. Native proposals remain separate from current reads, acceptance, adoption and public return.
+Bangumi/VNDB vocabulary rows cap at 128 per call and use only room remaining in the 100-command batch. Scheme/Concept bindings and diagnostics are bounded; unknown subtrees are not traversed. Proposals stay separate from current reads, acceptance, adoption and public return.
 
 ### Bangumi TVAnime websites and work evidence
 
@@ -76,7 +72,7 @@ Selected type-2 anime and type-4 Game subject-person rows provide finite creator
 
 ### Bangumi Character identity and appearance
 
-Selected type-2 work-character rows define appearance; actual Character records define identity, kind and source names. Kind and appearance role use distinct exact schemes/Concepts. Pinned Crt names: name=und, name_cn=zh, 简体中文名=zh-Hans, 第二中文名=zh, 英文名=en, 日文名/纯假名=ja, 罗马字=und-Latn, 昵称=und; split nicknames only on full-width comma. Malformed optional order does not erase valid role appearance. Name bounds: 64 aliases, 4 KiB/500 codepoints each, 32 KiB infobox, 64 fields, 16 diagnostics, 85 commands. Physical bounds: 65,536-byte infobox, depth 2, 64 fields, 128 scalar code units, 64 quantity characters, ≤2 explicit-unit quantities, 16 diagnostics. No broader selection or second identity.
+Selected type-2 work-character rows define appearance; Character records define identity. Kind and role use distinct exact schemes/Concepts. Names use `name=und`, `name_cn=zh`, pinned Crt strings or exact type-1 CharacterDetail infobox arrays ([endpoint](https://api.bgm.tv/v0/characters/1), [schema](https://bangumi.github.io/api/dist.json)). Labels: 简体中文名=zh-Hans, 第二中文名=zh, 英文名=en, 日文名/纯假名=ja, 罗马字=und-Latn, 昵称=und. Only Crt nicknames split on full-width comma; preserve punctuation. Reconcile exact Chinese duplicates; diagnose/withhold only conflicting, ambiguous, unknown or unlabelled names. Fingerprint bounded fields/presence and retain raw infobox for replay; cite the Character endpoint. Reuse selected responses, with no name-only fetch or graph expansion. Malformed neighbors do not suppress valid facts. Bounds: 64 aliases; 4 KiB/500 codepoints each; infobox ≤32 KiB, depth 2/64 fields; 16 diagnostics; 85 commands. Physical profile ≤65,536 bytes, depth 2/64 fields, 128 scalar units, 64 quantity characters, ≤2 explicit-unit quantities and 16 diagnostics. No broader selection or second identity.
 
 ### Bangumi Game cast
 
@@ -90,9 +86,13 @@ Source dates cite the exact subject, follow its selected Book, Game, music or li
 
 Selected person rows keep person:<id> identity. A nonempty source summary becomes an attributed schema:abstract. Birth-date facts use only the supported PersonDetail integers. Career strings are normalized only for an actual type-1 Person, at most seven values, and do not themselves create an occupation.
 
-Only the vocabulary mapper may emit P106, for the actual Person at exact person:<id>, with the source-owned careers Scheme, exact current career Concept, released P106 and Person record citation #/career. The pure converter emits no P106. Bangumi career Concepts are source-owned, not evidence of cross-provider canonical equivalence. A valid item survives a malformed neighbor; empty, unknown, malformed or Organization cases emit no unsupported occupation.
+Only the vocabulary mapper emits P106, for the actual Person at exact `person:<id>`, with source-owned careers Scheme, exact current career Concept, released P106 and Person `#/career` citation. The pure converter emits none; source Concepts do not imply cross-provider equivalence. Valid items survive malformed neighbors; empty, unknown, malformed or Organization cases yield no unsupported occupation.
 
 The career feature review retains its original identities cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 as history. The current source registration uses the checked-in exports above. When the archive omits career data, only the separately authorized local showcase may use the fallback described under [Explicit local showcase publication](#explicit-local-showcase-publication).
+
+### Open Library Work first publication date
+
+Only the Work's optional top-level first_publish_date produces an independently keyed, cited schema:datePublished proposal. Its exact scalar remains in the normalized digest; publish_date and Edition conversion remain distinct. The converter validates the complete released statement and diagnoses malformed or unsupported forms. See the [conversion mapping and bound](../../packages/conversion/README.md#source-mappings-and-limits).
 
 ## Explicit local showcase publication
 
@@ -111,6 +111,8 @@ The immutable journal receipt binds the exact GET https://api.bgm.tv/v0/persons/
 Converters return media intent, not fetched image bytes. Media acquisition requires an explicit provider-supported source and a valid current subject. A 202 reserved receipt is not an available media ID; the importer records the exact request, observed receipt and status separately. Unknown delivery reuses original bytes and key. Only confirmed available media can enter the separately reviewed cover candidate.
 
 Bangumi cover bytes keep the rights-holder credit, “via Bangumi” source attribution, unknown image licence and cover-only use. Originals remain private; public output is re-encoded. Summary prose is not made public by a cover permission or metadata descriptor. Rejected or missing covers remain addressable gaps without suppressing independent metadata. Source withdrawal, media takedown and deletion are governed by the common [deletion policy](../../docs/deletion.md); refresh may not reintroduce fenced material.
+
+Selected Bangumi Person/Organization images use only GET `/v0/persons/{id}` `PersonDetail.images.large` under schema `2026-07-24`, after exact response-ID/archive-type match. Missing, null, blank or placeholder images are absent; alternate sizes/redirects are excluded. Immutable receipts bind archive revision/digest, response SHA-256 and optional ETag; missing revisions stay unversioned. Changed digests append journal entries; pending, unknown and fenced outcomes replay prior evidence. Acquisition stays within the selected graph and shared deadline/pacing.
 
 ## Deletion
 
@@ -195,6 +197,18 @@ O(input bytes + (selected + dependencies)(1+q) log R) with bounded retry count a
 ### Import Open Library edition page counts
 
 One five-column TSV row defaults to 256 KiB; normalized projection ≤2 MiB; one bounded allowlist pass and scalar count.
+
+### Import Bangumi Character source names
+
+One selected Character; at most 16 preferred names, 64 aliases and 85 commands. Infobox is capped at 32 KiB, 64 fields, depth 2; names at 4 KiB/500 codepoints; at most 16 diagnostics. Reuse the selected response; no name-only fetch or graph expansion.
+
+### Import Open Library Work first publication date
+
+One optional Work field in the existing five-column TSV flow; at most 1,500 characters in the 2 MiB projection and one proposal within 100 commands. No Edition lookup or extra source read; existing author/work point reads remain capped at 64 per record.
+
+### Selected showcase media acquisition and publication
+
+Five exact roots plus direct cast/episodes; ≤64 people/Organizations per provider; ≤320 sequential detail requests and ≤320 outcomes/omissions; ≤1 MiB per response and ≤1 MiB combined sealed evidence. Selected caps: 8,192 graph edges/8 MiB (1 MiB/edge), 768 source records, 8,192 assertions, 512 vocabularies, 128 assertions/record, 256 Bangumi works, 64 creators. Deduplicated current reads cover ≤768 source plus 512 vocabulary subjects; graph targets stay selected. Candidate pages are ≤100 rows. Shared deadline/pacing; ordinary authenticated media send/status, exact bindings and current `(source, external_id, cover)` fence. No catalogue scan or generic accept-all.
 
 ### Native mixed Wikidata acquisition
 
