@@ -277,7 +277,9 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
     const { fixture, character, read } = prepare('en');
     const page = pageFor(character);
     setLocale('en', { reload: false });
-    client.setQueryData(['session'], { state: 'signed-in', subject: member, csrfToken: 'member' });
+    await act(async () => {
+      client.setQueryData(['session'], { state: 'signed-in', subject: member, csrfToken: 'member' });
+    });
     await act(async () =>
       root.render(
         createElement(
@@ -313,6 +315,9 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
         ),
       ),
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(calls.at(-1)?.viewer).toBe(member);
     expect(host.textContent).toContain('今井麻美');
   } finally {
