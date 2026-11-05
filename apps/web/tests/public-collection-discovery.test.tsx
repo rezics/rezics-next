@@ -243,7 +243,7 @@ test('rejects a native next cursor that cannot be admitted by the directory rout
 test('an empty native continuation stays open and offers its exact next cursor', () => {
   const markup = renderToStaticMarkup(
     createElement(PublicCollectionDiscoveryPage, {
-      state: { status: 'ready', collections: [], next: 'next+/=' },
+      state: { status: 'ready', collections: [], next: 'next+/=', asOf: 'native-checkpoint' },
       locale: 'en',
       onRetry: () => undefined,
     }),
