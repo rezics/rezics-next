@@ -51,6 +51,7 @@ test('return review, preflight and bounded write retries have explicit whole-cal
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
   await flush(() => page.calls[0]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/account-operations/approve']);
+  expect(page.calls[0]!.body).toEqual(page.calls[1]!.body);
   await flush(() => page.calls[1]!.resolve(approval()));
   expect(page.calls.map((call) => call.path)).toEqual([
     '/account-operations/approve',
@@ -64,6 +65,7 @@ test('return review, preflight and bounded write retries have explicit whole-cal
     '/account-operations/execute',
     '/account-operations/execute',
   ]);
+  expect(page.calls[2]!.body).toEqual(page.calls[3]!.body);
   await flush(() => page.calls[3]!.resolve(Response.json({ accountId: organization })));
   expect(reads).toBe(3);
   expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');

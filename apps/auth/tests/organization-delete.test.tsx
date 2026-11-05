@@ -212,6 +212,35 @@ test('a replaced continuation during released review retires controls and preser
   expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
 });
 
+test('a continuation replaced while approval is receiving prevents execution and preserves the replacement', async () => {
+  const page = await open(content(first, async () => ready(first)), body);
+  await confirm(page.host, '@first');
+  let finishApproval!: () => void;
+  const approvalBody = JSON.stringify({
+    reference: 'bmF0aXZl.' + 'a'.repeat(43),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const pendingApproval = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(approvalBody));
+        finishApproval = () => controller.close();
+      },
+    }),
+    { headers: { 'content-type': 'application/json' } },
+  );
+  await flush(() => page.calls[0]!.resolve(pendingApproval));
+  expect(page.calls).toHaveLength(1);
+  const replacement = { humanAccountId: human, organizationId: second, operationKey: 'b'.repeat(32) };
+  expect(storeOrganizationDeleteStepUp(replacement)).toBe(true);
+  await flush(finishApproval);
+  expect(page.calls).toHaveLength(1);
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
+  expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
+  expect(page.host.textContent).not.toContain('The deletion result is unknown');
+  expect(page.unload()).toBe(false);
+});
+
 test('current native refusal has no authentication loop or destructive control', async () => {
   const page = await open(
     content(first, async () => ({ kind: 'denied' })),
