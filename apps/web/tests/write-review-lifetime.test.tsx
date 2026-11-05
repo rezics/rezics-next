@@ -147,7 +147,8 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 const { sessionQuery } = await import('../src/session/query');
 const { fingerprintReviewCsrf } = await import('../src/subject/write-review-lifetime');
-const { WriteReviewAction, readRealmReviewBoards } = await import('../src/subject/write-review');
+const { WriteReviewAction } = await import('../src/subject/write-review');
+const { readReviewDestination } = await import('../src/threads/review-destination/server');
 const { readMyRealmsPageForReview } = await import('../src/community/space-actions');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -258,7 +259,6 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   // the server result carries only the identity fingerprint from that same Request object.
   const expectedA = await expectedReader(readerA, null);
   const prepared = await readMyRealmsPageForReview({ data: { expected: expectedA } });
-  console.log({ prepared, credentialSubjects: credentialReads.map(({ subject }) => subject), authorized: membershipCalls().map(({ authorization }) => !!authorization) });
   expect(prepared).toMatchObject({
     kind: 'ready',
     page: { signedIn: true, realms: [{ realmId: realmA, name: 'Realm 1' }] },
@@ -287,7 +287,9 @@ test('one connected review-entry preparation and chooser admits only same-prepar
 
   const boardCountBeforeMismatch = boardCalls().length;
   serverReader = readerB;
-  const boardMismatch = await readRealmReviewBoards({ data: { realms: [realm(1)], expected: expectedA } });
+  const boardMismatch = await readReviewDestination({
+    data: { realmId: realmA, subjectId: subjectA, locale: 'en', expected: expectedA },
+  });
   expect(boardMismatch).toEqual({ kind: 'mismatch' });
   expect(boardCalls()).toHaveLength(boardCountBeforeMismatch);
   expect(serverCalls.every(({ data }) => !JSON.stringify(data).includes('access-'))).toBe(true);
