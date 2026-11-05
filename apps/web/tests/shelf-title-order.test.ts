@@ -25,13 +25,13 @@ test('title URLs retain native intent across filters and display changes, with a
   expect(validateShelfSearch({ ...search, label: '01900000-0000-7000-8000-000000000001' }).orderBy).toBeUndefined();
 });
 
-test('saved title order is native while unsupported saved orders retain date recovery', () => {
+test('saved title order is native while saved score remains an unsupported address', () => {
   const shelf = { sorts: { all: { field: 'title' as const, direction: 'asc' as const } } };
   expect(resolveShelfPresentation({}, shelf).sort).toEqual({ orderBy: 'title', direction: 'asc' });
   expect(unsupportedShelfSorts(shelf)).toEqual([]);
   expect(resolveShelfPresentation({ orderBy: 'title', direction: 'asc' }, shelf).sort.orderBy).toBe('title');
   const score = { sorts: { all: { field: 'rating' as const, direction: 'asc' as const } } };
-  expect(resolveShelfPresentation({}, score).sort.orderBy).toBe('lastActivity');
+  expect(resolveShelfPresentation({}, score).sort.orderBy).toBe('personalScore');
   expect(unsupportedShelfSorts(score)).toEqual([{ tab: 'all', field: 'rating' }]);
 });
 

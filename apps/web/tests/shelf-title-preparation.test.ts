@@ -45,7 +45,7 @@ test('a preparation step uses the generated native POST with its exact key and l
   expect(requests).toHaveLength(1);
   expect(requests[0]!.method).toBe('POST');
   expect(new URL(requests[0]!.url).pathname).toBe('/v1/libraryShelfTitlePreparation');
-  expect(requests[0]!.body).toBeNull();
+  expect(await requests[0]!.clone().text()).toBe('');
   expect(requests[0]!.headers.get('authorization')).toBe('Bearer owner');
   expect(requests[0]!.headers.get('idempotency-key')).toBe(key);
   expect(requests[0]!.headers.get('accept-language')).toBe('ja-JP, ja;q=0.9');
