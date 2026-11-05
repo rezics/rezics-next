@@ -2,18 +2,6 @@ import type { PoolClient } from 'pg';
 import type { EntryShelfWrite, HeadSnapshot } from './shelf-contract.ts';
 import { assertPreProfileLibraryRead } from './profile-source.ts';
 import { newId } from '../route/route.ts';
-import copyDelete from './entry-store-copy-delete.sql';
-import copyInsert from './entry-store-copy-insert.sql';
-import copyPage from './entry-store-copy-page.sql';
-import copySubjectPage from './entry-store-copy-subject-page.sql';
-import copyKindPage from './copies-kind-page.sql';
-import copyStatusPage from './copies-status-page.sql';
-import copyKindStatusPage from './copies-kind-status-page.sql';
-import copySubjectKindPage from './copies-subject-kind-page.sql';
-import copySubjectStatusPage from './copies-subject-status-page.sql';
-import copySubjectKindStatusPage from './copies-subject-kind-status-page.sql';
-import copyRead from './entry-store-copy-read.sql';
-import copyUpdate from './entry-store-copy-update.sql';
 import entryDelete from './entry-store-entry-delete.sql';
 import entryInsert from './entry-store-entry-insert.sql';
 import entryPage from './entry-store-entry-page.sql';
@@ -22,6 +10,13 @@ import entryUpdate from './entry-store-entry-update.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { decodeCopyConditionFacts } from './copy-condition.ts';
 import type { LibraryProfilePin } from './profile.ts';
+import {
+  copyDeleteStatementPlan,
+  copyInsertStatementPlan,
+  copyPageStatementPlan,
+  copyReadStatementPlan,
+  copyUpdateStatementPlan,
+} from './copy-operation-bounds.ts';
 import {
   MAX_LIBRARY_PAGE_SIZE,
   type Copy,
@@ -246,7 +241,7 @@ export async function insertCopy(
 ): Promise<Copy> {
   const acceptance = copyAcceptance(accepted);
   if (accepted === undefined) assertStatus(copy.status);
-  const rows = await copyInsert.run(queryClient(client), {
+  const plan = copyInsertStatementPlan({
     route,
     copy_id: copy.id,
     account_id: copy.accountId,
@@ -262,13 +257,14 @@ export async function insertCopy(
     ...acceptance,
     ...write(context),
   });
+  const rows = await plan.run(queryClient(client));
   const row = rows[0];
   if (!row) throw new Error('Library copy insert returned no row');
   return asCopy(row);
 }
 
 export async function readCopy(client: Client, route: number, copyId: string): Promise<Copy | null> {
-  const row = await copyRead.run(queryClient(client), { route, copy_id: copyId });
+  const row = await copyReadStatementPlan({ route, copy_id: copyId }).run(queryClient(client));
   if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
     await assertPreProfileLibraryRead(client, row.accountId);
     assertStatus(row.status);
@@ -282,7 +278,7 @@ export async function readCopyFact(
   route: number,
   copyId: string,
 ): Promise<{ copy: Copy; pin: LibraryProfilePin | null; kind: string | null } | null> {
-  const row = await copyRead.run(queryClient(client), { route, copy_id: copyId });
+  const row = await copyReadStatementPlan({ route, copy_id: copyId }).run(queryClient(client));
   return row ? { copy: asCopy(row), pin: decodeLibraryProfilePin(row.libraryProfilePin), kind: row.kind } : null;
 }
 
@@ -297,7 +293,7 @@ export async function updateCopy(
 ): Promise<Copy | null> {
   const acceptance = copyAcceptance(accepted);
   if (accepted === undefined) assertStatus(changes.status);
-  const row = await copyUpdate.run(queryClient(client), {
+  const plan = copyUpdateStatementPlan({
     route,
     copy_id: copyId,
     revision,
@@ -314,6 +310,7 @@ export async function updateCopy(
     library_profile_pin: accepted?.statusSupplied === false ? null : acceptance.library_profile_pin,
     ...write(context),
   });
+  const row = await plan.run(queryClient(client));
   return row ? asCopy(row) : null;
 }
 
@@ -324,13 +321,14 @@ export async function deleteCopy(
   revision: number,
   context: WriteContext,
 ): Promise<Copy | null> {
-  const rows = await copyDelete.run(queryClient(client), {
+  const plan = copyDeleteStatementPlan({
     route,
     copy_id: copyId,
     revision,
     deletion_id: context.transactionId,
     time: context.time,
   });
+  const rows = await plan.run(queryClient(client));
   const row = rows[0];
   return row ? asCopy({ ...row, revision }) : null;
 }
@@ -352,23 +350,8 @@ export async function pageCopies(
     after_copy_id: page.after?.copyId ?? null,
     limit: Math.min(MAX_LIBRARY_PAGE_SIZE, page.limit),
   };
-  const query = queryClient(client);
-  const rows =
-    subjectId !== null
-      ? kind !== null && status !== null
-        ? await copySubjectKindStatusPage.run(query, { ...parameters, subject_id: subjectId, kind, status })
-        : kind !== null
-          ? await copySubjectKindPage.run(query, { ...parameters, subject_id: subjectId, kind })
-          : status !== null
-            ? await copySubjectStatusPage.run(query, { ...parameters, subject_id: subjectId, status })
-            : await copySubjectPage.run(query, { ...parameters, subject_id: subjectId })
-      : kind !== null && status !== null
-        ? await copyKindStatusPage.run(query, { ...parameters, kind, status })
-        : kind !== null
-          ? await copyKindPage.run(query, { ...parameters, kind })
-          : status !== null
-            ? await copyStatusPage.run(query, { ...parameters, status })
-            : await copyPage.run(query, parameters);
+  const plan = copyPageStatementPlan(parameters, subjectId, kind, status);
+  const rows = await plan.run(queryClient(client));
   if (rows.some((row) => row.libraryProfilePin === null)) {
     await assertPreProfileLibraryRead(client, accountId);
     for (const row of rows) if (row.libraryProfilePin === null) assertStatus(row.status);

@@ -4,11 +4,15 @@ import { readRelease } from '../semantic/definitions.ts';
 import { chooseLabel } from '../semantic/language.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { resolveLibraryProfilePin } from './profile.ts';
-import optionsQuery from './copy-inventory-options.sql';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
+import {
+  COPY_FILTER_OPTION_QUERY_LIMIT,
+  MAX_COPY_FILTER_OPTIONS,
+  copyInventoryValuesStatementPlan,
+} from './copy-operation-bounds.ts';
 
-export const MAX_COPY_FILTER_OPTIONS = 64;
+export { MAX_COPY_FILTER_OPTIONS };
 const MAX_COPY_FILTER_OPTIONS_BYTES = 65_536;
 
 export type CopyInventoryChoice = Readonly<{
@@ -44,11 +48,12 @@ export async function readCopyInventoryValues(
   route: number,
   accountId: string,
 ): Promise<CopyInventoryValue[]> {
-  return optionsQuery.run(queryClient(client), {
+  const plan = copyInventoryValuesStatementPlan({
     route,
     account_id: accountId,
-    limit: MAX_COPY_FILTER_OPTIONS + 1,
+    limit: COPY_FILTER_OPTION_QUERY_LIMIT,
   });
+  return plan.run(queryClient(client));
 }
 
 function unavailableFacet(): CopyInventoryFacet {

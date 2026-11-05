@@ -32,8 +32,12 @@ import { readRelease } from '../semantic/definitions.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
-import retentionRead from './copy-retention-read.sql';
-import retentionRestore from './copy-retention-restore.sql';
+import {
+  copyDetailReadStatementPlan,
+  copyPrivateReadStatementPlan,
+  copyRetentionReadStatementPlan,
+  copyRetentionRestoreStatementPlan,
+} from './copy-operation-bounds.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
 import { deadlineClient, within as withinDeadline } from '../access/authenticate.ts';
 import type { CopyPresentation } from './copy-model.ts';
@@ -515,18 +519,11 @@ export function createCopyCommands(config: Dependencies) {
             // This exact read owns no checkout while immutable release and original/terminal
             // disclosure adapters visit their own anchors. Errors are deferred until receipt miss.
             const row = await readOnly(owner, async (client) => {
-              const result = await client.query<{
-                subject_id: string;
-                kind: string | null;
-                status: string;
-                library_profile_pin: unknown;
-                kind_profile_pin: unknown;
-                status_profile_pin: unknown;
-              }>(
-                'SELECT subject_id, kind, status, library_profile_pin, kind_profile_pin, status_profile_pin FROM library.copy WHERE route=$1 AND copy_id=$2 AND account_id=$3',
-                [route, copyId, owner.accountId],
-              );
-              return result.rows[0];
+              return copyPrivateReadStatementPlan({
+                route,
+                copy_id: copyId,
+                account_id: owner.accountId,
+              }).run(client);
             });
             if (!row) throw new LibraryNotFoundError();
             const pin = decodeLibraryProfilePin(row.status_profile_pin ?? row.library_profile_pin);
@@ -545,7 +542,8 @@ export function createCopyCommands(config: Dependencies) {
               if (!profile?.copies?.kinds.some((kind) => kind.id === row.kind))
                 throw new Error('Retained copy accepted kind profile is unavailable');
             }
-            if (!(await resolveSubject(config, owner, row.subject_id, attempt.time))) throw new LibraryNotFoundError();
+            const currentSubject = await resolveSubject(config, owner, row.subject_id, attempt.time);
+            if (!currentSubject || currentSubject.subjectId !== row.subject_id) throw new LibraryNotFoundError();
             return { error: null };
           } catch (error) {
             return { error };
@@ -553,19 +551,19 @@ export function createCopyCommands(config: Dependencies) {
         },
       },
       async (tx, command, prepared) => {
-        const row = await retentionRead.run(tx, {
+        const row = await copyRetentionReadStatementPlan({
           route,
           copy_id: copyId,
           account_id: owner.accountId,
           time: authoritativeTimeValue(command.time),
-        });
+        }).run(tx);
         if (!row) throw new LibraryNotFoundError();
         if (row.deletionId === null) throw new ProblemError('copy_restore_occupied');
         if (row.deletionId !== selected.deletionId || row.revision !== selected.revision)
           throw new ProblemError('copy_restore_stale');
         if (row.expired) throw new ProblemError('copy_restore_expired');
         if (prepared.error) throw prepared.error;
-        const restored = await retentionRestore.run(tx, {
+        const restored = await copyRetentionRestoreStatementPlan({
           route,
           account_id: owner.accountId,
           copy_id: copyId,
@@ -573,7 +571,7 @@ export function createCopyCommands(config: Dependencies) {
           revision: selected.revision,
           time: authoritativeTimeValue(command.time),
           transaction_id: command.transactionId,
-        });
+        }).run(tx);
         if (!restored) throw new ProblemError('copy_restore_stale');
         const copy = await store.readCopy(tx, route, copyId);
         if (!copy) throw new Error('Restored copy is missing');
@@ -629,7 +627,11 @@ export function createCopyCommands(config: Dependencies) {
             const bounded = deadlineClient(client, deadline);
             if (!(await check(bounded, at))) throw new GrantDeniedError();
             const partition = await readPartition(bounded, partitionOf(route));
-            const row = await copyDetailRead.run(bounded, { route, copy_id: copyId, account_id: owner.accountId });
+            const row = await copyDetailReadStatementPlan({
+              route,
+              copy_id: copyId,
+              account_id: owner.accountId,
+            }).run(bounded);
             if (!partition || !row) throw new LibraryNotFoundError();
             const {
               libraryProfilePin,

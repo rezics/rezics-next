@@ -25,6 +25,37 @@ capture/pruning, Shelf work, History events and response serialization belong in
 plans. The current command runner continues to own execution and replay. Read-only history cannot repair an Entry;
 no-op and receipt replay cannot append a transition. Retention and the public history/page limits are unchanged.
 
+## Copy SQL leaves
+
+Decision: Commerce keeps the copy journey in its existing command and inventory owners; immutable operation declarations derive complete finite nine-axis costs from actual SQL, serialized binds, schema widths and current ceilings, then bind through existing native roots.
+
+`copy-operation-bounds.ts` binds exact compiled statements to their original operands at the existing EntryStore and
+copy-inventory execution owners. The declaration keeps SQL text, serialized bind bytes and projected result bytes
+separate, with a fixed zero for engine requests on these SQL-only leaves. Profile pin Type/Profile IDs use the
+immutable Definitions release byte ceiling and JSON's six-byte escape maximum; copy text fields use the existing
+HTTP and database limits. No result row count reprices a dispatched statement.
+
+Each filtered page plan selects the same one of nine SQL statements used by `pageCopies`. Its route/account,
+optional subject/kind/status predicates and `(created_at, copy_id)` frontier match the existing full-key indexes.
+The maximum page remains 100. Because the page helper clamps its own limit to 100, the maximum list branch retains
+the separate one-row sentinel query; its candidate and output work is charged as its own plan. Inventory options
+use the actual recursive kind/status query and its 65-value limit per dimension. The 65th raw value still makes an
+oversized facet unavailable. Both page observations, each raw option and the sentinel are physical work even when
+their visible result is filtered, suppressed or unchanged.
+
+The same leaf plans bind copy insert/read/update/delete, detail presentation reads, and the retained source/read,
+locked retention read and exact restore CAS. Restore preparation now requires the currently resolved subject to
+remain the retained row's original subject; a redirect cannot restore that exact row under a replacement source.
+The existing revision, deletion ID, expiry, profile pin, account route, owner authorization, command receipt,
+Shelf, History, loan/archive, and retention-worker owners keep their current semantics.
+
+These declarations cover the actual Library SQL leaves and their output projections. The enclosing command and
+observation composition still needs to sum account/action/group admission, original/current Source and profile
+reads, partition/floor/epoch checks, transaction and receipt paths, triggers, Shelf/History effects, and response
+serialization from their current owners. That completion is tracked in
+[the continuation brief](../../../../.temp/continuation/copy-operation-composition.md); this leaf set does not claim
+a complete end-to-end copy operation bound.
+
 # Progress session operations
 
 The existing Progress and Continue descriptors retain their native session commands and response contracts.
