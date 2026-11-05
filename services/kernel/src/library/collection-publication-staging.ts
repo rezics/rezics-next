@@ -328,10 +328,7 @@ export async function stageCollectionPublicationStep(
     const plan = compileCurrentOwnerFilter(native.definition.filter);
     // The delivered adapter has no current public Source/index proof. Refuse this foreign branch before
     // scope preparation can issue a public Search request or use it as part of private whole-query meaning.
-    if (
-      plan.leaves.some((leaf) => leaf.kind === 'catalogue') ||
-      !plan.leaves.some((leaf) => leaf.kind === 'owner')
-    )
+    if (plan.leaves.some((leaf) => leaf.kind === 'catalogue') || !plan.leaves.some((leaf) => leaf.kind === 'owner'))
       throw unavailable();
     const scope = createSearchScopeSource(options);
     const prepared = await work.compose(async (allowance) => {
