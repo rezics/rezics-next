@@ -26,10 +26,10 @@ import type { HttpResponse } from './semantic-driver';
 export type Persona = 'anonymous' | 'editor' | 'acceptor' | 'suspended';
 export interface SearchDriver {
   readonly globalContext: string;
-  /** Semantic writes carry structured-field Idempotency-Key; search is a read. */
+  /** Semantic writes carry structured-field Idempotency-Key; all requests use the real kernel HTTP path. */
   request(
     persona: Persona,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     body?: unknown,
     headers?: Record<string, string>,

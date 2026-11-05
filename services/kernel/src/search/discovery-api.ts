@@ -14,7 +14,8 @@ import type { MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
 import type { SearchRequest } from './service.ts';
 import type { SearchFreshness } from './search-context.ts';
 import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
-import type { SubjectSource } from './source.ts';
+import type { IndexedSubject, SubjectSource } from './source.ts';
+import type { TextNode } from './text.ts';
 
 export type DiscoveryKey =
   | { owner: 'semantic'; kind: string; route: number; id: string }
@@ -193,6 +194,8 @@ export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'a
   languages?: readonly string[];
   collectionQuery?: import('../library/collection-discovery-source.ts').CollectionDiscoveryQuery;
   descriptions?: boolean;
+  currentTextMatches?: (subject: IndexedSubject, query: TextNode) => Promise<boolean>;
+  textQuery?: TextNode;
   spoilerThreshold?: 0 | 1 | 2;
   observeRelationRelease?: () => Promise<{
     digest: string;

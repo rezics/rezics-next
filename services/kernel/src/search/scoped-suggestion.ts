@@ -50,6 +50,7 @@ export async function executeScopedSuggestions(options: {
   filter: FilterDocument;
   release: FilterRelease;
   source: SubjectSource;
+  currentText: (subject: IndexedSubject) => Promise<boolean>;
   scope?: ScopeRuntime;
   preparedScope?: PreparedSearchScope;
   scopeWork?: ScopeWork;
@@ -81,7 +82,10 @@ export async function executeScopedSuggestions(options: {
         options.source,
         hits,
         clauses,
-        options.preparedScope ? undefined : { filter: options.filter, relationProperties },
+        {
+          ...(options.preparedScope ? {} : { filter: options.filter, relationProperties }),
+          currentText: options.currentText,
+        },
       ),
     );
     const acceptedById = new Map(passed.map(({ hit, subject }) => [hit.id, subject]));
