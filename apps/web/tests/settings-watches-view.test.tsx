@@ -57,7 +57,6 @@ const { m } = await import('../src/paraglide/messages.js');
 test('the mounted private view separates inaccessible targets, uncertain removal, sparse/empty pages and refresh failure', async () => {
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
-  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -208,10 +207,8 @@ test('the mounted private view separates inaccessible targets, uncertain removal
 test('a disclosed later-page visit returns to its exact current window without scanning', async () => {
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
-  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
   const host = window.document.createElement('div');
   window.document.body.append(host);
-  window.history.replaceState({}, '', '/en/settings#watches');
   const requests: { kind: string; cursor: string | null }[] = [];
   const attempted: Parameters<WatchManagementIO['stop']>[0][] = [];
   const watch = (subscriptionId: string, revision: number, target: ManagedWatch['target']): ManagedWatch => ({
@@ -248,15 +245,21 @@ test('a disclosed later-page visit returns to its exact current window without s
         : { kind: 'removed' };
     },
   };
+  function SettingsRoute() {
+    const [owner] = useState(() => new SettingsSessionOwner(client, 'csrf', 'alice'));
+    return (
+      <SettingsSessionContext.Provider value={owner}>
+        <SettingsNavigationProvider>
+          <SettingsWatchesOwner io={io} />
+        </SettingsNavigationProvider>
+      </SettingsSessionContext.Provider>
+    );
+  }
   const base = createRootRoute();
   const settings = createRoute({
     getParentRoute: () => base,
     path: '/settings',
-    component: () => (
-      <SettingsNavigationProvider>
-        <SettingsWatchesOwner io={io} />
-      </SettingsNavigationProvider>
-    ),
+    component: SettingsRoute,
   });
   const target = createRoute({
     getParentRoute: () => base,
@@ -311,9 +314,7 @@ test('a disclosed later-page visit returns to its exact current window without s
       await router.load();
       root.render(
         <QueryClientProvider client={client}>
-          <SettingsSessionContext.Provider value={owner}>
-            <RouterProvider router={router} />
-          </SettingsSessionContext.Provider>
+          <RouterProvider router={router} />
         </QueryClientProvider>,
       );
     });
