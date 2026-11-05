@@ -93,10 +93,12 @@ function selectionMatches(read: Success, expected: Selection) {
       candidate.statementId === expected.statementId &&
       (expected.property === undefined || candidate.property === expected.property),
   );
-  return !!text &&
+  return (
+    !!text &&
     (!expected.context || text.assertion?.context === expected.context) &&
     (!expected.release || text.assertion?.release === expected.release) &&
-    (expected.revision === undefined || text.assertion?.revision === expected.revision);
+    (expected.revision === undefined || text.assertion?.revision === expected.revision)
+  );
 }
 
 function readingMatchesContext(read: Success, context: string) {
@@ -155,9 +157,10 @@ export function useQuotationVisit(props: {
       ? saved
       : null;
   });
-  const context = restoration && restoration !== null
-    ? restoration.context
-    : (props.context ?? returnContext(returnToken) ?? candidateContext);
+  const context =
+    restoration && restoration !== null
+      ? restoration.context
+      : (props.context ?? returnContext(returnToken) ?? candidateContext);
   const lostReceipt = returnToken !== null && restoration === null;
   const initialResult =
     initial?.ok && !readingMatchesContext(initial, context) ? ({ ok: false, reason: 'stale' } as const) : initial;
@@ -180,13 +183,7 @@ export function useQuotationVisit(props: {
     },
     previous: restoration?.previous,
     phase:
-      restoration === null
-        ? 'failed'
-        : initialResult === undefined
-          ? 'loading'
-          : initialResult.ok
-            ? 'ready'
-            : 'failed',
+      restoration === null ? 'failed' : initialResult === undefined ? 'loading' : initialResult.ok ? 'ready' : 'failed',
     result: restoration === null ? { ok: false, reason: 'stale' } : initialResult,
     observation: 0,
   }));
@@ -221,7 +218,12 @@ export function useQuotationVisit(props: {
     if (!work.active() || !mounted.current) return;
     receipt = undefined;
     const owner = ++sequence.current;
-    const expected = expectedSelection === undefined ? (restorePending.current ? restoration?.selection : undefined) : expectedSelection;
+    const expected =
+      expectedSelection === undefined
+        ? restorePending.current
+          ? restoration?.selection
+          : undefined
+        : expectedSelection;
     if (!expected) selectedIntent.current = undefined;
     const requestIntent = { ...intent, context };
     focus.current = focusSelected ? { owner, element: document.activeElement } : undefined;

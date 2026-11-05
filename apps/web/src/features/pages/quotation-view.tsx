@@ -109,7 +109,12 @@ function correctionControl(
     origin,
     locale,
   );
-  const factsHref = contextualVisitHref(subjectHref({ id: selected.id, label: title }, locale).href, context, origin, locale);
+  const factsHref = contextualVisitHref(
+    subjectHref({ id: selected.id, label: title }, locale).href,
+    context,
+    origin,
+    locale,
+  );
   return (
     <div className="space-y-2">
       {state === 'allowed' ? (
@@ -164,8 +169,7 @@ function SourcePart({
       ? subjectHref({ id: part.id, label: part.value }, locale).href
       : undefined;
   const externalHref = part.status === 'current' && part.href && webUrl(part.href) ? part.href : undefined;
-  const internalReturnHref =
-    internalHref && contextualVisitHref(internalHref, context, returnTo, locale);
+  const internalReturnHref = internalHref && contextualVisitHref(internalHref, context, returnTo, locale);
   return (
     <li className="min-w-0 break-words">
       <span className="me-2 text-muted-foreground">{part.label}:</span>
@@ -401,11 +405,7 @@ function ContextAssertion({
                   context={readingContext}
                 />
               )}
-              <Inspection
-                assertion={context.assertion}
-                locale={locale}
-                returnTo={returnTo}
-              />
+              <Inspection assertion={context.assertion} locale={locale} returnTo={returnTo} />
             </>
           )}
         </div>
@@ -430,10 +430,9 @@ function SelectedText({
   context: string;
 }) {
   const o = option(locale);
-  const text =
-    chosen
-      ? selected.statements.find((text) => text.statementId === chosen)
-      : (selected.statements.find((text) => text.language === locale) ?? selected.statements[0]);
+  const text = chosen
+    ? selected.statements.find((text) => text.statementId === chosen)
+    : (selected.statements.find((text) => text.language === locale) ?? selected.statements[0]);
   return (
     <>
       {selected.statements.length > 1 && (
@@ -500,8 +499,15 @@ function QuotationVisitView({
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const selected = read?.selected;
   const readingContext =
-    selected?.statements.find((text) => text.assertion)?.assertion?.context ?? read?.public.subject.context ?? visit.context;
-  const factsHref = contextualVisitHref(subjectHref({ id, label: title.text }, locale).href, readingContext, '', locale);
+    selected?.statements.find((text) => text.assertion)?.assertion?.context ??
+    read?.public.subject.context ??
+    visit.context;
+  const factsHref = contextualVisitHref(
+    subjectHref({ id, label: title.text }, locale).href,
+    readingContext,
+    '',
+    locale,
+  );
   const origin = visit.safeOrigin ?? factsHref;
 
   return (

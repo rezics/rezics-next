@@ -144,8 +144,7 @@ function boundedLabel(value: string) {
 function assertSubjectLabels(subject: SubjectRead) {
   for (const label of Object.values(subject.subject.labels)) boundedLabel(label);
   for (const summary of Object.values(subject.related)) {
-    if ('labels' in summary)
-      for (const label of Object.values(summary.labels ?? {})) boundedLabel(label);
+    if ('labels' in summary) for (const label of Object.values(summary.labels ?? {})) boundedLabel(label);
   }
 }
 
@@ -171,7 +170,10 @@ async function readQuotationViewerActions(
       { type: 'semantic.subject', id },
       { type: 'semantic.context', id: context },
     ];
-    const result = await client.viewerActions.post({ resources }, { headers: { authorization }, fetch: { cache: 'no-store' } });
+    const result = await client.viewerActions.post(
+      { resources },
+      { headers: { authorization }, fetch: { cache: 'no-store' } },
+    );
     if (
       result.status !== 200 ||
       !result.data ||
@@ -198,7 +200,10 @@ async function readQuotationViewerActions(
         return unavailableViewerAction();
       return {
         state: 'available',
-        actions: resource.viewerActions.map((action) => ({ action: action.action, operations: [...action.operations] })),
+        actions: resource.viewerActions.map((action) => ({
+          action: action.action,
+          operations: [...action.operations],
+        })),
       };
     };
     return {

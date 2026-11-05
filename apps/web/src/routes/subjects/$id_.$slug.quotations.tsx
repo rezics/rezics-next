@@ -22,7 +22,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
     if (quote !== undefined && (typeof quote !== 'string' || !/^[0-9a-f-]{36}$/i.test(quote))) throw notFound();
     if (
       context !== undefined &&
-      (typeof context !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(context))
+      (typeof context !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(context))
     )
       throw notFound();
     if (

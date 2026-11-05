@@ -25,7 +25,9 @@ function assertion(context: string, id: string, property: string, target?: strin
     id,
     rank: 'normal' as const,
     property: { id: property, data_type: target ? 'wikibase-item' : 'monolingualtext' },
-    value: target ? { type: 'value' as const, content: target } : { type: 'value' as const, content: { text: 'A cited line', language: 'en' } },
+    value: target
+      ? { type: 'value' as const, content: target }
+      : { type: 'value' as const, content: { text: 'A cited line', language: 'en' } },
     qualifiers: [],
     references: [],
   } as QuotationAssertion['statement'];
@@ -96,7 +98,16 @@ async function harness(url: string) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'HTMLButtonElement', 'Element', 'Node', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'Element',
+    'Node',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
@@ -170,7 +181,9 @@ test('an explicit Context survives a disclosed target return and duplicate targe
     expect(target.searchParams.get('context')).toBe(contextA);
     const via = target.searchParams.get('via')!;
     expect(via).toContain('quotationReturn=');
-    await act(async () => links[0]!.dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true, cancelable: true })));
+    await act(async () =>
+      links[0]!.dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true, cancelable: true })),
+    );
     await act(async () => ui.root.render(null));
     ui.window.history.replaceState(null, '', via);
     await ui.mount(contextA, transport);
