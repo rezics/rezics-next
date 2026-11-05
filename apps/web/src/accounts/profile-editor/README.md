@@ -20,6 +20,8 @@ unknown attempt with its original credential, key, version, intent and body. A m
 acknowledgement, denial nor commitment. Independent current reads, later drafts, remounts, exact-original retries and
 session retirement remain distinct. Every retry rereads exact current native operation advice before sending the same
 original body and Structured Field command key; a different current value requires review.
+Failed readback keeps acknowledgement or unknown delivery visible without revealing the retained draft; read
+recovery never replays an acknowledged command. Departure uses the shared profile draft/command navigation decision.
 Missing real `KERNEL_ORIGIN` is unavailable, including development; the editor never consumes the fake kernel.
 
 Integration acceptance remains the contract's web suite and native authority oracles. Web owns visual review.

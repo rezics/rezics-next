@@ -59,25 +59,19 @@ transition. Privacy unlinking and dispute/reassignment procedures in the researc
 
 ### Editable profile
 
-`GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) is an authenticated, `private, no-store`
-read of editable source fields by immutable ID, including accounts without handles. It uses the same native
-authorization as `updateAccount`: `account:update` on the subject, or `account:manage` on an operated actor's
-exact current operator. All actor, client scope, principal, current state and fence operands apply. Unknown or
-denied subjects disclose no profile; there is no self, operator or administrator bypass. The closed `{ profile, editing }`
-contains `id`, `kind`, nullable current `handle`, `displayName`, `bio`, `links`, Content's current avatar summary
-or null, `publicViews` (`posts`, `reviews`, `collections`, `realms`) and organization-only `speakersListed`, plus a
-viewer/target field-advice observation built from that prepared authority, account kind and command limits.
-Private visibility choices round-trip; missing or malformed flags resolve to false. No credential, email,
-verification evidence, operator proof or stored avatar URL belongs in this projection. GET consumes no write
-operation and does not change PATCH validation, public lookup or discovery. Advice is not a durable grant. See the
-[Access read contract][access-public].
+`GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) reads editable source by immutable ID,
+including handleless accounts, authenticated and `private, no-store`. Authority matches `updateAccount`:
+`account:update` on the subject or `account:manage` on an operated actor's exact current operator. All actor,
+client-scope, principal, current-state and fence operands apply; unknown or denied subjects disclose nothing,
+with no self, operator or administrator bypass.
 
-Web binds the advice's viewer to the authenticated cookie viewer and its target to the selected immutable account;
-delegated editors and software operators need not be the target. Managed profile PATCH uses the same Structured Field
-command-key encoding as Settings. A lost media-completion response retains successfully stored avatar bytes for
-native observation and explicit recovery; it cannot undo a completion that may already have committed.
-The managed page keeps acknowledgement and unknown delivery visible when readback fails, with deliberate read
-recovery and no replay of an acknowledged command. A matching read alone leaves an unknown command unresolved.
+The closed `{ profile, editing }` contains `id`, `kind`, nullable `handle`, `displayName`, `bio`, `links`, Content's
+current avatar summary or null, `publicViews` (`posts`, `reviews`, `collections`, `realms`), organization-only
+`speakersListed`, and viewer/target advice from prepared authority, kind and command limits. Private choices
+round-trip; missing or malformed flags resolve to false. Credentials, email, verification evidence, operator proof
+and stored avatar URLs are excluded. GET consumes no write and changes neither PATCH validation nor public lookup
+or discovery. Advice is not a durable grant. See [Access][access-public] and the
+[Web editor contract](../apps/web/src/accounts/profile-editor/README.md).
 
 ### Public identity
 
