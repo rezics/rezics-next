@@ -240,8 +240,10 @@ export class ProgressRecoveryJourney<Choices = unknown> {
     this.#state.mappedSubject = null;
     this.#state.unitSupport = [];
     await this.#work(async () => {
-      const value = await this.port.choices(subjectId);
+      const reply = await this.port.choices(subjectId);
       if (!this.#live() || epoch !== this.#selection) return;
+      const value = this.#accept(reply);
+      if (!value) return;
       this.#state.choices = value.choices;
       this.#state.mappedSubject = value.subjectId;
     });
@@ -259,10 +261,14 @@ export class ProgressRecoveryJourney<Choices = unknown> {
     this.#state.result = null;
     this.#state.application = null;
     await this.#work(async () => {
+      const normalized = structuredClone(body);
+      normalized.additionalMeasures.sort((left, right) =>
+        left.sourceUnit < right.sourceUnit ? -1 : left.sourceUnit > right.sourceUnit ? 1 : 0,
+      );
       unresolved.set(this.binding, {
         kind: 'review',
         inspection,
-        body: structuredClone(body),
+        body: normalized,
         key: crypto.randomUUID(),
         port: this.port,
         upload: this.#state.upload,
