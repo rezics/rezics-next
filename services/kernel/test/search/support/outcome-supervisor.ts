@@ -90,26 +90,29 @@ export async function searchProxy(endpoint: string) {
     await gate.wait;
   }
   const server = createServer((incoming, outgoing) => {
-    const alias = incoming.method === 'POST' && incoming.url === '/_aliases' ? lostAlias : undefined;
-    const losesAlias =
-      alias === undefined
-        ? Promise.resolve(false)
-        : new Promise<boolean>((resolve, reject) => {
-            const chunks: Buffer[] = [];
-            incoming.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-            incoming.once('error', reject);
-            incoming.once('end', () => {
-              try {
-                const body = JSON.parse(Buffer.concat(chunks).toString()) as { actions: { add?: { alias: string } }[] };
-                resolve(body.actions.some((action) => action.add?.alias === alias));
-              } catch (error) {
-                reject(error);
-              }
-            });
-          });
     void (async () => {
       await boundary('request', incoming.method, incoming.url);
       if (incoming.destroyed || outgoing.destroyed) return;
+      const alias = incoming.method === 'POST' && incoming.url === '/_aliases' ? lostAlias : undefined;
+      const losesAlias =
+        alias === undefined
+          ? Promise.resolve(false)
+          : new Promise<boolean>((resolve, reject) => {
+              const chunks: Buffer[] = [];
+              incoming.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+              incoming.once('error', reject);
+              incoming.once('end', () => {
+                try {
+                  const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+                    actions: { add?: { alias: string } }[];
+                  };
+                  resolve(body.actions.some((action) => action.add?.alias === alias));
+                } catch (error) {
+                  reject(error);
+                }
+              });
+            });
+      void losesAlias.catch(() => outgoing.destroy());
       const upstream = forward(
         {
           protocol: target.protocol,
@@ -124,7 +127,7 @@ export async function searchProxy(endpoint: string) {
           void boundary('response', incoming.method, incoming.url)
             .then(async () => {
               // The actual node has applied this request. Drop only its response to the fixture's read alias.
-              if ((await losesAlias) && lostAlias === alias) {
+              if ((await losesAlias) && lostAlias === alias && response.statusCode === 200) {
                 lostAlias = undefined;
                 lostAliasResponses++;
                 outgoing.destroy();
