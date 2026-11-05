@@ -129,7 +129,7 @@ test('summary navigation focuses the scoped qualifier field, then its group when
       );
     const select = async (pointer: string, value: string) => {
       const control = host.querySelector<HTMLSelectElement>(
-        `[data-condition-field-pointer="${CONDITION_POINTER}/statement/${pointer}"] input`,
+        `[data-condition-field-pointer="${CONDITION_POINTER}/statement/${pointer}"] select`,
       )!;
       await act(async () => {
         control.value = value;
