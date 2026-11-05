@@ -7,6 +7,7 @@ const realm = '0192f3a0-6c1e-7b2a-9d4e-000000000942';
 const meta = {
   title: 'Pages/Catalogue/Literary current visit',
   component: LiteraryCurrentVisitAdmission,
+  args: { input: { kind: 'direct' }, locale: 'en', globalHref: '/en/catalogue/literary', children: null },
   render: () => (
     <LiteraryCurrentVisitAdmission
       locale={getLocale()}

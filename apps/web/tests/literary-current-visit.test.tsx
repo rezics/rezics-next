@@ -78,6 +78,7 @@ test('public literary entry refuses a Realm editor before mount and offers a fre
     for (const search of [
       '?context=' + context,
       '?unknown=1',
+      new URL(href, 'https://site.test').search.replace('book', '%FF'),
       '?source=' + 'é'.repeat(1100),
       new URL(href, 'https://site.test').search + '&realm=' + realm,
       new URL(href, 'https://site.test').search.replace(context, candidateContext),
