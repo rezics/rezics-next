@@ -208,14 +208,19 @@ const loaded = (
 function activateMenuTrigger(trigger: HTMLButtonElement) {
   const propsKey = Object.getOwnPropertyNames(trigger).find((key) => key.startsWith('__reactProps$'))!;
   const onClick = (trigger as unknown as Record<string, { onClick: (event: unknown) => void }>)[propsKey]!.onClick;
+  const nativeEvent = new trigger.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true, cancelable: true });
   const event = {
     currentTarget: trigger,
     target: trigger,
+    nativeEvent,
     defaultPrevented: false,
     preventDefault() {
+      nativeEvent.preventDefault();
       this.defaultPrevented = true;
     },
-    stopPropagation() {},
+    stopPropagation() {
+      nativeEvent.stopPropagation();
+    },
   };
   onClick(event);
 }
