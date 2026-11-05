@@ -1226,7 +1226,7 @@ export function createAniListImport(deps: Dependencies) {
           scoreOutcome = { status: 'skipped', reason: 'Native vote effects were not separately confirmed.' };
           if (status === 'unsupported') status = 'skipped';
         } else if (!reviewed.score.native.guard) {
-          scoreOutcome = { status: 'unavailable', reason: reviewed.score.native.reason };
+          scoreOutcome = { status: 'unavailable', ...(reviewed.score.native.reason === undefined ? {} : { reason: reviewed.score.native.reason }) };
         } else if (reviewed.score.action === 'vote' && reviewed.score.native.currentVote.status === 'current' &&
           reviewed.score.native.currentVote.vote?.units !== null && reviewed.score.native.currentVote.vote !== null &&
           !reviewed.input.replace) {
@@ -1271,7 +1271,7 @@ export function createAniListImport(deps: Dependencies) {
           }
           if (status === 'unsupported') status = scoreOutcome.status;
         }
-        if (scoreOutcome.status === 'applied') retained = retained.filter((field) => field !== 'score');
+        if (scoreOutcome!.status === 'applied') retained = retained.filter((field) => field !== 'score');
       }
       const outcome: AniListOutcome = {
         ordinal: confirmation.ordinal,
