@@ -183,7 +183,7 @@ test('changed-set copy, independent outcomes, unknown retry and candidate-read s
   const read = current();
   const genreDraft = change(
     storyArcClassificationDraft(read, genre, read.public.subject.statements[genre]![0]!.id)!,
-    concept,
+    other,
   );
   const keywordDraft = change(
     storyArcClassificationDraft(read, keywords, read.public.subject.statements[keywords]![0]!.id)!,
