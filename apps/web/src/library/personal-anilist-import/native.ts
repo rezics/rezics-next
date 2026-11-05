@@ -1,5 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { QUESTION } from '../../features/pages/subject-ratings';
+import { readHomeQuestion } from '../../features/pages/home-feed-questions';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { mapSourceAdmissionPort } from '../rich-private-entry/admission';
@@ -12,7 +14,6 @@ import {
   completenessOf,
   isScoreFormat,
   quotedIdempotencyKey,
-  type AniListApplyBody,
   type AniListApplyCallResult,
   type AniListApplyResult,
   type AniListCommand,
@@ -31,6 +32,7 @@ import {
   type AniListPage,
   type AniListPageResult,
   type AniListPreviewResult,
+  type AniListQuestionResult,
   type AniListRecord,
   type AniListReview,
   type AniListReviewInput,
@@ -43,34 +45,8 @@ import {
 
 type NativeResult = { data?: unknown; error?: { value?: unknown }; status: number };
 type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
-type PreviewResource = {
-  post: (body: { upload: string; scoreFormat?: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type ReviewResource = {
-  post: (
-    body: { ordinal: number; subjectId?: string; skip?: boolean; fields: string[]; replace?: boolean },
-    options: { headers: NativeHeaders },
-  ) => Promise<NativeResult>;
-};
-type ApplyResource = {
-  post: (body: AniListApplyBody, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type CancelResource = {
-  post: (body: { remove?: boolean }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type IdResource = {
-  get: (options: { query?: { after?: number }; headers: NativeHeaders }) => Promise<NativeResult>;
-  $review?: ReviewResource;
-  review?: ReviewResource;
-  $apply?: ApplyResource;
-  apply?: ApplyResource;
-  $cancel?: CancelResource;
-  cancel?: CancelResource;
-};
-export type AniListSurface = ((params: { importId: string }) => IdResource) & {
-  $preview?: PreviewResource;
-  preview?: PreviewResource;
-};
+type AniListSurface = NonNullable<KernelClient['libraryImports']['anilist']>;
+type IdResource = ReturnType<AniListSurface>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -188,7 +164,15 @@ function isReviewInput(value: unknown): value is AniListReviewInput {
     return false;
   if (value.skip !== undefined && typeof value.skip !== 'boolean') return false;
   if (value.replace !== undefined && typeof value.replace !== 'boolean') return false;
+  if (value.score !== undefined && !isReviewScore(value.score)) return false;
   return true;
+}
+
+function isReviewScore(value: unknown): boolean {
+  if (!record(value) || typeof value.questionId !== 'string' || !SUBJECT_ID.test(value.questionId)) return false;
+  if (!Number.isSafeInteger(value.questionRevision) || (value.questionRevision as number) < 1) return false;
+  if (value.action === 'clear') return true;
+  return value.action === 'vote' && Number.isSafeInteger(value.units) && (value.units as number) >= 0;
 }
 
 function isReview(value: unknown): value is AniListReview {
@@ -196,18 +180,21 @@ function isReview(value: unknown): value is AniListReview {
   if (typeof value.commandKey !== 'string' || typeof value.clientId !== 'string') return false;
   if (value.requestedBy !== null && typeof value.requestedBy !== 'string') return false;
   if (!isMatch(value.match) || !isReviewInput(value.input)) return false;
+  if (value.score !== undefined && !record(value.score)) return false;
   return value.observation === null || isObservation(value.observation);
 }
 
 function isOutcome(value: unknown): value is AniListOutcome {
   if (!record(value) || typeof value.ordinal !== 'number' || !Array.isArray(value.retained)) return false;
   if (!value.retained.every((field) => typeof field === 'string')) return false;
+  if (value.score !== undefined && !record(value.score)) return false;
   return (
     value.status === 'applied' ||
     value.status === 'skipped' ||
     value.status === 'stale' ||
     value.status === 'unsupported' ||
-    value.status === 'failed'
+    value.status === 'failed' ||
+    value.status === 'unavailable'
   );
 }
 
@@ -225,11 +212,26 @@ function isRow(value: unknown): value is AniListRow {
   if (value.proposal !== null && value.proposal !== undefined && !isObservation(value.proposal)) return false;
   if (value.review !== null && value.review !== undefined && !isReview(value.review)) return false;
   if (value.outcome !== null && value.outcome !== undefined && !isOutcome(value.outcome)) return false;
+  if (value.currentScore !== undefined && value.currentScore !== null && !isCurrentScore(value.currentScore)) return false;
+  if (value.scoreLexeme !== undefined && typeof value.scoreLexeme !== 'string') return false;
   return true;
+}
+
+function isCurrentScore(value: unknown): boolean {
+  if (!record(value)) return false;
+  if (value.status === 'unavailable') return typeof value.reason === 'string';
+  if (value.status !== 'current' || !record(value.question)) return false;
+  return (
+    typeof value.question.id === 'string' &&
+    typeof value.question.revision === 'number' &&
+    (value.vote === null ||
+      (record(value.vote) && Number.isSafeInteger(value.vote.units) && typeof value.vote.revision === 'number'))
+  );
 }
 
 function normalizeRow(value: AniListRow): AniListRow {
   return {
+    ...value,
     ordinal: value.ordinal,
     source: value.source,
     match: value.match,
@@ -253,6 +255,13 @@ function isPage(importId: string, value: unknown): AniListPage | undefined {
     rows,
     next: value.next,
   };
+}
+
+function pointFailure(status: string): AniListFailure {
+  if (status === 'auth' || status === 'denied') return { kind: 'denied' };
+  if (status === 'lost') return { kind: 'not-found' };
+  if (status === 'invalid') return { kind: 'malformed' };
+  return { kind: 'unavailable' };
 }
 
 function isApply(value: unknown): value is AniListApplyResult {
@@ -317,6 +326,14 @@ export function kernelAniListPort(
     }
   }
   return {
+    async question(): Promise<AniListQuestionResult> {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      const result = await readHomeQuestion(client, QUESTION, session.authorization);
+      return result.status === 'ready'
+        ? { kind: 'question', question: result.question }
+        : pointFailure(result.status);
+    },
     async preview(command) {
       return call(
         command,
@@ -365,6 +382,7 @@ export function kernelAniListPort(
               replace: command.replace,
               ...(command.subjectId ? { subjectId: command.subjectId } : {}),
               ...(command.skip ? { skip: true } : {}),
+              ...(command.score === undefined ? {} : { score: command.score }),
             },
             { headers: headers(authorization, command.key) },
           );

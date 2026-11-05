@@ -17,12 +17,18 @@ Mounted under `/v1/libraryImports/anilist` after Commerce dependency `69b73c6a`.
 The generated client snapshot may lag the kernel source; missing methods render unavailable rather than a
 local parser or successful fixture.
 
+Decision: read the standard Rating question through its installed point method on visit entry and before each
+score review; use the import page's supplied `currentScore` as the post-apply vote readback, with no parallel
+per-row vote hydration.
+
 | Step    | Native                                                                            | Page                                                                              |
 | ------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Upload  | `POST :preview` `{ upload, scoreFormat? }` with quoted Idempotency-Key            | File stays local until submit; bytes drop after native ownership                  |
 | Preview | `GET :importId?after=-1` pages of 20                                              | Current page only; titles assist display/search, never automatic identity         |
-| Review  | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace }`         | Default `replace:false`; only `status` is selectable; REPEATING stays unsupported |
-| Confirm | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId }] }` batches of 20 | Exact stored review ids; `complete:false` is resumable                            |
+| Question | `GET /v1/rating-questions/{standard-question-id}`                                 | One current point read on visit entry, before a vote/clear review, and on refresh |
+| Review  | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace, score? }` | Status and native score choices are reviewed together; source score is never converted |
+| Confirm | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId, confirmNativeVoteEffects? }] }` batches of 20 | Vote consent is separate and bound to the exact score review; `complete:false` is resumable |
+| Readback | `GET :importId?after=...` owner page supplies each reviewed row's `currentScore` | Fresh owner observation after apply/refresh; not a command receipt              |
 | Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply              | Separate typed command; only after privacy and original-timestamp confirmation    |
 | Stop    | `POST :importId:cancel` `{ remove:false }`                                        | Stops new admission; acknowledged effects remain                                  |
 | Discard | `POST :importId:cancel` `{ remove:true }`                                         | Clears this upload's evidence now; Library facts stay                             |
@@ -39,6 +45,15 @@ skipped, stale, unsupported and failed. Stale unstarted reviews refresh; started
 or retried with its identity. Exact review id, fields, replace flag and key survive retry. Cancellation does
 not roll back admitted rows.
 
+Score review keeps the exact source score value, lexeme, declared scale, validity and reason. Owners choose
+native units within the current question or explicitly clear; source zero means unrated and native zero is a
+real vote. Keep is the default. Replacing a present own vote uses the existing explicit Replace choice.
+Review observations and atomic write availability are distinct: an available review does not promise that
+the guarded writer can apply, and the owner may return `atomic_guard_unavailable`. The page shows the supplied
+score outcome independently from the state outcome and displays the owner's `currentScore` observation as
+separate readback. A positive vote receipt does not replace readback; an unavailable vote effect does not
+undo an acknowledged state effect. Exact Retry keeps the original confirmation and review/consent identity.
+
 Bounds follow native caps: 1 MiB UTF-8, depth 24, 200 rows, 65,536 bytes/128 fields per row, 100-character
 field names, 8,192-byte group metadata, five owner uploads and 20 rows per read/apply. Web retained work is
 the upload during submission, the current response page without `rawUpload`, bounded per-row metadata for N
@@ -46,13 +61,16 @@ rows and exact uncertain-command operands.
 
 ## Cost
 
-- Operation: personal AniList upload preview, paged read, per-row review, batched apply and cancel/remove.
+- Operation: personal AniList upload preview, paged read, current-question point read, per-row review, owner
+  current-vote readbacks, batched apply and cancel/remove.
 - Touched neighbourhood: installed `libraryImports.anilist` methods, the mounted visit, current page evidence
   and N bounded row metadata. No client matching, parser or per-field native fan-out.
-- Formula: `1 + K + M + Q + lifecycle + R` native calls for K returned pages, M reviewed rows, Q apply
-  batches, cancel lifecycle calls and explicit retries R, with `M <= N`, `Q <= M`, page size `<= 20` and
-  apply size `<= 20`. Full 20-row batches reduce Q to `ceil(M/20)`; single-row choices keep `Q = M`.
-  Source admission is a separate typed command after apply and is omitted from this import cost formula.
+- Formula: `1 + K + M + Q + lifecycle + R + H + V`, where H counts explicit point reads of the current
+  rating question and V counts owner-page current-vote reads for rows with score review. K is returned pages,
+  M reviewed rows, Q apply batches, lifecycle counts cancel/remove and R counts explicit retries. `M <= N`,
+  `Q <= M`, page size `<= 20` and apply size `<= 20`. Full 20-row batches reduce Q to `ceil(M/20)`;
+  single-row choices keep `Q = M`. Source admission is a separate typed command after apply and is omitted
+  from this import cost formula.
 
 Decision: a missing AniList list-entry `id` uses the AniList media identifier from preview identifiers as the
 provider record identity. Unix `createdAt`/`updatedAt` stay unknown. Confirm without the two source checkboxes

@@ -3,27 +3,79 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
 import type { AniListOutcome, AniListRowMeta } from './contract';
 import { AniListAction } from './controls';
-import { aniListOutcomeLabel } from './meaning';
+import { aniListOutcomeLabel, aniListValidityLabel } from './meaning';
 
 function Outcome({
   outcome,
   titles,
   admission,
+  row,
 }: {
   outcome: AniListOutcome;
   titles: Map<number, string>;
   admission: AniListRowMeta['sourceAdmission'];
+  row: AniListRowMeta | undefined;
 }) {
   const applied = outcome.status === 'applied' ? ['status'].filter((field) => !outcome.retained.includes(field)) : [];
+  const score = outcome.score && typeof outcome.score === 'object' && !Array.isArray(outcome.score)
+    ? (outcome.score as Record<string, unknown>)
+    : null;
+  const scoreStatus = score && typeof score.status === 'string' ? score.status : null;
+  const scoreReason = score && typeof score.reason === 'string' ? score.reason : null;
+  const readback = currentScoreReadback(row?.currentScore);
   return (
     <li className="rounded-md border p-3" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
       <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`}</p>
-      <p>{aniListOutcomeLabel(outcome.status)}</p>
-      {applied.length ? (
-        <p className="text-sm">{m.library_anilist_applied_fields({ fields: applied.join(', ') })}</p>
-      ) : (
-        <p className="text-sm">{m.library_anilist_applied_summary()}</p>
-      )}
+      <section className="space-y-1" data-anilist-state-effect>
+        <h4 className="font-medium">{m.library_anilist_state_effect()}</h4>
+        <p>{aniListOutcomeLabel(outcome.status)}</p>
+        {applied.length ? (
+          <p className="text-sm">{m.library_anilist_applied_fields({ fields: applied.join(', ') })}</p>
+        ) : (
+          <p className="text-sm">{m.library_anilist_applied_summary()}</p>
+        )}
+      </section>
+      <section className="space-y-1" data-anilist-source-retention>
+        <h4 className="font-medium">{m.library_anilist_source_retention()}</h4>
+        {row?.scoreSource ? (
+          <>
+            <p className="text-sm [overflow-wrap:anywhere]">
+              {m.library_anilist_score_source({
+                value: row.scoreSource.lexeme ?? (JSON.stringify(row.scoreSource.value) ?? String(row.scoreSource.value)),
+                scale: row.scoreSource.scale ?? m.library_anilist_score_scale_unknown(),
+                validity: aniListValidityLabel(row.scoreSource.validity),
+              })}
+            </p>
+            <p className="text-sm">{m.library_anilist_source_score_retained()}</p>
+          </>
+        ) : (
+          <p className="text-sm">{m.library_anilist_source_score_absent()}</p>
+        )}
+      </section>
+      <section className="space-y-1" data-anilist-score-effect>
+        <h4 className="font-medium">{m.library_anilist_score_effect()}</h4>
+        {scoreStatus ? <p>{scoreOutcomeLabel(scoreStatus)}</p> : row?.scoreAction === 'keep' ? (
+          <p>{m.library_anilist_score_no_effect()}</p>
+        ) : (
+          <p>{m.library_anilist_score_effect_not_reported()}</p>
+        )}
+        {scoreReason ? <p className="text-sm text-muted-foreground">{scoreReason}</p> : null}
+        {readback ? (
+          <p role="status" data-anilist-current-score>
+            {readback.status === 'unavailable'
+              ? m.library_anilist_score_readback_unavailable({ reason: readback.reason ?? '' })
+              : readback.units === null
+                ? m.library_anilist_score_readback_absent()
+                : m.library_anilist_score_readback_vote({ units: readback.units })}
+            {readback.questionLabel ? ` · ${readback.questionLabel}` : ''}
+            {readback.questionRevision !== undefined
+              ? ` · ${m.library_anilist_question_revision({ revision: readback.questionRevision })}`
+              : ''}
+          </p>
+        ) : row?.scoreReview ? (
+          <p>{m.library_anilist_score_readback_pending()}</p>
+        ) : null}
+      </section>
       {outcome.retained.length ? (
         <details>
           <summary className="min-h-11 cursor-pointer py-2">{m.library_anilist_retained_summary()}</summary>
@@ -38,6 +90,42 @@ function Outcome({
       <ImportSourceOutcome outcome={admission} />
     </li>
   );
+}
+
+function scoreOutcomeLabel(status: string): string {
+  switch (status) {
+    case 'applied': return m.library_anilist_score_outcome_applied();
+    case 'skipped': return m.library_anilist_score_outcome_skipped();
+    case 'stale': return m.library_anilist_score_outcome_stale();
+    case 'unsupported': return m.library_anilist_score_outcome_unsupported();
+    case 'failed': return m.library_anilist_score_outcome_failed();
+    case 'unavailable': return m.library_anilist_score_outcome_unavailable();
+    default: return m.library_anilist_score_effect_not_reported();
+  }
+}
+
+function currentScoreReadback(value: unknown): {
+  status: 'current' | 'unavailable';
+  units: number | null;
+  reason?: string;
+  questionLabel?: string;
+  questionRevision?: number;
+} | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const readback = value as Record<string, unknown>;
+  if (readback.status === 'unavailable') {
+    return { status: 'unavailable', units: null, reason: typeof readback.reason === 'string' ? readback.reason : '' };
+  }
+  if (readback.status !== 'current' || !readback.question || typeof readback.question !== 'object') return null;
+  const question = readback.question as Record<string, unknown>;
+  const questionLabel = typeof question.label === 'string' ? question.label : undefined;
+  const questionRevision = typeof question.revision === 'number' ? question.revision : undefined;
+  if (readback.vote === null) return { status: 'current', units: null, questionLabel, questionRevision };
+  if (readback.vote && typeof readback.vote === 'object') {
+    const vote = readback.vote as Record<string, unknown>;
+    if (typeof vote.units === 'number') return { status: 'current', units: vote.units, questionLabel, questionRevision };
+  }
+  return null;
 }
 
 export function AniListResultPage({
@@ -63,6 +151,7 @@ export function AniListResultPage({
 }) {
   const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
   const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
+  const rows = new Map(meta.map((row) => [row.ordinal, row]));
   const locale = getLocale();
   return (
     <section className="space-y-4" data-anilist-stage="results">
@@ -79,6 +168,7 @@ export function AniListResultPage({
             outcome={outcome}
             titles={titles}
             admission={admissions.get(outcome.ordinal) ?? null}
+            row={rows.get(outcome.ordinal)}
           />
         ))}
         {remaining.map((ordinal) => (

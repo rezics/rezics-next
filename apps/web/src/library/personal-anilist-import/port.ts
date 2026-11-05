@@ -53,6 +53,10 @@ const productionPort: AniListImportPort = {
     const { cancelAniListImport } = await import('./server');
     return cancelAniListImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },
+  async question() {
+    const { readAniListStandardQuestion } = await import('./server');
+    return readAniListStandardQuestion({});
+  },
 };
 
 export function useAniListImportPort(): AniListImportPort {

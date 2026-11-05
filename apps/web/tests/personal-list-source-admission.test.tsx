@@ -248,6 +248,9 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
     async cancel() {
       return { kind: 'cancelled', removed: true };
     },
+    async question() {
+      return { kind: 'unavailable' };
+    },
   };
   const aniVisit = visit();
   const ani = createAniListJourney({ port: aniPort, visit: aniVisit });

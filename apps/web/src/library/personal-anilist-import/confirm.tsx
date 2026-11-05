@@ -2,7 +2,8 @@ import { m } from '../../paraglide/messages.js';
 import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/source-confirm';
 import type { AniListRowMeta } from './contract';
 import { AniListAction } from './controls';
-import { aniListAppliedFields, aniListMatchLabel, aniListMediaLabel } from './meaning';
+import { AniListCheck } from './controls';
+import { aniListAppliedFields, aniListMatchLabel, aniListMediaLabel, aniListValidityLabel } from './meaning';
 
 export function AniListConfirmPage({
   rows,
@@ -12,6 +13,7 @@ export function AniListConfirmPage({
   onBack,
   onConfirm,
   onConfirmSource,
+  onVoteConsent,
 }: {
   rows: AniListRowMeta[];
   busy: boolean;
@@ -20,6 +22,7 @@ export function AniListConfirmPage({
   onBack: () => void;
   onConfirm: () => void;
   onConfirmSource: (choice: { privacy?: boolean; timestamps?: boolean }) => void;
+  onVoteConsent: (ordinal: number, consent: boolean) => void;
 }) {
   const ready = rows.filter((row) => row.reviewId);
   const gated = busy || ready.length === 0 || !confirmPrivacy || !confirmTimestamps;
@@ -41,6 +44,9 @@ export function AniListConfirmPage({
                 })}
               </p>
               {row.replace ? <p className="text-sm">{m.library_anilist_confirm_replace()}</p> : null}
+              {row.replace && row.scoreReview?.currentVote === 'present' ? (
+                <p className="text-sm">{m.library_anilist_confirm_replace_vote()}</p>
+              ) : null}
               {row.proposedState ? (
                 <p className="text-sm">{m.library_anilist_proposed({ state: row.proposedState })}</p>
               ) : null}
@@ -53,6 +59,83 @@ export function AniListConfirmPage({
                 <p className="text-sm">{m.library_anilist_absence()}</p>
               )}
               <ImportSourceEvidence preview={row.sourcePreview} />
+              {row.scoreSource ? (
+                <div className="space-y-2 rounded-md border p-3" data-anilist-confirm-score={row.ordinal}>
+                  <p className="font-medium">
+                    {m.library_anilist_score_source({
+                      value:
+                        row.scoreSource.lexeme ??
+                        (JSON.stringify(row.scoreSource.value) ?? String(row.scoreSource.value)),
+                      scale: row.scoreSource.scale ?? m.library_anilist_score_scale_unknown(),
+                      validity: aniListValidityLabel(row.scoreSource.validity),
+                    })}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{row.scoreSource.reason}</p>
+                  {row.scoreReview ? (
+                    <>
+                      <p>
+                        {row.scoreReview.action === 'vote'
+                          ? m.library_anilist_confirm_vote({ units: row.scoreReview.units ?? 0 })
+                          : m.library_anilist_confirm_clear()}
+                      </p>
+                      {row.scoreReview.questionLabel ? <p>{row.scoreReview.questionLabel}</p> : null}
+                      {row.scoreReview.questionMeaning ? <p>{row.scoreReview.questionMeaning}</p> : null}
+                      {row.scoreReview.minimumUnits !== null &&
+                      row.scoreReview.maximumUnits !== null &&
+                      row.scoreReview.stepUnits !== null ? (
+                        <p className="text-sm">
+                          {m.library_anilist_question_scale({
+                            min: row.scoreReview.minimumUnits,
+                            max: row.scoreReview.maximumUnits,
+                            step: row.scoreReview.stepUnits,
+                          })}
+                        </p>
+                      ) : null}
+                      {row.scoreReview.questionRevision !== null ? (
+                        <p className="text-sm">
+                          {m.library_anilist_question_revision({ revision: row.scoreReview.questionRevision })}
+                        </p>
+                      ) : null}
+                      {row.scoreReview.targetId ? (
+                        <p className="text-sm [overflow-wrap:anywhere]">
+                          {m.library_anilist_score_target({ target: row.scoreReview.targetId })}
+                        </p>
+                      ) : null}
+                      {row.scoreReview.currentVote === 'present' ? (
+                        <p>
+                          {m.library_anilist_review_vote_present({ units: row.scoreReview.currentVoteUnits ?? 0 })}
+                        </p>
+                      ) : row.scoreReview.currentVote === 'absent' ? (
+                        <p>{m.library_anilist_review_vote_absent()}</p>
+                      ) : (
+                        <p>{m.library_anilist_review_vote_unavailable({ reason: row.scoreReview.currentVoteReason ?? '' })}</p>
+                      )}
+                      {row.scoreReview.currentVote === 'present' &&
+                      row.scoreReview.action === 'vote' &&
+                      !row.replace ? <p>{m.library_anilist_existing_vote_preserved()}</p> : null}
+                      <p className="text-sm">
+                        {row.scoreReview.availability === 'available'
+                          ? m.library_anilist_review_observations_available()
+                          : m.library_anilist_vote_write_unavailable({
+                              reason: row.scoreReview.availabilityReason ?? '',
+                            })}
+                      </p>
+                      <AniListCheck
+                        id={`anilist-vote-consent-${row.ordinal}`}
+                        checked={
+                          row.nativeVoteConsent?.reviewId === row.scoreReview.reviewId &&
+                          row.nativeVoteConsent.consentKey === row.scoreReview.consentKey
+                        }
+                        disabled={busy || !row.scoreReview.consentKey}
+                        label={m.library_anilist_confirm_native_vote_effects()}
+                        onToggle={(consent) => onVoteConsent(row.ordinal, consent)}
+                      />
+                    </>
+                  ) : (
+                    <p>{m.library_anilist_score_keep()}</p>
+                  )}
+                </div>
+              ) : null}
             </li>
           );
         })}
