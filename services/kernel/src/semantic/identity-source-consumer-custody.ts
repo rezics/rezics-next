@@ -506,7 +506,7 @@ export async function readIdentitySourcePrepaidLibraryPage(
   const entry = Object.getOwnPropertyDescriptor(installed, 'readLibraryScopeEffectsPageWithWork');
   if (!entry || !('value' in entry) || typeof entry.value !== 'function')
     throw new IdentitySourceOriginalUnavailable('identity-source-readLibraryScopeEffectsPageWithWork-not-installed');
-  const libraryOwner = await import('../library/collection-source-work.ts');
+  const libraryOwner = await import('../library/identity-original-work.ts');
   if (identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) !== work)
     throw new IdentitySourceOriginalUnavailable('identity-source-Library-original-ended');
   const declaration = Object.getOwnPropertyDescriptor(libraryOwner, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');

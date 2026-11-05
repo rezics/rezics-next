@@ -41,7 +41,7 @@ import seal from '../../src/library/identity-scope-effects-seal.sql';
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity-native-planner-projection.ts';
 import savedJob from '../../src/semantic/identity-epoch-store-select-job-4.sql';
 import partition from '../../src/partition/read.sql';
-import * as installedLibraryWork from '../../src/library/collection-source-work.ts';
+import * as installedLibraryWork from '../../src/library/identity-original-work.ts';
 
 // This is a no-IO refusal fixture, never a native database or private Accounts grant fixture.
 function forbiddenPool(): { pool: Pool; calls: () => number } {
