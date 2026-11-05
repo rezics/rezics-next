@@ -349,7 +349,7 @@ async function open(
     }, pendingOperation);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    expect(response?.status(), 'the documented dev server serves the page').toBe(200);
+    expect(response?.status(), `the documented dev server serves the page: ${await response?.text()}`).toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, authenticator };
   } catch (error) {
