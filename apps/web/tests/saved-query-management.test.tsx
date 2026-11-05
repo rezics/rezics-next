@@ -38,6 +38,14 @@ mock.module('../src/library/collection-current-admission', () => ({
   }),
 }));
 mock.module('../src/library/saved-query-publication', () => ({ SavedQueryPublicationAction: () => null }));
+mock.module('../src/library/collection-commands', () => ({
+  captureCollectionUpdate: () => {
+    throw new Error('Mounted callback test must not dispatch a write');
+  },
+  captureCollectionDelete: () => {
+    throw new Error('Mounted callback test must not dispatch a write');
+  },
+}));
 
 const { SavedQueryManagement } = await import('../src/library/saved-query-management');
 
