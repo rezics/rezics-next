@@ -80,12 +80,7 @@ async function withRetryFixture(
 }
 
 async function withThreeTaskIncident(
-  run: (
-    job: WorkerJob,
-    h: ReturnType<typeof harness>,
-    taskIds: string[],
-    inbox: ManagerEvent[],
-  ) => Promise<void>,
+  run: (job: WorkerJob, h: ReturnType<typeof harness>, taskIds: string[], inbox: ManagerEvent[]) => Promise<void>,
 ): Promise<void> {
   const h = harness(captureAndSucceed),
     inbox: ManagerEvent[] = [];
@@ -220,15 +215,15 @@ test('three distinct tasks with one normalized blocker open one incident and hol
           ? { ...task, urgent: false, pendingRetry: { reason: 'backoff', until: pendingUntil } }
           : taskIds.includes(task.id)
             ? {
-              ...task,
-              urgent: false,
-              pendingRetry: {
-                reason: 'environment-incident',
-                incidentId: incident.id,
-                nextProbeAt: incident.nextProbeAt,
-                isProbe: incident.probe.taskId === task.id,
-              },
-            }
+                ...task,
+                urgent: false,
+                pendingRetry: {
+                  reason: 'environment-incident',
+                  incidentId: incident.id,
+                  nextProbeAt: incident.nextProbeAt,
+                  isProbe: incident.probe.taskId === task.id,
+                },
+              }
             : { ...task, urgent: false },
     );
     const expected = {
@@ -269,7 +264,9 @@ test('three distinct tasks with one normalized blocker open one incident and hol
     expect(retryRead).toHaveBeenCalledTimes(cohort.filter((task) => task.currentAttempt > 0).length);
     expect(taskStateRead).not.toHaveBeenCalled();
     expect(
-      queryRead.mock.calls.filter(([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence'),
+      queryRead.mock.calls.filter(
+        ([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence',
+      ),
     ).toHaveLength(1);
     expect(status.toolIncidents).toHaveLength(1);
     expect(status.toolIncidents[0]).toMatchObject({
@@ -311,7 +308,9 @@ test('three distinct tasks with one normalized blocker open one incident and hol
     expect(retryRead).toHaveBeenCalledTimes(1);
     expect(taskStateRead).toHaveBeenCalledTimes(1);
     expect(
-      queryRead.mock.calls.filter(([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence'),
+      queryRead.mock.calls.filter(
+        ([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence',
+      ),
     ).toHaveLength(1);
 
     h.store.updateTask({ taskId: incident.probe.taskId, attempt: incident.probe.attempt }, (task) => {
@@ -338,7 +337,9 @@ test('three distinct tasks with one normalized blocker open one incident and hol
     });
     expect(taskStateRead).toHaveBeenCalledTimes(1);
     expect(
-      queryRead.mock.calls.filter(([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence'),
+      queryRead.mock.calls.filter(
+        ([sql]) => sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence',
+      ),
     ).toHaveLength(1);
     cohortRead.mockRestore();
     taskRead.mockRestore();
@@ -358,9 +359,11 @@ test('a passing incident probe releases the other held retries', async () => {
       tasks: h.tasks,
       print: (value) => incidentOutput.push(value),
     });
-    const incident = (JSON.parse(incidentOutput.at(-1)!) as {
-      toolIncidents: Array<{ nextProbeAt: string }>;
-    }).toolIncidents[0]!;
+    const incident = (
+      JSON.parse(incidentOutput.at(-1)!) as {
+        toolIncidents: Array<{ nextProbeAt: string }>;
+      }
+    ).toolIncidents[0]!;
     const originalNow = Date.now;
     Date.now = () => Date.parse(incident.nextProbeAt) + 1;
     try {
@@ -369,9 +372,12 @@ test('a passing incident probe releases the other held retries', async () => {
     } finally {
       Date.now = originalNow;
     }
-    expect(h.store.tasks().filter((task) => taskIds.includes(task.id)).map((task) => task.currentAttempt)).toEqual([
-      2, 2, 2,
-    ]);
+    expect(
+      h.store
+        .tasks()
+        .filter((task) => taskIds.includes(task.id))
+        .map((task) => task.currentAttempt),
+    ).toEqual([2, 2, 2]);
     const releasedStatus: string[] = [];
     await runWorkerCommand('status', [], {
       settings: h.settings,

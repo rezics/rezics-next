@@ -18,7 +18,7 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   const output: string[] = [];
   let mutations = 0;
   const reads = { tasks: 0, task: 0, attempt: 0, retryIntent: 0, incidentHistory: 0 };
-  const statusReads: typeof reads[] = [];
+  const statusReads: (typeof reads)[] = [];
   const mutate = () => {
     mutations++;
   };

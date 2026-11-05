@@ -204,10 +204,7 @@ test('later and integrated probes release held retries without another probe', (
     const finishedProjection = projectToolIncidentStatus(h.store, h.store.tasks());
     expect(finishedProjection.toolIncidents).toEqual([]);
     expect(
-      finishedProjection.forAttempt(
-        h.store.task(nextHeldRefs[0]!.taskId),
-        h.store.attempt(nextHeldRefs[0]!),
-      ),
+      finishedProjection.forAttempt(h.store.task(nextHeldRefs[0]!.taskId), h.store.attempt(nextHeldRefs[0]!)),
     ).toBeNull();
     expect(nextHeldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([true, true]);
     expect(nextHeldRefs.map((ref) => h.store.retryIntent(ref)?.status)).toEqual(['pending', 'pending']);
