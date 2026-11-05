@@ -7,6 +7,10 @@ import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
 
+const effectRef = '00000000-0000-4000-8000-000000000003';
+const receiptId = '00000000-0000-4000-8000-000000000004';
+const approvalReference = `${'A'.repeat(48)}.${'A'.repeat(43)}`;
+
 function page(advice: 'allowed' | 'unavailable' = 'allowed') {
   const value = structuredClone(initial);
   if (value.kind === 'ready' && value.page) value.page.actions.change_password = advice;
@@ -104,7 +108,7 @@ test('lost stage response exposes exact explicit retry and only validated phases
   await flush(() =>
     calls[1]!.resolve(
       Response.json({
-        effectRef: 'effect-ref',
+        effectRef,
         key: original.key,
         subjectId: storyAccount,
         purpose: 'set-password',
@@ -115,19 +119,111 @@ test('lost stage response exposes exact explicit retry and only validated phases
   expect(calls[2]!.path).toBe('/credential-effects/approve');
   await flush(() =>
     calls[2]!.resolve(
-      Response.json({ reference: 'approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
     ),
   );
   expect(calls[3]!.path).toBe('/credential-effects/apply');
   expect(calls[3]!.body).toEqual({
     key: original.key,
     subjectId: storyAccount,
-    effectRef: 'effect-ref',
+    effectRef,
     purpose: 'set-password',
     digest: 'a'.repeat(64),
-    reference: 'approval-ref',
+    reference: approvalReference,
   });
-  await flush(() => calls[3]!.resolve(Response.json({ receiptId: 'receipt', replayed: true })));
+  await flush(() => calls[3]!.resolve(Response.json({ receiptId, replayed: true })));
   expect(host.textContent).toContain(m.auth_security_password_changed());
   expect(host.querySelector('a[href="/login"]')).not.toBeNull();
+});
+
+test('ordinary password completion posts one admitted stage, approval and apply', async () => {
+  const { host, calls } = await mount();
+  await fillPassword(host, 'ordinary password secret');
+  await flush(() => host.querySelector('form')!.requestSubmit());
+  await flush(() => button(host, m.auth_security_password_confirm())!.click());
+  expect(calls).toHaveLength(1);
+  await flush(() =>
+    calls[0]!.resolve(
+      Response.json({
+        effectRef,
+        key: calls[0]!.body.key,
+        subjectId: storyAccount,
+        purpose: 'set-password',
+        digest: 'a'.repeat(64),
+      }),
+    ),
+  );
+  expect(calls.map((call) => call.path)).toEqual(['/credential-effects/stage', '/credential-effects/approve']);
+  await flush(() => calls[1]!.resolve(Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() })));
+  expect(calls.map((call) => call.path)).toEqual([
+    '/credential-effects/stage',
+    '/credential-effects/approve',
+    '/credential-effects/apply',
+  ]);
+  await flush(() => calls[2]!.resolve(Response.json({ receiptId, replayed: false })));
+  expect(host.textContent).toContain(m.auth_security_password_changed());
+  expect(calls).toHaveLength(3);
+});
+
+test('approval retry repeats only its exact uncertain phase', async () => {
+  const { host, calls } = await mount();
+  await fillPassword(host, 'approval retry secret');
+  await flush(() => host.querySelector('form')!.requestSubmit());
+  await flush(() => button(host, m.auth_security_password_confirm())!.click());
+  await flush(() =>
+    calls[0]!.resolve(
+      Response.json({
+        effectRef,
+        key: calls[0]!.body.key,
+        subjectId: storyAccount,
+        purpose: 'set-password',
+        digest: 'a'.repeat(64),
+      }),
+    ),
+  );
+  const exactApproval = calls[1]!.body;
+  await flush(() => calls[1]!.resolve(Response.json({ malformed: true })));
+  expect(host.textContent).toContain(m.auth_security_password_approval_unknown());
+  await flush(() => button(host, m.auth_signup_retry_original())!.click());
+  expect(calls.map((call) => call.path)).toEqual([
+    '/credential-effects/stage',
+    '/credential-effects/approve',
+    '/credential-effects/approve',
+  ]);
+  expect(calls[2]!.body).toEqual(exactApproval);
+  await flush(() => calls[2]!.resolve(Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() })));
+  await flush(() => calls[3]!.resolve(Response.json({ receiptId, replayed: false })));
+  expect(host.textContent).toContain(m.auth_security_password_changed());
+});
+
+test('apply retry repeats only its exact uncertain phase', async () => {
+  const { host, calls } = await mount();
+  await fillPassword(host, 'apply retry secret');
+  await flush(() => host.querySelector('form')!.requestSubmit());
+  await flush(() => button(host, m.auth_security_password_confirm())!.click());
+  await flush(() =>
+    calls[0]!.resolve(
+      Response.json({
+        effectRef,
+        key: calls[0]!.body.key,
+        subjectId: storyAccount,
+        purpose: 'set-password',
+        digest: 'a'.repeat(64),
+      }),
+    ),
+  );
+  await flush(() => calls[1]!.resolve(Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() })));
+  const exactApply = calls[2]!.body;
+  await flush(() => calls[2]!.resolve(Response.json({ receiptId: 'not-a-native-receipt', replayed: false })));
+  expect(host.textContent).toContain(m.auth_security_password_apply_unknown());
+  await flush(() => button(host, m.auth_signup_retry_original())!.click());
+  expect(calls.map((call) => call.path)).toEqual([
+    '/credential-effects/stage',
+    '/credential-effects/approve',
+    '/credential-effects/apply',
+    '/credential-effects/apply',
+  ]);
+  expect(calls[3]!.body).toEqual(exactApply);
+  await flush(() => calls[3]!.resolve(Response.json({ receiptId, replayed: true })));
+  expect(host.textContent).toContain(m.auth_security_password_changed());
 });

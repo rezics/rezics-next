@@ -2,7 +2,12 @@
  * Callers supply a finite positive byte allowance and their existing whole-call
  * signal. This utility neither starts nor renews a deadline.
  */
-export async function readJsonBounded(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
+export async function readJsonBounded(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+  parse: (text: string) => unknown = JSON.parse,
+): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Private JSON response unavailable');
 
@@ -45,7 +50,7 @@ export async function readJsonBounded(response: Response, maxBytes: number, sign
     }
     // One fatal decode handles code points split across transport chunks.
     // Parsing starts only after the entire body has passed the byte allowance.
-    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    const value: unknown = parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     signal.throwIfAborted();
     return value;
   } catch {

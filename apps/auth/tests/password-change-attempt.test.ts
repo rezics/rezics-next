@@ -6,8 +6,11 @@ import {
   passwordLengthValid,
 } from '../src/password-change-attempt';
 
+const effectReference = '00000000-0000-4000-8000-000000000001';
+const approvalReference = `${'A'.repeat(48)}.${'A'.repeat(43)}`;
+
 const stageReply = (attempt: ReturnType<typeof createPasswordChangeAttempt>) => ({
-  effectRef: 'effect-ref',
+  effectRef: effectReference,
   key: attempt.key,
   subjectId: attempt.subjectId,
   purpose: 'set-password',
@@ -47,7 +50,7 @@ test('every explicit phase retry retains the original exact key and phase payloa
   expect(approvalRequest.body).toEqual({
     key: 'original-key',
     subjectId: 'account',
-    effectRef: 'effect-ref',
+    effectRef: effectReference,
     purpose: 'set-password',
     digest: 'a'.repeat(64),
   });
@@ -58,13 +61,13 @@ test('every explicit phase retry retains the original exact key and phase payloa
 
   const applying = classifyPasswordChangeReply(uncertainApproval.attempt, {
     ok: true,
-    body: { reference: 'approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    body: { reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() },
   });
   expect(applying.kind).toBe('next');
   if (applying.kind !== 'next') throw new Error('expected approval');
   expect(passwordChangeRequest(applying.attempt).body).toEqual({
     ...approvalRequest.body,
-    reference: 'approval-ref',
+    reference: approvalReference,
   });
 });
 
@@ -76,8 +79,8 @@ test('malformed replies stay uncertain and later refusal cannot settle an unknow
     ...attempt,
     phase: 'apply' as const,
     stagePayload: null,
-    binding: { effectRef: 'effect-ref', purpose: 'set-password' as const, digest: 'a'.repeat(64) },
-    approval: { reference: 'approval-ref', expiresAt: new Date(Date.now() - 1000).toISOString() },
+    binding: { effectRef: effectReference, purpose: 'set-password' as const, digest: 'a'.repeat(64) },
+    approval: { reference: approvalReference, expiresAt: new Date(Date.now() - 1000).toISOString() },
     uncertain: true,
   };
   expect(

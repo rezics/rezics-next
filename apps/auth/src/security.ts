@@ -1,7 +1,12 @@
 import { createServerFn } from '@tanstack/react-start';
-import { securityFixedResponseByteBudgets } from '@rezics/auth-contract';
+import {
+  credentialEffectResponseByteBudgets,
+  securityFixedResponseByteBudgets,
+  type CredentialEffectErrorResponse,
+} from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
-import { authPost, failureMessage } from './api';
+import { AUTH_POST_TIMEOUT_MS, authPost, failureMessage } from './api';
+import { readJsonBounded } from './private-auth-json';
 import { m } from './paraglide/messages.js';
 import {
   issuerSecurityJsonRequest,
@@ -16,6 +21,7 @@ import {
   passwordChangeRequest,
   type PasswordChangeAttempt,
   type PasswordChangeLimits,
+  type PasswordChangeReply,
   type PasswordChangeReplyResult,
 } from './password-change-attempt';
 
@@ -29,6 +35,101 @@ export type SecuritySession = {
   client_display_name?: string | null;
   revoke?: SecurityAdvice;
 };
+
+function isCredentialEffectError(value: unknown): value is CredentialEffectErrorResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const body = value as Record<string, unknown>;
+  return (
+    Object.keys(body).length === 2 &&
+    Object.hasOwn(body, 'error') &&
+    Object.hasOwn(body, 'effect_status') &&
+    (body.error === 'credential_effect_denied' || body.error === 'step_up_required') &&
+    body.effect_status === 'not_applied'
+  );
+}
+
+function parseUnambiguousJson(text: string): unknown {
+  let position = 0;
+  const whitespace = () => {
+    while (position < text.length && /\s/.test(text[position]!)) position++;
+  };
+  const expect = (character: string) => {
+    if (text[position] !== character) throw new SyntaxError('Invalid credential response JSON');
+    position++;
+  };
+  const string = () => {
+    const start = position;
+    expect('"');
+    while (position < text.length) {
+      const character = text[position++]!;
+      if (character === '"') return JSON.parse(text.slice(start, position)) as string;
+      if (character === '\\') position++;
+    }
+    throw new SyntaxError('Invalid credential response JSON');
+  };
+  const value = (): void => {
+    whitespace();
+    const character = text[position];
+    if (character === '"') {
+      string();
+      return;
+    }
+    if (character === '{') {
+      position++;
+      whitespace();
+      const keys = new Set<string>();
+      if (text[position] === '}') {
+        position++;
+        return;
+      }
+      for (;;) {
+        whitespace();
+        const key = string();
+        if (keys.has(key)) throw new SyntaxError('Ambiguous credential response JSON');
+        keys.add(key);
+        whitespace();
+        expect(':');
+        value();
+        whitespace();
+        if (text[position] === '}') {
+          position++;
+          return;
+        }
+        expect(',');
+      }
+    }
+    if (character === '[') {
+      position++;
+      whitespace();
+      if (text[position] === ']') {
+        position++;
+        return;
+      }
+      for (;;) {
+        value();
+        whitespace();
+        if (text[position] === ']') {
+          position++;
+          return;
+        }
+        expect(',');
+      }
+    }
+    const literal = ['true', 'false', 'null'].find((candidate) => text.startsWith(candidate, position));
+    if (literal) {
+      position += literal.length;
+      return;
+    }
+    const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(position));
+    if (!number) throw new SyntaxError('Invalid credential response JSON');
+    position += number[0].length;
+  };
+
+  value();
+  whitespace();
+  if (position !== text.length) throw new SyntaxError('Invalid credential response JSON');
+  return JSON.parse(text) as unknown;
+}
 
 export type SecurityPasskey = {
   id: string;
@@ -183,9 +284,73 @@ export async function dispatchPasswordChangePhase(
 ): Promise<PasswordChangeReplyResult> {
   if (signal?.aborted) return { kind: 'cancelled', attempt };
   const { path, body } = passwordChangeRequest(attempt);
-  const result = await authPost(path, body);
-  if (signal?.aborted) return { kind: 'unknown', attempt: { ...attempt, uncertain: true } };
-  return classifyPasswordChangeReply(attempt, result);
+  const controller = new AbortController();
+  const payload = JSON.stringify(body);
+  const interruptedToken = Symbol('password phase interrupted');
+  let settleInterrupted!: () => void;
+  let interrupted = false;
+  const interruption = new Promise<typeof interruptedToken>((resolve) => {
+    settleInterrupted = () => resolve(interruptedToken);
+  });
+  const interrupt = () => {
+    if (interrupted) return;
+    interrupted = true;
+    controller.abort();
+    settleInterrupted();
+  };
+  const onCallerAbort = () => interrupt();
+  signal?.addEventListener('abort', onCallerAbort, { once: true });
+  if (signal?.aborted) {
+    signal.removeEventListener('abort', onCallerAbort);
+    return { kind: 'cancelled', attempt };
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let received: PasswordChangeReply | typeof interruptedToken;
+  try {
+    // This one absolute lifetime includes both fetch headers and bounded body
+    // admission; caller retirement and timeout settle even when fetch ignores abort.
+    timer = setTimeout(interrupt, AUTH_POST_TIMEOUT_MS);
+    if (signal?.aborted) return { kind: 'cancelled', attempt };
+    const pending: Promise<PasswordChangeReply> = (async () => {
+      const response = await fetch(path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal: controller.signal,
+      });
+      const budget = credentialEffectResponseByteBudgets[attempt.phase];
+      const received = await readJsonBounded(
+        response,
+        response.status === 200 ? budget.success : budget.error,
+        controller.signal,
+        parseUnambiguousJson,
+      );
+      if (response.status === 200) return { ok: true, body: received };
+
+      if (isCredentialEffectError(received))
+        return {
+          ok: false,
+          status: response.status,
+          code: received.error,
+          effectStatus: 'not_applied',
+        };
+      return { ok: false, status: response.status, code: '' };
+    })();
+    received = await Promise.race([pending, interruption]);
+  } catch {
+    // A dispatched mutation with unreadable output may have completed natively.
+    return { kind: 'unknown', attempt: { ...attempt, uncertain: true } };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    signal?.removeEventListener('abort', onCallerAbort);
+  }
+  if (received === interruptedToken || interrupted || signal?.aborted)
+    return { kind: 'unknown', attempt: { ...attempt, uncertain: true } };
+  return classifyPasswordChangeReply(attempt, received);
 }
 
 export async function revokeSession(sessionId: string, accountId: string) {

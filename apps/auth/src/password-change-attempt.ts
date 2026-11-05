@@ -1,3 +1,10 @@
+import {
+  credentialEffectNotAppliedStatuses,
+  isCredentialEffectApprovalExpiry,
+  isCredentialEffectUuid,
+  isPasswordCredentialEffectApprovalReference,
+} from '@rezics/auth-contract';
+
 export type PasswordChangeLimits = { minLength: number; maxLength: number };
 
 export type PasswordChangePhase = 'stage' | 'approve' | 'apply';
@@ -97,7 +104,8 @@ export function classifyPasswordChangeReply(
   if (!reply.ok) {
     const refusal =
       reply.effectStatus === 'not_applied' &&
-      ((reply.code === 'credential_effect_denied' && [400, 401, 403, 409, 413, 415, 503].includes(reply.status)) ||
+      ((reply.code === 'credential_effect_denied' &&
+        credentialEffectNotAppliedStatuses.some((status) => status === reply.status)) ||
         (reply.code === 'step_up_required' && reply.status === 401));
     if (refusal && !attempt.uncertain)
       return { kind: 'refused', phase: attempt.phase, status: reply.status, code: reply.code };
@@ -108,13 +116,12 @@ export function classifyPasswordChangeReply(
   if (attempt.phase === 'stage') {
     if (
       !exactKeys(reply.body, ['effectRef', 'key', 'subjectId', 'purpose', 'digest']) ||
-      typeof reply.body.effectRef !== 'string' ||
-      !reply.body.effectRef ||
+      !isCredentialEffectUuid(reply.body.effectRef) ||
       reply.body.key !== attempt.key ||
       reply.body.subjectId !== attempt.subjectId ||
       reply.body.purpose !== 'set-password' ||
       typeof reply.body.digest !== 'string' ||
-      !/^[a-f0-9]{64}$/i.test(reply.body.digest)
+      !/^[a-f0-9]{64}$/.test(reply.body.digest)
     )
       return unknown(attempt);
     return {
@@ -133,12 +140,12 @@ export function classifyPasswordChangeReply(
     };
   }
   if (attempt.phase === 'approve') {
-    const expiresAt = record(reply.body) && typeof reply.body.expiresAt === 'string' ? reply.body.expiresAt : '';
-    const expiry = Date.parse(expiresAt);
+    const expiresAt = reply.body.expiresAt;
+    const expiry = isCredentialEffectApprovalExpiry(expiresAt) ? Date.parse(expiresAt) : Number.NaN;
     if (
       !exactKeys(reply.body, ['reference', 'expiresAt']) ||
-      typeof reply.body.reference !== 'string' ||
-      !reply.body.reference ||
+      !isPasswordCredentialEffectApprovalReference(reply.body.reference) ||
+      !isCredentialEffectApprovalExpiry(expiresAt) ||
       !Number.isFinite(expiry) ||
       expiry <= now
     )
@@ -155,8 +162,7 @@ export function classifyPasswordChangeReply(
   }
   if (
     !exactKeys(reply.body, ['receiptId', 'replayed']) ||
-    typeof reply.body.receiptId !== 'string' ||
-    !reply.body.receiptId ||
+    !isCredentialEffectUuid(reply.body.receiptId) ||
     typeof reply.body.replayed !== 'boolean'
   )
     return unknown(attempt);

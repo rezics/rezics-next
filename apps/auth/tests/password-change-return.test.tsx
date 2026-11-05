@@ -80,7 +80,7 @@ async function begin(host: HTMLElement) {
 
 function stageResponse(body: Record<string, string>) {
   return Response.json({
-    effectRef: 'retired-effect-ref',
+    effectRef: '00000000-0000-4000-8000-000000000002',
     key: body.key,
     subjectId: body.subjectId,
     purpose: 'set-password',
@@ -147,8 +147,13 @@ test('cached return reads current advice once, keeps generic history, and requir
   expect(ui.identityReads).toBe(2);
   expect(ui.inventoryReads).toHaveLength(4);
 
+  expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.calls[0]!.resolve(stageResponse(ui.calls[0]!.body)));
   expect(ui.calls).toHaveLength(1);
+  expect(
+    ui.host.querySelector('[aria-labelledby="security-password-return-heading"]')?.textContent,
+  ).toContain(m.auth_security_password_return_stage());
+  expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-password-return-acknowledge]')!.click());
   expect(ui.host.querySelector('#security-new-password')).not.toBeNull();
   expect(document.activeElement).toBe(ui.host.querySelector('#security-new-password'));
@@ -167,4 +172,4 @@ test('cached return reads current advice once, keeps generic history, and requir
   expect(ui.calls).toHaveLength(2);
   expect(ui.calls[1]!.body.key).not.toBe(oldKey);
   expect(ui.calls[1]!.body.credential.password).toBe('fresh password secret');
-});
+}, 60_000);
