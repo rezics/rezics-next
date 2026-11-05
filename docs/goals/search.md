@@ -17,7 +17,9 @@ publish safe page compositions without adding a page implementation for each ver
 - Admitted plans cover filter, source and order together, with bounded direct execution or bounded preparation.
 - Shared compositions validate against the registry, reject executable input and render each launch vertical from
   configuration. Aggregate page reads keep standalone authorization and declared budgets.
-- At render time, unavailable components are skipped and malformed declared slots render empty, preserving supported siblings in document order. Configured-list lookup walks the same declared slots and structural nodes, so malformed or unsupported siblings cannot crash the read or reveal a list outside those slots. A TypeList native page is admitted only at or under its planned search `body.limit`; a larger or non-search descriptor is unavailable as a whole.
+- Unavailable components are skipped and malformed declared slots render empty; supported siblings keep document order.
+  Configured-list lookup uses those same slots and structural nodes, without crashing or exposing lists elsewhere.
+  TypeList admits only native Search pages at or below its planned `body.limit`; oversized or non-search pages are wholly unavailable.
 - The real default worker proves convergence, freshness, generation recovery and public rating-sort consumption.
 
 Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
@@ -25,8 +27,8 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 ## Scope
 
-Decision: profile publication, configured launch pages and Recipe's public method retain the existing shared registry,
-aggregate plan and public-document runtime; acceptance extends those owners rather than adding vertical page readers.
+Decision: profile publication, launch pages and Recipe's public method retain the shared registry, aggregate plan and
+public-document runtime, without vertical page readers.
 
 Decision: Empty Search recovery drafts bind to the executed request, reader, locale, checkpoint and native page response; valid text uses shared query admission, and explicit retry focuses only the still-current result owner after settlement.
 Decision: released CreativeWork inheritance selects ordinary-page tag metadata; Web passes definitions to the shared reader only when the catalogue digest matches the Subject's exact release.
