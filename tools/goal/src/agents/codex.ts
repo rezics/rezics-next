@@ -5,12 +5,7 @@ import { defaultPolicy } from '../policy.ts';
 import type { AgentAdapter } from '../agents.ts';
 import type { Pool, PoolReading } from '../types.ts';
 import { codexCommand, pinnedCodexProfile } from './codex-command.ts';
-import {
-  codexEvent,
-  codexUsageAccumulator,
-  parseCodexAllowance,
-  parseCodexSessionUsage,
-} from './codex-events.ts';
+import { codexEvent, codexUsageAccumulator, parseCodexAllowance, parseCodexSessionUsage } from './codex-events.ts';
 
 export { parseCodexAllowance, parseCodexSessionUsage };
 

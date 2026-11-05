@@ -26,9 +26,9 @@ function options(cli: Cli = 'codex'): AgentLaunchOptions {
 
 test('Codex normalization keeps command identity, rollout usage and completed-answer selection', () => {
   const usage = { input_tokens: 8, cached_input_tokens: 5, output_tokens: 2 };
-  expect(
-    codexAdapter.parseEvent!({ type: 'turn.completed', usage, usage_mode: 'delta' }, false),
-  ).toEqual({ usage: { tokens: { input: 8, cached: 5, output: 2 }, delta: true } });
+  expect(codexAdapter.parseEvent!({ type: 'turn.completed', usage, usage_mode: 'delta' }, false)).toEqual({
+    usage: { tokens: { input: 8, cached: 5, output: 2 }, delta: true },
+  });
   expect(
     codexAdapter.parseEvent!(
       { type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: usage } } },
