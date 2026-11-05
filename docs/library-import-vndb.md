@@ -4,6 +4,10 @@ The mounted Kernel API imports only the authenticated person's uploaded `vndb-ex
 It does not fetch accounts, claim another person's account, create catalogue subjects, change provider mappings,
 create holdings, labels or sessions, import provider aggregates, or publish notes/reviews. Web owns the interface.
 
+Decision: the seed caller submits the supplied private export through the installed generated VNDB preview method,
+seals the exact upload body and idempotency key in the existing `ShowcaseJournal`, and returns only the native upload
+UUID and row count. Progress and vote effects remain unavailable until their owning native producers admit them.
+
 Decision: compose explicit released entry-state commands with private source evidence; role suggestions never
 grant an import mapping or invent state IDs, and every other field stays retained until its native owner admits it.
 Profiles with no entry state set cannot receive a state. There is no separately released VNDB field mapping.

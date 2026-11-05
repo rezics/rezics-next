@@ -116,6 +116,53 @@ test('own HTTP upload, admitted VN identifier, explicit unmatched resolution and
   expect((await f.send('other', 'POST', `${base}/${id}:apply`, { rows: selection })).status).toBe(404);
   await json('DELETE', `${base}/${id}`);
 }, 120000);
+test('a changed export updates the same matched Library entry and current readback without creating another entry', async () => {
+  const before = await f.inspect();
+  const firstUpload = await upload(
+    xml(vn(vnId, '<label label="Playing"/><vote>8.5</vote><progress unit="chapter">4</progress>')),
+  );
+  const firstPage = await json('GET', `${base}/${firstUpload.uploadId}`);
+  expect(firstPage.rows[0].match).toEqual({ status: 'matched', candidates: [matched] });
+  expect(firstPage.rows[0].fields).toMatchObject({
+    score: { value: 8.5 },
+    progress: { value: '4' },
+    progressMeasure: { value: 'chapter' },
+  });
+  const firstReview = await review(firstUpload.uploadId, { ordinal: 0, action: 'state', state: 'playing' });
+  const firstApplied = await apply(firstUpload.uploadId, [{ ordinal: 0, reviewId: firstReview.reviewId }]);
+  expect(firstApplied.outcomes[0].status).toBe('applied');
+  const firstEntry = await f.commands.readEntry(f.owner.actor, matched);
+  expect(firstEntry.state).toBe('playing');
+  const afterFirst = await f.inspect();
+  expect(afterFirst.entries).toHaveLength(before.entries.length + 1);
+
+  const changedUpload = await upload(
+    xml(vn(vnId, '<label label="Finished"/><vote>9.2</vote><progress unit="chapter">12</progress>')),
+  );
+  const changedPage = await json('GET', `${base}/${changedUpload.uploadId}`);
+  expect(changedPage.rows[0].match).toEqual({ status: 'matched', candidates: [matched] });
+  expect(changedPage.rows[0].fields).toMatchObject({
+    score: { value: 9.2 },
+    progress: { value: '12' },
+    progressMeasure: { value: 'chapter' },
+  });
+  const changedReview = await review(changedUpload.uploadId, {
+    ordinal: 0,
+    action: 'state',
+    state: 'completed',
+    replace: true,
+  });
+  const changedApplied = await apply(changedUpload.uploadId, [{ ordinal: 0, reviewId: changedReview.reviewId }]);
+  expect(changedApplied.outcomes[0].status).toBe('applied');
+  const current = await f.commands.readEntry(f.owner.actor, matched);
+  expect(current).toMatchObject({ state: 'completed', incarnationId: firstEntry.incarnationId });
+  expect(current.revision).toBeGreaterThan(firstEntry.revision);
+  const afterChanged = await f.inspect();
+  expect(afterChanged.entries).toHaveLength(afterFirst.entries.length);
+  expect(afterChanged.sessions).toEqual(before.sessions);
+  await json('DELETE', `${base}/${firstUpload.uploadId}`);
+  await json('DELETE', `${base}/${changedUpload.uploadId}`);
+}, 120000);
 test('reviewed conflicts preserve facts, revision and release guards reject stale choices, cancellation stops remaining rows', async () => {
   const target = await f.createSubject('game');
   await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey());
