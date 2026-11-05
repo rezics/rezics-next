@@ -2723,9 +2723,14 @@ test('a 28 GiB host at 6 GiB per run takes no ordinary run once three ordinary s
     new Response(child.stderr).text(),
   ]);
   expect(code, stderr).toBe(0);
-  expect(JSON.parse(stdout.split('\n').filter((line) => line.startsWith('TRY_ONCE '))[0]!.slice('TRY_ONCE '.length)).status).toBe(
-    'no-slot',
-  );
+  expect(
+    JSON.parse(
+      stdout
+        .split('\n')
+        .filter((line) => line.startsWith('TRY_ONCE '))[0]!
+        .slice('TRY_ONCE '.length),
+    ).status,
+  ).toBe('no-slot');
   expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
 });
 

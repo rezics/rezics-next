@@ -789,9 +789,7 @@ export function hostMemoryPerRunGiB(host: Pick<Host, 'memoryPerRunGiB'>): number
 
 /** Concurrent slot units a host can admit: slots, processors, and floor(memoryMaxGiB / memoryPerRunGiB). */
 export function hostAdmittedRunCapacity(host: Host, sliceProcessors: number): number {
-  const processorSlots = Math.floor(
-    Math.min(sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot,
-  );
+  const processorSlots = Math.floor(Math.min(sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot);
   const memoryRuns = Math.max(1, Math.floor(host.memoryMaxGiB / hostMemoryPerRunGiB(host)));
   return Math.min(host.slots, processorSlots, memoryRuns);
 }
