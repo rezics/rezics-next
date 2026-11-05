@@ -82,6 +82,8 @@ checks remain on their owning flows. An uncertain result is never presented as d
 Whole-call home cost: rendering, task navigation and language changes make zero home requests. Mount, explicit Retry
 or persisted `pageshow` makes one `POST /account-identity` with `{}`. The shared `privateAuthRead` races a single
 five-second deadline through headers and body even if transport ignores abort; timeout becomes unavailable with Retry.
+The receiver bounds the successful DTO to the native contract's 1,578 UTF-8 bytes before parsing and passes that same
+effective read signal through body consumption.
 `pagehide` synchronously clears private data and aborts the old generation; source replacement makes one fresh read.
 Late results cannot restore identity or focus. There is no polling, automatic retry, inventory fan-out, command prepare,
 approval or write. Links have no background preflight, operands or workflow keys. Read Retry focuses current status
@@ -364,8 +366,11 @@ unavailable/Retry, independent inventory availability and generation-based retir
 
 `private-auth-json.ts` counts bytes before retaining chunks, then performs fatal UTF-8 decoding and JSON parsing.
 It rejects announced excess, checks dishonest/missing lengths and cancels excess/abort without awaiting cleanup.
-Errors disclose no body excerpts. Sign-in keeps its native 16,384-byte allowance, five-second full-call bound and
-request count: zero extra requests.
+Errors disclose no body excerpts. The identity allowance is derived from the native DTO: a 36-byte lowercase UUID,
+254 UTF-16 email code units (252 worst-case six-byte JSON escapes plus `@` and `.`), and 28 bytes of fixed JSON syntax,
+for 1,578 bytes. It uses the installed `privateAuthRead` signal and five-second whole-call deadline, with no nested
+timer or retry. Sign-in keeps its native 16,384-byte allowance, five-second full-call bound and request count: zero
+extra requests.
 
 Security allowances require native bounds for session `user_agent` length and mounted `siteActions` scope count
 before migrating decodes. Keep valid configured names/scopes, native DTO/account checks, row caps and classifications.

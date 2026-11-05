@@ -1,5 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
+
+// 28 fixed JSON bytes + 36 UUID bytes + 252 escapable UTF-16 units at six
+// bytes each + the required one-byte `@` and `.`.
+const ACCOUNT_IDENTITY_MAX_BYTES = 1_578;
 
 export type AccountIdentityResult =
   | { kind: 'ready'; accountId: string; email: string | null }
@@ -23,7 +28,7 @@ export const loadAccountIdentity: AccountIdentitySource = async (signal) => {
       if (response.status === 401) return { kind: 'signed-out' };
       if (response.status === 403) return { kind: 'denied' };
       if (response.status !== 200) return { kind: 'unavailable' };
-      const body: unknown = await response.json();
+      const body = await readJsonBounded(response, ACCOUNT_IDENTITY_MAX_BYTES, readSignal);
       if (!body || typeof body !== 'object' || Array.isArray(body)) return { kind: 'unavailable' };
       const value = body as Record<string, unknown>;
       if (
