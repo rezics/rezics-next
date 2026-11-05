@@ -20,13 +20,13 @@ export function archiveRecoveryAdmission(): { available: true } {
 
 /** The installed native client owns every DTO and all file validation. */
 export function archiveRecoveryNative(client: KernelClient, authorization: string) {
-  const options = (signal?: AbortSignal) => ({ headers: { authorization }, fetch: { signal, cache: 'no-store' as const } });
+  const options = (signal?: AbortSignal) => ({ headers: { authorization }, fetch: { ...(signal === undefined ? {} : { signal }), cache: 'no-store' as const } });
   async function receive<T>(call: () => Promise<{ data: T | null; error: unknown; status: number }>): Promise<ArchiveReply<T>> {
     // Only a transport failure creates uncertainty. Unexpected programming errors still throw.
     let result;
     try { result = await call(); }
     catch (error) {
-      if (error instanceof TypeError) return { kind: 'uncertain' };
+      if (archiveTransportLost(error)) return { kind: 'uncertain' };
       throw error;
     }
     if (result.error) {
@@ -40,9 +40,8 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
   }
   return {
     upload(text: string, key: string, signal?: AbortSignal) {
-      return receive(() => client.libraryArchiveMerges.post(text, {
-        ...options(signal), headers: { authorization, 'idempotency-key': JSON.stringify(key) },
-      }));
+      const headers = { authorization, 'idempotency-key': JSON.stringify(key) };
+      return receive(() => client.libraryArchiveMerges.post(text, { ...options(signal), headers }));
     },
     status(id: string, signal?: AbortSignal) {
       return receive(() => client.libraryArchiveMerges({ id }).get(options(signal)));
@@ -74,3 +73,8 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
   };
 }
 export type ArchiveRecoveryPort = ReturnType<typeof archiveRecoveryNative>;
+
+/** Fetch's documented network failures can follow a committed native effect. */
+export function archiveTransportLost(error: unknown): boolean {
+  return error instanceof TypeError && ['fetch failed', 'Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'].includes(error.message);
+}

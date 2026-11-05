@@ -1,17 +1,17 @@
 import type { ExpectedReader } from '../../session/expected-reader';
-import type { ArchiveRecoveryPort } from './native';
+import { archiveTransportLost, type ArchiveRecoveryPort } from './native';
 
 /** The encrypted original sender is captured before any archive command can be sent. */
 export async function browserArchiveRecoveryPort(expected: ExpectedReader): Promise<ArchiveRecoveryPort> {
   const { archiveRecoverySender, archiveRecoveryCall } = await import('./server');
   const headers = { 'X-CSRF-Token': expected.expectedCredential };
   const sender = await archiveRecoverySender({ data: expected, headers });
-  async function call<K extends keyof ArchiveRecoveryPort>(operation: K, args: Parameters<ArchiveRecoveryPort[K]>) {
-    const reply = await archiveRecoveryCall({
-      data: { ...expected, sender, operation, args } as Parameters<typeof archiveRecoveryCall>[0]['data'],
-      headers,
-    });
-    return reply as Awaited<ReturnType<ArchiveRecoveryPort[K]>>;
+  function call<K extends keyof ArchiveRecoveryPort>(operation: K, args: Parameters<ArchiveRecoveryPort[K]>): ReturnType<ArchiveRecoveryPort[K]> {
+    const data = { ...expected, ...(sender === undefined ? {} : { sender }), operation, args } as NonNullable<Parameters<typeof archiveRecoveryCall>[0]>['data'];
+    return archiveRecoveryCall({ data, headers }).catch(error => {
+      if (archiveTransportLost(error)) return { kind: 'uncertain' as const };
+      throw error;
+    }) as ReturnType<ArchiveRecoveryPort[K]>;
   }
   // Signals fence the mounted visit locally; they are not serialized over the server-function boundary.
   return {

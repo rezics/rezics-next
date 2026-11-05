@@ -442,6 +442,7 @@ export async function createProfileEntryFixture(
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
     return {
+      handle: (request: Request) => kernel.handle(request),
       pool,
       access,
       tokens,
