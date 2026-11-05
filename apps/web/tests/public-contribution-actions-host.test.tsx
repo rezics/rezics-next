@@ -42,6 +42,7 @@ type MockComposerProps = {
   initialKey: string;
   localDraft: boolean;
   canSubmit: boolean;
+  canStart?: boolean;
   containerId?: string;
   boardId?: string;
   replyTargetId?: string | null;
@@ -681,7 +682,28 @@ test('prepared current advice keeps native watch custody through uncertain readb
     );
     expect(node.textContent).toContain('Retry the same action');
     expect(commands).toHaveLength(1);
-    await render(<ContributionWatch presentation={{ ...scope, source: { ...source, actions: { ...source.actions, references: [{ ...source.actions.references[0]!, operations: [{ action: 'thread:watch', operationId: 'thread.unwatch', state: 'denied' }] }] } } }} watching returnTo="/en/accounts/author/discussion" native={native} />);
+    await render(
+      <ContributionWatch
+        presentation={{
+          ...scope,
+          source: {
+            ...source,
+            actions: {
+              ...source.actions,
+              references: [
+                {
+                  ...source.actions.references[0]!,
+                  operations: [{ action: 'thread:watch', operationId: 'thread.unwatch', state: 'denied' }],
+                },
+              ],
+            },
+          },
+        }}
+        watching
+        returnTo="/en/accounts/author/discussion"
+        native={native}
+      />,
+    );
     expect(node.textContent).toContain('This action is currently not allowed.');
     await click('Retry the same action');
     expect(commands).toHaveLength(2);
@@ -728,6 +750,35 @@ test('prepared current advice keeps native watch custody through uncertain readb
     );
     expect(node.textContent).toContain('This action is currently not allowed.');
     expect(node.querySelector('button')).toBeNull();
+    const uncertainNative = {
+      ...native,
+      set: async (command: Command) => {
+        commands.push(command);
+        return { kind: 'unknown' as const };
+      },
+    };
+    await render(
+      <ContributionWatch
+        presentation={scope}
+        watching={false}
+        returnTo="/en/accounts/author/discussion"
+        native={uncertainNative}
+      />,
+    );
+    await click('Watch');
+    await render(
+      <ContributionWatch
+        presentation={{ ...scope, source: denied }}
+        watching={false}
+        returnTo="/en/accounts/author/discussion"
+        native={uncertainNative}
+      />,
+    );
+    expect(node.textContent).toContain('Retry the same action');
+    await click(m.reaction_discard());
+    expect(commands).toHaveLength(3);
+    expect(node.textContent).not.toContain('Retry the same action');
+    expect(node.textContent).not.toContain('Stop watching');
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -842,7 +893,21 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       await paint({ ...source }, 2);
       expect(reads).toBe(0);
       expect(commands).toHaveLength(1);
-      await paint({ ...source, actions: { ...source.actions, references: [{ ...source.actions.references[0]!, operations: operations.map((operation) => ({ ...operation, state: 'denied' as const })) }] } }, 3);
+      await paint(
+        {
+          ...source,
+          actions: {
+            ...source.actions,
+            references: [
+              {
+                ...source.actions.references[0]!,
+                operations: operations.map((operation) => ({ ...operation, state: 'denied' as const })),
+              },
+            ],
+          },
+        },
+        3,
+      );
       expect(node.querySelector('[data-advice-state]')?.getAttribute('data-advice-state')).toBe('denied');
       const retry = [...node.querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry());
       expect(retry).toBeDefined();
@@ -853,6 +918,8 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
         new Headers(commands[0]!.headers).get('Idempotency-Key'),
       );
       expect(reads).toBe(1);
+      await paint();
+      expect(commands).toHaveLength(2);
       expect(node.querySelector('[role="status"]')).toBeNull();
     } finally {
       await act(async () => root.unmount());
@@ -1086,6 +1153,7 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       await act(async () => node.querySelector<HTMLButtonElement>('[data-slot="lock-mock-reply"]')!.click());
       await paint(denied);
       expect(node.querySelector('[data-slot="mock-reply-composer"]')).not.toBeNull();
+      expect(mountedComposerProps.at(-1)!.canStart).toBe(false);
       await act(async () => node.querySelector<HTMLButtonElement>('[data-slot="send-mock-reply"]')!.click());
       await act(async () => submitMockReply?.());
       expect(replyWrites).toHaveLength(1);
