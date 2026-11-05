@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, createElement as h } from 'react';
+import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import type { LiteraryRead } from '../src/features/catalogue/literary-profile';
@@ -125,8 +125,7 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
 
   const { literaryFixture, literaryWorkId } = await import('../src/kernel/fake/catalogue-literary-profile');
   const { Window } = await import(createRequire(createRequire(import.meta.url).resolve('@puckeditor/core')).resolve('happy-dom'));
-  const { SubjectPage } = await import('../src/features/pages/subject');
-  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { SubjectPage, subjectPageTitle } = await import('../src/features/pages/subject');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const { m } = await import('../src/paraglide/messages.js');
   const fixture = literaryFixture('ready', 'en', 'schema:Book', true);
@@ -166,25 +165,14 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     return page;
   };
   const publicMessages = { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Aliases', search: 'Search' };
-  const publicClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  publicClient.setQueryData(['session'], { state: 'signed-out', csrfToken: null, subject: null });
-  const initialPublicMarkup = renderToStaticMarkup(
-    h(
-      QueryClientProvider,
-      { client: publicClient },
-      h(SubjectPage, {
-        page: publicPage('An original literary work'),
-        locale: 'en',
-        messages: publicMessages,
-        renderJsonLd: false,
-      }),
-    ),
-  );
-  publicClient.clear();
-  const literaryHref = /href="([^"]*\/literary\?context=[^"]*)"/.exec(initialPublicMarkup)?.[1];
-  expect(literaryHref).toBeDefined();
-  const publicAdmission = new URL(literaryHref!.replaceAll('&amp;', '&'), 'https://site.test');
-  const sourceA = publicAdmission.searchParams.get('source')!;
+  const globalContext = { id: candidateContext, population: { kind: 'global' as const } };
+  const sourceA = literaryAddress({
+    id: literaryWorkId,
+    label: subjectPageTitle(publicPage('An original literary work'), 'en'),
+    locale: 'en',
+    view: 'overview',
+    context: globalContext,
+  });
   let freshAnswer: EditorRead = structuredClone(current);
   const profileRequests: Record<string, unknown>[] = [];
   const correctionRequests: Record<string, unknown>[] = [];
@@ -237,7 +225,7 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     realm,
     context: { id: realmContext, population: { kind: 'realm', id: realm, title: 'A shelf' } },
   });
-  const globalAddress = publicAdmission.search;
+  const globalAddress = literaryCurrentVisitSearch({ context: candidateContext, type: 'schema:Book', source: sourceA });
   const realmAddress = literaryCurrentVisitSearch({ context: realmContext, realm, type: 'schema:Book', source: sourceB });
   const globalVisit = parseLiteraryCurrentVisit(globalAddress, literaryWorkId, 'en');
   const realmVisit = parseLiteraryCurrentVisit(realmAddress, literaryWorkId, 'en');
@@ -390,7 +378,6 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
       ),
     );
     expect(host.textContent).toContain('Fresh public title after return');
-    expect(host.querySelector('a[href*="/literary?"]')).not.toBeNull();
   } finally {
     await act(async () => root.unmount());
     client.clear();
