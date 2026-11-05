@@ -81,6 +81,8 @@ const page = v.strictObject({
 export function presentContinuePage(value: unknown): ContinueResult {
   const parsed = v.safeParse(page, value);
   if (!parsed.success) return { state: 'unavailable' };
+  if (parsed.output.next !== null && continueAddress({ cursor: parsed.output.next }).malformed)
+    return { state: 'unavailable' };
   const entries: ContinueEntry[] = [];
   for (const row of parsed.output.subjects) {
     if (!row.subject || row.subject.id !== row.subjectId) return { state: 'unavailable' };

@@ -3700,6 +3700,8 @@
   "library_continue_address_malformed": "Diese gespeicherte Seitenposition ist ungültig. Öffne die neueste Seite, um fortzufahren.",
   "library_continue_address_expired": "Diese gespeicherte Seitenposition ist nicht mehr verfügbar. Öffne die neueste Seite, um fortzufahren.",
   "library_continue_address_newest": "Neueste Seite öffnen",
+  "library_continue_previous_window": "Vorheriges Fenster",
+  "library_continue_first_window": "Erstes Fenster",
   "library_continue_empty": "Noch nichts zum Fortsetzen.",
   "library_continue_preparing": "Deine Liste zum Fortsetzen wird vorbereitet.",
   "library_continue_loading": "Deine Liste zum Fortsetzen wird geladen…",

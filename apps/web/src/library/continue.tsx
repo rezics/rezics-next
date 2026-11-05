@@ -14,6 +14,14 @@ import { pageText } from '../features/pages/shared';
 import { SectionHeading } from './section-heading';
 import { continueRetryDelay, type ContinueEntry, type ContinueResult, type ContinueView } from './continue-source';
 import { continueNewestHref } from './continue-address';
+import type { ContinueWindowDirection, ContinueCursor } from './continue-window-navigation';
+
+export type ContinueWindowAction = {
+  direction: ContinueWindowDirection;
+  target: ContinueCursor;
+  href: string;
+  label: string;
+};
 
 /**
  * What the visitor is in the middle of. Each card is a cover card: one link to carry on, on its title and stretched
@@ -144,7 +152,7 @@ export function ContinueRow({
 export function useContinuePreparation(
   result: ContinueView | undefined,
   refresh: () => Promise<object>,
-  scope: string,
+  scope: unknown,
 ) {
   const attempts = useRef(0);
   useEffect(() => {
@@ -166,7 +174,7 @@ export function useContinuePreparation(
 export function useContinueRefresh(
   initial: ContinueView | undefined,
   read: () => Promise<ContinueResult>,
-  scope: string,
+  scope: unknown,
 ) {
   const lifetime = useMemo(() => ({ active: false, latestRequest: 0 }), [initial, scope]);
   useLayoutEffect(() => {
@@ -213,6 +221,10 @@ export function ContinueSection({
   busy = false,
   destination = false,
   newestHref,
+  windowActions,
+  windowBusy = false,
+  onWindowNavigate,
+  onNewest,
 }: {
   /** Retained for existing component consumers that already have a successful page. */
   entries?: ContinueEntry[];
@@ -223,6 +235,10 @@ export function ContinueSection({
   busy?: boolean;
   destination?: boolean;
   newestHref?: string;
+  windowActions?: ContinueWindowAction[];
+  windowBusy?: boolean;
+  onWindowNavigate?: (action: ContinueWindowAction, restoreHeadingFocus: boolean) => void;
+  onNewest?: () => void;
 }) {
   const result = state ?? (entries ? { state: 'loaded', entries, next: null } : { state: 'unknown' });
   if (result.state === 'signed-out') return null;
@@ -279,6 +295,16 @@ export function ContinueSection({
           {address ? (
             <a
               href={newestHref ?? continueNewestHref(locale)}
+              onClick={(event) => {
+                if (
+                  event.button === 0 &&
+                  !event.metaKey &&
+                  !event.ctrlKey &&
+                  !event.shiftKey &&
+                  !event.altKey
+                )
+                  onNewest?.();
+              }}
               className="mt-4 inline-flex min-h-11 max-w-full items-center rounded-sm px-3 py-2 text-sm text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {m.library_continue_address_newest({}, options)}
@@ -297,14 +323,76 @@ export function ContinueSection({
           ) : null}
         </div>
       )}
-      {destination && result.state === 'loaded' && result.next ? (
-        <a
-          href={`/${locale}/library/continue?cursor=${encodeURIComponent(result.next)}`}
-          className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-2 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.library_next_page({}, options)}
-        </a>
+      {destination && result.state === 'loaded' ? (
+        <WindowNavigation
+          actions={
+            windowActions ??
+            (result.next
+              ? [
+                  {
+                    direction: 'next',
+                    target: result.next,
+                    href: `/${locale}/library/continue?cursor=${encodeURIComponent(result.next)}`,
+                    label: m.library_next_page({}, options),
+                  },
+                ]
+              : [])
+          }
+          busy={windowBusy}
+          onNavigate={onWindowNavigate}
+        />
       ) : null}
     </section>
+  );
+}
+
+function WindowNavigation({
+  actions,
+  busy,
+  onNavigate,
+}: {
+  actions: ContinueWindowAction[];
+  busy: boolean;
+  onNavigate?: (action: ContinueWindowAction, restoreHeadingFocus: boolean) => void;
+}) {
+  const keyboardIntent = useRef<HTMLAnchorElement | null>(null);
+  if (actions.length === 0) return null;
+  return (
+    <nav aria-label={m.library_continue()} className="flex flex-wrap gap-2">
+      {actions.map((action) => (
+        <a
+          key={`${action.direction}:${action.target ?? 'first'}`}
+          href={action.href}
+          aria-disabled={busy || undefined}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.repeat) keyboardIntent.current = event.currentTarget;
+          }}
+          onBlur={(event) => {
+            if (keyboardIntent.current === event.currentTarget) keyboardIntent.current = null;
+          }}
+          onClick={(event) => {
+            const restoreHeadingFocus =
+              keyboardIntent.current === event.currentTarget && document.activeElement === event.currentTarget;
+            keyboardIntent.current = null;
+            if (
+              !onNavigate ||
+              busy ||
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return;
+            event.preventDefault();
+            onNavigate(action, restoreHeadingFocus);
+          }}
+          className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-3 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:cursor-wait aria-disabled:opacity-60"
+        >
+          {action.label}
+        </a>
+      ))}
+    </nav>
   );
 }
