@@ -198,6 +198,7 @@ export function createDiscoveryPersonalPage(input: {
     },
     snapshot: () => revision,
     current: () => !retired && owns(),
+    retire,
     accepts: (target: DiscoveryPersonalTarget) => signatures.get(target.rowKey) === targetKey(target),
     state(rowKey: string, family: DiscoveryCommandFamily): DiscoveryCommandState {
       if (!owns()) return 'retired';

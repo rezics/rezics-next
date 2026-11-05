@@ -29,9 +29,9 @@ import { DiscoveryResults } from '../src/search/discovery-results';
 
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
 
-const { useDiscoveryPersonalResults } = await import('../src/search/discovery-personal-host');
 // Bun supplies the runtime binding; native transport assertions below use explicit ports.
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { useDiscoveryPersonalResults } = await import('../src/search/discovery-personal-host');
 const { readBoundDiscoveryPage } = await import('../src/search/discovery-personal-server');
 const { writeQuestionBoundRatingForCurrentReader } = await import('../src/features/pages/rating-actions');
 const { changePersonalLibraryEntry } = await import('../src/library/entries-read');

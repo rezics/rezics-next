@@ -247,6 +247,7 @@ export function useDiscoveryPersonalResults(input: {
       if (owner === undefined) return;
       if (activated) captureFocus();
       if (current) {
+        current.page.retire();
         current.suppressed = true;
         setMounted({ owner: episode, value: { ...current } });
       }
