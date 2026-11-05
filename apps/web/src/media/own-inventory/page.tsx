@@ -332,7 +332,7 @@ export function OwnMediaInventoryWorkspace({
   // Read the ref at activation: confirmation can precede React's next render.
   // An unresolved original command must stay mounted for its existing recovery.
   const admitPageMovement = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (episodeRef.current || !isCurrent()) event.preventDefault();
+    if (episodeRef.current || (state === 'ready' && !isCurrent())) event.preventDefault();
   };
 
   const format = locale || localeNow;
