@@ -13,6 +13,7 @@ type PendingRead = { cursor?: string; resolve: (value: ReviewRead) => void };
 const reads: PendingRead[] = [];
 const reviewerA = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
 const reviewerB = '0192f3a0-6c1e-7b2a-9d4e-000000000102';
+let currentSession = { state: 'signed-in', subject: reviewerA, csrfToken: 'token-a1' };
 const readReviewPage = (input: { data: { cursor?: string } }) =>
   new Promise<ReviewRead>((resolve) => reads.push({ cursor: input.data.cursor, resolve }));
 
@@ -23,6 +24,10 @@ mock.module('../src/account-verification/actions', () => ({
   decideVerification: async () => ({ state: 'accepted' }),
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
+mock.module('../src/session/query', () => ({
+  useSession: () => currentSession,
+  sessionQuery: { queryKey: ['session'] },
+}));
 afterAll(() => mock.restore());
 
 const ready = (viewerId: string, next: string | null, requests: ReviewPage['requests'] = []): ReviewRead => ({
@@ -81,8 +86,10 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   document.body.append(host);
   const root = createRoot(host);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const setSession = (subject: string, csrfToken: string) =>
-    queryClient.setQueryData(sessionQueryKey, { state: 'signed-in', subject, csrfToken });
+  const setSession = (subject: string, csrfToken: string) => {
+    currentSession = { state: 'signed-in', subject, csrfToken };
+    queryClient.setQueryData(sessionQueryKey, currentSession);
+  };
   setSession(reviewerA, 'token-a1');
   const render = async () =>
     act(async () =>
