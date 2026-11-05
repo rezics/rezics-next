@@ -87,7 +87,7 @@ export async function bootstrapLocalShowcaseBoardCreation(
         subject_kind: 'identity',
         subject_id: accountId,
         subject_role: '',
-        actions: value.actions,
+        actions: [...value.actions],
         valid,
         transaction_id: transactionId,
       });
