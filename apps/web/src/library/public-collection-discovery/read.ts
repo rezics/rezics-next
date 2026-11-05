@@ -94,11 +94,18 @@ const inputSchema = v.object({
 
 const readPublicCollectionDiscoveryWithLocale = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(inputSchema, input))
-  .handler(async ({ data }) =>
-    readPublicCollectionPage(data.locale, data, async (request) =>
+  .handler(async ({ data }) => {
+    const address: PublicCollectionDirectoryAddress = {
+      ...(data.presentationKind === undefined ? {} : { presentationKind: data.presentationKind }),
+      ...(data.curator === undefined ? {} : { curator: data.curator }),
+      ...(data.subject === undefined ? {} : { subject: data.subject }),
+      ...(data.order === undefined ? {} : { order: data.order }),
+      ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+    };
+    return readPublicCollectionPage(data.locale, address, async (request) =>
       kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal: getRequest().signal } }),
-    ),
-  );
+    );
+  });
 
 export function readPublicCollectionDiscovery({
   data,
