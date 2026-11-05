@@ -175,7 +175,7 @@ test('selected Context release visit keeps exact duplicate occurrence, date, evi
     expect(visit.host.textContent).toContain('https://source.example/exact-release');
     expect(visit.host.textContent).toContain('https://vndb.org/r200');
     expect(visit.host.textContent).toContain('https://vndb.org/r123');
-    expect(visit.host.querySelector('[data-slot="release-work"] a')).toBeNull();
+    expect(visit.host.querySelector('[data-slot="release-work"] a[href*="/subjects/"]') === null).toBe(true);
     const link = visit.host.querySelector<HTMLAnchorElement>('[data-slot="release-related"] li a')!;
     const destination = new URL(link.href);
     expect(destination.searchParams.get('context')).toBe(selectedContext);
@@ -199,8 +199,10 @@ test('selected Context release visit keeps exact duplicate occurrence, date, evi
       visit.window.dispatchEvent(new visit.window.Event('popstate'));
     });
     await eventually(() => expect(visit.host.textContent).toContain(m.release_fidelity_visit_changed({}, o)));
-    expect(visit.host.querySelector('[data-slot="release-detail-facts"]')).toBeNull();
-    expect(visit.host.querySelector('[data-slot="release-related"] h2')).toBe(visit.window.document.activeElement);
+    expect(visit.host.querySelector('[data-slot="release-detail-facts"]') === null).toBe(true);
+    expect(visit.host.querySelector('[data-slot="release-related"] h2') === visit.window.document.activeElement).toBe(
+      true,
+    );
     expect(data.calls.filter((call) => call.cursor)).toHaveLength(1);
   } finally {
     await visit.close();
@@ -242,10 +244,10 @@ test('closed return intent rejects malformed addresses; changed native currentne
     const sources = visit.host.querySelector<HTMLAnchorElement>('a[href*="/sources?"]')!;
     expect(new URL(sources.href).searchParams.get('via')).toContain('/release?context=');
     await visit.context(selectedContext);
-    await eventually(() => expect(visit.host.querySelector('[data-slot="release-work"]')).toBeNull());
+    await eventually(() => expect(visit.host.querySelector('[data-slot="release-work"]') === null).toBe(true));
     await visit.context(candidateContext);
     await eventually(() => expect(visit.host.querySelector('[data-slot="release-work"]')).not.toBeNull());
-    expect(visit.host.querySelector('[data-slot="release-detail-facts"]')).toBeNull();
+    expect(visit.host.querySelector('[data-slot="release-detail-facts"]') === null).toBe(true);
   } finally {
     await visit.close();
   }
@@ -263,14 +265,20 @@ test('File visits use the disclosed Global handoff; a concealed return and a new
     hash = new URL(back, 'https://site.test').hash;
     expect(releaseVisitFromHash(hash)?.occurrence?.statementId).toBeTruthy();
     await visit.click(link);
+    await act(async () => {
+      visit.window.dispatchEvent(new visit.window.Event('popstate'));
+    });
+    await eventually(() => expect(visit.window.document.activeElement?.tagName).toBe('SUMMARY'));
+    expect(visit.host.querySelector('[data-slot="release-occurrence-evidence"]')?.hasAttribute('open')).toBe(true);
+    expect(visit.host.querySelector('[data-slot="release-detail-facts"]') === null).toBe(true);
     data.conceal();
     await act(async () => {
       visit.window.dispatchEvent(new visit.window.Event('popstate'));
     });
     await eventually(() => expect(visit.host.textContent).toContain(m.release_fidelity_visit_changed({}, o)));
-    expect(visit.host.querySelector('[data-slot="release-related"] li a')).toBeNull();
-    expect(visit.host.querySelector('[data-slot="release-occurrence-evidence"]')).toBeNull();
-    expect(visit.host.querySelector('[data-slot="release-detail-facts"]')).toBeNull();
+    expect(visit.host.querySelector('[data-slot="release-related"] li a') === null).toBe(true);
+    expect(visit.host.querySelector('[data-slot="release-occurrence-evidence"]') === null).toBe(true);
+    expect(visit.host.querySelector('[data-slot="release-detail-facts"]') === null).toBe(true);
   } finally {
     await visit.close();
   }

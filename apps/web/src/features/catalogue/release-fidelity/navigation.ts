@@ -8,6 +8,8 @@ const prefix = '#release-reading?';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const token = (value: unknown, limit: number): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= limit && !/[\u0000-\u001f\u007f]/u.test(value);
+const propertyId = /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9._~-]+$/u;
+const streamId = /^(forward|inverse):[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9._~-]+$/u;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 
 /** A locator only: no evidence, native session, command, URL or recursive return chain. */
@@ -35,7 +37,7 @@ export function releaseVisit(value: unknown): ReleaseVisit | undefined {
     !Number.isSafeInteger(v.revision) ||
     v.revision < 0 ||
     !['work', 'related', 'sources', 'inspection'].includes(v.focus) ||
-    (v.stream !== undefined && !token(v.stream, 256)) ||
+    (v.stream !== undefined && (!token(v.stream, 256) || !streamId.test(v.stream))) ||
     (v.cursor !== undefined && (!v.stream || !token(v.cursor, 4096)))
   )
     return;
@@ -53,6 +55,8 @@ export function releaseVisit(value: unknown): ReleaseVisit | undefined {
       !uuid.test(o.statementId) ||
       !uuid.test(o.target) ||
       !token(o.relation, 256) ||
+      !propertyId.test(o.relation) ||
+      o.stream !== `${o.direction}:${o.relation}` ||
       o.stream !== v.stream ||
       !['forward', 'inverse'].includes(o.direction) ||
       !Number.isSafeInteger(o.revision) ||
