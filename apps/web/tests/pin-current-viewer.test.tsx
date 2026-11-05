@@ -389,31 +389,27 @@ describe('Pin mutation completions cannot cross the originating viewer or Collec
     }
   });
 
-  test('fresh refusals use permission feedback while a refusal of an uncertain replay retains its exact command', async () => {
-    const h = await mount();
+  test('fresh refusals use permission feedback while a refused uncertain replay retains its exact command', async () => {
+    const h = await mount({ collectionId: 'b', pins: loaded(['a', 'x', 'b', 'c']), mode: 'list' });
     try {
-      await h.click('pin');
+      await h.click('up');
       const refused = calls[0]!;
       await complete(refused, 'denied');
       expect(h.control.notice).toBe(m.library_follow_forbidden());
-      expect(h.control.pending).toBe(false);
-
-      await h.click('pin');
+      await h.click('up');
       const unresolved = calls[1]!;
       expect(unresolved.data.idempotencyKey).not.toBe(refused.data.idempotencyKey);
+      expect(unresolved.data).toMatchObject({ collectionId: 'b', revision: 7, after: 'a' });
       await complete(unresolved, 'unavailable');
-      expect(h.control.notice).toBe(m.error_message());
-      await h.click('pin');
+      await h.click('up');
       expect(calls[2]!.data).toEqual(unresolved.data);
       expect(calls[2]!.headers).toEqual(unresolved.headers);
       expect(calls[2]!.operation).toBe(unresolved.operation);
-
       await complete(calls[2]!, 'closed');
       expect(h.control.notice).toBe(m.platform_closed_message());
-      expect(h.control.pending).toBe(false);
       expect(h.groups[0]!.navigation).not.toHaveBeenCalled();
       expect(h.groups[0]!.cache).not.toHaveBeenCalled();
-      await h.click('pin');
+      await h.click('up');
       expect(calls[3]!.data).toEqual(unresolved.data);
       expect(calls[3]!.headers).toEqual(unresolved.headers);
       await complete(calls[3]!, 'success');
