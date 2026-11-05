@@ -13,24 +13,56 @@ import {
 } from '@tanstack/react-router';
 import { libraryNavigation } from '../src/library/navigation';
 import { PublicCollectionDiscoveryPage } from '../src/library/public-collection-discovery/page';
-import { readPublicCollectionPage } from '../src/library/public-collection-discovery/read';
 import { publicCollectionDiscoveryRequest } from '../src/library/public-collection-discovery/request';
 import type { PublicCollectionDiscoveryState } from '../src/library/public-collection-discovery/read';
 import type { DiscoveryRequest } from '../src/search/discovery';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { resolveNavigation } from '../src/shell/navigation';
 
-type ReadInput = { data: { locale: string; cursor?: string }; signal?: AbortSignal };
 const readCalls: (string | null)[] = [];
 let readWindow: (cursor: string | null) => Promise<PublicCollectionDiscoveryState> = async () => {
   throw new Error('Unexpected public Collection page request');
 };
-mock.module('../src/library/public-collection-discovery/read', () => ({
-  readPublicCollectionDiscovery: async ({ data }: ReadInput) => {
-    const cursor = data.cursor ?? null;
-    readCalls.push(cursor);
-    return readWindow(cursor);
-  },
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
+mock.module('../src/kernel/client', () => ({
+  kernelClient: () => ({
+    subjects: {
+      $search: {
+        post: async (request: DiscoveryRequest) => {
+          const cursor = request.cursor ?? null;
+          readCalls.push(cursor);
+          const page = await readWindow(cursor);
+          if (page.status !== 'ready') return { status: 503, error: { detail: 'Search unavailable' } };
+          return {
+            status: 200,
+            data: {
+              hits: page.collections.map((collection) => ({
+                key: { owner: 'semantic', kind: 'collection', route: 0, id: collection.id },
+                summary: {
+                  kind: 'subject',
+                  value: {
+                    id: collection.id,
+                    type: 'collection',
+                    types: ['collection'],
+                    label: { value: collection.title, language: 'en' },
+                    creativeWork: false,
+                    cover: null,
+                  },
+                },
+                labels: { en: collection.title },
+              })),
+              kinds: { values: [], next: null },
+              next: page.next,
+              as_of: page.asOf,
+            },
+          };
+        },
+      },
+    },
+  }),
 }));
 
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
@@ -64,6 +96,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { readPublicCollectionPage } = await import('../src/library/public-collection-discovery/read');
 const { Route } = await import('../src/routes/collections/index');
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
