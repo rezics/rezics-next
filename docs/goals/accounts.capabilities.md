@@ -12,6 +12,8 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Personas:** Anonymous visitor; active human; automated actor; organization; expired token; revoked token; fenced account (401); suspended account, whose pre-suspension bearer answers every route with HTTP 401, JSON problem code `invalid_credentials` and `WWW-Authenticate: Bearer error="invalid_token"`; correct-password sign-in answers 403 `ACCOUNT_SUSPENDED` and issues no session, cookie or token, while wrong-password sign-in answers as for an active account. The kernel's 403 `account_suspended` is only a defensive branch for a verified bearer of a suspended, unfenced account, reached only by `services/kernel/test/access/suspended-bearer.test.ts`, and is not a persona.
 
+**Implementation choice:** Auth's zero-scope `login` client establishes identity; the configured website client owns requested-scope consent, and Web returns through its registered callback to the bounded destination.
+
 **Released fixture data:** `privacy` (accounts produces personas and account states); no catalogue release is needed.
 
 **Surface cells:** Authentication is a shared bearer check, not a list abstraction.
