@@ -46,6 +46,8 @@ const resourceHistoryCommands = {
   'zone.publish': 3012,
   'zone.delete': 3013,
   'zone.restore': 3014,
+  'zone.takedown': 3015,
+  'zone.releaseTakedown': 3016,
 } as const;
 for (const [kind, id] of Object.entries(resourceHistoryCommands)) registerCommandHistoryKind(kind, id);
 

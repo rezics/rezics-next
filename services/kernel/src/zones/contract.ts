@@ -175,6 +175,13 @@ export const ZoneListSchema = t.Object(
   closed,
 );
 export const ZonePublishInputSchema = t.Object({ visibility: visibilitySchema }, closed);
+/** Takedown and its release name 1-16 exact RFC 6901 pointers into the Zone configuration or its mounts. */
+const takedownPointerSchema = t.String({ maxLength: 512, pattern: '^(?:/(?:[^/~]|~[01])*)+$' });
+export const ZoneTakedownInputSchema = t.Object(
+  { pointers: t.Array(takedownPointerSchema, { minItems: 1, maxItems: 16, uniqueItems: true }) },
+  closed,
+);
+export type ZoneTakedownInput = Static<typeof ZoneTakedownInputSchema>;
 export type ZoneOwned = Static<typeof ZoneOwnedSchema>;
 export type ZoneResponse = Static<typeof ZoneResponseSchema>;
 export type ZoneMetadataResponse = Static<typeof ZoneMetadataResponseSchema>;

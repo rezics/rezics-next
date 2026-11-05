@@ -23,7 +23,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ZoneConfigureInput, ZoneCreateInput, ZonePublishInput } from './contract.ts';
+import type { ZoneConfigureInput, ZoneCreateInput, ZonePublishInput, ZoneTakedownInput } from './contract.ts';
 import { requireZoneAccount, zoneIdentity, zoneOwned } from './resource-reads.ts';
 import {
   compareAndSetZone,
@@ -34,6 +34,9 @@ import {
   zoneOwnerIsActive,
   type ZoneHead,
 } from './resource-store.ts';
+import { changeTakedown, movesWithheldElement } from './takedown.ts';
+
+export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'releaseTakedown';
 
 export function zoneIfMatch(value: string | undefined): string {
   if (
@@ -228,27 +231,32 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
   async function mutate(
     actor: Actor,
     id: string,
-    operation: 'configure' | 'publish' | 'delete' | 'restore',
-    input: ZoneConfigureInput | ZonePublishInput | null,
+    operation: ZoneMutation,
+    input: ZoneConfigureInput | ZonePublishInput | ZoneTakedownInput | null,
     expected: string,
     key: string,
     deadline: number,
   ) {
     requireZoneAccount(actor);
     const resource = zoneIdentity(id);
-    const action = `zone:${operation}`;
+    // Takedown is a platform moderation decision, so Access checks it on Global Context rather than the owner's Zone.
+    const platform = operation === 'takedown' || operation === 'releaseTakedown';
+    const action = platform ? 'moderation:takedown' : `zone:${operation}`;
+    const authority = platform ? globalContextAnchor.resource : resource;
     const base = resourceAuthorization({
       access,
       actor,
       action,
-      anchor: {
-        resource,
-        async validate(client) {
-          const row = await readZoneHead(client, resource.route, id);
-          if (!row || row.state === 'purged') throw new ProblemError('not_found');
-          return true;
-        },
-      },
+      anchor: platform
+        ? globalContextAnchor
+        : {
+            resource,
+            async validate(client) {
+              const row = await readZoneHead(client, resource.route, id);
+              if (!row || row.state === 'purged') throw new ProblemError('not_found');
+              return true;
+            },
+          },
       context: { pool, deadline, partition: partitionOf(resource.route) },
     });
     const prepared = prepareConfiguration(
@@ -256,7 +264,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
       actor,
       operation === 'configure' ? (input as ZoneConfigureInput) : null,
       deadline,
-      resource,
+      authority,
       action,
       true,
     );
@@ -307,6 +315,9 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             next.state = 'active';
             next.deletedAt = null;
             next.restoreUntil = null;
+          } else if (platform) {
+            // Takedown keeps state, visibility, configuration and the deletion clock; only decisions change.
+            next.withholding = changeTakedown(row, (input as ZoneTakedownInput).pointers, operation === 'takedown');
           } else {
             if (row.state !== 'active') throw new ProblemError('not_found');
             if (operation === 'delete') {
@@ -322,20 +333,29 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
               const requested = (input as ZoneConfigureInput).configuration;
               // Older clients may omit additive metadata. Only an explicit language selection changes
               // an existing primary; dropping the field must not silently rename the Zone by fallback.
-              next.configuration =
+              const configured =
                 row.configuration.primaryLanguage && requested.primaryLanguage === undefined
                   ? { ...requested, primaryLanguage: row.configuration.primaryLanguage }
                   : requested;
-              next.mounts = (input as ZoneConfigureInput).mounts;
+              const mounts = (input as ZoneConfigureInput).mounts;
+              // A takedown decision cannot follow a moved or edited array element; refuse instead of guessing.
+              if (movesWithheldElement(row, configured, mounts)) throw new ProblemError('conflict');
+              next.configuration = configured;
+              next.mounts = mounts;
               next.releaseDigest = configuration!.releaseDigest;
             }
           }
           await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }], { kind: `zone.${operation}` });
           const updated = await compareAndSetZone(tx, row, next, { at, transactionId: command.transactionId });
           if (!updated) throw new ProblemError('precondition_failed');
-          const event = { configure: 'configured', publish: 'published', delete: 'deleted', restore: 'restored' }[
-            operation
-          ];
+          const event = {
+            configure: 'configured',
+            publish: 'published',
+            delete: 'deleted',
+            restore: 'restored',
+            takedown: 'taken_down',
+            releaseTakedown: 'takedown_released',
+          }[operation];
           return {
             value: { zone: zoneOwned(updated) },
             events: [{ type: `com.rezics.zone.${event}.v1`, subject: id, data: { id, revision: updated.revision } }],
