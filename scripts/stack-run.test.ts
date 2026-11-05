@@ -1133,7 +1133,13 @@ function walkFixture(extra: Record<string, string> = {}): WalkFixture {
   return {
     dir,
     lease,
-    env: { ...env, PATH: `${join(root, 'walk-bin')}:${process.env.PATH}`, FAKE_DIR: dir, REZICS_WALK_STACK_DIR: lease, ...extra },
+    env: {
+      ...env,
+      PATH: `${join(root, 'walk-bin')}:${process.env.PATH}`,
+      FAKE_DIR: dir,
+      REZICS_WALK_STACK_DIR: lease,
+      ...extra,
+    },
   };
 }
 
@@ -1173,7 +1179,9 @@ const dockerRan = (fixture: WalkFixture, name: string) =>
 
 function dockerState(fixture: WalkFixture): { containers: string[]; volumes: string[] } {
   const file = join(fixture.dir, 'docker-state.json');
-  return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { containers: string[]; volumes: string[] }) : { containers: [], volumes: [] };
+  return existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as { containers: string[]; volumes: string[] })
+    : { containers: [], volumes: [] };
 }
 
 /** Holds host walk slots exactly as the stack-lease queue does, until the returned release is called. */
@@ -1200,7 +1208,10 @@ test('a walk worker starts its task-scoped stack through dev-stack, and its cont
   const fixture = walkFixture();
   const walker = spawnWalk(fixture, 'walk-one', ['sleep', '60']);
   const database = 'rezics-walk-walk-one-database';
-  await until(() => dockerRan(fixture, database), () => walker.stderr());
+  await until(
+    () => dockerRan(fixture, database),
+    () => walker.stderr(),
+  );
   expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(
     expect.arrayContaining(['--name', database, '-p', '127.0.0.1:20014:5432', '-v', `${database}:/var/lib/postgresql`]),
   );
@@ -1208,7 +1219,12 @@ test('a walk worker starts its task-scoped stack through dev-stack, and its cont
   walker.child.kill('SIGTERM');
   expect(await walker.child.exited).toBe(143);
   expect(dockerState(fixture)).toEqual({ containers: [], volumes: [] });
-  expect(dockerCalls(fixture)).toEqual(expect.arrayContaining([['rm', '-f', '-v', database], ['volume', 'rm', database]]));
+  expect(dockerCalls(fixture)).toEqual(
+    expect.arrayContaining([
+      ['rm', '-f', '-v', database],
+      ['volume', 'rm', database],
+    ]),
+  );
   expect(walker.stderr()).toContain('stack-lease: walk walk-one slot 1/6');
   expect(spawnSync('flock', ['-n', join(fixture.lease, 'slot-1.lock'), 'true']).status).toBe(0);
 }, 60_000);
@@ -1217,15 +1233,27 @@ test('walk stacks past the host policy wait in arrival order, each with its posi
   const fixture = walkFixture({ REZICS_WALK_STACKS: '1' });
   const release = await holdSlots(fixture.lease, [1]);
   const first = spawnWalk(fixture, 'walk-first', ['true']);
-  await until(() => first.stderr().includes('walk walk-first waiting (1/1 held, 0 ahead)'), () => first.stderr());
+  await until(
+    () => first.stderr().includes('walk walk-first waiting (1/1 held, 0 ahead)'),
+    () => first.stderr(),
+  );
   const second = spawnWalk(fixture, 'walk-second', ['true']);
-  await until(() => second.stderr().includes('walk walk-second waiting (1/1 held, 1 ahead)'), () => second.stderr());
+  await until(
+    () => second.stderr().includes('walk walk-second waiting (1/1 held, 1 ahead)'),
+    () => second.stderr(),
+  );
   await release();
-  await until(() => dockerRan(fixture, 'rezics-walk-walk-first-database'), () => first.stderr());
+  await until(
+    () => dockerRan(fixture, 'rezics-walk-walk-first-database'),
+    () => first.stderr(),
+  );
   expect(dockerRan(fixture, 'rezics-walk-walk-second-database')).toBe(false);
   first.child.kill('SIGTERM');
   await first.child.exited;
-  await until(() => dockerRan(fixture, 'rezics-walk-walk-second-database'), () => second.stderr());
+  await until(
+    () => dockerRan(fixture, 'rezics-walk-walk-second-database'),
+    () => second.stderr(),
+  );
   second.child.kill('SIGTERM');
   await second.child.exited;
   expect(dockerState(fixture)).toEqual({ containers: [], volumes: [] });
@@ -1235,19 +1263,32 @@ test('six walk stacks run by default, a seventh start waits behind them, and the
   const fixture = walkFixture();
   const release = await holdSlots(fixture.lease, [1, 2, 3, 4, 5]);
   const sixth = spawnWalk(fixture, 'walk-sixth', ['sleep', '60']);
-  await until(() => dockerRan(fixture, 'rezics-walk-walk-sixth-database'), () => sixth.stderr());
-  expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(expect.arrayContaining(['-p', '127.0.0.1:20064:5432']));
+  await until(
+    () => dockerRan(fixture, 'rezics-walk-walk-sixth-database'),
+    () => sixth.stderr(),
+  );
+  expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(
+    expect.arrayContaining(['-p', '127.0.0.1:20064:5432']),
+  );
   const seventh = spawnWalk(fixture, 'walk-seventh', ['true']);
-  await until(() => seventh.stderr().includes('walk walk-seventh waiting (6/6 held, 0 ahead)'), () => seventh.stderr());
+  await until(
+    () => seventh.stderr().includes('walk walk-seventh waiting (6/6 held, 0 ahead)'),
+    () => seventh.stderr(),
+  );
   expect(dockerRan(fixture, 'rezics-walk-walk-seventh-database')).toBe(false);
   sixth.child.kill('SIGTERM');
   await sixth.child.exited;
-  await until(() => dockerRan(fixture, 'rezics-walk-walk-seventh-database'), () => seventh.stderr());
+  await until(
+    () => dockerRan(fixture, 'rezics-walk-walk-seventh-database'),
+    () => seventh.stderr(),
+  );
   seventh.child.kill('SIGTERM');
   await seventh.child.exited;
   await release();
   expect(walkStackLimit({})).toBe(6);
-  expect(() => walkStackLimit({ REZICS_WALK_STACKS: '1001' })).toThrow('REZICS_WALK_STACKS must be an integer from 1 to 1000');
+  expect(() => walkStackLimit({ REZICS_WALK_STACKS: '1001' })).toThrow(
+    'REZICS_WALK_STACKS must be an integer from 1 to 1000',
+  );
 }, 90_000);
 
 test('a local stack container needs a worker whose brief lists native or browser and a slot lock its launch holds', async () => {
@@ -1280,7 +1321,15 @@ test("a walk worker's own checks still place on a check host, as any other worke
     hosts,
     JSON.stringify({
       hosts: [
-        { name: 'a', performance: true, address: 'ops@a.test', identity: '/keys/a', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
+        {
+          name: 'a',
+          performance: true,
+          address: 'ops@a.test',
+          identity: '/keys/a',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 2,
+        },
       ],
     }),
   );
