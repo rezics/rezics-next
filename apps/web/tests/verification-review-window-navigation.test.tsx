@@ -158,7 +158,15 @@ test('review windows browse only admitted targets, retry exact failures, cap his
       await Promise.resolve();
     });
     await act(async () => {
-      await waitFor(() => expect(host.querySelector('[role="region"]')?.getAttribute('aria-busy')).toBe('false'));
+      await waitFor(() => {
+        const busy = host.querySelector('[role="region"]')?.getAttribute('aria-busy');
+        if (busy !== 'false') {
+          const queries = queryClient.getQueryCache().findAll({ queryKey: ['account-verification', 'review'] });
+          throw new Error(
+            `Read ${index} did not settle; busy=${busy}; queries=${JSON.stringify(queries.map((query) => [query.queryKey, query.state.status, query.state.fetchStatus]))}`,
+          );
+        }
+      });
     });
     await act(async () => {
       await waitFor(() => expect(queryClient.isFetching({ queryKey: ['account-verification', 'review'] })).toBe(0));
