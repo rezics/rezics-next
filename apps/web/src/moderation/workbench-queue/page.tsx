@@ -332,9 +332,10 @@ export function WorkbenchPage({
     }
   }
   useLayoutEffect(() => {
-    if (search.queue === 'appeals')
-      console.log('appeal page admission gate', navigation?.visitId, search.case, owner?.available(), owner?.healthy(), isCurrent());
-    if (owner && (!owner.available() || !isCurrent())) {
+    if (
+      owner &&
+      (!owner.available() || getLocale() !== locale.current || navigation?.isCurrent() === false)
+    ) {
       if (navigation?.isCurrent() !== false && !owner.healthy()) {
         windowHistory?.clearForVisit(navigation?.visitId);
         windowHistory?.clearAppealForVisit(navigation?.visitId);
