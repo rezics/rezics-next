@@ -30,10 +30,7 @@ export type FocusedRunnerOptions = {
   prepare?: (appDirectory: string, env: NodeJS.ProcessEnv) => number | Promise<number>;
   onStart?: (runtime: { pid?: number; stateDirectory: string }) => void;
   onOutput?: (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
-  place?: (
-    run: { root: string; cwd: string; command: string[] },
-    env: NodeJS.ProcessEnv,
-  ) => Promise<number | null>;
+  place?: (run: { root: string; cwd: string; command: string[] }, env: NodeJS.ProcessEnv) => Promise<number | null>;
 };
 
 async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv): Promise<number> {

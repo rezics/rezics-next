@@ -197,7 +197,11 @@ test('prepare binds the request then run-prepared reports this invocation and re
   expect(f.invocations[1]!.env.REMOTE_CHECK_RECEIPT_FD).toBe('3');
   expect(f.invocations[1]!.env.REMOTE_CHECK_RECEIPT_NONCE).toBe(f.descriptor().nonce);
   expect(f.invocations[1]!.env.REMOTE_CHECK_INVOCATION_ID).toBe(f.descriptor().invocationId);
-  expect(result).toEqual({ code: 0, invocationId: f.descriptor().invocationId, descriptorFile: f.files.descriptorFile });
+  expect(result).toEqual({
+    code: 0,
+    invocationId: f.descriptor().invocationId,
+    descriptorFile: f.files.descriptorFile,
+  });
   expect(f.wasRemoved()).toBe(true);
 });
 

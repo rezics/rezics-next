@@ -332,12 +332,7 @@ export async function runPreparedWebCheck(
       },
     });
   } catch {
-    return finishInvocation(
-      runtime,
-      input.files,
-      signal?.aborted ? signalCode(signal) : 75,
-      descriptor.invocationId,
-    );
+    return finishInvocation(runtime, input.files, signal?.aborted ? signalCode(signal) : 75, descriptor.invocationId);
   }
   return finishInvocation(
     runtime,
