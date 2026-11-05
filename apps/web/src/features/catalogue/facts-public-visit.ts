@@ -113,6 +113,16 @@ function parseOrigin(raw: string, subject: string, locale: string): FactsPublicO
   } catch {
     return;
   }
+  if (typeof value === 'string') {
+    const nested = value;
+    try {
+      value = JSON.parse(nested);
+    } catch {
+      return;
+    }
+    const origin = normalizeOrigin(value, subject, locale);
+    return origin && JSON.stringify(origin) === nested && JSON.stringify(nested) === raw ? origin : undefined;
+  }
   const origin = normalizeOrigin(value, subject, locale);
   return origin && JSON.stringify(origin) === raw ? origin : undefined;
 }

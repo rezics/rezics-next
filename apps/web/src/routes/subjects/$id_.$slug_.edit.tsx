@@ -91,7 +91,12 @@ const canonicalEditor = createServerFn({ method: 'GET', strict: false })
 export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => {
-    const origin = typeof input.origin === 'string' ? input.origin : undefined;
+    const origin =
+      typeof input.origin === 'string'
+        ? input.origin
+        : input.origin !== null && typeof input.origin === 'object'
+          ? JSON.stringify(input.origin)
+          : undefined;
     const publicReturn = typeof input.publicReturn === 'string' ? input.publicReturn : undefined;
     const property = typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined;
     const statement =

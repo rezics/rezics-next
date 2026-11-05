@@ -36,6 +36,13 @@ test('Facts public visits keep the address closed and leave exact-review search 
   const visit = parseFactsPublicVisit(new URL(href, 'https://site.test').search, addonProfileId, 'en', base);
   expect(visit).toEqual({ kind: 'origin', origin: { ...observed, returnHref: `${publicHref}#connections` } });
   expect(factsPublicVisitUnsupported(visit)).toBe(false);
+  const normalizedOrigin = { ...observed, returnHref: `${publicHref}#connections` };
+  const routerEncodedOrigin = `${base}?${new URLSearchParams({
+    origin: JSON.stringify(JSON.stringify(normalizedOrigin)),
+  })}`;
+  expect(
+    parseFactsPublicVisit(new URL(routerEncodedOrigin, 'https://site.test').search, addonProfileId, 'en', base),
+  ).toEqual(visit);
 
   const realmOrigin = {
     ...observed,
