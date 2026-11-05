@@ -90,7 +90,14 @@ export function characterPublicExample(
     if (address.only) {
       const section = result.sections[address.only]!;
       const cursor = address.selection?.[address.only]?.cursor;
-      if (section.section.ok && cursor) section.section.read = { ...section.section.read, cursor };
+      if (section.section.ok)
+        section.section.read = {
+          kind: 'links',
+          id: character,
+          property: section.stream.property,
+          limit: 12,
+          ...(cursor ? { cursor } : {}),
+        };
       result.sections = { [address.only]: section };
     }
     return result;

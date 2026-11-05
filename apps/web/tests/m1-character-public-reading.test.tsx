@@ -204,7 +204,7 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     response = spoiler.read;
     await render({});
     expect(host.innerHTML).not.toContain('STEINS;GATE');
-    expect(host.innerHTML).not.toContain('bgm.tv');
+    expect(host.querySelector('[data-slot="character-public-reading"]')!.innerHTML).not.toContain('bgm.tv');
     await click('Reveal');
     expect(host.textContent).toContain('STEINS;GATE');
     response = characterPublicExample('en', 'stale').read;
@@ -241,6 +241,16 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     await render(source, member, '00000000-0000-4000-8000-000000000002');
     await render(source, member, a);
     expect(host.innerHTML).not.toContain('STEINS;GATE');
+    response = async () => {
+      const suppressed = fixture.visit();
+      for (const section of Object.values(suppressed.sections))
+        if (section!.section.ok) section!.section.body.links = [];
+      return suppressed;
+    };
+    await render({}, member, a);
+    expect(calls.at(-1)?.context).toBe(a);
+    expect(host.innerHTML).not.toContain('STEINS;GATE');
+    response = fixture.read;
     shared = createConnectionWindow({ id: fixture.value.subject!, locale: 'en', viewer: member }, read);
     await act(async () => {
       await shared!.load();
