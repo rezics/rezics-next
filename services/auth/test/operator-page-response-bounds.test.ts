@@ -10,11 +10,14 @@ test('all closed stages, viewer continuations and action flags fit the public in
     ...['allowed', 'denied'].map((action) => ({ kind: 'destination', destinationAccountId: 'f'.repeat(36), action })),
   ];
   for (const viewer of [
-    { kind: 'ready' }, { kind: 'signed-out' }, { kind: 'refused' },
+    { kind: 'ready' },
+    { kind: 'signed-out' },
+    { kind: 'refused' },
     { kind: 'authentication-required', continuation: 'operator-transfer' },
-  ]) for (const review of reviews) {
-    expect(Buffer.byteLength(JSON.stringify({ viewer, review }))).toBeLessThanOrEqual(success);
-  }
+  ])
+    for (const review of reviews) {
+      expect(Buffer.byteLength(JSON.stringify({ viewer, review }))).toBeLessThanOrEqual(success);
+    }
   const bodies = [
     { viewer: { kind: 'refused' }, review: { kind: 'refused' } },
     { viewer: { kind: 'ready' }, review: { kind: 'unavailable' } },

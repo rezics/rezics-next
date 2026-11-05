@@ -38,8 +38,8 @@ const destination = {
   viewer: { kind: 'ready' },
   review: { kind: 'destination', destinationAccountId: '', action: 'allowed' },
 };
-const terminal = ['readiness', 'missing', 'refused', 'changed', 'unavailable'].map((kind) =>
-  JSON.stringify({ viewer: { kind: 'ready' }, review: { kind } }).length,
+const terminal = ['readiness', 'missing', 'refused', 'changed', 'unavailable'].map(
+  (kind) => JSON.stringify({ viewer: { kind: 'ready' }, review: { kind } }).length,
 );
 const viewer = [
   { kind: 'authentication-required', continuation: 'operator-transfer' },

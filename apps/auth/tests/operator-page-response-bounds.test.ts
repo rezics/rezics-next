@@ -1,22 +1,37 @@
 import { afterEach, expect, test } from 'bun:test';
-import { OPERATOR_TRANSFER_PAGE_MAX_RESPONSE_BYTES as limit, OPERATOR_TRANSFER_PAGE_MAX_ERROR_BYTES as errorLimit } from '@rezics/auth-contract';
+import {
+  OPERATOR_TRANSFER_PAGE_MAX_RESPONSE_BYTES as limit,
+  OPERATOR_TRANSFER_PAGE_MAX_ERROR_BYTES as errorLimit,
+} from '@rezics/auth-contract';
 import { requestOperatorTransferPage } from '../src/operator-transfer-page';
 const original = globalThis.fetch;
-afterEach(() => { globalThis.fetch = original; });
+afterEach(() => {
+  globalThis.fetch = original;
+});
 const input = { kind: 'readiness' as const };
 const json = JSON.stringify({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
 function stream(bytes: Uint8Array, headers: HeadersInit = {}) {
-  return new Response(new ReadableStream({ start(controller) {
-    for (let i = 0; i < bytes.length; i += 13) controller.enqueue(bytes.slice(i, i + 13));
-    controller.close();
-  } }), { headers });
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        for (let i = 0; i < bytes.length; i += 13) controller.enqueue(bytes.slice(i, i + 13));
+        controller.close();
+      },
+    }),
+    { headers },
+  );
 }
 test('actual chunked bytes govern receiving before parsing regardless of Content-Length', async () => {
   for (const headers of [{}, { 'content-length': '1' }, { 'content-length': String(limit) }]) {
     for (const excess of [0, 1]) {
       const response = stream(new TextEncoder().encode(json.padEnd(limit + excess)), headers);
       globalThis.fetch = (async (_path, init) => {
-        expect(init).toMatchObject({ method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store' });
+        expect(init).toMatchObject({
+          method: 'POST',
+          credentials: 'same-origin',
+          redirect: 'error',
+          cache: 'no-store',
+        });
         expect(JSON.parse(String(init?.body))).toEqual(input);
         return response;
       }) as typeof fetch;
@@ -25,16 +40,25 @@ test('actual chunked bytes govern receiving before parsing regardless of Content
     }
   }
   for (const response of [
-    stream(new Uint8Array([0xff])), stream(new TextEncoder().encode('{')),
+    stream(new Uint8Array([0xff])),
+    stream(new TextEncoder().encode('{')),
     stream(new TextEncoder().encode(json), { 'content-length': String(limit + 1) }),
   ]) {
     globalThis.fetch = (async () => response) as typeof fetch;
     expect(await requestOperatorTransferPage(input)).toMatchObject({ ok: false, code: 'unavailable' });
   }
   for (const size of [errorLimit, errorLimit + 1]) {
-    globalThis.fetch = (async () => new Response(JSON.stringify({ code: 'step_up_required' }).padEnd(size),
-      { status: 401, headers: { 'Retry-After': '17' } })) as typeof fetch;
-    expect(await requestOperatorTransferPage(input)).toEqual({ ok: false, status: 401, code: size === errorLimit ? 'step_up_required' : '', retryAfter: '17' });
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ code: 'step_up_required' }).padEnd(size), {
+        status: 401,
+        headers: { 'Retry-After': '17' },
+      })) as typeof fetch;
+    expect(await requestOperatorTransferPage(input)).toEqual({
+      ok: false,
+      status: 401,
+      code: size === errorLimit ? 'step_up_required' : '',
+      retryAfter: '17',
+    });
   }
 });
 

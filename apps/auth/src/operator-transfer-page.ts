@@ -70,7 +70,7 @@ export async function requestOperatorTransferPage(
         if (response.status === 200) throw error;
       }
       if (response.status === 200) return { ok: true, body };
-      const error = body && typeof body === 'object' ? body as Record<string, unknown> : null;
+      const error = body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
       const code = typeof error?.code === 'string' ? error.code : typeof error?.error === 'string' ? error.error : '';
       const retryAfter = response.headers.get('Retry-After');
       return {

@@ -1,4 +1,9 @@
-import { isOperatorPageId, isOperatorPageVersion, managementOperationProfile, type SessionProof } from '@rezics/auth-contract';
+import {
+  isOperatorPageId,
+  isOperatorPageVersion,
+  managementOperationProfile,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 
