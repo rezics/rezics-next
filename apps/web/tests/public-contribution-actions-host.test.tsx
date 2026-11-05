@@ -132,9 +132,8 @@ const { ContributionAdvicePresentation, ContributionWatch } =
   await import('../src/accounts/public-profile/contribution-actions/presentation');
 const { ContributionReaction } = await import('../src/accounts/public-profile/contribution-actions/reaction');
 const { ContributionReport } = await import('../src/accounts/public-profile/contribution-actions/report');
-const { ContributionReply, contributionReplyTarget } = await import(
-  '../src/accounts/public-profile/contribution-actions/reply'
-);
+const { ContributionReply, contributionReplyTarget } =
+  await import('../src/accounts/public-profile/contribution-actions/reply');
 const { m } = await import('../src/paraglide/messages.js');
 const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
   await import('../src/accounts/public-profile/contribution-actions/advice');
@@ -958,7 +957,8 @@ test('prepared report keeps the selected post target and uncertain owner while c
 });
 
 test.each(['discussion', 'reviews', 'posts'] as const)(
-  'prepared %s reply uses the selected thread, immediate parent and original credential', async (view) => {
+  'prepared %s reply uses the selected thread, immediate parent and original credential',
+  async (view) => {
     const dom = await installDom();
     const node = document.createElement('div');
     document.body.append(node);
@@ -1010,9 +1010,7 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       id: threadId,
       sourceRevisionId: openingRevision,
       state: 'current' as const,
-      operations: [
-        { action: 'post:create', operationId: 'post.create', state: 'available' as const },
-      ],
+      operations: [{ action: 'post:create', operationId: 'post.create', state: 'available' as const }],
     };
     const source: NativeAdvice = {
       viewer: { kind: 'account', id },

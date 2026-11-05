@@ -4,11 +4,7 @@ import type { VerificationConfig } from '../../../report/turnstile';
 import { PostActions } from '../../../report/content-actions';
 import type { OperationLease } from '../../../reader/lease';
 import { contributionOperationLeaseId, type ContributionOperation } from './current';
-import {
-  contributionOperationAdvice,
-  originalContributionReference,
-  type ContributionAdviceState,
-} from './advice';
+import { contributionOperationAdvice, originalContributionReference, type ContributionAdviceState } from './advice';
 import { ContributionAdvicePresentation, type ContributionPresentation } from './presentation';
 
 function isReportLease(lease: OperationLease<ContributionOperation> | undefined): lease is OperationLease<'report'> {
@@ -48,11 +44,7 @@ export function ContributionReport({
   const candidateLease = isCurrent() ? presentation.operation('report') : undefined;
   const lease = isReportLease(candidateLease) ? candidateLease : undefined;
   const ready =
-    advice === 'available' &&
-    !!reader &&
-    lease?.reader === reader &&
-    lease.current() &&
-    lease.credential() !== null;
+    advice === 'available' && !!reader && lease?.reader === reader && lease.current() && lease.credential() !== null;
   const state = advice === 'available' && !ready ? 'unavailable' : advice;
   const ownerKey = JSON.stringify([
     contributionOperationLeaseId(lease),
@@ -106,8 +98,7 @@ function ContributionReportVisit({
     if (ready) setAdmitted(true);
   }, [ready]);
 
-  const retaining =
-    (ready || admitted) && presentation.isCurrent() && !!lease && lease.current();
+  const retaining = (ready || admitted) && presentation.isCurrent() && !!lease && lease.current();
   const target = reference
     ? { kind: reference.type === 'content.thread' ? ('thread' as const) : ('post' as const), id: reference.id }
     : undefined;

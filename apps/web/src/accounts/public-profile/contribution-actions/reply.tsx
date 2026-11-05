@@ -28,8 +28,7 @@ export type ContributionReplyTarget = {
 };
 
 const contentId = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -89,11 +88,7 @@ export function ContributionReply({
   const candidateLease = target && isCurrent() ? presentation.operation('reply') : undefined;
   const lease = isReplyLease(candidateLease) ? candidateLease : undefined;
   const ready =
-    advice === 'available' &&
-    !!reader &&
-    lease?.reader === reader &&
-    lease.current() &&
-    lease.credential() !== null;
+    advice === 'available' && !!reader && lease?.reader === reader && lease.current() && lease.credential() !== null;
   const state = advice === 'available' && !ready ? 'unavailable' : advice;
   const ownerKey = JSON.stringify([
     contributionOperationLeaseId(lease),
@@ -236,4 +231,3 @@ function ContributionReplyVisit({
     </ContributionAdvicePresentation>
   );
 }
-
