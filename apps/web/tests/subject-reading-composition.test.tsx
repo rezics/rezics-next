@@ -174,6 +174,11 @@ test('The default Subject reader does not describe admitted incoming editions as
       recordedPage.subject,
     );
     if (loaded.kind !== 'page') throw new Error('Expected a loaded subject page.');
+    console.log('loaded composition diagnostic', JSON.stringify({
+      views: loaded.page.views,
+      content: (loaded.page.document as CompositionDocument).content.map((node) => ({ type: node.type, id: node.props.id })),
+      readKeys: Object.keys(loaded.page.reads),
+    }));
     return renderPage(loaded.page);
   };
   const incoming = await renderLoaded(ownEmpty);
