@@ -62,6 +62,7 @@ export function ClassificationsReader({
     locale,
     address: classificationAddressKey(frontier),
     initial,
+    read,
     state,
     active: true,
     abort: new AbortController(),
@@ -73,11 +74,13 @@ export function ClassificationsReader({
     latest.current.locale !== locale ||
     latest.current.address !== address ||
     latest.current.state !== state ||
-    latest.current.initial !== initial
+    latest.current.initial !== initial ||
+    latest.current.read !== read
   ) {
+    if (latest.current.address === address) windows?.retire();
     latest.current.active = false;
     latest.current.abort.abort();
-    latest.current = { subject, locale, address, initial, state, active: true, abort: new AbortController() };
+    latest.current = { subject, locale, address, initial, read, state, active: true, abort: new AbortController() };
   }
   const visit = latest.current;
   const [result, update] = useState<{ visit: object; value: OwnClassificationsRead } | null>(null);
@@ -135,6 +138,7 @@ export function ClassificationsReader({
         update({ visit, value: matches ? value : unavailable });
       }
     } catch {
+      if (windows) windows.focus = false;
       if (current()) update({ visit, value: unavailable });
     } finally {
       if (inFlight.current === visit) inFlight.current = null;
