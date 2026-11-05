@@ -7,7 +7,15 @@ import type { ShowcaseJournal } from './showcase-publication.ts';
 type VndbSurface = KernelClient['libraryImports']['vndb'];
 type PreviewResponse = Awaited<ReturnType<VndbSurface['$preview']['post']>>;
 
-export const developmentPersonalListScopes = ['library_entry:update'] as const;
+export const developmentPersonalListScopes = [
+  'library_entry:update',
+  'library_entry:read',
+  'library_entry:list',
+  'rating:vote',
+  'progress_session:list',
+  'progress_session:create',
+  'progress_session:record',
+] as const;
 const EXPORT_BYTES = 2 * 1024 * 1024;
 const PREVIEW_PATH = '/v1/libraryImports/vndb:preview';
 
