@@ -935,7 +935,7 @@ export function createVndbImport(config: Config) {
       const compatible =
         before?.targetId === target.targetId &&
         before.matchDigest === matchDigest &&
-        before.guard?.source === target.source;
+        (before.status === 'applied' || before.guard?.source === target.source);
       if (!compatible && before?.status === 'applied') throw new ProblemError('conflict');
       const parentReviewId = compatible && before ? before.reviewId : randomUUID();
       const plan: Decision =

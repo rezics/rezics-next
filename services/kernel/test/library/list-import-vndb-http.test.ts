@@ -468,6 +468,34 @@ test('VNDB score review admits the released standard question when meaning is nu
   }
 }, 120000);
 
+test('VNDB score review after an applied state keeps the same Entry and records the chosen vote', async () => {
+  const c = await sameHomeScoreCaller();
+  const { uploadId } = await c.importUpload(xml(vn(`v${Date.now()}8`, '<vote>7.5</vote>')));
+  const state = await c.send('POST', `${base}/${uploadId}:review`, {
+    ordinal: 0,
+    action: 'state',
+    targetId: c.target,
+    state: 'playing',
+    replace: false,
+  });
+  expect(
+    (await c.send('POST', `${base}/${uploadId}:apply`, { rows: [{ ordinal: 0, reviewId: state.reviewId }] })).outcomes[0]
+      .status,
+  ).toBe('applied');
+  const incarnation = (await f.commands.readEntry(c.actor, c.target)).incarnationId;
+  const chosen = await c.scoreReview(uploadId, 15);
+  expect(chosen).toMatchObject({ status: 'reviewed', units: 15, nativeAdmission: 'conditional' });
+  expect(
+    (await c.send('POST', `${base}/${uploadId}:apply`, { rows: [{ ordinal: 0, scoreReviewId: chosen.reviewId }] }))
+      .outcomes[0],
+  ).toMatchObject({ status: 'applied', currentVote: { state: 'set', units: 15 } });
+  expect((await f.commands.readEntry(c.actor, c.target)).incarnationId).toBe(incarnation);
+  expect((await c.votes.readVoteReview(c.actor, STANDARD_QUESTION_ID, c.target)).currentVote).toMatchObject({
+    state: 'counted',
+    units: 15,
+  });
+}, 120000);
+
 test('VNDB explicit unmatched score choice commits chosen units, zero and clear with counted current readback and independent Entry state', async () => {
   const c = await sameHomeScoreCaller();
   const source = xml(
