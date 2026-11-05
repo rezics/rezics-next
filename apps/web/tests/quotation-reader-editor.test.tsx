@@ -356,7 +356,7 @@ test('quotation reading keeps multilingual text, two contexts, missing and restr
 });
 
 test('quotation reads bind the relation page, selected Subject and viewer permission to Context', async () => {
-  const definitions = admit({ types: {}, properties: {} } as unknown as Release);
+  const definitions = admit({ types: { 'schema:Book': { properties: [] } }, properties: {} } as unknown as Release);
   const context = '00000000-0000-4000-8000-00000000c001';
   const calls: { kind: string; input: unknown }[] = [];
   const result = await readQuotationPage(
