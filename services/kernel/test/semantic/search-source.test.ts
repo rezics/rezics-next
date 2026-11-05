@@ -7,6 +7,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { subjectPartition } from '../../src/search/source.ts';
+import { documentActions } from '../../src/search/document.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -97,6 +98,10 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         descriptions: { en: 'A satirical novel' },
         aliases: { ja: ['猫'], en: ['Wagahai wa Neko de Aru', 'I am a cat'] },
         statements: {
+          'schema:name': [statement('schema:name', { language: 'ja', text: '吾輩は猫である' })],
+          'schema:alternateName': [
+            statement('schema:alternateName', { language: 'ja-Latn', text: 'Wagahai wa Neko de Aru' }),
+          ],
           'schema:author': [statement('schema:author', soseki.id)],
           'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
           'schema:datePublished': [
@@ -147,6 +152,8 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         ],
         descriptions: [{ language: 'en', value: 'A satirical novel' }],
         statements: expect.arrayContaining([
+          { property: 'schema:name', value: '吾輩は猫である', language: 'ja' },
+          { property: 'schema:alternateName', value: 'Wagahai wa Neko de Aru', language: 'ja-Latn' },
           { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
           {
             property: 'schema:datePublished',
@@ -157,13 +164,22 @@ test("the source reads a subject's terms and adopted Global statements in one sn
       },
     ],
   });
-  expect(snapshot.subjects[0]!.statements).toHaveLength(2);
+  expect(snapshot.subjects[0]!.statements).toHaveLength(4);
+  const indexed = documentActions(snapshot, [work.id])[0]!;
+  expect(indexed).toMatchObject({
+    op: 'index',
+    document: { names: expect.arrayContaining(['吾輩は猫である', 'Wagahai wa Neko de Aru']) },
+  });
 
   const [language] = work.statements['schema:inLanguage'].map(({ id }: { id: string }) => id);
   await ok(`/v1/subjects/${work.id}/candidates/${language}:hide`, { reason: 'spam' });
   const hidden = (await source.read(partition, [work.id])).subjects[0]!;
   expect(hidden.securityRevision).toBe(1);
-  expect(hidden.statements.map(({ property }) => property).sort()).toEqual(['schema:datePublished']);
+  expect(hidden.statements.map(({ property }) => property).sort()).toEqual([
+    'schema:alternateName',
+    'schema:datePublished',
+    'schema:name',
+  ]);
 
   const elsewhere = newId((routeOf(work.id)! + 16) % 65_536);
   await expect(source.read(partition, [elsewhere])).rejects.toThrow(TypeError);

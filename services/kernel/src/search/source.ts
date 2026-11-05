@@ -51,6 +51,8 @@ export type IndexedStatement = {
   property: string;
   /** Stored statement value. An item value is the target subject id; a code value is the code. */
   value: string;
+  /** Original language of an admitted monolingual title or alternate name. */
+  language?: string;
   /** Present when the value's datatype can be a facet. */
   facet?: FacetValue;
   /** Concrete adopted item (target subject id), string or canonical spoiler-level qualifiers on this statement.

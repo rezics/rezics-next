@@ -502,6 +502,13 @@ export function normalizeSourceStatement(
   if (value === null) return null;
 
   const statement: IndexedStatement = { property: property, value };
+  if (
+    (property === 'schema:name' || property === 'schema:alternateName') &&
+    definition?.datatype === 'monolingualtext'
+  ) {
+    const content = (body.value as { content: { language: string } }).content;
+    statement.language = content.language;
+  }
   if (definition?.datatype === 'wikibase-item') statement.facet = { kind: 'item' };
   else if (definition?.datatype === 'time') {
     const content = sourceObject(body.value) && sourceObject(body.value.content) ? body.value.content : undefined;

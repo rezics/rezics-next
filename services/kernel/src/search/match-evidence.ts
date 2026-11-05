@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { IndexedSubject } from './source.ts';
 import type { TextLeaf } from './text.ts';
+import { publicNames } from './document-names.ts';
 
 export type MatchEvidenceField = 'title' | 'alias' | 'description';
 export type MatchEvidenceReason = {
@@ -25,8 +26,6 @@ export const MATCH_EVIDENCE_LIMITS = Object.freeze({
   spans: 8,
   textBytes: 256,
   fragmentBytes: 1024,
-  sourceValues: 32,
-  sourceBytes: 32_768,
   enginePageBytes: 262_144,
   pageBytes: 131_072,
 });
@@ -41,7 +40,6 @@ export type MatchEvidenceQuery = Readonly<{
 type CompiledText = { query: Record<string, unknown>; leaves: readonly TextLeaf[] };
 type TextField = 'names' | 'descriptions';
 const textFields: readonly TextField[] = ['names', 'descriptions'];
-const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 
 function leafQuery(field: TextField, leaf: TextLeaf, name: string): Record<string, unknown> {
   return leaf.kind === 'term'
@@ -222,20 +220,9 @@ function parseFragment(value: unknown): Fragment | undefined {
 
 type CandidateSource = { field: MatchEvidenceField; language: string; value: string };
 
-function currentSources(subject: IndexedSubject): CandidateSource[] | undefined {
-  const values: CandidateSource[] = [
-    ...subject.labels.map(({ language, value }) => ({ field: 'title' as const, language, value })),
-    ...subject.aliases.map(({ language, value }) => ({ field: 'alias' as const, language, value })),
-    ...subject.descriptions.map(({ language, value }) => ({ field: 'description' as const, language, value })),
-  ];
-  if (values.length > MATCH_EVIDENCE_LIMITS.sourceValues) return;
-  let bytes = 0;
-  for (const value of values) {
-    if (typeof value.value !== 'string' || !value.value.isWellFormed() || !languageTag.test(value.language)) return;
-    bytes += Buffer.byteLength(value.value, 'utf8');
-    if (bytes > MATCH_EVIDENCE_LIMITS.sourceBytes) return;
-  }
-  return values;
+function* currentSources(subject: IndexedSubject): Generator<CandidateSource> {
+  yield* publicNames(subject);
+  for (const name of subject.descriptions) yield { field: 'description', ...name };
 }
 
 /** Project only engine-highlighted excerpts that map to one current public source value and language. */
@@ -248,8 +235,6 @@ export function projectMatchEvidence(
   if (!candidate || candidate.malformed) return { state: 'unavailable' };
   const matched = new Set(candidate.matched);
   if (matched.size !== candidate.matched.length) return { state: 'unavailable' };
-  const sources = currentSources(subject);
-  if (!sources) return { state: 'unavailable' };
   const highlight = candidate.highlight;
   if (!highlight || typeof highlight !== 'object' || Array.isArray(highlight)) return { state: 'unavailable' };
   const fields = highlight as Record<string, unknown>;
@@ -272,15 +257,20 @@ export function projectMatchEvidence(
     for (const rawFragment of fragments) {
       const fragment = parseFragment(rawFragment);
       if (!fragment) return { state: 'unavailable' };
-      const candidates = sources.filter(
-        (source) =>
+      // Scan bounded native fields; only matching identities allocate memory. A
+      // later accepted alias remains attributable even after the first 32 names.
+      const identities = new Map<string, CandidateSource>();
+      for (const source of currentSources(subject)) {
+        if (
           (engineField === 'names'
             ? source.field === 'title' || source.field === 'alias'
-            : source.field === publicField) && source.value.includes(fragment.text),
-      );
-      const identities = new Map(
-        candidates.map((source) => [`${source.field}\0${source.language}\0${source.value}`, source]),
-      );
+            : source.field === publicField) &&
+          source.value.includes(fragment.text)
+        ) {
+          identities.set(`${source.field}\0${source.language}\0${source.value}`, source);
+          if (identities.size > 1) return { state: 'unavailable' };
+        }
+      }
       if (identities.size !== 1) return { state: 'unavailable' };
       const source = [...identities.values()][0]!;
       reasons.push({ field: source.field, language: source.language, text: fragment.text, spans: fragment.spans });

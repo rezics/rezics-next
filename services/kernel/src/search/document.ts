@@ -4,6 +4,7 @@ import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
 import { discoveryIdentity, type AccountSnapshot } from './discovery.ts';
 import { DOCUMENT_TEXT_COST, DOCUMENT_TEXT_RECIPE } from './document-text.ts';
+import { publicNames } from './document-names.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
 export const MAX_NAME_SORT_CHARACTERS = 512;
@@ -203,10 +204,7 @@ function subjectDocument(partition: number, subject: IndexedSubject, calendarFor
           subjectId: subject.id,
         });
   const labels = [...subject.labels].sort((a, b) => (a.language < b.language ? -1 : a.language > b.language ? 1 : 0));
-  const names = uniqueValues([
-    ...subject.labels.map((item) => item.value),
-    ...subject.aliases.map((item) => item.value),
-  ]);
+  const names = uniqueValues(Array.from(publicNames(subject), ({ value }) => value));
   return {
     id: subject.id,
     partition,
