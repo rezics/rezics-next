@@ -147,3 +147,14 @@ test('hidden originals and redirects use current native original AND terminal di
   ).toBe(false);
   expect(await f.facts(collection.id)).toEqual(stored);
 });
+
+test('current completed pointer readback matches the published generation against the live basis', async () => {
+  const collection = await f.collection('public');
+  await f.add(collection.id, await f.subject());
+  const ready = await f.build(collection.id, 1);
+  const current = await store.readCanonicalSourceState(db.pool, f.call(collection.id));
+  expect(current.state).toBe('ready');
+  if (current.state !== 'ready') throw new Error('Published generation must be the current completed pointer');
+  expect(current.generation).toBe(ready.generation);
+  expect(current.basis.digest).toBe(ready.basis.digest);
+});

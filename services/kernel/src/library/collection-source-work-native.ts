@@ -2,16 +2,25 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, QueryResultRow } from 'pg';
-import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
+import { type Bound } from '@rezics/bounds';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
+import { routeOf } from '../route/route.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import {
+  CANONICAL_SOURCE_RAW_KEY_LIMIT,
+  CANONICAL_SOURCE_RECEIVING_COST,
+  CANONICAL_SOURCE_STATEMENTS,
+  assertCanonicalSourceStatement,
+  canonicalSourceGroupStatement,
+  canonicalSourceWorkDimensions,
+  type CanonicalSourceStatement,
+} from './canonical-source-bounds.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
-import type { CollectionSourceObservation, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 
 export type CollectionSourceWorkDefinition = Awaited<ReturnType<typeof readScopeWorkDefinition>>;
@@ -26,106 +35,18 @@ export type CollectionSourceWorkState = Readonly<{
 }>;
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 
-const bounded = (values: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...values, engineRequests: 0 });
-
-const sourceScopeSQL = `SELECT identity,capture_id::text AS capture,committed_revision::text AS revision
-       FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`;
-const sourceHeadSQL = 'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2';
-const sourceGenerationSQL = `SELECT basis,state,source_exhausted AS exhausted FROM library.canonical_source_generation
-       WHERE route=$1 AND collection_id=$2 AND generation=$3`;
-const groupSeekSQL = `SELECT canonical_subject_id::text AS subject FROM library.canonical_source_reference
-       WHERE route=$1 AND collection_id=$2 AND generation=$3
-       AND canonical_subject_id>COALESCE($4::uuid,'00000000-0000-0000-0000-000000000000')
-       ORDER BY canonical_subject_id,stored_subject_id,driver,fact_id LIMIT 1`;
-const groupPageSQL = `SELECT stored_subject_id::text AS original,driver,fact_id::text AS fact FROM library.canonical_source_reference
-       WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id=$4
-       AND (stored_subject_id,driver,fact_id)>(COALESCE($5::uuid,'00000000-0000-0000-0000-000000000000'),COALESCE($6::smallint,-1),COALESCE($7::uuid,'00000000-0000-0000-0000-000000000000'))
-       ORDER BY stored_subject_id,driver,fact_id LIMIT $8`;
-
-const pointBound = (rows: number, bytes: number) =>
-  bounded({
-    candidateKeys: 0,
-    nativeRows: rows,
-    identityMetadataRows: 0,
-    emptySeeks: 1,
-    nativePoints: 1,
-    witnessKeys: 0,
-    statements: 1,
-    bytes,
-  });
-
 /** The indexed canonical group page's fixed LIMIT. Selected Source reads cannot raise it. */
-export const COLLECTION_SOURCE_WORK_GROUP_LIMIT = 100;
+export const COLLECTION_SOURCE_WORK_GROUP_LIMIT = CANONICAL_SOURCE_RAW_KEY_LIMIT;
 
-const metadataBound = bounded({
-  candidateKeys: 0,
-  nativeRows: 24,
-  identityMetadataRows: 0,
-  emptySeeks: 5,
-  nativePoints: 5,
-  witnessKeys: 0,
-  statements: 5,
-  bytes: 2_097_152,
-});
-const sourceScopeBound = pointBound(16, 9_216);
-const sourceHeadBound = pointBound(16, 1_536);
-const sourceGenerationBound = pointBound(16, 9_216);
-
-/** Upper bounds follow the exact indexed statements below. Request parameters and returned projections are capped. */
-export const COLLECTION_SOURCE_WORK_COST = Object.freeze({
-  metadata: metadataBound,
-  sourceScope: sourceScopeBound,
-  sourceHead: sourceHeadBound,
-  sourceGeneration: sourceGenerationBound,
-  seek: bounded({
-    candidateKeys: 1,
-    nativeRows: 8,
-    identityMetadataRows: 0,
-    emptySeeks: 1,
-    nativePoints: 1,
-    witnessKeys: 0,
-    statements: 1,
-    bytes: 2_304,
-  }),
-  group(limit: number): Bound {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > COLLECTION_SOURCE_WORK_GROUP_LIMIT)
-      throw new RangeError('Invalid work group limit');
-    return bounded({
-      candidateKeys: limit,
-      nativeRows: 8 * limit + 8,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 1,
-      witnessKeys: 0,
-      statements: 1,
-      bytes: 2_304 + 256 * limit,
-    });
-  },
-  state: sumBounds(metadataBound, sourceScopeBound, sourceHeadBound, sourceGenerationBound),
-});
+/** Upper bounds follow the exact indexed statements in the canonical Source plan. */
+export const COLLECTION_SOURCE_WORK_COST = CANONICAL_SOURCE_RECEIVING_COST;
 
 const sourceReceipt = (bound: Bound): WorkReceipt =>
   Object.freeze({
     reservationId: 'collection-source-static',
-    used: Object.freeze({
-      candidateKeys: bound.candidateKeys,
-      nativeRows: bound.nativeRows,
-      identityMetadataRows: bound.identityMetadataRows,
-      emptySeeks: bound.emptySeeks,
-      nativePoints: bound.nativePoints,
-      witnessKeys: bound.witnessKeys,
-      statements: bound.statements,
-      bytes: bound.bytes,
-    }),
+    used: canonicalSourceWorkDimensions(bound),
   });
 
-type StaticStatement = Readonly<{
-  name: string;
-  sql: string;
-  requestBytes: number;
-  resultBytes: number;
-  rows: number;
-}>;
 type StaticFrame = { readonly deadline: number; readonly called: Set<string> };
 function frame(deadline: number): StaticFrame {
   if (!Number.isFinite(deadline) || Date.now() >= deadline) throw new ProblemError('semantic_not_ready');
@@ -134,49 +55,27 @@ function frame(deadline: number): StaticFrame {
 async function query<R extends QueryResultRow>(
   work: ScopeWorkContext,
   current: StaticFrame,
-  statement: StaticStatement,
+  statement: CanonicalSourceStatement,
   values: unknown[],
 ): Promise<R[]> {
+  const declared = statement;
   if (
-    statement.sql.length === 0 ||
+    declared.sql.length === 0 ||
     !hasLiveOperationalTransaction(work.tx) ||
     Date.now() >= current.deadline ||
-    current.called.has(statement.name)
+    current.called.has(declared.name)
   )
     throw new ProblemError('semantic_not_ready');
   const resources = currentOperationalResources(work.tx);
   if (resources.deadline < current.deadline || resources.mode !== 'work-step')
     throw new ProblemError('semantic_not_ready');
-  const requestBytes = Buffer.byteLength(statement.sql) + Buffer.byteLength(JSON.stringify(values));
-  if (requestBytes > statement.requestBytes) throw new ProblemError('dependency_unavailable');
-  current.called.add(statement.name);
-  const rows = (await deadlineClient(work.tx, current.deadline).query<R>(statement.sql, values)).rows;
-  if (rows.length > statement.rows || Buffer.byteLength(JSON.stringify(rows) ?? '') > statement.resultBytes)
+  assertCanonicalSourceStatement(declared, values);
+  current.called.add(declared.name);
+  const rows = (await deadlineClient(work.tx, current.deadline).query<R>(declared.sql, values)).rows;
+  if (rows.length > declared.rows || Buffer.byteLength(JSON.stringify(rows) ?? '') > declared.resultBytes)
     throw new ProblemError('dependency_unavailable');
   return rows;
 }
-
-const stateScopeStatement: StaticStatement = Object.freeze({
-  name: 'source-scope-currentness',
-  sql: sourceScopeSQL,
-  requestBytes: 1_024,
-  resultBytes: 8_192,
-  rows: 1,
-});
-const stateHeadStatement: StaticStatement = Object.freeze({
-  name: 'source-head-generation',
-  sql: sourceHeadSQL,
-  requestBytes: 1_024,
-  resultBytes: 512,
-  rows: 1,
-});
-const stateGenerationStatement: StaticStatement = Object.freeze({
-  name: 'source-complete-generation',
-  sql: sourceGenerationSQL,
-  requestBytes: 1_024,
-  resultBytes: 8_192,
-  rows: 1,
-});
 
 /** Rereads native admission before IO, then verifies the same source and current indexed generation. */
 export async function readCollectionSourceWorkState(
@@ -234,7 +133,7 @@ export async function readCollectionSourceWorkState(
     const [scope] = await query<{ identity: NativeSourceIdentity; capture: string | null; revision: string | null }>(
       work,
       current,
-      stateScopeStatement,
+      CANONICAL_SOURCE_STATEMENTS.scope,
       [source.route, source.collectionId, fence],
     );
     if (!scope?.capture || scope.revision === null || !isDeepStrictEqual(scope.identity, source))
@@ -249,18 +148,18 @@ export async function readCollectionSourceWorkState(
         native.identityObservation.committedRevision !== BigInt(scope.revision))
     )
       throw new ProblemError('semantic_not_ready');
-    const [head] = await query<{ generation: string }>(work, current, stateHeadStatement, [
+    const [head] = await query<{ generation: string }>(work, current, CANONICAL_SOURCE_STATEMENTS.head, [
       source.route,
       source.collectionId,
     ]);
     if (!head) throw new ProblemError('dependency_unavailable');
-    const [generation] = await query<{ basis: CanonicalBasis; state: string; exhausted: boolean }>(
+    const [generation] = await query<{ basis: CanonicalBasis; state: string; source_exhausted: boolean }>(
       work,
       current,
-      stateGenerationStatement,
+      CANONICAL_SOURCE_STATEMENTS.generation,
       [source.route, source.collectionId, head.generation],
     );
-    if (!generation || generation.state !== 'complete' || !generation.exhausted)
+    if (!generation || generation.state !== 'complete' || !generation.source_exhausted)
       throw new ProblemError('dependency_unavailable');
     const { basis } = generation;
     if (
@@ -309,7 +208,7 @@ export async function seekCollectionSourceWorkGroup(
     const [row] = await query<{ subject: string }>(
       work,
       current,
-      { name: 'canonical-group-seek', sql: groupSeekSQL, requestBytes: 2_048, resultBytes: 256, rows: 1 },
+      CANONICAL_SOURCE_STATEMENTS.seek,
       [state.metadata.route, state.metadata.collectionId, state.generation, after],
     );
     return { subjectId: row?.subject ?? null, work: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek) };
@@ -354,13 +253,7 @@ export async function readCollectionSourceWorkGroup(
     const rows = await query<{ original: string; driver: number; fact: string }>(
       work,
       current,
-      {
-        name: 'canonical-group-page',
-        sql: groupPageSQL,
-        requestBytes: 2_048,
-        resultBytes: 256 * limit,
-        rows: limit,
-      },
+      canonicalSourceGroupStatement(limit),
       values,
     );
     const keys = rows.map((row): CanonicalRawKey => {

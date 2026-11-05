@@ -786,19 +786,12 @@ import {
   publishCanonicalSourceRepair,
   CANONICAL_SOURCE_WORKFLOW,
   type CanonicalAllowance,
-  type CanonicalWork,
 } from './canonical-source-store.ts';
+import { CANONICAL_SOURCE_REPAIR_STEP, canonicalSourceCallAllowance } from './canonical-source-bounds.ts';
 
 const sourceStepAllowance = (): CanonicalAllowance => ({
   reservationId: randomUUID(),
-  rawKeys: 100,
-  nativeRows: 1000000,
-  nativePoints: 10000,
-  emptySeeks: 1000,
-  statements: 10000,
-  bytes: 16 * 1024 * 1024,
-  // Native custody checks the owner partition and its committed capture receipt.
-  identityMetadataRows: 32,
+  ...canonicalSourceCallAllowance(CANONICAL_SOURCE_REPAIR_STEP),
 });
 type SourceLocator = { accounts: [string]; collectionId: string };
 type SourceSweep = {
@@ -839,36 +832,19 @@ async function advanceSourceStep(
     deadline,
     allowance: sourceStepAllowance(),
   };
-  function consume(w: CanonicalWork) {
-    const a = call.allowance;
-    call.allowance = {
-      reservationId: a.reservationId,
-      rawKeys: a.rawKeys - w.candidateKeys - w.aliasKeys - w.duplicateKeys - w.lookaheadKeys - w.internalDriverKeys,
-      nativeRows: a.nativeRows - w.nativeRows,
-      nativePoints: a.nativePoints - w.nativePoints,
-      emptySeeks: a.emptySeeks - w.emptySeeks,
-      statements: a.statements - w.statements,
-      bytes: a.bytes - w.bytes,
-      identityMetadataRows: a.identityMetadataRows - w.identityMetadataRows,
-    };
-  }
   const observed = await advanceCanonicalSourceCapture(context.pool, call);
-  consume(observed.work);
   if (observed.state !== 'admitted') {
     return observed.reason === 'incomplete' ? 'more' : 'unavailable';
   }
   const ready = await readCanonicalSourceState(context.pool, call);
-  consume(ready.work);
   if (ready.state === 'ready') return 'ready';
   const started = await beginCanonicalSourceRepair(context.pool, { ...call, basis: observed.basis });
-  consume(started.work);
   if (started.state !== 'working') return 'unavailable';
   const next = await repairCanonicalSourceStep(context.pool, {
     ...call,
     basis: observed.basis,
     repair: started.repair,
   });
-  consume(next.work);
   if (next.state !== 'complete') return next.state === 'working' ? 'more' : 'unavailable';
   const published = await publishCanonicalSourceRepair(context.pool, {
     ...call,

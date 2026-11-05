@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { declareBound, repeatBound } from '@rezics/bounds';
+import {
+  CANONICAL_SOURCE_DECLARATION,
+  CANONICAL_SOURCE_RAW_KEY_LIMIT,
+  CANONICAL_SOURCE_STATEMENTS,
+  assertCanonicalSourceStatement,
+  canonicalSourceMappingBound,
+  canonicalSourceWorkDimensions,
+} from '../../src/library/canonical-source-bounds.ts';
 import * as store from '../../src/library/canonical-source-store.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { accessCheck } from '../../src/request/access.ts';
@@ -648,4 +657,76 @@ test('pending group fits the shared encrypted cursor without permissions or a se
   expect(await decodeListCursor(keys, { ...binding, viewer: f.editor.accountId }, token, now)).toMatchObject({
     ok: false,
   });
+});
+
+test('canonical Source plan refuses overflow, engine requests and oversized statement parameters', () => {
+  expect(CANONICAL_SOURCE_DECLARATION.status).toBe('complete');
+  expect(CANONICAL_SOURCE_DECLARATION.repair.engineRequests).toBe(0);
+  expect(CANONICAL_SOURCE_DECLARATION.repair.candidateKeys).toBeLessThanOrEqual(CANONICAL_SOURCE_RAW_KEY_LIMIT);
+  expect(() => canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT + 1)).toThrow(RangeError);
+  expect(() => repeatBound(CANONICAL_SOURCE_DECLARATION.repair, Number.MAX_SAFE_INTEGER)).toThrow(TypeError);
+  expect(() =>
+    canonicalSourceWorkDimensions(
+      declareBound({
+        candidateKeys: 0,
+        nativeRows: 0,
+        identityMetadataRows: 0,
+        emptySeeks: 0,
+        nativePoints: 0,
+        witnessKeys: 0,
+        statements: 0,
+        bytes: 0,
+        engineRequests: 1,
+      }),
+    ),
+  ).toThrow(TypeError);
+  expect(() =>
+    assertCanonicalSourceStatement(CANONICAL_SOURCE_STATEMENTS.seek, ['x'.repeat(8_000), 1, 2, 3]),
+  ).toThrow(TypeError);
+});
+
+test('exact raw-limit window resumes durably and source mutation before the next generation CAS is basis_changed', async () => {
+  const c = await f.collection();
+  for (let n = 0; n < 100; n++) await f.add(c.id, await f.subject());
+  const observed = await store.observeCanonicalSource(db.pool, f.call(c.id));
+  if (observed.state !== 'admitted') throw new Error('Current source must be admitted');
+  const started = await store.beginCanonicalSourceRepair(db.pool, { ...f.call(c.id), basis: observed.basis });
+  if (started.state !== 'working') throw new Error('Repair must start');
+  const reserved = allowance(100);
+  const first = await store.repairCanonicalSourceStep(db.pool, {
+    ...f.call(c.id, reserved),
+    basis: observed.basis,
+    repair: started.repair,
+  });
+  receipt(first.work, reserved);
+  expect(first.state).toBe('working');
+  if (first.state !== 'working') throw new Error('Exact 100-row window must remain working');
+  expect(first.examined).toHaveLength(100);
+  expect(first.repair.sourceExhausted).toBe(false);
+  expect(first.repair.after).not.toBeNull();
+  const recovered = await store.beginCanonicalSourceRepair(db.pool, { ...f.call(c.id), basis: observed.basis });
+  if (recovered.state !== 'working') throw new Error('Examined frontier must survive replay');
+  expect(recovered.repair.after).toEqual(first.repair.after);
+  await f.add(c.id, await f.subject());
+  const mutated = await store.repairCanonicalSourceStep(db.pool, {
+    ...f.call(c.id, allowance(100)),
+    basis: observed.basis,
+    repair: first.repair,
+  });
+  expect(mutated.state).toBe('basis_changed');
+});
+
+test('published exhausted generation is the current completed pointer on the freshly observed basis', async () => {
+  const c = await f.collection();
+  await f.add(c.id, await f.subject());
+  const ready = await f.build(c.id, 1);
+  const current = await store.readCanonicalSourceState(db.pool, f.call(c.id));
+  expect(current.state).toBe('ready');
+  if (current.state !== 'ready') throw new Error('Completed pointer must be ready');
+  expect(current.generation).toBe(ready.generation);
+  expect(current.basis).toEqual(ready.basis);
+  const observed = await store.observeCanonicalSource(db.pool, f.call(c.id));
+  expect(observed.state).toBe('admitted');
+  if (observed.state !== 'admitted') throw new Error('Fresh observation must match the completed pointer');
+  expect(observed.basis).toEqual(current.basis);
 });
