@@ -569,7 +569,9 @@ test('Previous and browser return re-admit the exact unread address and restore 
 
     const destination = view.host.querySelector<HTMLAnchorElement>('[data-notice-id="return-origin"] a[href]');
     expect(destination?.getAttribute('href')).toBe('/threads/thread#post-return-origin');
-    await act(async () => destination!.click());
+    await act(async () => {
+      destination!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, button: 0 }));
+    });
     await tick();
     expect(view.router.state.location.pathname).toBe('/threads/thread');
     await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
@@ -622,7 +624,9 @@ test('a missing returned notice names the changed result, focuses the heading, a
     await view.click(m.inbox_previous_page());
     await view.settle(() => view.host.textContent?.includes('Original unread notice') === true);
     const destination = view.host.querySelector<HTMLAnchorElement>('[data-notice-id="disappearing-origin"] a[href]');
-    await act(async () => destination!.click());
+    await act(async () => {
+      destination!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, button: 0 }));
+    });
     await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
     await act(async () => view.router.history.back());
     await view.settle(() => view.host.textContent?.includes(m.inbox_return_notice_missing()) === true);
