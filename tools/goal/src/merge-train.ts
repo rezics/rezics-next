@@ -4925,12 +4925,7 @@ export class MergeTrain {
     const outside = outsideScope(files, request.declaredPaths);
     if (!outside.length) return;
     const refused = outside.filter((path) =>
-      isProtectedRiskPath(
-        path,
-        request.protectedPaths,
-        request.protectedRiskAreas,
-        this.options.policy?.brief,
-      ),
+      isProtectedRiskPath(path, request.protectedPaths, request.protectedRiskAreas, this.options.policy?.brief),
     );
     if (refused.length) throw new Error(`Changes in undeclared risk areas: ${refused.join(', ')}`);
     appendFileSync(logPath, `Changed outside declared paths (allowed): ${outside.join(', ')}\n`);

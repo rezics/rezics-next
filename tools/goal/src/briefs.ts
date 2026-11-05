@@ -5,9 +5,7 @@ import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuati
 import { parseBunTestCommand, parseEnvironmentPrefix } from './command-shape.ts';
 import { parseProofMetadata } from './verification.ts';
 
-export type RiskAreaDefinition =
-  | readonly string[]
-  | { include: readonly string[]; exclude?: readonly string[] };
+export type RiskAreaDefinition = readonly string[] | { include: readonly string[]; exclude?: readonly string[] };
 export type RiskAreaRules = { area: string; include: readonly string[]; exclude: readonly string[] };
 export type RiskOwnership = { version: number; areas: Record<string, RiskAreaDefinition> };
 /** Prompt size diagnostic threshold. Large prompts still reach the provider and may meet the OS argument limit. */
@@ -211,7 +209,9 @@ export function isProtectedRiskPath(
   protectedAreas: readonly RiskAreaRules[] = [],
   policy: BriefPolicy = defaultPolicy.brief,
 ): boolean {
-  return matchesPath(path, protectedPaths, policy) || classifyRiskAreas(path, protectedAreas, 'file', policy).length > 0;
+  return (
+    matchesPath(path, protectedPaths, policy) || classifyRiskAreas(path, protectedAreas, 'file', policy).length > 0
+  );
 }
 
 export function readRiskOwnership(file: string, policy: BriefPolicy = defaultPolicy.brief): RiskOwnership {
@@ -612,8 +612,7 @@ export function parseBrief(
   const riskRules = riskAreaRulesFor(ownership);
   const touchedAreas = new Set(brief.paths.flatMap((path) => classifyRiskAreas(path, riskRules, 'pattern', policy)));
   for (const area of touchedAreas) {
-    if (!brief.riskAreas.includes(area))
-      throw new Error(`declared paths touch undeclared risk area: ${area}`);
+    if (!brief.riskAreas.includes(area)) throw new Error(`declared paths touch undeclared risk area: ${area}`);
   }
   return brief;
 }

@@ -76,7 +76,8 @@ export const GUARDS = {
     repair: 'Resolve the conflicting requirement and issue a current brief.',
   },
   'undeclared-risk-area': {
-    defect: 'An undeclared production change can alter authorization, disclosure, rights, deletion or account controls.',
+    defect:
+      'An undeclared production change can alter authorization, disclosure, rights, deletion or account controls.',
     owner: 'control-plane',
     since: '2026-11-05',
     repair: 'Keep protected production files unchanged or declare every applicable risk area.',

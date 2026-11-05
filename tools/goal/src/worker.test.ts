@@ -66,9 +66,7 @@ test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then i
     expect(
       landings[0]!.protectedRiskAreas?.some(
         ({ area, include, exclude }) =>
-          area === 'authorization' &&
-          include.includes('**/auth/**') &&
-          exclude.includes('services/auth/scripts/**'),
+          area === 'authorization' && include.includes('**/auth/**') && exclude.includes('services/auth/scripts/**'),
       ),
     ).toBe(true);
     const ref = { taskId: task.id, attempt: 1 },

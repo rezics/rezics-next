@@ -284,7 +284,11 @@ export class TrainResolver {
     const tree = this.tasks?.settings.mainCheckout ?? this.store.task(request.taskId).worktree;
     if (this.git(tree, 'rev-parse', `${request.branch}^{commit}`) !== conflict.sourceCommit)
       throw new Error('Accepted source ref changed during train resolution');
-    if (!allowTargetMove && !conflict.allowTargetMove && this.git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
+    if (
+      !allowTargetMove &&
+      !conflict.allowTargetMove &&
+      this.git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead
+    )
       throw new Error('Integration ref changed during train resolution');
     const task = this.store.task(request.taskId);
     if (request.managerLanding && request.managerLanding.managerId !== task.brief.manager)
@@ -372,12 +376,7 @@ export class TrainResolver {
       allPaths.some(
         (path) =>
           frozen.includes(path) ||
-          isProtectedRiskPath(
-            path,
-            request.protectedPaths,
-            request.protectedRiskAreas,
-            this.store.policy.brief,
-          ),
+          isProtectedRiskPath(path, request.protectedPaths, request.protectedRiskAreas, this.store.policy.brief),
       )
     ) {
       conflict.detail = 'Conflict touches a frozen or protected input';
@@ -501,46 +500,48 @@ export class TrainResolver {
     const hasQueue = this.store.db
       .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='landing_queue'")
       .get();
-    const contracts = this.store.tasks().flatMap((candidate) => {
-      if (candidate.id === task.id) return [];
-      const row = hasQueue
-        ? (this.store.db
-            .query('SELECT request FROM landing_queue WHERE task=? AND attempt=?')
-            .get(candidate.id, candidate.currentAttempt) as { request: string } | null)
-        : null;
-      const queued = row ? (JSON.parse(row.request) as LandingRequest) : undefined;
-      const accepted =
-        candidate.state === 'landing' &&
-        queued?.taskId === candidate.id &&
-        queued.attempt === candidate.currentAttempt &&
-        queued.branch === candidate.branch &&
-        queued.managerLanding?.managerId === candidate.brief.manager
-          ? queued.managerLanding.acceptedCommit
-          : undefined;
-      const source = accepted ?? candidate.integratedCommit;
-      if (
-        !source ||
-        spawnSync('git', ['merge-base', '--is-ancestor', source, conflict.targetCommit], { cwd: tree }).status !== 0
-      )
-        return [];
-      // Exact native scope approvals never rewrite briefs. Actual accepted contributions still need their owners'
-      // original contracts when a later member conflicts on one of those additional files.
-      if (
-        !paths.some((path) => matchesPath(path, candidate.brief.paths, this.store.policy.brief)) &&
-        !this.git(tree, 'diff', '--name-only', '-z', candidate.base, source, '--', ...paths)
-      )
-        return [];
-      return [
-        {
-          taskId: candidate.id,
-          attempt: candidate.currentAttempt,
-          goal: candidate.brief.goal,
-          owner: candidate.brief.manager,
-          source,
-          brief: candidate.brief.markdown.slice(0, this.store.policy.trainResolver.sourceContractCharacters),
-        },
-      ];
-    })
+    const contracts = this.store
+      .tasks()
+      .flatMap((candidate) => {
+        if (candidate.id === task.id) return [];
+        const row = hasQueue
+          ? (this.store.db
+              .query('SELECT request FROM landing_queue WHERE task=? AND attempt=?')
+              .get(candidate.id, candidate.currentAttempt) as { request: string } | null)
+          : null;
+        const queued = row ? (JSON.parse(row.request) as LandingRequest) : undefined;
+        const accepted =
+          candidate.state === 'landing' &&
+          queued?.taskId === candidate.id &&
+          queued.attempt === candidate.currentAttempt &&
+          queued.branch === candidate.branch &&
+          queued.managerLanding?.managerId === candidate.brief.manager
+            ? queued.managerLanding.acceptedCommit
+            : undefined;
+        const source = accepted ?? candidate.integratedCommit;
+        if (
+          !source ||
+          spawnSync('git', ['merge-base', '--is-ancestor', source, conflict.targetCommit], { cwd: tree }).status !== 0
+        )
+          return [];
+        // Exact native scope approvals never rewrite briefs. Actual accepted contributions still need their owners'
+        // original contracts when a later member conflicts on one of those additional files.
+        if (
+          !paths.some((path) => matchesPath(path, candidate.brief.paths, this.store.policy.brief)) &&
+          !this.git(tree, 'diff', '--name-only', '-z', candidate.base, source, '--', ...paths)
+        )
+          return [];
+        return [
+          {
+            taskId: candidate.id,
+            attempt: candidate.currentAttempt,
+            goal: candidate.brief.goal,
+            owner: candidate.brief.manager,
+            source,
+            brief: candidate.brief.markdown.slice(0, this.store.policy.trainResolver.sourceContractCharacters),
+          },
+        ];
+      })
       // Only target-side contributions after the common base explain the conflict; older owners are already in the
       // base. Keep the most recent ones within the same bound as source contracts.
       .filter(

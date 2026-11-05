@@ -122,12 +122,7 @@ function assertScopeApprovalFiles(input: ControlPlaneScopeApprovalRequest, runti
     if (
       matchesPath(path, task.brief.paths, runtime.store.policy.brief) ||
       frozen.has(path) ||
-      isProtectedRiskPath(
-        path,
-        entry?.request.protectedPaths,
-        protectedRiskAreas,
-        runtime.store.policy.brief,
-      )
+      isProtectedRiskPath(path, entry?.request.protectedPaths, protectedRiskAreas, runtime.store.policy.brief)
     )
       throw new Error(`Scope approval cannot replace declared, frozen or protected authority: ${path}`);
     // ls-tree distinguishes a concrete regular file from a directory, symlink or submodule, including deleted files.

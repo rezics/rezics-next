@@ -477,8 +477,7 @@ export function completeContinuation(
   if (ownership && Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string')) {
     const rules = riskAreaRulesFor(ownership);
     for (const path of paths) {
-      for (const area of classifyRiskAreas(path, rules, 'pattern', policy))
-        if (!areas.includes(area)) areas.push(area);
+      for (const area of classifyRiskAreas(path, rules, 'pattern', policy)) if (!areas.includes(area)) areas.push(area);
     }
   }
   front.riskAreas = areas;
