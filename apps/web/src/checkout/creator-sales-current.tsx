@@ -224,11 +224,11 @@ function CurrentSalesRead({
         previous: windows.coordinates.previous,
         staged: windows.coordinates.staged,
         move,
-        retry: () => { if (origin.isCurrent()) void query.refetch(); },
+        retry: () => { if (sourceIsCurrent()) void query.refetch(); },
       } : undefined}
       refreshing={query.isFetching}
       refresh={() => {
-        if (sourceIsCurrent()) void query.refetch();
+        if (!windows.coordinates.staged && sourceIsCurrent()) void query.refetch();
       }}
       locale={locale}
       {...(cursor === undefined ? {} : { cursor })}

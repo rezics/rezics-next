@@ -239,3 +239,83 @@ test('supported departure restores only the exact sale on the original admitted 
     host.remove();
   }
 });
+
+test('three windows return through exact Previous and failed Restart retry without retaining inspection', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const lifetime = viewerExposureLifetime(client);
+  const keep = lifetime.subscribe(() => {});
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: A, csrfToken: 'window-visit' });
+  const snapshot = lifetime.getSnapshot();
+  if (snapshot.state !== 'signed-in') throw new Error('Expected viewer');
+  client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, { subject: A, admitted: ['selling', 'commerce_sale.list'] });
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }) });
+  let cursor: string | undefined;
+  const native = (target?: string): CreatorSalesCurrentRead => {
+    const value = page(A, target ?? null);
+    value.page = { kind: 'ready', sales: target === 'third+/=' ? [] : [creatorSaleFixture],
+      next: target === 'third+/=' ? null : target ? 'third+/=' : 'second+/=', projectionState: 'ready' };
+    return value;
+  };
+  let initial = native();
+  let fail = false;
+  const requested: (string | undefined)[] = [];
+  const read = spyOn(reads, 'readCreatorSalesCurrent').mockImplementation(async ({ data }) => {
+    requested.push(data.cursor);
+    const value = native(data.cursor);
+    if (fail) value.page = { kind: 'unavailable' };
+    return value;
+  });
+  const show = () => root.render(<QueryClientProvider client={client}><RouterContextProvider router={router}>
+    <CreatorSalesCurrent initial={initial} cursor={cursor} locale="en" navigate={(href) => {
+      cursor = new URL(href, 'https://site.test').searchParams.get('cursor') ?? undefined;
+      void reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} }).then((value) => { initial = value; show(); });
+    }} />
+  </RouterContextProvider></QueryClientProvider>);
+  const tick = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const click = async (label: string) => {
+    const element = [...host.querySelectorAll<HTMLElement>('a,button')].find((item) => item.textContent === label)!;
+    expect(element).toBeDefined();
+    await act(async () => element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: 1 })));
+    await tick();
+  };
+  const stay = (event: Event) => event.preventDefault();
+  host.addEventListener('click', stay);
+  try {
+    await act(async () => show());
+    await tick();
+    await click('Older sales');
+    await click('Inspect sale');
+    expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
+    await click('Older sales');
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+    expect(host.textContent).toContain('No sales on this page');
+    expect(host.textContent).toContain('Previous sales');
+    fail = true;
+    await click('Previous sales');
+    expect(host.textContent).toContain('Retry this window');
+    fail = false;
+    await click('Retry this window');
+    expect(cursor).toBe('second+/=');
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+    await click('Previous sales');
+    expect(cursor).toBeUndefined();
+    expect(host.textContent).not.toContain('Previous sales');
+    await click('Older sales');
+    fail = true;
+    await click('Back to latest sales');
+    fail = false;
+    await click('Retry this window');
+    expect(host.textContent).not.toContain('Previous sales');
+    expect(requested).toEqual(['second+/=', 'third+/=', 'second+/=', 'second+/=', undefined, 'second+/=', undefined, undefined]);
+    await click('Inspect sale');
+    await click('Refresh');
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+  } finally {
+    host.removeEventListener('click', stay);
+    await act(async () => root.unmount());
+    keep(); client.clear(); read.mockRestore(); host.remove();
+  }
+});
