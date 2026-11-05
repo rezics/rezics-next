@@ -21,6 +21,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import {
   bindNativeOwnerFilterRead,
+  type NativeOwnerFilterCeilings,
   releaseNativeOwnerFilterRead,
   revalidateOwnerFilterDisclosure,
   nativeOwnerFilterBinding,
@@ -91,8 +92,9 @@ export async function bindOwnerFilterRead(
   deadline: number,
   attempt?: CommandAttempt,
   pagePlan?: OrdinaryCollectionPagePlan,
+  ceilings?: NativeOwnerFilterCeilings,
 ): Promise<Unavailable | Readonly<{ status: 'bound'; binding: OwnerFilterReadBinding }>> {
-  return bindNativeOwnerFilterRead(dependencies, actor, collectionId, admission, deadline, attempt, pagePlan);
+  return bindNativeOwnerFilterRead(dependencies, actor, collectionId, admission, deadline, attempt, pagePlan, ceilings);
 }
 
 /** Complete native original/fact closure, independently of positive candidate enumeration.
