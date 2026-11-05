@@ -1096,7 +1096,7 @@ export function QuestionManagementPage({
     setNavigationBusy(true);
     focusMovement('history', keyboard);
     try {
-      const leave = await confirmMovement.current?.();
+      const leave = await confirmMovement.current!();
       if (!leave || !isVisitCurrent(candidate)) {
         windows.focus = null;
         return;

@@ -1,5 +1,7 @@
 # Realm question management navigation
 
+This follows [Web](../../../../../docs/goals/web.md), the current [types](types.ts), [page](page.tsx),
+[address](address.ts) and [named route](../../routes/realms/$id_.questions.tsx).
 The existing management reader and commands own admission, immutable definitions, caption compare-and-set,
 lifecycle and authorization. This consumer only navigates their current native windows.
 
@@ -12,6 +14,7 @@ remounts and Router Back/Forward. Its existing navigation observer distinguishes
 of an equal source. Realm, selected question, caller/credentials, locale or source retirement discards both coordinate
 paths, including A–B–A replacement. Selection keeps the route's existing reset and fresh inspection semantics:
 directory cursors bind the exact selected question. Caption coordinates belong to that question and original visit.
+Inactive loader metadata is not cached, so an old loader source cannot be replayed before a fresh preparation.
 No previous page bodies are cached. Returning always uses the existing readers, including caption readmission.
 
 Each stream retains at most eight predecessor cursors, current and one staged target. At the admitted 4096 JavaScript

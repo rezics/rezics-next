@@ -46,6 +46,7 @@ function searchAddress(input: Record<string, unknown>): Search {
 
 export const Route = createFileRoute('/realms/$id_/questions')({
   beforeLoad: requireSignedIn,
+  gcTime: 0,
   validateSearch: searchAddress,
   loaderDeps: ({ search }) => search,
   loader: async ({ params, deps }): Promise<QuestionManagementVisit> => {
