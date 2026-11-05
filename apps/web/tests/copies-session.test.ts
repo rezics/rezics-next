@@ -204,8 +204,7 @@ test('native Copy-list permission denial stays distinct from missing, closure an
       const before = calls.length;
       const error = await readCopiesCurrent({ data: address }).catch((caught: unknown) => caught);
       expect(calls).toHaveLength(before + 1);
-      expect(error).toBeTruthy();
-      expect(isPlatformClosedError(error)).toBe(kind === 'closed');
+      expect([error instanceof Error, isPlatformClosedError(error)]).toEqual([true, kind === 'closed']);
     }
 
     outcome = 'transport';
