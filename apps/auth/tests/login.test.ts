@@ -137,7 +137,7 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     try {
@@ -319,7 +319,7 @@ test(
         expect(signIns().length).toBe(1);
         submitted(signIns()[0]);
         if (status === 503) {
-          const choice = page.getByRole('region', { name: 'Sign in', exact: true });
+          const choice = page.locator('section[aria-label="Sign in"]');
           const uncertain = choice.getByRole('status').filter({ hasText: /sign-in outcome could not be confirmed/i });
           await uncertain.waitFor({ state: 'visible' });
           await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'status');
