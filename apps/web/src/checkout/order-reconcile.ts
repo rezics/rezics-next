@@ -63,7 +63,21 @@ export const nativeOrderReconcile: (
   client: KernelClient,
   authorization: string,
   intent: ReconciliationIntent,
-) => Promise<ReconciliationResult> = async () => ({ kind: 'unavailable' });
+) => Promise<ReconciliationResult> = async (client, authorization, { orderId, idempotencyKey }) => {
+  const response = await client.orders({ orderId }).$reconcile.post(
+    {},
+    { headers: { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) } },
+  );
+  if (
+    response.status === 202 &&
+    response.data?.orderId === orderId &&
+    response.data.reconciliation === 'queued'
+  )
+    return { kind: 'queued', orderId, reconciliation: 'queued' };
+  if (response.status === 401 || response.status === 403 || response.status === 404) return { kind: 'denied' };
+  if (response.status === 422) return { kind: 'conflict' };
+  return { kind: 'unavailable' };
+};
 
 export const requestOrderReconciliation = createServerFn({ method: 'POST' })
   .validator(validateIntent)

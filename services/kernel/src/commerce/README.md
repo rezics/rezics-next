@@ -626,9 +626,13 @@ does not reset the original sixteen-read budget; current access requires the ord
 
 The generated client types `order.reconcile` as `client.orders({orderId}).$reconcile.post({}, {headers: {authorization,
 'idempotency-key': JSON.stringify(idempotencyKey)}})`, with body `{}` and the exact 202 queued response.
-`nativeOrderReconcile` in `apps/web/src/checkout/order-reconcile.ts` remains the typed unavailable adapter until Web
-replaces it with that call, preserving denied/conflict/unavailable/uncertain results. There is no cast client or guessed
-HTTP transport. The default caller is `requestOrderReconciliation`; the kernel default effect is already registered.
+`nativeOrderReconcile` in `apps/web/src/checkout/order-reconcile.ts` uses that generated call, accepts only the exact
+202 order receipt, and preserves denied, conflict, unavailable and transport-uncertain outcomes through the existing
+controller. There is no cast client or guessed HTTP transport. The default caller is `requestOrderReconciliation`;
+the kernel default effect is already registered.
+
+Decision: A queued repair receipt acknowledges scheduling only; later payment and current-access truth comes from the
+existing order and entitlement reads.
 Website registration and renewed consent must explicitly include the new scope before visibility is available; existing
 sessions are not upgraded.
 
