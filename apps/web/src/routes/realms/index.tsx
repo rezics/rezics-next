@@ -4,7 +4,7 @@ import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { myRealmsQuery } from '../../community/realm-membership-queries';
-import { captureMyRealmsCaller, MyRealmsCallerHost } from '../../community/my-realms-caller';
+import { captureMyRealmsCaller, MyRealmsCallerHost, retireMyRealmsNavigation } from '../../community/my-realms-caller';
 import { ClosedErrorPage } from '../../shell/closed';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -15,6 +15,7 @@ export const Route = createFileRoute('/realms/')({
   validateSearch: (search: Record<string, unknown>) =>
     typeof search.cursor === 'string' && search.cursor ? { cursor: search.cursor } : {},
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
+  onLeave: ({ context }) => retireMyRealmsNavigation(context.queryClient),
   loader: async ({ context, deps, abortController }) =>
     loadPrivatePage(context.sessionAccess, async () => {
       const caller = await captureMyRealmsCaller(context.queryClient, {

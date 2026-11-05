@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { MyRealmsPageView } from '../community/my-realms-page';
 import type { MyRealmsPage } from '../community/space';
+import type { MyRealmsNavigation } from '../community/my-realms-caller';
 import recording from '../kernel/recorded/my-realms.json';
 import { m } from '../paraglide/messages.js';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
@@ -40,10 +41,12 @@ function ContinuationExample({
   pages,
   direction = 'ltr',
   unavailable = false,
+  navigation,
 }: {
   pages: MyRealmsPage[];
   direction?: 'ltr' | 'rtl';
   unavailable?: boolean;
+  navigation?: MyRealmsNavigation;
 }) {
   const locale = getLocale();
   const router = useMemo(() => {
@@ -53,7 +56,7 @@ function ContinuationExample({
           {unavailable ? (
             <ClosedErrorPage error={new Error('Realm list is unavailable')} />
           ) : (
-            pages.map((page, index) => <MyRealmsPageView key={index} page={page} />)
+            pages.map((page, index) => <MyRealmsPageView key={index} page={page} navigation={navigation} />)
           )}
         </main>
       ),
@@ -66,7 +69,7 @@ function ContinuationExample({
         output: ({ url }) => localizeUrl(url).href,
       },
     });
-  }, [pages, locale, direction, unavailable]);
+  }, [pages, locale, direction, unavailable, navigation]);
   return <RouterProvider router={router} />;
 }
 
@@ -215,4 +218,22 @@ export const Unavailable: Story = {
 export const UnavailableTraditionalChinese: Story = {
   args: { pages: [], unavailable: true },
   globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+};
+
+/** Named missing state: an admitted later terminal window still offers deliberate return. */
+export const LaterEmptyWithReturn: Story = {
+  args: { pages: [finalEmpty], navigation: { previous: cursor, first: true } },
+  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(m.realms_empty())).toBeVisible();
+    const navigation = canvas.getByRole('navigation', { name: m.realms_heading() });
+    for (const label of [m.prq_previous(), m.realms_first_page()]) {
+      const link = within(navigation).getByRole('link', { name: label });
+      await expect(link).toBeVisible();
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      await expect(getComputedStyle(link).whiteSpace).toBe('normal');
+    }
+    await expect(canvas.queryByRole('link', { name: m.realms_more() })).toBeNull();
+  },
 };

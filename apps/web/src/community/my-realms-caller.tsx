@@ -47,7 +47,22 @@ export type MyRealmsVisit = {
 type CacheQuery = object;
 
 type TaggedPage = { callerId: string; sourceRevision: number; query: CacheQuery };
-type ContinuationFocus = { callerId: string; cursor: string };
+export type MyRealmsMovement = 'next' | 'previous' | 'first';
+export type MyRealmsNavigation = { previous?: string | null; first: boolean };
+type InventoryNavigation = {
+  ownerId: string;
+  locale: string;
+  credentialMode: ReadCredentialMode;
+  current: string | null;
+  predecessors: (string | null)[];
+  staged?: { kind: MyRealmsMovement; target: string | null };
+};
+type ContinuationFocus = {
+  callerId: string;
+  cursor: string | null;
+  allowed: boolean;
+  stop: () => void;
+};
 const taggedPages = new WeakMap<object, TaggedPage>();
 const retiredVisits = new WeakSet<object>();
 const sessions = new WeakMap<QueryClient, MyRealmsSessionSource>();
@@ -153,6 +168,7 @@ class MyRealmsSessionSource {
   private hasVisited = false;
   private visitGeneration = 0;
   private continuationFocus: ContinuationFocus | null = null;
+  private navigation: InventoryNavigation | null = null;
 
   constructor(readonly client: QueryClient) {
     this.snapshot = sessionFrom(client);
@@ -170,6 +186,7 @@ class MyRealmsSessionSource {
       this.snapshot = nextSession;
       this.cacheRevision = nextRevision;
       this.revision++;
+      this.clearNavigation();
       this.active?.retire();
       this.notify();
     });
@@ -204,22 +221,101 @@ class MyRealmsSessionSource {
     return this.visitGeneration;
   }
 
-  requestContinuationFocus(caller: MyRealmsCaller, cursor: string) {
-    if (!cursor || !caller.isCurrent()) return false;
-    this.continuationFocus = { callerId: caller.visit.id, cursor };
+  clearNavigation() {
+    this.navigation = null;
+    this.continuationFocus?.stop();
+    this.continuationFocus = null;
+  }
+
+  prepareNavigation(
+    ownerId: string,
+    input: { cursor?: string | undefined; locale: string; credentialMode: ReadCredentialMode },
+  ) {
+    const navigation = this.navigation;
+    if (
+      navigation?.staged &&
+      navigation.staged.target === (input.cursor ?? null) &&
+      navigation.locale === input.locale &&
+      navigation.credentialMode === input.credentialMode
+    ) {
+      navigation.ownerId = ownerId;
+      if (this.continuationFocus) this.continuationFocus.callerId = ownerId;
+      return;
+    }
+    this.clearNavigation();
+    this.navigation = {
+      ownerId,
+      locale: input.locale,
+      credentialMode: input.credentialMode,
+      current: input.cursor ?? null,
+      predecessors: [],
+    };
+  }
+
+  navigationFor(caller: MyRealmsCaller): MyRealmsNavigation {
+    const navigation = this.navigation;
+    return {
+      ...(navigation?.ownerId === caller.visit.id && navigation.predecessors.length
+        ? { previous: navigation.predecessors.at(-1)! }
+        : {}),
+      first: caller.visit.cursor !== null,
+    };
+  }
+
+  stageMovement(caller: MyRealmsCaller, kind: MyRealmsMovement, target: string | null, trigger?: HTMLElement) {
+    if (!caller.isCurrent() || this.navigation?.staged) return false;
+    if (!this.navigation)
+      this.prepareNavigation(caller.visit.id, {
+        cursor: caller.visit.cursor ?? undefined,
+        locale: caller.visit.locale,
+        credentialMode: caller.visit.credentialMode,
+      });
+    const navigation = this.navigation!;
+    navigation.staged = { kind, target };
+    if (trigger) {
+      const document = trigger.ownerDocument;
+      const focus: ContinuationFocus = {
+        callerId: caller.visit.id,
+        cursor: target,
+        allowed: true,
+        stop: () => {
+          document.removeEventListener('focusin', moved);
+          document.removeEventListener('pointerdown', moved);
+        },
+      };
+      const moved = (event: Event) => {
+        if (event.target !== trigger) focus.allowed = false;
+      };
+      document.addEventListener('focusin', moved);
+      document.addEventListener('pointerdown', moved);
+      this.continuationFocus = focus;
+    }
     return true;
   }
 
-  takeContinuationFocus(cursor?: string) {
-    const requested = this.continuationFocus;
+  admitMovement(caller: MyRealmsCaller) {
+    const navigation = this.navigation;
+    if (navigation?.ownerId !== caller.visit.id) return;
+    const staged = navigation.staged;
+    if (!staged) return;
+    if (staged.kind === 'next') navigation.predecessors = [...navigation.predecessors, navigation.current].slice(-8);
+    else if (staged.kind === 'previous') navigation.predecessors.pop();
+    else navigation.predecessors = [];
+    navigation.current = staged.target;
+    delete navigation.staged;
+  }
+
+  hasContinuationFocus(caller: MyRealmsCaller) {
+    const focus = this.continuationFocus;
+    return !!(focus?.callerId === caller.visit.id && focus.cursor === caller.visit.cursor && caller.isCurrent());
+  }
+
+  takeContinuationFocus(caller: MyRealmsCaller) {
+    if (!this.hasContinuationFocus(caller)) return false;
+    const focus = this.continuationFocus!;
     this.continuationFocus = null;
-    const caller = this.active;
-    return !!(
-      requested &&
-      requested.cursor === cursor &&
-      caller?.visit.id === requested.callerId &&
-      caller.isCurrent()
-    );
+    focus.stop();
+    return focus.allowed;
   }
 
   currentVisitGeneration() {
@@ -273,9 +369,9 @@ class MyRealmsSessionSource {
     return this.hasVisited;
   }
 
-  remove(caller: MyRealmsCaller) {
+  remove(caller: MyRealmsCaller, preserveNavigation = false) {
     if (this.active === caller) this.active = null;
-    if (this.continuationFocus?.callerId === caller.visit.id) this.continuationFocus = null;
+    if (this.navigation?.ownerId === caller.visit.id && !preserveNavigation) this.clearNavigation();
     this.visits.delete(caller.visit.id);
   }
 
@@ -327,7 +423,6 @@ export class MyRealmsCaller {
   private readonly localSourceRevision: number;
   private readonly localVisitGeneration: number;
   private resultVisit: MyRealmsVisit | undefined;
-  private continuationFocusPending = false;
 
   private constructor(
     private readonly source: MyRealmsSessionSource,
@@ -338,7 +433,6 @@ export class MyRealmsCaller {
       localSourceRevision: number;
       localSessionCacheRevision: SessionCacheRevision;
       localVisitGeneration: number;
-      continuationFocus?: boolean;
     } = {
       localSourceRevision: visit.sourceRevision,
       localSessionCacheRevision: visit.sessionCacheRevision,
@@ -354,7 +448,6 @@ export class MyRealmsCaller {
     this.hydrationPending = this.adopted;
     this.localSourceRevision = options.localSourceRevision;
     this.localVisitGeneration = options.localVisitGeneration;
-    this.continuationFocusPending = options.continuationFocus ?? false;
   }
 
   static async capture(
@@ -366,7 +459,7 @@ export class MyRealmsCaller {
     const captured = source.read();
     const cache = realmCacheRevision(client, input.cursor);
     const callerId = globalThis.crypto.randomUUID();
-    const continuationFocus = source.takeContinuationFocus(input.cursor);
+    source.prepareNavigation(callerId, input);
     const visitGeneration = source.beginVisit(options.preserveQuery);
     if (!options.preserveQuery) source.clearRealmCache(input.cursor);
     const queryKey = ['my-realms', input.cursor ?? ''] as const;
@@ -417,7 +510,6 @@ export class MyRealmsCaller {
       localSourceRevision: captured.sourceRevision,
       localSessionCacheRevision: captured.cacheRevision,
       localVisitGeneration: visitGeneration,
-      continuationFocus,
     });
     if (!source.activate(caller, options.preserveQuery)) {
       caller.retire();
@@ -499,18 +591,20 @@ export class MyRealmsCaller {
     );
   }
 
-  requestContinuationFocus(cursor: string) {
-    return this.source.requestContinuationFocus(this, cursor);
+  navigation() {
+    return this.source.navigationFor(this);
+  }
+
+  move(kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) {
+    return this.source.stageMovement(this, kind, cursor, trigger);
   }
 
   hasContinuationFocus() {
-    return this.continuationFocusPending && this.isCurrent();
+    return this.source.hasContinuationFocus(this);
   }
 
   claimContinuationFocus() {
-    const pending = this.continuationFocusPending;
-    this.continuationFocusPending = false;
-    return pending && this.isCurrent();
+    return this.source.takeContinuationFocus(this);
   }
 
   isCurrentAddress(address: {
@@ -628,7 +722,8 @@ export class MyRealmsCaller {
         }
         this.retire();
       } else if (event.action.type === 'error') {
-        this.retire();
+        // A failed movement retains its exact target for the route's existing Retry.
+        this.retire(false, true);
       }
     });
   }
@@ -714,6 +809,7 @@ export class MyRealmsCaller {
       resultCacheRevision: this.publishedCacheRevision,
       readerOrigin,
     };
+    this.source.admitMovement(this);
     return this.resultVisit;
   }
 
@@ -740,17 +836,16 @@ export class MyRealmsCaller {
     void this.finishHydrationVerification(connection, attempt);
   }
 
-  retire(preserveCache = false) {
+  retire(preserveCache = false, preserveNavigation = false) {
     if (!this.active) return;
     this.active = false;
-    this.continuationFocusPending = false;
     this.hydrationVerified = false;
     this.hydrationPending = false;
     this.stopReadWatching?.();
     this.stopReadWatching = undefined;
     const owned = this.ownedQuery;
     if (this.resultVisit) retiredVisits.add(this.resultVisit);
-    this.source.remove(this);
+    this.source.remove(this, preserveNavigation);
     if (!preserveCache && owned) this.source.clearRealmCache(this.visit.cursor ?? undefined, owned);
     this.source.publish();
   }
@@ -866,6 +961,10 @@ export function beginMyRealmsRead(caller: MyRealmsCaller, client: QueryClient, s
   };
 }
 
+export function retireMyRealmsNavigation(client: QueryClient) {
+  sourceFor(client).clearNavigation();
+}
+
 function normalizedTarget(pathname: string) {
   return pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/u, '').replace(/\/$/u, '') || '/';
 }
@@ -897,7 +996,8 @@ export function MyRealmsCallerHost({
   };
   const matchingAddress = caller.isCurrentAddress(address);
   const focusContinuation = caller.hasContinuationFocus() ? () => caller.claimContinuationFocus() : undefined;
-  const onKeyboardNext = (nextCursor: string) => caller.requestContinuationFocus(nextCursor);
+  const onMove = (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) =>
+    caller.move(kind, cursor, trigger);
 
   useEffect(() => {
     const disconnect = caller.connect();
@@ -912,7 +1012,12 @@ export function MyRealmsCallerHost({
         <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
           {m.space_setup_heading()}
         </Link>
-        <MyRealmsPageView page={initial.page} onKeyboardNext={onKeyboardNext} focusContinuation={focusContinuation} />
+        <MyRealmsPageView
+          page={initial.page}
+          navigation={caller.navigation()}
+          onMove={onMove}
+          focusContinuation={focusContinuation}
+        />
       </div>
     );
   if (hydrated && caller.adoptionPending()) return null;
@@ -930,7 +1035,12 @@ export function MyRealmsCallerHost({
       <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
         {m.space_setup_heading()}
       </Link>
-      <MyRealmsPageView page={page} onKeyboardNext={onKeyboardNext} focusContinuation={focusContinuation} />
+      <MyRealmsPageView
+        page={page}
+        navigation={caller.navigation()}
+        onMove={onMove}
+        focusContinuation={focusContinuation}
+      />
     </div>
   );
 }

@@ -10,7 +10,7 @@ action import, and after the response. `publishResponse` admits only the origina
 matches the captured reader, and tags that page with the same caller and query object before TanStack Query can publish
 success. Query data is usable only while the exact query, page object, update revision, route, locale, credential mode
 and session source still belong to that visit. Successful equal-data session replacement, error/removal, observed ABA,
-route changes, abort, a replaced query or final unmount retire the visit. Fetch and observer activity alone do not.
+address changes, abort, a replaced query or final unmount retire the caller. Fetch and observer activity alone do not.
 
 Retirement removes only the exact owned query object. Its cancellation and removal filters include that object identity,
 so a replacement query sharing the cursor key survives reentrant cleanup. A late read, query error, `finally` callback
@@ -26,8 +26,7 @@ shared hydration/session producer. Independent QueryClients still cannot reveal 
 transition; the known independent-cache/ABA limit remains.
 
 The source boundary is the existing My Realms caller's capture, admission, verification, query ownership and
-post-verification effects; its route host; this document; and the three connected regression files. The route loader,
-membership query, page reader, session producer, native query, and renderer remain unchanged. The existing first-page
+post-verification effects; its route host; this document; and the three connected regression files. The membership query, page reader, session producer and native query retain their contracts. The existing first-page
 request, cursor recovery and continuation, order, private disclosure and null-CSRF read-only behavior are preserved.
 No extra session read, authentication preflight, polling, per-row hydration or native request is added.
 
@@ -66,3 +65,26 @@ The existing caller, Query object, page, session, source, locale and credential 
 review, readback and retry. Exposure or presentation retirement discards the selection and fences late effects.
 Returning from entry or management obtains a fresh admitted inventory page; keyboard return restores focus only
 within that current visit. This extension preserves the reserved private SSR/hydration boundary above.
+
+## Finite inventory return
+
+Decision: keep at most eight accepted predecessor coordinates, current and one staged exact target in the existing
+per-QueryClient named-route visit. Previous rereads the most recent retained predecessor; First deliberately reads
+without a cursor, including on direct later-page visits. A direct visit, reload or new tab has no predecessor.
+Next after Previous starts a new branch; First clears the predecessor chain. No old page body is retained.
+
+Each explicit movement makes one existing native page read through the signed-in route guard and a fresh caller.
+Only exact-target loader admission commits the staged history change. Failure retains the accepted chain and exact
+target for existing route Retry; denial, closed, restartable failure and native waits keep their separate handling.
+Sparse and empty terminal windows keep Previous and First. Coordinates stay opaque within the native 4096-character
+ceiling; no offset or predecessor is inferred. Only the current native window of at most 20 rows is displayed.
+
+The source transfers coordinates across the movement's caller-host remount while retiring each old address and
+exact Query normally. Reentrant activation cannot replace a staged target. Session success (including equal-data
+replacement), error/removal, credentials, locale, source, QueryClient and actual visit replacement clear coordinates
+and focus; ordinary query observation does not. Leaving the named route clears even a failed target. Late completion
+and cleanup cannot alter a new owner's history. No additional session observer, private storage or entry authority
+is introduced. Current-entry and selected-command admission remain owned by the preceding section.
+
+Keyboard Next, Previous and First transfer focus to the newly admitted heading only while that movement still owns
+the request and the reader has not focused or pointed elsewhere. Retirement clears the pending focus effect.
