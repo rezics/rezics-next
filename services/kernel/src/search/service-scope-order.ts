@@ -44,7 +44,10 @@ function ordinalTerms() {
     Object.freeze({
       metadataPrefix: MEMBERS_PREPARATION_SOURCE_TERMS().metadataPrefix,
       searchBody: MEMBERS_PREPARATION_SOURCE_TERMS().searchBody,
-      collectionState: repeatBound(sourceBound(CANONICAL_SOURCE_RECEIVING_COST().state), ordinalPath().membersSnapshots),
+      collectionState: repeatBound(
+        sourceBound(CANONICAL_SOURCE_RECEIVING_COST().state),
+        ordinalPath().membersSnapshots,
+      ),
       nativeOrdinal: repeatBound(sourceBound(nativeOrdinal().work), ordinalPath().rawOrdinalRowsMaximum),
       sourceTransaction: MEMBERS_PREPARATION_SOURCE_TERMS().sourceTransaction,
     }),
