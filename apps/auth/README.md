@@ -315,6 +315,9 @@ configuration shows an unavailable state before the form. This read is advice on
 validation and verification.
 The read costs one existing Turnstile configuration read and one BFF/native `GET /registration-page`, with zero
 additional Auth or Kernel calls or commands; the native issuer keeps its own deadline, origin/cookie and no-store rules.
+The BFF admits an issuer read whose `Origin` is the Auth origin or issuer. A read without `Origin` is admitted only with
+`Sec-Fetch-Site` `same-origin` or `none` (server-rendered and typed navigations), forwarding the Auth origin; `cross-site`
+or any other origin is refused.
 An already signed-in visitor continues with the current account and can choose Sign in to replace it.
 Nonblank handle/email, any password or confirmation, or a pending creation prompts Stay/Leave; Stay
 preserves input, validation and the same attempt, while confirmed creation releases the warning before sign-in.
