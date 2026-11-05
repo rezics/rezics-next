@@ -965,7 +965,6 @@ Only an exact admitted 201 starts its original attempt's one separate existing s
 retains immutable exact-key recovery with fresh verification. No receiving probe or automatic resend is added.
 Native and browser acceptance of this projection remain integration qualifications; local fixtures alone do not prove them.
 
-
 Production uses `await createAuthHost(options)`, exported from `src/index.ts` with
 `AuthHostOptions` and `AuthHostConfigurationError`. Supply the migrated Auth
 `database` pool, the existing service options, persistent Auth-only 32-byte
