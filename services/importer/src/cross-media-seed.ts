@@ -3679,9 +3679,7 @@ export async function runCrossMediaSeedCli(
           destination: { origin: api },
           ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
           extras: {
-            ...(options.sourceSnapshotAsOf === undefined
-              ? {}
-              : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
+            ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
             ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
             vndbCharacterProfileBindings: characterProfileBindings,
             ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
