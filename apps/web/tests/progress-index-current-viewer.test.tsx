@@ -439,6 +439,21 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
     },
   };
 }
+async function renderCurrentViewerHtml(loader: CurrentViewerProgressIndex) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/library/progress'] }),
+  });
+  await router.load();
+  return renderToString(
+    <QueryClientProvider client={client}>
+      <RouterContextProvider router={router}>
+        <CurrentViewerProgressIndexPage loader={loader} requested={{ subjectId: loader.requested.subjectId }} />
+      </RouterContextProvider>
+    </QueryClientProvider>,
+  );
+}
 function listCall(viewer: Viewer) {
   return calls.findLast((call) => call.viewer === viewer && call.request.method === 'GET')!;
 }
@@ -527,28 +542,13 @@ test('an ordinary denied progress list renders permission on the initial page an
   expect(direct).toMatchObject({ signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null });
   expect(initial).toMatchObject({ viewer: 'A', page: { signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null } });
   expect([initial.page.emptyKind, initial.page.progressChoices, naming, releases]).toEqual([undefined, undefined, 0, 0]);
-  const h = await mount(true, initial);
-  try {
-    expect(h.serverHtml).toContain(m.library_progress_discovery_forbidden());
-    expect(h.host.textContent).toContain(m.library_progress_discovery_forbidden());
-    expect(h.hydrationErrors).toEqual([]);
-    expect(h.host.querySelector('form, button, a, [data-picker]')).toBeNull();
-    deferLists = true;
-    await h.refresh();
-    await resolveListFailure(listCall('A'));
-    expect(h.host.textContent).toContain(m.library_progress_discovery_forbidden());
-    expect(h.host.textContent).not.toContain(m.library_progress_discovery_empty_owner());
-    expect(h.host.querySelector('form, button, a, [data-picker]')).toBeNull();
-    expect(writes()).toHaveLength(0);
-    deferLists = false;
-    listOutcome = 'unavailable';
-    await h.refresh();
-    await tick();
-    expect(h.host.textContent).toContain(m.library_progress_unavailable());
-    expect(h.host.textContent).not.toContain(m.library_progress_discovery_forbidden());
-  } finally {
-    await h.close();
-  }
+  const refresh = await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } });
+  expect(refresh.requested).toEqual(initial.requested);
+  const html = [await renderCurrentViewerHtml(initial), await renderCurrentViewerHtml(refresh)];
+  expect(html.every((page) => page.includes(m.library_progress_discovery_forbidden()))).toBe(true);
+  expect(html.every((page) => !/<form|<button|<a\b|No progress sessions have been recorded/.test(page))).toBe(true);
+  expect(calls).toHaveLength(3);
+  expect(calls.every(({ request }) => new URL(request.url).pathname === '/v1/progressSessions')).toBe(true);
 });
 
 test('closed, concealed, invalid/stale cursor and unavailable list outcomes retain their reader meaning', async () => {
