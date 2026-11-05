@@ -421,8 +421,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
-    expect(tagAcceptanceCalls).toHaveLength(2);
-    expect(tagAcceptanceCalls[1]).toEqual(tagAcceptanceCalls[0]);
+    expect(tagAcceptanceCalls).toHaveLength(1);
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
