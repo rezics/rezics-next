@@ -26,6 +26,7 @@ export class BuyerHistoryVisit {
   windows = new BuyerHistoryWindows();
   private revision = 0;
   private binding: string | undefined;
+  private locale: string | undefined;
   private listeners = new Set<() => void>();
   private focus: { ticket: BuyerHistoryIntent; initiator: Element } | undefined;
   private connected = false;
@@ -48,8 +49,14 @@ export class BuyerHistoryVisit {
     this.publish();
   };
 
+  observeLocale(locale: string) {
+    if (this.locale !== undefined && this.locale !== locale) this.clear();
+    this.locale = locale;
+  }
+
   bind(origin: BuyerCurrentOrigin, locale: string) {
-    const binding = JSON.stringify([origin.observed.readId, locale]);
+    this.observeLocale(locale);
+    const binding = JSON.stringify([origin.observed.readId]);
     if (this.binding !== undefined && this.binding !== binding) this.clear();
     this.binding = binding;
     return this.windows;
@@ -61,7 +68,10 @@ export class BuyerHistoryVisit {
     const observation = browserObservation(this.client);
     const retirement = observation.subscribeRetirement(this.clear);
     const cache = observation.subscribeCache((event) => {
-      if (event.query.queryKey[0] === 'exposure' && event.type === 'updated' &&
+      const current = observation.getSnapshot();
+      const key = event.query.queryKey;
+      if (current.state === 'signed-in' && key[0] === 'exposure' && key[1] === 'viewer' &&
+        key[2] === current.observation.subject && key[3] === current.observation.id && event.type === 'updated' &&
         ['success', 'error', 'invalidate'].includes(event.action.type)) this.clear();
     });
     const navigation = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
@@ -86,7 +96,7 @@ export class BuyerHistoryVisit {
       if (!from || !to || from.locale !== to.locale || to.list === 'editions') return;
       // The originating control has already made its departure decision. Never dispatch one here.
       // Native malformed/stale First recovery may have no ready pagination control to stage it.
-      if (!to.id && to.list !== 'editions' && !to.url.searchParams.has('cursor')) {
+      if (!to.id && !to.url.searchParams.has('cursor')) {
         const list = to.list as BuyerHistoryList;
         const path = this.windows.window(list);
         if (path.current !== undefined && path.pending?.cursor !== null && (path.current !== null || path.pending)) {
