@@ -195,7 +195,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   useLayoutEffect(() => {
     if (hasFragment && !credentials && message) alert.current?.focus();
-  }, [credentials, hasFragment, message]);
+  }, [credentials, hasFragment, message, page]);
 
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
