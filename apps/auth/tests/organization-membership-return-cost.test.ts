@@ -97,6 +97,17 @@ const { membershipProfile, newMembershipCommand, submitMembership, saveMembershi
     expect(await submitMembership(excess)).toBe('unavailable');
     expect(calls.filter(c => c.path.endsWith('/execute'))).toHaveLength(before);
 
+    const displaced = newMembershipCommand(accountId!, command.operation);
+    const replacement = newMembershipCommand(accountId!, command.operation);
+    saveMembershipCommand(displaced);
+    globalThis.fetch = ((input, init) => {
+      if (String(input).endsWith('/approve')) saveMembershipCommand(replacement);
+      return ordinaryFetch(input, init);
+    }) as typeof fetch;
+    expect(await submitMembership(displaced)).toBe('unavailable');
+    expect(readMembershipCommand()).toEqual(replacement);
+    expect(calls.filter(c => c.path.endsWith('/execute'))).toHaveLength(before);
+
     // Shared stream tests cover the byte matrix. Here pin the membership POST's
     // lifetime through a stalled body and ignored-abort headers, without waiting five seconds.
     const timer = globalThis.setTimeout;
@@ -113,8 +124,10 @@ const { membershipProfile, newMembershipCommand, submitMembership, saveMembershi
         const late = new Promise<Response>(resolve => { release = resolve; });
         globalThis.fetch = ((input, init) => {
           if (!String(input).endsWith('/execute')) return ordinaryFetch(input, init);
-          reachedExecute();
-          return stalledBody ? new Response(new ReadableStream({ start() {}, cancel() {} })) : late;
+          if (!stalledBody) { reachedExecute(); return late; }
+          return new Response(new ReadableStream({
+            pull() { reachedExecute(); return new Promise(() => {}); }, cancel() {},
+          }, { highWaterMark: 0 }));
         }) as typeof fetch;
         const attempt = newMembershipCommand(accountId!, command.operation);
         saveMembershipCommand(attempt);

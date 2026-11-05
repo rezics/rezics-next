@@ -467,8 +467,7 @@ test.each([403, 503])('a refused exact retry (%s) keeps first unknown and latest
   await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
   await click(m.auth_members_submit());
   const saved = membership.readMembershipCommand();
-  execute = async () =>
-    Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 });
+  execute = async () => Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status });
   await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
   await click(m.auth_members_retry_exact());
   expect(host.textContent).toContain(m.auth_members_unknown());
