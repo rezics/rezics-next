@@ -17,11 +17,19 @@ import { captureVndbStatistics, VNDB_API_ORIGIN } from './vndb-statistics-driver
 // Synthetic changes to the same real-shaped COPY rows used by the frozen six cases.
 // The native entry revision, column headers and statistic-bearing columns survive.
 async function* archive(average: number): AsyncGenerator<Uint8Array> {
-  for (const name of ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta']) {
-    let text = readFileSync(
-      new URL(`../../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url),
-      'utf8',
-    );
+  for (const name of [
+    'TIMESTAMP',
+    'vn.header',
+    'vn',
+    'vn_titles.header',
+    'vn_titles',
+    'entry_meta.header',
+    'entry_meta',
+  ]) {
+    let text =
+      name === 'TIMESTAMP'
+        ? '2026-10-25 00:00:00+00\n'
+        : readFileSync(new URL(`../../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url), 'utf8');
     if (name === 'vn') {
       const rows = text.trimEnd().split('\n');
       const cells = rows[0]!.split('\t');
@@ -33,7 +41,7 @@ async function* archive(average: number): AsyncGenerator<Uint8Array> {
     const body = new TextEncoder().encode(text);
     const header = new Uint8Array(512);
     const put = (offset: number, value: string) => header.set(new TextEncoder().encode(value), offset);
-    put(0, `db/${name}`);
+    put(0, name === 'TIMESTAMP' ? name : `db/${name}`);
     put(100, '0000644\0');
     put(108, '0000000\0');
     put(116, '0000000\0');
