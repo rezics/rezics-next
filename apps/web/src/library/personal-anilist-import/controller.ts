@@ -131,7 +131,7 @@ function scoreSourceMeta(
   if (!Object.hasOwn(row.source.evidence, 'score')) return null;
   const field = row.source.fields.find((candidate) => candidate.field === 'score');
   return {
-    value: row.source.evidence.score,
+    value: row.source.evidence.score!,
     lexeme:
       typeof row.scoreLexeme === 'string'
         ? row.scoreLexeme

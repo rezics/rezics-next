@@ -6,6 +6,7 @@ import { AniListImportPortContext } from '../library/personal-anilist-import/por
 import type {
   AniListApplyCallResult,
   AniListImportPort,
+  AniListJson,
   AniListPage,
   AniListQuestion,
   AniListReview,
@@ -34,9 +35,9 @@ function makeSource(ordinal: number): AniListRow['source'] {
     evidence: {
       mediaId: ordinal + 1,
       status: 'CURRENT',
-      score: sourceScores[ordinal],
+      score: sourceScores[ordinal]!,
       progress: 0,
-      media: { id: ordinal + 1, type: 'ANIME', title: { userPreferred: titles[ordinal] } },
+      media: { id: ordinal + 1, type: 'ANIME', title: { userPreferred: titles[ordinal]! } },
     },
     group: null,
     identifiers: [{ source: 'anilist', externalId: String(ordinal + 1) }],
@@ -47,7 +48,7 @@ function makeSource(ordinal: number): AniListRow['source'] {
   };
 }
 
-function row(ordinal: number, score?: unknown): AniListRow {
+function row(ordinal: number, score?: AniListJson): AniListRow {
   return {
     ordinal,
     source: makeSource(ordinal),
@@ -81,7 +82,7 @@ function question(revision: number): AniListQuestion {
 
 function makeJourneyPort() {
   const reviews = new Map<number, AniListReview>();
-  const readbacks = new Map<number, unknown>();
+  const readbacks = new Map<number, AniListJson>();
   let applyAttempts = 0;
   let questionRevision = 17;
   const port: AniListImportPort = {
@@ -101,11 +102,12 @@ function makeJourneyPort() {
       };
     },
     async review(command) {
+      const existingVote = existingVotes[command.ordinal]!;
       const rawScore = command.score
         ? {
             source: {
               present: true,
-              value: sourceScores[command.ordinal],
+              value: sourceScores[command.ordinal]!,
               lexeme: command.ordinal === 0 ? '0.00' : null,
               scale: 'POINT_10',
               validity: 'valid',
@@ -134,9 +136,9 @@ function makeJourneyPort() {
                 ? { status: 'unavailable', reason: 'atomic_guard_unavailable' }
                 : {
                     status: 'current',
-                    vote: existingVotes[command.ordinal] === null
+                    vote: existingVote === null
                       ? null
-                      : { units: existingVotes[command.ordinal], revision: 2 },
+                      : { units: existingVote, revision: 2 },
                   },
               commandKey: `score-command-${command.ordinal}`,
               consentKey: `score-consent-${command.ordinal}`,
