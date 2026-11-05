@@ -6,6 +6,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { readSourceConcept, type ConceptRead } from '../src/features/catalogue/source-concept-explorer';
 import {
   conceptVisitDescriptorFor,
+  conceptVisitHref,
   conceptVisitPosition,
   conceptVisitWorkIntent,
   parseConceptVisitDescriptor,
@@ -370,4 +371,26 @@ test('strict visit and Subject-return bounds reject malformed, oversized, and re
   expect(subjectVisitReturn(address + '&cursor=old-work-cursor', 'en')).toBeUndefined();
   const recursive = `/en/subjects/${parent}/parent-concept/concepts?conceptVisit=${encoded}&returnTo=${encodeURIComponent(address)}`;
   expect(subjectVisitReturn(recursive, 'en')).toBeUndefined();
+});
+
+test('tagged-work returns keep the same Concept identity when the locale prefix changes', async () => {
+  const base = await nativeRead(parent);
+  if (!base.ok) throw new Error('fixture Concept was not admitted');
+  const encoded = conceptVisitDescriptorFor(base, { addresses: [undefined], truncated: false }, 0, route, {
+    section: 'works',
+  })!;
+  const descriptor = parseConceptVisitDescriptor(encoded)!;
+  expect(descriptor.subject).toBe(parent);
+  expect(descriptor.works).toEqual(route);
+  for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
+    const conceptHref = conceptVisitHref(descriptor, locale, origin)!;
+    expect(conceptHref.startsWith(`/${locale}/subjects/${parent}/`)).toBe(true);
+    expect(
+      parseConceptVisitDescriptor(new URL(conceptHref, 'https://rezics.test').searchParams.get('conceptVisit')),
+    ).toEqual(descriptor);
+    expect(subjectVisitReturn(conceptHref, locale)).toBe(conceptHref);
+    expect(subjectVisitReturn(conceptHref, locale === 'en' ? 'ja' : 'en')).toBeUndefined();
+    const workHref = subjectVisitHref(`/en/subjects/${work}/steins-gate`, conceptHref);
+    expect(new URL(workHref, 'https://rezics.test').searchParams.get('via')).toBe(conceptHref);
+  }
 });
