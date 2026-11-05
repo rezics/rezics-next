@@ -164,9 +164,11 @@ function NativeMembership({
   const source = observation;
   const observationVersion = realmMembershipObservationVersion(source);
   const [attemptRevision, setAttemptRevision] = useState(0);
-  const [busy, setBusy] = useState<{ attempt: RealmMembershipCommandAttempt; caller: RealmMembershipCaller } | null>(
-    null,
-  );
+  const [busy, setBusy] = useState<{
+    attempt: RealmMembershipCommandAttempt;
+    caller: RealmMembershipCaller;
+    observation: NativeRealmHomeObservation;
+  } | null>(null);
   const attempt = useMemo(
     () => (subject ? caller.store.nativeCommand(realmId, subject) : null),
     [attemptRevision, caller, realmId, subject],
@@ -217,34 +219,37 @@ function NativeMembership({
     current();
   const action = attempt ? null : source.actions.leave === 'admitted' ? 'leave' : canJoin ? 'join' : null;
   const signIn = source.viewer.state === 'anonymous' && source.actions.join === 'sign-in';
-  const busyNow = !!busy && busy.attempt === attempt && busy.caller.isCurrent() && current();
+  const busyNow =
+    !!busy && busy.attempt === attempt && busy.observation === source && busy.caller.isCurrent() && current();
 
   useEffect(() => {
-    if (!subject || !attempt || attempt.observation === observationVersion || source.viewer.state !== 'member') return;
+    if (!subject || !attempt || attempt.observation === observationVersion) return;
+    const accepted = acknowledged.current;
+    if (accepted?.command !== attempt) return;
+    acknowledged.current = null;
     const confirmed =
-      attempt.body.action === 'join'
+      source.viewer.state === 'member' &&
+      (attempt.body.action === 'join'
         ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
-        : source.viewer.membership === 'none';
-    if (confirmed) {
-      const accepted = acknowledged.current;
-      acknowledged.current = null;
-      caller.store.discardNativeCommand(realmId, subject, attempt);
-      setAttemptRevision((revision) => revision + 1);
-      setBusy(null);
-      if (accepted?.command === attempt && accepted.caller.isCurrent() && current()) {
-        const receiptCurrent = () => accepted.caller.isCurrent() && current();
-        setCompleted({
-          receipt: {
-            realmId,
-            action: attempt.body.action,
-            membership: source.viewer.membership,
-            current: receiptCurrent,
-            focusEligible: () => receiptCurrent() && accepted.focus.eligible(),
-          },
-          focus: accepted.focus,
-        });
-      }
+        : source.viewer.membership === 'none');
+    if (!confirmed || !accepted.caller.isCurrent() || !current()) {
+      accepted.focus.cancel();
+      return;
     }
+    caller.store.discardNativeCommand(realmId, subject, attempt);
+    setAttemptRevision((revision) => revision + 1);
+    setBusy(null);
+    const receiptCurrent = () => accepted.caller.isCurrent() && current();
+    setCompleted({
+      receipt: {
+        realmId,
+        action: attempt.body.action,
+        membership: source.viewer.membership,
+        current: receiptCurrent,
+        focusEligible: () => receiptCurrent() && accepted.focus.eligible(),
+      },
+      focus: accepted.focus,
+    });
   }, [attempt, caller, observationVersion, realmId, source, subject]);
 
   useEffect(() => {
@@ -302,7 +307,7 @@ function NativeMembership({
     if (retry && caller.store.nativeCommand(realmId, subject) !== retry) return;
     const focus = captureFocus(event);
     setAttemptRevision((revision) => revision + 1);
-    setBusy({ attempt: command, caller });
+    setBusy({ attempt: command, caller, observation: source });
     const stillCurrent = () =>
       current() && caller.isCurrent() && caller.store.nativeCommand(realmId, subject) === command;
     try {
