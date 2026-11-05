@@ -47,7 +47,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.8 is current, while release 1.0.0 through 1.0.7 bytes and their digests remain loadable for existing pins. Book
+is immutable: 1.0.9 is current, while release 1.0.0 through 1.0.8 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -352,6 +352,15 @@ to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
 `presentation/<vertical>/<tag>.yaml` for each locale the vertical supports. Keep
 each term's labels in the group named for the schema file that defines that term.
 Profiles with no current terms can contain only metadata and an import of `core`.
+
+The music-context catalogue keeps `schema:Place` and `schema:Event` as concrete
+generic identities, with `schema:MusicVenue` and `schema:MusicEvent` as their
+music-specific refinements. `schema:AdministrativeArea` is a Place. The
+instrument identity is Wikidata `wd:Q34379`; `wdt:P1303` qualifies the exact
+`schema:performer` statement that records its use. No Schema.org
+`MusicInstrument` Type is defined. Shared `schema:startDate` and `schema:endDate`
+are owned by `core` and preserve source precision and calendar for events and
+other supported subjects.
 
 ### Type interface words and descriptions
 
