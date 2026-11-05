@@ -518,10 +518,7 @@ export function createSearchGenerationPublication(
               // Definition/observation changes can be discovered before entering the publication body.
               // Recover an outstanding alias intent under the same native fence before returning unready.
               await native(job.consumer, context);
-              if (!job.fence) {
-            if (!(await completeSource(job, client, context, meter))) return preparing();
-            await installFence(job, client, context, meter);
-          }
+              if (!job.fence) await installFence(job, client, context, meter);
               await restart(job, client, context, meter);
             }
             throw error;
@@ -1088,7 +1085,10 @@ export function createSearchGenerationPublication(
           }
           if (job.phase !== 'reconciled' && job.phase !== 'fencing' && job.phase !== 'intent') return preparing();
           guardAvailable();
-          if (!job.fence) await installFence(job, client, context, meter);
+          if (!job.fence) {
+            if (!(await completeSource(job, client, context, meter))) return preparing();
+            await installFence(job, client, context, meter);
+          }
           if (!job.fenced_pass) {
             const result = await writerGuard.drainPublication(fence(job), context);
             add(meter, result.cost);
