@@ -187,6 +187,16 @@ async function mount() {
     await flush(() => {
       root.render(tree(<CollectionPublicationPage address={currentAddress} />));
     });
+    if (nextSession.state === 'signed-in' && nextSession.subject && reads.length === 0) {
+      const snapshot = exposure.getSnapshot();
+      const groups =
+        snapshot.state === 'signed-in'
+          ? client.getQueryData(viewerExposureQuery(snapshot.observation).queryKey)
+          : undefined;
+      throw new Error(
+        `Expected an admitted collection read; viewer=${JSON.stringify(snapshot)}, exposure=${JSON.stringify(groups)}, page=${host.textContent}`,
+      );
+    }
   };
   const button = (label: string) => {
     const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === label);

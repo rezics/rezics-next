@@ -166,7 +166,9 @@ test('the installed generated operation sends the exact selected request; unknow
     },
   });
   const selected = { ...input, subjectIds: ['canonical-a'] };
-  expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({ ok: false, reason: 'unknown' });
+  const uncertain = await publishSelectedNative(client, write(), sessionEnv, selected);
+  expect(calls).toHaveLength(1);
+  expect(uncertain).toEqual({ ok: false, reason: 'unknown' });
   expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({ ok: false, reason: 'unavailable' });
   expect(calls).toHaveLength(2);
   for (const call of calls) {
@@ -276,6 +278,7 @@ test('Selected Collection publication communicates zero one and many selected it
     window,
     document: window.document,
     navigator: window.navigator,
+    scrollTo: () => undefined,
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
