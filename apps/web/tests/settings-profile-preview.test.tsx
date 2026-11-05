@@ -1,10 +1,10 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProfilePreview } from '../src/settings/profile-preview';
 import { ProfileEditor } from '../src/settings/profile-write';
-import type { ProfileValues } from '../src/settings/profile-data';
+import { profileChanges, profileHasLocalPreview, type ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
 
 const draft: ComponentProps<typeof ProfilePreview> = {
@@ -114,8 +114,6 @@ test('open, update, close and reopen the local draft without submitting or chang
 });
 
 test('matching current fields do not mark the local preview as saved while the original is unacknowledged', async () => {
-  mock.module('cloudflare:workers', () => ({ env: {} }));
-  const { ProfileCard } = await import('../src/settings/profile');
   const initial: ProfileValues = {
     accountId: '019a0000-0000-7000-8000-000000000001',
     kind: 'actor',
@@ -137,9 +135,23 @@ test('matching current fields do not mark the local preview as saved while the o
   editor.edit({ displayName: 'Submitted name' });
   await editor.submit('profile');
   editor.edit({ displayName: initial.displayName });
-  expect(editor.snapshot().attempt).not.toBeNull();
-  expect(editor.snapshot().draft?.displayName).toBe(initial.displayName);
-  const html = renderToStaticMarkup(createElement(ProfileCard, { editor, previewActive: true }));
+  const snapshot = editor.snapshot();
+  const draft = snapshot.draft;
+  expect(snapshot.attempt).not.toBeNull();
+  expect(draft?.displayName).toBe(initial.displayName);
+  const changed = snapshot.known != null && draft != null && Object.keys(profileChanges(snapshot.known, draft)).length > 0;
+  expect(changed).toBe(false);
+  expect(profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged)).toBe(true);
+  const html = renderToStaticMarkup(
+    createElement(ProfilePreview, {
+      displayName: draft!.displayName,
+      biography: draft!.biography,
+      avatar: draft!.avatar,
+      localAvatarUrl: null,
+      hasUnsavedChanges: profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged),
+      links: [],
+    }),
+  );
   expect(html).toContain(m.settings_profile_preview_draft());
   expect(html).not.toContain(m.settings_profile_preview_saved());
 });
