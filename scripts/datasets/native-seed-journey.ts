@@ -39,6 +39,8 @@ function redactLog(value: string): string {
 }
 
 async function command(name: string, argv: string[]): Promise<number> {
+  const started = Date.now();
+  console.log(`${name}: starting ${new Date(started).toISOString()}`);
   const logPath = resolve(privateLogs, `${name}.log`);
   const descriptor = openSync(logPath, 'a', 0o600);
   let code: number;
@@ -48,7 +50,7 @@ async function command(name: string, argv: string[]): Promise<number> {
   } finally {
     closeSync(descriptor);
   }
-  console.log(`${name}: exit ${code}`);
+  console.log(`${name}: exit ${code} (${((Date.now() - started) / 1000).toFixed(1)} seconds)`);
   if (code) {
     // Persona provisioning prints a password. Its output always remains private.
     if (name !== 'persona') console.error(redactLog(await readFile(logPath, 'utf8')).slice(-16000));
@@ -139,6 +141,9 @@ async function observe(result: SeedReport) {
 
 await mkdir(evidence, { recursive: true, mode: 0o700 });
 await mkdir(privateLogs, { recursive: true, mode: 0o700 });
+// Prepare the generated route imports before starting the concurrent native services.
+// Keep this finite preparation separate from the HTTP readiness deadline.
+assert.equal(await command('web-localization', ['bun', 'run', '--cwd', 'apps/web', 'generate']), 0);
 assert.equal(await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']), 0);
 assert.equal(await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']), 0);
 const kernelEnvironmentFile = resolve(root, 'services/kernel/.env');
