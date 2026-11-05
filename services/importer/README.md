@@ -91,6 +91,8 @@ Decision: personal-list explicit matching consumes current native Entry and impo
 score consent. Selecting a different target adds one authenticated Entry point read and saving its review adds one
 existing page read (at most eight retained rows). These reads do not write native votes or renew source retention.
 Result-to-work navigation keeps the public-safe Library return landmark, without carrying the private upload address.
+Graph hops retain one immediate public opener. An inverse assertion returns to its original incoming stream;
+it does not flip the originating stream or accumulate the previous opener in a nested URL.
 The independent current Library read now renders the FULL page's counted native vote facts beside status and
 Progress, preserving zero, absence and unavailable in occurrence order. It costs the same one eight-row page, with
 no per-row inspection query. The original sealed review/apply commands, changed-export Entry identity and typed franchise publisher remain the
