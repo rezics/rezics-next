@@ -290,7 +290,7 @@ async function clickKind(kind: SubjectReactionKind) {
   });
   if (kind !== 'like' && kind !== 'insightful')
     await act(async () => {
-      const choice = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
+      const choice = [...window.document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button')].find(
         (button) =>
           button.getAttribute('aria-label')?.startsWith(
             kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad(),
