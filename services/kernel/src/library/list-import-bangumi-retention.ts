@@ -161,7 +161,10 @@ function minimizeReview(review: Record<string, unknown> | null, accountId: strin
   return { token, metadata };
 }
 
-function minimizeChoice(choice: ExpiringChoice | null, outcome: Record<string, unknown> | null): ReceiptOnlyChoice | null {
+function minimizeChoice(
+  choice: ExpiringChoice | null,
+  outcome: Record<string, unknown> | null,
+): ReceiptOnlyChoice | null {
   const plan = choice?.scorePlan;
   if (!choice || outcome || !plan?.started || !plan.command) return null;
   return {
