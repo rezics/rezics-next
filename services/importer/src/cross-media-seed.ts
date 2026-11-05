@@ -3772,7 +3772,12 @@ export async function runCrossMediaSeedCli(
               .map((item) => ({ workId: item.workId, sourceKey: item.sourceKey, tagId: item.tagId })),
           ],
           gaps: [...publicTags.gaps, ...parentPublication.gaps],
-          status: publicTags.gaps.length || parentPublication.gaps.length ? 'imported-with-gaps' : publicTags.status,
+          status:
+            publicTags.gaps.length || parentPublication.gaps.length
+              ? 'imported-with-gaps'
+              : 'status' in publicTags
+                ? publicTags.status
+                : 'imported',
         };
       }
     }
