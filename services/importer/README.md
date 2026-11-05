@@ -1,6 +1,6 @@
 # Importer
 
-The importer owns source acquisition, run and record state, candidate journals and recovery. It sends ordinary public API requests under current caller authority. It does not have a privileged catalogue writer.
+The importer owns source acquisition, run/record state, candidate journals and recovery. It writes through ordinary public APIs under caller authority; it has no privileged catalogue writer.
 
 ## Sources, grain and rights
 
