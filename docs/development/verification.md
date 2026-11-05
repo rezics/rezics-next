@@ -25,8 +25,7 @@ Build and prove frontend surfaces in Storybook 11 with `addon-vitest` and `addon
 responses for populated, empty, long or overflowing content, preparing or unavailable, and error states, for each
 applicable viewer (anonymous, member, owner or curator, suspended), on desktop and phone. Cover every control state
 on library, Collection, subject, search and Zone surfaces: filters, selection, each status chip, curated and dynamic,
-private/unlisted/public, Liked and Continue progress kinds. Clearly identified contract-shaped fakes may support
-interaction or failure injection; they do not establish a new backend state or replace native API evidence.
+private/unlisted/public, Liked and Continue progress kinds. Fakes may inject interaction or failure; they do not replace native API evidence. Page data is verified against the seeded running product, not fixtures.
 
 Every interface brief lists the page stories it adds and their API evidence. Track exact story exports in the
 [page story coverage map](page-stories.md); a story proves only what it actually renders. Existing primitive stories

@@ -1,5 +1,23 @@
 # Scripts
 
+## Page data check
+
+`bun scripts/page-data-check.ts --base-url <web> --kernel <kernel>` opens each M1 page in
+`scripts/page-data-sections.json` as the anonymous visitor and the signed-in development persona. For every declared
+section it calls the native Kernel endpoint with that persona's authorization, optionally runs a read-only SQL count,
+and prints one line: `page persona section CLASS`. Classes are DATA (the page renders seeded data); EMPTY,
+UNAUTHORIZED or UNAVAILABLE where the native API states that outcome; and defects API (the native endpoint errors or
+refuses), WEB (the native endpoint returns data the section does not render) or SEED (the database holds no such data).
+The process exits 1 when any defect is printed, 2 on usage or infrastructure failure, and 0 otherwise. Credentials never
+appear in output.
+
+Empty native lists with a seed SQL count of zero are SEED. Surfaces that may legitimately be empty omit SQL and
+classify EMPTY when the page shows empty, WEB when it hides that empty reading. HTTP 400/5xx and an authenticated 403
+are API. Unauthenticated 401/403 is UNAUTHORIZED. Native 200 that states preparing or unavailable is UNAVAILABLE.
+`--database-url` and `DATABASE_URL` (or `services/kernel/.env`) supply the count connection; `--member-token` or
+`PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the signed-in Kernel bearer; otherwise the local persona keys are used without
+being printed. A seeded local run over this manifest is expected to finish in under five minutes.
+
 ## Check hosts
 
 ### Check cost ledger
