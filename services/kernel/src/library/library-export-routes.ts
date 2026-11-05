@@ -35,7 +35,9 @@ const sectionV2 = t.Union([
   t.Literal('journals'),
 ]);
 function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
-  return t.Tuple(
+  return t.Tuple<{
+    -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
+  }>(
     sections.map((section) => t.Literal(section)) as {
       -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
     },

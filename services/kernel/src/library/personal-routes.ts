@@ -33,7 +33,8 @@ import { createLoanCommands, loanPeopleDisplay } from './loan-commands.ts';
 import { loanDueBoundary, type LoanDueBoundary } from './loan-date.ts';
 import { LoanConflictError, LoanInvalidError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
 import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
-import { attachCopyListContext } from './copy-list-context.ts';
+import { attachCopyListContext, type CopyListContext } from './copy-list-context.ts';
+import type { CopyInventory } from './copy-inventory.ts';
 import {
   createEntryCommands,
   LibraryConflictError,
@@ -736,6 +737,15 @@ function copyView({ id, subjectId, kind, status, revision, location, source, acq
     acquiredOn,
     disposedOn,
     note,
+  };
+}
+function copyContextView(context: CopyListContext): Static<typeof copyListContextSchema> {
+  return context.state === 'available' ? { ...context, work: [...context.work] } : context;
+}
+function copyInventoryView(inventory: CopyInventory): Static<typeof copyInventorySchema> {
+  return {
+    kinds: { ...inventory.kinds, choices: [...inventory.kinds.choices] },
+    statuses: { ...inventory.statuses, choices: [...inventory.statuses.choices] },
   };
 }
 function loanView(
@@ -1490,7 +1500,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           return fullView(config(), actor, query.view, {
             copies: result.copies.map(copyView),
             next: result.next,
-            filterOptions: result.filterOptions,
+            filterOptions: copyInventoryView(result.filterOptions),
           });
 
         const copiesPage = await attachCopyListContext(
@@ -1510,7 +1520,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
           },
         );
-        return { copies: copiesPage, next: result.next, filterOptions: result.filterOptions };
+        return {
+          copies: copiesPage.map((copy) => ({ ...copy, context: copyContextView(copy.context) })),
+          next: result.next,
+          filterOptions: copyInventoryView(result.filterOptions),
+        };
       },
     )
     .get(
@@ -1734,7 +1748,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               revision: item.copy.revision,
               kind: item.copy.kind,
               status: item.copy.status,
-              context: context?.context ?? {
+              context: context ? copyContextView(context.context) : {
                 state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
               },
             };
