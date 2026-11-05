@@ -11,12 +11,25 @@ export type WindowRead<T> = { page: Page<T>; reader: number | null; scope: strin
 export async function readManagementWindow<T>(
   client: QueryClient,
   target: string,
-  read: () => Promise<Page<T>>,
+  signal: AbortSignal,
+  read: (signal: AbortSignal) => Promise<Page<T>>,
 ): Promise<WindowRead<T>> {
-  const observation = browserObservation(client).getSnapshot();
-  const reader = observation.state === 'signed-in' ? observation.observation.id : null;
+  const observation = browserObservation(client);
+  const source = observation.getSnapshot();
+  const reader = source.state === 'signed-in' ? source.observation.id : null;
   const scope = `${getLocale()}:${target}`;
-  return { page: await read(), reader, scope };
+  const retired = new AbortController();
+  const release =
+    source.state === 'signed-in'
+      ? observation.subscribe(() => {
+          if (observation.getSnapshot() !== source) retired.abort();
+        })
+      : () => {};
+  try {
+    return { page: await read(AbortSignal.any([signal, retired.signal])), reader, scope };
+  } finally {
+    release();
+  }
 }
 
 export type WindowNavigation = {

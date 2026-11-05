@@ -14,8 +14,8 @@ export const Route = createFileRoute('/accounts/$accountId')({
   loaderDeps: ({ search }) => search,
   gcTime: 0,
   loader: ({ params, deps, abortController, context }) =>
-    readManagementWindow(context.queryClient, params.accountId, () =>
-      readAccountManagement({ data: { accountId: params.accountId, ...deps }, signal: abortController.signal }),
+    readManagementWindow(context.queryClient, params.accountId, abortController.signal, (signal) =>
+      readAccountManagement({ data: { accountId: params.accountId, ...deps }, signal }),
     ),
   head: ({ match }) =>
     pageHead({ title: m.managed_detail_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
