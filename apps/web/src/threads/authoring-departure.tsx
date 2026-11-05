@@ -165,6 +165,7 @@ export class AuthoringDepartureState {
   };
 
   block = (currentContext: string, nextContext: string, focused: HTMLElement | null, local = false) => {
+    if (local) console.log('[departure-debug]', this.active, this.drafts.size, [...this.drafts.values()].map((draft) => [draft.needsDecision(), draft.unresolved()]));
     if (!this.active || currentContext === nextContext || !this.needsDecision()) return false;
     if (this.decision) return true;
     this.focusTarget = focused;
