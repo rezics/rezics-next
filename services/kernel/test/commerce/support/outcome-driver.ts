@@ -20,7 +20,7 @@ import { actionCatalogue } from '../../../src/http/request.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
 import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';

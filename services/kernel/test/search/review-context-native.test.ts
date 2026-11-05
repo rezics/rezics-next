@@ -8,7 +8,7 @@ import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
-import { createDefaultDiscoveryOwnerAdapters } from '../../src/search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { hydrateOwnerDiscoveryHits } from '../../src/search/discovery-hydration.ts';
 import { discoveryHttpPage } from '../../src/search/discovery-http.ts';
 import { prepareSearchReviewContexts, REVIEW_CONTEXT_LIMITS } from '../../src/search/review-context.ts';
@@ -71,12 +71,13 @@ test('selected mixed Search preserves the opening citation and current target, a
       });
       expect(changed.response.status, changed.text).toBe(200);
     }
-    const ownerAdapters = createDefaultDiscoveryOwnerAdapters({ ...deps, keys: deps.tokens });
+    const source = createRatedSubjectSource(deps.pool, deps.routeKey).source;
+    const producers = createDiscoveryProducerEntry({ ...deps, subjects: source });
     const registry = await nativeDiscoveryRegistry(
       deps.pool,
       deps.routeKey,
-      createRatedSubjectSource(deps.pool, deps.routeKey).source,
-      { ownerAdapters, languages: ['en'] },
+      producers.subjects,
+      { ownerAdapters: producers.ownerAdapters, accounts: producers.accounts, languages: ['en'] },
     );
     async function selected(): Promise<DiscoveryPage> {
       const read = context();

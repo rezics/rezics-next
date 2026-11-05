@@ -23,7 +23,8 @@ export function createNativeDiscoveryRegistry(options: {
   routeKey: Uint8Array;
   release: DiscoveryRegistryOptions['release'];
   semantic: Pick<DiscoveryRegistryOptions['semantic'], 'source' | 'icons'>;
-  accounts: Pick<DiscoveryRegistryOptions['accounts'], 'labels' | 'icon'>;
+  accounts: Pick<DiscoveryRegistryOptions['accounts'], 'labels' | 'icon'> &
+    Partial<Pick<DiscoveryRegistryOptions['accounts'], 'source'>>;
   ownerAdapters?: DiscoveryOwnerAdapterSlots;
   languages?: readonly string[];
 }) {
@@ -39,7 +40,7 @@ export function createNativeDiscoveryRegistry(options: {
     },
     accounts: {
       ...options.accounts,
-      source: accountDiscoverySource(pool),
+      source: options.accounts.source ?? accountDiscoverySource(pool),
       async hydrate(ids, context) {
         const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, {
           languages,
@@ -118,7 +119,7 @@ function validOwnerSummary(
     );
   }
   return (
-    Object.keys(value).length === 9 &&
+    Object.keys(value).length === 8 &&
     ['id', 'title', 'summary', 'revision', 'sourcePosition', 'address', 'realmId', 'realmTitle'].every((key) =>
       Object.hasOwn(value, key),
     ) &&

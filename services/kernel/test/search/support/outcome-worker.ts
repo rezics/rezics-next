@@ -1,5 +1,5 @@
 import { readWorkerConfig, startWorker, type WorkerConfig } from '../../../src/worker.ts';
-import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
 import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';

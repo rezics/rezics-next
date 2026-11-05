@@ -6,7 +6,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { semanticWorkModule } from '../../src/semantic/work-module.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -48,7 +48,10 @@ const program = `
     return startRelays(nativePool, relays, ...rest);
   });
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
-  import { KERNEL_WORK_MODULES } from './src/work/modules.ts';
+  import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
+  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
+    import { createKernelWorkModules } from './src/work/modules.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
   let pool;
   let starts = 0;
   let stops = 0;

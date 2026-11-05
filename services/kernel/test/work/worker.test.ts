@@ -3,7 +3,7 @@ import { readWorkerConfig } from '../../src/worker.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { fixture } from './support/process.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -120,7 +120,10 @@ test('a worker missing or rejecting commerce configuration names the variable an
   const program = `
     import { ConfigError } from './src/commerce/config.ts';
     import { readWorkerConfig, startWorker } from './src/worker.ts';
-    import { KERNEL_WORK_MODULES } from './src/work/modules.ts';
+    import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
+    import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
+    import { createKernelWorkModules } from './src/work/modules.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
 
     const env = { ...process.env };
     const { variable, value } = JSON.parse(process.env.WORKER_CONFIG_CASE);

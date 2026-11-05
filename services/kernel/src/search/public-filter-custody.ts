@@ -31,7 +31,7 @@ import { admitFilter, walkFilter } from '@rezics/filter';
 import releaseExists from '../semantic/definitions-exists.sql';
 import compositeReference from '../semantic/composite-read.sql';
 import { withConnection } from '../database/pool.ts';
-import { compileDiscoveryConsumerCapture } from './discovery.ts';
+import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';

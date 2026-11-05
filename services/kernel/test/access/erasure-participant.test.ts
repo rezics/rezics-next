@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
 import { readErasureStatus, erasureWorkModule } from '../../src/access/erasure.ts';
 import { NATIVE_ERASURE_GROUPS } from '../../src/access/erasure-native.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';

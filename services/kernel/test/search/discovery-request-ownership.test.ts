@@ -7,6 +7,7 @@ import type { Pool } from 'pg';
 import type { Access } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { createDefaultDiscoverySearch } from '../../src/search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { compileDiscoveryCapture, currentDiscoveryFilter } from '../../src/search/discovery-filter.ts';
 import { admitDiscoveryRequest, type MixedDiscoveryRequest } from '../../src/search/discovery-request.ts';
@@ -427,8 +428,15 @@ test('default discovery owns hydration languages before activeRelease', async ()
       throw new Error('owned languages recorded');
     }),
   );
+  const pool = { query: async () => ({ rows: [] }), options: { connectionString: '' } } as unknown as Pool;
+  const access = new Proxy({} as Access, {
+    get() {
+      throw new Error('Unexpected Access read');
+    },
+  });
+  const producers = createDiscoveryProducerEntry({ pool, routeKey: new Uint8Array(32).fill(1), access, tokens: keys });
   const discovery = createDefaultDiscoverySearch({
-    pool: { query: async () => ({ rows: [] }), options: { connectionString: '' } } as unknown as Pool,
+    pool,
     routeKey: new Uint8Array(32).fill(1),
     access: new Proxy({} as Access, {
       get() {
@@ -442,7 +450,7 @@ test('default discovery owns hydration languages before activeRelease', async ()
     prefix: 'own-',
     clock: () => new Date(now),
     keys,
-  });
+  }, producers);
   try {
     const request = liveRequest();
     const pending = discovery.open('anonymous', request, {

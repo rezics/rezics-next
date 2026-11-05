@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
-import { createDefaultDiscoveryOwnerAdapters } from '../../src/search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import {
   assertDiscoveryProducerCoverage,
   SECOND_SCOPE_PUBLIC_METADATA_KINDS,
@@ -18,16 +18,17 @@ test('bundled discovery definitions have native producers for every discoverable
     },
   } as unknown as Pool;
   const routeKey = new Uint8Array(32);
-  const owners = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool,
     routeKey,
     access: {} as never,
-    keys: {} as never,
     reviewSource: {} as never,
   });
-  const registry = await nativeDiscoveryRegistry(pool, routeKey, {} as never, {
+  const owners = { ...producers.ownerAdapters, metadataProducers: producers.metadataProducers };
+  const registry = await nativeDiscoveryRegistry(pool, routeKey, producers.subjects, {
     release: bundledRelease,
     ownerAdapters: owners,
+    accounts: producers.accounts,
   });
   const registrations: DiscoveryProducerRegistration[] = [
     ...registry.entries.map(({ kind, owner }) => ({ kind, owner })),

@@ -643,7 +643,7 @@ import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compilePublicSuggestion } from './public-suggestion-input.ts';
 import { type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
-import { compileDiscoveryConsumerCapture } from './discovery.ts';
+import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { readDiscoveryEngineResult } from './discovery-query.ts';
 

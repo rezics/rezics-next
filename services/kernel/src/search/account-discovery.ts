@@ -39,9 +39,8 @@ import { reviewDiscoveryDocument } from './review-discovery.ts';
 import {
   assertDiscoveryCapabilityBinding,
   DiscoveryProducerCoverageError,
-  type DiscoveryMetadataKind,
-  type DiscoveryMetadataProducers,
 } from './generations.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducers } from './discovery-api.ts';
 import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { accountDocumentActions } from './document.ts';
@@ -258,7 +257,12 @@ export async function nativeDiscoveryRegistry(
   pool: Pool,
   routeKey: Uint8Array,
   subjects: SubjectSource,
-  options?: { release?: Release; languages?: readonly string[]; ownerAdapters?: DiscoveryOwnerAdapterSlots },
+  options?: {
+    release?: Release;
+    languages?: readonly string[];
+    ownerAdapters?: DiscoveryOwnerAdapterSlots;
+    accounts?: AccountDiscoverySource;
+  },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
   if (!release) throw new Error('Discovery requires an active definition release');
@@ -272,6 +276,7 @@ export async function nativeDiscoveryRegistry(
       icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),
     },
     accounts: {
+      ...(options?.accounts ? { source: options.accounts } : {}),
       labels: { en: 'Accounts' },
       icon: 'user-round',
     },
