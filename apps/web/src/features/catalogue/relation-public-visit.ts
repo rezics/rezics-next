@@ -32,9 +32,7 @@ function publicReturn(value: unknown, id: string, locale: string): { href: strin
   const href = subjectVisitReturn(value, locale);
   if (!href || !relationPublicIntentFits(href)) return;
   const url = new URL(href, localOrigin);
-  const route = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+$/iu.exec(
-    url.pathname,
-  );
+  const route = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/subjects\/([0-9a-f-]{36})\/[^/?#]+$/iu.exec(url.pathname);
   const keys = [...url.searchParams.keys()];
   const realms = url.searchParams.getAll('realm');
   if (
@@ -99,10 +97,7 @@ export function createRelationPublicOrigin(input: {
 }
 
 /** The public menu and direct address use the same closed observation. */
-export function relationPublicCorrectionHref(
-  base: string,
-  origin: RelationPublicOrigin,
-): string {
+export function relationPublicCorrectionHref(base: string, origin: RelationPublicOrigin): string {
   const href = `${base}?${new URLSearchParams({ origin: JSON.stringify(origin) })}`;
   return relationPublicIntentFits(href) ? href : `${base}?origin=!`;
 }

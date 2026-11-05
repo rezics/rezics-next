@@ -1,7 +1,14 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createContext, useContext, type ReactNode } from 'react';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import { candidateContext } from '../src/subject/candidates';
@@ -146,13 +153,21 @@ test('mounted menu and production relation route gate unsupported origins before
 
   mock.module('../src/features/pages/subject', () => ({
     ...subjectPages,
-    loadSubjectPage: async (_client: unknown, requestedId: string, _view: string, _locale: string, options: { realm?: string }) => {
+    loadSubjectPage: async (
+      _client: unknown,
+      requestedId: string,
+      _view: string,
+      _locale: string,
+      options: { realm?: string },
+    ) => {
       pageReads.push({ id: requestedId, realm: options.realm });
       return {
         kind: 'page',
         page: {
           subject: requestedId,
-          context: options.realm ? { id: context, population: { kind: 'realm', id: options.realm, title: 'Realm' } } : { id: pageContext, population: { kind: 'global' } },
+          context: options.realm
+            ? { id: context, population: { kind: 'realm', id: options.realm, title: 'Realm' } }
+            : { id: pageContext, population: { kind: 'global' } },
           catalogue: { digest: 'sha256:current' },
         },
       };
@@ -186,7 +201,9 @@ test('mounted menu and production relation route gate unsupported origins before
   }));
 
   const { createRoot } = await import('react-dom/client');
-  const { waitFor, within } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
+  const { waitFor, within } = await import(
+    createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom')
+  );
   const { default: userEvent } = await import(
     createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
   );
@@ -213,7 +230,14 @@ test('mounted menu and production relation route gate unsupported origins before
   window.document.body.append(host);
   const root = createRoot(host);
   const Content = createContext<ReactNode>(null);
-  const rootRoute = createRootRoute({ component: () => <>{useContext(Content)}<Outlet /></> });
+  const rootRoute = createRootRoute({
+    component: () => (
+      <>
+        {useContext(Content)}
+        <Outlet />
+      </>
+    ),
+  });
   const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
   Route.update({
     id: '/subjects/$id_/$slug_/relation-edit',
@@ -226,7 +250,11 @@ test('mounted menu and production relation route gate unsupported origins before
     parseSearch,
     stringifySearch,
   });
-  const menu = <EditorialEntry id={subjectId} label={label} locale="en" context={candidateContext}>{null}</EditorialEntry>;
+  const menu = (
+    <EditorialEntry id={subjectId} label={label} locale="en" context={candidateContext}>
+      {null}
+    </EditorialEntry>
+  );
   const renderMenu = async () =>
     act(async () =>
       root.render(
@@ -243,7 +271,12 @@ test('mounted menu and production relation route gate unsupported origins before
   const openEditor = async () => {
     await act(async () => user.click(within(host).getByRole('button', { name: m.relation_open() })));
   };
-  const relationEntry = subjectContributionEntries({ id: subjectId, label, locale: 'en', context: candidateContext })[0]!;
+  const relationEntry = subjectContributionEntries({
+    id: subjectId,
+    label,
+    locale: 'en',
+    context: candidateContext,
+  })[0]!;
   const originHref = relationEntry.href;
   const unsupportedHref = subjectContributionEntries({ id: subjectId, label, locale: 'en', context })[0]!.href;
   const realmHref = subjectContributionEntries({ id: subjectId, label, locale: 'en', context, realm })[0]!.href;
@@ -253,7 +286,9 @@ test('mounted menu and production relation route gate unsupported origins before
     await renderMenu();
     await act(async () => user.click(within(host).getByRole('button', { name: m.contribute_title() })));
     await act(async () => user.hover(within(window.document.body).getByText(m.contribute_edit())));
-    const menuRelation = await waitFor(() => within(window.document.body).getByRole('menuitem', { name: m.relation_title() }));
+    const menuRelation = await waitFor(() =>
+      within(window.document.body).getByRole('menuitem', { name: m.relation_title() }),
+    );
     expect(menuRelation.getAttribute('href')).toBe(originHref);
     await navigate(menuRelation.getAttribute('href')!);
     await waitFor(() => expect(host.textContent).toContain('Subject heading'));
@@ -321,9 +356,9 @@ test('mounted menu and production relation route gate unsupported origins before
     expect((identityReplacement as { options?: { href?: string } }).options?.href).toContain('origin=!');
     canonicalId = subjectId;
 
-    expect(parseRelationPublicVisit(new URL(originHref, 'https://site.test').search, subjectId, 'en', editPath).kind).toBe(
-      'origin',
-    );
+    expect(
+      parseRelationPublicVisit(new URL(originHref, 'https://site.test').search, subjectId, 'en', editPath).kind,
+    ).toBe('origin');
   } finally {
     holdSessionReads = false;
     await act(async () => root.unmount());

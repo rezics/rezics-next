@@ -34,8 +34,7 @@ const readEditorPage = createServerFn({ method: 'GET', strict: false })
       typeof input.locale !== 'string' ||
       input.locale.length > 35 ||
       typeof input.search !== 'string' ||
-      input.search.length >
-        (publicVisitAddress ? publicSearchLimit : subjectRouteSearchLimit(input.search))
+      input.search.length > (publicVisitAddress ? publicSearchLimit : subjectRouteSearchLimit(input.search))
     )
       throw notFound();
     return { ...input, realm: validatePageRealm(input.realm) };
@@ -80,7 +79,8 @@ const readEditorPage = createServerFn({ method: 'GET', strict: false })
       supported:
         !data.realm &&
         (visit.kind === 'origin'
-          ? visit.origin.context === candidateContext && (page.page.context?.id ?? candidateContext) === visit.origin.context
+          ? visit.origin.context === candidateContext &&
+            (page.page.context?.id ?? candidateContext) === visit.origin.context
           : !page.page.context || page.page.context.id === candidateContext),
       realm: data.realm,
       routePath: relationEditPath(data.id, data.slug, data.locale),
@@ -137,7 +137,10 @@ function RelationEditRoute() {
     return (
       <article className="mx-auto w-full max-w-4xl space-y-8">
         <p role="alert">{m.relation_public_unsupported()}</p>
-        <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={origin.returnHref}>
+        <a
+          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          href={origin.returnHref}
+        >
           {general ? m.relation_public_general_return() : m.relation_public_return()}
         </a>
         <a
@@ -150,10 +153,13 @@ function RelationEditRoute() {
     );
   }
   const { page, frame, supported, visit, routePath } = data;
-  const publicReturn = visit.kind === 'origin' ? visit.origin.returnHref : visit.kind === 'fresh' ? visit.returnHref : undefined;
+  const publicReturn =
+    visit.kind === 'origin' ? visit.origin.returnHref : visit.kind === 'fresh' ? visit.returnHref : undefined;
   const observedUnsupported = visit.kind === 'origin' && !supported;
-  const freshReturn = visit.kind === 'fresh' ? visit.returnHref : visit.kind === 'origin' ? visit.origin.returnHref : undefined;
-  const generalPublicReturn = publicReturn && !new URL(publicReturn, 'https://rezics.invalid').searchParams.has('realm');
+  const freshReturn =
+    visit.kind === 'fresh' ? visit.returnHref : visit.kind === 'origin' ? visit.origin.returnHref : undefined;
+  const generalPublicReturn =
+    publicReturn && !new URL(publicReturn, 'https://rezics.invalid').searchParams.has('realm');
   const editorKey = [
     getLocale(),
     frame.id,
@@ -170,7 +176,10 @@ function RelationEditRoute() {
     <article className="mx-auto w-full max-w-4xl space-y-8">
       {publicReturn ? (
         <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={publicReturn}>
+          <a
+            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            href={publicReturn}
+          >
             {generalPublicReturn ? m.relation_public_general_return() : m.relation_public_return()}
           </a>
           {visit.kind === 'fresh' ? <p>{m.relation_public_fresh_notice()}</p> : null}
