@@ -20,6 +20,8 @@ does not start an unprotected worker.
 ```sh
 bun install --cwd tools/goal --frozen-lockfile
 bun run --cwd tools/goal check
+bun tools/goal/scripts/test-timings.ts
+bun tools/goal/scripts/test-timings.ts --fast
 bun tools/goal/src/cli.ts dispatch .temp/goal/brief.md
 bun tools/goal/src/cli.ts status
 bun tools/goal/src/cli.ts attempts --json
@@ -33,6 +35,20 @@ one task, `attempts --task <task> [--after <attempt>] [--limit <count>] [--json]
 include `hasMore`; when more records remain, `nextAfter` is the attempt number to pass to the next `--after` request.
 The text form also prints whether more attempts remain and the continuation attempt number.
 Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
+
+## Testing
+
+`bun tools/goal/scripts/test-timings.ts` runs this package's tests in isolated processes, at most sixteen files at
+once (`GOAL_TEST_PARALLEL` raises or lowers that). It prints wall time per file and per test, slowest first, and the
+total. Git fixtures are built once per file and cloned with `git clone --shared`. Tests that wait for time to pass use
+an injected clock. `--fast` skips the integration files that still drive real worker processes and silence windows.
+
+Before this runner the suite took about 15 minutes or more; three files for one change took 5 to 8 minutes. After, the
+full suite completes in under 4 minutes on this host. `bun run --cwd tools/goal test:fast` is the seconds-scale set for
+ordinary edits.
+
+Decision: shared Git templates live in test-support; the suite runner owns file isolation, parallelism and the
+integration split.
 
 `goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
 host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
