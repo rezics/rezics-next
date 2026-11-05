@@ -42,27 +42,55 @@ test('late rollout precedence and a growing file match measureLog in one travers
   const initial = jsonl([
     { type: 'thread.started', thread_id: 'late-session' },
     { timestamp: start, type: 'turn.completed', usage: tokens(9000, 8000, 900) },
-    { timestamp: start, type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ text: 'Final report' }] } },
-    { timestamp: '2026-10-25T01:00:20.000Z', type: 'response_item', payload: { type: 'command_execution', id: 'check', command: 'bun test' } },
-    { timestamp: '2026-10-25T01:00:30.000Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(1300, 700, 150) } } },
-    { timestamp: '2026-10-25T01:01:01.000Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(9000, 8000, 900) } } },
+    {
+      timestamp: start,
+      type: 'response_item',
+      payload: { type: 'message', role: 'assistant', content: [{ text: 'Final report' }] },
+    },
+    {
+      timestamp: '2026-10-25T01:00:20.000Z',
+      type: 'response_item',
+      payload: { type: 'command_execution', id: 'check', command: 'bun test' },
+    },
+    {
+      timestamp: '2026-10-25T01:00:30.000Z',
+      type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: tokens(1300, 700, 150) } },
+    },
+    {
+      timestamp: '2026-10-25T01:01:01.000Z',
+      type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: tokens(9000, 8000, 900) } },
+    },
   ]);
   const appended = jsonl([
-    { timestamp: end, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(10000, 9000, 1000) } } },
+    {
+      timestamp: end,
+      type: 'event_msg',
+      payload: { type: 'token_count', info: { total_token_usage: tokens(10000, 9000, 1000) } },
+    },
   ]);
   withSessionFile((file) => {
     fs.writeFileSync(file, initial);
-    const originalOpen = fs.openSync.bind(fs), originalRead = fs.readSync.bind(fs);
+    const originalOpen = fs.openSync.bind(fs),
+      originalRead = fs.readSync.bind(fs);
     const descriptors = new Set<number>();
-    let traversals = 0, grew = false;
+    let traversals = 0,
+      grew = false;
     const open = spyOn(fs, 'openSync').mockImplementation(((path, flags, mode) => {
       const descriptor = originalOpen(path, flags, mode);
-      if (String(path) === file && flags === 'r') { traversals++; descriptors.add(descriptor); }
+      if (String(path) === file && flags === 'r') {
+        traversals++;
+        descriptors.add(descriptor);
+      }
       return descriptor;
     }) as typeof fs.openSync);
     const read = spyOn(fs, 'readSync').mockImplementation(((descriptor, buffer, offset, length, position) => {
       const count = originalRead(descriptor, buffer, offset, length, position);
-      if (descriptors.has(descriptor) && !grew) { grew = true; fs.appendFileSync(file, appended); }
+      if (descriptors.has(descriptor) && !grew) {
+        grew = true;
+        fs.appendFileSync(file, appended);
+      }
       return count;
     }) as typeof fs.readSync);
     try {
