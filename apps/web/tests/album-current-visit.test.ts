@@ -79,7 +79,7 @@ test('a deliberate return matches only the freshly admitted Album visit', () => 
     { ...current, context: { ...current.context, id: '00000000-0000-4000-8000-00000000b101' } },
     { ...current, reader: 'reader-2' },
     { ...current, release: 'release-2' },
-    { ...current, address: `${address}?realm=00000000-0000-4000-8000-00000000b101` },
+    { ...current, address: `/en/subjects/${subjectId}/harbour-sessions?realm=00000000-0000-4000-8000-00000000b101#connections` },
   ])
     expect(albumCurrentVisitMatches(visit, changed)).toBe(false);
 });
