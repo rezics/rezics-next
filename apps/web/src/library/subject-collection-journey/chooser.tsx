@@ -110,9 +110,7 @@ export function CollectionChooserPanel({
     retireInspection(true);
     setIssue(problem);
     setPage((previousPage) =>
-      loaded
-        ? replaceCollectionPage(previousPage, collections ?? [], next, previousPage.visit)
-        : emptyCollectionPage(previousPage.generation + 1),
+      loaded ? replaceCollectionPage(previousPage, collections ?? [], next, previousPage.visit) : emptyCollectionPage(),
     );
   }, [collections, next, loaded, problem]);
 
