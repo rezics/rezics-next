@@ -118,9 +118,18 @@ function expectCustodyQueue(
   expect(commands).toHaveLength(4);
   const first = commands[0]!;
   const second = commands[3]!;
-  expect(first).toMatchObject({ kind: 'admit-source', subjectId: firstTarget, ordinal: 0, body: { provider, recordId: firstRecordId } });
+  expect(first).toMatchObject({
+    kind: 'admit-source',
+    subjectId: firstTarget,
+    ordinal: 0,
+    body: { provider, recordId: firstRecordId },
+  });
   expect(first.custody).toBeUndefined();
-  const firstCustody = { viewer: 'captured-viewer-1', csrfToken: 'captured-csrf-1', credential: 'captured-credential-1' };
+  const firstCustody = {
+    viewer: 'captured-viewer-1',
+    csrfToken: 'captured-csrf-1',
+    credential: 'captured-credential-1',
+  };
   const firstRetry = { ...first, custody: firstCustody };
   expect(commands.slice(1, 3)).toEqual([firstRetry, firstRetry]);
   expect(second).toMatchObject({
@@ -335,7 +344,11 @@ test('AniList and Bangumi retry captured production source admissions and advanc
       return {
         kind: 'applied',
         result: {
-          outcomes: command.body.confirmations.map(({ ordinal }) => ({ ordinal, status: 'applied' as const, retained: [] })),
+          outcomes: command.body.confirmations.map(({ ordinal }) => ({
+            ordinal,
+            status: 'applied' as const,
+            retained: [],
+          })),
           complete: true,
         },
       };
