@@ -76,7 +76,9 @@ export function executeSubjectCollectionPairs(
 
 /** Maintained public-pair counts are independent observations, never a visible-row recomputation. */
 export function subjectCollectionCountPlan(input: Parameters<typeof counts.run>[1]) {
-  const original = Object.freeze({ ...input, subject_ids: Object.freeze([...input.subject_ids]) });
+  const subjects = [...input.subject_ids];
+  Object.freeze(subjects);
+  const original = Object.freeze({ ...input, subject_ids: subjects });
   const keys = original.subject_ids.length;
   const total = sumBounds(
     declareBound({

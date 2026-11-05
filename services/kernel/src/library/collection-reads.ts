@@ -170,9 +170,9 @@ type CollectionDirectoryPage = {
 };
 
 /** The mounted presentation finishes before the reader's terminal observations. */
-type PagePresentation<Page> = {
+type PagePresentation<Page, Result = Page> = {
   deadline: number;
-  present(page: Page): Promise<Page>;
+  present(page: Page): Promise<Result>;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -765,32 +765,49 @@ export function createCollectionReads(
     return { epoch: decoded.epoch, after: decoded.after };
   }
 
+  function listCollections<Result>(
+    viewer: Actor,
+    options: CuratorPageOptions,
+    preview: { deadline: number } | undefined,
+    presentation: PagePresentation<CollectionDirectoryPage, Result>,
+  ): Promise<Result>;
   function listCollections(
     viewer: Actor,
     options: CuratorPageOptions,
     preview?: { deadline: number },
-    presentation?: PagePresentation<CollectionDirectoryPage>,
+  ): Promise<CollectionDirectoryPage>;
+  function listCollections<Result>(
+    viewer: Actor,
+    options: CuratorPageOptions,
+    preview?: { deadline: number },
+    presentation?: PagePresentation<CollectionDirectoryPage, Result>,
   ) {
     if (preview && (options.limit ?? DEFAULT_PAGE_SIZE) > 20) throw new ProblemError('invalid_request');
     return listCuratorPage(viewer, options, false, preview, presentation);
   }
 
   /** The account's public face uses the public index even when the curator is the viewer. */
-  function listAccountCollections(
+  function listAccountCollections<Result>(
     viewer: Actor,
     options: CuratorPageOptions,
-    presentation?: PagePresentation<CollectionDirectoryPage>,
+    presentation: PagePresentation<CollectionDirectoryPage, Result>,
+  ): Promise<Result>;
+  function listAccountCollections(viewer: Actor, options: CuratorPageOptions): Promise<CollectionDirectoryPage>;
+  function listAccountCollections<Result>(
+    viewer: Actor,
+    options: CuratorPageOptions,
+    presentation?: PagePresentation<CollectionDirectoryPage, Result>,
   ) {
     return listCuratorPage(viewer, options, true, undefined, presentation);
   }
 
-  async function listCuratorPage(
+  async function listCuratorPage<Result>(
     viewer: Actor,
     options: CuratorPageOptions,
     publicOnly: boolean,
     preview?: { deadline: number },
-    presentation?: PagePresentation<CollectionDirectoryPage>,
-  ): Promise<CollectionDirectoryPage> {
+    presentation?: PagePresentation<CollectionDirectoryPage, Result>,
+  ): Promise<CollectionDirectoryPage | Result> {
     const deadline = presentation?.deadline ?? preview?.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
     const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit', 'ownerManagement']);
     const curatorAccountId = options.curatorAccountId;
@@ -817,7 +834,10 @@ export function createCollectionReads(
     )
       throw invalidCursor();
     const after = builtinCursor ? null : listPosition(cursor, route);
-    if (!visible && !curator) return { collections: [], next: null };
+    if (!visible && !curator) {
+      const body = { collections: [], next: null };
+      return presentation ? presentation.present(body) : body;
+    }
     const listFilter = specializeCollectionListPolicy(nativePolicyCatalogueForAccess(access), fullView);
     if (listFilter.status !== 'ready') throw new ProblemError('dependency_unavailable');
     const logical =

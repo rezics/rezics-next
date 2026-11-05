@@ -112,13 +112,19 @@ export function collectionDirectoryRowPlan(input: Parameters<typeof collectionRe
 }
 
 type PreviewInput = Parameters<typeof fencesRead.run>[1];
+function frozenOperands<T>(values: readonly T[]): T[] {
+  const original = [...values];
+  Object.freeze(original);
+  // Generated SQL signatures use mutable arrays; their runner only serializes them.
+  return original;
+}
 function previewOriginal(input: PreviewInput): PreviewInput {
   // Freeze every array; caller mutation must not change any deferred dispatch.
   return Object.freeze({
-    routes: Object.freeze([...input.routes]),
-    collection_ids: Object.freeze([...input.collection_ids]),
-    source_generations: Object.freeze([...input.source_generations]),
-    revisions: Object.freeze([...input.revisions]),
+    routes: frozenOperands(input.routes),
+    collection_ids: frozenOperands(input.collection_ids),
+    source_generations: frozenOperands(input.source_generations),
+    revisions: frozenOperands(input.revisions),
   });
 }
 
