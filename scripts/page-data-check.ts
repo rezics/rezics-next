@@ -668,7 +668,9 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               };
               vars.filter = section.native.query?.filter ? expand(section.native.query.filter, vars) : NIL_UUID;
               let actionFailed = false;
-              if (section.native.action) {
+              if (section.native.action && navigationTimedOut) {
+                actionFailed = true;
+              } else if (section.native.action) {
                 try {
                   await clickSectionAction(page, section, readerTimeout);
                 } catch (error) {
@@ -680,7 +682,12 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               }
               const [native, read] = await Promise.all([
                 nativeCall(kernel, section.native, vars, persona === 'member' ? token : undefined, send, requestTimeout),
-                observeSection(page, section, readerTimeout),
+                navigationTimedOut
+                  ? Promise.resolve({
+                      observation: { present: false, itemCount: 0, text: '', dataState: null, busy: true },
+                      timedOut: false,
+                    })
+                  : observeSection(page, section, readerTimeout),
               ]);
               let seedCount: number | null = null;
               if (section.sql) {
