@@ -41,7 +41,7 @@ export const loadLiteraryProfile = createServerFn({ method: 'GET', strict: false
     const result = await readLiteraryProfile(
       kernelClient(),
       typeof data === 'object' ? data.id : data,
-      authorization,
+      authorization ?? undefined,
     );
     if (
       typeof data === 'object' &&
