@@ -1,7 +1,7 @@
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
-import { withSubjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { withSubjectVisitReturn } from '../../features/pages/showcase-work';
 import { importLibraryReturnHref } from '../showcase-import-return/navigation';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
