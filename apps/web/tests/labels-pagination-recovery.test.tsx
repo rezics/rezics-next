@@ -87,14 +87,21 @@ test('First-page emptiness, prefix no-results and bounded later-page emptiness r
   await withDocument(async () => {
     const { LabelsPageView } = await import('../src/library/labels-page');
     const { hydrateRoot } = await import('react-dom/client');
-    for (const scenario of [
+    const scenarios: {
+      state: 'loaded' | 'unavailable';
+      reason: string;
+      message: string;
+      labels?: LabelsPage['labels'];
+      next?: string;
+    }[] = [
       { page: emptyPage(), cursor: undefined, message: m.library_labels_empty() },
       { page: emptyPage({ query }), cursor: undefined, message: m.library_subject_label_no_results() },
       { page: emptyPage(), cursor, message: m.library_labels_page_empty() },
       { page: emptyPage({ query }), cursor, message: m.library_labels_page_empty() },
       { page: emptyPage({ query: '' }), cursor, message: m.library_labels_page_empty() },
       { page: emptyPage({ query, next: 'next+/page==' }), cursor, message: m.library_labels_page_empty() },
-    ]) {
+    ];
+    for (const scenario of scenarios) {
       const host = document.createElement('div');
       document.body.append(host);
       const tree = <LabelsPageView page={scenario.page} cursor={scenario.cursor} locale="fr" />;
@@ -139,25 +146,44 @@ test('First-page emptiness, prefix no-results and bounded later-page emptiness r
   });
 });
 
-test('Stale cursor recovery names the first-page restart and preserves the exact applied query and locale', async () => {
+test('Native cursor recovery names the first-page restart and preserves the exact applied query and locale', async () => {
   await withDocument(async () => {
     const { LabelsPageView } = await import('../src/library/labels-page');
-    for (const state of ['loaded', 'unavailable'] as const) {
+    for (const scenario of [
+      { state: 'loaded' as const, reason: 'stale_cursor', message: m.library_labels_stale_cursor() },
+      { state: 'unavailable' as const, reason: 'stale_cursor', message: m.library_labels_stale_cursor() },
+      {
+        state: 'unavailable' as const,
+        reason: 'invalid_cursor',
+        message: m.library_labels_invalid_cursor(),
+        labels: [{ id: 'rejected-row', name: 'Rejected row', revision: 8, renameKey: 'r', deleteKey: 'd' }],
+        next: 'rejected-next',
+      },
+    ]) {
       const host = document.createElement('div');
       host.innerHTML = renderToString(
         <LabelsPageView
-          page={emptyPage({ state, query, feedback: { ok: false, reason: 'stale_cursor' } })}
+          page={emptyPage({
+            state: scenario.state,
+            query,
+            feedback: { ok: false, reason: scenario.reason },
+            ...(scenario.labels ? { labels: scenario.labels } : {}),
+            ...(scenario.next ? { next: scenario.next } : {}),
+          })}
           cursor={cursor}
           locale="fr"
         />,
       );
       expect(host.querySelectorAll('[role="alert"]')).toHaveLength(1);
-      expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.library_labels_stale_cursor());
+      expect(host.querySelector('[role="alert"]')!.textContent).toBe(scenario.message);
       expect(link(host, m.library_collections_first_page()).getAttribute('href')).toBe(firstPage);
       expect(host.textContent).not.toContain(m.library_labels_empty());
       expect(host.textContent).not.toContain(m.library_subject_label_no_results());
       expect(host.textContent).not.toContain(m.library_labels_page_empty());
       expect(host.textContent).not.toContain(m.subject_view_retry());
+      expect(host.textContent).not.toContain(m.library_label_more());
+      expect(host.textContent).not.toContain('Rejected row');
+      expect(host.querySelector('form, ul, [data-library-label-link]')).toBeNull();
       expect([...host.querySelectorAll('a')].some((item) => item.textContent === m.library_labels_heading())).toBe(
         false,
       );

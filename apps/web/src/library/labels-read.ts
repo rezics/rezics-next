@@ -164,6 +164,7 @@ export async function loadLabelsPage(
     });
     if (result.error || !result.data) {
       const code = labelProblem(result.error?.value).code;
+      const reason = code === 'invalid_cursor' && result.status !== 400 ? 'unavailable' : (code ?? 'unavailable');
       page.state = isPlatformClosedProblem(result.status, result.error?.value)
         ? 'closed'
         : result.status === 401 || result.status === 403 || result.status === 404
@@ -171,7 +172,7 @@ export async function loadLabelsPage(
           : code === 'index_not_ready' || code === 'semantic_not_ready'
             ? 'preparing'
             : 'unavailable';
-      page.feedback = { ...page.feedback, ok: false, reason: code ?? 'unavailable' };
+      page.feedback = { ...page.feedback, ok: false, reason };
       return page;
     }
     page.state = 'loaded';

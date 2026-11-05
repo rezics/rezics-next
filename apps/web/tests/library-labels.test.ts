@@ -45,6 +45,7 @@ import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
+import { m } from '../src/paraglide/messages.js';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadLabelsPage, submitLabel, handleLabelForm } = await import('../src/library/labels-read');
 const { LabelsPageView } = await import('../src/library/labels-page');
@@ -135,6 +136,64 @@ test("the labels page lists the owner's labels from one catalogue read of up to 
     const html = markup(page);
     expect(html).toContain('cursor=opaque%2Bnext%2Fcursor');
     expect(html.indexOf(`${size} winter reads`)).toBeLessThan(html.indexOf('1 winter reads'));
+  }
+});
+
+test('a native 400 invalid_cursor preserves the prefix for explicit first-page recovery and other 400s keep same-address retry', async () => {
+  const { fake } = setup();
+  const originalAnswer = fake.answer.bind(fake);
+  let catalogueFailure: { status: 400 | 500; code: 'invalid_cursor' | 'invalid_request' } = {
+    status: 400,
+    code: 'invalid_cursor',
+  };
+  fake.answer = async (nativeRequest) => {
+    const recording = await originalAnswer(nativeRequest);
+    if (new URL(nativeRequest.url).pathname === '/v1/libraryLabels' && nativeRequest.method === 'GET')
+      return catalogueFailure;
+    return recording;
+  };
+  const client = createKernelClient('https://kernel.example.test', { fetch: fake.fetch });
+  const prefix = '  Private %_ + & ?  ';
+  const rejectedCursor = 'exact+/rejected==';
+  const page = await loadLabelsPage(client, request(), env, rejectedCursor, prefix);
+  const catalogueReads = () => fake.calls.filter((call) => call.path === '/v1/libraryLabels');
+  expect(catalogueReads()).toHaveLength(1);
+  expect(catalogueReads()[0]).toMatchObject({
+    method: 'GET',
+    query: { cursor: rejectedCursor, q: prefix, limit: '100' },
+  });
+  expect(page).toMatchObject({
+    state: 'unavailable',
+    query: prefix,
+    labels: [],
+    next: null,
+    feedback: { ok: false, reason: 'invalid_cursor' },
+  });
+  const recovery = renderToStaticMarkup(
+    createElement(LabelsPageView, { page, cursor: rejectedCursor, locale: 'fr' }),
+  );
+  const firstPagePath = `/fr/library/labels?${new URLSearchParams({ q: prefix })}`;
+  expect(recovery).toContain(m.library_labels_invalid_cursor());
+  expect(recovery).toContain(`href="${firstPagePath.replaceAll('&', '&amp;')}"`);
+  expect(recovery).not.toContain(m.subject_view_retry());
+  expect(recovery).not.toContain(m.library_label_more());
+  expect(recovery).not.toContain('<form');
+
+  const sameAddress = `/fr/library/labels?${new URLSearchParams({ q: prefix, cursor: rejectedCursor })}`;
+  for (const failure of [
+    { status: 400, code: 'invalid_request', reason: 'invalid_request' },
+    { status: 500, code: 'invalid_cursor', reason: 'unavailable' },
+  ] as const) {
+    catalogueFailure = failure;
+    const generic = await loadLabelsPage(client, request(), env, rejectedCursor, prefix);
+    expect(catalogueReads()).toHaveLength(failure.status === 400 ? 2 : 3);
+    expect(generic.feedback?.reason).toBe(failure.reason);
+    const retry = renderToStaticMarkup(
+      createElement(LabelsPageView, { page: generic, cursor: rejectedCursor, locale: 'fr' }),
+    );
+    expect(retry).toContain(m.subject_view_retry());
+    expect(retry).toContain(`href="${sameAddress.replaceAll('&', '&amp;')}"`);
+    expect(retry).not.toContain(m.library_labels_invalid_cursor());
   }
 });
 

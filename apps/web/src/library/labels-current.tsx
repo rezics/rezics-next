@@ -162,10 +162,17 @@ function LabelsRead({
   const guard = accepted
     ? origin.accept(
         queryKey,
-        (value) =>
-          matches(value as LabelsCurrentRead, subject, address) &&
-          (value as LabelsCurrentRead).page.operations.includes('library_label.list') &&
-          (!(value as LabelsCurrentRead).page.state || (value as LabelsCurrentRead).page.state === 'loaded'),
+        (value) => {
+          const current = value as LabelsCurrentRead;
+          const recoverableCursor =
+            current.page.state === 'unavailable' &&
+            (current.page.feedback?.reason === 'invalid_cursor' || current.page.feedback?.reason === 'stale_cursor');
+          return (
+            matches(current, subject, address) &&
+            current.page.operations.includes('library_label.list') &&
+            (!current.page.state || current.page.state === 'loaded' || recoverableCursor)
+          );
+        },
         labelOperations,
       )
     : null;

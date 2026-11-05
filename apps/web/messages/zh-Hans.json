@@ -2388,6 +2388,7 @@
   "library_labels_empty": "你还没有标签。",
   "library_labels_page_empty": "此页没有可显示的标签。",
   "library_labels_stale_cursor": "此页已过期。请从第一页开始查看。",
+  "library_labels_invalid_cursor": "无法使用此已保存的页面位置。请从第一页开始查看。",
   "library_label_unconfirmed": "无法确认此次更改的结果。请重试同一更改以确认结果。",
   "library_label_draft_navigation_title": "丢弃未保存的标签名称？",
   "library_label_draft_navigation_description": "未保存的标签名称将丢失。选择留下可继续编辑，选择丢弃则继续操作。",

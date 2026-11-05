@@ -2423,6 +2423,7 @@
   "library_labels_empty": "You have no labels yet.",
   "library_labels_page_empty": "No labels are shown on this page.",
   "library_labels_stale_cursor": "This page is out of date. Start from the first page.",
+  "library_labels_invalid_cursor": "This saved page position could not be used. Start from the first page.",
   "library_label_unconfirmed": "This change could not be confirmed. Retry the same change to check its result.",
   "library_label_draft_navigation_title": "Discard unsaved label name?",
   "library_label_draft_navigation_description": "Your unsaved label name will be lost. Stay to keep editing, or discard it to continue.",

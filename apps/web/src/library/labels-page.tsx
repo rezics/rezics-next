@@ -451,6 +451,8 @@ export function LabelsPageView({
   const feedback = page.feedback;
   const staleCursor =
     feedback?.reason === 'stale_cursor' && (!page.state || page.state === 'loaded' || page.state === 'unavailable');
+  const invalidCursor = feedback?.reason === 'invalid_cursor' && page.state === 'unavailable';
+  const cursorRecovery = staleCursor || invalidCursor;
   const firstPageSearch = new URLSearchParams(page.query !== undefined ? { q: page.query } : {});
   const firstPagePath = firstPageSearch.size ? `${path}?${firstPageSearch}` : path;
   const search = new URLSearchParams({
@@ -588,8 +590,10 @@ export function LabelsPageView({
       <article className="max-w-3xl space-y-6">
         <PageHeading>{m.library_labels_heading()}</PageHeading>
         <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
-          {staleCursor
-            ? m.library_labels_stale_cursor()
+          {cursorRecovery
+            ? staleCursor
+              ? m.library_labels_stale_cursor()
+              : m.library_labels_invalid_cursor()
             : page.state === 'preparing'
               ? m.library_labels_preparing()
               : page.state === 'denied'
@@ -604,10 +608,10 @@ export function LabelsPageView({
           onClick={(event) => {
             if (!alive()) event.preventDefault();
           }}
-          href={staleCursor ? firstPagePath : mutationPath}
+          href={cursorRecovery ? firstPagePath : mutationPath}
           className={buttonVariants({ variant: 'outline', className: actionClass })}
         >
-          {staleCursor ? m.library_collections_first_page() : m.subject_view_retry()}
+          {cursorRecovery ? m.library_collections_first_page() : m.subject_view_retry()}
         </a>
       </article>
     );
@@ -865,9 +869,9 @@ export function LabelsPageView({
           </DialogContent>
         </Dialog>
       ) : null}
-      {cursor !== undefined || page.next || staleCursor ? (
+      {cursor !== undefined || page.next || cursorRecovery ? (
         <nav className="flex flex-wrap gap-2">
-          {cursor !== undefined || staleCursor ? (
+          {cursor !== undefined || cursorRecovery ? (
             <a
               onClick={(event) => {
                 if (!alive()) event.preventDefault();
@@ -878,7 +882,7 @@ export function LabelsPageView({
               {m.library_collections_first_page()}
             </a>
           ) : null}
-          {page.next && !staleCursor ? (
+          {page.next && !cursorRecovery ? (
             <a
               className={buttonVariants({ variant: 'outline', className: actionClass })}
               onClick={(event) => {

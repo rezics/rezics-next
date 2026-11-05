@@ -2388,6 +2388,7 @@
   "library_labels_empty": "Vous n’avez pas encore d’étiquettes.",
   "library_labels_page_empty": "Aucune étiquette n’est affichée sur cette page.",
   "library_labels_stale_cursor": "Cette page n’est plus à jour. Revenez à la première page.",
+  "library_labels_invalid_cursor": "Cette position de page enregistrée ne peut pas être utilisée. Revenez à la première page.",
   "library_label_unconfirmed": "Cette modification n’a pas pu être confirmée. Réessayez la même modification pour vérifier son résultat.",
   "library_label_draft_navigation_title": "Abandonner le nom d’étiquette non enregistré ?",
   "library_label_draft_navigation_description": "Le nom d’étiquette non enregistré sera perdu. Restez pour continuer à le modifier ou abandonnez-le pour poursuivre.",
