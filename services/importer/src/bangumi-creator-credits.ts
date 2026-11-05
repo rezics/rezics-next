@@ -13,6 +13,7 @@ import {
   type SourceVocabularyMetadata,
 } from '@rezics/conversion/source-vocabulary';
 import type { Claim } from './record-bindings.ts';
+import { observePersonIdentity, personIdentityForSource } from './showcase-person-identity.ts';
 import { createImporter } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
 import { createSourceRegistration } from './source-registry.ts';
@@ -255,6 +256,15 @@ export async function deliverBangumiCreatorCredits(input: {
         | undefined;
       const type = nativeType(current);
       const expectedType = input.expectedNativeType(key);
+      const personIdentity = personIdentityForSource('bangumi', key, expectedType);
+      if (personIdentity) {
+        if (!current || observePersonIdentity(personIdentity, current).state !== 'current') continue;
+        // Keep the proposal endpoint on its original durable binding; native reference reads follow redirects.
+        const identity = { id: claim.subject, type: 'schema:Person', releaseDigest: bundledDigest };
+        resolved[key] = identity;
+        identities[key] = identity;
+        continue;
+      }
       const identityProperty = key.startsWith('person:')
         ? 'wdt:P6298'
         : key.startsWith('character:')

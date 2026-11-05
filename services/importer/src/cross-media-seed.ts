@@ -25,6 +25,11 @@ import {
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest, sourceWebsiteUrl } from '../../../packages/conversion/src/support.ts';
+import {
+  observePersonIdentity,
+  personIdentityForSource,
+  type CurrentPersonIdentity,
+} from './showcase-person-identity.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
 import {
@@ -2057,12 +2062,15 @@ export type CrossMediaReading = {
   route: string;
   selection: 'selected' | 'proposed';
 };
+export type CrossMediaPersonIdentity = CurrentPersonIdentity & { boundSubjectId: string };
 export type CrossMediaSeedResult = {
   status: 'imported' | 'imported-with-gaps';
   franchises: CrossMediaPlan['franchises'];
   members: CrossMediaMember[];
   runs: Partial<Record<Provider, ImportRunResult>> & { bangumiCharacterFidelity?: ImportRunResult };
   readings: CrossMediaReading[];
+  /** Current native identities for exact source records, including their durable original binding. */
+  personIdentities: CrossMediaPersonIdentity[];
   mediaOutcomes: CrossMediaMediaOutcome[];
   workLinks: ShowcaseWorkLinkHandoff[];
   gaps: CrossMediaGap[];
@@ -2107,6 +2115,13 @@ function currentReleaseReadFailure(error: unknown): ReleaseEndpointCurrentness {
   if (error.status === 404 || error.status === 410) return 'missing';
   if (error.status === undefined || error.status >= 500) return 'unavailable';
   return 'unknown';
+}
+
+function currentPersonIdentityReadFailure(error: unknown): 'missing' | 'refused' | 'unavailable' {
+  if (!(error instanceof ImportTransportError)) return 'unavailable';
+  if (error.status === 401 || error.status === 403) return 'refused';
+  if (error.status === 404 || error.status === 410) return 'missing';
+  return 'unavailable';
 }
 
 function currentReleaseEndpoint(
@@ -2284,6 +2299,7 @@ export async function seedCrossMedia(
   importer = createImporter(importerOptions);
   const runs: CrossMediaSeedResult['runs'] = {};
   const readings: CrossMediaReading[] = [];
+  const personIdentities: CrossMediaPersonIdentity[] = [];
   const mediaAttempts = new Map<string, CrossMediaMediaOutcome>();
   const unsubmittedCovers = new Set<string>();
   const onlyPendingBangumiCovers = (provider: Provider, result: ImportRunResult): boolean => {
@@ -2589,6 +2605,17 @@ export async function seedCrossMedia(
           currentReadFailures.get(nativeSubjectId),
         );
       },
+      async currentPersonIdentity(alias, externalId, nativeSubjectId) {
+        const provider: Provider = alias === crossMediaAliases.bangumi ? 'bangumi' : 'vndb';
+        const identity = personIdentityForSource(
+          provider,
+          externalId,
+          nativeTypes.get(`${alias}\u0000${externalId}`),
+        );
+        if (!identity) return false;
+        const read = await readCurrent(nativeSubjectId);
+        return read !== null && observePersonIdentity(identity, read).state === 'current';
+      },
       fence: (input) => port.fence(input),
       batch: (request) => port.batch(request),
       journal: {
@@ -2635,6 +2662,46 @@ export async function seedCrossMedia(
         });
         continue;
       }
+      const expectedType = nativeTypes.get(`${sourceAlias}\u0000${record.key}`);
+      const personIdentity = personIdentityForSource(provider, record.key, expectedType);
+      if (personIdentity) {
+        if (!subjectRead) {
+          const state = currentPersonIdentityReadFailure(currentReadFailures.get(claim.subject));
+          sourceIdentityGaps.push({
+            source: provider,
+            fields: [personIdentity.property],
+            record: { external_id: record.key },
+            reason: `Current reviewed Person identity read is ${state}`,
+            property: personIdentity.property,
+          });
+          continue;
+        }
+        const observation = observePersonIdentity(personIdentity, subjectRead);
+        if (observation.state !== 'current') {
+          sourceIdentityGaps.push({
+            source: provider,
+            fields: [personIdentity.property],
+            record: { external_id: record.key },
+            reason:
+              observation.state === 'wrong_type'
+                ? 'Current source identity resolves to a non-Person'
+                : observation.state === 'conflicting'
+                  ? 'Current Person carries conflicting identifiers for this provider'
+                  : 'Current source identity association is missing',
+            property: personIdentity.property,
+          });
+          continue;
+        }
+        personIdentities.push({ ...observation, boundSubjectId: claim.subject });
+        readings.push({
+          source: provider,
+          externalId: record.key,
+          subject: subjectRead,
+          route: subjectRoute(subjectRead),
+          selection: 'selected',
+        });
+        continue;
+      }
       ensure(subjectRead, 'Current bound source subject is unavailable');
       if (provider === 'bangumi') {
         const subject = subjectRead.subject as
@@ -2644,7 +2711,6 @@ export async function seedCrossMedia(
               statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]>;
             }
           | undefined;
-        const expectedType = nativeTypes.get(`${sourceAlias}\u0000${record.key}`);
         const identity = bangumiSourceIdentity(record.key, expectedType);
         const matches =
           identity === undefined
@@ -2713,6 +2779,7 @@ export async function seedCrossMedia(
       members: plan.members,
       runs,
       readings,
+      personIdentities,
       mediaOutcomes: [],
       workLinks: [],
       gaps: [
@@ -2927,10 +2994,12 @@ export async function seedCrossMedia(
       members: plan.members,
       runs,
       readings,
+      personIdentities,
       mediaOutcomes,
       workLinks,
       gaps: [
         ...plan.gaps,
+        ...sourceIdentityGaps,
         ...delivered.gaps.map((gap) => ({
           source: (gap.table === 'producers_relations' ? 'vndb' : 'bangumi') as Provider,
           fields: fieldsOf(gap.table ?? 'subject-relations', gap.record),

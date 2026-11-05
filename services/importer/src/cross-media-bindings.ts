@@ -322,6 +322,8 @@ export class CrossMediaGraph {
     claim(owner: { source: string; external_id: string }): Claim | null;
     nativeType(externalId: string, alias?: string): string | undefined;
     currentReleaseEndpoint?: (externalId: string, nativeSubjectId: string) => Promise<ReleaseEndpointCurrentness>;
+    /** Current provider identity gates Person endpoints without changing their sealed source binding. */
+    currentPersonIdentity?: (alias: string, externalId: string, nativeSubjectId: string) => Promise<boolean>;
     fence(input: {
       source: string;
       externalId: string;
@@ -378,6 +380,25 @@ export class CrossMediaGraph {
         unresolved.push({ ...draft, reason });
         mark.run('unresolved', null, graphEdgeKey(draft));
         continue;
+      }
+      if (input.currentPersonIdentity) {
+        const endpoints = [
+          [draft.holder, holder.subject],
+          ...(draft.targetKind === 'literal' ? [] : [[draft.target, target.subject] as const]),
+        ] as const;
+        let staleEndpoint: string | undefined;
+        for (const [externalId, nativeSubjectId] of endpoints) {
+          if (input.nativeType(externalId, draft.alias) !== 'schema:Person') continue;
+          if (!(await input.currentPersonIdentity(draft.alias, externalId, nativeSubjectId))) {
+            staleEndpoint = externalId;
+            break;
+          }
+        }
+        if (staleEndpoint) {
+          unresolved.push({ ...draft, reason: `current_person_identity_unavailable:${staleEndpoint}` });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
       }
       if (releaseSupersession) {
         let endpointFailure: { id: string; status: ReleaseEndpointCurrentness } | undefined;
