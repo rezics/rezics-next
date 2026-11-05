@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { relationActor, relationFixture, relationProperty } from '../src/kernel/fake/catalogue-relations';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
-import { personGroups } from '../src/features/catalogue/person-reader/model';
+import { personCrossSourceIdentity, personGroups } from '../src/features/catalogue/person-reader/model';
 import { creditVisit } from '../src/features/catalogue/credit-inspection/model';
 import { creditReturn, creditWindowHref } from '../src/features/catalogue/credit-inspection/navigation';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
@@ -29,7 +29,9 @@ test('Person identity keeps names, sites, biography and named unsupported occupa
     expect(html).toContain('https://example.org/biography');
     expect(html).toContain(m.showcase_people_credits({}, { locale }));
     expect(html).toContain('href="#connections"');
+    expect(html).toContain(m.person_identity_unconfirmed({}, { locale }));
     expect(html).toContain(m.people_biography_unsupported({}, { locale }));
+    expect(/<input[^>]*type="search"[^>]*>/.exec(html)?.[0] ?? '').toContain('min-h-11');
     expect(
       personGroups(fixture.release, fixture.read, locale)[1]!.fields
         .filter((field) => !field.admitted)
@@ -37,6 +39,7 @@ test('Person identity keeps names, sites, biography and named unsupported occupa
     ).toEqual(['schema:hasOccupation', 'schema:occupation']);
   }
   const empty = personReaderExample('empty');
+  expect(personCrossSourceIdentity(empty.read)).toBe('unconfirmed');
   expect(
     renderToStaticMarkup(
       h(PersonReader, { public: empty.read, release: empty.release, documents: empty.documents, locale: 'en' }),
