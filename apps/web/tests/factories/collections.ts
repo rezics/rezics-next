@@ -22,7 +22,12 @@ export function nativeCollection({
   title = 'Reading collection',
   curatorAccountId = '019a0000-0000-7000-8000-000000000001',
   previewMembers = [previewMember()],
-}: { id?: Collection['id']; title?: Collection['title']; previewMembers?: PreviewMember[] } = {}): ReadyCollection {
+}: {
+  id?: Collection['id'];
+  title?: Collection['title'];
+  curatorAccountId?: Collection['curatorAccountId'];
+  previewMembers?: PreviewMember[];
+} = {}): ReadyCollection {
   return {
     id,
     membershipKind: 'curated',

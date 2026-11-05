@@ -10,6 +10,7 @@ import type { PinMutation } from '../src/library/pins-actions';
 
 // UNRUN: one mounted/deferred journey for controller integration. The installed DOM and
 // real exports exercise composition, not native authority, browser rendering or visual proof.
+let serverReads = true;
 let preparation: 'active' | 'absent' | 'unavailable' = 'active';
 let actualSubject: string | undefined = 'A';
 let preparations = 0;
@@ -50,8 +51,8 @@ mock.module('@tanstack/react-start', () => ({
         handler = run;
         return chain;
       },
-      client() {
-        return handler;
+      client(run: (...args: never[]) => unknown) {
+        return (...args: never[]) => (serverReads ? handler(...args) : run(...args));
       },
     };
     return chain;
@@ -183,6 +184,7 @@ test('The default My Collections route immediately retires private collections a
     expect(Route.options.beforeLoad).toBe(requireSignedIn);
   } finally {
     native.mockRestore();
+    serverReads = false;
   }
 
   const { createRoot, hydrateRoot } = await import('react-dom/client');
@@ -193,6 +195,8 @@ test('The default My Collections route immediately retires private collections a
   const menu = await import('@rezics/ui/menu');
   const actions = await import('../src/library/pins-actions');
   const { m } = await import('../src/paraglide/messages.js');
+  const { sessionQuery } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const menus: MenuProps[] = [];
   const OriginalMenu = menu.Menu;
   const menuRead = spyOn(menu, 'Menu').mockImplementation((props) => {
@@ -245,8 +249,13 @@ test('The default My Collections route immediately retires private collections a
     else if (search.cursor !== undefined) query.set('cursor', search.cursor);
     await act(async () => {
       await router.navigate({ href: `/library/collections?${query}` });
-      client.setQueryData(['session'], viewer);
-      client.setQueryData(['exposure', 'viewer'], admitted ? ['collections', 'personal_library'] : []);
+      client.setQueryData(sessionQuery.queryKey, viewer);
+      const observation = viewerExposureLifetime(client).getSnapshot();
+      if (observation.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
+          subject: observation.observation.subject,
+          admitted: admitted ? ['collections', 'personal_library'] : [],
+        });
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
         const html = renderToString(tree());
