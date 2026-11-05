@@ -59,9 +59,9 @@ Selected Book/BookSeries membership and creator rows require current exact endpo
 
 ### Cover acquisition and media
 
-Bangumi PersonDetail fallback reads only selected Persons without archive images and requires matching response ID/type. Selected Characters without a usable archive image use `/v0/characters/N` and require a matching ID. Both admit only `images.large`; missing, blank, placeholder and alternate-size images are omitted. Content owns image rights, processing, identity and serving ([Content covers](../kernel/src/content/README.md#covers)); metadata licences do not license images, so require rights-holder and via-source credit. The development seed sends selected bytes through the local Content API/shared worker, then separately accepts/adopts and independently rereads public facts and decoded variants. Takedown/fences block restoration; replay reuses the sealed intent/keys; unavailable media is not adopted.
+Selected Bangumi PersonDetail fallback requires matching response ID/type and admits only `images.large` when the archive lacks an image. A selected Character without a usable archive image uses `/v0/characters/N`, requires a matching ID/type, and admits only `images.large`; missing, blank, placeholder and alternate-size images are omitted. Content owns image rights, processing, identity and serving ([Content covers](../kernel/src/content/README.md#covers)); metadata licences never grant image rights, so require rights-holder/via-source credit. The dev seed sends bytes through the Content API/shared worker, separates acceptance/adoption, then rereads public facts and decoded variants. Fences/takedown block restoration; replay reuses sealed intent/keys; unavailable media is not adopted.
 
-Decision: Character facts retain exact provider keys, appearance rows and units; unsupported VNDB gender variants remain omitted, and portraits use separate rights-credited media. Metadata licences never grant image rights.
+Decision: Keep exact Character provider keys, appearance rows and units; omit unsupported VNDB gender variants; portraits use separate rights-credited media.
 
 ## Native execution boundary
 
