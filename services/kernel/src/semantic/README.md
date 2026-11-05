@@ -5,7 +5,11 @@ This module owns subject facts and their item projections, partition paging, and
 ## Canonical identity boundary
 
 Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,
-while `identity-adapters/index.ts` is the native public entry of the existing `kernel-semantic` adapter module.
+while `identity-adapters/read.ts` is the lightweight native mapping entry and `identity-adapters/index.ts`
+is the native store entry of the existing `kernel-semantic` adapter module.
+Read-only callers use `read.ts`, which re-exports only `readIdentityMappings` and never loads the store or binding graph.
+Binding proofs remain owned by the existing native binding implementation; a public binding entry must preserve
+its opaque proof identity without adding value-import cycles through Accounts or the store.
 The adapter remains in that module because its admission, closure and participant mechanisms already share native authority.
 
 The core owns mapping DTOs, bounded evidence classification, exact observation values and immutable merge/unmerge/repoint

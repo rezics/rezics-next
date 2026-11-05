@@ -15,7 +15,7 @@ import {
 } from '../rating/register.ts';
 import { STANDARD_QUESTION_ID, VOTE_SCOPE } from '../rating/votes.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import viewerEntries from './viewer-facts-entries.sql';
 

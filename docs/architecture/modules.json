@@ -338,7 +338,8 @@
       "paths": ["services/kernel/src/semantic/**", "services/kernel/db/semantic/**"],
       "publicEntries": [
         "services/kernel/src/semantic/index.ts",
-        "services/kernel/src/semantic/identity-adapters/index.ts"
+        "services/kernel/src/semantic/identity-adapters/index.ts",
+        "services/kernel/src/semantic/identity-adapters/read.ts"
       ],
       "allowedDependencies": [
         "composition",
