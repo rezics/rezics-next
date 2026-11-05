@@ -765,10 +765,10 @@ test('The actual named-label Library renders private FULL assignments and remove
 
     hold = null;
     const replacementLabel = id(805);
-    const replacement = new URLSearchParams(secondSearch);
-    replacement.set('label', replacementLabel);
+    const replacementSearch = new URLSearchParams(secondSearch);
+    replacementSearch.set('label', replacementLabel);
     await act(async () => {
-      await navigate(replacement);
+      await navigate(replacementSearch);
     });
     await settle();
     const replacementPage = currentQuery().state.data as CurrentLabelShelfData;
