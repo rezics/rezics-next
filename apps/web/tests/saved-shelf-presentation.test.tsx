@@ -360,10 +360,12 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
               types:
                 typesMode === 'empty'
                   ? []
-                  : [
-                      { type: book, label: 'Books' },
-                      { type: movie, label: 'Films' },
-                    ],
+                  : browsing && cursor
+                    ? [{ type: cursor === 'second' ? movie : absent, label: cursor === 'second' ? 'Films' : 'Other' }]
+                    : [
+                        { type: book, label: 'Books' },
+                        { type: movie, label: 'Films' },
+                      ],
               next: browsing ? (cursor === 'second' ? 'third' : cursor === 'third' ? null : 'second') : null,
             },
     });
@@ -526,14 +528,22 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await select(8, book);
       const patchCount = patches.length;
       await click(m.library_types_next());
+      expect(host.textContent).toContain(m.settings_shelf_type_absent());
       await click(m.library_types_next());
+      typesMode = 'unavailable';
       await click(m.library_collections_previous());
-      expect(typeCursors.slice(-3)).toEqual(['second', 'third', 'second']);
+      expect(host.textContent).toContain(m.library_types_unavailable());
+      typesMode = 'loaded';
+      await click(m.library_types_retry());
+      expect(typeCursors.slice(-4)).toEqual(['second', 'third', 'second', 'second']);
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
       expect((host.querySelectorAll('select')[8] as HTMLSelectElement).value).toBe(book);
       expect(patches).toHaveLength(patchCount);
+      typesMode = 'unavailable';
       await click(m.library_types_first());
-      expect(typeCursors.at(-1)).toBeUndefined();
+      typesMode = 'loaded';
+      await click(m.library_types_retry());
+      expect(typeCursors.slice(-2)).toEqual([undefined, undefined]);
       browsing = false;
       await select(0, 'list');
       await select(8, movie);
