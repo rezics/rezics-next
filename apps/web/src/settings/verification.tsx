@@ -552,16 +552,18 @@ export function VerificationCard({
         {state.attempt && !pending ? (
           <Alert>
             <AlertTitle>
-              {state.attempt.kind === 'request'
-                ? m.settings_verification_uncertain_request()
-                : m.settings_verification_uncertain_withdraw()}
+              {state.attempt.receipt
+                ? state.attempt.kind === 'request'
+                  ? m.settings_verification_request_received()
+                  : m.settings_verification_withdraw_received()
+                : state.attempt.kind === 'request'
+                  ? m.settings_verification_uncertain_request()
+                  : m.settings_verification_uncertain_withdraw()}
             </AlertTitle>
             <AlertDescription className="min-w-0 space-y-3">
               <p>
                 {state.attempt.receipt
-                  ? state.attempt.kind === 'request'
-                    ? m.settings_verification_request_received()
-                    : m.settings_verification_withdraw_received()
+                  ? m.settings_verification_check_guidance()
                   : state.attempt.kind === 'request'
                     ? m.settings_verification_request_unconfirmed()
                     : m.settings_verification_withdraw_unconfirmed()}
@@ -575,7 +577,7 @@ export function VerificationCard({
                       subject: action?.subject ?? m.settings_verification_generic_subject(),
                     })}
               </p>
-              <p>{m.settings_verification_check_guidance()}</p>
+              {!state.attempt.receipt ? <p>{m.settings_verification_check_guidance()}</p> : null}
               <p>
                 {state.attempt.kind === 'request'
                   ? m.settings_verification_retry_request_guidance()

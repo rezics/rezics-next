@@ -335,13 +335,12 @@ export class VerificationRecovery {
     const attempt = this.state.attempt;
     const request = current.verificationRequest;
     if (request) this.remember(request);
-    // A latest status or identical payload cannot identify a lost request command. Its receipt supplies the ID.
+    // A validated receipt acknowledges the command; a readable current snapshot retires it at the ordering floor.
+    // Without a receipt, only withdrawal's exact request identity and terminal state can resolve an attempt.
     const resolved =
       attempt &&
-      request &&
-      (attempt.kind === 'withdraw'
-        ? request.id === attempt.requestId && request.state === 'withdrawn'
-        : attempt.receipt && request.id === attempt.receipt.id && this.matchesInput(request, attempt.input));
+      (attempt.receipt ||
+        (request && attempt.kind === 'withdraw' && request.id === attempt.requestId && request.state === 'withdrawn'));
     this.update({
       current,
       readStatus: 'success',
