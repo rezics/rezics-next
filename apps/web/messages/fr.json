@@ -8536,6 +8536,7 @@
   "library_my_ratings_page_order": "Les pages suivent les clés de la question et du Subject d’origine. 20 évaluations au maximum, sans tri par date.",
   "library_my_ratings_next": "Page suivante des évaluations",
   "library_my_ratings_first": "Première page des évaluations",
+  "library_my_ratings_previous": "Page précédente des évaluations",
   "library_my_ratings_subject": "Subject",
   "library_my_ratings_original_key": "Subject et question d’origine",
   "library_my_ratings_question": "Question",

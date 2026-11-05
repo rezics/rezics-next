@@ -8621,6 +8621,7 @@
   "library_my_ratings_page_order": "Pages follow the original question and Subject keys. This page shows at most 20 ratings; it is not sorted by date.",
   "library_my_ratings_next": "Next ratings page",
   "library_my_ratings_first": "First ratings page",
+  "library_my_ratings_previous": "Previous ratings page",
   "library_my_ratings_subject": "Subject",
   "library_my_ratings_original_key": "Original Subject and question",
   "library_my_ratings_question": "Question",

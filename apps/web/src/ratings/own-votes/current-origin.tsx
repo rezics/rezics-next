@@ -194,6 +194,24 @@ export function useOwnVotesCurrentOrigin(
       OWN_VOTES_SOURCE,
       client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0,
     ]);
+  const coordinateAuthority = JSON.stringify([
+    origin.boundary.id,
+    origin.boundary.lifetime,
+    origin.lifetime(0),
+    origin.subject,
+    locale,
+    OWN_VOTES_SOURCE,
+  ]);
+  const isAdmittedRead = (value: unknown): value is OwnVotesRead => {
+    const queryState = client.getQueryState(options.queryKey);
+    return (
+      queryState?.status === 'success' &&
+      queryState.data === value &&
+      isOwnVotesRead(value) &&
+      matches(value, origin.subject, cursor, locale) &&
+      current()
+    );
+  };
   const captureReturnOwner = useCallback(
     (previousResponseVersion = -1): OwnVotesReturnOwner => {
       const responseCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
@@ -285,6 +303,8 @@ export function useOwnVotesCurrentOrigin(
     locale,
     viewKey,
     responseIdentity,
+    coordinateAuthority,
+    isAdmittedRead,
     isCurrent,
     captureReturnOwner,
     admitRouteResponse,

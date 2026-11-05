@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
-import { Link, useRouterState } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type Ref } from 'react';
+import { Link, useRouter, useRouterState } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -13,7 +13,14 @@ import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey, type VotePai
 import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
 import type { OwnVoteReadback } from './readback';
 import { OwnVotesInspection } from './inspection';
-import { useOwnVotesReturn, useOwnVotesReturnReceipt, type OwnVotesReturnOutcome } from './return';
+import {
+  useOwnVotesCoordinates,
+  useOwnVotesPendingCoordinate,
+  useOwnVotesReturn,
+  useOwnVotesReturnReceipt,
+  type OwnVotesCoordinateMove,
+  type OwnVotesReturnOutcome,
+} from './return';
 
 type Execute = (input: { data: OwnVoteIntent }) => Promise<Awaited<ReturnType<typeof executeOwnVoteIntent>>>;
 type Review = (input: { data: { intent: OwnVoteIntent; after: 'REVIEW' } }) => Promise<OwnVoteReadback>;
@@ -29,17 +36,92 @@ export function CurrentViewerOwnVotesPage({
   invalidAddress?: boolean;
   responseVersion?: number;
 }) {
+  const router = useRouter({ warn: false });
   const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const locale = getLocale();
   const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
-  const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt, responseVersion);
-  const refresh = useCallback(() => {
+  const pendingCoordinate = useOwnVotesPendingCoordinate(cursor, responseVersion);
+  const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt || pendingCoordinate, responseVersion);
+  const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
+  const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
+  const acceptRead = useCallback(
+    (candidate: unknown) => {
+      const pending = coordinates.pending;
+      if (
+        !pending ||
+        pending.authorityKey !== origin.coordinateAuthority ||
+        pending.cursor !== origin.cursor ||
+        !origin.isAdmittedRead(candidate)
+      )
+        return;
+      if (candidate.state === 'ready') coordinates.admit(origin.cursor);
+      else if (candidate.state === 'unavailable') coordinates.fail(pending.id);
+      else if (candidate.state === 'invalid-cursor' || candidate.state === 'denied' || candidate.state === 'signed-out')
+        coordinates.cancel(pending.id);
+    },
+    [coordinates, origin],
+  );
+  const refresh = useCallback(async () => {
     if (receipt) {
       const routeRead = origin.admitRouteResponse(initial, receipt.owner.responseVersion);
       if (routeRead) return routeRead;
     }
-    return origin.refresh();
-  }, [receipt, origin, initial]);
+    const result = await origin.refresh();
+    if (result && typeof result === 'object' && 'data' in result) acceptRead(result.data);
+    return result;
+  }, [receipt, origin, initial, acceptRead]);
+  const staged = coordinates.pending;
+  useEffect(() => {
+    if (!staged || staged.authorityKey !== origin.coordinateAuthority || staged.cursor !== origin.cursor) return;
+    const routeRead = origin.admitRouteResponse(initial, staged.responseVersion);
+    if (routeRead) {
+      void routeRead.then((result) => {
+        if (result && typeof result === 'object' && 'data' in result) acceptRead(result.data);
+      });
+    }
+  }, [staged, origin, initial, acceptRead]);
+  useEffect(() => {
+    if (staged && staged.authorityKey !== origin.coordinateAuthority) coordinates.retire();
+    else if (origin.state === 'denied' || origin.state === 'signed-out') coordinates.retire();
+  }, [staged, origin, coordinates]);
+  useEffect(() => {
+    if (!staged && (origin.state === 'ready' || origin.state === 'invalid-cursor') && origin.isCurrent())
+      coordinates.admit(origin.cursor);
+  }, [staged, origin, coordinates]);
+  const move = useCallback(
+    async (destination: OwnVotesCoordinateMove) => {
+      const sourceAuthority = origin.coordinateAuthority;
+      const sourceCursor = origin.cursor;
+      const sourceResponse = origin.responseIdentity();
+      const sourceView = origin.viewKey;
+      if (!origin.isCurrent()) return;
+      const id = coordinates.stage(responseVersion, destination);
+      if (!id) return;
+      const allowed = await confirmMovement.current!();
+      if (
+        !allowed ||
+        !origin.isCurrent() ||
+        origin.coordinateAuthority !== sourceAuthority ||
+        origin.cursor !== sourceCursor ||
+        origin.responseIdentity() !== sourceResponse ||
+        origin.viewKey !== sourceView
+      ) {
+        coordinates.cancel(id);
+        return;
+      }
+      await router.navigate({
+        to: '/library/ratings',
+        search: destination.cursor === null ? {} : { cursor: destination.cursor },
+      });
+      const location = router.state.location;
+      const search = location.search as Record<string, unknown>;
+      const navigatedCursor = typeof search.cursor === 'string' ? search.cursor : null;
+      if (location.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '') !== '/library/ratings' ||
+          navigatedCursor !== destination.cursor)
+        coordinates.cancel(id);
+    },
+    [origin, coordinates, responseVersion, router],
+  );
   const heading = useRef<HTMLHeadingElement>(null);
   const [returnResult, setReturnResult] = useState<{
     outcome: OwnVotesReturnOutcome;
@@ -69,8 +151,14 @@ export function CurrentViewerOwnVotesPage({
       } else if (outcome.kind === 'refreshed') heading.current?.focus();
     },
   });
-  const state = returnVisit.pending ? (returnVisit.failed ? 'unavailable' : 'preparing') : origin.state;
-  const page = returnVisit.pending ? null : origin.page;
+  const state = pendingCoordinate
+    ? 'preparing'
+    : returnVisit.pending
+      ? returnVisit.failed
+        ? 'unavailable'
+        : 'preparing'
+      : origin.state;
+  const page = pendingCoordinate || returnVisit.pending ? null : origin.page;
   const admittedReturn =
     returnResult?.responseIdentity === origin.responseIdentity() && returnResult.page === page ? returnResult : null;
   return (
@@ -90,6 +178,11 @@ export function CurrentViewerOwnVotesPage({
       returnOutcome={admittedReturn?.outcome ?? null}
       {...(admittedReturn ? { returnIndex: admittedReturn.index } : {})}
       onDeparturePair={returnVisit.inspect}
+      onNavigate={origin.isCurrent() ? (destination) => void move(destination) : undefined}
+      hasPrevious={coordinates.hasPrevious}
+      previousCursor={coordinates.previousCursor}
+      firstAvailable={cursor !== null || invalidAddress}
+      confirmMovement={confirmMovement}
     />
   );
 }
@@ -110,6 +203,11 @@ export function OwnVotesWorkspace({
   returnOutcome = null,
   returnIndex,
   onDeparturePair,
+  onNavigate,
+  hasPrevious = false,
+  previousCursor = null,
+  firstAvailable = cursor !== null,
+  confirmMovement,
 }: {
   state: OwnVotesRead['state'];
   page: OwnVotesPage | null;
@@ -125,6 +223,11 @@ export function OwnVotesWorkspace({
   returnOutcome?: OwnVotesReturnOutcome | null;
   returnIndex?: Map<string, OwnVoteEntry>;
   onDeparturePair?: (pair: VotePair | null) => void;
+  onNavigate?: (move: OwnVotesCoordinateMove) => void;
+  hasPrevious?: boolean;
+  previousCursor?: string | null;
+  firstAvailable?: boolean;
+  confirmMovement?: { current: (() => Promise<boolean>) | null };
 }) {
   const [selectedPair, setSelectedPair] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -134,6 +237,7 @@ export function OwnVotesWorkspace({
   const [feedback, setFeedback] = useState<OwnVoteFeedback | null>(null);
   const [busy, setBusy] = useState(false);
   const [awaitingCommand, setAwaitingCommand] = useState(false);
+  const [retired, setRetired] = useState(false);
   const attempt = useRef(0);
   const selection = useRef<{ entry: OwnVoteEntry; active: boolean } | null>(null);
   useEffect(
@@ -154,6 +258,8 @@ export function OwnVotesWorkspace({
   }, [page, returnIndex]);
   const indexedPageValid = !page || index.size === page.votes.length;
   const activeEntry = selectedPair ? (index.get(selectedPair) ?? null) : null;
+  const visibleState = retired ? 'preparing' : state;
+  const visiblePage = retired ? null : page;
   // A new action observation requires a new explicit selection. Local readback retains the actions object.
   if (selectedPair && (state !== 'ready' || !activeEntry || selection.current?.entry.actions !== activeEntry.actions)) {
     if (selection.current) selection.current.active = false;
@@ -172,8 +278,9 @@ export function OwnVotesWorkspace({
     (awaitingCommand && feedback?.kind === 'review-missing');
   const dirty = !!activeEntry && editing && draft !== String(activeEntry.own.units);
   const locked = busy || unresolved;
+  const presentationCurrent = () => !retired && isCurrent();
   const selectedCurrent = () =>
-    isCurrent() &&
+    presentationCurrent() &&
     observation?.active === true &&
     !!activeEntry &&
     (!intent ||
@@ -184,6 +291,21 @@ export function OwnVotesWorkspace({
     attempt.current += 1;
     intentRef.current = null;
     setIntent(null);
+    setAwaitingCommand(false);
+    setBusy(false);
+  }
+
+  function retire() {
+    if (!isCurrent()) return;
+    if (selection.current) selection.current.active = false;
+    attempt.current += 1;
+    intentRef.current = null;
+    setRetired(true);
+    setSelectedPair(null);
+    setEditing(false);
+    setDraft('');
+    setIntent(null);
+    setFeedback(null);
     setAwaitingCommand(false);
     setBusy(false);
   }
@@ -343,7 +465,7 @@ export function OwnVotesWorkspace({
 
   const message = (() => {
     if (!indexedPageValid) return m.library_my_ratings_unavailable();
-    switch (state) {
+    switch (visibleState) {
       case 'signed-out':
         return m.library_my_ratings_signed_out();
       case 'denied':
@@ -358,6 +480,11 @@ export function OwnVotesWorkspace({
         return null;
     }
   })();
+  const navigateLink = (event: MouseEvent<HTMLAnchorElement>, destination: OwnVotesCoordinateMove) => {
+    if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    onNavigate(destination);
+  };
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
@@ -368,23 +495,27 @@ export function OwnVotesWorkspace({
       {message ? (
         <section
           className="space-y-3"
-          role={state === 'unavailable' || state === 'invalid-cursor' ? 'alert' : 'status'}
+          role={visibleState === 'unavailable' || visibleState === 'invalid-cursor' ? 'alert' : 'status'}
         >
           <p>{message}</p>
-          {state === 'unavailable' ? (
+          {visibleState === 'unavailable' ? (
             <Button className="min-h-11" onClick={() => void onRefresh()}>
               {m.library_my_ratings_retry_page()}
             </Button>
           ) : null}
-          {state === 'invalid-cursor' ? (
-            <Link className="inline-flex min-h-11 items-center underline" to="/library/ratings">
+          {visibleState === 'invalid-cursor' && firstAvailable ? (
+            <Link
+              className="inline-flex min-h-11 items-center underline"
+              to="/library/ratings"
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => navigateLink(event, { kind: 'first', cursor: null })}
+            >
               {m.library_my_ratings_first()}
             </Link>
           ) : null}
         </section>
       ) : null}
 
-      {state === 'ready' && page && indexedPageValid ? (
+      {visibleState === 'ready' && visiblePage && indexedPageValid ? (
         <>
           {returnOutcome ? (
             <p role="status" data-own-vote-return-status>
@@ -396,13 +527,13 @@ export function OwnVotesWorkspace({
             </p>
           ) : null}
           <p className="text-sm text-muted-foreground">{m.library_my_ratings_page_order()}</p>
-          {page.votes.length === 0 ? (
+          {visiblePage.votes.length === 0 ? (
             feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? null : (
-              <p role="status">{page.next ? m.library_my_ratings_sparse() : m.library_my_ratings_empty()}</p>
+              <p role="status">{visiblePage.next ? m.library_my_ratings_sparse() : m.library_my_ratings_empty()}</p>
             )
           ) : (
             <OwnVotesInspection
-              entries={page.votes}
+              entries={visiblePage.votes}
               locale={locale}
               selectedPair={selectedPair}
               disabled={locked}
@@ -452,15 +583,34 @@ export function OwnVotesWorkspace({
           ) : null}
           <nav className="flex flex-wrap gap-3" aria-label={m.library_my_ratings_heading()}>
             {cursor !== null ? (
-              <Link className="inline-flex min-h-11 items-center underline" to="/library/ratings">
-                {m.library_my_ratings_first()}
-              </Link>
-            ) : null}
-            {page.next ? (
               <Link
                 className="inline-flex min-h-11 items-center underline"
                 to="/library/ratings"
-                search={{ cursor: page.next }}
+                onClick={(event: MouseEvent<HTMLAnchorElement>) => navigateLink(event, { kind: 'first', cursor: null })}
+              >
+                {m.library_my_ratings_first()}
+              </Link>
+            ) : null}
+            {hasPrevious ? (
+              <Link
+                className="inline-flex min-h-11 items-center underline"
+                to="/library/ratings"
+                search={previousCursor === null ? {} : { cursor: previousCursor }}
+                onClick={(event: MouseEvent<HTMLAnchorElement>) =>
+                  navigateLink(event, { kind: 'previous', cursor: previousCursor })
+                }
+              >
+                {m.library_my_ratings_previous()}
+              </Link>
+            ) : null}
+            {visiblePage.next ? (
+              <Link
+                className="inline-flex min-h-11 items-center underline"
+                to="/library/ratings"
+                search={{ cursor: visiblePage.next }}
+                onClick={(event: MouseEvent<HTMLAnchorElement>) =>
+                  navigateLink(event, { kind: 'continue', cursor: visiblePage.next! })
+                }
               >
                 {m.library_my_ratings_continue()}
               </Link>
@@ -468,7 +618,13 @@ export function OwnVotesWorkspace({
           </nav>
         </>
       ) : null}
-      <OwnVotesDeparture dirty={dirty} locked={locked} isCurrent={isCurrent} />
+      <OwnVotesDeparture
+        dirty={dirty}
+        locked={locked}
+        isCurrent={presentationCurrent}
+        onLeave={retire}
+        confirmMovement={confirmMovement}
+      />
     </main>
   );
 }

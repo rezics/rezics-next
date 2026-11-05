@@ -39,16 +39,20 @@ confirmation; pending or uncertain command ownership requires review before depa
 
 Decision: after return, retain only the exact original pair as a short-lived in-memory focus bookmark; hide prior advice while refreshing, then require a fresh Inspect action before editing or clearing.
 
+Decision: during an eligible My ratings visit, retain up to eight admitted predecessor cursors plus the current cursor in the existing return provider; stage each move and commit it only after the target response is admitted.
+
 ## Cost
 
 - **Touches**
   - One native page request on admission or explicit refresh/return, using the existing prepared session.
+  - One native page request for each First, Previous or Continue move; the return provider keeps only the accepted cursor path, never page bodies.
   - One O(N) exact-pair index per admitted page. Selection and row lookup are O(1); presentation is O(N).
   - Zero per-row question, vote, public-figure or aggregate reads. A deliberate write has one command and one exact
     original-pair readback. An explicit uncertain retry reuses the same intent; there is no polling.
 - **Bound**
   - Native page: N ≤ 20; cursor ≤ 4096 characters. Web retains one page, one selected pair and one bounded draft or
     command intent. It never refills or accumulates pages.
+  - The in-memory visit path holds at most eight predecessor cursors plus current, each within the existing 4096-character cursor bound. A failed target leaves the accepted path unchanged for exact-cursor retry.
   - The inventory and command requests use private no-store handling. Query state has `gcTime: 0` and does not enter
     persistent storage, URL or browser history state.
 - **Growth checks**

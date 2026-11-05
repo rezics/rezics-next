@@ -69,17 +69,18 @@ export function OwnVotesDeparture({
 
   const decide = () => {
     const originalAuthority = live.current.isCurrent;
-    return confirm().then((leave) => leave && originalAuthority() && live.current.isCurrent());
+    return confirm().then((leave) => {
+      const admittedLeave = leave && originalAuthority() && live.current.isCurrent();
+      if (admittedLeave) live.current.onLeave?.();
+      return admittedLeave;
+    });
   };
   if (confirmMovement) confirmMovement.current = decide;
 
   useBlocker({
     shouldBlockFn: () =>
       protectedNow()
-        ? decide().then((leave) => {
-            if (leave) live.current.onLeave?.();
-            return !leave;
-          })
+        ? decide().then((leave) => !leave)
         : false,
     enableBeforeUnload: dirty || locked,
   });

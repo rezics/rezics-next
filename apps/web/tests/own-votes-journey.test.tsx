@@ -374,6 +374,57 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
   }
 });
 
+test('the single departure decision preserves a dirty editor on Stay and retires it only on eligible Leave', async () => {
+  const view = await setup(pageOf(row()), async () => ({ kind: 'uncertain' }));
+  try {
+    await click(view, button(view, m.library_my_ratings_inspect()));
+    await click(view, button(view, m.library_my_ratings_edit()));
+    const input = view.host.querySelector<HTMLInputElement>('input');
+    if (!input) throw new Error('Expected the selected answer editor');
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
+    if (!setter) throw new Error('Expected an input value setter');
+    await act(async () => {
+      setter.call(input, '2');
+      input.dispatchEvent(new view.window.Event('input', { bubbles: true }));
+      input.dispatchEvent(new view.window.Event('change', { bubbles: true }));
+    });
+    const subjectLink = [...view.host.querySelectorAll('a')].find((link) => link.textContent?.trim() === 'Kokoro');
+    if (!subjectLink) throw new Error('Expected the admitted Subject return link');
+
+    await click(view, subjectLink);
+    expect(view.window.document.body.textContent).toContain(m.library_my_ratings_departure_title());
+    const stay = [...view.window.document.body.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === m.library_my_ratings_stay(),
+    );
+    if (!stay) throw new Error('Expected Stay in the departure decision');
+    await click(view, stay);
+    expect(view.router.state.location.pathname).toBe('/library/ratings');
+    expect((view.host.querySelector('input') as HTMLInputElement | null)?.value).toBe('2');
+    expect(button(view, m.library_my_ratings_save())).toBeDefined();
+
+    const currentSubjectLink = [...view.host.querySelectorAll('a')].find((link) => link.textContent?.trim() === 'Kokoro');
+    if (!currentSubjectLink) throw new Error('Expected the current Subject return link');
+    await click(view, currentSubjectLink);
+    expect(view.window.document.body.textContent).toContain(m.library_my_ratings_departure_title());
+    const leave = [...view.window.document.body.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === m.library_my_ratings_leave(),
+    );
+    if (!leave) throw new Error('Expected Leave in the departure decision');
+    await click(view, leave);
+    expect(view.router.state.location.pathname).not.toBe('/library/ratings');
+    expect(view.host.querySelector('input')).toBeNull();
+    expect(view.host.textContent).toContain('Subject reader');
+
+    await back(view);
+    expect(view.refreshCount.value).toBe(1);
+    expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
+    expect(view.host.querySelector('input')).toBeNull();
+    expect(button(view, m.library_my_ratings_edit())).toBeUndefined();
+  } finally {
+    await view.close();
+  }
+});
+
 test('failed return stays unavailable until the user retries the same page', async () => {
   const page = pageOf(row());
   let attempts = 0;
