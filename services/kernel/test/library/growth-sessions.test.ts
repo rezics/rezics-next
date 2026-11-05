@@ -77,7 +77,7 @@ async function createFixture(route: number): Promise<Fixture> {
   });
   return {
     route,
-    actor: await authenticateAccount(access, { pool: database.pool, deadline: Date.now() + 5000 }, actor),
+    actor: await authenticateAccount(access, { pool: database.pool, deadline: Date.now() + 300_000 }, actor),
     subjectId: created.subject.id,
     commands: createSessionCommands({ pool: database.pool, access, tokens, clock: () => new Date(recordedAt) }),
   };

@@ -94,7 +94,7 @@ beforeAll(async () => {
         .map((action) => [action, { anonymous: false, authority: 'own-account' as const }] as const),
     ]),
   });
-  const context = { pool: database.pool, deadline: Date.now() + 5000 };
+  const context = { pool: database.pool, deadline: Date.now() + 300_000 };
   owner = await authenticateAccount(access, context, owner);
   other = await authenticateAccount(access, context, other);
   commands = createSessionCommands({ pool: database.pool, access, tokens, clock });
