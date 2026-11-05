@@ -30,7 +30,11 @@ test('Manga series and volume editor uses actual released metadata native writes
   expect(created).toEqual({
     ok: true,
     id: mangaVolumeId,
-    reader: { state: 'ready', href: `/en/subjects/${mangaVolumeId}/the-paper-observatory-volume-2` },
+    reader: {
+      state: 'ready',
+      href: `/en/subjects/${mangaVolumeId}/the-paper-observatory-volume-2`,
+      identity: { id: mangaVolumeId, label: 'The Paper Observatory, volume 2', type: 'schema:PublicationVolume' },
+    },
   });
   expect(fixture.calls.find((call) => call.method === 'POST')).toMatchObject({
     path: '/v1/subjects',
