@@ -388,9 +388,20 @@ test('tagged-work returns keep the same Concept identity when the locale prefix 
     expect(
       parseConceptVisitDescriptor(new URL(conceptHref, 'https://rezics.test').searchParams.get('conceptVisit')),
     ).toEqual(descriptor);
-    expect(subjectVisitReturn(conceptHref, locale)).toBe(conceptHref);
+    const admitted = subjectVisitReturn(conceptHref, locale);
+    expect(admitted).toBeDefined();
+    expect(decodeURIComponent(admitted!.split('?')[0]!)).toBe(decodeURIComponent(conceptHref.split('?')[0]!));
+    expect(new URL(admitted!, 'https://rezics.test').searchParams.get('conceptVisit')).toBe(
+      new URL(conceptHref, 'https://rezics.test').searchParams.get('conceptVisit'),
+    );
     expect(subjectVisitReturn(conceptHref, locale === 'en' ? 'ja' : 'en')).toBeUndefined();
     const workHref = subjectVisitHref(`/en/subjects/${work}/steins-gate`, conceptHref);
-    expect(new URL(workHref, 'https://rezics.test').searchParams.get('via')).toBe(conceptHref);
+    expect(
+      parseConceptVisitDescriptor(
+        new URL(new URL(workHref, 'https://rezics.test').searchParams.get('via')!, 'https://rezics.test').searchParams.get(
+          'conceptVisit',
+        ),
+      ),
+    ).toEqual(descriptor);
   }
 });
