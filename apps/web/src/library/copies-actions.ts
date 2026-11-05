@@ -123,8 +123,8 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
       ...(requested.cursor ? { cursor: requested.cursor } : {}),
     },
     (authorization) => {
-      // No list dispatch is possible for these predicates. Certify only this fresh preparation;
-      // unfiltered and point reads still require their observed native dispatch below.
+      // Filtered native list reads also dispatch. Certify this fresh preparation when the
+      // observer has not yet seen that GET, including unsupported-predicate 400 outcomes.
       if (requested.kind || requested.status) origin = prepared(request, authorization);
     },
   );

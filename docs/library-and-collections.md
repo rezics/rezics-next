@@ -384,11 +384,10 @@ kind source/release schema and type. Web profile preparation carries that explic
 including its absence on older releases; it never infers support from an ID or label. This current profile advice
 cannot establish historical admission or replace the private detail's per-field accepted pins.
 
-The installed generated client still lacks condition create/update/detail shapes. The retained Content publisher
-must publish those shapes through the official callables before Web can offer condition editing or render condition
-observations. Controls remain unavailable until that publication; profile preparation alone does not enable them.
-The remaining page journey includes the earlier Collection-item management comparison, independent media and
-packaging controls, full-Copy conflict review, exact retries and saved-copy reopening. Native, growth, browser and
+Until whole-Kernel declaration emission publishes Copy list filterOptions, condition write/detail fields and
+`copy-loans`, `@rezics/client` overlays those mounted contracts and yields when the generated envelopes exist. Web
+uses only those official types. Independent media and packaging controls, inventory comparison of recorded
+condition, Copy-editor loan commands and `/library/loans` are installed on that overlay. Native, growth, browser and
 promoted acceptance remain with the controller.
 
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org

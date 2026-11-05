@@ -55,6 +55,15 @@ const presentation = {
     statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
   },
 } satisfies NativeCopyPresentation;
+const omittedCondition = {
+  mediaCondition: { state: 'not_recorded' as const },
+  packagingCondition: { state: 'not_recorded' as const },
+  conditionEditing: {
+    state: 'unavailable' as const,
+    currentness: 'unavailable' as const,
+    reason: 'current_source_unavailable' as const,
+  },
+};
 const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
   ...native,
   subject: null,
@@ -95,10 +104,15 @@ const form = (value: CopyItem, extra: object = {}) =>
 
 test('raw list keeps two same-edition identities and original facts, with no point-detail requests', async () => {
   const second = { ...native, id: '01a17a3b-7065-7048-8c7f-f4ccfae1f401', kind: 'digital', note: 'Second copy' };
-  const { client, calls } = transport(() => json({ copies: [native, second], next: null }));
+  const options = {
+    kinds: { state: 'available' as const, choices: [{ id: 'print', label: 'Print', meaning: 'available' as const }] },
+    statuses: { state: 'unavailable' as const, choices: [] },
+  };
+  const { client, calls } = transport(() => json({ copies: [native, second], next: null, filterOptions: options }));
   const page = await loadCopiesPage(client, request(), {}, {});
   expect(calls).toHaveLength(1);
   expect(new URL(calls[0]!.url).pathname).toBe('/v1/copies');
+  expect(page.filterOptions).toEqual(options);
   expect(page.copies.map((item) => item.id)).toEqual([native.id, second.id]);
   for (const [index, original] of [native, second].entries()) {
     const { subjectId: _subject, ...fields } = original;
@@ -130,7 +144,7 @@ test('one explicit inspection reads the actual credential-bound point DTO once a
 
 test('declared native presentation binds accepted kind and status labels separately from current choices', () => {
   const declared = { ...native, presentation } satisfies NativeCopy;
-  expect(nativeCopyPresentation(declared)).toEqual(presentation);
+  expect(nativeCopyPresentation(declared)).toEqual({ ...presentation, ...omittedCondition });
   const html = form(
     { ...copy(), ...nativeCopyPresentation(declared) },
     {
@@ -276,7 +290,11 @@ test('native unknown historic kinds and missing releases retain raw facts withou
 test('unknown and unavailable presentation cannot supply labels or establish status-write support', () => {
   for (const meaning of ['unknown', 'unavailable'] as const) {
     const detail = { ...native, presentation: { ...presentation, meaning } } satisfies NativeCopy;
-    expect(nativeCopyPresentation(detail)).toEqual({ meaning, statusEditing: { state: 'unavailable' } });
+    expect(nativeCopyPresentation(detail)).toEqual({
+      meaning,
+      statusEditing: { state: 'unavailable' },
+      ...omittedCondition,
+    });
   }
 });
 

@@ -78,15 +78,19 @@ Returned history is private to the owner for the owner's lifetime and survives c
 owner erasure removes loan rows and the generation row through the existing owned-graph receiver, in batches of at
 most 100 keys per work step. No separate cleanup scheduler or retention timer was added.
 
-## Still to deliver
+## Installed web journey
 
-The native HTTP slice is installed, but the `/library/loans` page, contextual copy action, overflow navigation,
-generated web client delivery, locale strings, stories and rendered page cases are not. The native focused case does
-not yet cover concurrent create/disposal, foreign accounts and owner retirement, concealed-person threats,
-lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases for every pool. The
-native code uses bounded SQL and disclosure helpers, but complete measured costs for admission/currentness, SQL,
-locks, dispatch, receipts, hydration, serialization, retention and cleanup remain unverified. These requirements
-are the continuation; no browser or frozen acceptance pass is claimed.
+Decision: until whole-Kernel declaration emission publishes `copy-loans`, `@rezics/client` overlays the mounted
+GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses only those official types.
+
+`/library/loans` lists open and returned history through the current-viewer reader, with first/more cursor moves,
+extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
+extend and return commands for the inspected holding and links to the loans page.
+
+The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
+concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases
+for every pool. Complete measured costs for admission/currentness, SQL, locks, dispatch, receipts, hydration,
+serialization, retention and cleanup remain unverified.
 
 ## Verification
 

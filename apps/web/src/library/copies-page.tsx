@@ -37,6 +37,14 @@ import {
   invalidCopyFields,
   type CopyDraft as Draft,
 } from './copy-fields';
+import {
+  copyConditionDraftOf,
+  copyConditionDisplayText,
+  copyConditionOperand,
+  copyConditionWritten,
+  kindAdmitsCondition,
+} from './copy-condition';
+import { CopyLoanPanel } from './copy-loan-panel';
 import { CopyTextReader, dateText } from './copy-inventory-review/text-reader';
 import { CopyInventoryReview } from './copy-inventory-review/view';
 import { useCopyInventoryReview } from './copy-inventory-review/selection';
@@ -59,6 +67,8 @@ const draftOf = (copy?: CopyItem): Draft => ({
   acquiredOn: copy?.acquiredOn ?? '',
   disposedOn: copy?.disposedOn ?? '',
   note: copy?.note ?? '',
+  mediaCondition: copyConditionDraftOf(copy?.mediaCondition),
+  packagingCondition: copyConditionDraftOf(copy?.packagingCondition),
 });
 
 /** Optional for pure stories; the actual route always supplies the originating private lifetime. */
@@ -326,12 +336,16 @@ export function CopyForm({
     if (!intent.current) {
       if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
       if (!copy && !selected?.statuses.some((status) => status.id === draft.status)) return;
+      const mediaCondition = copyConditionOperand(draft.mediaCondition);
+      const packagingCondition = copyConditionOperand(draft.packagingCondition);
       const fields = {
         location: blank(draft.location),
         source: blank(draft.source),
         acquiredOn: blank(draft.acquiredOn),
         disposedOn: blank(draft.disposedOn),
         note: blank(draft.note),
+        ...(mediaCondition === undefined ? {} : { mediaCondition }),
+        ...(packagingCondition === undefined ? {} : { packagingCondition }),
       };
       const status = copy ? copyStatusChange(copy, draft.status) : undefined;
       if (copy && !status) {
@@ -384,6 +398,13 @@ export function CopyForm({
         );
         return;
       }
+      const written = (field: 'mediaCondition' | 'packagingCondition') =>
+        Object.hasOwn(captured.data, field)
+          ? copyConditionWritten(
+              copy?.[field],
+              captured.data[field] as Parameters<typeof copyConditionWritten>[1],
+            )
+          : copy?.[field];
       if (copy) {
         if (result.copy.id !== copy.id) {
           setFailure(m.library_copy_failure());
@@ -407,6 +428,8 @@ export function CopyForm({
           acquiredOn: result.copy.acquiredOn,
           disposedOn: result.copy.disposedOn,
           note: result.copy.note,
+          mediaCondition: written('mediaCondition'),
+          packagingCondition: written('packagingCondition'),
           idempotencyKey: crypto.randomUUID(),
         });
       } else {
@@ -414,6 +437,8 @@ export function CopyForm({
         onCreated({
           ...result.copy,
           kind: result.copy.kind ?? null,
+          mediaCondition: written('mediaCondition'),
+          packagingCondition: written('packagingCondition'),
           subject:
             editionBinding && edition
               ? {
@@ -711,7 +736,29 @@ export function CopyForm({
           showErrors={showFieldErrors}
           onExpandedChange={(expanded) => current() && setMore(expanded)}
           onChange={change}
+          condition={
+            copy
+              ? copy.conditionEditing || copy.mediaCondition || copy.packagingCondition
+                ? {
+                    editing: copy.conditionEditing,
+                    media: copy.mediaCondition,
+                    packaging: copy.packagingCondition,
+                    disabled: pending || !!intent.current,
+                  }
+                : undefined
+              : kindAdmitsCondition(selected?.condition)
+                ? {
+                    editing: { state: 'supported', currentness: 'current', choices: [] },
+                    media: { state: 'not_recorded' },
+                    packaging: { state: 'not_recorded' },
+                    disabled: pending || !!intent.current,
+                  }
+                : undefined
+          }
         />
+      ) : null}
+      {copy && originating ? (
+        <CopyLoanPanel copy={copy} originating={originating} disabled={pending || !!intent.current || conflicted} />
       ) : null}
       {pending ? (
         <p role="status" className="rounded-lg bg-muted p-3 text-sm">
@@ -936,6 +983,16 @@ export function CopyRow({
               collapseLabel={m.library_copy_note_reader_collapse_note()}
             />
           ) : null}
+          {copy.mediaCondition && copy.mediaCondition.state !== 'not_recorded' ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_copy_condition_media()}: {copyConditionDisplayText(copy.mediaCondition)}
+            </p>
+          ) : null}
+          {copy.packagingCondition && copy.packagingCondition.state !== 'not_recorded' ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_copy_condition_packaging()}: {copyConditionDisplayText(copy.packagingCondition)}
+            </p>
+          ) : null}
           <CopyInventoryHistory copy={copy} />
         </div>
       }
@@ -959,6 +1016,11 @@ export function CopyRow({
                 type: 'item',
                 label: m.library_copy_edit(),
                 onSelect: () => onEdit(launcher.current),
+              },
+              {
+                type: 'link',
+                label: m.library_copy_loans(),
+                href: `/${pageLocale}/library/loans`,
               },
             ]}
           />
@@ -1160,6 +1222,18 @@ function LoadedCopiesPage({
         <PageHeading id="copies-inventory-heading" tabIndex={-1}>
           {m.library_copy_heading()}
         </PageHeading>
+        <div className="flex flex-wrap items-center gap-3">
+          <Exposure operation="copy.list">
+            <Link
+              to="/library/loans"
+              className={quiet}
+              onClick={(event) => {
+                if (!currentPage('copy.list')) event.preventDefault();
+              }}
+            >
+              {m.library_copy_loans()}
+            </Link>
+          </Exposure>
         {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
           <button
             type="button"
@@ -1175,6 +1249,7 @@ function LoadedCopiesPage({
             {m.library_copy_add()}
           </button>
         ) : null}
+        </div>
       </header>
       {page.cursorRestarted ? <p role="status">{m.library_copies_address_cursor_restarted()}</p> : null}
       {failure ? (

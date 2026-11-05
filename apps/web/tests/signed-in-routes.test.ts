@@ -18,6 +18,7 @@ const routes = [
   ['library/index.tsx', '/library'],
   ['library/collections.tsx', '/library/collections'],
   ['library/copies.tsx', '/library/copies'],
+  ['library/loans.tsx', '/library/loans'],
   ['library/following.tsx', '/library/following'],
   ['library/progress.index.tsx', '/library/progress'],
   ['library/progress.$id.tsx', '/library/progress/example'],

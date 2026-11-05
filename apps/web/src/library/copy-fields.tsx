@@ -5,6 +5,13 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { copyFieldInputIsTooLong, copyTextFieldLimits, type CopyTextField } from './copy-field-input';
+import {
+  COPY_CONDITION_CLEAR,
+  copyConditionChoices,
+  copyConditionDisplayText,
+  type CopyConditionDraft,
+} from './copy-condition';
+import type { CopyConditionDisplay, CopyConditionEditing } from '@rezics/client';
 
 export type CopyDraft = {
   status: string;
@@ -13,6 +20,8 @@ export type CopyDraft = {
   acquiredOn: string;
   disposedOn: string;
   note: string;
+  mediaCondition: string;
+  packagingCondition: string;
 };
 
 const inputClass =
@@ -177,6 +186,7 @@ export function CopyOptionalFields({
   showErrors,
   onExpandedChange,
   onChange,
+  condition,
 }: {
   draft: CopyDraft;
   prefix: string;
@@ -184,6 +194,14 @@ export function CopyOptionalFields({
   showErrors: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onChange: <K extends keyof CopyDraft>(field: K, value: CopyDraft[K]) => void;
+  condition?:
+    | {
+        editing: CopyConditionEditing | undefined;
+        media: CopyConditionDisplay | undefined;
+        packaging: CopyConditionDisplay | undefined;
+        disabled: boolean;
+      }
+    | undefined;
 }) {
   return (
     <section className="min-w-0 space-y-4">
@@ -239,8 +257,125 @@ export function CopyOptionalFields({
           showErrors={showErrors}
           onChange={(value) => onChange('note', value)}
         />
+        {condition ? (
+          <CopyConditionFields
+            prefix={prefix}
+            draft={draft}
+            editing={condition.editing}
+            media={condition.media}
+            packaging={condition.packaging}
+            disabled={condition.disabled}
+            onChange={onChange}
+          />
+        ) : null}
       </div>
     </section>
+  );
+}
+
+export function CopyConditionFields({
+  prefix,
+  draft,
+  editing,
+  media,
+  packaging,
+  disabled,
+  onChange,
+}: {
+  prefix: string;
+  draft: CopyConditionDraft;
+  editing: CopyConditionEditing | undefined;
+  media: CopyConditionDisplay | undefined;
+  packaging: CopyConditionDisplay | undefined;
+  disabled: boolean;
+  onChange: <K extends keyof CopyDraft>(field: K, value: CopyDraft[K]) => void;
+}) {
+  const supported = editing?.state === 'supported';
+  const choices = supported && editing.choices.length ? editing.choices : copyConditionChoices();
+  return (
+    <section className="min-w-0 space-y-4">
+      <header className="space-y-1">
+        <h3 className="font-medium">{m.library_copy_condition_title()}</h3>
+        <p className="text-sm text-muted-foreground">{m.library_copy_condition_description()}</p>
+      </header>
+      <CopyConditionSelect
+        field="mediaCondition"
+        label={m.library_copy_condition_media()}
+        value={draft.mediaCondition}
+        current={media}
+        choices={choices}
+        supported={supported}
+        disabled={disabled}
+        prefix={prefix}
+        onChange={(value) => onChange('mediaCondition', value)}
+      />
+      <CopyConditionSelect
+        field="packagingCondition"
+        label={m.library_copy_condition_packaging()}
+        value={draft.packagingCondition}
+        current={packaging}
+        choices={choices}
+        supported={supported}
+        disabled={disabled}
+        prefix={prefix}
+        onChange={(value) => onChange('packagingCondition', value)}
+      />
+    </section>
+  );
+}
+
+function CopyConditionSelect({
+  field,
+  label,
+  value,
+  current,
+  choices,
+  supported,
+  disabled,
+  prefix,
+  onChange,
+}: {
+  field: 'mediaCondition' | 'packagingCondition';
+  label: string;
+  value: string;
+  current: CopyConditionDisplay | undefined;
+  choices: { id: string; label: string }[];
+  supported: boolean;
+  disabled: boolean;
+  prefix: string;
+  onChange: (value: string) => void;
+}) {
+  const id = `${prefix}-${field}`;
+  if (!supported) {
+    return (
+      <Field>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <p id={id} className="min-h-11 py-2">
+          {copyConditionDisplayText(current)}
+        </p>
+      </Field>
+    );
+  }
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <NativeSelect
+        id={id}
+        name={field}
+        className={`${inputClass} [&_select]:min-h-11 [&_select]:text-base`}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
+        <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
+        <NativeSelectOption value={COPY_CONDITION_CLEAR}>{m.library_copy_condition_cleared()}</NativeSelectOption>
+        {choices.map((choice) => (
+          <NativeSelectOption key={choice.id} value={choice.id}>
+            {choice.label}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </Field>
   );
 }
 

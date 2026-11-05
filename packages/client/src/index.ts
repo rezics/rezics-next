@@ -406,6 +406,57 @@ export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$
 export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
+type GeneratedCopies = GeneratedKernelClient['copies'];
+type GeneratedCopyPath = ReturnType<GeneratedCopies>;
+type GeneratedCopyListOptions = NonNullable<Parameters<GeneratedCopies['get']>[0]>;
+type GeneratedCopyListQuery = NonNullable<GeneratedCopyListOptions['query']>;
+type GeneratedCopyListRead = Awaited<ReturnType<GeneratedCopies['get']>>;
+type GeneratedCopyListData = NonNullable<GeneratedCopyListRead['data']>;
+type GeneratedCopyCreateBody = Parameters<GeneratedCopies['post']>[0];
+type GeneratedCopyPatchBody = Parameters<GeneratedCopyPath['patch']>[0];
+type GeneratedCopyDetailRead = Awaited<ReturnType<GeneratedCopyPath['get']>>;
+type GeneratedCopy = NonNullable<NonNullable<GeneratedCopyDetailRead['data']>['copy']>;
+type CopyListHasFilters = GeneratedCopyListData extends { filterOptions: unknown } ? true : false;
+type CopyConditionBodyPublished = GeneratedCopyCreateBody extends { mediaCondition?: unknown } ? true : false;
+type CopyConditionPresentationPublished = NonNullable<GeneratedCopy['presentation']> extends {
+  mediaCondition: unknown;
+}
+  ? true
+  : false;
+type CopyLoansPublished = 'copy-loans' extends keyof GeneratedKernelClient ? true : false;
+type CopyListQuery = CopyListHasFilters extends true
+  ? GeneratedCopyListQuery
+  : GeneratedCopyListQuery & { kind?: string; status?: string };
+type CopyListData = CopyListHasFilters extends true
+  ? GeneratedCopyListData
+  : GeneratedCopyListData & { filterOptions: import('./copy-contracts.ts').CopyInventoryOptions };
+type CopyCreateBody = CopyConditionBodyPublished extends true
+  ? GeneratedCopyCreateBody
+  : GeneratedCopyCreateBody & import('./copy-contracts.ts').CopyConditionPatch;
+type CopyPatchBody = CopyConditionBodyPublished extends true
+  ? GeneratedCopyPatchBody
+  : GeneratedCopyPatchBody & import('./copy-contracts.ts').CopyConditionPatch;
+type CopyDetailCopy = CopyConditionPresentationPublished extends true
+  ? GeneratedCopy
+  : Omit<GeneratedCopy, 'presentation'> & {
+      presentation?: NonNullable<GeneratedCopy['presentation']> &
+        Partial<import('./copy-contracts.ts').CopyConditionPresentation>;
+    };
+type CopyPath = Omit<GeneratedCopyPath, 'get' | 'patch'> & {
+  get(...args: Parameters<GeneratedCopyPath['get']>): Promise<
+    Omit<GeneratedCopyDetailRead, 'data'> & {
+      data: (Omit<NonNullable<GeneratedCopyDetailRead['data']>, 'copy'> & { copy: CopyDetailCopy }) | null;
+    }
+  >;
+  patch(body: CopyPatchBody, options: Parameters<GeneratedCopyPath['patch']>[1]): ReturnType<GeneratedCopyPath['patch']>;
+};
+type CopiesClient = Omit<GeneratedCopies, keyof Function | 'get' | 'post'> & {
+  get(
+    options?: Omit<GeneratedCopyListOptions, 'query'> & { query?: CopyListQuery },
+  ): Promise<Omit<GeneratedCopyListRead, 'data'> & { data: CopyListData | null }>;
+  post(body: CopyCreateBody, options: Parameters<GeneratedCopies['post']>[1]): ReturnType<GeneratedCopies['post']>;
+} & ((...args: Parameters<GeneratedCopies>) => CopyPath);
+
 export type KernelClient = Omit<
   GeneratedKernelClient,
   | 'accounts'
@@ -417,6 +468,7 @@ export type KernelClient = Omit<
   | 'libraryImports'
   | 'moderation-decisions'
   | 'realms'
+  | 'copies'
 > & {
   libraryImports: import('./personal-vndb-import.ts').PersonalVndbImports<GeneratedKernelClient['libraryImports']>;
   posts: PostsClient;
@@ -427,7 +479,23 @@ export type KernelClient = Omit<
   subjects: KernelSubjectsClient;
   'moderation-decisions': DecisionPages;
   realms: RealmsClient;
-};
+  copies: CopiesClient;
+} & (CopyLoansPublished extends true ? {} : { 'copy-loans': import('./copy-contracts.ts').CopyLoansClient });
+export { COPY_CONDITION_VALUES } from './copy-contracts.ts';
+export type {
+  CopyConditionChoice,
+  CopyConditionDisplay,
+  CopyConditionEditing,
+  CopyConditionPatch,
+  CopyConditionPresentation,
+  CopyConditionValue,
+  CopyInventoryOptions,
+  Loan,
+  LoanFilter,
+  LoanMutation,
+  LoanPage,
+  LoanWrite,
+} from './copy-contracts.ts';
 export type { PostHistoryPage } from './kernel/content/history-page.ts';
 export type {
   DecisionPageAppeal,

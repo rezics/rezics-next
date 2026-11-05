@@ -318,12 +318,28 @@ test('Actual server exports certify only the exact native preparation, preserve 
     ).toBe(true);
     expect(JSON.stringify(value)).not.toContain('credential-A');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
-    expect(value.page.filterOptions).toBeUndefined(); // Undeclared extra wire fields grant no capability.
+    expect(value.page.filterOptions).toEqual(filterOptions);
     refuseAfterPreparation = false;
-    for (const filters of [{ kind: 'old.print' }, { status: 'retired' }, { kind: 'print', status: 'shelf' }]) {
+    native.mockImplementation(async (input, init) => {
+      const call = new Request(input, init);
+      calls.push(call);
+      const url = new URL(call.url);
+      if (url.pathname === '/v1/copies') {
+        if (url.searchParams.get('kind') === 'old.print' || url.searchParams.get('status') === 'retired')
+          return Response.json({ code: 'unsupported_filter' }, { status: 400 });
+        if (url.searchParams.has('cursor')) return Response.json({ code: 'invalid_cursor' }, { status: 400 });
+        return Response.json({ copies: [{ ...copy('A'), subject: null }], next: 'next-A', filterOptions });
+      }
+      if (url.pathname === `/v1/copies/${id(1)}`) return Response.json({ copy: { ...copy('A'), subject: null } });
+      if (url.pathname === `/v1/subjects/${id(10)}`)
+        return Response.json({ subject: { id: id(10), type: 'Book', labels: { en: 'Prepared A edition' } } });
+      throw new Error(`Unexpected native read: ${url}`);
+    });
+    for (const filters of [{ kind: 'old.print' }, { status: 'retired' }]) {
       preparation = 'active';
       currentRequest = request();
       const before = prepareCalls;
+      const copiesBefore = calls.filter((call) => new URL(call.url).pathname === '/v1/copies').length;
       const unavailable = await actions.readCopiesCurrent({
         data: { subjectId: id(10), ...filters, cursor: 'exact/selected+cursor' },
       });
@@ -334,8 +350,20 @@ test('Actual server exports certify only the exact native preparation, preserve 
       });
       expect(unavailable.page.filterOptions).toBeUndefined();
       expect(prepareCalls - before).toBe(1);
-      expect(calls.filter((call) => new URL(call.url).pathname === '/v1/copies')).toHaveLength(2);
+      expect(calls.filter((call) => new URL(call.url).pathname === '/v1/copies')).toHaveLength(copiesBefore + 1);
     }
+    preparation = 'active';
+    currentRequest = request();
+    const admitted = await actions.readCopiesCurrent({
+      data: { subjectId: id(10), kind: 'print', status: 'shelf' },
+    });
+    expect(admitted).toMatchObject({
+      sessionSubject: 'A',
+      requested: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: null, locale: 'en' },
+      page: { kind: 'print', status: 'shelf', copies: [{ id: id(1) }], next: 'next-A', csrfToken: 'csrf-A' },
+    });
+    expect(admitted.page.filterOptions).toEqual(filterOptions);
+    expect(admitted.page.inventoryState).toBeUndefined();
 
     // Real retained WeakMap credential, followed by real refusal on the original Request.
     refuseAfterPreparation = false;
@@ -1128,6 +1156,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(nextAddress.searchParams.get('cursor')).toBe('next-B');
 
     // Explicit edition reads carry both source address and exact selected id; A IO never gates B.
+    search = {};
     await show(viewer('A'));
     await acceptList('A');
     await click(m.library_copy_add());
