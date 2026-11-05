@@ -127,6 +127,7 @@ export async function* readDump(
   memory.hold(8, source, 'metadata');
   let columns: string[] | null = null;
   let table: string | null = null;
+  let allowPersonDetailTrailingLine = false;
   let wiki: 'start' | 'lines' | 'first' | 'value' | 'valueOrClose' | 'separator' | 'closed' = 'start';
   let wikiParts: string[] | null = null;
   let wikiBytes = 0;
@@ -143,6 +144,11 @@ export async function* readDump(
           return invalid();
         }
         memory.hold(3, text);
+        if (source === 'bangumi' && options.bangumiPersonDetailRows && text === '' && allowPersonDetailTrailingLine) {
+          allowPersonDetailTrailingLine = false;
+          continue;
+        }
+        allowPersonDetailTrailingLine = false;
         let recordBytes = bytes.length;
         if (source === 'wikidata') {
           text = text.trim();
@@ -318,6 +324,7 @@ export async function* readDump(
               return invalid();
             key = id!;
             revision = null;
+            allowPersonDetailTrailingLine = true;
           } else {
             payload = object(text);
             if (source === 'bangumi') {
