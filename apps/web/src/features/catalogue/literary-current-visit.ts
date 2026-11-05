@@ -21,6 +21,12 @@ export const literaryVisitLimit = 2048;
 export function parseLiteraryCurrentVisit(search: string, id: string, locale: string): LiteraryVisitInput {
   if (search.length > literaryVisitLimit || new TextEncoder().encode(search).byteLength > literaryVisitLimit)
     return { kind: 'invalid' };
+  // URLSearchParams replaces malformed UTF-8; reject source=%FF rather than retaining a repaired address.
+  try {
+    decodeURIComponent(search);
+  } catch {
+    return { kind: 'invalid' };
+  }
   const params = new URLSearchParams(search);
   if (!params.size) return { kind: 'direct' };
   for (const key of params.keys())
@@ -29,24 +35,40 @@ export function parseLiteraryCurrentVisit(search: string, id: string, locale: st
   const realm = params.get('realm') ?? undefined;
   const type = params.get('type');
   const source = params.get('source');
-  if (!context || !uuid.test(context) || !type || !isLiteraryType(type) || !source ||
-    (realm !== undefined && (!uuid.test(realm) || context === candidateContext))) return { kind: 'invalid' };
+  if (
+    !context ||
+    !uuid.test(context) ||
+    !type ||
+    !isLiteraryType(type) ||
+    !source ||
+    (realm !== undefined && (!uuid.test(realm) || context === candidateContext))
+  )
+    return { kind: 'invalid' };
   const accepted = subjectVisitReturn(source, locale);
   if (!accepted) return { kind: 'invalid' };
   const url = new URL(source, 'https://rezics.invalid');
   const path = url.pathname.split('/');
-  if (path[2] !== 'subjects' || path[3] !== id ||
+  if (
+    path[2] !== 'subjects' ||
+    path[3] !== id ||
     (path[5] !== undefined && !['contents', 'editions'].includes(path[5])) ||
     (url.searchParams.get('realm') ?? undefined) !== realm ||
     (url.searchParams.has('context') && url.searchParams.get('context') !== context) ||
     (context !== candidateContext && !realm) ||
-    [...url.searchParams.keys()].some(key => !['realm', 'context', 'node', 'cursor', 'streamProperty', 'streamDirection', 'focus'].includes(key)))
+    [...url.searchParams.keys()].some(
+      (key) => !['realm', 'context', 'node', 'cursor', 'streamProperty', 'streamDirection', 'focus'].includes(key),
+    )
+  )
     return { kind: 'invalid' };
   return { kind: 'visit', visit: { context, type, source, ...(realm ? { realm } : {}) } };
 }
 
 /** The encoded enclosing query, including expansion of the public source, shares the same cap. */
 export function literaryCurrentVisitSearch(visit: LiteraryCurrentVisit): string {
-  return `?${new URLSearchParams({ context: visit.context, type: visit.type, source: visit.source,
-    ...(visit.realm ? { realm: visit.realm } : {}) })}`;
+  return `?${new URLSearchParams({
+    context: visit.context,
+    type: visit.type,
+    source: visit.source,
+    ...(visit.realm ? { realm: visit.realm } : {}),
+  })}`;
 }

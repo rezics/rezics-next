@@ -5,7 +5,13 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
-import { createLiteraryWork, isLiteraryType, readLiteraryProfile, type LiteraryCommand, type LiteraryRead } from './literary-profile';
+import {
+  createLiteraryWork,
+  isLiteraryType,
+  readLiteraryProfile,
+  type LiteraryCommand,
+  type LiteraryRead,
+} from './literary-profile';
 import type { CreateResult } from './create-subject';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -13,7 +19,14 @@ export const loadLiteraryProfile = createServerFn({ method: 'GET', strict: false
   .validator((input?: string | { id: string; type: string }) => {
     const id = typeof input === 'object' && input ? input.id : input;
     if (id !== undefined && (typeof id !== 'string' || !uuid.test(id))) throw new Error('Invalid work identity');
-    if (typeof input === 'object' && (!input || Object.keys(input).some(key => !['id', 'type'].includes(key)) || !isLiteraryType(input.type))) throw new Error('Invalid work type');
+    if (
+      typeof input === 'object' &&
+      (!input ||
+        !uuid.test(input.id) ||
+        Object.keys(input).some((key) => !['id', 'type'].includes(key)) ||
+        !isLiteraryType(input.type))
+    )
+      throw new Error('Invalid work type');
     return input;
   })
   .handler(async ({ data }): Promise<LiteraryRead> => {
