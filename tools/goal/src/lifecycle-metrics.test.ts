@@ -256,7 +256,7 @@ test('pending queue waits stay identical as settled event history grows', () => 
     {
       taskId: 'pending',
       attempt: 1,
-      kind: 'queue',
+      kind: 'queue' as const,
       stage: 'check',
       enteredAt: at(-5 * 60_000),
       ageMs: 5 * 60_000,
