@@ -527,7 +527,7 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
     await verifyDev({ ...setupContext, store: restarted, runGate: setupRunner });
     expect(
       readdirSync(setupContext.stateDirectory).filter((name) => name.startsWith('dev-verify-install-')),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     restarted.db.close();
   } finally {
     try {
