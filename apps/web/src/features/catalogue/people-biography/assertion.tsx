@@ -1,11 +1,11 @@
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useContext, useEffect, useState, type SyntheticEvent } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { PartValue } from '../statement-editor-view';
 import { useCurrentReadingVisible } from '../editor-lifetime';
 import { valueExplanationHref } from '../value-explanation';
 import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
-import { peopleBiographyAddress, peopleBiographyTargetHref } from './current-visit';
-import { peopleLabel, type PeopleBiographyFact, type PeopleBiographyField } from './index';
+import { PeopleBiographyOuterReturn, peopleBiographyAddress, peopleBiographyTargetHref } from './current-visit';
+import { peopleLabel, peopleOccupationConcept, type PeopleBiographyFact, type PeopleBiographyField } from './index';
 import type { FactsCurrent } from '../subject-facts';
 
 const control =
@@ -25,6 +25,7 @@ function targetFor(part: Part, read: FactsCurrent, locale: string) {
   if (typeof id !== 'string' || !Object.hasOwn(read.public.related, id)) return;
   const summary = read.public.related[id];
   if (!summary || !('labels' in summary)) return;
+  if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type)) return;
   return { id, label: peopleLabel(summary.labels ?? {}, locale) };
 }
 
@@ -44,6 +45,7 @@ function EvidenceValue({
   locale: string;
   title: string;
 }) {
+  const outerReturn = useContext(PeopleBiographyOuterReturn);
   const target = targetFor(part, read, locale);
   if (part.property.data_type === 'wikibase-item' && part.value.type === 'value') {
     if (!target) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
@@ -55,6 +57,7 @@ function EvidenceValue({
       field.kind,
       field.id,
       fact.id,
+      outerReturn,
     );
     return (
       <a
@@ -85,6 +88,7 @@ export function PeopleBiographyAssertion({
   restored: boolean;
   title: string;
 }) {
+  const outerReturn = useContext(PeopleBiographyOuterReturn);
   const visible = useCurrentReadingVisible();
   const [open, setOpen] = useState(false);
   const o = { locale: locale as never };
@@ -109,6 +113,7 @@ export function PeopleBiographyAssertion({
       field.kind,
       field.id,
       fact.id,
+      outerReturn,
     ),
     locale,
   );

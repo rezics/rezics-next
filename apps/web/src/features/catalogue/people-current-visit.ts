@@ -1,5 +1,5 @@
 import { candidateContext } from '../../subject/candidates';
-import { subjectVisitReturn } from '../pages/subject-visit-navigation';
+import { personBiographyReturn, subjectVisitReturn } from '../pages/subject-visit-navigation';
 import { subjectHref } from '../../subject/subject-href';
 import { peopleUuid } from './people-profile';
 
@@ -21,6 +21,7 @@ export type PeopleCurrentVisitOrigin = {
 export type PeopleCurrentVisitSearch =
   | { kind: 'legacy' }
   | { kind: 'invalid' }
+  | { kind: 'biography'; returnHref?: string }
   | { kind: 'origin'; origin: PeopleCurrentVisitOrigin; correction: 'global' | undefined };
 
 export type PeopleCurrentVisitInput = {
@@ -165,8 +166,41 @@ export function validatePeopleCurrentVisitSearch(
   search: Record<string, unknown>,
   id: string,
   locale: string,
+  hash = '',
 ): PeopleCurrentVisitSearch {
   const keys = Object.keys(search);
+  const biography = personBiographyReturn(hash);
+  if (biography) {
+    if (
+      !peopleUuid.test(id) ||
+      !locales.has(locale) ||
+      keys.some((key) => key !== 'context' && key !== 'via') ||
+      search.context !== biography.context ||
+      search.context !== candidateContext
+    )
+      return { kind: 'invalid' };
+    if (search.via === undefined) return { kind: 'biography' };
+    if (
+      typeof search.via !== 'string' ||
+      !queryWithinLimit(new URLSearchParams({ context: biography.context, via: search.via }).toString())
+    )
+      return { kind: 'invalid' };
+    const via = subjectVisitReturn(search.via, locale);
+    if (!via) return { kind: 'invalid' };
+    const outer = new URL(via, 'https://rezics.invalid');
+    const segments = outer.pathname.split('/');
+    if (
+      segments.length !== 5 ||
+      segments[2] !== 'subjects' ||
+      segments[3] !== id ||
+      outer.hash !== '#connections' ||
+      [...outer.searchParams.keys()].some((key) => key !== 'context' && key !== 'realm')
+    )
+      return { kind: 'invalid' };
+    outer.hash = 'person-biography';
+    return { kind: 'biography', returnHref: `${outer.pathname}${outer.search}${outer.hash}` };
+  }
+  if (hash.startsWith('#person-biography?')) return { kind: 'invalid' };
   if (keys.length === 0) return { kind: 'legacy' };
   if (
     keys.some((key) => !visitQueryKeys.has(key)) ||

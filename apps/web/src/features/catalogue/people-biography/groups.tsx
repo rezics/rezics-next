@@ -14,7 +14,7 @@ import type { CandidateTransport } from '../../../subject/candidate-review';
 import type { FactsCurrent, FactsTransport } from '../subject-facts';
 import { PeopleBiographyDocuments } from './biography';
 import { PeopleSelectedItems } from './items';
-import { peopleBiographyAddress } from './current-visit';
+import { PeopleBiographyOuterReturn, peopleBiographyAddress } from './current-visit';
 import { peopleBiographyAssertionAnchor, peopleBiographyFieldAnchor } from './assertion';
 import { useCurrentReadingActive, useCurrentReadingVisible } from '../editor-lifetime';
 import {
@@ -119,12 +119,14 @@ export function PeopleBiographyGroups({
   search,
   transport,
   review,
+  returnHref,
 }: {
   read: FactsCurrent;
   locale: string;
   search?: EntityPickerSearch | undefined;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
+  returnHref?: string;
 }) {
   const o = { locale: locale as never };
   const subject = read.public.subject;
@@ -185,51 +187,53 @@ export function PeopleBiographyGroups({
       return fact && spoilerLevel(fact.statement) <= defaultReader.spoilerLevel ? visit.locator.assertion : undefined;
     })();
   const returnAddress = (window: PersonBiographyReturn['window'], field: string, assertion?: string) =>
-    peopleBiographyAddress(subject.id, title, locale, subject.context, window, field, assertion);
+    peopleBiographyAddress(subject.id, title, locale, subject.context, window, field, assertion, returnHref);
   const affiliationField = groups.find((group) => group.kind === 'affiliations')?.fields[0];
   const historyReturn = affiliationField
     ? returnAddress('affiliations', affiliationField.id)
     : `${subjectHref({ id: subject.id, label: title }, locale).href}/people?context=${encodeURIComponent(subject.context)}`;
   return (
-    <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]">
-      {visit && !visit.current ? <p role="status">{m.people_facts_changed({}, o)}</p> : null}
-      {groups.map((group) => (
-        <BiographyGroup
-          key={group.kind}
-          group={group}
-          read={read}
-          locale={locale}
-          {...(search ? { search } : {})}
-          transport={transport}
-          review={review}
-          restoredAssertion={restore(group.kind)}
-        />
-      ))}
-      {agent === 'schema:Organization' ? (
-        <section data-slot="people-organization-history" className="min-w-0 space-y-3">
-          <ContentItemHeading level={2} className="text-xl font-semibold">
-            {m.producer_history_title({}, o)}
-          </ContentItemHeading>
-          <p className="text-sm text-muted-foreground">{m.producer_history_intro({}, o)}</p>
-          <a
-            className={actionClass}
-            href={withSubjectVisitReturn(
-              (() => {
-                const url = new URL(
-                  `${subjectHref({ id: subject.id, label: title }, locale).href}/producer`,
-                  'https://rezics.invalid',
-                );
-                url.searchParams.set('context', subject.context);
-                return `${url.pathname}${url.search}`;
-              })(),
-              historyReturn,
-              locale,
-            )}
-          >
-            {m.producer_history_title({}, o)}
-          </a>
-        </section>
-      ) : null}
-    </div>
+    <PeopleBiographyOuterReturn value={returnHref}>
+      <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]">
+        {visit && !visit.current ? <p role="status">{m.people_facts_changed({}, o)}</p> : null}
+        {groups.map((group) => (
+          <BiographyGroup
+            key={group.kind}
+            group={group}
+            read={read}
+            locale={locale}
+            {...(search ? { search } : {})}
+            transport={transport}
+            review={review}
+            restoredAssertion={restore(group.kind)}
+          />
+        ))}
+        {agent === 'schema:Organization' ? (
+          <section data-slot="people-organization-history" className="min-w-0 space-y-3">
+            <ContentItemHeading level={2} className="text-xl font-semibold">
+              {m.producer_history_title({}, o)}
+            </ContentItemHeading>
+            <p className="text-sm text-muted-foreground">{m.producer_history_intro({}, o)}</p>
+            <a
+              className={actionClass}
+              href={withSubjectVisitReturn(
+                (() => {
+                  const url = new URL(
+                    `${subjectHref({ id: subject.id, label: title }, locale).href}/producer`,
+                    'https://rezics.invalid',
+                  );
+                  url.searchParams.set('context', subject.context);
+                  return `${url.pathname}${url.search}`;
+                })(),
+                historyReturn,
+                locale,
+              )}
+            >
+              {m.producer_history_title({}, o)}
+            </a>
+          </section>
+        ) : null}
+      </div>
+    </PeopleBiographyOuterReturn>
   );
 }

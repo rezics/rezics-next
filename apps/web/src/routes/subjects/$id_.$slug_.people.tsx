@@ -21,7 +21,8 @@ function PeopleProfileRoute() {
   const locale = getLocale();
   const search = Route.useSearch();
   const location = Route.useLocation();
-  const visit = validatePeopleCurrentVisitSearch(search, id, locale);
+  const hash = location.hash ? `#${location.hash.replace(/^#/, '')}` : '';
+  const visit = validatePeopleCurrentVisitSearch(search, id, locale, hash);
   const address = JSON.stringify([location.pathname, location.searchStr, location.hash]);
   const returnAfterSignIn = keepSearch(location.pathname, location.searchStr, location.hash);
   return (
@@ -29,12 +30,13 @@ function PeopleProfileRoute() {
       locale={locale}
       pathname={location.pathname}
       visit={visit}
-      renderEditor={(origin) => (
+      renderEditor={(origin, biographyReturn) => (
         <PeopleProfileSession
           id={id}
           locale={locale}
           address={address}
           returnAfterSignIn={returnAfterSignIn}
+          {...(biographyReturn ? { returnHref: biographyReturn } : {})}
           {...(origin
             ? {
                 origin,

@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -22,7 +22,7 @@ import {
 } from '../subject-facts';
 import { statementInput, type StatementInput } from '../statement-editor';
 import { PartValue, StatementFields } from '../statement-editor-view';
-import { peopleBiographyAddress, peopleBiographyTargetHref } from './current-visit';
+import { PeopleBiographyOuterReturn, peopleBiographyAddress, peopleBiographyTargetHref } from './current-visit';
 import { PeopleBiographyAssertion, peopleBiographyAssertionAnchor, peopleBiographyFieldAnchor } from './assertion';
 import {
   peopleLabel,
@@ -84,6 +84,7 @@ export function PeopleSelectedItems({
   review: (property: string, session?: string) => CandidateTransport;
   restoredAssertion?: string | undefined;
 }) {
+  const outerReturn = useContext(PeopleBiographyOuterReturn);
   const active = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();
   const o = { locale: locale as never };
@@ -161,7 +162,16 @@ export function PeopleSelectedItems({
   const target = value?.type === 'value' && typeof value.content === 'string' ? value.content : '';
   const subject = read.public.subject;
   const title = peopleSubjectLabel(subject, locale).text;
-  const returnHref = peopleBiographyAddress(subject.id, title, locale, subject.context, field.kind, field.id);
+  const returnHref = peopleBiographyAddress(
+    subject.id,
+    title,
+    locale,
+    subject.context,
+    field.kind,
+    field.id,
+    undefined,
+    outerReturn,
+  );
   const associationHidden = field.facts.some((fact) => spoilerLevel(fact.statement) > defaultReader.spoilerLevel);
   const relationAction = (
     <a
@@ -182,6 +192,7 @@ export function PeopleSelectedItems({
       field.kind,
       field.id,
       fact.id,
+      outerReturn,
     );
     const content = (
       <article
@@ -320,7 +331,12 @@ export function PeopleSelectedItems({
                           ]
                         : []
                   }
-                  search={search!}
+                  search={
+                    field.id === 'wdt:P106'
+                      ? async (text, signal) =>
+                          (await search!(text, signal)).filter((item) => item.types.includes('skos:Concept'))
+                      : search!
+                  }
                   onValueChange={(items) => {
                     if (!change) return;
                     setPicked(items);

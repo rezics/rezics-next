@@ -85,7 +85,9 @@ export function personGroups(release: PersonDefinitions, read: SubjectRead, loca
       fields: profileFields(release, read, supported, locale).map((field) => {
         return {
           ...field,
-          presentable: release.properties[field.id]?.datatype === (kind === 'biography' ? 'document' : 'wikibase-item'),
+          presentable:
+            field.id === 'wdt:P106' ||
+            release.properties[field.id]?.datatype === (kind === 'biography' ? 'document' : 'wikibase-item'),
         };
       }),
     };
