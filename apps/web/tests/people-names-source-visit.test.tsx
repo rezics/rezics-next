@@ -253,7 +253,7 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
     await mounted(async (host, draw) => {
       let current = personReaderExample().read;
       const spelling = 'Exact—Mél/旅 24';
-      const language = outcome === 'budget' ? 'en-' + 'a-'.repeat(4500) + 'a' : 'en';
+      const language = outcome === 'budget' ? 'en-' + 'a-'.repeat(4500) + 'a' : 'ja';
       current.subject.labels = { en: 'Selected', ja: '旅人' };
       current.subject.aliases = { [language]: Array.from({ length: 48 }, (_, i) => `Exact—Mél/旅 ${i}`) };
       let returning = false;
@@ -311,20 +311,20 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
       }
       expect(saved.focus).toMatchObject({
         kind: 'name',
-        language: 'en',
+        language,
         role: 'alias',
         identity: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
       expect(JSON.stringify(saved)).not.toContain(spelling);
       current = structuredClone(current);
       if (outcome === 'surviving')
-        current.subject.aliases.en!.splice(24, 2, ...current.subject.aliases.en!.slice(24, 26).reverse());
+        current.subject.aliases[language]!.splice(24, 2, ...current.subject.aliases[language]!.slice(24, 26).reverse());
       if (outcome === 'removed' || outcome === 'language' || outcome === 'role')
-        current.subject.aliases.en = current.subject.aliases.en!.filter((text) => text !== spelling);
-      if (outcome === 'language') current.subject.aliases.ja = [spelling];
-      if (outcome === 'role') current.subject.labels.en = spelling;
+        current.subject.aliases[language] = current.subject.aliases[language]!.filter((text) => text !== spelling);
+      if (outcome === 'language') current.subject.aliases.en = [spelling];
+      if (outcome === 'role') current.subject.labels.ja = spelling;
       if (outcome === 'window')
-        current.subject.aliases.en!.unshift(...Array.from({ length: 24 }, (_, i) => `New ${i}`));
+        current.subject.aliases[language]!.unshift(...Array.from({ length: 24 }, (_, i) => `New ${i}`));
       returning = true;
       // Exercise the actual Sources return adapter, with the same history value as Back/Forward.
       await act(async () => host.querySelector<HTMLAnchorElement>('a')!.click());
@@ -337,7 +337,7 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
         );
         expect(host.textContent).not.toContain('The names reading changed');
       } else {
-        expect(document.activeElement).toBe(host.querySelector('[data-name-language="en"] summary'));
+        expect(document.activeElement === host.querySelector(`[data-name-language="${language}"] summary`)).toBe(true);
         expect(host.textContent).toContain('The names reading changed');
       }
       expect(copy.isConnected).toBe(false);
