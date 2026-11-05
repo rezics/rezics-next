@@ -409,7 +409,15 @@ truncated because the read is bounded at the native contract limit.
 
 Security departure is protected by any nonempty new password, a nonblank passkey name, or an unresolved operation;
 Stay keeps the in-memory review and focus, while Leave clears local authority and drafts without claiming to cancel an
-operation already underway. Reload or close warns while protected. Cached-page return reloads the account,
+operation already underway. The local two-action alertdialog focuses Stay first, contains Tab/Shift+Tab and
+programmatic focus, and makes background controls inert and pointer-inactive. Escape chooses Stay once; only explicit
+Leave proceeds. Stay restores a connected enabled initiating control, then the existing recovery/password/passkey
+fallback. Close, pagehide and retirement restore prior inert and scroll state without focusing a replacement page.
+Long labels wrap and the decision scrolls within the viewport. Session actions use their exact native advice as an
+associated explanation, including step-up, last-credential and unavailable advice; an earlier unknown result remains
+independent. The installed DTO has no separate unknown-advice value. These presentation paths add exactly zero Auth
+or kernel requests, commands, persistence, retries or polling; existing whole-call bounds above remain unchanged.
+Reload or close warns while protected. Cached-page return reloads the account,
 credential/session lists and both application inventories before enabling their controls.
 Only an unresolved destructive target's original account, kind and native id survive in page memory: for the same
 account, return requires fresh explicit readback and confirmation; a different account discards that target. Failed

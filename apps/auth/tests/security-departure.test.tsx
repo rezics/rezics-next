@@ -114,12 +114,33 @@ test('clean pages leave freely; Stay keeps a masked password and Leave clears it
   const dialog = ui.host.querySelector<HTMLElement>('[role="alertdialog"]')!;
   expect(dialog.textContent).not.toContain(secret);
   expect(document.activeElement).toBe(dialog.querySelector('[data-stay]'));
-  await flush(() => dialog.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  const stay = dialog.querySelector<HTMLButtonElement>('[data-stay]')!;
+  const leave = dialog.querySelector<HTMLButtonElement>('[data-leave]')!;
+  const key = (value: string, shiftKey = false) => document.activeElement!.dispatchEvent(
+    new dom.KeyboardEvent('keydown', { key: value, shiftKey, bubbles: true, cancelable: true }),
+  );
+  key('Tab', true);
+  expect(document.activeElement).toBe(leave);
+  key('Tab');
+  expect(document.activeElement).toBe(stay);
+  input.focus();
+  expect(document.activeElement).toBe(stay);
+  expect(input.closest('[inert]')).not.toBeNull();
+  let backgroundClicks = 0;
+  input.addEventListener('click', () => backgroundClicks++);
+  input.click();
+  expect(backgroundClicks).toBe(0);
+  await flush(() => {
+    key('Escape');
+    leave.click();
+  });
   await tick();
   expect(ui.router.state.location.pathname).toBe('/security');
   expect(input.value).toBe(secret);
   expect(input.type).toBe('password');
   expect(document.activeElement).toBe(input);
+  expect(input.closest('[inert]')).toBeNull();
+  expect(document.body.style.overflow).toBe('');
   void stayed;
 
   const { navigation: leaving } = await startNavigation(ui.router, '/next');
@@ -255,7 +276,7 @@ test('Stay preserves a passkey prompt phase and focus; Leave retires it without 
   await tick();
   const { navigation: staying } = await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
-  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  await flush(() => document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await tick();
   expect(ui.host.textContent).toContain(m.auth_security_passkey_prompt_pending());
   expect(document.activeElement).toBe(ui.host.querySelector('[data-passkey-enrollment-status]'));
@@ -281,4 +302,23 @@ test('Stay preserves a passkey prompt phase and focus; Leave retires it without 
   await tick();
   expect(ui.calls.filter(({ path }) => path === '/passkeys/register')).toHaveLength(0);
   void staying;
+});
+
+
+test('pagehide and replacement restore preexisting inert and scroll without taking replacement focus', async () => {
+  const retained = document.body.appendChild(document.createElement('aside'));
+  retained.setAttribute('inert', 'retained');
+  document.body.style.setProperty('overflow', 'scroll', 'important');
+  const ui = await mount({ read: async () => ({ kind: 'unavailable' }), act: async () => ({ kind: 'denied' }) });
+  await setPassword(ui.host, 'private password');
+  await startNavigation(ui.router, '/next');
+  expect(document.body.style.overflow).toBe('hidden');
+  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  expect(document.body.style.getPropertyValue('overflow')).toBe('scroll');
+  expect(document.body.style.getPropertyPriority('overflow')).toBe('important');
+  expect(retained.getAttribute('inert')).toBe('retained');
+  await ui.render(<button autoFocus>Replacement</button>);
+  expect(document.activeElement?.textContent).toBe('Replacement');
+  expect(ui.host.querySelector('[inert]')).toBeNull();
+  document.body.style.removeProperty('overflow');
 });

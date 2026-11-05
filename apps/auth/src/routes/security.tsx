@@ -9,6 +9,7 @@ import { Trash2 } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
+import { SecurityDepartureDialog } from '../security-departure-dialog';
 import { AuthPage } from '../frame';
 import { useAccountIdentity, type AccountIdentitySource } from '../account-identity';
 import { AccountIdentitySummary } from '../account-identity-view';
@@ -154,10 +155,10 @@ const FIXTURE_PASSWORD_LIMITS: PasswordChangeLimits = { minLength: 8, maxLength:
 function canAct(advice: SecurityAdvice | undefined) {
   return advice === 'allowed' || advice === 'step-up-required';
 }
-function AdviceHint({ advice }: { advice: SecurityAdvice | undefined }) {
+function AdviceHint({ advice, id }: { advice: SecurityAdvice | undefined; id?: string }) {
   if (advice === 'allowed') return null;
   return (
-    <p className="auth-security-hint">
+    <p id={id} className="auth-security-hint">
       {advice === 'step-up-required'
         ? m.auth_security_step_up_advice()
         : advice === 'last-credential'
@@ -254,7 +255,6 @@ function SecurityPageView({
   const passwordAlert = useRef<HTMLDivElement>(null);
   const currentPasswordAdvice = useRef<SecurityAdvice | undefined>(page?.actions.change_password);
   currentPasswordAdvice.current = page?.actions.change_password;
-  const departureDialog = useRef<HTMLDivElement>(null);
   const departureFocus = useRef<HTMLElement | null>(null);
   const focusAfterStay = useRef(false);
   const identity = useAccountIdentity(
@@ -455,11 +455,6 @@ function SecurityPageView({
         blocker.proceed();
         return;
       }
-      if (!departureFocus.current) {
-        const active = document.activeElement;
-        departureFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
-      }
-      departureDialog.current?.querySelector<HTMLButtonElement>('[data-stay]')?.focus();
     } else if (focusAfterStay.current) {
       focusAfterStay.current = false;
       const target = departureFocus.current;
@@ -543,6 +538,8 @@ function SecurityPageView({
     const outcome = returnedOutcome ?? securityTargetReturnFromAttempt(activeOperation.current);
     if (outcome) rememberTargetReturn(outcome);
     captureRetiredPasswordOperation();
+    departureFocus.current = null;
+    focusAfterStay.current = false;
     if (departure) departure.current.protected = false;
     const held = activeOperation.current;
     if (held?.kind === 'consent' && consentHistoryValue.current === 'dispatched')
@@ -1467,10 +1464,11 @@ function SecurityPageView({
                               </span>
                             </ItemDescription>
                           </ItemContent>
-                          <ItemActions>
+                          <ItemActions className="flex-col items-start">
                             <Button
                               type="button"
                               variant="outline"
+                              aria-describedby={session.revoke === 'allowed' ? undefined : `session-advice-${session.id}`}
                               onClick={() => void revoke(session)}
                               disabled={operationBlocked || !canAct(session.revoke)}
                               aria-busy={sessionPending === session.id}
@@ -1478,6 +1476,7 @@ function SecurityPageView({
                             >
                               {m.auth_security_sign_out()}
                             </Button>
+                            <AdviceHint id={`session-advice-${session.id}`} advice={session.revoke} />
                           </ItemActions>
                         </article>
                       </Item>
@@ -1520,31 +1519,11 @@ function SecurityPageView({
         </div>
       </AuthPage>
       {blocker?.status === 'blocked' && departureProtected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div
-            ref={departureDialog}
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="security-departure-heading"
-            aria-describedby="security-departure-description"
-            className="w-full max-w-md rounded-lg border bg-background p-6 text-foreground shadow-xl"
-          >
-            <h2 id="security-departure-heading" className="text-lg font-semibold">
-              {m.auth_security_departure_heading()}
-            </h2>
-            <p id="security-departure-description" className="mt-2 text-sm">
-              {m.auth_security_departure_description()}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button type="button" variant="outline" data-stay onClick={stay}>
-                {m.auth_security_departure_stay()}
-              </Button>
-              <Button type="button" data-leave onClick={leave}>
-                {m.auth_security_departure_leave()}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <SecurityDepartureDialog
+          onStay={stay}
+          onLeave={leave}
+          captureFocus={(target) => { departureFocus.current = target; }}
+        />
       ) : null}
     </>
   );
