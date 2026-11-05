@@ -30,7 +30,8 @@ exit codes retain the compiler contract. `.reylo` caches are never returned. Ext
 
 Decision: emit source-checked declarations before the full workspace compiler and construct checks so tests can
 consume refreshed client types; all checks must pass before publication. The generated closure includes modules
-referenced by the public client entrypoint as well as mounted routes.
+referenced by the public client entrypoint as well as mounted routes. The declaration compiler inherits the prepared
+SQL analysis environment, including its Reylo project when the database URL is intentionally removed.
 
 Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
 independently of future source candidates or unfinished consumers.
