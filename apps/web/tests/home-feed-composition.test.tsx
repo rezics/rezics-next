@@ -686,7 +686,9 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(query().has('cursor')).toBe(false);
     feedStatus = 503;
     await click(m.library_next_page());
-    expect(host.textContent).toContain(m.home_feed_unavailable());
+    // A selected question's refusal is explained by its own control, not duplicated as a generic Home error.
+    expect(host.textContent).not.toContain(m.home_feed_unavailable());
+    expect(host.textContent).toContain(m.home_questions_unavailable());
     feedStatus = 200;
     await click(m.library_follow_retry());
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
@@ -1010,6 +1012,7 @@ test('Default Home keeps question details optional and recovers partial, refused
     )!;
     expect(selected.textContent).toContain(question.label);
     expect(selected.textContent).toContain('Book');
+    expect(selected.textContent).not.toContain('Revision 1'); // Metadata stays in the closed disclosure.
     const details = host.querySelector('details')!;
     expect(details.querySelector('summary')?.textContent).toBe(m.home_presentation_question_information());
     expect(details.open).toBe(false);

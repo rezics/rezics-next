@@ -12,6 +12,10 @@ containing any Realm-scoped or retired entry is unavailable; an active Realm-sco
 point is lost. Neither case clears the selected ID or chooses another question. Refresh retries that exact ID;
 clear is the deliberate way to remove it. A directory failure alone does not establish selected identity loss.
 
+The selector shows the label only; its grain, scale and revision stay in the closed information disclosure. When a
+ready selection's mixed feed returns `dependency_unavailable`, the question control explains that refusal (the generic
+Home feed message is suppressed) and Refresh or Clear recover it.
+
 The selected `ratingQuestionId` stays conjunctive with the current stream, kind and Space in each public or prepared
 private mixed-feed request. Selection or observed question revision replacement retires the displayed feed rows
 and cursor before the replacement read. Current directory and point requests use no-store responses and abortable
