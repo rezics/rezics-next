@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { isPlatformClosedError } from '../kernel/platform-closed';
@@ -126,6 +127,10 @@ function nativeFailure(value: unknown, status?: number, headers?: HeadersInit): 
   };
 }
 
+function rethrowFrameworkControlFlow(error: unknown): void {
+  if (isNotFound(error) || isRedirect(error)) throw error;
+}
+
 function failureState(failure: NativeInboxFailure): 'closed' | 'preparing' | 'unavailable' {
   if (failure.code === 'platform_closed') return 'closed';
   // Neither the native notice API nor its current target reads declare a preparation problem.
@@ -133,6 +138,7 @@ function failureState(failure: NativeInboxFailure): 'closed' | 'preparing' | 'un
 }
 
 export function inboxReadFailure(error: unknown): Extract<InboxPage, { failure: NativeInboxFailure }> {
+  rethrowFrameworkControlFlow(error);
   const failure =
     error instanceof InboxReadError
       ? error.failure
@@ -511,7 +517,8 @@ async function inboxSessionEnv(): Promise<Partial<SessionEnv>> {
 
 async function inboxKernelClient() {
   const { kernelClient } = await import('../kernel/client');
-  return kernelClient();
+  // Promise resolution reads `then`; keep the Eden proxy nested inside a plain container.
+  return { client: kernelClient() };
 }
 
 function inboxPageQueryOf(value: InboxPageQuery | string | undefined): InboxPageQuery {
@@ -560,10 +567,11 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       const authorization = viewerCredential(request);
       const accountId = sessionSubject(request);
       if (!authorization || !accountId) return { signedIn: false };
+      const { client } = await inboxKernelClient();
       return {
         signedIn: true,
         state: 'ready',
-        ...(await loadInboxPage(await inboxKernelClient(), accountId, authorization, data, request.signal)),
+        ...(await loadInboxPage(client, accountId, authorization, data, request.signal)),
       };
     } catch (error) {
       return inboxReadFailure(error);
@@ -606,7 +614,6 @@ export async function loadUnreadCount(
       count.count < 0 ||
       count.count > 100 ||
       typeof count.capped !== 'boolean' ||
-      (count.capped && count.count !== 100) ||
       (count.basis !== 'current-visible-unread' && count.basis !== 'current-visible-lower-bound') ||
       !isRecord(count.witness) ||
       !exactKeys(count.witness, ['kind', 'at']) ||
@@ -625,22 +632,32 @@ export async function loadUnreadCount(
       witness: { kind: count.witness.kind, at: count.witness.at },
     };
   } catch (error) {
-    const failure =
-      error instanceof InboxReadError
-        ? error.failure
-        : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
-    return {
-      signedIn: true,
-      state: 'unavailable',
-      failure: inboxSeenFailure(new InboxSeenError(failure)).failure,
-    };
+    return unreadCountUnavailable(error);
   }
+}
+
+function unreadCountUnavailable(error: unknown): Extract<UnreadCount, { state: 'unavailable' }> {
+  rethrowFrameworkControlFlow(error);
+  const failure =
+    error instanceof InboxReadError
+      ? error.failure
+      : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+  return {
+    signedIn: true,
+    state: 'unavailable',
+    failure: inboxSeenFailure(new InboxSeenError(failure)).failure,
+  };
 }
 
 export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (): Promise<UnreadCount> => {
   setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  return loadUnreadCount(await inboxKernelClient(), request, await inboxSessionEnv(), request.signal);
+  try {
+    const request = getRequest();
+    const { client } = await inboxKernelClient();
+    return await loadUnreadCount(client, request, await inboxSessionEnv(), request.signal);
+  } catch (error) {
+    return unreadCountUnavailable(error);
+  }
 });
 
 export type InboxSeenAttempt = { through: string; idempotencyKey: string };
@@ -658,6 +675,7 @@ export class InboxSeenError extends Error {
 
 /** Project only bounded native diagnostics. Body text, credentials and body-supplied waits stay private. */
 export function inboxSeenFailure(error: unknown): Extract<InboxSeenResult, { failure: NativeInboxFailure }> {
+  rethrowFrameworkControlFlow(error);
   const native = error instanceof InboxSeenError ? error.failure : nativeFailure(error);
   const bounded = (value: string | undefined) =>
     value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
@@ -747,7 +765,7 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadInboxSeen(await inboxKernelClient(), getRequest(), await inboxSessionEnv(), data);
+    return loadInboxSeen((await inboxKernelClient()).client, getRequest(), await inboxSessionEnv(), data);
   });
 
 export async function loadInboxNoticeSeen(
@@ -782,5 +800,5 @@ export const markInboxItemSeen = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadInboxNoticeSeen(await inboxKernelClient(), getRequest(), await inboxSessionEnv(), data);
+    return loadInboxNoticeSeen((await inboxKernelClient()).client, getRequest(), await inboxSessionEnv(), data);
   });
