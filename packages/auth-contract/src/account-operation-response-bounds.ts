@@ -8,17 +8,19 @@ export const ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH = 4096;
 export const RENAME_EXECUTION_MAX_ID_LENGTH = 4096;
 export type AccountOperationApprovalResponse = Readonly<{ reference: string; expiresAt: string }>;
 export type RenameApprovalResponse = AccountOperationApprovalResponse;
-export type RenameExecutionResponse = Readonly<{ accountId: string }>;
-export type RenameOperationRefusal = Readonly<{
+export type AccountOperationRefusal = Readonly<{
   error: 'account_operation_denied' | 'step_up_required';
   effect_status: 'not_applied';
 }>;
+export type RenameExecutionResponse = Readonly<{ accountId: string }>;
+export type RenameOperationRefusal = AccountOperationRefusal;
 
 // Closed ASCII skeletons count every key, quote, colon and comma. ISO dates
 // have at most 27 ASCII characters (extended years); opaque IDs can escape to
 // six UTF-8 bytes per UTF-16 unit, including lone surrogates.
 export const RENAME_APPROVAL_MAX_RESPONSE_BYTES =
   JSON.stringify({ reference: '', expiresAt: '' }).length + ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH + 27;
+export const ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES = RENAME_APPROVAL_MAX_RESPONSE_BYTES;
 export const RENAME_EXECUTION_MAX_RESPONSE_BYTES =
   JSON.stringify({ accountId: '' }).length + 6 * RENAME_EXECUTION_MAX_ID_LENGTH;
 export const ACCOUNT_OPERATION_MAX_ERROR_BYTES = Math.max(
@@ -44,6 +46,13 @@ export function parseAccountOperationApprovalResponse(value: unknown): AccountOp
     return null;
   return { reference: value.reference, expiresAt: value.expiresAt };
 }
+export function isAccountOperationReference(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH &&
+    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.exec(value)?.[0] === value
+  );
+}
 export function parseRenameExecutionResponse(value: unknown): RenameExecutionResponse | null {
   if (
     !object(value) ||
@@ -55,7 +64,7 @@ export function parseRenameExecutionResponse(value: unknown): RenameExecutionRes
     return null;
   return { accountId: value.accountId };
 }
-export function parseRenameOperationRefusal(value: unknown, status: number): RenameOperationRefusal | null {
+export function parseAccountOperationRefusal(value: unknown, status: number): AccountOperationRefusal | null {
   if (
     !object(value) ||
     Object.keys(value).sort().join(',') !== 'effect_status,error' ||
@@ -67,6 +76,7 @@ export function parseRenameOperationRefusal(value: unknown, status: number): Ren
     return { error: value.error, effect_status: 'not_applied' };
   return null;
 }
+export const parseRenameOperationRefusal = parseAccountOperationRefusal;
 
 // Deletion accepts legal JSON escaping of the sealed ASCII reference as well.
 export const DELETION_APPROVAL_MAX_RESPONSE_BYTES =
@@ -98,9 +108,6 @@ export function parseMembershipApprovalResponse(value: unknown): AccountOperatio
   return { reference: value.reference, expiresAt: value.expiresAt };
 }
 export const parseMembershipExecutionResponse = parseRenameExecutionResponse;
-export const parseAccountOperationRefusal = parseRenameOperationRefusal;
-
-export type AccountOperationRefusal = RenameOperationRefusal;
 
 /** Browser-safe account-operation responses used by automated account creation.
  * Access seals references with a 4,096-character token ceiling and the execute
@@ -173,7 +180,6 @@ export const automatedAccountOperationRequestByteBudgets = Object.freeze({
 
 // Organization and rename share the actual Access approval and accountId-only
 // workflow output. The reference is opaque to the browser, including its payload.
-export const ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES = RENAME_APPROVAL_MAX_RESPONSE_BYTES;
 export const ORGANIZATION_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPONSE_BYTES;
 export const parseOrganizationExecutionResponse = parseRenameExecutionResponse;
 export type OrganizationOperationError =

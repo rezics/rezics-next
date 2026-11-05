@@ -1410,6 +1410,22 @@ policy. `fenceOperator` provides the durable fencing fanout itself.
 
 ## Operated actor session opening transport
 
+Decision: The approval response is the closed `{ reference, expiresAt }` native shape, with UTF-8 allowance
+`ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES = JSON.stringify({ reference: '', expiresAt: '' }).length + 4096 + 27`.
+The reference is the admitted ASCII base64url payload and SHA-256 MAC; expiry is canonical ISO time. Opening,
+rename and deletion approvals with an incompatible projection return unavailable before command execution.
+
+The single issuance response remains Auth's native `SessionProof` body and its original response headers. Its JSON
+allowance is `securityResponseByteBudgets(min(C, openingProfile.scope.length)).session`, where C is the native
+`securityScopeLimit(siteActions.keys())` used to admit the deployed Auth catalogue and `openingProfile` is the exact
+`managementOperationProfile('opening')`. The formula includes JSON punctuation and the native identifier, scope,
+number and closed `amr` maxima. IDs are opaque SessionProof IDs (up to 1,024 UTF-16 units), separate from the
+selected UUIDs; the scope count is capped by both C and the requested profile. Auth consumes the approval receipt
+once and returns only its receipt-bound scopes. Genuine `Set-Cookie` values, including cleanup values, pass through
+unchanged; cookies and proof never enter workflow results or DBOS. Native issuance errors use `step_up_required`
+with `401/not_applied` or `account_operation_denied` with a closed not-applied status; `503/unknown` remains
+ambiguous after dispatch.
+
 Decision: opening metadata has its own public C-independent byte allowance in
 `operator-page-response-bounds.ts` (exported from `@rezics/auth-contract`), derived from this closed
 projection and Kernel's `operator-opening-page-source.ts`. It includes every stage variant and the largest current
@@ -1458,6 +1474,14 @@ session, cookie or proof is a workflow result or DBOS payload. Missing host Acce
 composition answers 503. Generic execution explicitly rejects `opening` in both
 the host and the browser helper.
 
+The browser bounds approval receiving with the closed approval allowance above, then bounds issuance from the same
+trusted native catalogue C and exact opening profile. Each POST has one five-second receiver lifetime through
+headers and body. The native response body is parsed only after bounded UTF-8 receiving; native `Set-Cookie` values
+are forwarded before projection and remain verbatim even when output is malformed. The browser acknowledges only
+the actual closed operator proof for the original subject, exact opening client/scope profile and operator
+authentication. Unsupported, malformed or over-budget output remains possibly completed and is never replayed.
+Current `/session` readback is a separate observation and cannot settle this issuance.
+
 Selection is private and explicit. An Origin-protected server function reads the
 delivered `/account-management/operators/relation` native point source using the
 current fresh human and exact opening profile. Missing native source disables
@@ -1483,8 +1507,8 @@ deliberate new key, fresh same-human sign-in, current metadata, new confirmation
 and native authorization. Automated proof is kept separate from the human-only
 management proof; displayed scopes are only the actual native receipt-bound scopes.
 
-Focused fixtures are `test/operator-session-transport.test.ts` and the Auth pages'
-`test/operator-session-opening.test.ts`. This transport adds no native authority,
+Focused fixtures are `test/operator-session-transport.test.ts` and Auth page
+`tests/operator-session-opening-route.test.tsx`. This transport adds no native authority,
 credential writer, relation, permission evaluator or deployment proof.
 
 ## Operated actor creation transport

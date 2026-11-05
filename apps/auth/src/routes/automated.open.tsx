@@ -499,7 +499,7 @@ function OpeningReview({
         retire();
         return;
       }
-      const result = await submitOperatorOpening(attempt, isCurrent, markProgress);
+      const result = await submitOperatorOpening(attempt, isCurrent, markProgress, owner.signal);
       if (!isCurrent()) return;
       if (result.kind === 'refused') {
         markProgress('refused');
