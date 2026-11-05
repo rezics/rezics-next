@@ -260,6 +260,18 @@ test('Creator statement source and bounded first-page next refresh and from navi
     expect(host.querySelectorAll('nav a')).toHaveLength(1);
     expect(link(host, m.statements_back()).search).toBe('');
     expect([...link(host, m.statements_next_lines()).searchParams]).toEqual([['cursor', next]]);
+
+    await show({
+      ...initial([]),
+      navigation: { previous: 'line-previous+/=', restart: true },
+      page: { kind: 'ready', statement: creatorStatementFixture, lines: { kind: 'ready', lines: [], next: null } },
+    });
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.statements_lines_empty());
+    expect([...link(host, m.statements_previous_lines()).searchParams]).toEqual([
+      ['cursor', 'line-previous+/='],
+      ['from', from],
+    ]);
+    expect([...link(host, m.statements_restart_lines()).searchParams]).toEqual([['from', from]]);
   });
 });
 
@@ -272,24 +284,17 @@ test('Creator statement incomplete error refused and preparing states preserve h
       expect(host.querySelectorAll('ul > li')).toHaveLength(0);
       expect(host.querySelectorAll('#statement-summary, #statement-payment')).toHaveLength(2);
       expect(host.querySelector('[role="alert"]')).not.toBeNull();
-      const recovery = link(
-        host,
-        kind === 'error' || kind === 'stale' ? m.statements_restart_lines() : m.statements_retry(),
-      );
-      expect([...recovery.searchParams]).toEqual(
-        kind === 'error' || kind === 'stale'
-          ? [['from', from]]
-          : [
-              ['cursor', cursor],
-              ['from', from],
-            ],
-      );
+      expect([...link(host, m.statements_retry()).searchParams]).toEqual([
+        ['cursor', cursor],
+        ['from', from],
+      ]);
+      expect([...link(host, m.statements_restart_lines()).searchParams]).toEqual([['from', from]]);
     }
     await show({ ...initial([]), page: { kind: 'denied' } });
     expect(host.querySelector('#statement-summary, #statement-payment, ul')).toBeNull();
     expect(host.querySelector('[role="alert"]')?.textContent).toContain(m.statements_denied());
     await show({ ...initial([]), page: { kind: 'preparing' } });
     expect(host.querySelector('[role="status"]')?.textContent).toContain(m.statements_preparing());
-    expect(host.querySelectorAll('a')).toHaveLength(1);
+    expect([...link(host, m.statements_restart_lines()).searchParams]).toEqual([['from', from]]);
   });
 });

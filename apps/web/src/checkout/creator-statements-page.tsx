@@ -1,11 +1,13 @@
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
+import type { MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatement, CreatorStatementsData, StatementFailure } from './creator-statements';
 import { formatMinorAmount } from './money';
 import { recordedMoneyUnit } from './money-schema';
+import type { StatementWindowControls } from './creator-statement-windows';
 
 export function statementsHref(locale: string, cursor?: string): string {
   return `/${locale}/creator/statements${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
@@ -55,13 +57,11 @@ export function StatementTime({ value, locale }: { value: string; locale: string
 export function StatementNotice({
   kind,
   retryHref,
-  restartHref,
-  restartLabel,
+  onRetry,
 }: {
   kind: StatementFailure['kind'] | 'preparing';
   retryHref: string;
-  restartHref: string;
-  restartLabel?: string;
+  onRetry?: () => void;
 }) {
   const label =
     kind === 'denied'
@@ -80,14 +80,20 @@ export function StatementNotice({
     >
       <p>{label}</p>
       {kind !== 'preparing' && (
-        <Button
-          variant="outline"
-          className="min-h-11"
-          nativeButton={false}
-          render={<a href={kind === 'stale' || kind === 'error' ? restartHref : retryHref} />}
-        >
-          {kind === 'stale' || kind === 'error' ? (restartLabel ?? m.statements_restart()) : m.statements_retry()}
-        </Button>
+        onRetry ? (
+          <Button type="button" variant="outline" className="min-h-11 min-w-11" onClick={onRetry}>
+            {m.statements_retry()}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            className="min-h-11 min-w-11"
+            nativeButton={false}
+            render={<a href={retryHref} />}
+          >
+            {m.statements_retry()}
+          </Button>
+        )
       )}
     </div>
   );
@@ -125,16 +131,24 @@ export function CreatorStatementsPage({
   page,
   locale,
   cursor,
+  navigation,
+  onMovement,
+  onRetry,
 }: {
   page: CreatorStatementsData | { kind: 'preparing' };
   locale: string;
   cursor?: string;
+  navigation?: StatementWindowControls;
+  onMovement?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  onRetry?: () => void;
 }) {
   const href = statementsHref(locale, cursor);
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="statements-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeading id="statements-heading">{m.statements_heading()}</PageHeading>
+        <PageHeading id="statements-heading" tabIndex={-1}>
+          {m.statements_heading()}
+        </PageHeading>
         {page.kind !== 'preparing' && (
           <Button variant="outline" className="min-h-11" nativeButton={false} render={<a href={href} />}>
             {m.statements_refresh()}
@@ -143,7 +157,10 @@ export function CreatorStatementsPage({
       </div>
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_intro()}</p>
       {page.kind !== 'ready' ? (
-        <StatementNotice kind={page.kind} retryHref={href} restartHref={statementsHref(locale)} />
+        <>
+          <StatementNotice kind={page.kind} retryHref={href} onRetry={onRetry} />
+          <StatementListPagination cursor={cursor} page={page} navigation={navigation} onMovement={onMovement} />
+        </>
       ) : (
         <>
           {page.payoutStatements.length === 0 ? (
@@ -181,30 +198,67 @@ export function CreatorStatementsPage({
               ))}
             </ul>
           )}
-          <nav aria-label={m.statements_pagination()} className="flex flex-wrap gap-3">
-            {cursor && (
-              <Button
-                variant="outline"
-                className="min-h-11"
-                nativeButton={false}
-                render={<Link preload={false} to="/creator/statements" search={{}} />}
-              >
-                {m.statements_restart()}
-              </Button>
-            )}
-            {page.next && (
-              <Button
-                variant="outline"
-                className="min-h-11"
-                nativeButton={false}
-                render={<Link preload={false} to="/creator/statements" search={{ cursor: page.next }} />}
-              >
-                {m.statements_next()}
-              </Button>
-            )}
-          </nav>
+          <StatementListPagination cursor={cursor} page={page} navigation={navigation} onMovement={onMovement} />
         </>
       )}
     </section>
+  );
+}
+
+function StatementListPagination({
+  cursor,
+  page,
+  navigation,
+  onMovement,
+}: {
+  cursor?: string;
+  page: CreatorStatementsData | { kind: 'preparing' };
+  navigation?: StatementWindowControls;
+  onMovement?: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  const hasPrevious = navigation ? navigation.previous !== undefined : false;
+  const restart = navigation ? navigation.restart : !!cursor;
+  const next = page.kind === 'ready' ? page.next : null;
+  if (!hasPrevious && !restart && !next) return null;
+  return (
+    <nav aria-label={m.statements_pagination()} className="flex flex-wrap gap-3">
+      {hasPrevious && (
+        <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
+          nativeButton={false}
+          render={
+            <Link
+              preload={false}
+              to="/creator/statements"
+              search={navigation!.previous ? { cursor: navigation!.previous } : {}}
+              onClick={onMovement}
+            />
+          }
+        >
+          {m.statements_previous()}
+        </Button>
+      )}
+      {restart && (
+        <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
+          nativeButton={false}
+          render={<Link preload={false} to="/creator/statements" search={{}} onClick={onMovement} />}
+        >
+          {m.statements_restart()}
+        </Button>
+      )}
+      {next && (
+        <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
+          nativeButton={false}
+          render={<Link preload={false} to="/creator/statements" search={{ cursor: next }} onClick={onMovement} />}
+        >
+          {m.statements_next()}
+        </Button>
+      )}
+    </nav>
   );
 }

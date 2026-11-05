@@ -2,10 +2,11 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@rezics/ui/shadcn/accordion';
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatementData, CreatorStatementLine } from './creator-statements';
+import type { StatementWindowControls } from './creator-statement-windows';
 import { recordedMoneyUnit } from './money-schema';
 import {
   StatementAmount,
@@ -39,6 +40,9 @@ export function CreatorStatementPage({
   cursor,
   from,
   payment,
+  navigation,
+  onMovement,
+  onRetry,
 }: {
   page: CreatorStatementData | { kind: 'preparing' };
   id: string;
@@ -46,9 +50,11 @@ export function CreatorStatementPage({
   cursor?: string;
   from?: string;
   payment?: ReactNode;
+  navigation?: StatementWindowControls;
+  onMovement?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  onRetry?: () => void;
 }) {
   const href = statementHref(locale, id, cursor, from);
-  const restart = statementHref(locale, id, undefined, from);
   const statement = page.kind === 'ready' ? page.statement : undefined;
   const summary = statement
     ? ([
@@ -75,7 +81,9 @@ export function CreatorStatementPage({
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">
-          <PageHeading id="statement-heading">{m.statements_detail_heading()}</PageHeading>
+          <PageHeading id="statement-heading" tabIndex={-1}>
+            {m.statements_detail_heading()}
+          </PageHeading>
           {statement && (
             <p className="text-lg">
               {statementMonth(statement.period, locale)} · {statement.currency.toUpperCase()}
@@ -89,12 +97,17 @@ export function CreatorStatementPage({
         )}
       </div>
       {page.kind !== 'ready' ? (
-        <StatementNotice
-          kind={page.kind}
-          retryHref={href}
-          restartHref={restart}
-          restartLabel={m.statements_restart_lines()}
-        />
+        <>
+          <StatementNotice kind={page.kind} retryHref={href} onRetry={onRetry} />
+          <StatementLinePagination
+            id={id}
+            from={from}
+            cursor={cursor}
+            page={page}
+            navigation={navigation}
+            onMovement={onMovement}
+          />
+        </>
       ) : (
         <>
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_intro()}</p>
@@ -125,17 +138,22 @@ export function CreatorStatementPage({
           </section>
           {payment ?? <StatementPayment statement={page.statement} locale={locale} />}
           <section className="min-w-0 space-y-4" aria-labelledby="statement-lines">
-            <h2 id="statement-lines" className="text-xl font-semibold">
+            <h2 id="statement-lines" tabIndex={-1} className="text-xl font-semibold">
               {m.statements_lines()}
             </h2>
             <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_lines_note()}</p>
             {page.lines.kind !== 'ready' ? (
-              <StatementNotice
-                kind={page.lines.kind}
-                retryHref={href}
-                restartHref={restart}
-                restartLabel={m.statements_restart_lines()}
-              />
+              <>
+                <StatementNotice kind={page.lines.kind} retryHref={href} onRetry={onRetry} />
+                <StatementLinePagination
+                  id={id}
+                  from={from}
+                  cursor={cursor}
+                  page={page}
+                  navigation={navigation}
+                  onMovement={onMovement}
+                />
+              </>
             ) : (
               <>
                 {page.lines.lines.length === 0 ? (
@@ -245,42 +263,14 @@ export function CreatorStatementPage({
                     ))}
                   </ul>
                 )}
-                <nav aria-label={m.statements_line_pagination()} className="flex min-w-0 flex-wrap gap-3">
-                  {cursor && (
-                    <Button
-                      variant="outline"
-                      className="h-auto min-h-11 max-w-full py-2 whitespace-normal break-words"
-                      nativeButton={false}
-                      render={
-                        <Link
-                          preload={false}
-                          to="/creator/statements/$id"
-                          params={{ id }}
-                          search={from ? { from } : {}}
-                        />
-                      }
-                    >
-                      {m.statements_restart_lines()}
-                    </Button>
-                  )}
-                  {page.lines.next && (
-                    <Button
-                      variant="outline"
-                      className="h-auto min-h-11 max-w-full py-2 whitespace-normal break-words"
-                      nativeButton={false}
-                      render={
-                        <Link
-                          preload={false}
-                          to="/creator/statements/$id"
-                          params={{ id }}
-                          search={{ cursor: page.lines.next, ...(from ? { from } : {}) }}
-                        />
-                      }
-                    >
-                      {m.statements_next_lines()}
-                    </Button>
-                  )}
-                </nav>
+                <StatementLinePagination
+                  id={id}
+                  from={from}
+                  cursor={cursor}
+                  page={page}
+                  navigation={navigation}
+                  onMovement={onMovement}
+                />
               </>
             )}
           </section>
@@ -308,5 +298,84 @@ export function CreatorStatementPage({
         </>
       )}
     </section>
+  );
+}
+
+function StatementLinePagination({
+  id,
+  from,
+  cursor,
+  page,
+  navigation,
+  onMovement,
+}: {
+  id: string;
+  from?: string;
+  cursor?: string;
+  page: CreatorStatementData | { kind: 'preparing' };
+  navigation?: StatementWindowControls;
+  onMovement?: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  const hasPrevious = navigation ? navigation.previous !== undefined : false;
+  const restart = navigation ? navigation.restart : !!cursor;
+  const next = page.kind === 'ready' && page.lines.kind === 'ready' ? page.lines.next : null;
+  if (!hasPrevious && !restart && !next) return null;
+  return (
+    <nav aria-label={m.statements_line_pagination()} className="flex min-w-0 flex-wrap gap-3">
+      {hasPrevious && (
+        <Button
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
+          nativeButton={false}
+          render={
+            <Link
+              preload={false}
+              to="/creator/statements/$id"
+              params={{ id }}
+              search={{ ...(navigation!.previous ? { cursor: navigation!.previous } : {}), ...(from ? { from } : {}) }}
+              onClick={onMovement}
+            />
+          }
+        >
+          {m.statements_previous_lines()}
+        </Button>
+      )}
+      {restart && (
+        <Button
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
+          nativeButton={false}
+          render={
+            <Link
+              preload={false}
+              to="/creator/statements/$id"
+              params={{ id }}
+              search={from ? { from } : {}}
+              onClick={onMovement}
+            />
+          }
+        >
+          {m.statements_restart_lines()}
+        </Button>
+      )}
+      {next && (
+        <Button
+          variant="outline"
+          className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
+          nativeButton={false}
+          render={
+            <Link
+              preload={false}
+              to="/creator/statements/$id"
+              params={{ id }}
+              search={{ cursor: next, ...(from ? { from } : {}) }}
+              onClick={onMovement}
+            />
+          }
+        >
+          {m.statements_next_lines()}
+        </Button>
+      )}
+    </nav>
   );
 }
