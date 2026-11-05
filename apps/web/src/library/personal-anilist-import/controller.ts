@@ -353,7 +353,15 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     if (!live() || busy) return;
     busy = true;
     const response = await send();
-    if (!live()) return;
+    if (!live()) {
+      // Retiring display/callbacks must not discard an uncertain original label sender.
+      if ((command.kind === 'review-labels' || command.kind === 'apply-labels') && response.kind === 'unknown') {
+        unknown = (response as AniListUnknown).command;
+        notice = response as AniListUnknown;
+        retain();
+      }
+      return;
+    }
     busy = false;
     if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {

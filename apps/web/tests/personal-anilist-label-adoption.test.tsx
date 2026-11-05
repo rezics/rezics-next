@@ -294,3 +294,29 @@ test('source cancellation prevents confirmation of a retained partial creation w
   expect(f.commands).toHaveLength(before);
   expect(f.journey.snapshot().page[0]!.labelWork).toEqual(work);
 });
+
+test('departure before an unknown acknowledgement retains original label custody while retiring callbacks', async () => {
+  const f = fixture();
+  let release!: () => void;
+  const response = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let original: Parameters<AniListImportPort['applyLabels']>[0];
+  f.port.applyLabels = async (command) => {
+    command.custody.sender = 'encrypted-original-sender';
+    original = command;
+    await response;
+    return { kind: 'unknown', command };
+  };
+  await f.journey.loadPage(id, -1);
+  f.journey.chooseLabels(0, subject, [{ key: 'group:name', target: { name: 'Private' } }]);
+  await f.journey.reviewLabels(0);
+  const inFlight = f.journey.confirmLabels(0);
+  expect(f.journey.snapshot().busy).toBe(true);
+  f.visit.retire();
+  release();
+  await inFlight;
+  expect(f.journey.snapshot().notice).toEqual({ kind: 'unknown', command: original! });
+  await f.journey.retryUnknown();
+  expect(f.journey.live()).toBe(false);
+});
