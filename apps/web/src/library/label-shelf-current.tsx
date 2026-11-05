@@ -256,15 +256,19 @@ function LabelShelfRead({
       return;
     }
     const captured = origin.capture(...readGroups);
+    const refreshSources = [
+      labelShelfSource({ labelId: sourceId, ...(source.cursor !== null ? { cursor: source.cursor } : {}) }),
+      labelShelfSource({ labelId: targetId }),
+    ] as const;
     refreshing.current = true;
     setRefreshState('loading');
     try {
       const results = await Promise.allSettled(
-        [sourceId, targetId].map((labelId) =>
+        refreshSources.map((requested) =>
           read({
             data: {
-              labelId,
-              ...(labelId === sourceId && source.cursor !== null ? { cursor: source.cursor } : {}),
+              labelId: requested.labelId,
+              ...(requested.cursor !== null ? { cursor: requested.cursor } : {}),
             },
           }),
         ),
@@ -274,9 +278,7 @@ function LabelShelfRead({
       if (
         sourceResult?.status === 'fulfilled' &&
         sourceResult.value.state === 'loaded' &&
-        sourceResult.value.provenance.subject === subject &&
-        sourceResult.value.provenance.locale === locale &&
-        sourceResult.value.label.id === sourceId
+        matches(sourceResult.value, subject, refreshSources[0], locale)
       ) {
         setReopened({
           binding: binding.id,
@@ -296,9 +298,7 @@ function LabelShelfRead({
           (result, index) =>
             result.status === 'fulfilled' &&
             result.value.state === 'loaded' &&
-            result.value.provenance.subject === subject &&
-            result.value.provenance.locale === locale &&
-            result.value.label.id === [sourceId, targetId][index],
+            matches(result.value, subject, refreshSources[index]!, locale),
         )
           ? 'idle'
           : 'unavailable',
