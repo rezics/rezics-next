@@ -120,7 +120,7 @@ Imports owns its source-backed candidates and retained local acquisition state. 
 
 ## Cost
 
-For R retained records, B binding/journal rows, N input records, M one record/request/response bytes, q per-record commands, r page size and K concurrent records, costs are finite in supplied input, selected rows, bounded pages and commands. Indexed point work is O(log R/B); keyset pages add only bounded results. No operation scans unrelated history or catalogue state.
+R=retained records; B=binding/journal rows; N=input records; M=one record/request/response bytes; q=commands per record; r=page; K=concurrent records. Costs are finite in supplied input, selected rows, bounded pages and commands. Indexed point work is O(log R) or O(log B); keyset pages add bounded rows; no unrelated source-history or catalogue scan.
 
 ### Import authored Bangumi television original-run and episode count
 
