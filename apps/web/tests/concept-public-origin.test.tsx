@@ -133,7 +133,7 @@ test('production route admits public scope before the original session transport
   }
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
