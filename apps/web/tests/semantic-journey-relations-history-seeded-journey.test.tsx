@@ -26,6 +26,7 @@ test('relation readers and history keep exact selection across continuation keyb
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const held: { request: RelationGroupRequest; resolve(value: Section): void; reject(error: Error): void }[] = [];
   const start = await import('../.storybook/react-start');
+  mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
   const { relationGroupKey } = await import('../src/features/pages/relation-stream-query');

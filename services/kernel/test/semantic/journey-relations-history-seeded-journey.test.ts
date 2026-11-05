@@ -63,7 +63,7 @@ const itemProperty = (
   mappings: [],
   datatype: 'wikibase-item' as const,
   multivalued: true,
-  qualifiers: ['schema:position', 'ex:role', 'rezics:spoilerLevel'],
+  qualifiers: ['ex:role', 'rezics:spoilerLevel', 'schema:position'],
   value: valueSchema('wikibase-item'),
   targets: ['ex:Person'],
   relation: { inverse: 'none' as const, group, order: 'position' as const, filter: 'ex:role', ...extra },
