@@ -377,7 +377,9 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
     enteredAt: at(5 * 60_000),
     ageMs: 0,
   });
-  expect(metrics.waiting.entries.some((entry) => ['superseded-wait', 'terminal-wait'].includes(entry.taskId))).toBe(false);
+  expect(metrics.waiting.entries.some((entry) => ['superseded-wait', 'terminal-wait'].includes(entry.taskId))).toBe(
+    false,
+  );
   expect(formatLifecycleMetrics(metrics)).toContain('Current waits: 11; oldest age unknown; unknown ages 4.');
   expect(metrics.waiting.entries.find((entry) => entry.taskId === 'unknown-wait-start')?.ageMs).toBeNull();
   expect(metrics.promotion).toEqual({ available: true, phase: 'gate-head', phaseAgeMs: 15 * 60_000 });
@@ -389,7 +391,9 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
     recentNewByCause: { 'invariant-a': 1, recovered: 1 },
   });
   insertTransition(db, 'attempt', 'unknown-wait-start', 1, 'waiting', at(-7 * 60_000));
-  expect(lifecycleMetrics(db, now).waiting.entries.find((entry) => entry.taskId === 'unknown-wait-start')).toMatchObject({
+  expect(
+    lifecycleMetrics(db, now).waiting.entries.find((entry) => entry.taskId === 'unknown-wait-start'),
+  ).toMatchObject({
     enteredAt: at(-7 * 60_000),
     ageMs: 7 * 60_000,
   });
@@ -490,9 +494,10 @@ test('current-state waits use one indexed latest-transition projection as the co
   const query = tracked.currentWaitQueries[0]!;
   const plan = db.query(`EXPLAIN QUERY PLAN ${query}`).all() as { detail: string }[];
   expect(
-    plan.some(({ detail }) =>
-      detail.includes('SEARCH candidate USING COVERING INDEX lifecycle_transition_current') &&
-      detail.includes('entity=? AND entity_id=? AND attempt=?'),
+    plan.some(
+      ({ detail }) =>
+        detail.includes('SEARCH candidate USING COVERING INDEX lifecycle_transition_current') &&
+        detail.includes('entity=? AND entity_id=? AND attempt=?'),
     ),
   ).toBe(true);
 });
