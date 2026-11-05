@@ -25,6 +25,7 @@ import { inspectReviewDestination, readReviewDestinationPage } from './review-de
 import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { softDeletePost } from './erase-post.ts';
@@ -1262,7 +1263,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               query.limit ?? 20,
             );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { revisions: page.revisions, next: page.next, page: page.page };
+            return { revisions: page.revisions, next: page.next, page: page.page } satisfies Static<
+              typeof RevisionPageResponseSchema
+            >;
           }),
         ),
     )
@@ -1380,8 +1383,19 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               throw error;
             }
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            const { anchors: _anchors, ...response } = page;
-            return response;
+            const response = {
+              ...page,
+              pinnedThreads: page.pinnedThreads.map((card) => ({
+                ...card,
+                media: { ...card.media, images: [...card.media.images] },
+              })),
+              threads: page.threads.map((card) => ({
+                ...card,
+                media: { ...card.media, images: [...card.media.images] },
+              })),
+            };
+            const { anchors: _anchors, ...body } = response;
+            return body satisfies Static<typeof BoardPageResponseSchema>;
           }),
         );
       },
