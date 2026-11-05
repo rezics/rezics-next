@@ -1,4 +1,5 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
+import { ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES } from '@rezics/auth-contract';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -42,9 +43,11 @@ const proof = (accountId: string) => ({
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>> | undefined;
 let sessionRead: ReturnType<typeof spyOn<typeof management, 'loadManagementSession'>> | undefined;
 let readback: ReturnType<typeof openingReadbackFixture> | undefined;
+let issuance: ReturnType<typeof spyOn<typeof opening.operatorOpeningBrowserTransport, 'issue'>> | undefined;
 let browser: ReturnType<typeof createBrowserHistory> | undefined;
 afterEach(() => {
   sessionRead?.mockRestore();
+  issuance?.mockRestore();
   readback?.mockRestore();
   read?.mockRestore();
   read = undefined;
@@ -63,6 +66,15 @@ async function setup() {
     amr: ['pwd'],
   };
   readback = openingReadbackFixture();
+  issuance = spyOn(opening.operatorOpeningBrowserTransport, 'issue').mockImplementation(async (input, signal) => {
+    const response = await fetch('/operator-sessions/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...input.input, reference: input.reference }),
+      signal,
+    });
+    return opening.receiveOperatorOpeningSessionResponse(response, input.input, 4, undefined, signal);
+  });
   sessionRead = spyOn(management, 'loadManagementSession').mockResolvedValue({
     kind: 'ready',
     accountId: human,
@@ -105,6 +117,20 @@ async function submitUnconfirmed(page: Awaited<ReturnType<typeof setup>>) {
   await flush(() => page.calls[1]!.resolve(new Response(null, { status: 503 })));
   return readPendingManagementOperationStepUp();
 }
+
+test('oversized native approval is unavailable and never crosses the submission fence', async () => {
+  const page = await setup();
+  await page.review();
+  await flush(() => page.host.querySelector<HTMLInputElement>('#opening-confirm')!.click());
+  await flush(() => send(page.host));
+  expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+  await flush(() =>
+    page.calls[0]!.resolve(new Response(' '.repeat(ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES + 1), { status: 200 })),
+  );
+  expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+  expect(readPendingManagementOperationStepUp()?.phase).not.toBe('submitted');
+  expect(page.host.textContent).toContain('Opening service unavailable');
+});
 
 test('native acknowledgement stays as generic history after cached retirement', async () => {
   const page = await setup();

@@ -187,7 +187,7 @@ export function accountOperationTransport(
         });
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
-        if (['rename', 'delete'].includes(operation.kind) && !parseAccountOperationApprovalResponse(projected))
+        if (['opening', 'rename', 'delete'].includes(operation.kind) && !parseAccountOperationApprovalResponse(projected))
           return response({ error: 'unavailable' }, 503);
         return response(projected);
       }
