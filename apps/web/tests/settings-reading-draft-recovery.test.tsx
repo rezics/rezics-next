@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
 import { readingNeedsNavigationDecision } from '../src/settings/reading-navigation';
 import type { ReadingIO } from '../src/settings/reading-preferences';
+import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingDraftRecovery } = await import('../src/settings/reading-card');
@@ -11,6 +12,9 @@ const owner = () => ({
   version: () => 0,
   onVersionChange: () => {},
 });
+const flushPromiseJobs = async () => {
+  for (let index = 0; index < 8; index++) await Promise.resolve();
+};
 
 test('rejected choices survive failed and successful reads until explicit save or discard', async () => {
   for (const scenario of ['conflict', 'denied', 'closed'] as const) {
@@ -178,49 +182,69 @@ test('loading current values retains the exact uncertain original and later edit
 });
 
 test('a confirmed command keeps later edit-back and recovers a failed current read without replaying stale fields', async () => {
-  const fixture = readingFixture('lost');
-  const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner());
-  await editor.edit({ spoilerLevel: 1 });
-  const original = editor.snapshot().pending;
-  await editor.edit({ spoilerLevel: 0 });
-  const finish = fixture.holdNextRead({
-    signedIn: true,
-    state: 'unavailable',
-    failure: { status: 503 },
-    securityHref: null,
-  });
-  const retrying = editor.retry();
-  finish();
-  await retrying;
-  expect(editor.snapshot()).toMatchObject({
-    phase: 'failed',
-    pending: null,
-    failureOrigin: 'read',
-    knownCurrent: false,
-  });
-  expect(editor.snapshot().confirmedReceipt).toMatchObject({ spoilerLevel: 1, suitability: 'blur', version: 1 });
-  fixture.concurrent({ suitability: 'show' });
-  await editor.reload();
-  expect(editor.snapshot()).toMatchObject({
-    phase: 'review',
-    pending: null,
-    knownCurrent: true,
-    known: { spoilerLevel: 1, suitability: 'show', version: 2 },
-    draft: { spoilerLevel: 0, suitability: 'show' },
-  });
-  expect(fixture.calls).toEqual([original, original]);
-  await editor.submit();
-  expect(fixture.calls[2]).toMatchObject({ expectedVersion: 2, spoilerLevel: 0 });
-  expect(fixture.calls[2]).not.toHaveProperty('suitability');
-  const live = readingFixture('conflict');
-  const review = new ReadingDraftRecovery(live.initial, live.io, owner());
-  await review.edit({ spoilerLevel: 1 });
-  await review.reload();
-  review.useCurrent();
-  expect(review.snapshot()).toMatchObject({
-    phase: 'idle',
-    pending: null,
-    draft: { spoilerLevel: 2, suitability: 'show' },
-  });
-  expect(live.calls).toHaveLength(1);
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const fixture = readingFixture('lost');
+    let releaseRead!: (page: Awaited<ReturnType<typeof fixture.io.read>>) => void;
+    let startRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => (startRead = resolve));
+    let reads = 0;
+    const io: ReadingIO = {
+      ...fixture.io,
+      read: () => {
+        if (++reads > 1) return fixture.io.read();
+        startRead();
+        return new Promise((resolve) => (releaseRead = resolve));
+      },
+    };
+    const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+    await editor.edit({ spoilerLevel: 1 });
+    const original = editor.snapshot().pending;
+    await editor.edit({ spoilerLevel: 0 });
+    const retrying = editor.retry();
+    await readStarted;
+    const stalePage = await fixture.io.read();
+    mock.timers.tick(managedReadTimeout);
+    await flushPromiseJobs();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'failed',
+      pending: null,
+      failureOrigin: 'read',
+      knownCurrent: false,
+    });
+    expect(editor.snapshot().confirmedReceipt).toMatchObject({ spoilerLevel: 1, suitability: 'blur', version: 1 });
+    await editor.retry();
+    expect(fixture.calls).toEqual([original, original]);
+    await retrying;
+
+    fixture.concurrent({ suitability: 'show' });
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      pending: null,
+      knownCurrent: true,
+      known: { spoilerLevel: 1, suitability: 'show', version: 2 },
+      draft: { spoilerLevel: 0, suitability: 'show' },
+    });
+    releaseRead(stalePage);
+    await flushPromiseJobs();
+    expect(editor.snapshot().known).toMatchObject({ spoilerLevel: 1, suitability: 'show', version: 2 });
+    expect(fixture.calls).toEqual([original, original]);
+    await editor.submit();
+    expect(fixture.calls[2]).toMatchObject({ expectedVersion: 2, spoilerLevel: 0 });
+    expect(fixture.calls[2]).not.toHaveProperty('suitability');
+    const live = readingFixture('conflict');
+    const review = new ReadingDraftRecovery(live.initial, live.io, owner());
+    await review.edit({ spoilerLevel: 1 });
+    await review.reload();
+    review.useCurrent();
+    expect(review.snapshot()).toMatchObject({
+      phase: 'idle',
+      pending: null,
+      draft: { spoilerLevel: 2, suitability: 'show' },
+    });
+    expect(live.calls).toHaveLength(1);
+  } finally {
+    mock.timers.restore();
+  }
 });

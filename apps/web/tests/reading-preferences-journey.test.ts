@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
 import recording from '../src/kernel/recorded/settings-preferences.json';
 import { readingMutation, readReading, sendReading, type ReadingValues } from '../src/settings/reading-preferences';
+import { managedReadTimeout } from '../src/settings/managed-read-deadline';
+import type { ReadingIO } from '../src/settings/reading-preferences';
 import { DisplayPreferences } from '../src/settings/display-preferences';
 import { AppearanceControls } from '../src/shell/appearance-controls';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
@@ -19,6 +21,59 @@ const owner = () => ({
   canWrite: () => true,
   version: () => 0,
   onVersionChange: () => {},
+});
+const flushPromiseJobs = async () => {
+  for (let index = 0; index < 8; index++) await Promise.resolve();
+};
+
+test('a stalled Reading save keeps its original for deliberate retry and ignores a late receipt', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const fixture = readingFixture();
+    let releaseSave!: (result: Awaited<ReturnType<typeof fixture.io.save>>) => void;
+    let startSave!: () => void;
+    const saveStarted = new Promise<void>((resolve) => (startSave = resolve));
+    let saves = 0;
+    let reads = 0;
+    const io: ReadingIO = {
+      save: (input) => {
+        if (++saves > 1) return fixture.io.save(input);
+        startSave();
+        return new Promise((resolve) => (releaseSave = resolve));
+      },
+      read: async () => {
+        reads++;
+        return fixture.io.read();
+      },
+    };
+    const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+    const saving = editor.edit({ spoilerLevel: 1 });
+    await saveStarted;
+    mock.timers.tick(managedReadTimeout);
+    await flushPromiseJobs();
+
+    expect(editor.snapshot().phase).toBe('uncertain');
+    const original = editor.snapshot().pending!;
+    expect(original).toMatchObject({ expectedVersion: 0, spoilerLevel: 1 });
+    await editor.edit({ suitability: 'show' });
+    expect(editor.snapshot().pending).toBe(original);
+    expect(editor.snapshot().draft).toEqual({ spoilerLevel: 1, suitability: 'show' });
+
+    const lateReceipt = await fixture.io.save(original);
+    releaseSave(lateReceipt);
+    await flushPromiseJobs();
+    expect(reads).toBe(0);
+    expect(editor.snapshot().pending).toBe(original);
+
+    await editor.retry();
+    expect(fixture.calls).toEqual([original, original]);
+    expect(fixture.calls[1]).toBe(original);
+    expect(reads).toBe(1);
+    expect(editor.snapshot()).toMatchObject({ phase: 'review', pending: null, draft: { spoilerLevel: 1, suitability: 'show' } });
+    await saving;
+  } finally {
+    mock.timers.restore();
+  }
 });
 
 test('Reading changes preserve the exact in-flight key and payload across response loss and reload actual current preference version', async () => {

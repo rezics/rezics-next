@@ -80,6 +80,9 @@ Retry-After is captured once on receipt as an absolute deadline in the mounted e
 remain separate: editing or reading current values does not clear a command wait. Expiry only enables deliberate
 recovery; it never sends automatically, and a retired viewer episode cannot pass its deadline to a new one.
 
+**Decision:** Reading saves and current reads each use the existing ten-second deadline; a save timeout preserves the
+exact original for deliberate retry, while a timed-out read remains unavailable and never replays a validated command.
+
 A refreshed choice list can stop admitting a retained draft value. The editor keeps and labels that local intent, then
 requires every changed value in a new patch to be admitted before sending. A singleton suitability choice is shown as
 read-only while the native effective and default values remain visible. This admission check never changes an
