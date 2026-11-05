@@ -183,6 +183,7 @@ export function CurrentViewerMineFollowingPage({
         onRefresh={() => {
           if (current()) void read.refetch();
         }}
+        refreshCurrent={current}
         onReview={async (targetId) => {
           if (addressInvalid || !current() || !readCurrent()) return null;
           const result = await read.refetch();
@@ -223,6 +224,7 @@ export function MineFollowingPageView({
   onRetry,
   onReview,
   onRefresh,
+  refreshCurrent,
   readSpace,
 }: {
   page: MineFollowingPage;
@@ -234,6 +236,7 @@ export function MineFollowingPageView({
   onRetry?: (() => void) | undefined;
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
+  refreshCurrent?: (() => boolean) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
 }) {
   const intentOwners = useRef<{
@@ -300,6 +303,7 @@ export function MineFollowingPageView({
       onRetry={onRetry}
       onReview={onReview}
       onRefresh={onRefresh}
+      refreshCurrent={refreshCurrent}
       readSpace={readSpace}
       intentOwnerFor={intentOwnerFor}
     />
@@ -316,6 +320,7 @@ function MineFollowingPageState({
   onRetry,
   onReview,
   onRefresh,
+  refreshCurrent,
   readSpace,
   intentOwnerFor,
 }: {
@@ -328,6 +333,7 @@ function MineFollowingPageState({
   onRetry?: (() => void) | undefined;
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
+  refreshCurrent?: (() => boolean) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
   intentOwnerFor: (targetId: string) => FollowIntentOwner;
 }) {
@@ -424,7 +430,14 @@ function MineFollowingPageState({
           variant="outline"
           disabled={!!status}
           onClick={() => {
-            if (page.forbidden ? !origin.isCurrent() : !reading.returnCurrent()) return;
+            if (
+              refreshCurrent
+                ? !refreshCurrent()
+                : page.forbidden
+                  ? !origin.isCurrent()
+                  : !reading.returnCurrent()
+            )
+              return;
             reading.close(false);
             onRefresh();
           }}
