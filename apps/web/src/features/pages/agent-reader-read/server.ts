@@ -3,7 +3,6 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../../kernel/client';
-import type { SessionEnv } from '../../../session/client';
 import { loadSettingsPage } from '../../../settings/preferences';
 import { agentReaderResult, type AgentReaderResult } from './result';
 
@@ -21,7 +20,7 @@ export const readAgentReader = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }): Promise<AgentReaderResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await loadSettingsPage(kernelClient(data.locale), request, env as Partial<SessionEnv>, {
+    const page = await loadSettingsPage(kernelClient(data.locale), request, env as Parameters<typeof loadSettingsPage>[2], {
       signal: request.signal,
     });
     return agentReaderResult(data.expectedReader, page);
