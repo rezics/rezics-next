@@ -1648,6 +1648,9 @@ admitted appearance-specific quantity (including age at that appearance) stay on
 overwrite the character's timeless biography, traits or measurements, and they never imply another character identity.
 Voice credits (`wdt:P725` with the character qualifier) remain an independent stream.
 
+The Character correction entry preserves the current Subject Context and optional Realm through read admission; its
+Global-only mutation boundary and exact-evidence return are owned by [catalogue editing](catalogue-editing.md#correct-an-existing-character-from-the-selected-reading).
+
 Relationships are admitted association or world item properties whose targets include the character Type, read forward
 and inverse from the current release. Direction uses the property's labels and inverse labels. No relationship type,
 privacy inference or automatic merge is invented on the page. Classification ballots and source figures stay with their
