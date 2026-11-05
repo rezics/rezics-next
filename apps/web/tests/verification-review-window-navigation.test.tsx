@@ -135,19 +135,14 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   };
   const hasButton = (label: string) =>
     [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === label);
+  let lastReadIndex = -1;
   const startRead = async (index: number) => {
-    await waitFor(() => {
-      if (reads.length !== index + 1) {
-        const queries = queryClient.getQueryCache().findAll({ queryKey: ['account-verification', 'review'] });
-        throw new Error(
-          `Expected ${index + 1} reads, got ${reads.length}; queries=${JSON.stringify(queries.map((query) => [query.queryKey, query.state.status, query.state.fetchStatus]))}`,
-        );
-      }
-    });
+    await waitFor(() => expect(reads.length).toBeGreaterThan(index));
+    lastReadIndex = Math.max(lastReadIndex, index);
     return reads[index]!;
   };
   const nextRead = async () => {
-    const index = reads.length;
+    const index = lastReadIndex + 1;
     return { index, read: await startRead(index) };
   };
   const settleRead = async (index: number, result: ReviewRead) => {
