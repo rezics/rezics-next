@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { createDisplayDefinitionCache } from '../src/subject/display-definition-cache/index';
 
-type ReleaseEnvelope = { digest: string; release: { types: Record<string, unknown>; properties: Record<string, unknown> } };
+type ReleaseEnvelope = {
+  digest: string;
+  release: { types: Record<string, unknown>; properties: Record<string, unknown> };
+};
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -41,7 +44,9 @@ test('invalid active and release 200 bodies are not remembered by the memory fal
         return Response.json(activeReads === 1 ? { digest: '' } : { digest: 'release-a' });
       }
       releaseReads += 1;
-      return Response.json(releaseReads === 1 ? { digest: 'other', release: { types: {}, properties: {} } } : validRelease('release-a'));
+      return Response.json(
+        releaseReads === 1 ? { digest: 'other', release: { types: {}, properties: {} } } : validRelease('release-a'),
+      );
     },
   });
 
@@ -120,7 +125,12 @@ test('same-origin reads deduplicate while a same-digest read from another origin
   const shared = readRelease(cache, originA, 'same-digest');
   const other = readRelease(cache, originB, 'same-digest');
   await new Promise<void>((resolve) => queueMicrotask(resolve));
-  expect(calls).toEqual(new Map([[originA, 1], [originB, 1]]));
+  expect(calls).toEqual(
+    new Map([
+      [originA, 1],
+      [originB, 1],
+    ]),
+  );
   releaseFetches();
   const [firstValue, sharedValue, otherValue] = await Promise.all([first, shared, other]);
   expect(firstValue).toEqual(sharedValue);
@@ -146,7 +156,11 @@ test('release memory stays bounded and an older failed flight cannot remove a ne
   expect(fetches).toBe(18);
 
   let failOld!: (error: Error) => void;
-  const old = cache.readRelease(origin, 'same-key', () => new Promise<string>((_resolve, reject) => (failOld = reject)));
+  const old = cache.readRelease(
+    origin,
+    'same-key',
+    () => new Promise<string>((_resolve, reject) => (failOld = reject)),
+  );
   await Promise.resolve();
   for (let index = 0; index < 16; index += 1)
     await cache.readRelease(origin, `evict-${index}`, async () => `evict-${index}`);

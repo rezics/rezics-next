@@ -110,7 +110,14 @@ export function createDisplayDefinitionCache(ports: DisplayDefinitionCachePorts)
     if (pending) return pending as Promise<T>;
 
     if (requests.size >= MAX_DEFINITION_REQUESTS) {
-      await Promise.race([...requests.values()].map((request) => request.then(() => undefined, () => undefined)));
+      await Promise.race(
+        [...requests.values()].map((request) =>
+          request.then(
+            () => undefined,
+            () => undefined,
+          ),
+        ),
+      );
       return read(url, ttl, parse);
     }
 

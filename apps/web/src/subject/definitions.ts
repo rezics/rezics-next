@@ -77,7 +77,12 @@ export async function readRelease(): Promise<Release> {
   const origin = kernelOrigin();
   const activeUrl = new URL('/v1/definitions/active', origin).href;
   const digest = await displayDefinitionCache.read(activeUrl, 60_000, (active) => {
-    if (!isRecord(active) || typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
+    if (
+      !isRecord(active) ||
+      typeof active.digest !== 'string' ||
+      active.digest.length === 0 ||
+      active.digest.length > 256
+    )
       throw new Error('Active definitions release is invalid');
     return active.digest;
   });
