@@ -99,6 +99,7 @@ let updating = false;
 let nativePopulations = ids.map((population) => ({ population, count: 1 }));
 let directoryGate: ReturnType<typeof deferred<Response>> | undefined;
 let aggregateGate: ReturnType<typeof deferred<Response>> | undefined;
+let labelGate: ReturnType<typeof deferred<Response>> | undefined;
 const opaqueNext = 'opaque.native.signed+/continuation==';
 const histogram = Array.from({ length: 21 }, (_, index) => (index === 16 ? count : 0));
 const question = {
@@ -167,6 +168,11 @@ const native = createKernelClient('https://kernel.test', {
       });
     }
     if (url.pathname.startsWith('/v1/realms/')) {
+      if (labelGate) {
+        const gate = labelGate;
+        labelGate = undefined;
+        return gate.promise;
+      }
       const id = url.pathname.split('/')[3]!;
       return denied.has(id)
         ? Response.json({}, { status: 404 })
@@ -201,8 +207,21 @@ const native = createKernelClient('https://kernel.test', {
     return Response.json({ code: 'not_found' }, { status: 404 });
   },
 });
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
+let bffRequest: Request;
+function signalServerFn() {
+  const chain = start.createServerFn();
+  const handle = chain.handler.bind(chain);
+  chain.handler = (handler) => {
+    const invoke = handle(handler);
+    return ((options: { signal?: AbortSignal }) => {
+      bffRequest = start.requestForStory(undefined, { signal: options?.signal });
+      return invoke(options as never);
+    }) as typeof handler;
+  };
+  return chain;
+}
+mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: signalServerFn }));
+mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => bffRequest }));
 mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
 mock.module('../src/kernel/client', () => ({ kernelClient: () => native }));
 mock.module('../src/settings/preferences', () => ({
@@ -335,7 +354,7 @@ beforeEach(() => {
   directoryStatus = 200;
   updating = false;
   nativePopulations = ids.map((population) => ({ population, count: 1 }));
-  directoryGate = aggregateGate = undefined;
+  directoryGate = aggregateGate = labelGate = undefined;
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   cache.setQueryData(sessionQuery.queryKey, session());
   start.setStoryRequestContext({ visitor: 'Signed In', url: window.location.href });
@@ -538,20 +557,39 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   await until(() => button(m.subject_section_retry()) !== undefined);
   aggregateGate = deferred<Response>();
   const pending = aggregateGate;
+  labelGate = deferred<Response>();
+  const pendingLabel = labelGate;
   await act(async () => {
     button(m.subject_section_retry()).click();
     await tick();
   });
+  const abandoned = paths('/ratings', true).at(-1)!;
+  const siblings = requests.slice(requests.indexOf(abandoned) - 20, requests.indexOf(abandoned));
+  const abandonedRequest = bffRequest;
+  expect(siblings).toHaveLength(20);
   const oldRemove = button(m.rating_population_remove({ name: names.get(ids[0]!)! }));
   await act(async () => {
     oldRemove.click();
     await tick();
   });
+  expect(abandonedRequest.signal.aborted && abandoned.signal.aborted).toBe(true);
+  expect(siblings.every((req) => req.signal.aborted)).toBe(true);
+  expect(paths('/ratings', true).at(-1)!.signal.aborted).toBe(false);
+  expect(paths('/ratings/populations').at(-1)!.signal.aborted).toBe(false);
   pending.resolve(Response.json({ subject: subjectId, question: QUESTION, figures: ids.map(aggregateFigure) }));
+  pendingLabel.resolve(Response.json({ realm: { realmId: ids[0], title: names.get(ids[0]!) } }));
   await act(tick);
   expect(boxes()[0]?.checked).toBe(false);
   expect(host.querySelector('[data-slot="rating-selected"]')?.textContent).not.toContain(names.get(ids[0]!)!);
   expect(paths('/ratings/populations')).toHaveLength(before);
+  aggregateGate = deferred<Response>();
+  const cleared = aggregateGate;
+  await act(async () => button(m.subject_section_retry()).click());
+  await until(() => aggregateGate === undefined);
+  expect(new URL(paths('/ratings', true).at(-1)!.url).searchParams.getAll('population')).toEqual(ids.slice(1));
+  await act(async () => button(m.rating_population_clear()).click());
+  expect(paths('/ratings', true).at(-1)!.signal.aborted).toBe(true);
+  cleared.resolve(Response.json({ subject: subjectId, question: QUESTION, figures: ids.slice(1).map(aggregateFigure) }));
   aggregateFailed = false;
   await act(async () => {
     const restart = button(m.rating_population_restart());
@@ -689,10 +727,14 @@ test('QueryClient, Subject, question and visit replacements and unmount reject h
   const delayed = directoryGate;
   await paint(ids[0]!, extraCache);
   await until(() => directoryGate === undefined);
+  const abandoned = paths('/ratings/populations').at(-1)!;
+  const realmReads = requests.filter((req) => new URL(req.url).pathname.startsWith('/v1/realms/')).length;
   await paint(subjectId, extraCache, { ...question, id: ids[1]! });
   await paint(subjectId, extraCache);
   delayed.resolve(Response.json({ populations: [{ population: ids[0], count: 777 }], next: null }));
   await until(() => boxes().length === 20);
+  expect(abandoned.signal.aborted).toBe(true);
+  expect(requests.filter((req) => new URL(req.url).pathname.startsWith('/v1/realms/'))).toHaveLength(realmReads + 20);
   expect(host.textContent).not.toContain('777');
   await paint(subjectId, extraCache, question, false);
   expect(boxes()).toHaveLength(0);
@@ -706,9 +748,15 @@ test('QueryClient, Subject, question and visit replacements and unmount reject h
     .find((query) => query.queryKey[6] === 'directory')!;
   const refetch = extraCache.refetchQueries({ queryKey: active.queryKey });
   await until(() => directoryGate === undefined);
+  labelGate = deferred<Response>();
+  const afterUnmountLabel = labelGate;
+  afterUnmount.resolve(Response.json({ populations: [{ population: ids[0], count: 111 }], next: null }));
+  await until(() => labelGate === undefined);
+  const abandonedLabel = requests.at(-1)!;
   await act(async () => root.unmount());
   mounted = false;
-  afterUnmount.resolve(Response.json({ populations: [{ population: ids[0], count: 111 }], next: null }));
+  expect(abandonedLabel.signal.aborted).toBe(true);
+  afterUnmountLabel.resolve(Response.json({ realm: { realmId: ids[0], title: names.get(ids[0]!) } }));
   await refetch.catch(() => {});
   await tick();
   expect(host.textContent).toBe('');

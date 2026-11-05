@@ -52,6 +52,8 @@ export async function readRatingPopulations(
   env: Partial<SessionEnv>,
   input: PopulationInput,
 ): Promise<PopulationEnvelope> {
+  const signal = request.signal;
+  const fetch = { signal };
   let reader: string | null = null;
   const envelope = (result: RatingOutcome<PopulationResult>): PopulationEnvelope => ({
     reader,
@@ -60,10 +62,13 @@ export async function readRatingPopulations(
     result,
   });
   try {
+    signal.throwIfAborted();
     // Keep exactly this Request across preparation, credential extraction and provenance derivation.
     await prepareSession(request, env);
+    signal.throwIfAborted();
     const authorization = viewerCredential(request);
     reader = await preparedRatingReader(request, authorization);
+    signal.throwIfAborted();
     if (reader !== input.expectedReader) return envelope({ kind: 'unavailable' });
     const headers: Record<string, string> = authorization ? { authorization } : {};
     const subject = client.subjects({ id: input.id });
@@ -75,13 +80,16 @@ export async function readRatingPopulations(
       return envelope({ kind: 'failed' });
 
     async function labels(ids: string[]) {
+      signal.throwIfAborted();
       return Promise.all(
         ids.map(async (id) => {
           try {
             // Use the installed generated Realm route; a population's presence/count grants no Realm read.
-            const result = await client.realms({ realmId: id }).get({ headers });
+            const result = await client.realms({ realmId: id }).get({ headers, fetch });
+            signal.throwIfAborted();
             return result.status === 200 ? realmLabel(id, result.data?.realm) : null;
           } catch {
+            signal.throwIfAborted();
             return null;
           }
         }),
@@ -94,10 +102,14 @@ export async function readRatingPopulations(
       const [currentLabels, aggregate] = await Promise.all([
         labels(selected),
         subject.ratings
-          .get({ query: { question: input.question, population: selected }, headers })
+          .get({ query: { question: input.question, population: selected }, headers, fetch })
           .then((response) => ({ response }))
-          .catch(() => ({ response: undefined })),
+          .catch(() => {
+            signal.throwIfAborted();
+            return { response: undefined };
+          }),
       ]);
+      signal.throwIfAborted();
       const response = aggregate.response;
       const body =
         response?.status === 200
@@ -139,12 +151,15 @@ export async function readRatingPopulations(
     const result = await subject.ratings.populations.get({
       query: { question: input.question, ...(input.cursor !== undefined ? { cursor: input.cursor } : {}) },
       headers,
+      fetch,
     });
+    signal.throwIfAborted();
     if (result.status !== 200) return envelope(ratingFailure(result.status, ratingResponseHeaders(result)));
     const page = admitRatingPopulationPage(result.data);
     if (!page) return envelope({ kind: 'failed' });
     const ids = page.populations.map((item) => item.population).filter((id) => id !== GLOBAL);
     const currentLabels = await labels(ids);
+    signal.throwIfAborted();
     return envelope({
       kind: 'ready',
       value: {
@@ -154,6 +169,8 @@ export async function readRatingPopulations(
       },
     });
   } catch {
+    // An interrupted read is not a failed comparison, even when native fetch ignored abort.
+    signal.throwIfAborted();
     return envelope({ kind: 'failed' });
   }
 }
