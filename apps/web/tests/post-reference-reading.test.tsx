@@ -69,9 +69,9 @@ test('one disclosure-aware projection bounds authored occurrences and preserves 
           attrs: { accountId: '0192f3a0-6c1e-7b2a-9d4e-000000000001' },
           marks: [{ type: 'link', attrs: { href: 'https://mention.example/profile' } }],
         },
-        { type: 'image', attrs: { src: 'media-id', alt: 'Image links are outside this list' } },
       ],
     },
+    { type: 'image', attrs: { src: 'media-id', alt: 'Image links are outside this list' } },
   ]);
   const projection = projectPostReading(body);
   expect(projection.references.entries.map(({ href }) => href)).toEqual([

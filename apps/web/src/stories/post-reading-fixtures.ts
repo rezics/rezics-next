@@ -30,25 +30,27 @@ export function preparedPostReading(blocks = 24) {
     focalPoint: null,
     credit: { ...cover.credit, obligations: [] },
   };
-  const body = fromMarkdown(
-    [
-      '# Field notes / 観測記録',
-      'A short introduction keeps the author and the document distinct.',
-      ...Array.from(
-        { length: blocks },
-        (_, index) =>
-          `Reading ${index + 1}. ${'星を読む。文書の言語を保つ。 Latin words, é and 👩🏽‍🚀 stay intact. '.repeat(3)}`,
-      ),
-      '> A quoted observation stays beside its source. 引用の境界も保持する。',
-      '- A complete list item\n- Another complete item',
-      '1. Read the document\n2. Inspect the selected revision\n3. Return to this post',
-      `\`\`\`typescript\nconst destination = '${'a-long-unbroken-value'.repeat(12)}';\n  console.log(destination);\n\`\`\``,
-      '| Observation / 観測 | Notes / 記録 |\n| --- | --- |\n| North | A complete table cell |\n| South | 文書の最後まで読む |',
-      `[${readingLongLink}](${readingLongLink})`,
-      `Before the spoiler. >!${readingSecret}!< After the spoiler.`,
-      readingEnding,
-    ].join('\n\n'),
-    'blocks',
+  const body = structuredClone(
+    fromMarkdown(
+      [
+        '# Field notes / 観測記録',
+        'A short introduction keeps the author and the document distinct.',
+        ...Array.from(
+          { length: blocks },
+          (_, index) =>
+            `Reading ${index + 1}. ${'星を読む。文書の言語を保つ。 Latin words, é and 👩🏽‍🚀 stay intact. '.repeat(3)}`,
+        ),
+        '> A quoted observation stays beside its source. 引用の境界も保持する。',
+        '- A complete list item\n- Another complete item',
+        '1. Read the document\n2. Inspect the selected revision\n3. Return to this post',
+        `\`\`\`typescript\nconst destination = '${'a-long-unbroken-value'.repeat(12)}';\n  console.log(destination);\n\`\`\``,
+        '| Observation / 観測 | Notes / 記録 |\n| --- | --- |\n| North | A complete table cell |\n| South | 文書の最後まで読む |',
+        `[${readingLongLink}](${readingLongLink})`,
+        `Before the spoiler. >!${readingSecret}!< After the spoiler.`,
+        readingEnding,
+      ].join('\n\n'),
+      'blocks',
+    ),
   );
   for (const [index, node] of body.doc.content!.entries()) {
     if (node.type === 'paragraph' && index >= 2 && index < blocks + 2)
