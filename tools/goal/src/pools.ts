@@ -1,9 +1,5 @@
 import { isAgentCli } from './agents.ts';
-import {
-  choosePool,
-  choosePoolWithFallback as chooseByAllowance,
-  type PoolSelectionOptions,
-} from './allowance.ts';
+import { choosePool, choosePoolWithFallback as chooseByAllowance, type PoolSelectionOptions } from './allowance.ts';
 import { defaultPolicy } from './policy.ts';
 import { retainPoolReadings } from './pacing.ts';
 import { readFileSync, statSync } from 'node:fs';

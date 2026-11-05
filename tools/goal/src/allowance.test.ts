@@ -35,13 +35,11 @@ test('A pool whose window used percent rose 2 points over the last 90 minutes, w
   const cursorReading = observed(cursor, 5, now);
   expect(burnPerHour(current, history, { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
   expect(() => choosePool(profile, [codex], [current], { now, history, spanMs: span })).toThrow('no allowed pool');
-  const chosen = choosePoolWithFallback(
-    profile,
-    [cursorProfile],
-    [codex, cursor],
-    [current, cursorReading],
-    { now, history, spanMs: span },
-  );
+  const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [current, cursorReading], {
+    now,
+    history,
+    spanMs: span,
+  });
   expect(chosen.profile).toBe(cursorProfile);
   expect(chosen.pool.name).toBe('cursor');
   expect(() => choosePoolWithFallback(profile, [], [codex], [current], { now, history, spanMs: span })).toThrow(
