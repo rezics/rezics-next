@@ -38,7 +38,10 @@ test('the complete assigned visible journey uses actual current native data and 
           ? Response.json({ follow: follow(true) })
           : Response.json({ code: 'not_found' }, { status: 404 });
       }
-      expect(next.headers.get('idempotency-key')).toBe(next.method === 'PUT' ? followIdempotencyKey : idempotencyKey);
+      expect(next.headers.get('idempotency-key')).toBe(
+        JSON.stringify(next.method === 'PUT' ? followIdempotencyKey : idempotencyKey),
+      );
+      expect(await next.text()).toBe('');
       following = next.method === 'PUT';
       return Response.json({ follow: follow(following) });
     },
@@ -89,7 +92,10 @@ test('delete-only removal of a known unavailable edge never reads or replaces it
   const input = { targetId, following: false, idempotencyKey };
   expect(await writeFollowRecord(client, request(), {}, input)).toEqual({ ok: false, reason: 'unavailable' });
   expect(await writeFollowRecord(client, request(), {}, input)).toEqual({ ok: true, following: false });
-  expect(requests.map((item) => item.headers.get('idempotency-key'))).toEqual([idempotencyKey, idempotencyKey]);
+  expect(requests.map((item) => item.headers.get('idempotency-key'))).toEqual([
+    JSON.stringify(idempotencyKey),
+    JSON.stringify(idempotencyKey),
+  ]);
 });
 
 test('dependency, concealed target, revocation, key conflict and CSRF failures remain failures', async () => {
@@ -127,4 +133,17 @@ test('dependency, concealed target, revocation, key conflict and CSRF failures r
     state: 'signed-out',
   });
   expect(reads).toBe(before);
+});
+
+test('a response for another edge or without its identity cannot acknowledge this command', async () => {
+  for (const returnedId of [undefined, 'another-target']) {
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async () => Response.json({ follow: { ...follow(true), targetId: returnedId } }),
+    });
+    expect(await readFollowRecord(client, targetId, authorization)).toEqual({ state: 'unavailable' });
+    expect(await writeFollowRecord(client, request(), {}, { targetId, following: true, idempotencyKey })).toEqual({
+      ok: false,
+      reason: 'unavailable',
+    });
+  }
 });

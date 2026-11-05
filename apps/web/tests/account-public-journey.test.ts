@@ -32,7 +32,7 @@ const profile = (extra: Record<string, unknown> = {}) =>
         kind: 'actor',
         state: 'active',
         handle: 'reader',
-        publicViews: { realms: true },
+        publicViews: { posts: true, reviews: true, collections: true, realms: true },
         ...extra,
       },
     ],
@@ -59,7 +59,11 @@ test('public profile only marks a visible verified Subject; pending and deleted 
   expect(JSON.stringify(profile({ evidence: 'private', email: 'private@example.test' }))).not.toContain('private');
   for (const state of ['pending', 'deleted'])
     expect(accountOf({ accounts: [{ id: accountId, state }] })).toBeUndefined();
-  expect(viewIsPublic(profile({ publicViews: {} }), 'realms')).toBe(false);
+  for (const publicViews of [{}, { posts: 'true', reviews: 1, collections: null, realms: [] }]) {
+    const hidden = profile({ publicViews });
+    for (const view of ['posts', 'reviews', 'collections', 'realms', 'discussion'])
+      expect(viewIsPublic(hidden, view)).toBe(false);
+  }
 });
 
 test('Realms consumes the signed owner continuation anonymously, omits hidden rows and never scans for handles', async () => {

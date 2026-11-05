@@ -107,9 +107,8 @@ without asserting that the complete search journey is callable in every checkout
 and sitemap enumeration do not deliver Account search. [Universal search](search-conditions.md) and
 [facet discovery](search-facets.md) remain the sole Search policy; there is no second engine or permission cache.
 
-The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label. The base's
-[account-data.ts][account-data] meets that shape for organizations but still returns extra null/false fields
-for actors; those fields are an implementation gap, not additional public identity policy.
+The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label, for both
+actors and organizations. [account-data.ts][account-data] returns before profile or Subject hydration.
 
 Live attribution exposes `id`, `kind`, `handle`, `displayName`, public state, `automated` and `operatorId`.
 The handle profile can also expose biography, links, avatar, verification and the account's public-view choices.
@@ -151,6 +150,9 @@ profile/verification delivery slices for Web, Accounts and Semantic, not new ide
 released identity coordinator must publish verification and exact reversal; local merge primitives or stored
 verification state alone do not establish the final public-page outcome.
 
+Decision: Web admits only explicit native public-view flags and sends bodyless follow commands with structured-field
+idempotency keys; exact edge identities bind acknowledgements, and fresh reads supply persisted relationship state.
+
 ### Managed-account detail presentation
 
 Standalone native reads have ten-second decoding deadlines with cancellation. Optional exposure gets two seconds;
@@ -190,8 +192,8 @@ cannot operate another account or join an organization; an operator chain cannot
 identity, account pages and attribution must mark automation and identify its operator, for example
 “Automated · operated by @handle”. The [operator commands][operator], [membership inverse][membership-inverse]
 and [public projection][account-data] carry the relation and public fields. The website's
-[profile reader][web-profile-reader] currently drops `automated` and `operatorId`, and its
-[profile header][web-profile-header] does not render that marking; this is a presentation gap.
+[profile reader][web-profile-reader] preserves the native automation marker and its
+[profile header][web-profile-header] renders the operator only from an admitted public identity.
 
 The operator creates the account and controls whether it has independent credentials. Opening sessions,
 changing credentials and managing it require current management authority: the human operator holds that

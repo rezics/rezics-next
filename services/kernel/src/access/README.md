@@ -2403,17 +2403,20 @@ freeze assignments or public identity state.
   `invalid_request` and the whole patch writes nothing. Clearing the reference does not erase Content's media object.
 - `publicViews: { posts?: boolean, reviews?: boolean, collections?: boolean, realms?: boolean }` merges only the
   supplied flags. Posts, reviews and collections default to true for actors and organizations; `realms` defaults to
-  false. The handle read always returns all four keys. The three activity flags hide only the lists on the agent's
+  false. The handle read always returns all four keys; missing or malformed stored flags are false. The three activity
+  flags hide only the lists on the agent's
   subject page; individual items retain their own visibility. The Realm flag controls the public account Realms page.
 - An organization's patch also accepts `speakersListed: boolean`, default false. Only organization handle profiles
   return this field. Principal assignments still determine who speaks for the organization; this flag controls listing.
 - Presentation follows the existing profile authorization: the account itself (including an organization's acting
   principals) or its operator's managers. Manager authority follows the current operator, rechecked under the account lock.
   There is no new action. Fencing or deletion clears avatar, biography and links, sets every view off and clears speaker
-  listing. Fenced or inactive profiles expose no public views even if stale presentation values remain stored.
+  listing. Fenced or inactive profiles expose no biography, links, avatar or public views even if stale presentation
+  values remain stored.
 - Touches: one `handle_claim_pkey(route, normalized_handle)` point read on the handle's route, then one
   `account_pkey(route, account_id)` point read on the account's route for an active or currently forwarding claim.
-  A missing, expired or ordinarily pending claim stops after the first read.
+  A missing, expired or ordinarily pending claim stops after the first read. An active claim must match the account's
+  current handle; a stale active allocation never substitutes for former-handle forwarding.
   An active profile reads the selected subject's label and type through Semantic's bounded one-id batch reads. An avatar
   adds one `readAvatarSummaries` statement in the account's partition. An avatar patch adds one
   `checkAvatarMedia` primary key read to the existing patch statements.

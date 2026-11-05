@@ -149,9 +149,9 @@ export function accountOf(body: unknown): AccountProfile | undefined {
     ...(account.operated === true || typeof account.operatorId === 'string' ? { operated: true } : {}),
     operatorId: typeof account.operatorId === 'string' ? account.operatorId : null,
     publicViews: {
-      posts: views.posts !== false,
-      reviews: views.reviews !== false,
-      collections: views.collections !== false,
+      posts: views.posts === true,
+      reviews: views.reviews === true,
+      collections: views.collections === true,
       realms: views.realms === true,
     },
   };

@@ -173,9 +173,16 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           } finally {
             await world.native.hold();
           }
+          // ID reads intentionally contain attribution only. Resolve the profile
+          // through the current handle returned for this immutable Account identity.
+          const identities = await json<{ accounts: { id: string; handle: string | null }[] }>(
+            await request(null, `/v1/accounts?ids=${targetAccountId}`),
+          );
+          const handle = identities.accounts.find((account) => account.id === targetAccountId)?.handle;
+          if (!handle) return unavailable('native account-agent current handle');
           const identity = await json<{
             accounts: { id: string; subject: { id: string } | null }[];
-          }>(await request(null, `/v1/accounts?ids=${targetAccountId}`));
+          }>(await request(null, `/v1/accounts?handle=${encodeURIComponent(handle)}`));
           const account = identity.accounts.find((account) => account.id === targetAccountId);
           if (!account?.subject) return unavailable('native account-agent effect/public subject');
           target = { targetType: 'subject', targetId: account.subject.id };

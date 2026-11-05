@@ -17,6 +17,7 @@ import {
   EMPTY_ACCESS_WORK,
   type AccessWork,
 } from './work.ts';
+import { accountPublicViews } from './account-public-profile.ts';
 import profileRead from './account-edit-profile-read.sql';
 
 export const PROFILE_TEXT_MAX_LENGTH = 4096;
@@ -210,14 +211,7 @@ export async function readEditableAccountProfile(
                 profileRead.run(client, { route, account_id: accountId }),
               );
               if (!row) throw new ProblemError('forbidden');
-              const views = row.publicViews as Record<string, unknown> | null;
-              // Missing or malformed storage never opts an account into public presentation.
-              const publicViews = {
-                posts: views?.posts === true,
-                reviews: views?.reviews === true,
-                collections: views?.collections === true,
-                realms: views?.realms === true,
-              };
+              const publicViews = accountPublicViews(row.publicViews);
               const avatarId = row.avatar;
               const avatar = avatarId
                 ? await accessOwnerWork(

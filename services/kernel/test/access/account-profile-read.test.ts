@@ -235,3 +235,13 @@ test('fencing and deletion erase biography and links, and a deleted handle is un
     } else expect(byHandle.body.accounts[0]).toMatchObject({ bio: null, links: [] });
   }
 });
+
+test('an active allocation for a previous spelling cannot stand in for the account current handle', async () => {
+  const id = await person('profile_claim_before');
+  await pool.query('UPDATE access.account SET handle=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(id),
+    id,
+    'profile_claim_after',
+  ]);
+  expect(await read('handle=profile_claim_before')).toEqual({ status: 200, body: { accounts: [], next: null } });
+});
