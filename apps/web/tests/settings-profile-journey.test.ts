@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
-import { EditableProfileReadError } from '../src/settings/editable-profile-source';
+import { EditableProfileReadError, officialProfileRead } from '../src/settings/editable-profile-source';
 import {
   ProfileEditor,
   profileFieldErrors,
@@ -70,15 +70,13 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
       return Response.json(
         options.compactHandle
           ? { accounts: [identity], next: null }
-          : {
-              profile: {
-                ...identity,
-                bio: current.biography,
-                avatar: current.avatar,
-                links: current.links,
-                publicViews: current.publicViews,
-              },
-            },
+          : officialProfileRead({
+              ...identity,
+              bio: current.biography,
+              avatar: current.avatar,
+              links: current.links,
+              publicViews: current.publicViews,
+            }),
         { headers: { 'cache-control': 'private, no-store' } },
       );
     }) as typeof fetch,

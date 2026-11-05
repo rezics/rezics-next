@@ -9,7 +9,7 @@ import {
   type ProfileValues,
 } from '../src/settings/profile-data';
 import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';
-import { EditableProfileReadError } from '../src/settings/editable-profile-source';
+import { EditableProfileReadError, officialProfileRead } from '../src/settings/editable-profile-source';
 
 const accountId = '019a0000-0000-7000-8000-000000000001';
 const mediaId = '019a0000-0000-7000-8000-000000000002';
@@ -55,7 +55,7 @@ function boundary(authorization: string, initial = source()) {
       if (request.method === 'GET') {
         expect(url.pathname).toBe(`/v1/accounts/${accountId}/profile`);
         const { accountId: id, biography: bio, ...fields } = current;
-        return Response.json(readBody ?? { profile: { id, handle: null, bio, ...fields } }, {
+        return Response.json(readBody ?? officialProfileRead({ id, handle: null, bio, ...fields }), {
           status: readStatus,
           headers: { 'cache-control': 'private, no-store' },
         });
@@ -149,7 +149,7 @@ test('The actual returned avatar/public-view fields are used and denied/unavaila
     expect(api.writes).toHaveLength(0);
     expect(api.requests).toHaveLength(1);
     expect(new URL(api.requests[0]!.url).pathname).toBe(`/v1/accounts/${accountId}/profile`);
-    api.respond(200, { profile: { id, handle: null, bio, ...fields } });
+    api.respond(200, officialProfileRead({ id, handle: null, bio, ...fields }));
     await api.editor.reload();
     expect(api.editor.snapshot().known).toEqual(source());
   }

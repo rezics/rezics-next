@@ -6,6 +6,7 @@ import { boundViewer } from '../src/accounts/profile-editor/request';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import { parseSubmission, readTarget, writeTarget } from '../src/accounts/profile-editor/data';
 import type { ProfilePatch, ProfileValues } from '../src/settings/profile-data';
+import { officialProfileRead } from '../src/settings/editable-profile-source';
 
 const accountId = '00000000-0000-7000-8000-000000000002';
 const viewerId = '00000000-0000-7000-8000-000000000001';
@@ -53,7 +54,7 @@ function boundary() {
         expect(path).toBe(`/v1/accounts/${accountId}/profile`);
         if (readStatus !== 200) return Response.json({ code: 'forbidden' }, { status: readStatus });
         const { accountId: id, biography: bio, ...fields } = current;
-        return Response.json(readOverride ?? { profile: { id, handle: null, bio, ...fields } });
+        return Response.json(readOverride ?? officialProfileRead({ id, handle: null, bio, ...fields }, viewerId));
       }
       expect(request.method).toBe('PATCH');
       expect(path).toBe(`/v1/accounts/${accountId}`);

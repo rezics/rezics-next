@@ -3,6 +3,7 @@ import { createKernelClient } from '@rezics/client';
 import { AccountProfileEditor } from '../../src/accounts/profile-editor/editor';
 import { writeTarget } from '../../src/accounts/profile-editor/data';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../../src/settings/profile-data';
+import { officialProfileRead } from '../../src/settings/editable-profile-source';
 import { withProfileDeadline } from '../../src/settings/profile-request-deadline';
 
 const accountId = '019a0000-0000-7000-8000-000000000001';
@@ -38,16 +39,18 @@ test('native profile GET and both PATCH adapters bound stalled headers and bodie
           const request = new Request(input, init);
           signals.push(request.signal);
           if (!reading && request.method === 'GET')
-            return Response.json({
-              profile: {
-                ...profile,
+            return Response.json(
+              officialProfileRead({
                 id: accountId,
-                accountId: undefined,
+                kind: 'actor',
                 handle: null,
-                bio: null,
-                biography: undefined,
-              },
-            });
+                displayName: profile.displayName,
+                bio: profile.biography,
+                links: profile.links,
+                avatar: profile.avatar,
+                publicViews: profile.publicViews,
+              }),
+            );
           return phase === 'headers'
             ? never<Response>()
             : new Response(new ReadableStream(), {

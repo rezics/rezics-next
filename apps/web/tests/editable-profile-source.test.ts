@@ -1,10 +1,20 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { EditableProfileReadError, type EditableProfile } from '../src/settings/editable-profile-source';
+import {
+  closedProfileEditing,
+  EditableProfileReadError,
+  officialProfileRead,
+  type EditableProfile,
+} from '../src/settings/editable-profile-source';
 import {
   loadProfileRecord,
   profileReadResult,
+  profileReadSetupFailure,
   profileReadValue,
+  runReadProfile,
+  runSaveProfile,
+  saveProfileRecord,
+  serializeProfileResult,
   type ProfileValues,
 } from '../src/settings/profile-data';
 import { ProfileEditor } from '../src/settings/profile-write';
@@ -24,12 +34,14 @@ const profile: EditableProfile = {
 test('the editable source rejects incomplete, foreign and non-closed native bodies without a draft or write', async () => {
   const { bio, ...incomplete } = profile;
   for (const body of [
+    { profile },
     { profile: incomplete },
-    { profile: { ...profile, id: 'another-account' } },
-    { profile: { ...profile, state: 'deleted' } },
-    { profile: { ...profile, publicViews: { posts: false } } },
-    { profile: { ...profile, avatar: { media: 'incomplete-avatar' } } },
-    { profile: { ...profile, kind: 'organization' } },
+    officialProfileRead({ ...profile, id: 'another-account' }),
+    { profile: { ...profile, state: 'deleted' }, editing: closedProfileEditing(profile) },
+    { profile: { ...profile, publicViews: { posts: false } }, editing: closedProfileEditing(profile) },
+    { profile: { ...profile, avatar: { media: 'incomplete-avatar' } }, editing: closedProfileEditing(profile) },
+    { profile: { ...profile, kind: 'organization' }, editing: closedProfileEditing(profile) },
+    { profile, editing: closedProfileEditing({ id: profile.id, kind: 'organization' }) },
     { profile, accounts: [] },
     { accounts: [{ id: profile.id, handle: null }] },
   ]) {
@@ -59,6 +71,25 @@ test('the editable source rejects incomplete, foreign and non-closed native bodi
     await editor.submit('profile');
     expect(writes).toBe(0);
   }
+});
+
+test('the official private GET supplies field advice and keeps unsupported local choices review-only', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async () =>
+      Response.json(officialProfileRead(profile), { headers: { 'cache-control': 'private, no-store' } })) as typeof fetch,
+  });
+  const editor = new ProfileEditor({
+    read: () => loadProfileRecord(client, 'Bearer unchanged', profile.id),
+    save: async () => {
+      throw new Error('Must not write');
+    },
+  });
+  await editor.reload();
+  expect(editor.snapshot().known?.displayName).toBe('Native name');
+  expect(editor.snapshot().editing).toEqual(closedProfileEditing(profile, profile.id));
+  editor.edit({ speakersListed: true });
+  await editor.submit('profile');
+  expect(editor.snapshot().attempt).toBeNull();
 });
 
 test('native denial status survives the server boundary while transport failures retain the same-actor draft', async () => {
@@ -154,4 +185,82 @@ test('private profile recovery preserves actual native problem metadata and dela
     });
     expect(wrapped).toEqual(result);
   }
+});
+
+test('thrown setup yields a serializable unavailable result rather than an escaped transport failure', async () => {
+  const leaked = 'private-setup-token';
+  const headers: string[] = [];
+  mock.module('@tanstack/react-start/server', () => ({
+    getRequest() {
+      throw new Error(leaked);
+    },
+    setResponseHeader(name: string, value: string) {
+      headers.push(`${name}: ${value}`);
+    },
+  }));
+  mock.module('cloudflare:workers', () => ({
+    get env() {
+      throw new Error(leaked);
+    },
+  }));
+  const setup = serializeProfileResult(profileReadSetupFailure(new Error(leaked)));
+  expect(setup).toEqual({ ok: false, status: 503 });
+  expect(JSON.stringify(setup)).not.toContain(leaked);
+  const read = JSON.parse(JSON.stringify(await runReadProfile()));
+  expect(read).toEqual(setup);
+  expect(JSON.stringify(read)).not.toContain(leaked);
+  const write = JSON.parse(
+    JSON.stringify(
+      await runSaveProfile({
+        before: { accountId: profile.id, kind: 'actor', displayName: null, biography: null, avatar: null, links: [], publicViews: profile.publicViews },
+        after: { accountId: profile.id, kind: 'actor', displayName: 'Later', biography: null, avatar: null, links: [], publicViews: profile.publicViews },
+        idempotencyKey: '123e4567-e89b-42d3-a456-426614174000',
+      }),
+    ),
+  );
+  expect(write).toEqual({ ok: false, status: 503, message: '' });
+  expect(JSON.stringify(write)).not.toContain(leaked);
+  expect(headers).toEqual(['cache-control: private, no-store', 'cache-control: private, no-store']);
+});
+
+test('a PATCH without the matching account acknowledgement keeps the original unresolved', async () => {
+  const before: ProfileValues = {
+    accountId: profile.id,
+    kind: 'actor',
+    displayName: 'Native name',
+    biography: 'Native notes',
+    avatar: null,
+    links: [],
+    publicViews: profile.publicViews,
+  };
+  for (const body of [{}, { accountId: 'another-account' }, { accountId: profile.id, extra: true }, before]) {
+    const result = await saveProfileRecord(
+      createKernelClient('https://kernel.example.test', {
+        fetch: (async (input, init) => {
+          const request = new Request(input, init);
+          expect(request.method).toBe('PATCH');
+          expect(request.headers.get('cache-control')).toBe('no-store');
+          expect(request.cache).toBe('no-store');
+          return Response.json(body);
+        }) as typeof fetch,
+      }),
+      'Bearer unchanged',
+      profile.id,
+      before,
+      { ...before, displayName: 'Submitted name' },
+      '123e4567-e89b-42d3-a456-426614174000',
+    );
+    expect(result).toEqual({ ok: false, status: 503, message: '' });
+  }
+  const acknowledged = await saveProfileRecord(
+    createKernelClient('https://kernel.example.test', {
+      fetch: (async () => Response.json({ accountId: profile.id })) as typeof fetch,
+    }),
+    'Bearer unchanged',
+    profile.id,
+    before,
+    { ...before, displayName: 'Submitted name' },
+    '123e4567-e89b-42d3-a456-426614174000',
+  );
+  expect(acknowledged).toEqual({ ok: true, profile: { ...before, displayName: 'Submitted name' } });
 });

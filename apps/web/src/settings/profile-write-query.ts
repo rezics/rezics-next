@@ -3,7 +3,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } f
 import { personalRead } from '../kernel/query';
 import { sessionQuery, useSession } from '../session/query';
 import { readProfile, saveProfile } from './actions';
-import { profileReadValue } from './profile-data';
+import { profileCommandValues, profileReadObservation } from './profile-data';
 import { ProfileEditorSession } from './profile-write';
 
 type EditorEntry = {
@@ -70,7 +70,7 @@ function createEntry(client: QueryClient) {
   const owner = new ProfileEditorSession(observed, (owner) => {
     const read = async () => {
       if (!current()) throw new Error('Profile unavailable');
-      const profile = profileReadValue(await readProfile());
+      const profile = profileReadObservation(await readProfile());
       if (!current()) throw new Error('Profile unavailable');
       if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
       return profile;
@@ -88,7 +88,10 @@ function createEntry(client: QueryClient) {
       },
       canWrite: () => current() && owner.canWrite(),
       confirmed: (profile) => {
-        if (current()) client.setQueryData(owner.key, profile);
+        if (!current()) return;
+        const values = profileCommandValues(profile);
+        const editing = owner.editor.snapshot().editing;
+        client.setQueryData(owner.key, editing ? { ...values, editing } : values);
       },
     };
   });
@@ -184,7 +187,7 @@ export function useProfileEditor() {
         queryKey: owner.key,
         queryFn: async () => {
           if (!entry.current()) throw new Error('Profile unavailable');
-          const profile = profileReadValue(await readProfile());
+          const profile = profileReadObservation(await readProfile());
           if (!entry.current()) throw new Error('Profile unavailable');
           if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
           return profile;

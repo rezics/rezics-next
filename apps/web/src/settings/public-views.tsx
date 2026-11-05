@@ -5,7 +5,7 @@ import { Field, FieldContent, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { ProfileFeedback } from './profile';
-import { profileChanges } from './profile-data';
+import { profileChanges, profilePatchAdmitted } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { usePreferenceRetry } from './preference-failure-retry';
@@ -31,16 +31,18 @@ export function PublicViewsCard({
   const ids = useId();
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
-  const changed =
-    profile &&
-    state.known &&
-    Object.keys(
-      profileChanges(state.known, {
-        ...state.known,
-        publicViews: profile.publicViews,
-        ...(profile.kind === 'organization' ? { speakersListed: profile.speakersListed } : {}),
-      }),
-    ).length > 0;
+  const viewsPatch =
+    profile && state.known
+      ? profileChanges(state.known, {
+          ...state.known,
+          publicViews: profile.publicViews,
+          ...(profile.kind === 'organization' ? { speakersListed: profile.speakersListed } : {}),
+        })
+      : {};
+  const changed = Object.keys(viewsPatch).length > 0;
+  const admitted = (field: 'publicViews' | 'speakersListed') =>
+    state.editing === undefined || (!!state.editing && field in state.editing.fields);
+  const canSubmitPatch = changed && profilePatchAdmitted(viewsPatch, state.editing);
   return (
     <Card>
       <CardHeader>
@@ -70,7 +72,7 @@ export function PublicViewsCard({
                   <Switch
                     id={`${ids}-${view}`}
                     checked={profile.publicViews[view]}
-                    disabled={closed || busy}
+                    disabled={closed || busy || !admitted('publicViews')}
                     onCheckedChange={(checked) => {
                       editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
                     }}
@@ -87,7 +89,7 @@ export function PublicViewsCard({
                   <Switch
                     id={`${ids}-speakers`}
                     checked={profile.speakersListed === true}
-                    disabled={closed || busy}
+                    disabled={closed || busy || !admitted('speakersListed')}
                     onCheckedChange={(checked) => {
                       editor.edit({ speakersListed: checked });
                     }}
@@ -100,7 +102,7 @@ export function PublicViewsCard({
                 type="button"
                 variant="outline"
                 className="mt-2 h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left"
-                disabled={closed || !!state.attempt || commandWaiting}
+                disabled={closed || !!state.attempt || commandWaiting || !canSubmitPatch}
                 onClick={() => void editor.submit('views')}
               >
                 {m.settings_profile_save_activity()}

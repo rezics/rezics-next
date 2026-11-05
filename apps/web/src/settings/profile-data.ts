@@ -1,14 +1,18 @@
 import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
+import { isNotFound, isRedirect } from '@tanstack/react-router';
+import type { SessionEnv } from '../session/client';
 import { settingsCommandKeyHeader } from './command-headers';
 import {
   createEditableProfileSource,
   EditableProfileReadError,
   nativeProfileFailure,
+  parseProfilePatchAck,
   profileReadFailure,
   type EditableProfileFailure,
   type EditableProfile,
   type EditableProfileSource,
+  type ProfileEditing,
 } from './editable-profile-source';
 
 export type ProfileLink = { label: string; url: string };
@@ -23,6 +27,7 @@ export type ProfileValues = {
   publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
   speakersListed?: boolean;
 };
+export type ObservedProfile = ProfileValues & { editing?: ProfileEditing };
 export type ProfilePatch = {
   displayName?: string | null;
   biography?: string | null;
@@ -38,11 +43,14 @@ export type ProfileSaveResult =
 
 /** Keep native read status intact across the server-function serialization boundary. */
 export type ProfileReadResult =
-  | { ok: true; profile: ProfileValues }
+  | { ok: true; profile: ProfileValues; editing: ProfileEditing }
   | { ok: false; status: number; failure?: EditableProfileFailure };
-export async function profileReadResult(read: () => Promise<ProfileValues>): Promise<ProfileReadResult> {
+
+export async function profileReadResult(read: () => Promise<ObservedProfile>): Promise<ProfileReadResult> {
   try {
-    return { ok: true, profile: await read() };
+    const current = await read();
+    if (!current.editing) throw new Error('Profile unavailable');
+    return { ok: true, profile: profileCommandValues(current), editing: current.editing };
   } catch (error) {
     const failure = profileReadFailure(error);
     if (failure) return { ok: false, status: failure.status, ...(Object.keys(failure).length > 1 ? { failure } : {}) };
@@ -55,12 +63,38 @@ export function profileReadValue(result: ProfileReadResult): ProfileValues {
   return result.profile;
 }
 
+export function profileReadObservation(result: ProfileReadResult): ObservedProfile {
+  if (!result.ok) throw new EditableProfileReadError(result.status, result.failure);
+  return result.editing ? { ...result.profile, editing: result.editing } : result.profile;
+}
+
 export function profileReadDenied(error: unknown): boolean {
   const failure = profileReadFailure(error);
   return !!failure && [401, 403, 404].includes(failure.status);
 }
 
-function accountProfile(value: EditableProfile): ProfileValues {
+/** Redirect and not-found remain Start/Router control flow, including after a failed private read. */
+export function profileControlFlow(error: unknown): void {
+  if (isRedirect(error) || isNotFound(error)) throw error;
+}
+
+/** Module, request-helper and serialization faults stay in the same plain unavailable envelope. */
+export function profileReadSetupFailure(error: unknown): ProfileReadResult {
+  profileControlFlow(error);
+  return { ok: false, status: 503 };
+}
+
+export function profileSaveSetupFailure(error: unknown): ProfileSaveResult {
+  profileControlFlow(error);
+  return { ok: false, status: 503, message: '' };
+}
+
+/** Server-function transport drops custom properties; only JSON-safe metadata crosses the boundary. */
+export function serializeProfileResult<T>(result: T): T {
+  return JSON.parse(JSON.stringify(result)) as T;
+}
+
+function accountProfile(value: EditableProfile, editing: ProfileEditing): ObservedProfile {
   return {
     accountId: value.id,
     kind: value.kind,
@@ -72,7 +106,36 @@ function accountProfile(value: EditableProfile): ProfileValues {
     ...(value.kind === 'organization' && value.speakersListed !== undefined
       ? { speakersListed: value.speakersListed }
       : {}),
+    editing,
   };
+}
+
+/** Command operands never carry current field advice. */
+export function profileCommandValues(profile: ProfileValues): ProfileValues {
+  return {
+    accountId: profile.accountId,
+    kind: profile.kind,
+    displayName: profile.displayName,
+    biography: profile.biography,
+    avatar: profile.avatar,
+    links: profile.links,
+    publicViews: { ...profile.publicViews },
+    ...(profile.kind === 'organization' && typeof profile.speakersListed === 'boolean'
+      ? { speakersListed: profile.speakersListed }
+      : {}),
+  };
+}
+
+export function profilePatchAdmitted(patch: ProfilePatch, editing: ProfileEditing | null | undefined): boolean {
+  if (!editing) return true;
+  for (const key of Object.keys(patch) as (keyof ProfilePatch)[]) {
+    if (key === 'publicViews') {
+      if (!('publicViews' in editing.fields)) return false;
+      continue;
+    }
+    if (!(key in editing.fields)) return false;
+  }
+  return true;
 }
 
 export async function loadProfileRecord(
@@ -81,10 +144,10 @@ export async function loadProfileRecord(
   accountId: string,
   source: EditableProfileSource = createEditableProfileSource(client),
   signal?: AbortSignal,
-): Promise<ProfileValues> {
-  const profile = await source.read(authorization, accountId, signal);
+): Promise<ObservedProfile> {
+  const { profile, editing } = await source.read(authorization, accountId, signal);
   if (profile.id !== accountId) throw new Error('Profile unavailable');
-  return accountProfile(profile);
+  return accountProfile(profile, editing);
 }
 
 function avatarReference(avatar: object | null): string | null {
@@ -126,13 +189,21 @@ export async function saveProfileRecord(
 ): Promise<ProfileSaveResult> {
   if (after.links.length > 5) throw new Error('At most five links are allowed');
   const body = profileChanges(before, after);
-  if (!Object.keys(body).length) return { ok: true, profile: before };
-  const headers = { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) };
+  if (!Object.keys(body).length) return { ok: true, profile: profileCommandValues(before) };
+  const headers = {
+    authorization,
+    'idempotency-key': settingsCommandKeyHeader(idempotencyKey),
+    'cache-control': 'no-store',
+  };
   const result = await withProfileDeadline(
-    (bounded) => client.accounts({ accountId }).patch(body, { headers, fetch: { signal: bounded } }),
+    (bounded) => client.accounts({ accountId }).patch(body, { headers, fetch: { cache: 'no-store', signal: bounded } }),
     signal,
   );
-  if (!result.error && result.data) return { ok: true, profile: after };
+  if (!result.error && result.data) {
+    const ack = parseProfilePatchAck(result.data, accountId);
+    if (!ack) return { ok: false, status: 503, message: '' };
+    return { ok: true, profile: profileCommandValues(after) };
+  }
   const errorBody = result.error?.value;
   const message =
     errorBody && typeof errorBody === 'object' && 'detail' in errorBody && typeof errorBody.detail === 'string'
@@ -145,4 +216,93 @@ export async function saveProfileRecord(
     message,
     ...(Object.keys(failure).length > 1 ? { failure } : {}),
   };
+}
+
+export async function runReadProfile(): Promise<ProfileReadResult> {
+  try {
+    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    setResponseHeader('cache-control', 'private, no-store');
+    const { env } = await import('cloudflare:workers');
+    const { kernelClient } = await import('../kernel/client');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
+    try {
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const authorization = viewerCredential(request);
+      const accountId = sessionSubject(request);
+      return serializeProfileResult(
+        await profileReadResult(async () => {
+          if (!authorization || !accountId) throw new EditableProfileReadError(401);
+          return loadProfileRecord(kernelClient(), authorization, accountId);
+        }),
+      );
+    } catch (error) {
+      profileControlFlow(error);
+      const failure = profileReadFailure(error);
+      if (failure)
+        return serializeProfileResult({
+          ok: false as const,
+          status: failure.status,
+          ...(Object.keys(failure).length > 1 ? { failure } : {}),
+        });
+      return serializeProfileResult(profileReadSetupFailure(error));
+    }
+  } catch (error) {
+    return serializeProfileResult(profileReadSetupFailure(error));
+  }
+}
+
+export async function runSaveProfile(data: {
+  before: ProfileValues;
+  after: ProfileValues;
+  idempotencyKey: string;
+}): Promise<ProfileSaveResult> {
+  try {
+    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    setResponseHeader('cache-control', 'private, no-store');
+    const { env } = await import('cloudflare:workers');
+    const { kernelClient } = await import('../kernel/client');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
+    try {
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const authorization = viewerCredential(request);
+      const accountId = sessionSubject(request);
+      if (!authorization || !accountId)
+        return serializeProfileResult({
+          ok: false as const,
+          status: 403,
+          message: 'Sign in to change your profile.',
+        });
+      if (data.before.accountId !== accountId || data.after.accountId !== accountId)
+        return serializeProfileResult({
+          ok: false as const,
+          status: 403,
+          message: 'You can only change your own profile.',
+        });
+      return serializeProfileResult(
+        await saveProfileRecord(
+          kernelClient(),
+          authorization,
+          accountId,
+          profileCommandValues(data.before),
+          profileCommandValues(data.after),
+          data.idempotencyKey,
+        ),
+      );
+    } catch (error) {
+      profileControlFlow(error);
+      const failure = profileReadFailure(error);
+      if (failure)
+        return serializeProfileResult({
+          ok: false as const,
+          status: failure.status >= 500 ? failure.status : 503,
+          message: '',
+          ...(Object.keys(failure).length > 1 ? { failure } : {}),
+        });
+      return serializeProfileResult(profileSaveSetupFailure(error));
+    }
+  } catch (error) {
+    return serializeProfileResult(profileSaveSetupFailure(error));
+  }
 }
