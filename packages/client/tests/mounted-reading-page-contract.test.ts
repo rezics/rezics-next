@@ -40,7 +40,7 @@ test('installed public root exposes the mounted reading, review, rating and shel
   );
   await client.libraryEntries.get({ query: { orderBy: 'priority', direction: 'desc' }, headers });
   await client.libraryEntries.get({ query: { orderBy: 'title', direction: 'asc' }, headers });
-  await client.libraryShelfTitlePreparation.post({ headers });
+  await client.libraryShelfTitlePreparation.post(undefined, { headers });
   await client.me['rating-votes'].get({ query: { cursor: 'selected-page' }, headers });
   await client.collections({ collectionId: id }).members.get({ query: { view: 'FULL' }, headers });
 
