@@ -356,8 +356,8 @@ Decision: keep empty updates as ordinary revision/event writes; bind immutable C
 read and inventory owners, preserving one original deadline and current Source/profile meaning through retries.
 
 `copy-operation-bounds.ts` composes all nine axes with `@rezics/bounds`. SQL leaves retain compiled SQL, detached
-original operands and escaped schema projections. Text uses the admitted 64/200/1000-character limits, timestamps
-and revisions their native widths, and pinned Type/Profile identifiers the immutable Definitions release ceiling.
+original operands and escaped schema projections. Text uses the admitted 64/200/1000-character limits, profile labels
+80 Unicode code points, timestamps and revisions their native widths, and pinned Type/Profile identifiers the immutable Definitions release ceiling.
 Logical result rows, examined candidates, negative seeks, points, statements and bytes remain distinct. SQL and
 Source observations invoke no Search engine; the explicit eight-axis native bridge retains that zero in the plan.
 
@@ -366,7 +366,9 @@ Its original runner, owner, client, admission, deadline and retry policy remain 
 admission uses Access's accounting port, including the group exposure observation on the original attempt time.
 The command envelope includes owner floor/share, time, partition, receipt candidates (including the transitional raw
 key), Shelf, input/response serialization, History basis/outbox, and commit or rollback. Deadline-bounded recovery
-probes and every dispatched retry remain charged. Native frame/connection owners retain single drain/release custody.
+probes and every dispatched retry remain charged. Creation binds one original copy ID through planning and retries.
+Copy triggers include the indexed migration probes, owner-support live/absent arms, owner activity initialization and
+the 64-state pin cascade. Native frame/connection owners retain single drain/release custody.
 
 Create and update compare independently collected original/current Source anchors and accepted profile pins before
 fresh mutation; preparation errors remain deferred until an authorized receipt miss. Empty patches still advance
