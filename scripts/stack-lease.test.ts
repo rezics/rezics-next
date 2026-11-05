@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { acquireStackSlot, stackCapacity } from './stack-lease.ts';
+import { repositoryBun, runScript } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const lease = join(import.meta.dir, 'stack-lease.ts');
@@ -328,46 +329,20 @@ test('web and auth isolated runs hold one slot for the whole command', async () 
   }
 }, 20_000);
 
-test('remote commands run with the lease off', async () => {
+test('remote commands run with the lease off', () => {
   const env = environment();
-  const directory = env.REZICS_STACK_LEASE_DIR!;
-  const bin = join(directory, 'bin');
-  mkdirSync(bin);
-  const scriptFile = join(directory, 'remote-script');
-  writeFileSync(
-    join(bin, 'ssh'),
-    `#!/usr/bin/env bun
-    const script = process.argv.at(-1);
-    if (script.includes('/proc/loadavg')) {
-      console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 4000000000\\nPROCESSORS 4\\nSLICE_PROCESSORS 2\\nLOAD 0\\nSLOTS_USED 0');
-    }
-    else if (script.includes('systemd-run')) await Bun.write(${JSON.stringify(scriptFile)}, script);
-    else if (script.includes('SLOT')) { console.log('SLOT 0'); await Bun.stdin.text(); }
-  `,
+  const script = runScript(
+    'lease-test',
+    '/srv/rezics-check/runs/lease-test',
+    '.',
+    ['true'],
+    'test',
+    repositoryBun(repository),
   );
-  writeFileSync(join(bin, 'rsync'), '#!/usr/bin/env bun\nawait Bun.stdin.text();\n');
-  for (const name of ['ssh', 'rsync']) chmodSync(join(bin, name), 0o755);
-  const hosts = join(directory, 'hosts.json');
-  writeFileSync(
-    hosts,
-    JSON.stringify({
-      hosts: [
-        { name: 'test', address: 'ops@test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 200, slots: 1 },
-      ],
-    }),
-  );
-  const run = start({ ...env, PATH: `${bin}:${env.PATH}`, KERNEL_CHECK_REMOTE: hosts }, 'remote', [
-    process.execPath,
-    join(import.meta.dir, 'remote-check.ts'),
-    repository,
-    '--',
-    'true',
-  ]);
-  await stop(run);
-  const script = readFileSync(scriptFile, 'utf8');
   expect(script).toContain('REZICS_STACK_LEASE=off');
   const exportLine = script.split('\n').find((line) => line.startsWith('export PATH='))!;
   const remoteEnv = Bun.spawnSync(['sh', '-c', `${exportLine}\nprintf '%s' "$REZICS_STACK_LEASE"`], { env });
+  expect(remoteEnv.exitCode).toBe(0);
   expect(remoteEnv.stdout.toString()).toBe('off');
 });
 
