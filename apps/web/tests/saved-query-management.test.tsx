@@ -389,4 +389,3 @@ test('mounted manager callbacks keep their originating controller state and port
     await harness.browser.happyDOM.close();
   }
 });
-
