@@ -35,6 +35,9 @@ import { loanDueBoundary, type LoanDueBoundary } from './loan-date.ts';
 import { LoanConflictError, LoanInvalidError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
 import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
 import { attachCopyListContext } from './copy-list-context.ts';
+import type { CopyListContext } from './copy-list-context.ts';
+import type { CopyInventory } from './copy-inventory.ts';
+import type { CopyPresentation } from './copy-model.ts';
 import {
   createEntryCommands,
   LibraryConflictError,
@@ -518,6 +521,7 @@ const loanResponse = t.Object(
   },
   closed,
 );
+type LoanResponse = Static<typeof loanResponse>;
 const loanCopyResponse = t.Object(
   {
     state: t.Union([t.Literal('available'), t.Literal('deleted'), t.Literal('missing')]),
@@ -741,12 +745,48 @@ function copyView({ id, subjectId, kind, status, revision, location, source, acq
     note,
   };
 }
+function copyInventoryView(filterOptions: CopyInventory) {
+  return {
+    kinds: { ...filterOptions.kinds, choices: [...filterOptions.kinds.choices] },
+    statuses: { ...filterOptions.statuses, choices: [...filterOptions.statuses.choices] },
+  };
+}
+function copyListContextView(context: CopyListContext): Static<typeof copyListContextSchema> {
+  switch (context.state) {
+    case 'available':
+      return {
+        state: 'available',
+        work: context.work.map((item) => ({ ...item, labels: { ...item.labels } })),
+        facts: { ...context.facts },
+      };
+    case 'unsupported':
+      return { state: 'unsupported', facts: { ...context.facts } };
+    case 'scope':
+    case 'withheld':
+    case 'missing':
+    case 'unavailable':
+      return { state: context.state };
+  }
+}
+function copyPresentationView(presentation: CopyPresentation): Static<typeof copyPresentationSchema> {
+  return {
+    ...presentation,
+    statusEditing:
+      presentation.statusEditing.state === 'supported'
+        ? { ...presentation.statusEditing, statuses: [...presentation.statusEditing.statuses] }
+        : presentation.statusEditing,
+    conditionEditing:
+      presentation.conditionEditing.state === 'supported'
+        ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
+        : presentation.conditionEditing,
+  };
+}
 function loanView(
   loan: Loan,
   boundary: LoanDueBoundary,
   people: ReadonlyMap<string, string | null>,
   copyAvailable = true,
-) {
+): LoanResponse {
   const state = loanState(loan, boundary);
   const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
   const action = { allowed: reason === null, reason };
@@ -1498,7 +1538,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           return fullView(config(), actor, query.view, {
             copies: result.copies.map(copyView),
             next: result.next,
-            filterOptions: result.filterOptions,
+            filterOptions: copyInventoryView(result.filterOptions),
           });
 
         const copiesPage = await attachCopyListContext(
@@ -1518,7 +1558,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             },
           },
         );
-        return { copies: copiesPage, next: result.next, filterOptions: result.filterOptions };
+        return {
+          copies: copiesPage.map((copy) => ({ ...copy, context: copyListContextView(copy.context) })),
+          next: result.next,
+          filterOptions: copyInventoryView(result.filterOptions),
+        };
       },
     )
     .get(
@@ -1562,15 +1606,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                     const editing = presentation.statusEditing;
                     const value = {
                       ...copyView(copy),
-                      presentation: {
-                        ...presentation,
-                        statusEditing:
-                          editing.state === 'supported' ? { ...editing, statuses: [...editing.statuses] } : editing,
-                        conditionEditing:
-                          presentation.conditionEditing.state === 'supported'
-                            ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
-                            : presentation.conditionEditing,
-                      },
+                      presentation: copyPresentationView(presentation),
                     };
                     if (query.view !== 'FULL') return { copy: value };
                     const subject = disclosure.subject
@@ -1742,7 +1778,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               revision: item.copy.revision,
               kind: item.copy.kind,
               status: item.copy.status,
-              context: context?.context ?? {
+              context: context ? copyListContextView(context.context) : {
                 state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
               },
             };
