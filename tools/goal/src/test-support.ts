@@ -241,13 +241,13 @@ export function installTestClock(start = nativeDateNow()): TestClock {
     const id = nextId++;
     timers.set(id, { at: now + Math.max(0, Number(ms) || 0), interval: null, fn: () => run(fn, args) });
     return id as unknown as ReturnType<typeof setTimeout>;
-  }) as typeof setTimeout;
+  }) as unknown as typeof setTimeout;
   const setRepeating = ((fn: TimerHandler, ms = 0, ...args: unknown[]) => {
     const id = nextId++;
     const period = Math.max(1, Number(ms) || 0);
     timers.set(id, { at: now + period, interval: period, fn: () => run(fn, args) });
     return id as unknown as ReturnType<typeof setInterval>;
-  }) as typeof setInterval;
+  }) as unknown as typeof setInterval;
   const clear = (id: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | undefined) => {
     timers.delete(Number(id));
   };
@@ -274,7 +274,7 @@ export function installTestClock(start = nativeDateNow()): TestClock {
         if (next.interval === null) timers.delete(next.id);
         else {
           const timer = timers.get(next.id);
-          if (timer) timer.at += timer.interval;
+          if (timer?.interval != null) timer.at += timer.interval;
         }
         next.fn();
       }

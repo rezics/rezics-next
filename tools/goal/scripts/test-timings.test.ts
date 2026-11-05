@@ -70,7 +70,8 @@ test('parses bun test lines and prints files, tests and total slowest first', ()
   expect(printed).toContain('Files (slowest first)');
   expect(printed).toContain('Tests (slowest first)');
   expect(printed.indexOf('src/slow.test.ts')).toBeLessThan(printed.indexOf('src/quick.test.ts'));
-  expect(printed.indexOf('slower')).toBeLessThan(printed.indexOf('quick'));
+  const testsSection = printed.slice(printed.indexOf('Tests (slowest first)'));
+  expect(testsSection.indexOf('slower')).toBeLessThan(testsSection.indexOf('quick'));
   expect(printed).toContain('Total: 0.055s');
 });
 
