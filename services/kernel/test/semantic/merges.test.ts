@@ -11,9 +11,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
-import { readIdentityEpochCutover, runIdentityEpochBootstrapBatch } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
@@ -55,11 +53,6 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:read');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
   await installIdentityEpochBootstrap(pool);
-  // The Community worker closes every native home before serving; repeat its bootstrap batch until the cutover is ready.
-  for (let batch = 0; (await withReadTransaction(pool, readIdentityEpochCutover)).state !== 'ready'; batch++) {
-    if (batch > 100_000) throw new Error('identity epoch bootstrap did not settle');
-    await runIdentityEpochBootstrapBatch(pool);
-  }
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
