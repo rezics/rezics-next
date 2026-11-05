@@ -59,7 +59,8 @@ test('native exact expiry purge keeps only permitted public structural identity 
   const unscoped = await f.identity([...sessionScopes, 'published_log:read']);
   const subjectId = await f.createSubject('game', 'Retention book');
 
-  async function publish(bearer: string) {
+  let firstSessionId: string | undefined;
+  async function publish(bearer: string, requestKey = entryKey()) {
     const started = await f.send(bearer, 'POST', '/v1/progressSessions', {
       subjectId,
       mode: 'scalar_amount',
@@ -67,10 +68,14 @@ test('native exact expiry purge keeps only permitted public structural identity 
     });
     expect(started.status).toBe(201);
     const session = (await started.json()).progressSession;
-    const created = await f.send(bearer, 'POST', '/v1/publishedLogs', {
-      sessionId: session.id,
-      note: 'private retained note',
-    });
+    firstSessionId ??= session.id;
+    const created = await f.send(
+      bearer,
+      'POST',
+      '/v1/publishedLogs',
+      { sessionId: session.id, note: 'private retained note' },
+      requestKey,
+    );
     expect(created.status).toBe(201);
     return (await created.json()).publishedLog as {
       id: string;
@@ -81,12 +86,31 @@ test('native exact expiry purge keeps only permitted public structural identity 
     };
   }
 
-  const first = await publish(owner.bearer);
+  const publishKey = entryKey();
+  const first = await publish(owner.bearer, publishKey);
   const sibling = await publish(owner.bearer);
   const revision = Number(
     (await f.send(owner.bearer, 'GET', `/v1/publishedLogs/${first.id}`)).headers.get('Library-Published-Log-Revision'),
   );
   expect(revision).toBe(1);
+  expect(await (await f.send('anonymous', 'GET', `/v1/publishedLogs/${first.id}`)).json()).toEqual({
+    publishedLog: first,
+  });
+  const listedBeforeDelete = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
+  expect((await listedBeforeDelete.json()).publishedLogs.map((log: { id: string }) => log.id)).toContain(first.id);
+  const completedSession = await f.send(owner.bearer, 'POST', `/v1/progressSessions/${firstSessionId}:complete`, {
+    revision: 1,
+  });
+  expect(completedSession.status).toBe(200);
+  const replayedPublish = await f.send(
+    owner.bearer,
+    'POST',
+    '/v1/publishedLogs',
+    { sessionId: firstSessionId, note: 'private retained note' },
+    publishKey,
+  );
+  expect(replayedPublish.status).toBe(201);
+  expect((await replayedPublish.json()).publishedLog).toEqual(first);
   expect(
     (await f.send(other.bearer, 'DELETE', `/v1/publishedLogs/${first.id}?revision=${revision}`, undefined, entryKey()))
       .status,
@@ -138,6 +162,7 @@ test('native exact expiry purge keeps only permitted public structural identity 
     restoreUntil: new Date(originalDeletion.restore_until).toISOString(),
   };
   const restoreBody = { deletionId, revision: deletedRevision };
+  time = Date.parse(originalLocator.restoreUntil) - 1;
   const restored = await f.send(owner.bearer, 'POST', `/v1/publishedLogs/${first.id}:restore`, restoreBody, entryKey());
   expect(restored.status).toBe(200);
   expect((await restored.json()).publishedLog).toMatchObject({
@@ -185,6 +210,15 @@ test('native exact expiry purge keeps only permitted public structural identity 
   );
   const deadline = new Date(located.rows[0]!.restore_until).toISOString();
   time = Date.parse(deadline);
+  const expiredUndo = await f.send(
+    owner.bearer,
+    'POST',
+    `/v1/publishedLogs/${first.id}:restore`,
+    { deletionId: d3, revision: d3Revision },
+    entryKey(),
+  );
+  expect(expiredUndo.status).toBe(409);
+  expect(await expiredUndo.json()).toMatchObject({ code: 'published_log_restore_expired' });
   const atBoundary = await client.triggerSchedule(PUBLISHED_LOG_RETENTION_SCHEDULE);
   await atBoundary.getResult({ pollingIntervalMs: 20 });
   const minimized = await row(first.id);

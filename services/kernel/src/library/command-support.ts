@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import type { Bound } from '@rezics/bounds';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
@@ -19,11 +20,20 @@ import {
 import type { KernelClock } from '../clock.ts';
 import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 
 import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 
 export const WORK_STEP_DEADLINE_MS = 5_000;
+
+/** Bind a closed Library SQL declaration to the caller's existing accounting frame. */
+export function runLibraryBoundedStep<T>(operation: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {
+  const association = currentCommandWorkAssociation();
+  if (!association) return dispatch();
+  const { engineRequests: _engineRequests, ...work } = bound;
+  return association.run(operation, work, dispatch);
+}
 
 /** Shared deadline policy for native Library work steps outside actor commands. */
 export function workStepDeadline(): number {

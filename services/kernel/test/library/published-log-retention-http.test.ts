@@ -21,14 +21,19 @@ test('published reading log retracts immediately and Undo restores its original 
   });
   expect(started.status).toBe(201);
   const session = (await started.json()).progressSession;
+  const publishKey = entryKey();
   const made = await f.send(owner.bearer, 'POST', '/v1/publishedLogs', {
     sessionId: session.id,
     note: 'chosen public note',
-  });
+  }, publishKey);
   expect(made.status).toBe(201);
   const original = (await made.json()).publishedLog;
   const revision = Number(made.headers.get('Library-Published-Log-Revision'));
   expect(revision).toBeGreaterThan(0);
+  const publicDetail = await f.send('anonymous', 'GET', `/v1/publishedLogs/${original.id}`);
+  expect((await publicDetail.json()).publishedLog).toEqual(original);
+  const publicList = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
+  expect((await publicList.json()).publishedLogs).toContainEqual(original);
   const path = `/v1/publishedLogs/${original.id}`,
     key = entryKey();
   const removed = await f.send(owner.bearer, 'DELETE', `${path}?revision=${revision}`, undefined, key);
@@ -47,6 +52,17 @@ test('published reading log retracts immediately and Undo restores its original 
     revision: session.revision,
   });
   expect(completed.status).toBe(200);
+  const replayedPublish = await f.send(
+    owner.bearer,
+    'POST',
+    '/v1/publishedLogs',
+    { sessionId: session.id, note: 'chosen public note' },
+    publishKey,
+  );
+  expect(replayedPublish.status).toBe(201);
+  expect((await replayedPublish.json()).publishedLog).toEqual(original);
+  const replayedList = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
+  expect((await replayedList.json()).publishedLogs.filter((log: { id: string }) => log.id === original.id)).toHaveLength(1);
   const restored = await f.send(owner.bearer, 'POST', path + ':restore', { deletionId, revision: deletedRevision });
   expect(restored.status).toBe(200);
   const value = (await restored.json()).publishedLog;

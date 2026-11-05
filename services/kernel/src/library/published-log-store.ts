@@ -1,13 +1,16 @@
 import type { PoolClient } from 'pg';
 import type { ProgressState } from './progress.ts';
-import deleteLog from './published-log-delete.sql';
-import insertLog from './published-log-insert.sql';
 import readLog from './published-log-read.sql';
-import restoreLog from './published-log-restore.sql';
 import {
+  executePublishedLogDelete,
+  executePublishedLogInsert,
   publishedLogReadPlan,
   publishedLogLockPlan,
   publishedLogPagePlan,
+  publishedLogDeletePlan,
+  publishedLogInsertPlan,
+  publishedLogRestorePlan,
+  executePublishedLogRestore,
   executePublishedLogRead,
   executePublishedLogLock,
   executePublishedLogPage,
@@ -59,19 +62,22 @@ export async function insertPublishedLog(
   if (log.note !== null && log.note.length > 1000)
     throw new RangeError('A published log note is at most 1000 characters');
   return normalize(
-    await insertLog.run(queryClient(client), {
-      route,
-      log_id: log.id,
-      account_id: log.accountId,
-      session_id: log.sessionId,
-      subject_id: log.subjectId,
-      session_state: log.sessionState,
-      started_at: log.startedAt,
-      completed_at: log.completedAt,
-      note: log.note,
-      published_at: log.publishedAt,
-      transaction_id: log.transactionId,
-    }),
+    await executePublishedLogInsert(
+      queryClient(client),
+      publishedLogInsertPlan({
+        route,
+        log_id: log.id,
+        account_id: log.accountId,
+        session_id: log.sessionId,
+        subject_id: log.subjectId,
+        session_state: log.sessionState,
+        started_at: log.startedAt,
+        completed_at: log.completedAt,
+        note: log.note,
+        published_at: log.publishedAt,
+        transaction_id: log.transactionId,
+      }),
+    ),
   );
 }
 export async function readPublishedLog(
@@ -90,27 +96,33 @@ export async function lockPublishedLog(client: Client, route: number, accountId:
   return row ? normalize(row) : null;
 }
 export async function deletePublishedLog(client: Client, key: Episode, context: Context): Promise<boolean> {
-  const row = await deleteLog.run(queryClient(client), {
-    route: key.route,
-    account_id: key.accountId,
-    log_id: key.logId,
-    revision: key.revision,
-    deletion_id: key.deletionId,
-    time: context.time,
-    transaction_id: context.transactionId,
-  });
+  const row = await executePublishedLogDelete(
+    queryClient(client),
+    publishedLogDeletePlan({
+      route: key.route,
+      account_id: key.accountId,
+      log_id: key.logId,
+      revision: key.revision,
+      deletion_id: key.deletionId,
+      time: context.time,
+      transaction_id: context.transactionId,
+    }),
+  );
   return row !== null;
 }
 export async function restorePublishedLog(client: Client, key: Episode, context: Context): Promise<boolean> {
-  const row = await restoreLog.run(queryClient(client), {
-    route: key.route,
-    account_id: key.accountId,
-    log_id: key.logId,
-    revision: key.revision,
-    deletion_id: key.deletionId,
-    time: context.time,
-    transaction_id: context.transactionId,
-  });
+  const row = await executePublishedLogRestore(
+    queryClient(client),
+    publishedLogRestorePlan({
+      route: key.route,
+      account_id: key.accountId,
+      log_id: key.logId,
+      revision: key.revision,
+      deletion_id: key.deletionId,
+      time: context.time,
+      transaction_id: context.transactionId,
+    }),
+  );
   return row !== null;
 }
 export async function pagePublishedLogs(client: Client, route: number, accountId: string, page: PublishedLogPage) {
