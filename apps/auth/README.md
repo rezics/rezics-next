@@ -79,14 +79,13 @@ the exact automated actor/current operator and replaces the browser session. The
 selectors, guessing public-profile targets or preparing drafts. Native authentication, permission and consequence
 checks remain on their owning flows. An uncertain result is never presented as deletion or cleanup completion.
 
-Whole-call home cost: server rendering, task navigation and language changes perform zero home requests. Each mount,
-explicit read Retry or persisted `pageshow` performs one installed `POST /account-identity` with `{}` and a five-second
-deadline through response-body completion. The shared `privateAuthRead` races cancellation even when fetch or its body
-ignores abort; timeout becomes unavailable with explicit Retry. `pagehide` clears private data synchronously;
-source replacement retires the prior read and makes one fresh observation. Late results cannot restore old identity.
-There is no focus polling or automatic retry, inventory fan-out, command prepare, approval or write. Links perform no
-background preflight and accept no operands or workflow keys. Read Retry only refreshes the observation, focuses its
-current status and never navigates or starts authentication.
+Whole-call home cost: rendering, task navigation and language changes make zero home requests. Mount, explicit Retry
+or persisted `pageshow` makes one `POST /account-identity` with `{}`. The shared `privateAuthRead` races a single
+five-second deadline through headers and body even if transport ignores abort; timeout becomes unavailable with Retry.
+`pagehide` synchronously clears private data and aborts the old generation; source replacement makes one fresh read.
+Late results cannot restore identity or focus. There is no polling, automatic retry, inventory fan-out, command prepare,
+approval or write. Links have no background preflight, operands or workflow keys. Read Retry focuses current status
+without navigation or authentication.
 
 The local guide has phone/desktop and light/dark stories for current identity, missing email, loading, signed-out,
 denied, unavailable and current-read replacement. The mounted language chooser updates all guide copy without a reload

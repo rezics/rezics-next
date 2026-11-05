@@ -2,8 +2,14 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { loadAccountIdentity, type AccountIdentityResult } from '../src/account-identity';
 
 const originalFetch = globalThis.fetch;
-afterEach(() => { globalThis.fetch = originalFetch; });
-const identity = (accountId: string, email: string | null): AccountIdentityResult => ({ kind: 'ready', accountId, email });
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+const identity = (accountId: string, email: string | null): AccountIdentityResult => ({
+  kind: 'ready',
+  accountId,
+  email,
+});
 
 test('the admitted identity read keeps its closed result states and same-origin request', async () => {
   const replies = [
@@ -59,9 +65,10 @@ for (const phase of ['headers', 'body'] as const)
       const pending = loadAccountIdentity(new AbortController().signal);
       await Promise.resolve();
       const response = new Response();
-      response.json = () => body.promise;
+      const json = spyOn(response, 'json').mockImplementation(() => body.promise);
       if (phase === 'body') headers.resolve(response);
       await Promise.resolve();
+      expect(json).toHaveBeenCalledTimes(phase === 'body' ? 1 : 0);
       expect(timer).toHaveBeenCalledTimes(1);
       expect(timer.mock.calls[0]![1]).toBe(5000);
       (timer.mock.calls[0]![0] as () => void)();
