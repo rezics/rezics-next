@@ -2504,6 +2504,8 @@ hydrates only `schema:abstract`. Catalogue file and release-group pages keep vie
 `{ state, context, statementPropose }`; admitted quotation pages keep `{ kind }` plus correction `actions`.
 Decision: direct quotation routes carry Context; one-use receipts pin Context, caller generation and assertion across `via` returns; corrections use exact Subject/Context permission and stay unavailable when Global-only operation advice cannot serve the selected Context.
 
+Decision: Subject exploration carries `context ?? frame.context` into the canonical quotation address. A malformed Context or an observed Realm is explicitly unsupported at this entry and never becomes an implicit Global reading. The entry retains one same-locale, same-Subject public origin only when the local return parser accepts its route and the complete encoded address fits 2,048 characters and UTF-8 bytes; otherwise it labels exact return unsupported and offers a separately named fresh general quotation visit. The entry carries no selected quotation or assertion.
+
 The public `via` address remains a bounded path plus quote intent and a one-use marker whose public Context suffix is
 only a recovery address, because the shared Subject return validator does not admit Context inside a nested quotation
 address. A lost receipt restarts with a current read. Accept and adopt stay on their Context commands. A hidden speaker stays omitted from statements and related,
