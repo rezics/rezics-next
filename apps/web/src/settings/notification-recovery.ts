@@ -89,9 +89,14 @@ export function unavailableNotificationIntent(
   return Object.fromEntries(Object.entries(intent).filter(([kind]) => !admittedOptionalKind(page, kind)));
 }
 
+/** Restore defaults clears every optional override, so its draft is the catalogue default, not the values it replaces. */
 function projectOptionalIntent(known: Snapshot, intent: NotificationPatch | undefined): NotificationPreferences {
+  if (intent === null)
+    return Object.fromEntries(
+      known.page.kinds.filter((entry) => entry.optional).map((entry) => [entry.kind, entry.default]),
+    );
   const draft = { ...known.notifications };
-  if (intent === undefined || intent === null) return draft;
+  if (intent === undefined) return draft;
   for (const [kind, enabled] of Object.entries(intent)) {
     const policy = known.page.kinds.find((entry) => entry.kind === kind && entry.optional);
     if (policy) draft[kind] = enabled ?? policy.default;
