@@ -10484,5 +10484,8 @@
   "subject_synopsis_visit_invalid": "Diese Zusammenfassung konnte nicht geöffnet werden. Kehren Sie zur aktuellen Lesart des Werks zurück und wählen Sie die Zusammenfassung erneut aus.",
   "subject_synopsis_visit_changed": "Die angeforderte Zusammenfassung konnte nicht mit ihrer ursprünglichen Dokumentzuordnung geöffnet werden. Die aktuelle Lesart hat sich möglicherweise geändert oder ist nicht verfügbar.",
   "subject_synopsis_current_field": "Das aktuelle Global-Feld in einem neuen Besuch prüfen",
-  "subject_synopsis_return_changed": "Die zuvor ausgewählte Zusammenfassung wurde geändert oder ist nicht mehr verfügbar. Die aktuelle Lesart wird angezeigt."
+  "subject_synopsis_return_changed": "Die zuvor ausgewählte Zusammenfassung wurde geändert oder ist nicht mehr verfügbar. Die aktuelle Lesart wird angezeigt.",
+  "character_visit_context": "Ausgewählter Kontext: {context}",
+  "character_visit_unsupported": "Diese Character-Lesung ist verfügbar, aber Korrekturen und Vorschlagsprüfung unterstützen nur Global.",
+  "character_visit_global": "Eine separate Global-Character-Korrektur öffnen"
 }

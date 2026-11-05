@@ -10578,5 +10578,8 @@
   "subject_synopsis_visit_invalid": "このあらすじを開けませんでした。作品の現在の閲覧ページに戻り、あらすじを選び直してください。",
   "subject_synopsis_visit_changed": "元の文書との対応関係で、選択したあらすじを再表示できませんでした。現在の閲覧内容が変更されたか、利用できない可能性があります。",
   "subject_synopsis_current_field": "新しい閲覧として現在の Global フィールドを確認",
-  "subject_synopsis_return_changed": "以前選択したあらすじは変更されたか、利用できなくなりました。現在の閲覧内容を表示しています。"
+  "subject_synopsis_return_changed": "以前選択したあらすじは変更されたか、利用できなくなりました。現在の閲覧内容を表示しています。",
+  "character_visit_context": "選択中のコンテキスト: {context}",
+  "character_visit_unsupported": "このキャラクターの読み取りは利用できますが、修正と候補の確認はGlobalのみ対応しています。",
+  "character_visit_global": "Globalで別のキャラクター修正を開く"
 }

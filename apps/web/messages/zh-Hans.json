@@ -10491,5 +10491,8 @@
   "subject_synopsis_visit_invalid": "无法打开这次简介查看。请返回作品当前的阅读页面，重新选择简介。",
   "subject_synopsis_visit_changed": "无法按照原有的文档绑定重新打开所选简介。当前阅读可能已更改或不可用。",
   "subject_synopsis_current_field": "单独查看当前的 Global 字段",
-  "subject_synopsis_return_changed": "先前所选的简介已更改或不再提供。此处显示当前阅读。"
+  "subject_synopsis_return_changed": "先前所选的简介已更改或不再提供。此处显示当前阅读。",
+  "character_visit_context": "所选 Context：{context}",
+  "character_visit_unsupported": "此角色阅读可用，但更正和候选审核仅支持 Global。",
+  "character_visit_global": "另开 Global 角色更正"
 }

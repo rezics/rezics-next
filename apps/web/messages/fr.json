@@ -10484,5 +10484,8 @@
   "subject_synopsis_visit_invalid": "Cette visite du synopsis ne peut pas être ouverte. Revenez à la lecture actuelle de l’œuvre et sélectionnez à nouveau le synopsis.",
   "subject_synopsis_visit_changed": "Le synopsis demandé ne peut pas être rouvert avec le document associé à l’origine. La lecture actuelle a peut-être changé ou est indisponible.",
   "subject_synopsis_current_field": "Consulter le champ Global actuel dans une nouvelle visite",
-  "subject_synopsis_return_changed": "Le synopsis précédemment sélectionné a changé ou n’est plus disponible. La lecture actuelle est affichée."
+  "subject_synopsis_return_changed": "Le synopsis précédemment sélectionné a changé ou n’est plus disponible. La lecture actuelle est affichée.",
+  "character_visit_context": "Contexte sélectionné : {context}",
+  "character_visit_unsupported": "Cette lecture du personnage est disponible, mais la correction et l’examen des propositions ne sont disponibles que dans Global.",
+  "character_visit_global": "Ouvrir une correction distincte du personnage dans Global"
 }

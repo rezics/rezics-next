@@ -10578,5 +10578,8 @@
   "subject_synopsis_visit_invalid": "無法開啟這次簡介檢視。請返回作品目前的閱讀頁面，重新選擇簡介。",
   "subject_synopsis_visit_changed": "無法依照原本的文件綁定重新開啟所選簡介。目前的閱讀可能已變更或無法使用。",
   "subject_synopsis_current_field": "另行檢視目前的 Global 欄位",
-  "subject_synopsis_return_changed": "先前所選的簡介已變更或不再提供。此處顯示目前的閱讀。"
+  "subject_synopsis_return_changed": "先前所選的簡介已變更或不再提供。此處顯示目前的閱讀。",
+  "character_visit_context": "所選 Context：{context}",
+  "character_visit_unsupported": "此角色閱讀可用，但更正與候選審查僅支援 Global。",
+  "character_visit_global": "另開 Global 角色更正"
 }
