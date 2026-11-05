@@ -83,14 +83,18 @@ async function call(
   body?: unknown,
   headers: Record<string, string> = {},
 ): Promise<HttpResponse> {
+  const extra = { ...headers };
+  const idempotency = extra['Idempotency-Key'] ?? extra['idempotency-key'] ?? key();
+  delete extra['Idempotency-Key'];
+  delete extra['idempotency-key'];
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
         ...(persona ? { authorization: `Bearer ${real.bearer(persona)}` } : {}),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        'idempotency-key': headers['Idempotency-Key'] ?? key(),
-        ...headers,
+        'idempotency-key': idempotency,
+        ...extra,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -204,10 +208,10 @@ beforeAll(async () => {
   await real.grant(global, 'delegated', 'statement:propose');
   for (const action of ['subject:create', 'statement:propose', 'context:create'] as const)
     await real.grant(global, 'suspended', action);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(accounts.suspended),
-    accounts.suspended,
-  ]);
+  await admin.query(
+    "UPDATE access.account SET state='suspended', minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2",
+    [routeOf(accounts.suspended), accounts.suspended],
+  );
 }, 180_000);
 
 afterAll(async () => {
