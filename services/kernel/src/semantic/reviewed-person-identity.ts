@@ -27,38 +27,58 @@ export type ReviewedPersonEndpoint = {
 export type ReviewedPersonSource = Pick<ReviewedPersonEndpoint, 'source' | 'externalId'>;
 export type ReviewedPersonExpectation = { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
 
-export const ReviewedPersonEndpointSchema = t.Object({
-  subject: t.String({ format: 'uuid' }),
-  revision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-  securityRevision: t.String({ pattern: String.raw`^[1-9][0-9]*$(?![\s\S])` }),
-  source: t.Union([t.Literal('bangumi'), t.Literal('vndb')]),
-  externalId: t.String({ maxLength: 255 }),
-  claimTransactionId: t.String({ format: 'uuid' }),
-  property: t.Union([t.Literal('wdt:P6298'), t.Literal('wdt:P3180')]),
-  value: t.String({ maxLength: 255 }),
-}, { additionalProperties: false });
-export const ReviewedPersonExpectationSchema = t.Object({
-  endpoints: t.Tuple([ReviewedPersonEndpointSchema, ReviewedPersonEndpointSchema]),
-}, { additionalProperties: false });
+export const ReviewedPersonEndpointSchema = t.Object(
+  {
+    subject: t.String({ format: 'uuid' }),
+    revision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+    securityRevision: t.String({ pattern: String.raw`^[1-9][0-9]*$(?![\s\S])` }),
+    source: t.Union([t.Literal('bangumi'), t.Literal('vndb')]),
+    externalId: t.String({ maxLength: 255 }),
+    claimTransactionId: t.String({ format: 'uuid' }),
+    property: t.Union([t.Literal('wdt:P6298'), t.Literal('wdt:P3180')]),
+    value: t.String({ maxLength: 255 }),
+  },
+  { additionalProperties: false },
+);
+export const ReviewedPersonExpectationSchema = t.Object(
+  {
+    endpoints: t.Tuple([ReviewedPersonEndpointSchema, ReviewedPersonEndpointSchema]),
+  },
+  { additionalProperties: false },
+);
 
 const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 /** Cross-field validation at the public request boundary, before digesting the unchanged body. */
 export function isReviewedPersonSource(value: ReviewedPersonSource): boolean {
-  return bytes(value.externalId) <= 255 && (value.source === 'bangumi'
-    ? /^person:[1-9][0-9]*$(?![\s\S])/.test(value.externalId)
-    : /^s[1-9][0-9]*$(?![\s\S])/.test(value.externalId));
+  return (
+    bytes(value.externalId) <= 255 &&
+    (value.source === 'bangumi'
+      ? /^person:[1-9][0-9]*$(?![\s\S])/.test(value.externalId)
+      : /^s[1-9][0-9]*$(?![\s\S])/.test(value.externalId))
+  );
 }
 export function reviewedPersonIdentifier(source: ReviewedPersonSource) {
   return source.source === 'bangumi'
     ? { property: 'wdt:P6298' as const, value: source.externalId.slice(7) }
     : { property: 'wdt:P3180' as const, value: source.externalId };
 }
-export function validReviewedPersonExpectation(subjects: readonly string[], expected: ReviewedPersonExpectation): boolean {
-  return bytes(JSON.stringify(expected)) <= 4096 && expected.endpoints.every((endpoint, index) => {
-    const identifier = reviewedPersonIdentifier(endpoint);
-    return endpoint.subject === subjects[index] && isReviewedPersonSource(endpoint) &&
-      endpoint.property === identifier.property && endpoint.value === identifier.value && bytes(endpoint.value) <= 255;
-  });
+export function validReviewedPersonExpectation(
+  subjects: readonly string[],
+  expected: ReviewedPersonExpectation,
+): boolean {
+  return (
+    bytes(JSON.stringify(expected)) <= 4096 &&
+    expected.endpoints.every((endpoint, index) => {
+      const identifier = reviewedPersonIdentifier(endpoint);
+      return (
+        endpoint.subject === subjects[index] &&
+        isReviewedPersonSource(endpoint) &&
+        endpoint.property === identifier.property &&
+        endpoint.value === identifier.value &&
+        bytes(endpoint.value) <= 255
+      );
+    })
+  );
 }
 
 /** Existing native unavailable classification, with a stable internal reason for unsupported coverage. */
@@ -81,13 +101,18 @@ export async function observeReviewedPersonIdentity(
 ): Promise<ReviewedPersonEndpoint | null> {
   const route = routeOf(subject)!;
   const identity = reviewedPersonIdentifier(source);
-  if (!release.types['schema:Person']?.properties.includes(identity.property) ||
-      release.properties[identity.property]?.datatype !== 'external-id') return null;
+  if (
+    !release.types['schema:Person']?.properties.includes(identity.property) ||
+    release.properties[identity.property]?.datatype !== 'external-id'
+  )
+    return null;
   const visible = await readVisible.run(tx, { route, subject_id: subject });
   if (visible?.type !== 'schema:Person') return null;
   if ((await readRedirect.run(tx, { route, subject_id: subject }))?.target) return null;
   const claim = await readClaim.run(tx, {
-    route: tupleRoute(routeKey, source.source, source.externalId), source: source.source, external_id: source.externalId,
+    route: tupleRoute(routeKey, source.source, source.externalId),
+    source: source.source,
+    external_id: source.externalId,
   });
   if (claim?.subject !== subject) return null;
   const latest = await readLatestRevision.run(tx, { route, subject_id: subject });
@@ -95,20 +120,28 @@ export async function observeReviewedPersonIdentity(
   const selected = await effectiveGlobalSlotFacts(tx, subject, identity.property, undefined, lockSelected);
   // Hidden or missing selected rows cannot be filtered into an apparently agreeing identity.
   const basis = selected.basis as { selection: unknown[] } | unknown[] | null;
-  const count = Array.isArray(basis) ? basis.length : basis?.selection.length ?? 0;
+  const count = Array.isArray(basis) ? basis.length : (basis?.selection.length ?? 0);
   if (count === 0 || count > 32 || selected.facts.length !== count) return null;
   let strings = 0;
   for (const fact of selected.facts) {
     const statement = fact.body as { rank?: string; value: { type: string; content?: unknown } };
     if (statement.rank === 'deprecated') continue;
-    if (statement.value.type !== 'value' || typeof statement.value.content !== 'string' ||
-        statement.value.content !== identity.value) return null;
+    if (
+      statement.value.type !== 'value' ||
+      typeof statement.value.content !== 'string' ||
+      statement.value.content !== identity.value
+    )
+      return null;
     strings++;
   }
   if (!strings) return null;
   return {
-    subject, revision: latest.revision, securityRevision: latest.security_revision,
-    source: source.source, externalId: source.externalId, claimTransactionId: claim.transaction,
+    subject,
+    revision: latest.revision,
+    securityRevision: latest.security_revision,
+    source: source.source,
+    externalId: source.externalId,
+    claimTransactionId: claim.transaction,
     ...identity,
   };
 }
@@ -122,20 +155,30 @@ export async function guardReviewedPersonIdentity(
 ): Promise<void> {
   const partition = currentCommand(tx).partition;
   const keys = expected.endpoints.map((endpoint) => ({
-    endpoint, route: routeOf(endpoint.subject),
+    endpoint,
+    route: routeOf(endpoint.subject),
     claimRoute: tupleRoute(routeKey, endpoint.source, endpoint.externalId),
   }));
-  if (keys.some(({ route, claimRoute }) => route === null ||
-      partitionOf(route) !== partition || partitionOf(claimRoute) !== partition))
+  if (
+    keys.some(
+      ({ route, claimRoute }) =>
+        route === null || partitionOf(route) !== partition || partitionOf(claimRoute) !== partition,
+    )
+  )
     throw new ReviewedPersonGuardUnavailableError(partition);
   const home = await readPartition(tx, partition);
   if (home?.writeState !== 'active') throw new ReviewedPersonGuardUnavailableError(partition);
   // Lock exact positive keys only. Missing claims need no gap exclusion: no effect can follow.
-  for (const { endpoint, claimRoute } of [...keys].sort((a, b) =>
-    a.claimRoute - b.claimRoute || a.endpoint.source.localeCompare(b.endpoint.source) ||
-    a.endpoint.externalId.localeCompare(b.endpoint.externalId))) {
+  for (const { endpoint, claimRoute } of [...keys].sort(
+    (a, b) =>
+      a.claimRoute - b.claimRoute ||
+      a.endpoint.source.localeCompare(b.endpoint.source) ||
+      a.endpoint.externalId.localeCompare(b.endpoint.externalId),
+  )) {
     const claim = await lockClaim.run(tx, {
-      route: claimRoute, source: endpoint.source, external_id: endpoint.externalId,
+      route: claimRoute,
+      source: endpoint.source,
+      external_id: endpoint.externalId,
     });
     if (claim?.subject !== endpoint.subject || claim.transaction !== endpoint.claimTransactionId)
       throw new EditorialConflictError();
@@ -145,17 +188,27 @@ export async function guardReviewedPersonIdentity(
     if (!locked) throw new EditorialConflictError();
     // Installed closure incarnations require the concurrent admission owner; this native
     // first-effect path can establish only an unpending legacy self mapping.
-    if (locked.owner_epoch !== home.epoch || locked.group_owner_epoch !== home.epoch ||
-        locked.control_partition !== partition || locked.terminal !== endpoint.subject ||
-        locked.closure_state !== 'legacy' || locked.pending_job || locked.pending_epoch !== null)
+    if (
+      locked.owner_epoch !== home.epoch ||
+      locked.group_owner_epoch !== home.epoch ||
+      locked.control_partition !== partition ||
+      locked.terminal !== endpoint.subject ||
+      locked.closure_state !== 'legacy' ||
+      locked.pending_job ||
+      locked.pending_epoch !== null
+    )
       throw new ReviewedPersonGuardUnavailableError(partition);
   }
   for (const { endpoint } of keys) {
     const observed = await observeReviewedPersonIdentity(tx, endpoint.subject, endpoint, routeKey, release, true);
-    if (!observed || observed.revision !== endpoint.revision ||
-        observed.securityRevision !== endpoint.securityRevision ||
-        observed.claimTransactionId !== endpoint.claimTransactionId ||
-        observed.property !== endpoint.property || observed.value !== endpoint.value)
+    if (
+      !observed ||
+      observed.revision !== endpoint.revision ||
+      observed.securityRevision !== endpoint.securityRevision ||
+      observed.claimTransactionId !== endpoint.claimTransactionId ||
+      observed.property !== endpoint.property ||
+      observed.value !== endpoint.value
+    )
       throw new EditorialConflictError();
   }
 }

@@ -1,4 +1,8 @@
-import { observeReviewedPersonIdentity, type ReviewedPersonEndpoint, type ReviewedPersonSource } from './reviewed-person-identity.ts';
+import {
+  observeReviewedPersonIdentity,
+  type ReviewedPersonEndpoint,
+  type ReviewedPersonSource,
+} from './reviewed-person-identity.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import {
   beginSemanticRecordSourceSet,
@@ -717,9 +721,10 @@ export async function readSubject(
           if (!allowed) return null;
           return {
             freshnessRetry: false as const,
-            reviewedIdentity: summaries.reviewIdentity && subjectId === id && !terminal
-              ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
-              : null,
+            reviewedIdentity:
+              summaries.reviewIdentity && subjectId === id && !terminal
+                ? await observeReviewedPersonIdentity(client, subjectId, summaries.reviewIdentity, routeKey, release)
+                : null,
             rows,
             supported: await supportedFacts(client, routeKey, subjectId, [
               ...currentTerms(asFacts(rows)),

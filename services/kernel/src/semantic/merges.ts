@@ -53,8 +53,10 @@ export async function mergeSubjects(
     authorization: CommandAuthorization;
     deadline?: number;
     clock?: () => Date;
-  } & ({ expectedIdentity: ReviewedPersonExpectation; routeKey: Uint8Array } |
-       { expectedIdentity?: undefined; routeKey?: Uint8Array }),
+  } & (
+    | { expectedIdentity: ReviewedPersonExpectation; routeKey: Uint8Array }
+    | { expectedIdentity?: undefined; routeKey?: Uint8Array }
+  ),
 ) {
   const requestedSurvivor = options.survivor;
   if (requestedSurvivor !== undefined && !options.subjects.includes(requestedSurvivor))

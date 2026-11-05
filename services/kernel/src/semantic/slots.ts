@@ -248,8 +248,13 @@ export async function effectiveGlobalSlotFacts(
   const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
   if (lockSelected) {
     const locked = (await lockReviewedSelection.run(tx, {
-      route: routeOf(subject)!, subject_id: subject, slot_id: slot,
-      expanded: state.expanded, selection, context_id: GLOBAL_CONTEXT, head: state.adoption?.head ?? 0,
+      route: routeOf(subject)!,
+      subject_id: subject,
+      slot_id: slot,
+      expanded: state.expanded,
+      selection,
+      context_id: GLOBAL_CONTEXT,
+      head: state.adoption?.head ?? 0,
     }))!;
     if (state.expanded && (locked.candidates !== selection.length || locked.adoption !== (state.adoption ? 1 : 0)))
       throw new AccessUnavailableError('contention');

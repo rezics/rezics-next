@@ -1,4 +1,9 @@
-import { ReviewedPersonEndpointSchema, ReviewedPersonExpectationSchema, validReviewedPersonExpectation, isReviewedPersonSource } from '../reviewed-person-identity.ts';
+import {
+  ReviewedPersonEndpointSchema,
+  ReviewedPersonExpectationSchema,
+  validReviewedPersonExpectation,
+  isReviewedPersonSource,
+} from '../reviewed-person-identity.ts';
 import { correctTerms, termRevision, StaleTermsRevisionError } from '../terms.ts';
 import {
   changeStatementDisclosure,
@@ -947,8 +952,10 @@ function subjectRoutes(
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: t.Object(
-          { subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }),
-            expectedIdentity: t.Optional(ReviewedPersonExpectationSchema) },
+          {
+            subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }),
+            expectedIdentity: t.Optional(ReviewedPersonExpectationSchema),
+          },
           { additionalProperties: false },
         ),
         response: {
@@ -1008,7 +1015,9 @@ function subjectRoutes(
           const { component, ...result } = await admission.run('normal', job, () =>
             mergeSubjects(pool, {
               subjects: body.subjects,
-              ...(body.expectedIdentity ? { expectedIdentity: body.expectedIdentity, routeKey } : { expectedIdentity: undefined }),
+              ...(body.expectedIdentity
+                ? { expectedIdentity: body.expectedIdentity, routeKey }
+                : { expectedIdentity: undefined }),
               actor,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
               digest: requestDigest('subject.merge', actor, body),
@@ -1053,10 +1062,15 @@ function subjectRoutes(
         },
       },
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
-        const reviewIdentity = query.reviewIdentitySource !== undefined && query.reviewIdentityExternalId !== undefined
-          ? { source: query.reviewIdentitySource, externalId: query.reviewIdentityExternalId } : undefined;
-        if ((query.reviewIdentitySource !== undefined || query.reviewIdentityExternalId !== undefined) &&
-            (!reviewIdentity || !isReviewedPersonSource(reviewIdentity))) throw new ProblemError('invalid_request');
+        const reviewIdentity =
+          query.reviewIdentitySource !== undefined && query.reviewIdentityExternalId !== undefined
+            ? { source: query.reviewIdentitySource, externalId: query.reviewIdentityExternalId }
+            : undefined;
+        if (
+          (query.reviewIdentitySource !== undefined || query.reviewIdentityExternalId !== undefined) &&
+          (!reviewIdentity || !isReviewedPersonSource(reviewIdentity))
+        )
+          throw new ProblemError('invalid_request');
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const languages = languageRanges(request.headers.get('accept-language'), query.language);
@@ -1194,7 +1208,8 @@ function subjectRoutes(
           session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
-        set.headers['cache-control'] = query.includeViewerActions || documentRead || reviewIdentity ? 'private, no-store' : 'no-cache';
+        set.headers['cache-control'] =
+          query.includeViewerActions || documentRead || reviewIdentity ? 'private, no-store' : 'no-cache';
         return {
           subject: result.subject,
           ...(reviewIdentity ? { reviewedIdentity: result.reviewedIdentity ?? null } : {}),
