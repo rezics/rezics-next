@@ -3,6 +3,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { gameTypes } from './game-profile';
 import type { Release } from '@rezics/definitions';
 import { isFileOrGroupType } from './catalogue-file-profile/model';
+import { addonPublicCorrectionHref, type AddonPublicOrigin } from './addon-public-visit';
 import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
@@ -28,11 +29,19 @@ export const catalogueEntries = {
     label,
     work,
     locale,
-  }: Locale & { id?: string | undefined; label?: string | undefined; work?: string | undefined }): CatalogueEntry => ({
+    origin,
+  }: Locale & {
+    id?: string | undefined;
+    label?: string | undefined;
+    work?: string | undefined;
+    origin?: AddonPublicOrigin | undefined;
+  }): CatalogueEntry => ({
     group: id ? 'edit' : 'create',
     label: m.addon_title({}, options(locale)),
     href: id
-      ? `${subject({ id, label: label ?? '', locale })}/addon`
+      ? origin
+        ? addonPublicCorrectionHref(`${subject({ id, label: label ?? '', locale })}/addon`, origin)
+        : `${subject({ id, label: label ?? '', locale })}/addon`
       : `/${locale}/catalogue/addon${work ? `?work=${encodeURIComponent(work)}` : ''}`,
   }),
   create: ({ locale }: Locale): CatalogueEntry => ({

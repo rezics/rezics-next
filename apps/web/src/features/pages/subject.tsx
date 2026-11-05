@@ -796,7 +796,19 @@ export function SubjectPage({
           />
           <CreateSubjectEntry locale={locale} />
           {read.subject.type === 'wd:Q209163' ? (
-            <AddonProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            <AddonProfileEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              origin={{
+                subject: read.subject.id,
+                type: 'wd:Q209163',
+                context: page.context?.id ?? read.subject.context,
+                definition: page.catalogue?.digest ?? read.subject.release,
+                ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
+                returnHref: workReturn ?? '',
+              }}
+            />
           ) : (
             <AddonProfileEntry
               locale={locale}

@@ -1,3 +1,4 @@
+import type { AddonPublicVisit } from './addon-public-visit';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
@@ -16,8 +17,15 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 function AddonProfileSessionLive({
   locale,
   classificationHandoffToken,
+  visit,
+  address: outerAddress,
   ...address
-}: AddonAddress & { locale: string; classificationHandoffToken?: string }) {
+}: AddonAddress & {
+  locale: string;
+  classificationHandoffToken?: string;
+  visit?: AddonPublicVisit | undefined;
+  address?: string | undefined;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -27,6 +35,8 @@ function AddonProfileSessionLive({
   return (
     <AddonProfile
       {...address}
+      visit={visit}
+      address={outerAddress}
       locale={locale}
       session={state}
       search={search}
@@ -76,4 +86,7 @@ function AddonProfileSessionLive({
   );
 }
 
-export const AddonProfileSession = candidateSession(AddonProfileSessionLive);
+const AddonProfileCandidateSession = candidateSession(AddonProfileSessionLive);
+export function AddonProfileSession(props: Parameters<typeof AddonProfileSessionLive>[0]) {
+  return <AddonProfileCandidateSession {...props} address={JSON.stringify([props.visit, props.address])} />;
+}

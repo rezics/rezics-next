@@ -1,4 +1,9 @@
 {
+  "addon_origin_invalid": "Esta dirección de corrección no es válida. Vuelve a abrir la corrección desde la página pública actual del complemento.",
+  "addon_origin_unsupported": "El Context o Realm de esta lectura del complemento no es compatible con este editor exclusivo de Global. Vuelve a la página pública o abre expresamente una nueva corrección Global independiente.",
+  "addon_origin_changed": "El complemento o su Definition ha cambiado desde esta lectura pública. Vuelve a leer la página o abre una nueva corrección Global para obtener las indicaciones actuales.",
+  "addon_origin_return": "Volver a la página pública actual del complemento",
+  "addon_origin_global": "Abrir una corrección Global independiente",
   "literary_visit_invalid": "Esta dirección de corrección no es válida. Abre de nuevo la corrección desde la lectura literaria actual.",
   "literary_visit_global_only": "Este editor solo admite correcciones globales. Abre una visita global independiente para obtener las indicaciones actuales.",
   "literary_visit_return": "Volver a la lectura literaria",
