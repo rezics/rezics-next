@@ -450,6 +450,8 @@ Use one worker-width decision that excludes check waiters, with physical check s
 Ship with durable-follow-up, worker-autonomy, retry-recovery/held/leftovers, stop-custody, settlement-contention,
 orphan/adoption/landing, stale-exit, check-wake and capacity tests. Add crash-boundary cases before and after
 claim/launch/exit/next-attempt commits, and simultaneous continuation harvest/recovery; assert exactly one next action.
+Boundary decision: grouped-research rewriting, group/member persistence, dispatch recovery, archival and completion delivery belong to backlog-research.ts; backlog.ts retains sweep admission and capacity accounting.
+
 Target net deletion: 2,000–3,500 lines across job/tasks/store/backlog/manager continuation. Existing rows remain
 readable through an adapter; rollback stops new admission briefly and uses the recorded old/new schema version.
 No live process is killed or cleared just to switch implementations.
