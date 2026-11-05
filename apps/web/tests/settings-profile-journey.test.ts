@@ -194,6 +194,7 @@ test('matching current reads retain the original command until retry acknowledge
     initial(),
   );
   const submit = editor.submit.bind(editor);
+  const review = editor.review.bind(editor);
   editor.edit({ displayName: 'Submitted name' });
   await submit('profile');
   const original = editor.snapshot().attempt!;
@@ -201,12 +202,12 @@ test('matching current reads retain the original command until retry acknowledge
   editor.edit({ displayName: 'Later name' });
   editor.edit({ displayName: initial().displayName, biography: 'Later biography' });
   await editor.reload();
-  expect([reads, editor.snapshot().known?.biography, editor.snapshot().draft?.displayName, editor.snapshot().draft?.biography]).toEqual([
-    1,
-    'Another writer',
-    'Avery',
-    'Later biography',
-  ]);
+  expect([
+    reads,
+    editor.snapshot().known?.biography,
+    editor.snapshot().draft?.displayName,
+    editor.snapshot().draft?.biography,
+  ]).toEqual([1, 'Another writer', 'Avery', 'Later biography']);
   expect(editor.snapshot().attempt).toBe(original);
   expect([editor.snapshot().phase, editor.snapshot().acknowledged, profileNeedsNavigationDecision(editor.snapshot())]).toEqual([
     'uncertain',
@@ -215,6 +216,7 @@ test('matching current reads retain the original command until retry acknowledge
   ]);
   await submit('views');
   await submit('profile');
+  review();
   expect([attempts.length, reads, editor.snapshot().attempt]).toEqual([1, 1, original]);
 
   await editor.retry();
@@ -240,8 +242,13 @@ test('matching current reads retain the original command until retry acknowledge
     'Latest writer',
     'Latest native biography',
   ]);
-  expect([editor.snapshot().attempt, editor.snapshot().acknowledged, editor.snapshot().draft?.displayName,
-    editor.snapshot().draft?.biography, editor.snapshot().phase]).toEqual([
+  expect([
+    editor.snapshot().attempt,
+    editor.snapshot().acknowledged,
+    editor.snapshot().draft?.displayName,
+    editor.snapshot().draft?.biography,
+    editor.snapshot().phase,
+  ]).toEqual([
     null,
     false,
     'Avery',

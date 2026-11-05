@@ -353,22 +353,17 @@ export class ProfileEditor {
       const commandAcknowledged = acknowledged || this.state.acknowledged;
       const rebased = rebaseProfile(commandAcknowledged || confirmed ? attempt.after : attempt.before, draft, current);
       const nextDraft = this.preserveLaterEdits(rebased, draft);
-      const resolved = commandAcknowledged || confirmed;
       const hasDraftChanges = Object.keys(profileChanges(current, nextDraft)).length > 0;
       this.update({
         known: current,
         draft: nextDraft,
-        attempt: resolved ? null : attempt,
-        acknowledged: resolved ? false : this.state.acknowledged,
+        attempt: commandAcknowledged ? null : attempt,
+        acknowledged: commandAcknowledged ? false : this.state.acknowledged,
         phase: commandAcknowledged
           ? hasDraftChanges || !confirmed
             ? 'review'
             : 'saved'
-          : !resolved
-            ? 'uncertain'
-            : confirmed && !hasDraftChanges
-              ? 'saved'
-              : 'review',
+          : 'uncertain',
         failure: undefined,
         readAuthority: 'allowed',
         readStatus: undefined,
