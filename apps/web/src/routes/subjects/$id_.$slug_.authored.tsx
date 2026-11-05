@@ -44,8 +44,13 @@ const canonicalAuthored = createServerFn({ method: 'GET', strict: false })
     const values = search.getAll('via');
     const visit = synopsisVisit(values.length > 1 ? '' : values[0], data.id, data.locale);
     // An unsupported reading must never borrow anonymous Global labels for its canonical identity.
-    if (visit.kind === 'invalid' || (visit.kind === 'selected' &&
-      (visit.selection.realm || visit.selection.context !== candidateContext || search.get('property') !== SUMMARY_PROPERTY)))
+    if (
+      visit.kind === 'invalid' ||
+      (visit.kind === 'selected' &&
+        (visit.selection.realm ||
+          visit.selection.context !== candidateContext ||
+          search.get('property') !== SUMMARY_PROPERTY))
+    )
       return { id: data.id };
 
     const [{ kernelClient }, { loadSubject }] = await Promise.all([
@@ -87,8 +92,8 @@ function AuthoredRoute() {
   const location = useRouterState({ select: (state) => state.location });
   const values = new URLSearchParams(location.searchStr).getAll('via');
   const visit = synopsisVisit(values.length > 1 ? '' : values[0], id, locale);
-  const unsupported = visit.kind === 'selected' &&
-    (!!visit.selection.realm || visit.selection.context !== candidateContext);
+  const unsupported =
+    visit.kind === 'selected' && (!!visit.selection.realm || visit.selection.context !== candidateContext);
   const invalid = visit.kind === 'invalid' || (visit.kind === 'selected' && property !== SUMMARY_PROPERTY);
   const via = visit.kind === 'selected' || visit.kind === 'ordinary' ? visit.returnTo : undefined;
   const selectedVia = visit.kind === 'selected' ? via : undefined;
@@ -182,7 +187,15 @@ function AuthoredRoute() {
             !work?.live()
               ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
               : loadAuthoredReview({
-                  data: { id, property: field, candidate, cursor, session, via: selectedVia, expectedReader: work.reader },
+                  data: {
+                    id,
+                    property: field,
+                    candidate,
+                    cursor,
+                    session,
+                    via: selectedVia,
+                    expectedReader: work.reader,
+                  },
                   headers: csrfHeaders(),
                 }),
         }}
