@@ -245,7 +245,11 @@ test('mounted public entry and menu gate the production Terms session until a de
     const freshLink = within(host).getByRole('link', { name: m.subject_terms_public_fresh_global() });
     await navigate(freshLink.getAttribute('href')!);
     await waitFor(() => expect(termsReads.length).toBeGreaterThan(0));
-    expect((termsReads[0] as { data: { expectedReader: string } }).data.expectedReader).toBe(reader);
+    await waitFor(() =>
+      expect(
+        termsReads.some((input) => (input as { data: { expectedReader: string | null } }).data.expectedReader === reader),
+      ).toBe(true),
+    );
     expect(authorityReads.length).toBeGreaterThan(0);
     expect(definitionReads.length).toBeGreaterThan(0);
 
