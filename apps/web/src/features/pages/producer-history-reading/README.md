@@ -29,3 +29,7 @@ A correction captures the current row's index, holder, statement, slot and nativ
 rereads that origin; only an admitted render with the same exact occurrence can restore selection and focus.
 Otherwise the current heading is the recovery target. Navigation fences late callbacks through the existing reading
 lease. The delivered Organization context visit and deliberate Global-origin choice remain the route authority.
+
+The Producer admission composes the existing private-reader lease with exposure query revisions through the common
+observation store. Its synchronous predicate retires old callbacks before React remounts the visit, even when the
+replacement has equal data. Native continuation tokens are not session-cache observations and do not retire it.

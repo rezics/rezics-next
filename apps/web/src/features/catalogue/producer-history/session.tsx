@@ -9,6 +9,7 @@ import { candidateContext } from '../../../subject/candidates';
 import { relationTargetSearch } from '../relation-editor-search';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from '../relation-editor-actions';
 import { readSubjectProducerHistory } from './actions';
+import { ProducerHistoryAdmission } from '../../pages/producer-history-reading/admission';
 import { ProducerHistoryPage } from '../../pages/producer-history';
 import { catalogueEntries } from '../catalogue-entry';
 import { subjectHref } from '../../../subject/subject-href';
@@ -59,7 +60,8 @@ function ProducerHistorySessionLive({
   via?: string | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
-  const { state } = useSession();
+  const observed = useSession();
+  const { state } = observed;
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
@@ -68,27 +70,31 @@ function ProducerHistorySessionLive({
     return <ProducerHistoryOriginChoice id={id} locale={locale} returnTo={via} />;
   if (state !== 'signed-in') return <p>{state === 'signed-out' ? m.relation_sign_in() : m.candidate_loading()}</p>;
   return (
-    <ProducerHistoryPage
-      id={id}
-      locale={locale}
-      returnTo={via}
-      search={search}
-      transport={{
-        read: (stream, cursor, session) =>
-          readSubjectProducerHistory({
-            data: editorRequest({ id, stream, cursor, session }, editorWork),
-            headers: csrfHeaders(),
-          }),
-        relation: (holder) => ({
-          read: (slot, cursor, session) =>
-            readSubjectRelationEditor({
-              data: editorRequest({ id: holder, slot, cursor, session }, editorWork),
+    <ProducerHistoryAdmission observed={observed} address={`${id}:${locale}`}>
+      <ProducerHistoryPage
+        id={id}
+        locale={locale}
+        returnTo={via}
+        search={search}
+        transport={{
+          read: (stream, cursor, session) =>
+            readSubjectProducerHistory({
+              data: editorRequest({ id, stream, cursor, session }, editorWork),
               headers: csrfHeaders(),
             }),
-          propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-          confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        }),
-      }}
-    />
+          relation: (holder) => ({
+            read: (slot, cursor, session) =>
+              readSubjectRelationEditor({
+                data: editorRequest({ id: holder, slot, cursor, session }, editorWork),
+                headers: csrfHeaders(),
+              }),
+            propose: (data) =>
+              proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+            confirm: (data) =>
+              confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          }),
+        }}
+      />
+    </ProducerHistoryAdmission>
   );
 }
