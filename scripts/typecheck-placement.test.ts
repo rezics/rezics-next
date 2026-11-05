@@ -699,7 +699,7 @@ const failure = new Error('consumer failed');
 await assert.rejects(withThrowawayDatabase(async () => {
   await Promise.resolve();
   throw failure;
-}), error => error === failure);
+}, { analysis: false }), error => error === failure);
 assert.equal(process.env.DATABASE_URL, inherited.url);
 assert.equal(process.env.KERNEL_DATABASE_CONTAINER, inherited.container);
 // Disposable labelled volumes keep PostgreSQL off the checkout and off unreserved slice cache.
