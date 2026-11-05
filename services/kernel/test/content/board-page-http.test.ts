@@ -141,7 +141,17 @@ test.serial('the mounted opening page combines current Realm context and a discl
   const result = await world.call('GET', `/v1/boards/${boardId}/page`);
   expect(result.response.status).toBe(200);
   expect(Object.keys(result.value).sort()).toEqual(
-    ['board', 'pinRevision', 'pinnedThreads', 'threads', 'next', 'rankRefreshedAt', 'reactionsAsOf', 'viewer', 'actions'].sort(),
+    [
+      'board',
+      'pinRevision',
+      'pinnedThreads',
+      'threads',
+      'next',
+      'rankRefreshedAt',
+      'reactionsAsOf',
+      'viewer',
+      'actions',
+    ].sort(),
   );
   expect(result.value.board).toMatchObject({
     id: boardId,
@@ -176,67 +186,71 @@ test.serial('the mounted opening page combines current Realm context and a discl
   expect(invalid.value.code).toBe('invalid_request');
 });
 
-test.serial('opening and continuation carry the observed generation and reject pin ABA during hydration', async () => {
-  const conceptId = await world.subject('skos:Concept', world.schemeId);
-  const created = await world.board(conceptId);
-  expect(created.response.status).toBe(201);
-  const boardId = created.value.board.id as string;
-  const threads: string[] = [];
-  for (let index = 0; index < 22; index++) {
-    const createdThread = await world.checked('POST', '/v1/threads', {
-      boardId,
-      title: `Generation discussion ${index}`,
-      body: fromPlainText('An observed opening.'),
-      licence: 'MIT',
-      subjectIds: [],
-      visibility: 'published',
-    });
-    threads.push(createdThread.thread.id);
-  }
-  const pinPath = `/v1/boards/${boardId}/threads/${threads[0]}/pin`;
-  await world.checked('POST', pinPath, { pinned: true }, 200);
-  const path = `/v1/boards/${boardId}/page?sort=new`;
-  const initial = await world.call('GET', path);
-  expect(initial.response.status).toBe(200);
-  expect(initial.value.pinRevision).toBe('1');
-  expect(initial.value.pinnedThreads.map((card: any) => card.thread.id)).toEqual([threads[0]]);
-  expect(initial.value.threads).toHaveLength(20);
-  expect(initial.value.next).toBeString();
-  const continued = await world.call('GET', `${path}&cursor=${encodeURIComponent(initial.value.next)}`);
-  expect(continued.response.status).toBe(200);
-  expect(continued.value.pinRevision).toBe(initial.value.pinRevision);
-  expect(continued.value.pinnedThreads).toEqual([]);
-  expect(continued.value.threads).toHaveLength(1);
+test.serial(
+  'opening and continuation carry the observed generation and reject pin ABA during hydration',
+  async () => {
+    const conceptId = await world.subject('skos:Concept', world.schemeId);
+    const created = await world.board(conceptId);
+    expect(created.response.status).toBe(201);
+    const boardId = created.value.board.id as string;
+    const threads: string[] = [];
+    for (let index = 0; index < 22; index++) {
+      const createdThread = await world.checked('POST', '/v1/threads', {
+        boardId,
+        title: `Generation discussion ${index}`,
+        body: fromPlainText('An observed opening.'),
+        licence: 'MIT',
+        subjectIds: [],
+        visibility: 'published',
+      });
+      threads.push(createdThread.thread.id);
+    }
+    const pinPath = `/v1/boards/${boardId}/threads/${threads[0]}/pin`;
+    await world.checked('POST', pinPath, { pinned: true }, 200);
+    const path = `/v1/boards/${boardId}/page?sort=new`;
+    const initial = await world.call('GET', path);
+    expect(initial.response.status).toBe(200);
+    expect(initial.value.pinRevision).toBe('1');
+    expect(initial.value.pinnedThreads.map((card: any) => card.thread.id)).toEqual([threads[0]]);
+    expect(initial.value.threads).toHaveLength(20);
+    expect(initial.value.next).toBeString();
+    const continued = await world.call('GET', `${path}&cursor=${encodeURIComponent(initial.value.next)}`);
+    expect(continued.response.status).toBe(200);
+    expect(continued.value.pinRevision).toBe(initial.value.pinRevision);
+    expect(continued.value.pinnedThreads).toEqual([]);
+    expect(continued.value.threads).toHaveLength(1);
 
-  const access = world.kernel.testAccess;
-  const deadline = Date.now() + 60_000;
-  const actor = await access.authenticate(world.owner.bearer, { pool: world.db.pool, deadline });
-  let changed = false;
-  const read = createBoardPageReader({
-    pool: world.db.pool,
-    access,
-    tokens: testTokens(),
-    routeKey: world.routeKey,
-    realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
-    async readConversationActivityBatch() {
-      if (!changed) {
-        changed = true;
-        await world.checked('POST', pinPath, { pinned: false }, 200);
-        await world.checked('POST', pinPath, { pinned: true }, 200);
-      }
-      return { items: [], anchors: [] };
-    },
-  });
-  // The only pin returns to the same position, leaving the visible page identical.
-  await expect(read(boardId, { actor, deadline }, { sort: 'new' })).rejects.toBeInstanceOf(BoardOpeningChangedError);
-  const obsolete = await world.call('GET', `${path}&cursor=${encodeURIComponent(initial.value.next)}`);
-  expect(obsolete.response.status).toBe(400);
-  expect(obsolete.value.code).toBe('invalid_cursor');
-  const restarted = await world.call('GET', path);
-  expect(restarted.response.status).toBe(200);
-  expect(restarted.value.pinRevision).toBe('3');
-  changed = false;
-  await expect(
-    read(boardId, { actor, deadline }, { sort: 'new', cursor: restarted.value.next }),
-  ).rejects.toThrow('Invalid content cursor');
-}, 120_000);
+    const access = world.kernel.testAccess;
+    const deadline = Date.now() + 60_000;
+    const actor = await access.authenticate(world.owner.bearer, { pool: world.db.pool, deadline });
+    let changed = false;
+    const read = createBoardPageReader({
+      pool: world.db.pool,
+      access,
+      tokens: testTokens(),
+      routeKey: world.routeKey,
+      realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+      async readConversationActivityBatch() {
+        if (!changed) {
+          changed = true;
+          await world.checked('POST', pinPath, { pinned: false }, 200);
+          await world.checked('POST', pinPath, { pinned: true }, 200);
+        }
+        return { items: [], anchors: [] };
+      },
+    });
+    // The only pin returns to the same position, leaving the visible page identical.
+    await expect(read(boardId, { actor, deadline }, { sort: 'new' })).rejects.toBeInstanceOf(BoardOpeningChangedError);
+    const obsolete = await world.call('GET', `${path}&cursor=${encodeURIComponent(initial.value.next)}`);
+    expect(obsolete.response.status).toBe(400);
+    expect(obsolete.value.code).toBe('invalid_cursor');
+    const restarted = await world.call('GET', path);
+    expect(restarted.response.status).toBe(200);
+    expect(restarted.value.pinRevision).toBe('3');
+    changed = false;
+    await expect(read(boardId, { actor, deadline }, { sort: 'new', cursor: restarted.value.next })).rejects.toThrow(
+      'Invalid content cursor',
+    );
+  },
+  120_000,
+);
