@@ -1,9 +1,8 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProfilePreview } from '../src/settings/profile-preview';
-import { ProfileCard } from '../src/settings/profile';
 import { ProfileEditor } from '../src/settings/profile-write';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
@@ -115,6 +114,8 @@ test('open, update, close and reopen the local draft without submitting or chang
 });
 
 test('matching current fields do not mark the local preview as saved while the original is unacknowledged', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { ProfileCard } = await import('../src/settings/profile');
   const initial: ProfileValues = {
     accountId: '019a0000-0000-7000-8000-000000000001',
     kind: 'actor',
