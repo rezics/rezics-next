@@ -273,8 +273,21 @@ async function sendStart(page: Page, address: string) {
 async function sendComplete(page: Page, value = newPassword) {
   const controls = await completeForm(page);
   await controls.password.fill(value);
+  await controls.submit.waitFor({ state: 'visible' });
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/recovery/complete'),
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/recovery/complete').catch(async (cause) => {
+      throw new Error(
+        `Recovery completion response missing: ${JSON.stringify({
+          url: page.url(),
+          submitEnabled: await controls.submit.isEnabled(),
+          passwordLength: (await controls.password.inputValue()).length,
+          alerts: await page.getByRole('alert').allTextContents(),
+          statuses: await page.getByRole('status').allTextContents(),
+          routes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+        })}`,
+        { cause },
+      );
+    }),
     controls.submit.click(),
   ]);
   return controls;
@@ -346,7 +359,7 @@ test(
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       try {
-        await sendComplete(page);
+        await sendComplete(page, newPassword);
         await page.waitForURL(`${origin}/login`);
         await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
         expect(await page.getByLabel(/email/i).isEditable()).toBe(true);
