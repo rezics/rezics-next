@@ -1372,7 +1372,7 @@ exec "${realGit}" "$@"
       sourcePresence: 'present',
       basePresence: 'present',
       precondition: 'satisfied',
-    });
+    } as const);
     expect(captured.context.dependencies).toEqual({
       required: 9,
       included: 9,
