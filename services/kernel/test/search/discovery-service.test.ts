@@ -8,6 +8,7 @@ import type { DiscoveryKey, DiscoveryReadContext } from '../../src/search/discov
 import type { PublicDiscoveryConsumerOperations } from '../../src/search/public-filter-consumer-contract.ts';
 import { installPublicFilterCoveragePage } from '../../src/search/public-filter-coverage-page.ts';
 import { admitDiscoveryPage, discoveryHttpPage } from '../../src/search/discovery-http.ts';
+import type { CollectionDiscoveryQuery } from '../../src/library/collection-discovery-source.ts';
 
 // Lifecycle regressions, authored without running the deferred native campaign. The
 // installed opener is an explicit unit double; it is not Source population evidence.
@@ -31,6 +32,7 @@ const cost = {
 
 function fixture(withCandidate = false) {
   const calls: string[] = [];
+  const collectionQueries: (CollectionDiscoveryQuery | undefined)[] = [];
   const consumer = {
     physicalTarget: 'discovery-unit',
     incarnation: 'incarnation',
@@ -126,6 +128,7 @@ function fixture(withCandidate = false) {
       },
       async hydrate(ids, readContext) {
         calls.push('hydrate');
+        collectionQueries.push(readContext.collectionQuery);
         if (readContext.textQuery !== undefined)
           calls.push(readContext.currentTextMatches ? 'text-check-bound' : 'text-check-missing');
         return new Map(
@@ -148,6 +151,19 @@ function fixture(withCandidate = false) {
       },
       labels: { en: 'Accounts' },
       icon: 'account',
+    },
+    ownerAdapters: {
+      collection: {
+        readiness: 'ready',
+        adapter: {
+          owner: 'commerce',
+          kind: 'collection',
+          metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'collection' },
+          readCurrent: unused,
+        },
+      },
+      review: { readiness: 'unavailable' },
+      space: { readiness: 'unavailable' },
     },
   });
   // These dependencies are unreachable in the empty native-window/unit owner path.
@@ -177,6 +193,7 @@ function fixture(withCandidate = false) {
   const request = { representation: 'discovery-v1' as const, sort: 'id' as const, limit: 1 };
   return {
     calls,
+    collectionQueries,
     context,
     config,
     request,
@@ -191,6 +208,31 @@ function fixture(withCandidate = false) {
     },
   };
 }
+
+test('ordinary discovery does not inherit a directory selection from another read', async () => {
+  const f = fixture(true);
+  await createDiscoverySearch(f.config)('anonymous', f.request, {
+    ...f.context,
+    collectionQuery: { subjectId: missing, popularity: true, order: 'popularity' },
+  });
+  expect(f.collectionQueries).toEqual([undefined]);
+});
+
+test('a current Collection card reader alone cannot enable directory ordering', async () => {
+  const f = fixture();
+  await expect(
+    createDiscoverySearch(f.config)(
+      'anonymous',
+      {
+        representation: 'discovery-v1',
+        filter: { and: [{ kind: { in: ['collection'] } }] },
+        collectionDirectory: { order: 'recent' },
+      },
+      f.context,
+    ),
+  ).rejects.toMatchObject({ code: 'index_not_ready' });
+  expect(f.calls).toEqual([]);
+});
 
 test('retained projection and positional primary batch precede the same native final and close', async () => {
   const f = fixture();
