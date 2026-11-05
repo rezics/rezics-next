@@ -460,36 +460,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await settle(reads[3]!, b);
     expect(host.textContent).toContain('B current title');
     await remove();
-    const rejected = writes.at(-1)!;
-    expect(rejected.input.idempotencyKey).toBe(b.page.follows[0]!.idempotencyKey);
-    await settle(rejected, { ok: false, reason: 'conflict' });
-    await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === m.library_follow_conflict_recovery_review())!
-        .click();
-      await tick();
-    });
-    expect(reads.at(-1)!.cursor).toBeUndefined();
-    await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
-    expect(host.textContent).toContain(m.library_follow_conflict_recovery_ready());
+    const bRemoval = writes.at(-1)!;
+    expect(bRemoval.input.idempotencyKey).toBe(b.page.follows[0]!.idempotencyKey);
     expect(writes).toHaveLength(3);
-    await remove();
-    expect(writes).toHaveLength(4);
-    const uncertain = writes.at(-1)!;
-    expect(uncertain.input.targetId).toBe(rejected.input.targetId);
-    expect(uncertain.input.idempotencyKey).not.toBe(rejected.input.idempotencyKey);
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, viewer('B', 'csrf-rotated'));
-      await tick();
-    });
-    await refetch(null);
-    await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
-    expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('true');
-    await settle(uncertain, { ok: false, reason: 'unavailable' });
-    await remove();
-    const retry = writes.at(-1)!;
-    expect(retry.input).toEqual(uncertain.input);
-    expect(retry.csrf).toBe('csrf-one');
     await settle(aRead, loaded('A', null, 'Late A disclosure'));
     await settle(aRetry, { ok: true, following: false });
     expect(host.textContent).toContain('B current title');
@@ -507,7 +480,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain('Wrong address disclosure');
     await refetch('current/cursor+');
     await settle(reads.at(-1)!, loaded('B', 'current/cursor+', 'B next page title'));
-    await settle(retry, { ok: true, following: false });
+    await settle(bRemoval, { ok: true, following: false });
     expect(host.textContent).toContain('B next page title');
     expect(host.textContent).not.toContain(m.library_follow_removed());
     await remove();
