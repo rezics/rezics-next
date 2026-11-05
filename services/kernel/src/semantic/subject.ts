@@ -1,4 +1,10 @@
 import {
+  selectedSynopsisFact,
+  redactSynopsisFact,
+  type SelectedSynopsisInput,
+  type SelectedSynopsisResult,
+} from './selected-synopsis.ts';
+import {
   observeReviewedPersonIdentity,
   type ReviewedPersonEndpoint,
   type ReviewedPersonSource,
@@ -503,6 +509,9 @@ async function disclosedTargets(
     );
   };
   const pending = [...new Set(supported.flatMap((row) => targets(row.fact)))];
+  // The Subject transport already accepts at most 256 related identities. Enforce
+  // that boundary before preparing Access evidence at any of their homes.
+  if (pending.length > BATCH_LIMIT) throw new TypeError('A related read accepts at most 256 ids');
   if (!pending.length) return supported;
   // No owner is checked out while Access prepares evidence, including on a max-one pool.
   const client = { query: pool.query.bind(pool) };
@@ -533,6 +542,7 @@ export async function readSubject(
   routeKey: Uint8Array,
   summaries: {
     reviewIdentity?: ReviewedPersonSource;
+    selectedSynopsis?: { input: SelectedSynopsisInput; admit: () => Promise<boolean> };
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
     seen?: readonly { partition: number; epoch: number; position: bigint }[];
@@ -542,6 +552,7 @@ export async function readSubject(
     readAs?: <T>(read: () => Promise<T>) => Promise<T>;
   } = {},
 ): Promise<{
+  selectedSynopsis?: SelectedSynopsisResult;
   reviewedIdentity?: ReviewedPersonEndpoint | null;
   subject: Item;
   account: { id: string } | null;
@@ -842,7 +853,81 @@ export async function readSubject(
     }
     requireAccessDeadline(deadline);
   }
+  let selectedSynopsis: SelectedSynopsisResult | undefined;
+  if (summaries.selectedSynopsis) {
+    const { input, admit } = summaries.selectedSynopsis;
+    selectedSynopsis = { kind: 'changed' };
+    if (context !== GLOBAL_CONTEXT || input.context !== GLOBAL_CONTEXT || input.realm) {
+      selectedSynopsis = { kind: 'unsupported' };
+    } else {
+      const fact =
+        input.pageRelease && input.pageRelease !== active?.digest ? undefined : selectedSynopsisFact(subject, input);
+      if (fact && (await admit())) {
+        // Content has released every home before this final authoritative Semantic pass.
+        await refreshStatementReaderAuthorization();
+        const check = summaries.prepareAuthorize ? await summaries.prepareAuthorize(id) : authorize;
+        const pageRelease = input.pageRelease ? await activeRelease(pool) : undefined;
+        const final = await withReadTransaction(
+          pool,
+          async (client) => {
+            if (input.pageRelease && pageRelease?.digest !== input.pageRelease) return null;
+            const identity = await readSubjectIdentity.run(client, {
+              route,
+              subject_id: id,
+              partition_no: partitionOf(route),
+            });
+            if (
+              !identity ||
+              identity.visibility !== 'visible' ||
+              identity.redirect ||
+              !(await check(client)) ||
+              identity.revision !== rows[0]!.revision ||
+              BigInt(identity.securityRevision) !== BigInt(rows[0]!.security_revision)
+            )
+              return null;
+            const stored = await getRelease(client, rows[0]!.release);
+            if (!stored) throw new Error('Subject revision release is missing');
+            const layer = await layeredRelease(client, { digest: rows[0]!.release, release: stored }, context);
+            if (layer.digest !== input.release) return null;
+            const slot = await slotView(client, id, 'schema:abstract', context, defaults);
+            return supportedFacts(client, routeKey, id, slot.facts);
+          },
+          deadline,
+        );
+        if (final) {
+          const current = await disclosedTargets(pool, release, final, summaries.authorize);
+          const admitted = resolveItem(
+            id,
+            current.map((entry) => entry.fact),
+            subject.type,
+            factDataTypes(
+              release,
+              current.map((entry) => entry.fact),
+            ),
+            {
+              revision: subject.revision,
+              release: subject.release,
+              context,
+              resolution: {},
+              relationCounts: {},
+            },
+          );
+          const currentFact = selectedSynopsisFact(admitted, input);
+          if (currentFact && JSON.stringify(currentFact) === JSON.stringify(fact))
+            selectedSynopsis = {
+              kind: 'matched',
+              fact: redactSynopsisFact(currentFact),
+              context,
+              release: subject.release,
+            };
+        }
+      } else if (fact) selectedSynopsis = { kind: 'missing' };
+    }
+    if (Buffer.byteLength(JSON.stringify({ input, selectedSynopsis }), 'utf8') > 262144)
+      selectedSynopsis = { kind: 'unavailable' };
+  }
   return {
+    ...(selectedSynopsis ? { selectedSynopsis } : {}),
     ...(summaries.reviewIdentity ? { reviewedIdentity: snapshot.reviewedIdentity } : {}),
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
     summary,

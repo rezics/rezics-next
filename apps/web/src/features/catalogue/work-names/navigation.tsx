@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefCallback } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../../../paraglide/messages.js';
-import { subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
+import { subjectVisitReturn, summaryReadingReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import type { WorkName, WorkNameGroup } from './model';
 
 export const NAMES_RETURN_BYTES = 8192;
@@ -351,7 +351,7 @@ export function NamesTermsReturn({ id, locale, via }: { id: string; locale: stri
   );
 }
 
-/** Transfer only the closed history value; modified activation and new tabs use the real href. */
+/** Transfer closed history state; synopsis links keep private return operands out of the DOM href. */
 export function NamesReturnAnchor({
   href,
   locale,
@@ -364,9 +364,12 @@ export function NamesReturnAnchor({
   children: ReactNode;
 }) {
   const router = useRouter({ warn: false });
+  const destination = new URL(href, 'https://rezics.invalid');
+  const synopsis = summaryReadingReturn(destination.hash);
+  const publicHref = synopsis ? `${destination.pathname}${destination.search}#subject-summary-reading` : href;
   return (
     <a
-      href={href}
+      href={publicHref}
       className={className}
       onClick={(event) => {
         if (
@@ -377,9 +380,14 @@ export function NamesReturnAnchor({
           event.shiftKey ||
           event.altKey ||
           subjectVisitReturn(href, locale) !== href ||
-          !href.endsWith('#supplied-names')
+          (!synopsis && !href.endsWith('#supplied-names'))
         )
           return;
+        if (synopsis) {
+          event.preventDefault();
+          void router.navigate({ to: href as never });
+          return;
+        }
         const saved = namesReturnFromHistory(router.history.location.state, locale);
         event.preventDefault();
         void router.navigate({

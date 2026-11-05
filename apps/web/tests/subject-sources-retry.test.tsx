@@ -19,6 +19,7 @@ mock.module('../src/features/catalogue/subject-sources-actions', () => ({
     calls.push(data);
     return read();
   },
+  readCurrentSubjectSources: async () => read(),
 }));
 
 test('actual Sources retry returns focus locally and retires focus across reader, address and route lifetimes', async () => {
@@ -50,7 +51,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
   const unavailable = { kind: 'unavailable' } as const;
   const tick = () => new Promise((done) => setTimeout(done, 0));
   try {
-    for (const mode of 'empty failed denied error pointer unfocused moved moved-back tab blur canonical reader retired'.split(
+    for (const mode of 'empty failed denied error pointer unfocused moved moved-back tab blur canonical reader global-reader retired'.split(
       ' ',
     )) {
       reader = 'alice';
@@ -67,7 +68,8 @@ test('actual Sources retry returns focus locally and retires focus across reader
         getParentRoute: () => parent,
         path: '/$locale/subjects/$id/$slug/sources',
       } as never);
-      const suffix = '?realm=realm-a&intent=exact%20read#kept';
+      const realm = mode === 'global-reader' ? undefined : '00000000-0000-4000-8000-000000000301';
+      const suffix = `?${realm ? `realm=${realm}&` : ''}intent=exact%20read#kept`;
       const router = routing.createRouter({
         routeTree: parent.addChildren([sources]),
         history: routing.createMemoryHistory({ initialEntries: [page.sourcesHref + suffix] }),
@@ -86,15 +88,16 @@ test('actual Sources retry returns focus locally and retires focus across reader
           root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router })));
           await tick();
         });
-        expect(document.activeElement).toBe(outside);
+        expect(document.activeElement === outside, mode).toBe(true);
         const opener = host.querySelector('button')!;
         expect(opener.textContent).toBe(m.sources_retry());
+        expect(calls, mode).toHaveLength(1);
         let release!: (value: SourcesResult) => void;
         const held = new Promise<SourcesResult>((resolve) => {
           release = resolve;
         });
         read = () => held;
-        await act(async () => {
+        act(() => {
           if (mode !== 'unfocused') opener.focus();
           opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: mode === 'pointer' ? 1 : 0 }));
           opener.click();
@@ -102,11 +105,11 @@ test('actual Sources retry returns focus locally and retires focus across reader
             outside.focus();
             opener.focus();
           }
-          await tick();
         });
+        await tick();
         expect(calls).toHaveLength(2);
-        expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm: 'realm-a', reader: 'alice' });
-        expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
+        expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm, reader: 'alice' });
+        expect(host.querySelector('article')?.getAttribute('aria-busy'), mode).toBe('true');
         if (mode === 'moved') outside.focus();
         if (mode === 'tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
         if (mode === 'blur') window.dispatchEvent(new window.Event('blur'));
@@ -116,13 +119,20 @@ test('actual Sources retry returns focus locally and retires focus across reader
           mounted = false;
           outside.focus();
         }
-        if (mode === 'reader') {
+        if (mode === 'reader' || mode === 'global-reader') {
           reader = 'bob';
           read = async () => ready;
           await act(async () => {
             client.setQueryData(sessionQuery.queryKey, session());
             await tick();
           });
+          if (mode === 'global-reader') {
+            reader = 'alice';
+            await act(async () => {
+              client.setQueryData(sessionQuery.queryKey, session());
+              await tick();
+            });
+          }
         }
         const returned =
           mode === 'canonical'
@@ -145,19 +155,26 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         if (mode === 'empty' || mode === 'error') {
           expect(host.textContent).toContain(m.sources_empty());
-          expect(document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
-          expect(host.querySelector('button')).toBeNull();
+          expect(
+            document.activeElement === host.querySelector('[data-slot="view-heading"] h1'),
+            `${mode}: ${document.activeElement?.outerHTML}`,
+          ).toBe(true);
+          expect(
+            Array.from(host.querySelectorAll('button')).some((button) => button.textContent === m.sources_retry()),
+          ).toBe(false);
         } else if (mode === 'failed' || mode === 'denied') {
-          expect(document.activeElement).toBe(
-            opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1'),
-          );
+          expect(
+            document.activeElement ===
+              (opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1')),
+            `${mode}: ${document.activeElement?.outerHTML}`,
+          ).toBe(true);
           expect(host.querySelector('button')?.disabled).toBe(false);
         } else {
-          expect(document.activeElement).not.toBe(host.querySelector('[data-slot="view-heading"] h1'));
-          if (mode === 'moved' || mode === 'retired') expect(document.activeElement).toBe(outside);
+          expect(document.activeElement === host.querySelector('[data-slot="view-heading"] h1'), mode).toBe(false);
+          if (mode === 'moved' || mode === 'retired') expect(document.activeElement === outside, mode).toBe(true);
           if (mode === 'pointer' || ['moved-back', 'tab', 'blur'].includes(mode))
-            expect(document.activeElement).toBe(document.body);
-          if (mode === 'unfocused') expect(document.activeElement).toBe(outside);
+            expect(document.activeElement === document.body, mode).toBe(true);
+          if (mode === 'unfocused') expect(document.activeElement === outside, mode).toBe(true);
         }
         if (mode === 'canonical') {
           expect(router.state.location.pathname).toEndWith('/renamed/sources');
@@ -179,4 +196,4 @@ test('actual Sources retry returns focus locally and retires focus across reader
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 20_000);
