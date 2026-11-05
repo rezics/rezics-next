@@ -226,7 +226,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   const selectedRead = (signal?: AbortSignal) =>
     loadThreadPage(
       client,
-      new Request('https://web.test/', { signal }),
+      new Request('https://web.test/', { signal: signal ?? null }),
       {},
       { id: threadId, post: replyId },
       { sitekey: '', scriptUrl: '' },
