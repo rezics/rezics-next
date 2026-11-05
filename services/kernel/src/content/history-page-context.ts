@@ -616,7 +616,7 @@ export async function readContentHistoryPage(
       retryable: mediaState === 'unavailable',
       items: imageItems,
     },
-    actions,
+    actions: { ...actions, references: [...actions.references] },
     navigation: {
       exact: selected.posts.map((post) => ({ postId: post.id, revisionId: post.revisionId })),
       compareToHead: selected.posts.flatMap((post) =>
