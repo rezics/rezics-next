@@ -68,6 +68,9 @@ export function developmentMediaHandler(token: string) {
       headers.set('content-length', String(body.byteLength));
       headers.set('content-range', `bytes ${start}-${end}/${bytes.byteLength}`);
     }
-    return new Response(request.method === 'HEAD' ? null : body, { status: body === bytes ? 200 : 206, headers });
+    return new Response(request.method === 'HEAD' ? null : body.slice().buffer, {
+      status: body === bytes ? 200 : 206,
+      headers,
+    });
   };
 }
