@@ -113,10 +113,10 @@ export class MineCollectionsWindowsVisit {
       return;
     }
 
-    const movedLocation = this.locationKey !== undefined && locationKey !== undefined && this.locationKey !== locationKey;
+    const movedLocation =
+      this.locationKey !== undefined && locationKey !== undefined && this.locationKey !== locationKey;
     const expectedMovement = this.snapshot.movement?.target === cursor;
-    const expectedLayout =
-      this.layoutTransition?.cursor === cursor && this.layoutTransition.layout === layout;
+    const expectedLayout = this.layoutTransition?.cursor === cursor && this.layoutTransition.layout === layout;
     const unexpectedAddress =
       (movedLocation && !expectedMovement && !expectedLayout) ||
       (!sameCursor(this.observedCursor ?? null, cursor) && !expectedMovement && !expectedLayout) ||
@@ -149,10 +149,7 @@ export class MineCollectionsWindowsVisit {
       !sameCursor(this.snapshot.coordinates.at(-1) ?? null, source)
     )
       return false;
-    if (
-      action === 'previous' &&
-      (this.snapshot.coordinates.length < 2 || this.snapshot.coordinates.at(-2) !== target)
-    )
+    if (action === 'previous' && (this.snapshot.coordinates.length < 2 || this.snapshot.coordinates.at(-2) !== target))
       return false;
     if (action === 'first' && (source === null || target !== null)) return false;
 
@@ -166,11 +163,7 @@ export class MineCollectionsWindowsVisit {
     return true;
   }
 
-  beginLayoutChange(
-    authorityKey: string,
-    cursor: MineCollectionsCoordinate,
-    layout: MineCollectionsLayout,
-  ): boolean {
+  beginLayoutChange(authorityKey: string, cursor: MineCollectionsCoordinate, layout: MineCollectionsLayout): boolean {
     if (this.disposed) return false;
     if (
       this.authorityKey !== authorityKey ||
@@ -188,12 +181,7 @@ export class MineCollectionsWindowsVisit {
   retryMovement(authorityKey: string, cursor: MineCollectionsCoordinate, focusSource?: HTMLElement): boolean {
     if (this.disposed) return false;
     const movement = this.snapshot.movement;
-    if (
-      this.authorityKey !== authorityKey ||
-      !movement?.failed ||
-      movement.target !== cursor
-    )
-      return false;
+    if (this.authorityKey !== authorityKey || !movement?.failed || movement.target !== cursor) return false;
     this.armFocus(focusSource);
     this.replace({ ...this.snapshot, movement: { ...movement, failed: false }, focusReady: false });
     return true;
@@ -246,14 +234,15 @@ export class MineCollectionsWindowsVisit {
     }
 
     const focusReady = moved && !!this.focusListener;
-    if (movement?.target === requested) this.replace({
-      ...this.snapshot,
-      coordinates,
-      current: requested,
-      movement: null,
-      cursorReset: moved ? false : this.snapshot.cursorReset,
-      focusReady,
-    });
+    if (movement?.target === requested)
+      this.replace({
+        ...this.snapshot,
+        coordinates,
+        current: requested,
+        movement: null,
+        cursorReset: moved ? false : this.snapshot.cursorReset,
+        focusReady,
+      });
     else {
       this.cancelFocus();
       this.replace({

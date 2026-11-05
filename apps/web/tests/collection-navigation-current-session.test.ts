@@ -107,13 +107,9 @@ test('real absent-session refusal closes Collection and personal navigation entr
     expect(await prepareSession(currentRequest, sessionEnv)).toBe(true);
     for (const [index, read] of reads.entries())
       expect(await read()).toEqual(
-        [
-          signedOut,
-          closedNavigation,
-          signedOut,
-          closedNavigation100,
-          { state: 'closed', origin: closedOrigin100 },
-        ][index],
+        [signedOut, closedNavigation, signedOut, closedNavigation100, { state: 'closed', origin: closedOrigin100 }][
+          index
+        ],
       );
     expect(viewerCredential(currentRequest)).toBe('Bearer current-viewer');
     expect(sessionSubject(currentRequest)).toBe('owner');

@@ -325,11 +325,7 @@ export function MineCollectionsPageView({
   windows?: MineCollectionsWindowsVisit;
   windowAuthorityKey?: string | null;
   windowCurrent?: () => boolean;
-  onMove?: (
-    action: MineCollectionsWindowAction,
-    target: string | null,
-    element: HTMLElement,
-  ) => boolean;
+  onMove?: (action: MineCollectionsWindowAction, target: string | null, element: HTMLElement) => boolean;
   onLayoutChange?: (layout: CollectionBrowseLayout) => void;
   onRetry?: (element: HTMLElement) => void;
 }) {
@@ -523,10 +519,7 @@ export function MineCollectionsPageView({
                       event.altKey
                     )
                       return;
-                    if (
-                      onMove &&
-                      !onMove('previous', windowSnapshot.coordinates.at(-2) ?? null, event.currentTarget)
-                    )
+                    if (onMove && !onMove('previous', windowSnapshot.coordinates.at(-2) ?? null, event.currentTarget))
                       event.preventDefault();
                   }}
                   className={buttonVariants({ variant: 'outline', size: 'lg' })}

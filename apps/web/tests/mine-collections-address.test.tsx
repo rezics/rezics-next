@@ -41,7 +41,11 @@ const startWithServerFunctions = {
   },
 };
 mock.module('@tanstack/react-start', () => startWithServerFunctions);
-mock.module('@tanstack/react-start/server', () => ({ ...startWithServerFunctions, getRequest: request, setResponseHeader() {} }));
+mock.module('@tanstack/react-start/server', () => ({
+  ...startWithServerFunctions,
+  getRequest: request,
+  setResponseHeader() {},
+}));
 mock.module('cloudflare:workers', () => ({ env }));
 const runtime = await import('../src/paraglide/runtime.js');
 const currentLocale = spyOn(runtime, 'getLocale').mockReturnValue('fr');

@@ -21,7 +21,12 @@ const env = {
   SESSIONS: {
     idFromName: (id: string) => id,
     get: () => ({
-      credential: async () => ({ status: 'active', subject: 'viewer-A', accessToken: 'credential-A', csrfToken: 'csrf-A' }),
+      credential: async () => ({
+        status: 'active',
+        subject: 'viewer-A',
+        accessToken: 'credential-A',
+        csrfToken: 'csrf-A',
+      }),
     }),
   },
 };
@@ -48,7 +53,9 @@ const globals = {
   scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -118,14 +125,8 @@ test('a route visit retains only eight admitted predecessor coordinates plus its
 test('the private Collections route retains admitted cursor coordinates across loader and reader remounts', async () => {
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const {
-    createRoute,
-    createMemoryHistory,
-    createRootRouteWithContext,
-    createRouter,
-    Outlet,
-    RouterProvider,
-  } = await import('@tanstack/react-router');
+  const { createRoute, createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { anonymousReadMode } = await import('../src/kernel/credential');
   const { Route } = await import('../src/routes/library/collections');
   const { browserObservation } = await import('../src/session/observation');
@@ -158,7 +159,10 @@ test('the private Collections route retains admitted cursor coordinates across l
     admitted: ['collections', 'personal_library'],
   });
 
-  const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient; credentialMode: typeof anonymousReadMode }>()({
+  const rootRoute = createRootRouteWithContext<{
+    queryClient: QueryClient;
+    credentialMode: typeof anonymousReadMode;
+  }>()({
     component: Outlet,
   });
   const route = Route.update({ getParentRoute: () => rootRoute, path: '/library/collections' } as never);
@@ -250,9 +254,9 @@ test('the private Collections route retains admitted cursor coordinates across l
     expect(host.textContent).toContain(m.library_collections_page_empty());
     expect(movementLink(m.library_collections_first_page()).getAttribute('href')).not.toContain('cursor=');
     expect(inputs.slice(retryStart).length).toBeGreaterThan(0);
-    expect(
-      inputs.slice(retryStart).every((input) => input.cursor === 'cursor-b' && input.layout === 'previews'),
-    ).toBe(true);
+    expect(inputs.slice(retryStart).every((input) => input.cursor === 'cursor-b' && input.layout === 'previews')).toBe(
+      true,
+    );
     expect(movementLink(m.library_collections_previous()).getAttribute('href')).toContain('cursor=cursor-a');
 
     await click(movementLink(m.library_collections_previous()));
