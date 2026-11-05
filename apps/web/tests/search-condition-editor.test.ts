@@ -52,16 +52,19 @@ function render(
   value: FilterDocument | undefined,
   issues: { pointer: string; code: string }[] = [],
   definitions: ConditionMetadata | undefined = metadata,
+  locale = 'en',
+  values: Record<string, { value: string; labels: Record<string, string> }[]> = {},
 ) {
   return renderToStaticMarkup(
     createElement(ConditionEditor, {
       value,
       metadata: definitions,
       onChange() {},
-      locale: 'en',
+      locale,
       languages: ['ja'],
       onLanguages() {},
       issues,
+      values,
     }),
   );
 }
