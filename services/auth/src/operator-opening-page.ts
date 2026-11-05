@@ -1,6 +1,12 @@
-import { managementOperationProfile, type SessionProof } from '@rezics/auth-contract';
+import {
+  isOperatorPageId,
+  isOperatorPageVersion,
+  managementOperationProfile,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
+import { securityId } from './security-response-bounds.ts';
 
 export interface OperatorOpeningPageAccess {
   readOperatorOpeningPage(input: {
@@ -19,7 +25,6 @@ export interface OperatorOpeningPageAccess {
   } | null>;
 }
 export const OPERATOR_OPENING_PAGE_PATH = '/account-management/operators/opening-page';
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /** One cookie-authenticated page observation. An observation never authorizes submission. */
 export function operatorOpeningPageTransport(
   service: AuthService,
@@ -47,10 +52,8 @@ export function operatorOpeningPageTransport(
       const body = await readJsonObject(request);
       if (
         Object.keys(body).sort().join(',') !== 'operatorAccountId,subjectAccountId' ||
-        typeof body.subjectAccountId !== 'string' ||
-        !uuid.test(body.subjectAccountId) ||
-        typeof body.operatorAccountId !== 'string' ||
-        !uuid.test(body.operatorAccountId)
+        !isOperatorPageId(body.subjectAccountId) ||
+        !isOperatorPageId(body.operatorAccountId)
       )
         throw new TransportDenied(400);
       if (!access) return response({ stage: 'unavailable' }, 503);
@@ -72,12 +75,19 @@ export function operatorOpeningPageTransport(
         });
         await service.internal.accessTokenForProof(human);
         if (!result) throw new TransportDenied(403);
-        // Closed projection; no port extension can serialize private labels or authority.
+        // Imported native fields must fit the closed page before serialization.
+        if (
+          !isOperatorPageId(result.relation.reservationId) ||
+          !isOperatorPageVersion(result.relation.version) ||
+          !['actor', 'organization'].includes(result.operator.kind)
+        )
+          throw new Error('Invalid opening page projection');
+        // Selected IDs come from the admitted request; no port extension is echoed.
         return {
           stage: 'current',
-          viewer: { accountId: human.account_id },
-          subject: { id: result.subject.id, kind: result.subject.kind },
-          operator: { id: result.operator.id, kind: result.operator.kind },
+          viewer: { accountId: securityId(human.account_id) },
+          subject: { id: body.subjectAccountId, kind: 'actor' },
+          operator: { id: body.operatorAccountId, kind: result.operator.kind },
           relation: { reservationId: result.relation.reservationId, version: result.relation.version },
           disclosure: 'unavailable',
           allowedActions: ['opening'],

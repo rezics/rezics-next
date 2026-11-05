@@ -1,3 +1,5 @@
+import { securityJsonStringBytes, securityResponseLimits } from './security-response-bounds';
+
 /** Shared native fields for the separate operator opening and transfer pages.
  * Selected IDs are lowercase routed UUIDs. Relation versions come from
  * access.account.operator_relation_version bigint via ::text, never Number.
@@ -57,4 +59,28 @@ export const OPERATOR_TRANSFER_PAGE_MAX_RESPONSE_BYTES = Math.max(
 export const OPERATOR_TRANSFER_PAGE_MAX_ERROR_BYTES = Math.max(
   JSON.stringify({ viewer: { kind: 'refused' }, review: { kind: 'refused' } }).length,
   JSON.stringify({ viewer: { kind: 'ready' }, review: { kind: 'unavailable' } }).length,
+);
+
+// Opening uses an opaque native SessionProof viewer ID (1,024 UTF-16 units),
+// not a selected UUID. Three selected/relation UUIDs and bigint19 are ASCII.
+// The manage-only profile emits no labels, human proof, scopes or catalogue.
+const opening = {
+  stage: 'current',
+  viewer: { accountId: '' },
+  subject: { id: '', kind: 'actor' },
+  operator: { id: '', kind: 'organization' },
+  relation: { reservationId: '', version: '' },
+  disclosure: 'unavailable',
+  allowedActions: ['opening'],
+};
+export const OPERATOR_OPENING_PAGE_MAX_ERROR_BYTES = Math.max(
+  ...['step-up', 'refused', 'unavailable'].map((stage) => JSON.stringify({ stage }).length),
+);
+export const OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES = Math.max(
+  JSON.stringify(opening).length +
+    securityJsonStringBytes(securityResponseLimits.id) -
+    2 +
+    3 * OPERATOR_PAGE_ID_BYTES +
+    OPERATOR_PAGE_MAX_VERSION_BYTES,
+  OPERATOR_OPENING_PAGE_MAX_ERROR_BYTES,
 );

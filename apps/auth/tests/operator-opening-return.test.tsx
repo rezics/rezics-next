@@ -13,7 +13,9 @@ import {
   markManagementOperationReturned,
   readPendingManagementOperationStepUp,
 } from '../src/management-operation-step-up';
+import * as management from '../src/management-operations';
 import { managementOperationProfile } from '../src/management-operations';
+import { openingReadbackFixture } from './operator-opening-read-fixture';
 
 creationFixture();
 const human = '11111111-1111-4111-8111-111111111111';
@@ -38,8 +40,12 @@ const proof = (accountId: string) => ({
   amr: ['operator'],
 });
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>> | undefined;
+let sessionRead: ReturnType<typeof spyOn<typeof management, 'loadManagementSession'>> | undefined;
+let readback: ReturnType<typeof openingReadbackFixture> | undefined;
 let browser: ReturnType<typeof createBrowserHistory> | undefined;
 afterEach(() => {
+  sessionRead?.mockRestore();
+  readback?.mockRestore();
   read?.mockRestore();
   read = undefined;
   browser?.destroy();
@@ -56,6 +62,16 @@ async function setup() {
     authn_epoch: 0,
     amr: ['pwd'],
   };
+  readback = openingReadbackFixture();
+  sessionRead = spyOn(management, 'loadManagementSession').mockResolvedValue({
+    kind: 'ready',
+    accountId: human,
+    clientId: session.client_id,
+    scopes: session.scope,
+    authTime: session.auth_time,
+    authnEpoch: session.authn_epoch,
+    amr: ['pwd'],
+  });
   read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const root = createRootRoute();
   const routeTree = root.addChildren(
@@ -177,6 +193,8 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   await flush(() => transition('pageshow'));
   expect(readbacks).toBe(2);
   expect(readSignals[1]!.aborted).toBe(false);
+  expect(readPendingManagementOperationStepUp()).toEqual(saved);
+  expect(page.host.textContent).toContain('outcome remains unconfirmed');
   expect(page.host.querySelector('#opening-current-state-heading')).toBeNull();
   expect(page.host.textContent).toContain('Check current session');
   await page.click('Check current session');
@@ -188,6 +206,7 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   expect(read).toHaveBeenCalledTimes(2);
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/operator-sessions/open']);
   expect(readPendingManagementOperationStepUp()).toEqual(saved);
+  expect(page.host.textContent).toContain('outcome remains unconfirmed');
   await page.click('Dismiss history');
   expect(page.host.querySelector('#opening-return-heading')).toBeNull();
   const currentState = page.host.querySelector('#opening-current-state-heading');

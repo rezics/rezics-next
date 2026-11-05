@@ -374,6 +374,11 @@ consent remain O(mounted actions), which is platform configuration, not user dat
 
 ### Native private response bounds and composition
 
+Opening's Auth-page readback shares the admitted server-only configuration and issuer transport with account-session
+and selected inventory receiving. It uses the session O/S/A formula below with trusted C before parsing, preserving
+one native GET, original-cookie forwarding and whole-call cancellation. Its strict operated parser keeps current
+state separate from unresolved issuance; overflow or unavailable configuration never produces an empty proof.
+
 Decision: user-agent display metadata is limited to 512 UTF-16 code units at session creation;
 older oversized values project as null. Client labels use 100 units and passkey names 128;
 oversized historical labels project as null and names as the existing unnamed empty string.
@@ -1367,6 +1372,21 @@ remain application integration work, including binding state suspension to Acces
 policy. `fenceOperator` provides the durable fencing fanout itself.
 
 ## Operated actor session opening transport
+
+Decision: opening metadata has its own public C-independent byte allowance in
+`@rezics/auth-contract/operator-page-response-bounds` (exported from the package entry), derived from this closed
+projection and Kernel's `operator-opening-page-source.ts`. It includes every stage variant and the largest current
+body: fixed JSON syntax/literals plus S(1024) for the opaque native SessionProof viewer ID, three ASCII UUID36 IDs
+and canonical nonnegative PostgreSQL bigint19. `OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES` includes JSON escaping and
+UTF-8; it is independent of transfer's envelope. Selected IDs reuse `isOperatorPageId`/`OPERATOR_PAGE_ID_BYTES` and
+relation versions reuse `isOperatorPageVersion`; viewer IDs retain the separate native `securityId` policy.
+The producer emits request-selected IDs and closed profile/action fields, and refuses invalid native viewer/relation
+projection before serialization. This prevents oversized imported identifiers or versions entering advice.
+The installed metadata receiver uses `readJsonBounded` through its existing five-second BFF/read lifetime, including
+stalled headers/body and retirement; the native service retains its ten-second deadline. A refused metadata retry
+keeps selection/key and sends no approval or issuance. Each explicit session readback costs one GET and no metadata,
+approval, cookie restoration or automatic retry. Installed stream/maxima/return tests cover this seam; broader native
+and browser qualification remains with the controller.
 
 `/automated/open` is an additive Auth page and production fetch trigger. It uses
 the existing `rezics-auth-account-management` registration with the exact

@@ -9,10 +9,10 @@ import {
   type OpeningRead,
 } from '../src/operator-session-opening';
 
-const viewer = '11111111-1111-4111-8111-111111111111';
-const operator = '22222222-2222-4222-8222-222222222222';
-const subject = '33333333-3333-4333-8333-333333333333';
-const reservation = '44444444-4444-4444-8444-444444444444';
+const viewer = '11111111-1111-8111-8111-111111111111';
+const operator = '22222222-2222-8222-8222-222222222222';
+const subject = '33333333-3333-8333-8333-333333333333';
+const reservation = '44444444-4444-8444-8444-444444444444';
 const input: OpeningInput = {
   accountId: viewer,
   operationKey: 'opening-review',
@@ -44,6 +44,7 @@ test('opening page accepts only the exact current viewer, relation and action wi
     { ...observation, subject: { ...observation.subject, id: viewer } },
     { ...observation, operator: { ...observation.operator, id: viewer } },
     { ...observation, relation: { ...observation.relation, version: '08' } },
+    { ...observation, relation: { ...observation.relation, version: '9223372036854775808' } },
     { ...observation, allowedActions: ['opening', 'transfer'] },
     { ...observation, subject: { ...observation.subject, label: 'Unadmitted label' } },
     { ...observation, authorization: true },

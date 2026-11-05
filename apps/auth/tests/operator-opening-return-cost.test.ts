@@ -1,7 +1,11 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import type { OpeningInput } from '../src/operator-session-opening';
 import { readOpenedSession } from '../src/operator-session-opening';
 import { managementOperationProfile } from '../src/management-operations';
+
+import { openingReadbackFixture } from './operator-opening-read-fixture';
+let transport: ReturnType<typeof openingReadbackFixture> | undefined;
+afterEach(() => transport?.mockRestore());
 
 const subject = '33333333-3333-4333-8333-333333333333';
 const input: OpeningInput = {
@@ -15,6 +19,7 @@ const input: OpeningInput = {
 };
 
 test('one explicit session readback makes one native read and no approval or opening request', async () => {
+  transport = openingReadbackFixture();
   const calls: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = ((path) => {
@@ -39,6 +44,7 @@ test('one explicit session readback makes one native read and no approval or ope
 });
 
 test('readback deadline covers hung headers and body; retirement cancels the call before and after it starts', async () => {
+  transport = openingReadbackFixture();
   const original = globalThis.fetch;
   const signals: AbortSignal[] = [];
   globalThis.fetch = ((_path, init) => {

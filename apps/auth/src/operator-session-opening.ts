@@ -1,6 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
 import {
   isManagementOperation,
+  isOperatorPageId,
+  isOperatorPageVersion,
+  OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES,
+  securityResponseLimits,
   managementOperationProfile,
   type ManagementOperationInput,
   type SessionProof,
@@ -9,6 +13,8 @@ import { authPost } from './api';
 import { approveManagementOperation } from './management-operations';
 import { markManagementOpeningSubmitted } from './management-operation-step-up';
 import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
+import { readSecurityIssuerResponse, trustedSecurityResponseConfiguration } from './security-response-config';
 
 export type OpeningInput = ManagementOperationInput & {
   operation: { kind: 'opening'; operatorAccountId: string; subjectAccountId: string };
@@ -60,7 +66,9 @@ export function isOpeningInput(value: unknown): value is OpeningInput {
   return (
     record(value) &&
     fields(value, ['accountId', 'operationKey', 'operation']) &&
-    id(value.accountId) &&
+    typeof value.accountId === 'string' &&
+    value.accountId.length > 0 &&
+    value.accountId.length <= securityResponseLimits.id &&
     text(value.operationKey) &&
     isManagementOperation(value.operation) &&
     value.operation.kind === 'opening' &&
@@ -134,7 +142,7 @@ export function parseOpeningRelation(value: unknown, input: OpeningInput): Legac
   };
 }
 function openingPageIdentity(value: unknown, kind: 'actor' | 'organization'): value is { id: string; kind: string } {
-  return record(value) && fields(value, ['id', 'kind']) && id(value.id) && value.kind === kind;
+  return record(value) && fields(value, ['id', 'kind']) && isOperatorPageId(value.id) && value.kind === kind;
 }
 /** The native page observation is closed and advice-only. No private identifier
  * is reused as a public identity label when native disclosure is unavailable. */
@@ -145,20 +153,21 @@ export function parseOperatorOpeningPage(value: unknown, input: OpeningInput): O
     value.stage !== 'current' ||
     !record(value.viewer) ||
     !fields(value.viewer, ['accountId']) ||
-    !id(value.viewer.accountId) ||
+    typeof value.viewer.accountId !== 'string' ||
+    !value.viewer.accountId ||
+    value.viewer.accountId.length > securityResponseLimits.id ||
     value.viewer.accountId !== input.accountId ||
     !openingPageIdentity(value.subject, 'actor') ||
     value.subject.id !== input.operation.subjectAccountId ||
     !record(value.operator) ||
     !fields(value.operator, ['id', 'kind']) ||
-    !id(value.operator.id) ||
+    !isOperatorPageId(value.operator.id) ||
     value.operator.id !== input.operation.operatorAccountId ||
     (value.operator.kind !== 'actor' && value.operator.kind !== 'organization') ||
     !record(value.relation) ||
     !fields(value.relation, ['reservationId', 'version']) ||
-    !id(value.relation.reservationId) ||
-    typeof value.relation.version !== 'string' ||
-    !/^(0|[1-9][0-9]*)$/.test(value.relation.version) ||
+    !isOperatorPageId(value.relation.reservationId) ||
+    !isOperatorPageVersion(value.relation.version) ||
     value.disclosure !== 'unavailable' ||
     !Array.isArray(value.allowedActions) ||
     value.allowedActions.length !== 1 ||
@@ -194,35 +203,37 @@ export async function requestOperatorOpeningPage(
   issuer: string,
 ): Promise<OpeningRead> {
   try {
-    const origin = new URL(request.url).origin;
-    if (
-      request.headers.get('sec-fetch-site') === 'cross-site' ||
-      (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer)
-    )
+    return await privateAuthRead(async (signal) => {
+      const origin = new URL(request.url).origin;
+      if (
+        request.headers.get('sec-fetch-site') === 'cross-site' ||
+        (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer)
+      )
+        return { kind: 'unavailable' };
+      const response = await fetch(new URL('/account-management/operators/opening-page', issuer), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Origin: issuer,
+          Cookie: request.headers.get('cookie') ?? '',
+        },
+        body: JSON.stringify({
+          subjectAccountId: input.operation.subjectAccountId,
+          operatorAccountId: input.operation.operatorAccountId,
+        }),
+        redirect: 'error',
+        cache: 'no-store',
+        signal,
+      });
+      const body = await readJsonBounded(response, OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES, signal);
+      if (response.status === 200) return parseOperatorOpeningPage(body, input);
+      if (response.status === 401 && record(body) && fields(body, ['stage']) && body.stage === 'step-up')
+        return { kind: 'step-up' };
+      if ([400, 403].includes(response.status) && record(body) && fields(body, ['stage']) && body.stage === 'refused')
+        return { kind: 'refused' };
       return { kind: 'unavailable' };
-    const response = await fetch(new URL('/account-management/operators/opening-page', issuer), {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Origin: issuer,
-        Cookie: request.headers.get('cookie') ?? '',
-      },
-      body: JSON.stringify({
-        subjectAccountId: input.operation.subjectAccountId,
-        operatorAccountId: input.operation.operatorAccountId,
-      }),
-      redirect: 'error',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body: unknown = await response.json();
-    if (response.status === 200) return parseOperatorOpeningPage(body, input);
-    if (response.status === 401 && record(body) && fields(body, ['stage']) && body.stage === 'step-up')
-      return { kind: 'step-up' };
-    if ([400, 403].includes(response.status) && record(body) && fields(body, ['stage']) && body.stage === 'refused')
-      return { kind: 'refused' };
-    return { kind: 'unavailable' };
+    }, request.signal);
   } catch {
     return { kind: 'unavailable' };
   }
@@ -247,6 +258,7 @@ const nativeOpeningPage = createServerFn({ method: 'POST' })
   });
 export const operatorOpeningBrowserTransport = {
   metadata: (input: OpeningInput, signal: AbortSignal) => nativeOpeningPage({ data: input, signal }),
+  session: (input: OpeningInput, signal: AbortSignal) => nativeOpenedSession({ data: input, signal }),
 };
 export async function loadOpeningMetadata(input: OpeningInput, signal?: AbortSignal): Promise<OpeningRead> {
   if (!isOpeningInput(input)) return { kind: 'unavailable' };
@@ -278,21 +290,47 @@ export function openedSession(value: unknown, input: OpeningInput): SessionProof
     return null;
   return value as unknown as SessionProof;
 }
+/** The readback admits the full native proof, independently of human advice.
+ * Issuance acknowledgement retains its command parser above. */
+export function parseOpenedSessionObservation(value: unknown, input: OpeningInput, scopeLimit: number): OpeningOutcome {
+  if (
+    !record(value) ||
+    typeof value.account_id !== 'string' ||
+    !value.account_id ||
+    value.account_id.length > securityResponseLimits.id ||
+    typeof value.client_id !== 'string' ||
+    !value.client_id ||
+    value.client_id.length > securityResponseLimits.id ||
+    !Array.isArray(value.scope) ||
+    value.scope.length > scopeLimit ||
+    !value.scope.every((scope) => typeof scope === 'string' && scope.length <= securityResponseLimits.scope)
+  )
+    return { kind: 'unknown' };
+  const session = openedSession(value, input);
+  return session ? { kind: 'opened', session } : { kind: 'unknown' };
+}
+const nativeOpenedSession = createServerFn({ method: 'POST' })
+  .validator((value: unknown): OpeningInput => {
+    if (!isOpeningInput(value)) throw new Error('Invalid opening');
+    return value;
+  })
+  .handler(async ({ data }): Promise<OpeningOutcome> => {
+    const configuration = await trustedSecurityResponseConfiguration();
+    if (!configuration) return { kind: 'unknown' };
+    return readSecurityIssuerResponse('/session', undefined, async (response, signal) => {
+      if (response.status !== 200) return { kind: 'unknown' };
+      return parseOpenedSessionObservation(
+        await readJsonBounded(response, configuration.sessionBytes, signal),
+        data,
+        configuration.scopeLimit,
+      );
+    });
+  });
 /** Read only: never renew cached metadata, replay issuance, restore a human
  * cookie, or treat readback as evidence that this request created the session. */
 export async function readOpenedSession(input: OpeningInput, signal?: AbortSignal): Promise<OpeningOutcome> {
   try {
-    return await privateAuthRead(async (readSignal) => {
-      const response = await fetch('/session', {
-        signal: readSignal,
-        credentials: 'same-origin',
-        redirect: 'error',
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      const session = response.status === 200 ? openedSession(await response.json(), input) : null;
-      return session ? { kind: 'opened', session } : { kind: 'unknown' };
-    }, signal);
+    return await privateAuthRead((readSignal) => operatorOpeningBrowserTransport.session(input, readSignal), signal);
   } catch {
     return { kind: 'unknown' };
   }
