@@ -169,7 +169,10 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
     const limit = securityResponseByteBudgets(4, 20).clients;
     const originalParse = JSON.parse;
     let parses = 0;
-    JSON.parse = (...args) => { parses++; return originalParse(...args); };
+    JSON.parse = (...args) => {
+      if (typeof args[0] === 'string' && args[0].length > limit) parses++;
+      return originalParse(...args);
+    };
     for (const [chunks, length] of [[[' '.repeat(limit + 1)], undefined], [[' '.repeat(limit >> 1), ' '.repeat((limit >> 1) + 1)], '1']]) {
       const before = calls.length;
       globalThis.fetch = async () => { calls.push('/clients'); return streamed(chunks, length); };

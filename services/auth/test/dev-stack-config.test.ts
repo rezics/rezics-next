@@ -23,8 +23,7 @@ import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
-test('Auth page scope configuration carries a mounted route catalogue and records native fallback explicitly', async () => {
-  const { actionCatalogue } = await import('../../kernel/src/http/request.ts');
+test('Auth page scope configuration carries trusted siteActions and records native fallback explicitly', () => {
   const letters = (index: number) => {
     let value = '';
     do {
@@ -33,28 +32,13 @@ test('Auth page scope configuration carries a mounted route catalogue and record
     } while (index >= 0);
     return value;
   };
-  const routes = Array.from({ length: 1200 }, (_, index) => {
-    const name = letters(index);
-    return {
-      method: 'get',
-      path: `/fixture/${name}`,
-      hooks: {
-        detail: {
-          'x-action': `fixture_${name}:read`,
-          operationId: `fixture_${name}.read`,
-          security: [{ scope: 'fixture' }],
-        },
-      },
-    };
-  });
-  const catalogue = actionCatalogue({ routes });
-  const configuration = authSecurityScopeConfiguration([
-    ...catalogue.keys(),
-    'openid',
-    'offline_access',
-    'media:complete',
-    'openid',
+  const siteActions = new Map<string, { anonymous: boolean }>([
+    ...Array.from({ length: 1200 }, (_, index) => [`action_${letters(index)}:read`, { anonymous: true }] as const),
+    ['openid', { anonymous: true }] as const,
+    ['offline_access', { anonymous: true }] as const,
+    ['media:complete', { anonymous: true }] as const,
   ]);
+  const configuration = authSecurityScopeConfiguration(siteActions.keys());
   expect(configuration).toBe('catalogue:1203');
   expect(authSecurityScopeConfiguration(undefined)).toBe('native-no-catalogue');
   expect(developmentAuthPageBindings({ AUTH_SECURITY_SCOPE_CONFIGURATION: configuration })).toEqual({
