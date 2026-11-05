@@ -184,6 +184,8 @@ if (process.argv.includes('--schedule-child')) {
       for (const extra of [
         { systemDatabaseUrl: 'bad-secret-url' },
         { systemDatabaseUrl: 'postgres://user:kernel-secret@127.0.0.1/kernel' },
+        { systemDatabaseUrl: 'postgres://user:secret@127.0.0.1/auth?host=kernel.example' },
+        { systemDatabaseUrl: 'postgres://user:secret@127.0.0.1/auth?host=/tmp/other-socket' },
         { stagingKey: new Uint8Array(3) },
         { maintenanceSchedule: 'invalid-secret-cron' },
       ]) {
