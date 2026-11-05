@@ -1,9 +1,22 @@
 import type { FollowingKind } from './following-kind-navigation/address';
+import {
+  acceptFollowingWindow,
+  emptyFollowingWindowHistory,
+  reconcileFollowingAddress,
+  reconcileFollowingAuthority,
+  reconcileFollowingIdentity,
+  sameFollowingWindow,
+  seedFollowingWindow,
+  stageFollowingWindow,
+  type FollowingMovement,
+  type FollowingWindow,
+  type FollowingWindowHistory,
+} from './following-kind-navigation/window-history';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
@@ -30,6 +43,26 @@ import { useFollowingReturn } from './following-reading/return';
 import { SubjectCover } from './subject-row';
 
 type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
+type FollowingWindowIdentity = { source: object; subject: string; locale: string; authorityEpoch: number };
+type FollowingWindowNavigation = {
+  previous: FollowingWindow | null;
+  busy: boolean;
+  unsettledRemoval: boolean;
+  focusId?: number;
+  move: (target: FollowingWindow, movement: FollowingMovement, keyboard: boolean) => boolean;
+  removalChanged: (targetId: string, unsettled: boolean) => void;
+};
+type FollowingDirectKindMovement = {
+  from: FollowingWindow;
+  fromVisit: number;
+  target: FollowingWindow;
+  targetVisit?: number;
+  id: number;
+  keyboard: boolean;
+  subject: string;
+  locale: string;
+  authorityEpoch: number;
+};
 
 const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
 
@@ -159,9 +192,11 @@ export function CurrentViewerMineFollowingPage({
     matches(read.data, origin.subject, address.cursor, locale, kind)
       ? read.data.page
       : retiredPage;
+  const rowOriginCurrent = useRef<() => boolean>(() => false);
+  rowOriginCurrent.current = () => current() && readCurrent();
   const rowOrigin: HistoryOrigin = {
     lifetime: origin.boundary.lifetime,
-    isCurrent: () => current() && readCurrent(),
+    isCurrent: () => rowOriginCurrent.current(),
   };
   const retryState = origin.client.getQueryState(options.queryKey);
   const status =
@@ -170,6 +205,169 @@ export function CurrentViewerMineFollowingPage({
         ? 'unavailable'
         : 'preparing'
       : undefined;
+  const [, setNavigationRevision] = useState(0);
+  const navigation = useRef<FollowingWindowHistory>(emptyFollowingWindowHistory());
+  const sourceTokens = useRef(new WeakMap<object, object>()).current;
+  const authorityEpoch = origin.epoch(0)!;
+  const nextMovementId = useRef(0);
+  const unsettledRemovals = useRef(new Set<string>());
+  const directKindMovement = useRef<FollowingDirectKindMovement | null>(null);
+  const routeVisit = useRef({ key: address.key, id: 0 });
+  if (routeVisit.current.key !== address.key)
+    routeVisit.current = { key: address.key, id: routeVisit.current.id + 1 };
+  const addressVisit = routeVisit.current.id;
+  const coordinate: FollowingWindow = { cursor: address.cursor, kind };
+  const sourceIdentity = (value: MineFollowingRead): FollowingWindowIdentity => {
+    let source = sourceTokens.get(value);
+    if (!source) {
+      source = {};
+      sourceTokens.set(value, source);
+    }
+    return { source, subject: value.subject!, locale, authorityEpoch };
+  };
+  const candidate =
+    !addressInvalid &&
+    !!origin.subject &&
+    read.data &&
+    !read.data.page.forbidden &&
+    !read.data.page.kindUnavailable &&
+    matches(read.data, origin.subject, address.cursor, locale, kind)
+      ? sourceIdentity(read.data)
+      : null;
+  let currentNavigation = navigation.current;
+  if (!origin.subject || !origin.allowed[0]) {
+    directKindMovement.current = null;
+    currentNavigation = emptyFollowingWindowHistory();
+    unsettledRemovals.current.clear();
+  } else {
+    currentNavigation = reconcileFollowingAuthority(currentNavigation, origin.subject, locale, authorityEpoch);
+    let direct = directKindMovement.current;
+    if (
+      addressInvalid ||
+      read.data?.page.forbidden ||
+      read.data?.page.kindUnavailable ||
+      read.data?.page.addressInvalid ||
+      (direct &&
+        (direct.subject !== origin.subject || direct.locale !== locale || direct.authorityEpoch !== authorityEpoch))
+    ) {
+      direct = null;
+    } else if (direct) {
+      if (sameFollowingWindow(coordinate, direct.target)) {
+        if (direct.targetVisit === addressVisit) {
+          // Keep the exact staged kind visit while its reader retries.
+        } else if (direct.targetVisit === undefined && addressVisit !== direct.fromVisit) {
+          direct = { ...direct, targetVisit: addressVisit };
+        } else direct = null;
+      } else if (!sameFollowingWindow(coordinate, direct.from) || addressVisit !== direct.fromVisit) direct = null;
+    }
+    directKindMovement.current = direct;
+    if (!direct) {
+      currentNavigation = addressInvalid
+        ? emptyFollowingWindowHistory()
+        : reconcileFollowingAddress(currentNavigation, coordinate, addressVisit);
+      if (candidate) currentNavigation = reconcileFollowingIdentity(currentNavigation, coordinate, candidate);
+    }
+    if (read.data?.page.forbidden || read.data?.page.kindUnavailable || read.data?.page.addressInvalid) {
+      directKindMovement.current = null;
+      currentNavigation = emptyFollowingWindowHistory();
+    }
+  }
+  if (currentNavigation !== navigation.current) navigation.current = currentNavigation;
+  const currentIdentity = useRef<() => FollowingWindowIdentity | null>(() => null);
+  currentIdentity.current = () => {
+    if (
+      directKindMovement.current ||
+      !candidate ||
+      addressInvalid ||
+      !address.isCurrent() ||
+      !origin.current(0) ||
+      !readCurrent() ||
+      origin.client.getQueryData(options.queryKey) !== read.data
+    )
+      return null;
+    return candidate;
+  };
+  useLayoutEffect(() => {
+    if (
+      !candidate ||
+      addressInvalid ||
+      !address.isCurrent() ||
+      !origin.current(0) ||
+      !readCurrent() ||
+      origin.client.getQueryData(options.queryKey) !== read.data
+    )
+      return;
+    const direct = directKindMovement.current;
+    const directTarget = direct && sameFollowingWindow(coordinate, direct.target);
+    const seeded = directTarget
+      ? seedFollowingWindow(emptyFollowingWindowHistory(), coordinate, addressVisit, candidate)
+      : navigation.current.staged
+        ? acceptFollowingWindow(navigation.current, coordinate, addressVisit, candidate)
+        : seedFollowingWindow(navigation.current, coordinate, addressVisit, candidate);
+    const admitted = directTarget && direct.keyboard && seeded.current
+      ? { ...seeded, current: { ...seeded.current, focusId: direct.id } }
+      : seeded;
+    if (direct && sameFollowingWindow(coordinate, direct.target)) directKindMovement.current = null;
+    if (admitted !== navigation.current) {
+      navigation.current = admitted;
+      setNavigationRevision((revision) => revision + 1);
+    }
+  });
+  const move = (target: FollowingWindow, movement: FollowingMovement, keyboard: boolean) => {
+    if (page.forbidden || unsettledRemovals.current.size || navigation.current.staged || directKindMovement.current)
+      return false;
+    const identity = currentIdentity.current();
+    if (!identity) {
+      if (
+        movement !== 'kind' ||
+        target.kind === coordinate.kind ||
+        !origin.subject ||
+        !origin.allowed[0] ||
+        !address.isCurrent() ||
+        !origin.current(0)
+      )
+        return false;
+      directKindMovement.current = {
+        from: coordinate,
+        fromVisit: addressVisit,
+        target,
+        id: ++nextMovementId.current,
+        keyboard,
+        subject: origin.subject,
+        locale,
+        authorityEpoch,
+      };
+      setNavigationRevision((revision) => revision + 1);
+      return true;
+    }
+    const staged = stageFollowingWindow(navigation.current, {
+      from: coordinate,
+      addressVisit,
+      target,
+      movement,
+      identity,
+      id: ++nextMovementId.current,
+      keyboard,
+    });
+    if (!staged) return false;
+    navigation.current = staged;
+    setNavigationRevision((revision) => revision + 1);
+    if (sameFollowingWindow(target, coordinate)) void read.refetch();
+    return true;
+  };
+  const removalChanged = (targetId: string, unsettled: boolean) => {
+    if (unsettled) unsettledRemovals.current.add(targetId);
+    else unsettledRemovals.current.delete(targetId);
+    setNavigationRevision((revision) => revision + 1);
+  };
+  const windowNavigation: FollowingWindowNavigation = {
+    previous: currentNavigation.previous.at(-1) ?? null,
+    busy: currentNavigation.staged !== null || directKindMovement.current !== null,
+    unsettledRemoval: unsettledRemovals.current.size > 0,
+    ...(currentNavigation.current?.focusId !== undefined ? { focusId: currentNavigation.current.focusId } : {}),
+    move,
+    removalChanged,
+  };
   return (
     <div hidden={origin.hydrated && !origin.allowed[0]}>
       <MineFollowingPageView
@@ -182,6 +380,7 @@ export function CurrentViewerMineFollowingPage({
         onRefresh={() => {
           if (current()) void read.refetch();
         }}
+        navigation={windowNavigation}
         onReview={async (targetId) => {
           if (addressInvalid || !current() || !readCurrent()) return null;
           const result = await read.refetch();
@@ -223,6 +422,7 @@ export function MineFollowingPageView({
   onReview,
   onRefresh,
   readSpace,
+  navigation,
 }: {
   page: MineFollowingPage;
   cursor?: string | null | undefined;
@@ -234,6 +434,7 @@ export function MineFollowingPageView({
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
+  navigation?: FollowingWindowNavigation | undefined;
 }) {
   const requestedAddress = personalDirectoryAddress(cursor ?? undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressRejected = invalidAddress || page.addressInvalid || page.kindUnavailable || !requestedAddress.valid;
@@ -286,6 +487,7 @@ export function MineFollowingPageView({
       onReview={onReview}
       onRefresh={onRefresh}
       readSpace={readSpace}
+      navigation={navigation}
     />
   );
 }
@@ -301,6 +503,7 @@ function MineFollowingPageState({
   onReview,
   onRefresh,
   readSpace,
+  navigation,
 }: {
   page: MineFollowingPage;
   cursor: string | null;
@@ -312,6 +515,7 @@ function MineFollowingPageState({
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
+  navigation?: FollowingWindowNavigation | undefined;
 }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
@@ -343,8 +547,38 @@ function MineFollowingPageState({
       !addressRejected,
   });
   useFollowingReturn(reading.returnCurrent, reading.suspend, onRefresh, reading.restoreFocus);
+  const focusedMovement = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      navigation?.focusId === undefined ||
+      focusedMovement.current === navigation.focusId ||
+      !origin.isCurrent()
+    )
+      return;
+    focusedMovement.current = navigation.focusId;
+    listHeading.current?.focus();
+  }, [navigation?.focusId]);
   const restart = !addressRejected && (!!cursor || !!page.cursorReset || removed);
   const firstPageEmpty = !restart && !page.next;
+  const nextAddress = page.next === null ? null : personalDirectoryAddress(page.next, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  const nextCursor = nextAddress?.valid ? nextAddress.cursor : null;
+  const nextUnavailable = page.next !== null && !nextAddress?.valid;
+  const navigationDisabled = !!navigation?.busy || !!navigation?.unsettledRemoval;
+  const kindChangeDisabled = page.forbidden || navigationDisabled;
+  const navigate = (event: ReactMouseEvent<HTMLAnchorElement>, target: FollowingWindow, movement: FollowingMovement) => {
+    if (
+      !navigation ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    if (!navigation.move(target, movement, event.detail === 0)) event.preventDefault();
+    else reading.close(false);
+  };
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
@@ -354,25 +588,42 @@ function MineFollowingPageState({
         </PageHeading>
       </header>
       <nav aria-label={m.following_kind_label()} className="flex flex-wrap gap-2">
-        {(['all', 'subject', 'collection', 'space'] as const).map((value) => (
-          <Link
-            key={value}
-            to="/library/following"
-            search={value === 'all' ? {} : { kind: value }}
-            aria-current={kind === value ? 'page' : undefined}
-            className={buttonVariants({ variant: kind === value ? 'default' : 'outline', className: 'min-h-11' })}
-          >
-            {value === 'all'
+        {(['all', 'subject', 'collection', 'space'] as const).map((value) => {
+          const label =
+            value === 'all'
               ? m.following_kind_all()
               : value === 'subject'
                 ? m.following_kind_subject()
                 : value === 'collection'
                   ? m.following_kind_collection()
-                  : m.following_kind_space()}
-          </Link>
-        ))}
+                  : m.following_kind_space();
+          const variant = kind === value ? 'default' : 'outline';
+          return kindChangeDisabled ? (
+            <Button
+              key={value}
+              variant={variant}
+              className="min-h-11"
+              disabled
+              aria-current={kind === value ? 'page' : undefined}
+            >
+              {label}
+            </Button>
+          ) : (
+            <Link
+              key={value}
+              to="/library/following"
+              search={value === 'all' ? {} : { kind: value }}
+              aria-current={kind === value ? 'page' : undefined}
+              className={buttonVariants({ variant, className: 'min-h-11' })}
+              onClick={(event) => navigate(event, { cursor: null, kind: value }, 'kind')}
+            >
+              {label}
+            </Link>
+          );
+        })}
       </nav>
       {!addressRejected && page.forbidden ? <p role="status">{m.library_my_ratings_denied()}</p> : null}
+      {navigation?.unsettledRemoval ? <p role="status">{m.following_navigation_recover_removal()}</p> : null}
       {!addressRejected && status ? (
         <div className="space-y-3">
           <p role="status">{status === 'preparing' ? m.library_follow_loading() : m.library_follow_unavailable()}</p>
@@ -404,7 +655,7 @@ function MineFollowingPageState({
         <Button
           className="min-h-11"
           variant="outline"
-          disabled={!!status}
+          disabled={!!status || navigationDisabled}
           onClick={() => {
             if (page.forbidden ? !origin.isCurrent() : !reading.returnCurrent()) return;
             reading.close(false);
@@ -463,6 +714,7 @@ function MineFollowingPageState({
                         disabled={!!status}
                         idempotencyKey={follow.idempotencyKey}
                         menuTitle={m.library_follow_more_actions({ title: title.text })}
+                        {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
                         onReview={onReview ? () => onReview(follow.targetId) : undefined}
                         onRemoved={() => {
                           if (!origin.isCurrent()) return;
@@ -508,32 +760,64 @@ function MineFollowingPageState({
           </EmptyContent>
         </Empty>
       ) : null}
-      {!addressRejected && !page.forbidden && page.signedIn && (page.next || restart) ? (
+      {nextUnavailable && !addressRejected && !page.forbidden ? (
+        <p role="status">{m.following_navigation_unavailable()}</p>
+      ) : null}
+      {!addressRejected && !page.forbidden && page.signedIn && (nextCursor || restart || navigation?.previous) ? (
         <Exposure operation="follow.list">
-          <nav aria-label={m.library_following_heading()} className="flex flex-wrap items-center gap-3">
-            {page.next ? (
-              <Link
-                to="/library/following"
-                search={{ cursor: page.next, ...(kind === 'all' ? {} : { kind }) }}
-                onClick={(event) => {
-                  if (!origin.isCurrent()) event.preventDefault();
-                }}
-                className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-              >
-                {m.library_collection_more()}
-              </Link>
+          <nav
+            aria-label={m.library_following_heading()}
+            className="flex flex-wrap items-center gap-3"
+            aria-busy={navigation?.busy || undefined}
+          >
+            {navigation?.previous ? (
+              navigationDisabled ? (
+                <Button variant="outline" disabled>
+                  {m.following_navigation_previous()}
+                </Button>
+              ) : (
+                <Link
+                  to="/library/following"
+                  search={{
+                    ...(navigation.previous.cursor === null ? {} : { cursor: navigation.previous.cursor }),
+                    ...(navigation.previous.kind === 'all' ? {} : { kind: navigation.previous.kind }),
+                  }}
+                  onClick={(event) => navigate(event, navigation.previous!, 'previous')}
+                  className={buttonVariants({ variant: 'outline' })}
+                >
+                  {m.following_navigation_previous()}
+                </Link>
+              )
+            ) : null}
+            {nextCursor ? (
+              navigationDisabled ? (
+                <Button disabled>{m.library_collection_more()}</Button>
+              ) : (
+                <Link
+                  to="/library/following"
+                  search={{ cursor: nextCursor, ...(kind === 'all' ? {} : { kind }) }}
+                  onClick={(event) => navigate(event, { cursor: nextCursor, kind }, 'next')}
+                  className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+                >
+                  {m.library_collection_more()}
+                </Link>
+              )
             ) : null}
             {restart ? (
-              <Link
-                to="/library/following"
-                search={kind === 'all' ? {} : { kind }}
-                onClick={(event) => {
-                  if (!origin.isCurrent()) event.preventDefault();
-                }}
-                className={buttonVariants({ variant: 'outline' })}
-              >
-                {m.library_collections_first_page()}
-              </Link>
+              navigationDisabled ? (
+                <Button variant="outline" disabled>
+                  {m.library_collections_first_page()}
+                </Button>
+              ) : (
+                <Link
+                  to="/library/following"
+                  search={kind === 'all' ? {} : { kind }}
+                  onClick={(event) => navigate(event, { cursor: null, kind }, 'first')}
+                  className={buttonVariants({ variant: 'outline' })}
+                >
+                  {m.library_collections_first_page()}
+                </Link>
+              )
             ) : null}
           </nav>
         </Exposure>

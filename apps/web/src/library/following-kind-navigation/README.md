@@ -7,6 +7,10 @@ The list remains bounded to twenty FULL rows with native order, locale and desti
 
 Decision: map URL kind to the native `targetType` selector on every read; all omits the selector.
 
+Decision: in-app Previous retains up to eight admitted cursor/kind predecessors; Next, Previous, First and kind changes commit only after an exact current-viewer read, and page movement waits for the existing removal command to settle.
+
+The browser retains at most eight predecessor cursors of 2,048 JavaScript code units each, the current and one staged cursor/kind coordinate, two opaque source identity tokens, and the current FULL twenty-row page. Visit markers are numbers; no prior row, destination or read body is archived.
+
 Commerce owns whole-population filtering, kind-bound cursors, disclosure and allowed actions. The native
 `personalLibraryRoutes` producer accepts subject, collection and space; it returns the unchanged follows/next
 page. Initial reads, continuation, same-address retries and stale-cursor first-page recovery all keep the selector.
