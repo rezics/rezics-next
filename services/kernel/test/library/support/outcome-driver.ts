@@ -322,7 +322,9 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     configureTestReceiptKeys(db.admin);
     restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
 
-    authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
+    // The native Auth workflow host shares its application and system pool.
+    // Keep normal capacity for its listeners and concurrently executing workflow steps.
+    authPool = new Pool({ connectionString: await createAuthDatabase(base, authName) });
     authPool.on('error', () => {});
     authPool.on('connect', (client) => client.on('error', () => {}));
 
