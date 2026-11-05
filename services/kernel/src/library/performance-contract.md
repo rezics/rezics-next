@@ -459,6 +459,9 @@ retention retain their existing owners; this composition introduces no scheduler
 
 ## Progress
 
+Decision: retain the original native session, Continue and Feed assertions; add causal regressions only for defects
+reached by the seeded record/correct/journal/clear journey, and compare native responses with the same persona's pages.
+
 The existing Progress and Continue descriptors retain their native session commands and response contracts.
 An operation declaration describes work; it supplies neither owner authority nor evidence of execution.
 Native owner admission still precedes receipt lookup. A completed mutation receipt and its current presentation
