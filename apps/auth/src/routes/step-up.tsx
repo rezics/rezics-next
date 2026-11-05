@@ -181,6 +181,7 @@ function StepUpForm({
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const emailValue = useRef('');
+  const adviceViewer = useRef<string | null>(null);
   const passwordValue = useRef('');
   const confirming = useRef(false);
   const returnStatus = useRef<HTMLParagraphElement>(null);
@@ -222,11 +223,31 @@ function StepUpForm({
   }, [clearSecrets, registerClear]);
 
   useLayoutEffect(() => {
-    if (advice.state.kind !== 'ready') {
+    if (advice.state.kind === 'loading') {
+      passwordValue.current = '';
+      setPassword('');
+      confirming.current = false;
+      const input = document.getElementById(passwordId);
+      if (input instanceof HTMLInputElement) input.value = '';
+      setEmailError('');
+      setPasswordError('');
+      return;
+    }
+    if (advice.state.kind === 'unavailable') {
+      clearSecrets();
+      adviceViewer.current = null;
+      setEmailError('');
+      setPasswordError('');
+      return;
+    }
+    const viewer =
+      advice.state.page.viewer.kind === 'signed-in' ? `account:${advice.state.page.viewer.account_id}` : 'signed-out';
+    if (adviceViewer.current !== null && adviceViewer.current !== viewer) {
       clearSecrets();
       setEmailError('');
       setPasswordError('');
     }
+    adviceViewer.current = viewer;
   }, [advice.state, clearSecrets]);
 
   useLayoutEffect(() => {

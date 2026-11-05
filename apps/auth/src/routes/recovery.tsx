@@ -193,6 +193,10 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     else if (message) alert.current?.focus();
   }, [emailError, passwordFieldError, message]);
 
+  useLayoutEffect(() => {
+    if (hasFragment && !credentials && message) alert.current?.focus();
+  }, [credentials, hasFragment, message]);
+
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!attempt.available || !page?.actions.start || !page.methods.email) return;

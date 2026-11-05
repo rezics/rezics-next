@@ -559,6 +559,8 @@ same ID, then activate the account and claim. Credentialless automation skips cr
 pending reservations release their handle, and orphan credentials cannot authenticate without an active Access
 account. See [registration-proof.ts][registration-proof], [lifecycle.ts][lifecycle] and
 [workflows.ts][workflows]; [Durable account workflow host][auth-workflows] explains evidence and retry ordering.
+Auth reads signup requirements and the current viewer after the page mounts through its same-origin POST BFF, so
+the issuer receives the browser Origin and cookie under the existing private-read boundary.
 
 Auth owns its bounded session, verification, key and consent-erasure maintenance in its own process and DBOS
 system schema. Kernel modules share the kernel worker; they do not receive Auth database credentials or a new

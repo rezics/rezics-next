@@ -282,6 +282,11 @@ async function form(page: Page) {
   const emailInput = page.getByLabel('Email', { exact: true });
   const passwordInput = page.getByLabel('Password', { exact: true });
   const confirmationInput = page.getByLabel('Confirm password', { exact: true });
+  await page.waitForFunction(
+    () => document.querySelector('#signup-handle') !== null || document.querySelector('[role="alert"]') !== null,
+    undefined,
+    { timeout: 30_000 },
+  );
   if ((await handleInput.count()) !== 1)
     throw new Error(
       `sign-up form unavailable: ${JSON.stringify({
@@ -355,13 +360,16 @@ test(
       expect(signupUrl.search).toBe(login.search);
       expect(signupUrl.searchParams.get('max_age')).toBe('600');
       expect(signupUrl.searchParams.has('prompt')).toBe(true);
+      const controls = await form(page);
+      const registrationRead = calls.find((call) => call.url === '/registration-page');
+      expect(registrationRead?.method).toBe('GET');
+      expect(registrationRead?.headers.origin).toBe(origin);
       const signInLink = page.getByRole('link', { name: 'Sign in', exact: true });
       expect(await signInLink.count()).toBe(1);
       const signInHref = new URL((await signInLink.getAttribute('href'))!, origin);
       expect(signInHref.pathname).toBe('/login');
       expect(signInHref.search).toBe(signupUrl.search);
 
-      const controls = await form(page);
       expect(await controls.email.getAttribute('autocomplete')).toBe('email');
       expect(await controls.password.getAttribute('autocomplete')).toBe('new-password');
       expect(await controls.password.getAttribute('type')).toBe('password');
