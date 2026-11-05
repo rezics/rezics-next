@@ -332,18 +332,21 @@ export function createImportTransport(options: ImportTransportOptions) {
   );
   const importFetch = options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider });
   const observedFetch: typeof fetch = options.onDeniedResponse
-    ? async (input, init) => {
-        const request = new Request(input, init);
-        const reply = await importFetch(request);
-        if (reply.status === 401 || reply.status === 403) {
-          await options.onDeniedResponse!({
-            method: request.method,
-            path: new URL(request.url).pathname,
-            response: reply.clone(),
-          });
-        }
-        return reply;
-      }
+    ? Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+          const request = new Request(input, init);
+          const reply = await importFetch(request);
+          if (reply.status === 401 || reply.status === 403) {
+            await options.onDeniedResponse!({
+              method: request.method,
+              path: new URL(request.url).pathname,
+              response: reply.clone(),
+            });
+          }
+          return reply;
+        },
+        { preconnect: importFetch.preconnect },
+      )
     : importFetch;
   const client =
     options.client ??
