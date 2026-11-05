@@ -83,7 +83,9 @@ test('SubjectFrame, editorial collection and the installed release route retain 
   expect(new URL(contributionHref(collected, true), 'https://rezics.invalid').searchParams.get('return_to')).toBe(
     collected.href,
   );
-  expect((await mountedFrame()).includes('data-slot="subject-contribute"')).toBe(true);
+  const mounted = (await mountedFrame()).replaceAll('&amp;', '&');
+  expect(mounted).toContain('data-slot="subject-contribute"');
+  expect(mounted).toContain(collected.href);
   expect((await mountedFrame(selectedContext, '00000000-0000-4000-8000-000000000303')).includes('subject-contribute')).toBe(
     false,
   );
