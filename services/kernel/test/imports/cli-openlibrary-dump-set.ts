@@ -330,23 +330,36 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
       expect(firstCandidate).toBeDefined();
       expect(firstCandidate!.statement.value).toEqual({
         type: 'value',
-        content: { time: '+1853-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+        content: {
+          time: '+1853-00-00T00:00:00Z',
+          precision: 9,
+          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        },
       });
       expect(await currentDate(workId)).toBeUndefined();
-      expect(firstCandidate!.statement.references[0]!.parts.map((part) => [
-        part.property.id,
-        part.value.type === 'value' ? part.value.content : null,
-      ])).toEqual([
+      expect(
+        firstCandidate!.statement.references[0]!.parts.map((part) => [
+          part.property.id,
+          part.value.type === 'value' ? part.value.content : null,
+        ]),
+      ).toEqual([
         ['schema:url', 'https://openlibrary.org/works/OL66554W.json'],
         ['wdt:P648', 'OL66554W'],
         ['schema:version', '120'],
-        ['schema:dateModified', { time: '+2026-09-18T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }],
+        [
+          'schema:dateModified',
+          { time: '+2026-09-18T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+        ],
       ]);
       const editionDate = (await datePage(editionId)).candidates;
       expect(editionDate).toHaveLength(1);
       expect(editionDate[0]!.statement.value).toEqual({
         type: 'value',
-        content: { time: '+1980-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+        content: {
+          time: '+1980-05-00T00:00:00Z',
+          precision: 10,
+          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        },
       });
       await selectDate(workId, firstCandidate, (await datePage(workId)).adoption);
       firstSelected = await currentDate(workId);
@@ -401,7 +414,11 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
         (candidate) =>
           candidate.statement.value.type === 'value' &&
           JSON.stringify(candidate.statement.value.content) ===
-            JSON.stringify({ time: '+1854-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }),
+            JSON.stringify({
+              time: '+1854-00-00T00:00:00Z',
+              precision: 9,
+              calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+            }),
       );
       expect(refreshedCandidate).toBeDefined();
       expect(refreshedCandidate!.id).not.toBe(firstCandidate.id);
@@ -432,9 +449,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
       : { ...workSource, revision: 8, title: 'Interrupted atlas' };
     const interruptManifest = await writeManifest('interrupt', ['author', 'work', 'edition'], {
       author: tsv(author),
-      work: [interruptedSourceWork, changedWork, extraWorks[1]!, extraWorks[2]!]
-        .map(tsv)
-        .join(''),
+      work: [interruptedSourceWork, changedWork, extraWorks[1]!, extraWorks[2]!].map(tsv).join(''),
       edition: tsv(currentEdition),
     });
     const lostStart = exchanges.length;
@@ -442,17 +457,19 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
     expect([1, 130]).toContain(interrupted.code);
     if (publicationWork && refreshedSelected) {
       expect(await currentDate(workId)).toEqual(refreshedSelected);
-      lostRequest = exchanges.slice(lostStart).find(
-        (exchange) =>
-          exchange.path === '/v1/subjects:batchWrite' &&
-          (JSON.parse(exchange.bytes) as BatchWriteRequest).commands.some(
-            (command) =>
-              command.source.external_id === currentWork.key &&
-              command.source.record_revision === '122' &&
-              command.op === 'propose' &&
-              command.statement.property.id === 'schema:datePublished',
-          ),
-      );
+      lostRequest = exchanges
+        .slice(lostStart)
+        .find(
+          (exchange) =>
+            exchange.path === '/v1/subjects:batchWrite' &&
+            (JSON.parse(exchange.bytes) as BatchWriteRequest).commands.some(
+              (command) =>
+                command.source.external_id === currentWork.key &&
+                command.source.record_revision === '122' &&
+                command.op === 'propose' &&
+                command.statement.property.id === 'schema:datePublished',
+            ),
+        );
       expect(lostRequest).toBeDefined();
     }
     const pendingBefore = local(

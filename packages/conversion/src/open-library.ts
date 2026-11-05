@@ -268,10 +268,7 @@ function time(year: string, month = '00', day = '00'): Time {
     calendarmodel: calendar,
   };
 }
-type ParsedPublicationDate =
-  | { kind: 'date'; value: Time }
-  | { kind: 'invalid_calendar' }
-  | { kind: 'unsupported' };
+type ParsedPublicationDate = { kind: 'date'; value: Time } | { kind: 'invalid_calendar' } | { kind: 'unsupported' };
 
 function parsePublicationDate(value: string): ParsedPublicationDate {
   const iso = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/u.exec(value);

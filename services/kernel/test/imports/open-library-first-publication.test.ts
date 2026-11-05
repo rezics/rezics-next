@@ -10,11 +10,19 @@ test('Open Library Work first publication date survives CLI refresh and explicit
     expect(publication!.firstCandidateId).not.toBe(publication!.refreshedCandidateId);
     expect(publication!.firstSelected.value).toEqual({
       type: 'value',
-      content: { time: '+1853-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+      content: {
+        time: '+1853-00-00T00:00:00Z',
+        precision: 9,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+      },
     });
     expect(publication!.refreshedSelected.value).toEqual({
       type: 'value',
-      content: { time: '+1854-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+      content: {
+        time: '+1854-00-00T00:00:00Z',
+        precision: 9,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+      },
     });
     expect(publication!.replayKey).toBeString();
     expect(JSON.parse(publication!.replayBytes).commands.length).toBeGreaterThan(0);

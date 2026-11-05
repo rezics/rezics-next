@@ -22,27 +22,29 @@ const input = (record: Record<string, unknown>) => ({
 type Proposal = Extract<BatchCommand, { op: 'propose' }>;
 const dateCandidates = (record: Record<string, unknown>) =>
   convertOpenLibrary(input(record), { subjectId }).proposals.filter(
-    (command): command is Proposal => command.op === 'propose' && command.statement.property.id === 'schema:datePublished',
+    (command): command is Proposal =>
+      command.op === 'propose' && command.statement.property.id === 'schema:datePublished',
   );
 
 test('Work first_publish_date retains source precision, citation and independent review identity', () => {
   expect(converter_revision).toBe('open-library@5');
-  const output = convertOpenLibrary(
-    input({ ...work, publish_date: 'May 1813', first_publish_date: '1853' }),
-    { subjectId },
-  );
+  const output = convertOpenLibrary(input({ ...work, publish_date: 'May 1813', first_publish_date: '1853' }), {
+    subjectId,
+  });
   const dates = dateCandidates({ ...work, publish_date: 'May 1813', first_publish_date: '1853' });
   expect(dates).toHaveLength(2);
   if (dates[0]?.op !== 'propose' || dates[1]?.op !== 'propose') throw new Error('Expected both date candidates');
   const content = (command: (typeof dates)[number]) =>
     command.op === 'propose' && command.statement.value.type === 'value' ? command.statement.value.content : null;
-  const original = dates.find((command) =>
-    JSON.stringify(content(command)) ===
-    JSON.stringify({ time: '+1813-05-00T00:00:00Z', precision: 10, calendarmodel: gregorian }),
+  const original = dates.find(
+    (command) =>
+      JSON.stringify(content(command)) ===
+      JSON.stringify({ time: '+1813-05-00T00:00:00Z', precision: 10, calendarmodel: gregorian }),
   );
-  const first = dates.find((command) =>
-    JSON.stringify(content(command)) ===
-    JSON.stringify({ time: '+1853-00-00T00:00:00Z', precision: 9, calendarmodel: gregorian }),
+  const first = dates.find(
+    (command) =>
+      JSON.stringify(content(command)) ===
+      JSON.stringify({ time: '+1853-00-00T00:00:00Z', precision: 9, calendarmodel: gregorian }),
   );
   expect(original).toBeDefined();
   expect(first).toBeDefined();
@@ -53,7 +55,9 @@ test('Work first_publish_date retains source precision, citation and independent
   );
   expect(checkStatementInput(first!.statement, bundledRelease).violations).toEqual([]);
   const reference = first!.statement.references[0]!;
-  expect(reference.parts.map((part) => [part.property.id, part.value.type === 'value' ? part.value.content : null])).toEqual([
+  expect(
+    reference.parts.map((part) => [part.property.id, part.value.type === 'value' ? part.value.content : null]),
+  ).toEqual([
     ['schema:url', 'https://openlibrary.org/works/OL66554W.json'],
     ['wdt:P648', 'OL66554W'],
     ['schema:version', '120'],
@@ -81,9 +85,9 @@ test('malformed and unsupported values withhold only that evidence; oversized an
     const record = { ...work, first_publish_date: value };
     const output = convertOpenLibrary(input(record), { subjectId });
     expect(output.diagnostics).toContainEqual({ pointer: '/first_publish_date', code });
-    expect(output.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:name')).toBe(
-      true,
-    );
+    expect(
+      output.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:name'),
+    ).toBe(true);
     expect(dateCandidates(record)).toHaveLength(0);
   }
   expect(() => convertOpenLibrary(input({ ...work, first_publish_date: 'x'.repeat(1501) }), { subjectId })).toThrow(
@@ -92,9 +96,11 @@ test('malformed and unsupported values withhold only that evidence; oversized an
 
   const absent = convertOpenLibrary(input(work), { subjectId });
   expect(absent.diagnostics.some((entry) => entry.pointer === '/first_publish_date')).toBe(false);
-  expect(absent.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:datePublished')).toBe(
-    false,
-  );
+  expect(
+    absent.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:datePublished',
+    ),
+  ).toBe(false);
 
   let read = 0;
   const accessor = { ...work } as Record<string, unknown>;
@@ -116,9 +122,11 @@ test('malformed and unsupported values withhold only that evidence; oversized an
   expect(output.normalizedRecord).not.toHaveProperty('first_publish_date');
   expect(dateCandidates(edition)).toHaveLength(1);
   const date = dateCandidates(edition)[0];
-  expect(date?.op === 'propose' && date.statement.value.type === 'value' ? date.statement.value.content : null).toEqual({
-    time: '+1980-05-00T00:00:00Z',
-    precision: 10,
-    calendarmodel: gregorian,
-  });
+  expect(date?.op === 'propose' && date.statement.value.type === 'value' ? date.statement.value.content : null).toEqual(
+    {
+      time: '+1980-05-00T00:00:00Z',
+      precision: 10,
+      calendarmodel: gregorian,
+    },
+  );
 });
