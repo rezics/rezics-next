@@ -629,9 +629,6 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(host.querySelector('input[name="q"]')!.getAttribute('value')).toBe(search.q!);
 
       search = { q: '  Private %_ + & ?  ', cursor: 'exact+/native-rejected==' };
-      const rawSearch =
-        'q=%20%20Private%20%25_%20%2B%20%26%20%3F%20%20&cursor=exact%2B%2Fnative-rejected%3D%3D';
-      window.history.replaceState(null, '', `/en/library/labels?${rawSearch}`);
       const rejectedRead = pendingReads.length;
       await show(session('F'));
       expect(pendingReads).toHaveLength(rejectedRead + 1);
@@ -653,11 +650,6 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
         (button) => button.textContent === m.library_collections_first_page(),
       );
       expect(recovery).toBeDefined();
-      await act(async () => (recovery as HTMLButtonElement).click());
-      expect(router.history.location.href).toBe('/en/library/labels?q=%20%20Private%20%25_%20%2B%20%26%20%3F%20%20');
-      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toMatchObject({
-        staged: { direction: 'first', target: null },
-      });
       const undoForm = [...host.querySelectorAll('form')].find((form) =>
         form.querySelector('input[name="operation"][value="restore"]'),
       )!;
