@@ -9,9 +9,22 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
     const quote = search.quote;
     const returnTo = search.returnTo;
     const quotationReturn = search.quotationReturn;
-    if (quotationReturn !== undefined && (typeof quotationReturn !== 'string' || quotationReturn.length > 128))
+    const context = search.context;
+    if (
+      quotationReturn !== undefined &&
+      (typeof quotationReturn !== 'string' ||
+        quotationReturn.length > 128 ||
+        !/^[^\s~]{1,91}~[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          quotationReturn,
+        ))
+    )
       throw notFound();
     if (quote !== undefined && (typeof quote !== 'string' || !/^[0-9a-f-]{36}$/i.test(quote))) throw notFound();
+    if (
+      context !== undefined &&
+      (typeof context !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(context))
+    )
+      throw notFound();
     if (
       returnTo !== undefined &&
       (typeof returnTo !== 'string' ||
@@ -25,6 +38,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
       quotationReturn: typeof quotationReturn === 'string' ? quotationReturn : undefined,
       quote: typeof quote === 'string' ? quote : undefined,
       returnTo: typeof returnTo === 'string' ? returnTo : undefined,
+      context: typeof context === 'string' ? context : undefined,
     };
   },
   head: () => ({ meta: [{ title: m.quotation_title() }, { name: 'robots', content: 'noindex,follow' }] }),
@@ -33,8 +47,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
 
 function QuotationsRoute() {
   const { id } = Route.useParams();
-  const { quote, returnTo } = Route.useSearch();
+  const { quote, returnTo, context } = Route.useSearch();
   return (
-    <QuotationSession key={`${id}:${getLocale()}`} id={id} locale={getLocale()} quote={quote} returnTo={returnTo} />
+    <QuotationSession
+      key={`${id}:${getLocale()}:${context ?? 'global'}`}
+      id={id}
+      locale={getLocale()}
+      context={context}
+      quote={quote}
+      returnTo={returnTo}
+    />
   );
 }

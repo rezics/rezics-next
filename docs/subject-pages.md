@@ -2302,9 +2302,11 @@ in `works.yaml` with `schema:spokenByCharacter`, so labels stay in the eight wor
 Decision: the ordinary overview includes admitted `schema:text` in the existing document composition; `Summary` still
 hydrates only `schema:abstract`. Catalogue file and release-group pages keep viewer
 `{ state, context, statementPropose }`; admitted quotation pages keep `{ kind }` plus correction `actions`.
-Decision: quotation pages derive one native Global `statement:propose` check, matching catalogue pages and
-`readSubjectCorrectionActions`; accept and adopt stay on their Context commands. Journey tests run native link
-projection so GET waits on actual outbound relations. A hidden speaker stays omitted from statements and related,
+Decision: direct quotation routes carry Context; one-use receipts pin Context, caller generation and assertion across `via` returns; corrections use exact Subject/Context permission and stay unavailable when Global-only operation advice cannot serve the selected Context.
+
+The public `via` address remains a bounded path plus quote intent and a one-use marker whose public Context suffix is
+only a recovery address, because the shared Subject return validator does not admit Context inside a nested quotation
+address. A lost receipt restarts with a current read. Accept and adopt stay on their Context commands. A hidden speaker stays omitted from statements and related,
 matching ordinary subject disclosure, while `somevalue` remains the withheld unknown speaker.
 
 The `/quotations` companion follows only relation targets whose released type extends `schema:Quotation`. A quote's
@@ -2331,12 +2333,19 @@ link, and selecting a quotation moves focus to its detail region.
 
 ### Cost
 
-Reading a quotation from a subject uses one current subject read, at most one relation page of 20 entries, one exact
-selected-quotation subject read and at most one exact document hydration. Direct quotation routes skip the relation
-page and selected-quotation read. Native growth measures that bounded quotation page (header, admitted text and
-speaker facts, one document) rather than the full platform overview relation widgets. Qualifiers and reference parts come from that same selected subject response; they
-add no provider or per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats
-the same bounded read and hides old source controls until it completes.
+Reading a quotation from a work uses one current Subject read, at most one relation page of 20 entries, one exact
+selected-quotation Subject read, one exact Subject/Context `viewerActions` request for a signed-in caller, and at most
+20 exact authored-body reads. Direct quotation routes use one Subject read, skip the relation page and separate
+selected-quotation Subject read, and retain the same viewer-action and body ceilings. `ItemSchema` uses unbounded
+string records for native labels and neither native Subject, relation nor viewer-action responses have aggregate
+byte caps. Web therefore rejects each such JSON over 1 MiB, any displayed UTF-8 label over 1,024 bytes, and any
+composed reading over 8 MiB. These post-response caps bound Web retention and rendering, not native database work.
+`checkDocument` enforces the existing 2 MiB serialized document limit. The admitted evidence ceiling remains
+`20 * (1 + 32 + 32 * (1 + 32)) = 21,780` entries. No database or native response-byte bound is claimed. Native
+growth measures the selected quotation page, outbound relation reads, document bytes and retained UTF-8 size.
+Qualifiers and reference parts come from that same selected subject response; they add no provider or
+per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats the same bounded
+read and hides old source controls until it completes.
 
 ## Work title variants
 

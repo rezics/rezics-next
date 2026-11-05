@@ -7410,6 +7410,7 @@
   "quotation_unavailable": "目前無法讀取此引文。",
   "quotation_denied": "目前工作階段無法使用此引文。",
   "quotation_stale": "此文件選擇已過時。",
+  "quotation_reading_changed": "此引文閱讀內容已變更或不再獲准閱讀。請重新開始以閱讀目前語境中的內容。",
   "quotation_empty": "此頁沒有返回引文。",
   "quotation_more": "更多引文",
   "quotation_correct": "提出引文更正",

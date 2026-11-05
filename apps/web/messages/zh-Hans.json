@@ -7407,6 +7407,7 @@
   "quotation_unavailable": "目前无法读取此引文。",
   "quotation_denied": "当前会话无法使用此引文。",
   "quotation_stale": "此文档选择已过时。",
+  "quotation_reading_changed": "此引文阅读内容已更改或不再获准阅读。请重新开始以阅读当前语境中的内容。",
   "quotation_empty": "此页没有返回引文。",
   "quotation_more": "更多引文",
   "quotation_correct": "提出引文更正",

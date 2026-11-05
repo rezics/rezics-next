@@ -7407,6 +7407,7 @@
   "quotation_unavailable": "Esta cita no se puede leer ahora.",
   "quotation_denied": "Esta cita no está disponible para la sesión actual.",
   "quotation_stale": "Esta selección de documento ya no es actual.",
+  "quotation_reading_changed": "La lectura de esta cita cambió o ya no está admitida. Reinicie para leer el contexto actual.",
   "quotation_empty": "Esta página no devolvió citas.",
   "quotation_more": "Más citas",
   "quotation_correct": "Proponer una corrección de cita",

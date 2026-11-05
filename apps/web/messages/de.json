@@ -7407,6 +7407,7 @@
   "quotation_unavailable": "Dieses Zitat kann derzeit nicht gelesen werden.",
   "quotation_denied": "Dieses Zitat ist für die aktuelle Sitzung nicht verfügbar.",
   "quotation_stale": "Diese Dokumentauswahl ist nicht mehr aktuell.",
+  "quotation_reading_changed": "Diese Zitatansicht hat sich geändert oder ist nicht mehr zugelassen. Starten Sie neu, um den aktuellen Kontext zu lesen.",
   "quotation_empty": "Auf dieser Seite wurden keine Zitate geliefert.",
   "quotation_more": "Weitere Zitate",
   "quotation_correct": "Zitatkorrektur vorschlagen",

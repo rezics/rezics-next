@@ -7494,6 +7494,7 @@
   "quotation_unavailable": "This quotation cannot be read right now.",
   "quotation_denied": "This quotation is not available for the current session.",
   "quotation_stale": "This document selection is no longer current.",
+  "quotation_reading_changed": "This quotation reading changed or is no longer admitted. Restart to read the current Context.",
   "quotation_empty": "No quotations were returned on this page.",
   "quotation_more": "More quotations",
   "quotation_correct": "Propose a quotation correction",

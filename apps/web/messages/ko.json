@@ -7407,6 +7407,7 @@
   "quotation_unavailable": "지금은 이 인용을 읽을 수 없습니다.",
   "quotation_denied": "현재 세션에서는 이 인용을 볼 수 없습니다.",
   "quotation_stale": "이 문서 선택은 더 이상 현재가 아닙니다.",
+  "quotation_reading_changed": "이 인용문 읽기 내용이 변경되었거나 더 이상 허용되지 않습니다. 현재 컨텍스트를 읽으려면 다시 시작하세요.",
   "quotation_empty": "이 페이지에 인용이 없습니다.",
   "quotation_more": "인용 더 보기",
   "quotation_correct": "인용 수정 제안",

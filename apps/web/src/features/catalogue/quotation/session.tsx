@@ -10,13 +10,15 @@ export const QuotationSession = candidateSession(function QuotationSessionLive({
   locale,
   quote,
   returnTo,
+  context,
 }: {
   id: string;
   locale: string;
   quote?: string | undefined;
   returnTo?: string | undefined;
+  context?: string | undefined;
 }) {
-  const work = useCatalogueLifetime('quotation-explore');
+  const work = useCatalogueLifetime(JSON.stringify(['quotation-explore', context]));
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   if (state === 'unknown') return <p>{m.quotation_loading({}, { locale: locale as never })}</p>;
@@ -24,6 +26,7 @@ export const QuotationSession = candidateSession(function QuotationSessionLive({
     <QuotationView
       id={id}
       locale={locale}
+      context={context}
       quote={quote}
       returnTo={returnTo}
       transport={{
@@ -32,6 +35,7 @@ export const QuotationSession = candidateSession(function QuotationSessionLive({
             data: {
               id,
               locale,
+              ...(next.context ? { context: next.context } : {}),
               expectedReader,
               quote: next.quote,
               cursor: next.cursor,

@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { languageName } from '../../subject/language';
 import { correctionProposalAvailability } from '../catalogue/statement-editor';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
@@ -9,6 +9,8 @@ import { DocumentBody } from '../../document-body';
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
+import { candidateContext } from '../../subject/candidates';
+import { withSubjectVisitReturn } from './subject-visit-navigation';
 import type {
   QuotationAssertion,
   QuotationContext,
@@ -30,11 +32,18 @@ export type QuotationTransport = {
     quote?: string | undefined;
     cursor?: string | undefined;
     session?: string | undefined;
+    context?: string | undefined;
   }) => Promise<QuotationRead>;
 };
 
 function option(locale: string) {
   return { locale: locale as never };
+}
+
+function contextualVisitHref(href: string, context: string, returnTo: string, locale: string) {
+  const address = new URL(href, 'https://rezics.invalid');
+  address.searchParams.set('context', context);
+  return withSubjectVisitReturn(`${address.pathname}${address.search}`, returnTo, locale);
 }
 
 function contextRole(kind: QuotationContext['kind'], locale: string) {
@@ -76,21 +85,38 @@ function correctionControl(
   locale: string,
   origin: string,
   title: string,
+  context: string,
 ) {
   const o = option(locale);
   const advised = read.actions?.find(
     (action) => action.action === 'statement:propose' && action.operationId === 'subject.propose',
   );
-  const state = read.viewerActions
-    ? correctionProposalAvailability(read.viewerActions)
-    : (advised?.state ?? 'unavailable');
-  const href = `${catalogueEntries.authored({ id: selected.id, title: title || m.quotation_title({}, o), locale }).href}?${new URLSearchParams({ returnTo: origin })}`;
+  const permission = read.viewerActions ? correctionProposalAvailability(read.viewerActions) : undefined;
+  const states = [advised?.state, permission];
+  const state = states.includes('denied')
+    ? 'denied'
+    : states.includes('withheld')
+      ? 'withheld'
+      : permission === 'unavailable' || advised?.state === 'unavailable' || permission === undefined
+        ? 'unavailable'
+        : states.includes('unsupported')
+          ? 'unsupported'
+          : permission === 'allowed' && advised?.state === 'allowed'
+            ? 'allowed'
+            : 'unavailable';
+  const href = withSubjectVisitReturn(
+    catalogueEntries.authored({ id: selected.id, title: title || m.quotation_title({}, o), locale }).href,
+    origin,
+    locale,
+  );
+  const factsHref = contextualVisitHref(subjectHref({ id: selected.id, label: title }, locale).href, context, origin, locale);
   return (
     <div className="space-y-2">
-      <a className={linkClass} href={href}>
-        {state === 'allowed' ? m.quotation_correct({}, o) : m.quotation_authoring({}, o)}
-      </a>
-      {state !== 'allowed' && (
+      {state === 'allowed' ? (
+        <a className={linkClass} href={href}>
+          {m.quotation_correct({}, o)}
+        </a>
+      ) : (
         <p role="status" data-action-state={state}>
           {state === 'denied'
             ? m.quotation_denied({}, o)
@@ -100,6 +126,11 @@ function correctionControl(
                 ? m.quotation_unsupported({}, o)
                 : m.quotation_unavailable({}, o)}
         </p>
+      )}
+      {state === 'unsupported' && (
+        <a className={linkClass} href={factsHref}>
+          {m.quotation_facts({}, o)}
+        </a>
       )}
     </div>
   );
@@ -115,7 +146,17 @@ function textStatus(text: QuotationText, locale: string) {
   return m.quotation_unavailable({}, o);
 }
 
-function SourcePart({ part, locale, returnTo }: { part: QuotationPart; locale: string; returnTo: string }) {
+function SourcePart({
+  part,
+  locale,
+  returnTo,
+  context,
+}: {
+  part: QuotationPart;
+  locale: string;
+  returnTo: string;
+  context: string;
+}) {
   const status = partStatus(part, locale);
   const value = part.value ?? part.id;
   const internalHref =
@@ -123,6 +164,8 @@ function SourcePart({ part, locale, returnTo }: { part: QuotationPart; locale: s
       ? subjectHref({ id: part.id, label: part.value }, locale).href
       : undefined;
   const externalHref = part.status === 'current' && part.href && webUrl(part.href) ? part.href : undefined;
+  const internalReturnHref =
+    internalHref && contextualVisitHref(internalHref, context, returnTo, locale);
   return (
     <li className="min-w-0 break-words">
       <span className="me-2 text-muted-foreground">{part.label}:</span>
@@ -133,7 +176,7 @@ function SourcePart({ part, locale, returnTo }: { part: QuotationPart; locale: s
           {value}
         </a>
       ) : internalHref ? (
-        <a className={linkClass} href={`${internalHref}?${new URLSearchParams({ returnTo })}`}>
+        <a className={linkClass} href={internalReturnHref}>
           {value}
         </a>
       ) : (
@@ -211,11 +254,13 @@ function Evidence({
   references,
   locale,
   returnTo,
+  context,
 }: {
   qualifiers: QuotationPart[];
   references: QuotationText['references'];
   locale: string;
   returnTo: string;
+  context: string;
 }) {
   const o = option(locale);
   return (
@@ -223,7 +268,7 @@ function Evidence({
       {qualifiers.length > 0 && (
         <ul className="space-y-2 text-sm">
           {qualifiers.map((part, index) => (
-            <SourcePart key={index} part={part} locale={locale} returnTo={returnTo} />
+            <SourcePart key={index} part={part} locale={locale} returnTo={returnTo} context={context} />
           ))}
         </ul>
       )}
@@ -246,7 +291,7 @@ function Evidence({
                 {reference.parts.length ? (
                   <ul className="space-y-1">
                     {reference.parts.map((part, index) => (
-                      <SourcePart key={index} part={part} locale={locale} returnTo={returnTo} />
+                      <SourcePart key={index} part={part} locale={locale} returnTo={returnTo} context={context} />
                     ))}
                   </ul>
                 ) : (
@@ -267,7 +312,17 @@ function Evidence({
   );
 }
 
-function QuotationStatement({ text, locale, returnTo }: { text: QuotationText; locale: string; returnTo: string }) {
+function QuotationStatement({
+  text,
+  locale,
+  returnTo,
+  context,
+}: {
+  text: QuotationText;
+  locale: string;
+  returnTo: string;
+  context: string;
+}) {
   const o = option(locale);
   const unavailable = textStatus(text, locale);
   const document = text.body?.ok ? text.body.document : undefined;
@@ -290,7 +345,13 @@ function QuotationStatement({ text, locale, returnTo }: { text: QuotationText; l
               {text.text}
             </p>
           ) : null}
-          <Evidence qualifiers={text.qualifiers} references={text.references} locale={locale} returnTo={returnTo} />
+          <Evidence
+            qualifiers={text.qualifiers}
+            references={text.references}
+            locale={locale}
+            returnTo={returnTo}
+            context={context}
+          />
           <Inspection assertion={text.assertion} locale={locale} returnTo={returnTo} />
         </div>
       </AssertionGate>
@@ -302,10 +363,12 @@ function ContextAssertion({
   context,
   locale,
   returnTo,
+  readingContext,
 }: {
   context: QuotationContext;
   locale: string;
   returnTo: string;
+  readingContext: string;
 }) {
   return (
     <li className="min-w-0 break-words">
@@ -315,7 +378,12 @@ function ContextAssertion({
           {context.status === 'current' && context.id && context.label ? (
             <a
               className={linkClass}
-              href={`${subjectHref({ id: context.id, label: context.label }, locale).href}?${new URLSearchParams({ returnTo })}`}
+              href={contextualVisitHref(
+                subjectHref({ id: context.id, label: context.label }, locale).href,
+                readingContext,
+                returnTo,
+                locale,
+              )}
             >
               {contextText(context, locale)}
             </a>
@@ -330,9 +398,14 @@ function ContextAssertion({
                   references={context.references ?? []}
                   locale={locale}
                   returnTo={returnTo}
+                  context={readingContext}
                 />
               )}
-              <Inspection assertion={context.assertion} locale={locale} returnTo={returnTo} />
+              <Inspection
+                assertion={context.assertion}
+                locale={locale}
+                returnTo={returnTo}
+              />
             </>
           )}
         </div>
@@ -347,18 +420,20 @@ function SelectedText({
   returnTo,
   chosen,
   choose,
+  context,
 }: {
   selected: QuotationRow;
   locale: string;
   returnTo: string;
   chosen?: string | undefined;
   choose: (id?: string) => void;
+  context: string;
 }) {
   const o = option(locale);
   const text =
-    selected.statements.find((text) => text.statementId === chosen) ??
-    selected.statements.find((text) => text.language === locale) ??
-    selected.statements[0];
+    chosen
+      ? selected.statements.find((text) => text.statementId === chosen)
+      : (selected.statements.find((text) => text.language === locale) ?? selected.statements[0]);
   return (
     <>
       {selected.statements.length > 1 && (
@@ -386,7 +461,13 @@ function SelectedText({
         </label>
       )}
       {text && (
-        <QuotationStatement key={text.statementId ?? text.property} text={text} locale={locale} returnTo={returnTo} />
+        <QuotationStatement
+          key={text.statementId ?? text.property}
+          text={text}
+          locale={locale}
+          returnTo={returnTo}
+          context={context}
+        />
       )}
     </>
   );
@@ -397,23 +478,31 @@ function QuotationVisitView({
   locale,
   quote,
   returnTo,
+  context,
   transport,
   initial,
 }: {
   id: string;
   locale: string;
+  context?: string | undefined;
   quote?: string | undefined;
   returnTo?: string | undefined;
   transport: QuotationTransport;
   initial?: QuotationRead | undefined;
 }) {
   const o = option(locale);
-  const visit = useQuotationVisit({ id, locale, quote, returnTo, transport, initial });
+  const visit = useQuotationVisit({ id, locale, context, quote, returnTo, transport, initial });
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const { read, error, loading, selectedRef } = visit;
+  useLayoutEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
-  const factsHref = subjectHref({ id, label: title.text }, locale).href;
-  const origin = visit.safeOrigin ?? factsHref;
   const selected = read?.selected;
+  const readingContext =
+    selected?.statements.find((text) => text.assertion)?.assertion?.context ?? read?.public.subject.context ?? visit.context;
+  const factsHref = contextualVisitHref(subjectHref({ id, label: title.text }, locale).href, readingContext, '', locale);
+  const origin = visit.safeOrigin ?? factsHref;
 
   return (
     <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={loading}>
@@ -421,11 +510,11 @@ function QuotationVisitView({
       <p className="max-w-prose text-muted-foreground">{m.quotation_intro({}, o)}</p>
       {loading && <p role="status">{m.quotation_loading({}, o)}</p>}
       {error && (
-        <p role="alert">
+        <p ref={errorRef} role="alert" tabIndex={-1}>
           {error.reason === 'denied'
             ? m.quotation_denied({}, o)
             : error.reason === 'stale'
-              ? m.quotation_stale({}, o)
+              ? m.quotation_reading_changed({}, o)
               : m.quotation_unavailable({}, o)}
         </p>
       )}
@@ -519,6 +608,7 @@ function QuotationVisitView({
                 returnTo={visit.returnHref}
                 chosen={visit.text}
                 choose={visit.chooseText}
+                context={readingContext}
               />
               <ul className="space-y-2">
                 {selected.contexts.map((context, index) => (
@@ -527,10 +617,11 @@ function QuotationVisitView({
                     context={context}
                     locale={locale}
                     returnTo={visit.returnHref}
+                    readingContext={readingContext}
                   />
                 ))}
               </ul>
-              {correctionControl(read, selected, locale, visit.returnHref, title.text)}
+              {correctionControl(read, selected, locale, visit.returnHref, title.text, readingContext)}
             </section>
           )}
         </div>
@@ -555,5 +646,10 @@ export function QuotationView(props: Parameters<typeof QuotationVisitView>[0]) {
   const source = useRef({ initial: props.initial, generation: 0 });
   if (source.current.initial !== props.initial)
     source.current = { initial: props.initial, generation: source.current.generation + 1 };
-  return <QuotationVisitView key={`${props.id}:${props.locale}:${source.current.generation}`} {...props} />;
+  return (
+    <QuotationVisitView
+      key={`${props.id}:${props.locale}:${props.context ?? candidateContext}:${source.current.generation}`}
+      {...props}
+    />
+  );
 }

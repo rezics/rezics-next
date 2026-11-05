@@ -2,8 +2,13 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { checkDocument } from '@rezics/document';
-import { candidateFailure, type CandidateFailure, type CandidateViewerActions } from '../../../subject/candidates';
-import { readCorrectionActions } from '../statement-editor';
+import {
+  candidateContext,
+  candidateFailure,
+  type CandidateFailure,
+  type CandidateViewerActions,
+  type ViewerActionComponent,
+} from '../../../subject/candidates';
 import { personBounds, personEvidenceFits } from '../person-reader/model';
 import { typeExtends, QUOTATION_PAGE_CAP } from '../../pages/graph-browser';
 import { spoilerLevel, webUrl } from '../../pages/shared';
@@ -113,6 +118,111 @@ type Snak = Statement['qualifiers'][number];
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type ForwardPage = NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>;
 
+const nativeReadingByteLimit = 1024 * 1024;
+const projectedReadingByteLimit = 8 * 1024 * 1024;
+const visibleLabelByteLimit = 1024;
+const utf8 = new TextEncoder();
+
+function jsonBytes(value: unknown) {
+  const json = JSON.stringify(value);
+  return typeof json === 'string' ? utf8.encode(json).byteLength : Number.POSITIVE_INFINITY;
+}
+
+function withinNativeBudget(value: unknown) {
+  return jsonBytes(value) <= nativeReadingByteLimit;
+}
+
+function withinProjectedBudget(value: unknown) {
+  return jsonBytes(value) <= projectedReadingByteLimit;
+}
+
+function boundedLabel(value: string) {
+  if (utf8.encode(value).byteLength > visibleLabelByteLimit) throw new Error('Quotation label exceeds its read budget');
+  return value;
+}
+
+function assertSubjectLabels(subject: SubjectRead) {
+  for (const label of Object.values(subject.subject.labels)) boundedLabel(label);
+  for (const summary of Object.values(subject.related)) {
+    if ('labels' in summary)
+      for (const label of Object.values(summary.labels ?? {})) boundedLabel(label);
+  }
+}
+
+function bounded<T>(value: T): T {
+  if (!withinProjectedBudget(value)) throw new Error('Quotation projection exceeds its read budget');
+  return value;
+}
+
+function unavailableViewerAction(): ViewerActionComponent {
+  return { state: 'unavailable', reason: 'unavailable' };
+}
+
+async function readQuotationViewerActions(
+  client: KernelClient,
+  authorization: string | undefined,
+  id: string,
+  context: string,
+): Promise<CandidateViewerActions> {
+  const notRequested = { state: 'not-requested' } as const;
+  if (!authorization) return { subject: notRequested, context: notRequested };
+  try {
+    const resources = [
+      { type: 'semantic.subject', id },
+      { type: 'semantic.context', id: context },
+    ];
+    const result = await client.viewerActions.post({ resources }, { headers: { authorization }, fetch: { cache: 'no-store' } });
+    if (
+      result.status !== 200 ||
+      !result.data ||
+      result.data.resources.length !== resources.length ||
+      !withinNativeBudget(result.data)
+    )
+      return { subject: unavailableViewerAction(), context: unavailableViewerAction() };
+    const component = (type: string, resourceId: string): ViewerActionComponent => {
+      const matches = result.data!.resources.filter((resource) => resource.type === type && resource.id === resourceId);
+      if (matches.length !== 1) return unavailableViewerAction();
+      const resource = matches[0]!;
+      if (!('viewerActions' in resource)) return { state: 'unavailable', reason: 'not-found' };
+      if (
+        !Array.isArray(resource.viewerActions) ||
+        resource.viewerActions.length > 64 ||
+        resource.viewerActions.reduce((count, action) => count + action.operations.length, 0) > 256 ||
+        resource.viewerActions.some(
+          (action) =>
+            typeof action.action !== 'string' ||
+            !Array.isArray(action.operations) ||
+            action.operations.some((operation) => typeof operation !== 'string'),
+        )
+      )
+        return unavailableViewerAction();
+      return {
+        state: 'available',
+        actions: resource.viewerActions.map((action) => ({ action: action.action, operations: [...action.operations] })),
+      };
+    };
+    return {
+      subject: component('semantic.subject', id),
+      context: component('semantic.context', context),
+    };
+  } catch {
+    return { subject: unavailableViewerAction(), context: unavailableViewerAction() };
+  }
+}
+
+function operationAdvice(subject: SubjectRead, context: string): QuotationAction[] {
+  if (context !== candidateContext) {
+    return [{ action: 'statement:propose', operationId: 'subject.propose', state: 'unsupported' }];
+  }
+  const advice = subject.viewerActions;
+  if (!advice || advice.state !== 'available')
+    return [{ action: 'statement:propose', operationId: 'subject.propose', state: 'unavailable' }];
+  const allowed = advice.actions.some(
+    (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
+  );
+  return [{ action: 'statement:propose', operationId: 'subject.propose', state: allowed ? 'allowed' : 'denied' }];
+}
+
 function headersOf(authorization?: string, session?: string) {
   return {
     ...(authorization ? { authorization } : {}),
@@ -139,13 +249,14 @@ export function quotationProperty(release: Definitions, type: string, ids: reado
 
 function propertyLabel(release: Definitions, property: string, locale: string) {
   const label = pickText(release.properties[property]?.labels ?? {}, locale).text;
-  return label || property;
+  return boundedLabel(label || property);
 }
 
 function relatedLabel(related: SubjectRead['related'], id: string, locale: string) {
   const summary = related[id];
   if (!summary || !('labels' in summary)) return;
-  return pickText(summary.labels ?? {}, locale).text;
+  const label = pickText(summary.labels ?? {}, locale).text;
+  return label ? boundedLabel(label) : undefined;
 }
 
 function ranked(statements: readonly Statement[]) {
@@ -516,17 +627,28 @@ export async function readQuotationPage(
   release: Definitions,
   id: string,
   locale: string,
-  input: { quote?: string | undefined; cursor?: string | undefined; session?: string | undefined },
+  input: {
+    quote?: string | undefined;
+    cursor?: string | undefined;
+    session?: string | undefined;
+    context?: string | undefined;
+  },
 ): Promise<QuotationRead> {
   try {
     const headers = headersOf(authorization, input.session);
-    const current = await client.subjects({ id }).get({ headers });
+    const context = input.context ?? candidateContext;
+    const current = await client.subjects({ id }).get({
+      query: { context, ...(authorization && context === candidateContext ? { includeViewerActions: true } : {}) },
+      headers,
+    });
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
-    if (current.data.subject.id !== id) return candidateFailure(409);
+    if (current.data.subject.id !== id || current.data.subject.context !== context) return candidateFailure(409);
+    if (!withinNativeBudget(current.data)) return candidateFailure(503);
+    assertSubjectLabels(current.data);
     const type = current.data.subject.type;
     const observation = observationOf(current.data.subject);
     if (!quotationTypeAdmitted(release)) {
-      return {
+      return bounded({
         ok: true,
         public: current.data,
         admitted: false,
@@ -535,7 +657,7 @@ export async function readQuotationPage(
         next: null,
         observation,
         unsupportedCount: 0,
-      };
+      });
     }
     const isQuotation = typeExtends(release, type, quotationRequested.type);
     const workProperty = quotationProperty(release, type, quotationRequested.work);
@@ -544,7 +666,7 @@ export async function readQuotationPage(
       ? undefined
       : (workProperty ?? speakerProperty ?? quotationProperty(release, type, ['schema:hasPart']));
     if (!isQuotation && !listProperty) {
-      return {
+      return bounded({
         ok: true,
         public: current.data,
         admitted: false,
@@ -553,12 +675,13 @@ export async function readQuotationPage(
         next: null,
         observation,
         unsupportedCount: 0,
-      };
+      });
     }
     let session = tokenOf(current) ?? input.session;
     let rows: QuotationRow[] = [];
     let next: string | null = null;
     let unsupportedCount = 0;
+    let actionSubject = current.data;
     if (isQuotation) {
       if (input.quote && input.quote !== id) return candidateFailure(409);
       rows = [await quotationRow(client, authorization, release, current.data, locale, session)];
@@ -568,11 +691,13 @@ export async function readQuotationPage(
           property: listProperty,
           language: locale,
           limit: QUOTATION_PAGE_CAP,
+          context,
           ...(input.cursor ? { cursor: input.cursor } : {}),
         },
         headers: headersOf(authorization, session),
       });
       if (page.status !== 200 || !page.data || !('relations' in page.data)) return candidateFailure(page.status);
+      if (!withinNativeBudget(page.data)) return candidateFailure(503);
       session = tokenOf(page) ?? session;
       next = page.data.next;
       const relations = page.data.relations.slice(0, QUOTATION_PAGE_CAP);
@@ -584,32 +709,46 @@ export async function readQuotationPage(
       const chosen = input.quote ?? rows[0]?.id;
       if (input.quote && !rows.some((row) => row.id === input.quote)) return candidateFailure(409);
       if (chosen) {
-        const target = await client.subjects({ id: chosen }).get({ headers: headersOf(authorization, session) });
+        const target = await client.subjects({ id: chosen }).get({
+          query: {
+            context,
+            ...(authorization && context === candidateContext ? { includeViewerActions: true } : {}),
+          },
+          headers: headersOf(authorization, session),
+        });
         if (target.status !== 200 || !target.data) return candidateFailure(target.status);
         if (
           target.data.subject.id !== chosen ||
+          target.data.subject.context !== context ||
           !typeExtends(release, target.data.subject.type, quotationRequested.type)
         )
           return candidateFailure(409);
+        if (!withinNativeBudget(target.data)) return candidateFailure(503);
+        assertSubjectLabels(target.data);
         session = tokenOf(target) ?? session;
+        actionSubject = target.data;
         const detail = await quotationRow(client, authorization, release, target.data, locale, session);
         rows = rows.map((row) => (row.id === chosen ? detail : row));
       }
     }
     const selected = rows.find((row) => row.state === 'current') ?? null;
-    const viewerActions = selected ? await readCorrectionActions(client, authorization, selected.id) : undefined;
-    return {
+    const viewerActions = selected
+      ? await readQuotationViewerActions(client, authorization, selected.id, context)
+      : undefined;
+    const actions = selected ? operationAdvice(actionSubject, context) : undefined;
+    return bounded({
       ok: true,
       public: current.data,
       admitted: true,
       rows,
       selected,
       viewerActions,
+      actions,
       next,
       observation,
       unsupportedCount,
       ...(session ? { session } : {}),
-    };
+    });
   } catch {
     return candidateFailure(503);
   }
@@ -644,46 +783,51 @@ export async function projectQuotationFromPage(
   page: QuotationPage,
   locale: string,
 ): Promise<QuotationRead> {
-  const publicRead = subjectFromPage(page);
-  if (!publicRead) return candidateFailure(503);
-  const observation = observationOf(publicRead.subject);
-  const authority = {
-    ...(page.viewer ? { viewer: page.viewer } : {}),
-    ...(page.actions ? { actions: page.actions } : {}),
-  };
-  if (!quotationTypeAdmitted(release) || !typeExtends(release, publicRead.subject.type, quotationRequested.type)) {
-    return {
+  try {
+    const publicRead = subjectFromPage(page);
+    if (!publicRead || !withinNativeBudget(publicRead)) return candidateFailure(503);
+    assertSubjectLabels(publicRead);
+    const observation = observationOf(publicRead.subject);
+    const authority = {
+      ...(page.viewer ? { viewer: page.viewer } : {}),
+      ...(page.actions ? { actions: page.actions } : {}),
+    };
+    if (!quotationTypeAdmitted(release) || !typeExtends(release, publicRead.subject.type, quotationRequested.type)) {
+      return bounded({
+        ok: true,
+        public: publicRead,
+        admitted: false,
+        rows: [],
+        selected: null,
+        next: null,
+        observation,
+        unsupportedCount: 0,
+        ...authority,
+      });
+    }
+    const selected = await quotationRow(
+      undefined,
+      undefined,
+      release,
+      publicRead,
+      locale,
+      undefined,
+      documentsFromPage(page, publicRead),
+    );
+    return bounded({
       ok: true,
       public: publicRead,
-      admitted: false,
-      rows: [],
-      selected: null,
+      admitted: true,
+      rows: [selected],
+      selected,
       next: null,
       observation,
       unsupportedCount: 0,
       ...authority,
-    };
+    });
+  } catch {
+    return candidateFailure(503);
   }
-  const selected = await quotationRow(
-    undefined,
-    undefined,
-    release,
-    publicRead,
-    locale,
-    undefined,
-    documentsFromPage(page, publicRead),
-  );
-  return {
-    ok: true,
-    public: publicRead,
-    admitted: true,
-    rows: [selected],
-    selected,
-    next: null,
-    observation,
-    unsupportedCount: 0,
-    ...authority,
-  };
 }
 
 export function quotationWorkOrCharacter(release: Definitions, type: string) {
