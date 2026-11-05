@@ -3423,7 +3423,8 @@ The `zone-disposition` admission removes all `resource_grant` and `resource_role
 The `terminal-account-subject` admission removes only identity rows whose subject is the erased account and whose
 subject role is empty; this includes the actual owner role grant and direct/editor action grants while preserving
 organization member grants, surviving owners and grants on other resources. These are separate selections. The
-terminal account branch cannot widen its selection to every row on a Zone.
+terminal-account-subject admission cannot widen its selection to every row on a Zone; that requires a separate
+owner-admitted Zone disposition.
 
 Each page selects K+1 raw ordered erasure keys from one grant table, K=1–100, before terminal-subject filtering; it
 processes at most K and returns the last processed key so the lookahead remains untouched. The next call pages the
