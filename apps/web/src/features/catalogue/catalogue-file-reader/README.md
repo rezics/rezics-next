@@ -20,3 +20,24 @@ one explicit page-recovery request. Cache and browser-session replacement retire
 automatic retry, document fetch or per-association request is retained.
 
 The bounded reader fragment retains at most 4,096 UTF-8 bytes of addresses and keys, never a response body or a nested return URL. It preserves the resolved Context and Definition for comparison, plus native assertion revision and direction. Existing spoiler controls gate complete rows and evidence.
+
+**Decision:** The public correction entry sends the installed correction origin from the current reading, including
+its actual Subject/Type, resolved Context, effective Definition and same-locale immediate public address. Overview
+adds no locator. Only a surviving disclosed own-Subject scalar assertion in the producer's supported fields adds
+its exact property/statement/holder; associations, qualifier parts and historical evidence retain only their public
+return receipt. Existing current statement-proposal advice and Global-only Context/population admission still apply.
+A missing address or Definition, contradictory Realm, or origin exceeding 2,048 characters or UTF-8 bytes uses the
+existing invalid/restart state; it never becomes an origin-free selected correction. The deliberate fresh Global
+choice discards selection and obtains current native advice. Direct legacy Global and creation entries keep their
+existing behavior. Exact Sources receiving stays unsupported without its owner's admitted projection.
+
+Public return enters the existing Subject loader before resolving evidence. It consumes the existing receipt once
+per address and shares the reading's cancellable focus owner with inspection and recovery. Connected visitor focus,
+pointer/keyboard activity and reading retirement defeat pending return focus; replacing a response never replays
+its old selection. Correction navigation submits no command and retains no draft or command operands in its URL.
+
+The added state is one bounded origin, using the stricter 2,048-character **and** 2,048-byte encoded/decoded producer
+ceiling even when the public evidence receipt fits its separate 4,096-byte fragment ceiling. Link composition scans
+only the existing bounded facts/selection and performs no native call. Correction uses the existing bounded profile
+read; returning adds the original current composed page read and linear evidence resolution, without increasing
+stream, detail, page or cursor limits, fetching documents, or adding per-row reads.

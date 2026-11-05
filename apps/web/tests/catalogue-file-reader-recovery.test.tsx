@@ -4,6 +4,7 @@ import { act, createElement, type ReactNode } from 'react';
 import { createRequire } from 'node:module';
 import * as start from '../.storybook/react-start';
 import { catalogueFileReaderVisit } from '../src/features/catalogue/catalogue-file-reader/model';
+import { parseCatalogueFileCorrectionOrigin } from '../src/features/catalogue/catalogue-file-profile/origin';
 import { catalogueFileProfileFixture } from '../src/kernel/fake/catalogue-file-profile';
 
 mock.module('@tanstack/react-start', () => start);
@@ -258,5 +259,55 @@ test('current-page retry names its destination, reports failure and fences retir
     expect(
       host.querySelector('[data-slot="catalogue-file-reader-recovery"] button')?.getAttribute('data-recovery-state'),
     ).toBe('idle');
+  });
+});
+
+test('current public return focus yields to connected visitor focus, interaction and retired readings', async () => {
+  const result = await catalogueFileProfileFixture('ready').read();
+  if (!result.ok) throw new Error('Expected current File');
+  const visit = () =>
+    catalogueFileReaderVisit({
+      locale: 'en',
+      public: structuredClone(result.public),
+      release: result.release,
+      digest: result.digest,
+      allowCorrection: true,
+    });
+  const href = `/en/subjects/${result.public.subject.id}/file`;
+  await mounted(async ({ host, window, render }) => {
+    await render(createElement(CatalogueFileReader, { visit: visit(), currentHref: href }));
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-property="wdt:P4092"] button')!.click());
+    const correction = host.querySelector<HTMLAnchorElement>('[data-slot="catalogue-file-reader-correction"] a')!;
+    const parsed = parseCatalogueFileCorrectionOrigin(
+      new URL(correction.href).searchParams.get('origin'),
+      'en',
+      result.public.subject.id,
+    );
+    if (parsed.kind !== 'valid') throw new Error('Expected current origin');
+    const outside = window.document.createElement('button');
+    window.document.body.append(outside);
+    let pending: FrameRequestCallback | undefined;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        pending = callback;
+        return 1;
+      },
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, value: () => {} });
+    for (const cancel of ['connected', 'pointerdown', 'keydown', 'retired'] as const) {
+      outside.blur();
+      if (cancel === 'connected') outside.focus();
+      await render(
+        createElement(CatalogueFileReader, { key: cancel, visit: visit(), currentHref: parsed.origin.returnHref }),
+      );
+      const heading = host.querySelector('[data-slot="catalogue-file-inspection"] h2');
+      expect(heading).not.toBeNull();
+      if (cancel === 'retired') await act(async () => window.dispatchEvent(new window.Event('pagehide')));
+      else if (cancel !== 'connected') await act(async () => window.dispatchEvent(new window.Event(cancel)));
+      await act(async () => pending?.(0));
+      expect(window.document.activeElement).not.toBe(heading);
+      if (cancel === 'connected') expect(window.document.activeElement).toBe(outside);
+    }
   });
 });

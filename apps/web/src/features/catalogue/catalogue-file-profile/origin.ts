@@ -172,6 +172,8 @@ function validOrigin(
     origin.definition,
   );
   if (!returnHref) return;
+  const returnRealm = fileReaderRealm(returnHref, sourceId ?? origin.subject, locale);
+  if ((origin.realm as string | undefined)?.toLowerCase() !== returnRealm?.toLowerCase()) return;
   return {
     subject: origin.subject.toLowerCase(),
     type: origin.type,

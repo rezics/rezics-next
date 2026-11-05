@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { act, createElement, type ReactNode } from 'react';
 import { createRequire } from 'node:module';
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import {
@@ -8,6 +9,11 @@ import {
   catalogueFile,
   catalogueEpisode,
 } from '../src/kernel/fake/catalogue-file-profile';
+import type { SubjectPageData } from '../src/features/pages/subject';
+import {
+  admittedCatalogueFileSelection,
+  parseCatalogueFileCorrectionOrigin,
+} from '../src/features/catalogue/catalogue-file-profile/origin';
 import { catalogueFileReaderVisit } from '../src/features/catalogue/catalogue-file-reader/model';
 import {
   fileEvidenceAt,
@@ -16,9 +22,13 @@ import {
 } from '../src/features/catalogue/catalogue-file-reader/navigation';
 
 mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { CatalogueFileReader, CatalogueFileReturnLink } =
+const { CatalogueFileReader, CatalogueFileReaderOverview, CatalogueFileReturnLink } =
   await import('../src/features/catalogue/catalogue-file-reader/reader');
+const { CatalogueFileProfilePage } = await import('../src/features/catalogue/catalogue-file-profile/view');
+const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+const { Route: FileRoute } = await import('../src/routes/subjects/$id_.$slug_.file');
 const realm = '00000000-0000-4000-8000-00000000b001';
 const sourceHref = `/en/subjects/${catalogueFile}/episode-1-file-a?realm=${realm}`;
 
@@ -53,7 +63,10 @@ async function mounted(
   try {
     await run(
       host,
-      async (element) => act(async () => root.render(createElement(QueryClientProvider, { client }, element))),
+      async (element) => {
+        await act(async () => root.render(createElement(QueryClientProvider, { client }, element)));
+        await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+      },
       client,
     );
   } finally {
@@ -230,4 +243,150 @@ test('concealed and spoiler evidence has no href, identifier or inspection fallb
   });
   expect(fileEvidenceReturn('#catalogue-file-reader?evidence=%')).toBeUndefined();
   expect(fileEvidenceAt(`/ja/subjects/${catalogueFile}/file#catalogue-file-reader`, 'en')).toBeUndefined();
+});
+
+test('the mounted public correction entry carries overview or exact own scalar intent and keeps public evidence separate', async () => {
+  const result = await catalogueFileProfileFixture('ready').read();
+  if (!result.ok) throw new Error('Expected current File');
+  const href = `/en/subjects/${catalogueFile}/episode-file`;
+  const page: SubjectPageData = {
+    subject: catalogueFile,
+    profile: 'file',
+    template: { scope: 'base', key: result.public.subject.type },
+    document: { root: { props: {} }, content: [] },
+    reads: {},
+    catalogue: {
+      state: 'released',
+      type: result.public.subject.type,
+      digest: result.digest,
+      definitions: result.release,
+    },
+    viewer: {
+      state: 'account',
+      account: catalogueFile,
+      context: result.public.subject.context,
+      actions: { statementPropose: 'allowed' },
+    },
+  };
+  await mounted(async (host, render, client) => {
+    const overview = (currentHref = href) =>
+      createElement(CatalogueFileReaderOverview, {
+        page,
+        public: result.public,
+        locale: 'en',
+        currentHref,
+      });
+    const origin = () => {
+      const url = new URL(link(host, '[data-slot="catalogue-file-reader-correction"] a'), 'https://site.test');
+      expect(url.searchParams.get('fileSource')).toBe(catalogueFile);
+      const parsed = parseCatalogueFileCorrectionOrigin(url.searchParams.get('origin'), 'en', catalogueFile);
+      if (parsed.kind !== 'valid') throw new Error('Expected observed correction origin');
+      return parsed.origin;
+    };
+    await render(overview());
+    expect(origin()).toMatchObject({
+      subject: catalogueFile,
+      context: result.public.subject.context,
+      definition: result.digest,
+    });
+    expect(origin().selection).toBeUndefined();
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-property="wdt:P4092"] button')!.click());
+    const scalar = origin();
+    expect(admittedCatalogueFileSelection(result, scalar)).toEqual({
+      property: 'wdt:P4092',
+      candidate: result.public.subject.statements['wdt:P4092']![0]!.id,
+    });
+    expect(fileEvidenceAt(scalar.returnHref, 'en')?.kind).toBe('assertion');
+    const search = FileRoute.options.validateSearch as (input: Record<string, unknown>) => {
+      origin: ReturnType<typeof parseCatalogueFileCorrectionOrigin>;
+    };
+    const received = search(
+      Object.fromEntries(
+        new URL(link(host, '[data-slot="catalogue-file-reader-correction"] a'), 'https://site.test').searchParams,
+      ),
+    );
+    expect(received.origin).toMatchObject({ kind: 'valid', origin: scalar });
+    const router = createRouter({
+      routeTree: createRootRoute(),
+      history: createMemoryHistory({ initialEntries: [href + '/file'] }),
+    });
+    const unexpected = async (): Promise<never> => {
+      throw new Error('Navigation must not submit a command');
+    };
+    const receiver = catalogueFileProfileFixture('ready');
+    await render(
+      createElement(
+        RouterContextProvider,
+        { router },
+        createElement(CandidateReaderBoundary, {
+          observed: { state: 'signed-in', subject: catalogueFile, csrfToken: 'one' },
+          address: href + '/file',
+          children: createElement(CatalogueFileProfilePage, {
+            id: catalogueFile,
+            locale: 'en',
+            origin: scalar,
+            returnHref: scalar.returnHref,
+            returnSourceId: catalogueFile,
+            search: async () => [],
+            transport: {
+              read: receiver.read,
+              facts: {
+                read: async () => ({ ok: true, public: result.public, release: result.release, source: null }),
+                propose: unexpected,
+              },
+              relation: () => ({ read: unexpected, propose: unexpected, confirm: unexpected }),
+              review: () => ({ read: async () => ({ ok: false, reason: 'denied' }), confirm: unexpected }),
+            },
+          }),
+        }),
+      ),
+    );
+    expect(host.querySelector('[data-slot="catalogue-file-profile"]')).not.toBeNull();
+    expect(host.querySelector('[data-slot="catalogue-file-correction-restart"]')).toBeNull();
+    expect([...host.querySelectorAll('a')].some((anchor) => anchor.getAttribute('href') === scalar.returnHref)).toBe(
+      true,
+    );
+    expect(receiver.calls.every((call) => call.method === 'GET')).toBe(true);
+    await render(overview());
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-inspection-kind="association"]')!.click());
+    expect(origin().selection).toBeUndefined();
+    expect(fileEvidenceAt(origin().returnHref, 'en')?.kind).toBe('association');
+    await render(overview(href.replace('episode-file', 'x'.repeat(768))));
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-property="wdt:P4092"] button')!.click());
+    expect(
+      new URL(link(host, '[data-slot="catalogue-file-reader-correction"] a'), 'https://site.test').searchParams.get(
+        'origin',
+      ),
+    ).toBe('!');
+    for (const advice of ['denied', 'unavailable'] as const) {
+      page.viewer!.actions.statementPropose = advice;
+      await render(overview());
+      expect(host.querySelector('[data-slot="catalogue-file-reader-correction"]')).toBeNull();
+    }
+    page.viewer!.actions.statementPropose = 'allowed';
+    page.requestedRealm = realm;
+    await render(overview(`${href}?realm=${realm}`));
+    expect(host.querySelector('[data-slot="catalogue-file-reader-correction"]')).toBeNull();
+    page.requestedRealm = undefined;
+    await render(overview());
+    const stale = host.querySelector<HTMLAnchorElement>('[data-slot="catalogue-file-reader-correction"] a')!;
+    let prevented = false;
+    stale.addEventListener('click', (event) => {
+      prevented = event.defaultPrevented;
+    });
+    await act(async () => {
+      client.setQueryData(['session'], { state: 'signed-in', subject: catalogueFile, csrfToken: 'changed' });
+      stale.click();
+    });
+    expect(prevented).toBe(true);
+    // The ordinary route supplies the new public read. Return never reuses the old response.
+    const fresh = catalogueFileReaderVisit({
+      public: structuredClone(result.public),
+      locale: 'en',
+      release: result.release,
+      digest: result.digest,
+    });
+    await render(createElement(CatalogueFileReader, { key: 'fresh', visit: fresh, currentHref: scalar.returnHref }));
+    expect(host.querySelector('[data-slot="catalogue-file-inspection"]')).not.toBeNull();
+  });
 });
