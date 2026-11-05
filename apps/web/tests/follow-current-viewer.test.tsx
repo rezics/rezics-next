@@ -1,11 +1,11 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { FollowControlProps } from '../src/library/follow-control';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
 
-// UNRUN: mounted regressions for integration. Puck's installed DOM is reused without new dependencies.
+// Mounted regressions for integration. Puck's installed DOM is reused without new dependencies.
 // These controlled transports do not prove native authorization or browser/session integration.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -46,6 +46,16 @@ const writes: (ReturnType<typeof deferred<FollowWriteResult>> & { input: FollowW
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/library/follow-actions', () => ({
+  readCurrentFollowState: ({ data }: { data: { targetId: string } }) => {
+    const subject = client.getQueryData<{ subject: string | null }>(sessionQuery.queryKey)?.subject ?? null;
+    const call = { ...deferred<FollowState>(), targetId: data.targetId };
+    reads.push(call);
+    return call.promise.then((edge) => ({
+      subject,
+      targetId: data.targetId,
+      edge,
+    }));
+  },
   readFollowState: ({ data }: { data: { targetId: string } }) => {
     const call = { ...deferred<FollowState>(), targetId: data.targetId };
     reads.push(call);
@@ -60,6 +70,7 @@ mock.module('../src/library/follow-actions', () => ({
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
+const viewerExposure = await import('../src/kernel/viewer-exposure');
 const { FollowTargetControl, followStateQuery } = await import('../src/library/follow-target-control');
 const { FollowControl } = await import('../src/library/follow-control');
 const { m } = await import('../src/paraglide/messages.js');
@@ -74,6 +85,10 @@ const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
+spyOn(viewerExposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
+  subject: data,
+  admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
+}));
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 const paint = (node: ReactNode, session?: Viewer) =>
   act(async () => {
@@ -119,6 +134,21 @@ const settle = <T,>(call: ReturnType<typeof deferred<T>>, value: T) =>
   });
 const cached = (subject = 'viewer-one', targetId = firstTarget) =>
   client.getQueryData(followStateQuery(subject, targetId).queryKey);
+const observedCache = (subject: string, targetId = firstTarget) =>
+  client
+    .getQueriesData<FollowState>({ queryKey: ['follow-state', subject, targetId] })
+    .map(([, value]) => value)
+    .filter((value): value is FollowState => value !== undefined);
+const setCurrentExposure = (admitted: string[]) =>
+  act(async () => {
+    const snapshot = viewerExposure.viewerExposureLifetime(client).getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('Expected a current signed-in exposure observation');
+    client.setQueryData(viewerExposure.viewerExposureQuery(snapshot.observation).queryKey, {
+      subject: snapshot.observation.subject,
+      admitted,
+    });
+    await tick();
+  });
 
 beforeEach(() => {
   reads.length = 0;
@@ -142,30 +172,29 @@ afterAll(async () => {
 });
 
 test('Follow state and pending mutation completions cannot cross observed viewer or target replacement', async () => {
-  client.setQueryData(followStateQuery('viewer-one', firstTarget).queryKey, { state: 'ready', following: true });
   await target({ following: undefined });
   expect(reads).toHaveLength(1);
-  expect(host.textContent).toContain(m.library_following());
+  expect(host.textContent).toContain(m.library_follow_loading());
   const oldViewerRead = reads[0]!;
   await target({ following: undefined }, viewer('viewer-two'));
   expect(reads).toHaveLength(2);
   await settle(oldViewerRead, { state: 'ready', following: true });
-  expect(cached('viewer-two')).toBeUndefined();
+  expect(observedCache('viewer-two')).toEqual([]);
   expect(host.textContent).not.toContain(m.library_following());
   await settle(reads[1]!, { state: 'ready', following: false });
   expect(button(m.library_follow()).disabled).toBe(false);
-  expect(cached('viewer-two')).toEqual({ state: 'ready', following: false });
+  expect(observedCache('viewer-two')).toEqual([{ state: 'ready', following: false }]);
 
   await target({ targetId: secondTarget, following: undefined });
   const oldTargetRead = reads[2]!;
   await target({ targetId: 'target-three', following: undefined });
   expect(reads).toHaveLength(4);
   await settle(oldTargetRead, { state: 'ready', following: true });
-  expect(cached('viewer-two', 'target-three')).toBeUndefined();
+  expect(observedCache('viewer-two', 'target-three')).toEqual([]);
   expect(host.textContent).not.toContain(m.library_following());
   await paint(null);
   await settle(reads[3]!, { state: 'ready', following: true });
-  expect(cached('viewer-two', 'target-three')).toBeUndefined();
+  expect(observedCache('viewer-two', 'target-three')).toEqual([]);
   expect(reads.map((call) => call.targetId)).toEqual([firstTarget, firstTarget, secondTarget, 'target-three']);
 });
 
@@ -217,7 +246,7 @@ test('Unknown, signed-out, missing-subject and unadmitted viewers cannot dispatc
   expect(host.querySelector('button')).toBeNull();
   expect(writes).toHaveLength(0);
   await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
-  await target({ following: false });
+  await target({ following: false }, viewer('viewer-one', 'csrf-two'));
   await click(m.library_follow(), true);
   expect(writes).toHaveLength(1);
   expect(writes[0]!.input.following).toBe(true);
@@ -244,21 +273,24 @@ for (const loss of ['unknown', 'signed-out', 'csrf', 'admission'] as const) {
     await target(props);
     await click(m.library_follow_unfollow());
     const oldWrite = writes[0]!;
-    if (loss === 'admission') await act(async () => client.setQueryData(exposureQuery.queryKey, []));
-    await target(
-      props,
-      loss === 'csrf'
-        ? { ...viewer(), csrfToken: null }
-        : loss === 'admission'
-          ? viewer()
+    if (loss === 'admission') await setCurrentExposure([]);
+    if (loss === 'admission') await target(props);
+    else
+      await target(
+        props,
+        loss === 'csrf'
+          ? { ...viewer(), csrfToken: null }
           : { state: loss, subject: null, csrfToken: null },
-    );
-    expect(host.querySelector<HTMLButtonElement>('button')?.disabled ?? true).toBe(true);
-    await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
+      );
+    expect(host.querySelector<HTMLButtonElement>('button')?.disabled ?? true).toBe(loss !== 'csrf');
     await target(props, viewer());
+    await setCurrentExposure(['personal_library']);
     await click(m.library_follow_unfollow());
     expect(writes).toHaveLength(2);
-    if (loss === 'csrf') expect(writes[1]!.input).toBe(oldWrite.input);
+    if (loss === 'csrf' || loss === 'admission') {
+      expect(writes[1]!.input).toBe(oldWrite.input);
+      expect(writes[1]!.csrfToken).toBe('csrf-one');
+    }
     await settle(oldWrite, { ok: true, following: false });
     expect(removed).toBe(0);
     expect(cached()).toBeUndefined();
@@ -277,22 +309,57 @@ test('Rerenders, refreshed following, callbacks, supplied keys and nonempty CSRF
   const refreshed = { following: false, idempotencyKey: secondKey, onRemoved: () => currentRemoved++ };
   await target(refreshed, viewer('viewer-one', 'csrf-two'));
   expect(writes).toHaveLength(1);
-  expect(button(m.library_follow_unfollow()).disabled).toBe(true);
+  expect(button(m.library_follow_unfollow()).disabled).toBe(false);
   await act(async () => first.reject(new Error('Response lost')));
   expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.error_message());
   await target({ ...refreshed, onRemoved: () => currentRemoved++ });
   await click(m.library_follow_unfollow());
   expect(writes[1]!.input).toBe(first.input);
-  expect(writes[1]!.csrfToken).toBe('csrf-two');
+  expect(writes[1]!.csrfToken).toBe('csrf-one');
   await settle(writes[1]!, { ok: false, reason: 'unavailable' });
   await target({ ...refreshed, following: true }, viewer('viewer-one', 'csrf-three'));
   expect(writes).toHaveLength(2);
   await click(m.library_follow_unfollow());
   expect(writes[2]!.input).toBe(first.input);
-  expect(writes[2]!.csrfToken).toBe('csrf-three');
+  expect(writes[2]!.csrfToken).toBe('csrf-one');
   await settle(writes[2]!, { ok: true, following: false });
   expect(oldRemoved).toBe(0);
   expect(currentRemoved).toBe(1);
+});
+
+test('A missing initial CSRF token preserves the seeded request through an explicit rejected-command review', async () => {
+  let reviews = 0;
+  await target(
+    { onReview: async () => (reviews++, { state: 'ready', following: true }) },
+    { ...viewer(), csrfToken: null },
+  );
+  await click(m.library_follow_unfollow());
+  expect(writes).toHaveLength(0);
+
+  await target(
+    {
+      idempotencyKey: secondKey,
+      onReview: async () => (reviews++, { state: 'ready', following: true }),
+    },
+    viewer('viewer-one', 'csrf-ready'),
+  );
+  await click(m.library_follow_unfollow());
+  expect(writes).toHaveLength(1);
+  const rejected = writes[0]!;
+  expect(rejected.input).toEqual({ targetId: firstTarget, following: false, idempotencyKey: firstKey });
+  expect(rejected.csrfToken).toBe('csrf-ready');
+  await settle(rejected, { ok: false, reason: 'conflict' });
+
+  await click(m.library_follow_conflict_recovery_review());
+  expect(reviews).toBe(1);
+  expect(host.textContent).toContain(m.library_follow_conflict_recovery_ready());
+  await click(m.library_follow_unfollow());
+  expect(writes).toHaveLength(2);
+  expect(writes[1]!.input.targetId).toBe(firstTarget);
+  expect(writes[1]!.input.following).toBe(false);
+  expect(writes[1]!.input.idempotencyKey).not.toBe(firstKey);
+  await settle(writes[1]!, { ok: true, following: false });
+  expect(host.textContent).toContain(m.library_follow_removed());
 });
 
 test('The standalone presenter fences target changes, preserves independent remove admission and keeps conflict explicit', async () => {
