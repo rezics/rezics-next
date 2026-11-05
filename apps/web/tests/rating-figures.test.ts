@@ -1,25 +1,24 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import { createKernelClient } from '@rezics/client';
 import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import recorded from '../src/kernel/recorded/subject-page.json';
-import { RatingControlView, applyOptimisticRatingChange } from '../src/features/pages/rating-control';
-import { RatingsView } from '../src/features/pages/subject-ratings-view';
-import { subjectHead } from '../src/features/pages/subject-head';
-import { subjectOwnRatingQuery, subjectRatingQuery } from '../src/features/pages/subject-queries';
-import {
-  GLOBAL,
-  QUESTION,
-  preparedRatingReader,
-  readRatings,
-  readOwnRating,
-  writeOwnRating,
-  type PublicFigure,
-  type RatingQuestion,
-} from '../src/features/pages/subject-ratings';
+import type { PublicFigure, RatingQuestion } from '../src/features/pages/subject-ratings';
 import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
-import { ResultRow } from '../src/search/results';
+
+const { RatingControlView, applyOptimisticRatingChange } = await import('../src/features/pages/rating-control');
+const { RatingsView } = await import('../src/features/pages/subject-ratings-view');
+const { subjectHead } = await import('../src/features/pages/subject-head');
+const { subjectOwnRatingQuery, subjectRatingQuery } = await import('../src/features/pages/subject-queries');
+const { GLOBAL, QUESTION, preparedRatingReader, readRatings, readOwnRating, writeOwnRating } = await import(
+  '../src/features/pages/subject-ratings'
+);
+const { ResultRow } = await import('../src/search/results');
 
 const subjectId = recorded.subject;
 const question: RatingQuestion = {

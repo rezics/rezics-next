@@ -10,7 +10,6 @@ import {
   type PersonalScoreWriteCommand,
   type PersonalScoreWriteResult,
 } from '../../library/personal-score';
-import { changeSubjectRating } from './rating-actions';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
 import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';
@@ -480,7 +479,10 @@ export function SubjectRatingControl({
         pendingCommand: command,
         write:
           write ??
-          (async (input) => changeSubjectRating({ data: { subjectId, ...input } })),
+          (async (input) => {
+            const { changeSubjectRating } = await import('./rating-actions');
+            return changeSubjectRating({ data: { subjectId, ...input } });
+          }),
         onFailure: (result) => {
           if (!isCurrentBinding()) return;
           const notice = personalScoreWriteNotice(result.stale ? 'stale' : result.uncertain ? 'uncertain' : 'rejected');
