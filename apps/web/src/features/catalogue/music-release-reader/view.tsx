@@ -152,7 +152,12 @@ export function MusicReleaseReader(props: Props) {
   currentAdmission.current = admission;
   const current = () => admitted && currentAdmission.current === admission && reading.isCurrent();
   const o = { locale: props.locale as never };
-  const currentSubjectHref = contextHref(subjectHref({ id: props.id, label: '' }, props.locale).href, props.realm);
+  const currentSubjectUrl = new URL(
+    contextHref(subjectHref({ id: props.id, label: '' }, props.locale).href, props.realm),
+    'https://rezics.invalid',
+  );
+  currentSubjectUrl.searchParams.set('context', props.context);
+  const currentSubjectHref = `${currentSubjectUrl.pathname}${currentSubjectUrl.search}`;
   const focusHeading = () => heading.current?.focus();
   useLayoutEffect(() => {
     mounted.current = true;
@@ -236,11 +241,13 @@ export function MusicReleaseReader(props: Props) {
       ) : (
         <div className="space-y-3" aria-busy={recovery?.status === 'pending'}>
           <p role="status">
-            {admission.reason === 'withheld'
-              ? m.music_release_withheld({}, o)
-              : admission.reason === 'invalid'
-                ? m.music_release_invalid({}, o)
-                : m.music_release_retired({}, o)}
+            {admission.reason === 'changed'
+              ? m.music_release_changed({}, o)
+              : admission.reason === 'withheld'
+                ? m.music_release_withheld({}, o)
+                : admission.reason === 'invalid'
+                  ? m.music_release_invalid({}, o)
+                  : m.music_release_retired({}, o)}
           </p>
           <p className="text-sm text-muted-foreground">{m.music_release_recovery_scope({}, o)}</p>
           {recovery &&

@@ -117,7 +117,16 @@ test('recording visit returns to its exact current stream, Context and row; Prev
     await ui.settle();
     expect(ui.host.textContent).toContain(m.music_release_changed());
     expect(ui.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(0);
-    await ui.click(m.work_parts_restart());
+    const currentLink = Array.from(ui.host.querySelectorAll<HTMLAnchorElement>('a')).find(
+      (node) => node.textContent === m.music_release_recover(),
+    )!;
+    const currentUrl = new URL(currentLink.href);
+    expect(currentUrl.searchParams.get('context')).toBe(musicAddress.context);
+    expect(currentUrl.searchParams.has('musicReturnRevision')).toBe(false);
+    await ui.render(null);
+    ui.window.history.replaceState({}, '', currentUrl.pathname + currentUrl.search);
+    await ui.render({ ...props, initial: undefined });
+    await ui.settle();
     expect(addresses.at(-1)).toEqual({ id: releaseId, context: musicAddress.context });
     expect(ui.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
   } finally {
