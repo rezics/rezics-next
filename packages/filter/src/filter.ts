@@ -1237,7 +1237,7 @@ export function admitDiscoveryFilter(
   filter: DiscoveryFilterDocument,
   release: FilterRelease,
   kinds: ReadonlySet<string>,
-  options?: Pick<FilterAdmissionOptions, 'owner' | 'spoilerThreshold'>,
+  options?: Pick<FilterAdmissionOptions, 'inverse' | 'owner' | 'spoilerThreshold'>,
 ): DiscoveryFilterDocument {
   return admitConstructed(filter, release, { ...options, kinds }, constructionFor(release));
 }

@@ -21,6 +21,22 @@ export function rangeDescription(range: FilterRange, locale = 'en'): string {
     .join(' ');
 }
 
+function relationDescription(property: ReactNode, values: ReactNode, locale: string): ReactNode {
+  const options = { locale: locales.find((item) => item === locale) ?? 'en' };
+  const propertyToken = '\uE000property\uE001';
+  const valuesToken = '\uE000values\uE001';
+  const sentence = m.condition_relation_inverse({ property: propertyToken, values: valuesToken }, options);
+  return sentence.split(/(\uE000property\uE001|\uE000values\uE001)/g).map((part, index) =>
+    part === propertyToken ? (
+      <span key={index}>{property}</span>
+    ) : part === valuesToken ? (
+      <span key={index}>{values}</span>
+    ) : (
+      part
+    ),
+  );
+}
+
 /** Preserve the executed Boolean structure and same-statement qualifiers in the explanation. */
 export function PredicateDescription({
   value,
@@ -92,11 +108,15 @@ export function PredicateDescription({
     return <>{saved ? saved(value.saved) : m.condition_saved_filter_label({ id: value.saved }, options)}</>;
   if ('statement' in value) {
     const statement = value.statement;
+    const inverseDescription =
+      'inverse' in statement && statement.inverse && 'in' in statement
+        ? relationDescription(label(statement.property), terms(statement.in), locale)
+        : undefined;
     return (
       <>
         {label(statement.property)}:{' '}
         {'in' in statement ? terms(statement.in) : rangeDescription(statement.range, locale)}
-        {'inverse' in statement && statement.inverse ? ' ←' : null}
+        {inverseDescription ? <p>{inverseDescription}</p> : null}
         {'in' in statement && statement.concept
           ? ` (${m.condition_concept_predicate(
               {

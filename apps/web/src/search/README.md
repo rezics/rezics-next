@@ -129,6 +129,8 @@ changed or uncertain authority yields an explicit session/unavailable state; it 
 
 The Search page is the wiring owner for request-only resource admission in ConditionEditor, population-aware GET order
 in SearchSort, scoped refinement continuations in Refinement, and the expanded response union in DiscoveryResults.
+Decision: relation direction names the source and target; direct uses each result as source, inverse uses each selected
+operand as source, and both descriptions name the released property and selected operand labels.
 GET submission, the shell/header form, refinements, retry/restart links, result-kind navigation and browser history
 carry Realm or Collection membership and `ratingPopulation` separately. Changing either basis or order drops the hit
 cursor. Removing a membership leaf retains sibling predicates; removing `ratingPopulation` selects Global. Blank or

@@ -2,11 +2,13 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import type { DiscoveryFilterDocument, FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { Access } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { createDefaultDiscoverySearch } from '../../src/search/default-discovery.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
+import { compileDiscoveryCapture, currentDiscoveryFilter } from '../../src/search/discovery-filter.ts';
 import { admitDiscoveryRequest, type MixedDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import { encodeDiscoveryCursor } from '../../src/search/cursor.ts';
@@ -111,6 +113,61 @@ function liveRequest(): MixedDiscoveryRequest & {
     kindPage: { limit: 1 },
   };
 }
+
+test('general discovery admits a released inverse relation and carries it into native current capture', () => {
+  const relation = Object.entries(bundledRelease.properties).find(
+    ([, definition]) =>
+      definition.datatype === 'wikibase-item' &&
+      definition.relation &&
+      definition.qualifiers?.some((property) => bundledRelease.properties[property]?.datatype === 'wikibase-item'),
+  );
+  expect(relation).toBeDefined();
+  const [property, definition] = relation!;
+  const qualifier = definition.qualifiers!.find(
+    (candidate) => bundledRelease.properties[candidate]?.datatype === 'wikibase-item',
+  )!;
+  const inverse: FilterDocument = {
+    statement: {
+      property,
+      inverse: true,
+      in: [id],
+      qualifiers: [{ property: qualifier, in: [id] }],
+    },
+  };
+  const filter: DiscoveryFilterDocument = {
+    and: [
+      { kind: { in: ['schema:Person'] } },
+      inverse,
+    ],
+  };
+  const request: MixedDiscoveryRequest = {
+    representation: 'discovery-v1',
+    filter,
+    limit: 1,
+    kindPage: { limit: 1 },
+  };
+  const current = registry();
+  const admitted = admitDiscoveryRequest(request, current, bundledRelease);
+  expect(admitted.filter).toEqual(filter);
+  expect(currentDiscoveryFilter(admitted.filter!, current, 'schema:Person', bundledRelease)).toEqual(
+    inverse,
+  );
+  const capture = compileDiscoveryCapture(
+    {
+      representation: 'discovery-v1',
+      comparator: 'mixed-public-v1',
+      filterDocument: admitted.filter,
+      text: admitted.text,
+      sort: admitted.sort,
+      size: 2,
+      pageSize: 1,
+    },
+    current,
+    bundledRelease,
+  );
+  expect(capture.filterDocument).toEqual(filter);
+  expect(JSON.stringify(capture.filter)).toContain('match_all');
+});
 
 function mutate(request: ReturnType<typeof liveRequest>) {
   request.text = 'mutated';
