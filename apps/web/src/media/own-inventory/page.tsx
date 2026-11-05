@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { executeOwnMediaErase, type OwnMediaEraseResult, type OwnMediaRead } from './actions';
@@ -329,6 +329,12 @@ export function OwnMediaInventoryWorkspace({
     if (episode && retryAdmitted && feedback?.kind === 'uncertain') void runErase(episode);
   };
 
+  // Read the ref at activation: confirmation can precede React's next render.
+  // An unresolved original command must stay mounted for its existing recovery.
+  const admitPageMovement = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (episodeRef.current || !isCurrent()) event.preventDefault();
+  };
+
   const format = locale || localeNow;
   const invalidPageState = state === 'ready' && invalidPage;
   const status = invalidPageState ? 'unavailable' : state;
@@ -354,6 +360,7 @@ export function OwnMediaInventoryWorkspace({
             {busy && episodeAuthority ? m.own_media_removing() : m.own_media_removal_uncertain()}
           </p>
           <p className="text-sm text-muted-foreground">{m.own_media_recovery_browsing()}</p>
+          <p className="text-sm text-muted-foreground">{m.own_media_movement_withheld()}</p>
           {!busy && retryAdmitted ? <p className="text-sm">{m.own_media_removal_uncertain_detail()}</p> : null}
           {!retryAdmitted ? <p>{m.own_media_recovery_withheld()}</p> : null}
           <div className="flex flex-wrap gap-2">
@@ -393,7 +400,12 @@ export function OwnMediaInventoryWorkspace({
             </Button>
           ) : null}
           {status === 'invalid-cursor' ? (
-            <Link to="/library/media" className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}>
+            <Link
+              to="/library/media"
+              onClick={admitPageMovement}
+              aria-disabled={!!episode}
+              className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}
+            >
               {m.own_media_restart_action()}
             </Link>
           ) : null}
@@ -580,6 +592,8 @@ export function OwnMediaInventoryWorkspace({
               <Link
                 to="/library/media"
                 search={{ cursor: page.nextCursor }}
+                onClick={admitPageMovement}
+                aria-disabled={!!episode}
                 className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}
               >
                 {m.own_media_continue()}
