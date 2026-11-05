@@ -51,7 +51,7 @@ function VisitSession({
     ...personalRead,
     queryKey: visit.key,
     queryFn: ({ signal }) => {
-      const movement = navigation?.request();
+      const movement = navigation?.request(props.mode === 'directory' ? props.input.cursor : undefined);
       return visit.read<DirectoryWorkspace | Result<Actions> | Result<Workspace>>(
         signal,
         (signal) => {
