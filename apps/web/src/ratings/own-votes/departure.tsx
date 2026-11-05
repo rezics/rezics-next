@@ -13,12 +13,11 @@ import {
 import { m } from '../../paraglide/messages.js';
 
 export type OwnVotesDepartureControl = {
-  current: {
-    confirm: () => Promise<boolean>;
-    allowNavigation: () => void;
-    clearNavigation: () => void;
-  } | null;
+  confirm: () => Promise<boolean>;
+  allowNavigation: () => void;
+  clearNavigation: () => void;
 };
+export type OwnVotesDepartureRef = { current: OwnVotesDepartureControl | null };
 
 /** One editor owns one draft and command; a pending or uncertain command cannot leave without review. */
 export function OwnVotesDeparture({
@@ -34,7 +33,7 @@ export function OwnVotesDeparture({
   isCurrent: () => boolean;
   onLeave?: () => void;
   onStay?: () => void;
-  confirmMovement?: OwnVotesDepartureControl;
+  confirmMovement?: OwnVotesDepartureRef | undefined;
 }) {
   const live = useRef<{
     dirty: boolean;

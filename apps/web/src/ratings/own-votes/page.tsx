@@ -7,7 +7,7 @@ import { m } from '../../paraglide/messages.js';
 import type { OwnVoteEntry, OwnVotesPage } from './types';
 import { executeOwnVoteIntent, voteReadbackForIntent, type OwnVotesRead } from './actions';
 import { useOwnVotesCurrentOrigin } from './current-origin';
-import { OwnVotesDeparture, type OwnVotesDepartureControl } from './departure';
+import { OwnVotesDeparture, type OwnVotesDepartureControl, type OwnVotesDepartureRef } from './departure';
 import { OwnVoteEditor, type OwnVoteFeedback } from './editor';
 import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey, type VotePair } from './inventory';
 import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
@@ -43,9 +43,7 @@ export function CurrentViewerOwnVotesPage({
   const pendingCoordinate = useOwnVotesPendingCoordinate(cursor);
   const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt || pendingCoordinate, responseVersion);
   const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
-  const confirmMovement = useRef<OwnVotesDepartureControl>({
-    current: null,
-  });
+  const confirmMovement = useRef<OwnVotesDepartureControl | null>(null);
   const acceptRead = useCallback(
     (candidate: unknown) => {
       const pending = coordinates.pending;
@@ -236,7 +234,7 @@ export function OwnVotesWorkspace({
   hasPrevious?: boolean;
   previousCursor?: string | null;
   firstAvailable?: boolean;
-  confirmMovement?: OwnVotesDepartureControl;
+  confirmMovement?: OwnVotesDepartureRef | undefined;
 }) {
   const [selectedPair, setSelectedPair] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
