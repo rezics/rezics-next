@@ -1973,6 +1973,11 @@ increase the request count. Native examined-work and physical cost remain the pr
 
 ## Classification assessment on pages
 
+Decision: the installed work-tag reader pages twelve disclosed assertions at a time and returns to the exact
+property/statement and browse or evidence link, including later windows. A changed reading consumes the old focus
+intent; missing or newly concealed selections focus the section. Unknown spoiler evidence contributes no row, count
+or unavailable-status hint. Source weights retain exact decimal range comparisons and their original citation groups.
+
 A person assesses one currently disclosed canonical Global classification association from the ordinary Subject page.
 This is never classification proposal, fact acceptance or native enjoyment rating. Semantic classification editors and
 the current-reading owner stay authoritative. Realm-local associations are named unavailable until native disclosure
