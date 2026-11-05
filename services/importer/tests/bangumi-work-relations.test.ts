@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
+import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { CrossMediaGraph, graphEdgeKey, type GraphEdgeDraft } from '../src/cross-media-bindings.ts';
 import { planCrossMediaSeed, type CrossMediaTables } from '../src/cross-media-seed.ts';
 
@@ -158,7 +159,10 @@ test('production graph journals immutable relation commands and retries without 
   const firstCommand = JSON.parse(firstRow.command_payload).commands[0];
   expect(first.proposed).toHaveLength(1);
   expect(firstCommand).toMatchObject({
-    source: { record_revision: 'unversioned', converter_revision: 'bangumi-vocabulary@2:relation-2@2:12:6' },
+    source: {
+      record_revision: 'unversioned',
+      converter_revision: `${bangumiVocabularyRevision}:relation-2@2:12:6`,
+    },
     statement: { property: { id: 'rezics:sideStoryOf' } },
   });
   expect(firstCommand.source.digest).toMatch(/^[a-f0-9]{64}$/);

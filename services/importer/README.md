@@ -62,6 +62,8 @@ Only admitted source-site rows with a parsed public Bangumi /subject/N URL yield
 
 COPY conversion retains exact table origins and native keys. Null, empty and missing optional Latin cells remain distinct in the digest: exactly empty omits only the Romanized alias; whitespace, missing and wrong-type values remain errors. Selected release names do not rank from translation flags. Dates retain year/month/day precision; TBA, unknown and absent remain distinct. Producer parent/subsidiary directions and release supersession use only their admitted outgoing source rows; no reciprocal or chronology-based edge is invented. Completeness remains a qualifier gap where no released status property exists.
 
+The local showcase keeps `vn_relations.side` and `par` as addressable gaps until the typed work-relations result supplies the mapped direction, current endpoint identities and citation. It does not emit a generic property from those inventory strings.
+
 Decision: `sourceParents` retains child/parent keys, category, path, main. Missing, cyclic or cross-category ancestry withholds edges; source closure grants no native hierarchy admission or equivalence.
 
 Public tags need COPY rows and current reviewed Scheme/Concept bindings. Kana weights need an exact current /vn response for the selected work/tag, retaining decimal rating, response digest and endpoint. Exclude user IDs, notes and votes; COPY votes are never weights, confidence or ratings. Changed or missing bindings withhold only their association.

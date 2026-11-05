@@ -156,6 +156,7 @@ const patterns: Record<Franchise, RegExp> = {
 };
 export const crossMediaAliases = { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' } as const;
 const FAMILY_CAP = 256;
+const UNMAPPED_TYPED_VNDB_WORK_RELATIONS = new Set(['side', 'par']);
 const SHOWCASE_PEOPLE_PER_PROVIDER = 64;
 const CREDIT_ASSOCIATIONS_PER_WORK = 64;
 const CREDIT_ASSOCIATIONS = 8192;
@@ -1170,7 +1171,9 @@ export async function planCrossMediaSeed(
       if (selection && (!vnFamily.has(id) || !vnFamily.has(vid))) continue;
       const known = vnFamily.get(id) ?? vnFamily.get(vid);
       if (!known) continue;
-      const mapping = mapSourceEnumeration('vndb', 'vn_relation', text(row, 'relation'));
+      const relation = text(row, 'relation');
+      if (UNMAPPED_TYPED_VNDB_WORK_RELATIONS.has(relation)) continue;
+      const mapping = mapSourceEnumeration('vndb', 'vn_relation', relation);
       if (!mapping?.term || mapping.status === 'omitted' || !isFamilyRelationTerm(mapping.term)) continue;
       const other = vnFamily.has(id) ? vid : id;
       if (!vnFamily.has(other) && countFamily(vnFamily, known) < FAMILY_CAP) {
@@ -1234,7 +1237,14 @@ export async function planCrossMediaSeed(
     const vid = text(row, 'vid');
     if (selection && (!vnIds.has(id) || !vnIds.has(vid))) continue;
     if (!vnIds.has(id) && !vnIds.has(vid)) continue;
-    const mapping = mapSourceEnumeration('vndb', 'vn_relation', text(row, 'relation'));
+    const relation = text(row, 'relation');
+    if (UNMAPPED_TYPED_VNDB_WORK_RELATIONS.has(relation)) {
+      gap('vndb', 'vn_relations', row, 'Selected VNDB relation awaits its typed work-relations result', {
+        code: relation,
+      });
+      continue;
+    }
+    const mapping = mapSourceEnumeration('vndb', 'vn_relation', relation);
     if (!mapping?.term || mapping.status === 'omitted') {
       gap(
         'vndb',

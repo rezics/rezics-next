@@ -59,8 +59,10 @@ function tables(rows = relations, unrelated = 0): CrossMediaTables {
       if (provider === 'vndb' && table === 'entry_meta')
         for (const key of ['v2002', 'v4', 'v17102'])
           yield { id: key, revision: '1', lastmod: '2026-11-04 00:00:00+00' };
-      if (provider === 'vndb' && table === 'vn_relations')
+      if (provider === 'vndb' && table === 'vn_relations') {
         yield { id: 'v2002', vid: 'v17102', relation: 'side', official: 't' };
+        yield { id: 'v17102', vid: 'v2002', relation: 'par', official: 't' };
+      }
     },
   };
 }
@@ -80,8 +82,13 @@ test('finite observed members use existing mapper semantics and ignore unrelated
     'rezics:sideStoryOf',
     'wdt:P155',
   ]);
-  // The retained VNDB inventory is still unadmitted. Preserve its loss until that owner supplies typed results.
-  expect(small.gaps.some((row) => row.source === 'vndb' && row.record.relation === 'side')).toBe(true);
+  // Keep these inventory strings unavailable until the selected typed-relation owner returns its exact result.
+  expect(
+    small.gaps.filter(
+      (row) => row.source === 'vndb' && ['side', 'par'].includes(String(row.record.relation)),
+    ),
+  ).toHaveLength(2);
+  expect(small.edges.some((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')).toBe(false);
   expect(small.edges.some((edge) => edge.property === 'wdt:P144')).toBe(false);
 });
 
