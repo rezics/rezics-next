@@ -157,7 +157,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     import('../src/paraglide/runtime'),
     import('../src/paraglide/messages'),
   ]);
-  const { within, userEvent, waitFor } = await import('storybook/test');
+  const { within, userEvent, waitFor: waitForMenu } = await import('storybook/test');
   const oldLocale = getLocale();
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -222,7 +222,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     const publicDom = within(window.document.body);
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="subject-contribute"] button')!;
     await act(async () => userEvent.click(trigger));
-    await waitFor(() =>
+    await waitForMenu(() =>
       expect(
         publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
       ).toBeTruthy(),
