@@ -4,56 +4,133 @@ import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRouteWithContext, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
-import { BulkOutcomeWindows, type LibraryBulkOperation, type LibraryBulkOutcome } from '../src/library/bulk-operation-recovery';
+import {
+  BulkOutcomeWindows,
+  type LibraryBulkOperation,
+  type LibraryBulkOutcome,
+} from '../src/library/bulk-operation-recovery';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/guard', () => ({ requireSignedIn: async () => {} }));
 mock.module('../src/kernel/exposure', () => ({ prepareExposure: async () => {} }));
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/library/operations/op' });
-const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-  Element: window.Element, Node: window.Node, Document: window.Document, MutationObserver: window.MutationObserver,
-  getComputedStyle: window.getComputedStyle.bind(window), IS_REACT_ACT_ENVIRONMENT: true };
-const saved = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-afterAll(async () => { mock.restore(); await window.happyDOM.close(); for (const [key, descriptor] of saved) {
-  if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
-} });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  MutationObserver: window.MutationObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+afterAll(async () => {
+  mock.restore();
+  await window.happyDOM.close();
+  for (const [key, descriptor] of saved) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
 function operation(id: string): LibraryBulkOperation {
-  return { id, route: 1, action: 'set_status', state: 'planned', collectionId: null, selectionKind: 'explicit',
-    phase: 'applying', selectionComplete: true, occurrencesComplete: true, cancelRequested: false,
-    counts: { scannedCandidates: 60, selectedSubjects: 60, scannedOccurrences: 0, capturedOccurrences: 0, targets: 60,
-      pending: changed ? 0 : 60, reconciling: 0, applied: changed ? 60 : 0, no_effect: 0, conflict: 0, denied: 0, failed: 0, cancelled: 0 },
-    summary: null, admittedAt: '2026-11-01T00:00:00Z', targetBoundAt: null, expiresAt: '2026-11-02T00:00:00Z',
-    resultsExpireAt: '2026-11-03T00:00:00Z', finishedAt: null, reason: null };
+  return {
+    id,
+    route: 1,
+    action: 'set_status',
+    state: 'planned',
+    collectionId: null,
+    selectionKind: 'explicit',
+    phase: 'applying',
+    selectionComplete: true,
+    occurrencesComplete: true,
+    cancelRequested: false,
+    counts: {
+      scannedCandidates: 60,
+      selectedSubjects: 60,
+      scannedOccurrences: 0,
+      capturedOccurrences: 0,
+      targets: 60,
+      pending: changed ? 0 : 60,
+      reconciling: 0,
+      applied: changed ? 60 : 0,
+      no_effect: 0,
+      conflict: 0,
+      denied: 0,
+      failed: 0,
+      cancelled: 0,
+    },
+    summary: null,
+    admittedAt: '2026-11-01T00:00:00Z',
+    targetBoundAt: null,
+    expiresAt: '2026-11-02T00:00:00Z',
+    resultsExpireAt: '2026-11-03T00:00:00Z',
+    finishedAt: null,
+    reason: null,
+  };
 }
 const reads: Array<{ operationId: string; cursor?: string }> = [];
 const commands: unknown[] = [];
-let fail = false, invalid = false, changed = false;
+let fail = false,
+  invalid = false,
+  changed = false;
 let late: (() => Promise<void>) | undefined;
 function page(cursor?: string) {
-  const outcomes: LibraryBulkOutcome[] = cursor === 'c' || cursor === 'd' ? [] : Array.from({ length: 20 }, (_, index) => ({
-    ordinal: `${cursor ?? 'first'}-${index}`, subjectId: `subject-${cursor ?? 'first'}-${index}`, memberId: null,
-    state: changed ? 'applied' : 'pending', reason: null, resultingMemberId: null,
-  }));
+  const outcomes: LibraryBulkOutcome[] =
+    cursor === 'c' || cursor === 'd'
+      ? []
+      : Array.from({ length: 20 }, (_, index) => ({
+          ordinal: `${cursor ?? 'first'}-${index}`,
+          subjectId: `subject-${cursor ?? 'first'}-${index}`,
+          memberId: null,
+          state: changed ? 'applied' : 'pending',
+          reason: null,
+          resultingMemberId: null,
+        }));
   return { outcomes, next: cursor === undefined ? 'b' : cursor === 'b' ? 'c' : cursor === 'c' ? 'd' : null };
 }
 mock.module('../src/library/bulk-operation-recovery-server', () => ({
   readBulkOperationRecovery: async ({ data }: { data: { operationId: string; cursor?: string } }) => {
-    reads.push(data); return { state: 'available', operation: operation(data.operationId), ...page(data.cursor) };
+    reads.push(data);
+    return { state: 'available', operation: operation(data.operationId), ...page(data.cursor) };
   },
   readBulkOperationRecoveryPage: async ({ data }: { data: { operationId: string; cursor: string } }) => {
-    reads.push(data); if (late) await late();
-    if (fail) { fail = false; return { state: 'unavailable', operationId: data.operationId }; }
-    if (invalid) { invalid = false; return { state: 'invalid', operationId: data.operationId }; }
+    reads.push(data);
+    if (late) await late();
+    if (fail) {
+      fail = false;
+      return { state: 'unavailable', operationId: data.operationId };
+    }
+    if (invalid) {
+      invalid = false;
+      return { state: 'invalid', operationId: data.operationId };
+    }
     return { state: 'available', page: page(data.cursor) };
   },
-  captureBulkOperationCancel: async () => ({ state: 'ready', csrfToken: 'csrf', intent: {
-    operationId: 'op', sender: 'viewer', idempotencyKey: 'exact-key', locale: 'en', capture: 'sealed-command',
-  } }),
-  cancelBulkOperationRecovery: async (input: unknown) => { commands.push(input); return { state: 'uncertain', operationId: 'op' }; },
+  captureBulkOperationCancel: async () => ({
+    state: 'ready',
+    csrfToken: 'csrf',
+    intent: {
+      operationId: 'op',
+      sender: 'viewer',
+      idempotencyKey: 'exact-key',
+      locale: 'en',
+      capture: 'sealed-command',
+    },
+  }),
+  cancelBulkOperationRecovery: async (input: unknown) => {
+    commands.push(input);
+    return { state: 'uncertain', operationId: 'op' };
+  },
 }));
 const { Route } = await import('../src/routes/library/operations/$id');
 const { createRoot } = await import('react-dom/client');
@@ -84,31 +161,56 @@ test('production route replaces three windows, retries exact reads independently
   const observe = () => {
     const snapshot = lifetime.getSnapshot();
     if (snapshot.state !== 'signed-in') throw new Error('missing viewer');
-    client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, { subject: 'viewer', admitted: ['personal_library'] });
+    client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+      subject: 'viewer',
+      admitted: ['personal_library'],
+    });
   };
-  const stop = lifetime.subscribe(() => {}); observe();
+  const stop = lifetime.subscribe(() => {});
+  observe();
   const parent = createRootRouteWithContext<{ queryClient: QueryClient }>()();
   const route = Route.update({ getParentRoute: () => parent, path: '/library/operations/$id', id: undefined } as never);
-  const router = createRouter({ routeTree: parent.addChildren([route]), context: { queryClient: client },
-    history: createMemoryHistory({ initialEntries: ['/library/operations/op'] }) });
-  const host = window.document.createElement('div'); window.document.body.append(host);
+  const router = createRouter({
+    routeTree: parent.addChildren([route]),
+    context: { queryClient: client },
+    history: createMemoryHistory({ initialEntries: ['/library/operations/op'] }),
+  });
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const settle = () => new Promise(resolve => setTimeout(resolve, 25));
-  const click = async (label: string) => { const button = Array.from(host.querySelectorAll('button')).find(b => b.textContent === label);
-    expect(button).toBeDefined(); await act(async () => { button!.focus(); button!.click(); await settle(); }); };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 25));
+  const click = async (label: string) => {
+    const button = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === label);
+    expect(button).toBeDefined();
+    await act(async () => {
+      button!.focus();
+      button!.click();
+      await settle();
+    });
+  };
   try {
-    await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); await settle(); });
+    await act(async () => {
+      await router.load();
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+      await settle();
+    });
     expect(host.querySelectorAll('ol li')).toHaveLength(20);
     await click(m.library_bulk_recovery_cancel());
     await click(m.library_bulk_recovery_read_more());
     expect(reads.at(-1)?.cursor).toBe('b');
     expect(host.querySelectorAll('ol li')).toHaveLength(20);
-    fail = true; await click(m.library_bulk_recovery_read_more());
+    fail = true;
+    await click(m.library_bulk_recovery_read_more());
     await click(m.library_vndb_browse_refresh());
     expect(reads.at(-1)?.cursor).toBe('b');
-    fail = true; await click(m.library_bulk_recovery_read_more());
+    fail = true;
+    await click(m.library_bulk_recovery_read_more());
     await click(m.library_bulk_recovery_read_again());
-    expect(reads.slice(-2).map(r => r.cursor)).toEqual(['c', 'c']);
+    expect(reads.slice(-2).map((r) => r.cursor)).toEqual(['c', 'c']);
     expect(host.querySelectorAll('ol li')).toHaveLength(0);
     await click(m.library_bulk_recovery_read_more());
     expect(reads.at(-1)?.cursor).toBe('d');
@@ -117,22 +219,42 @@ test('production route replaces three windows, retries exact reads independently
     expect(reads.at(-1)?.cursor).toBe('c');
     await click(m.library_window_previous());
     expect(reads.at(-1)?.cursor).toBe('b');
-    changed = true; await click(m.library_vndb_browse_refresh());
+    changed = true;
+    await click(m.library_vndb_browse_refresh());
     expect(host.textContent).toContain(m.library_bulk_recovery_outcome_success());
     await click(m.library_window_first());
     expect(reads.at(-1)).toEqual({ operationId: 'op' });
     await click(m.library_bulk_recovery_cancel_retry());
-    expect(commands).toHaveLength(2); expect(commands[1]).toEqual(commands[0]);
-    invalid = true; await click(m.library_bulk_recovery_read_more());
-    expect(reads.at(-1)).toEqual({ operationId: 'op' });
-    let resolve!: () => void; const pending = new Promise<void>(r => { resolve = r; }); late = () => pending;
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toEqual(commands[0]);
+    invalid = true;
     await click(m.library_bulk_recovery_read_more());
-    await act(async () => { client.setQueryData(sessionQuery.queryKey, { ...session, subject: 'other' });
-      client.setQueryData(sessionQuery.queryKey, session); observe(); resolve(); await settle(); });
+    expect(reads.at(-1)).toEqual({ operationId: 'op' });
+    let resolve!: () => void;
+    const pending = new Promise<void>((r) => {
+      resolve = r;
+    });
+    late = () => pending;
+    await click(m.library_bulk_recovery_read_more());
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...session, subject: 'other' });
+      client.setQueryData(sessionQuery.queryKey, session);
+      observe();
+      resolve();
+      await settle();
+    });
     expect(host.textContent).not.toContain('subject-b-');
     late = undefined;
-    await act(async () => { await router.navigate({ to: '/library/operations/$id', params: { id: 'other' } }); await settle(); });
+    await act(async () => {
+      await router.navigate({ to: '/library/operations/$id', params: { id: 'other' } });
+      await settle();
+    });
     expect(reads.at(-1)?.operationId).toBe('other');
     expect(host.textContent).not.toContain('subject-b-');
-  } finally { await act(async () => root.unmount()); stop(); client.clear(); host.remove(); }
+  } finally {
+    await act(async () => root.unmount());
+    stop();
+    client.clear();
+    host.remove();
+  }
 });

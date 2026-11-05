@@ -110,7 +110,10 @@ export function LibraryBulkOperationRecoveryView({
   cancelState = 'idle',
   cancelAvailable = true,
   busy = false,
-  previous, first, readRetry, readFailed = false,
+  previous,
+  first,
+  readRetry,
+  readFailed = false,
 }: Props) {
   const heading = useRef<HTMLHeadingElement>(null);
   const focus = useRef(searchWindowFocus());
@@ -141,7 +144,12 @@ export function LibraryBulkOperationRecoveryView({
       <section aria-live="polite">
         <p role="status">{unavailableLabel(read.state)}</p>
         {read.state === 'unavailable' ? (
-          <button className="min-h-11 min-w-11" type="button" disabled={busy} onClick={() => readFailed && readRetry ? readRetry() : readAgain(addressOperationId)}>
+          <button
+            className="min-h-11 min-w-11"
+            type="button"
+            disabled={busy}
+            onClick={() => (readFailed && readRetry ? readRetry() : readAgain(addressOperationId))}
+          >
             {m.library_bulk_recovery_read_again()}
           </button>
         ) : null}
@@ -151,7 +159,9 @@ export function LibraryBulkOperationRecoveryView({
   const operation = read.operation;
   return (
     <main>
-      <h1 ref={heading} tabIndex={-1}>{m.library_bulk_recovery_heading()}</h1>
+      <h1 ref={heading} tabIndex={-1}>
+        {m.library_bulk_recovery_heading()}
+      </h1>
       <dl>
         <dt>{m.library_bulk_recovery_action()}</dt>
         <dd>{actionLabel(operation.action)}</dd>
@@ -203,11 +213,44 @@ export function LibraryBulkOperationRecoveryView({
       </ol>
       {read.outcomes.length === 0 ? <p>{m.library_bulk_recovery_empty()}</p> : null}
       <nav className="flex flex-wrap gap-2" aria-label={m.library_bulk_recovery_heading()}>
-        {previous ? <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, previous)}>{m.library_window_previous()}</button> : null}
-        {first ? <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, first)}>{m.library_window_first()}</button> : null}
-        {read.next ? <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, () => readMore(addressOperationId, read.next!))}>{m.library_bulk_recovery_read_more()}</button> : null}
-        <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, () => readAgain(addressOperationId))}>{m.library_vndb_browse_refresh()}</button>
-        {readFailed ? <><p role="status">{m.library_bulk_recovery_unavailable()}</p><button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, () => readRetry?.())}>{m.library_bulk_recovery_read_again()}</button></> : null}
+        {previous ? (
+          <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, previous)}>
+            {m.library_window_previous()}
+          </button>
+        ) : null}
+        {first ? (
+          <button className="min-h-11 min-w-11" disabled={busy} onClick={(event) => activate(event, first)}>
+            {m.library_window_first()}
+          </button>
+        ) : null}
+        {read.next ? (
+          <button
+            className="min-h-11 min-w-11"
+            disabled={busy}
+            onClick={(event) => activate(event, () => readMore(addressOperationId, read.next!))}
+          >
+            {m.library_bulk_recovery_read_more()}
+          </button>
+        ) : null}
+        <button
+          className="min-h-11 min-w-11"
+          disabled={busy}
+          onClick={(event) => activate(event, () => readAgain(addressOperationId))}
+        >
+          {m.library_vndb_browse_refresh()}
+        </button>
+        {readFailed ? (
+          <>
+            <p role="status">{m.library_bulk_recovery_unavailable()}</p>
+            <button
+              className="min-h-11 min-w-11"
+              disabled={busy}
+              onClick={(event) => activate(event, () => readRetry?.())}
+            >
+              {m.library_bulk_recovery_read_again()}
+            </button>
+          </>
+        ) : null}
       </nav>
       {cancelState === 'uncertain' ? <p role="status">{m.library_bulk_recovery_cancel_uncertain()}</p> : null}
       {cancelState === 'refused' ? <p role="status">{m.library_bulk_recovery_cancel_refused()}</p> : null}

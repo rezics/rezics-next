@@ -99,7 +99,10 @@ export type BulkOutcomePageRead =
   | { state: 'available'; page: BulkOutcomes }
   | { state: 'expired' | 'forbidden' | 'invalid' | 'unavailable'; operationId: string };
 
-function failureState(status: number, missingMeansExpired = false): 'expired' | 'forbidden' | 'invalid' | 'unavailable' {
+function failureState(
+  status: number,
+  missingMeansExpired = false,
+): 'expired' | 'forbidden' | 'invalid' | 'unavailable' {
   if (status === 401 || status === 403) return 'forbidden';
   if (status === 400 || status === 422) return 'invalid';
   if (status === 410) return 'expired';

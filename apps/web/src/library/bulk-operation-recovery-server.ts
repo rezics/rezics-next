@@ -166,7 +166,9 @@ function recoveryUnavailable(operationId: string): LibraryBulkRecoveryRead {
 export const readBulkOperationRecovery = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     const address = validateOperationId(input);
-    return (input as { cursor?: unknown }).cursor === undefined ? { ...address, cursor: undefined } : validatePageInput(input);
+    return (input as { cursor?: unknown }).cursor === undefined
+      ? { ...address, cursor: undefined }
+      : validatePageInput(input);
   })
   .handler(async ({ data }): Promise<LibraryBulkRecoveryRead> => {
     const request = getRequest();
