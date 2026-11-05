@@ -1,7 +1,7 @@
 import { WatchesSection } from './watches';
 import type { WatchManagementIO } from './watch-native';
-import { exposureQuery, sessionQuery, useSession } from '../session/query';
-import { useQuery, useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
+import { sessionQuery, useSession } from '../session/query';
+import { useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
 import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback, type ReactNode } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -22,7 +22,7 @@ import { usePreferenceRetry } from './preference-failure-retry';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
-import { useOperation } from '../kernel/exposure';
+import { useOperation, useOperationAdmission } from '../kernel/exposure';
 import { AccountSafetyCard, AccountSafetySection } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
@@ -314,12 +314,12 @@ function SettingsSections({
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO: PreferenceIO;
 }) {
-  const collectionsAdmitted = useOperation('account.collections');
+  const collectionsAdmission = useOperationAdmission('account.collections');
+  const collectionsAdmitted = collectionsAdmission === 'available';
   const verificationAdmitted = useOperation('agent_verification.request');
-  const { state: sessionState, subject: verificationAccountId } = useSession();
+  const { subject: verificationAccountId } = useSession();
   const queryClient = useQueryClient();
-  // Observe the same admission and verification reads as the sections, without adding requests.
-  const exposure = useQuery({ ...exposureQuery, enabled: false });
+  // The shared operation hook observes the enrolled viewer exposure used by these sections.
   const observeVerification = useCallback(
     (changed: () => void) => observeVerificationRead(queryClient, verificationAccountId, changed),
     [queryClient, verificationAccountId],
@@ -486,7 +486,7 @@ function SettingsSections({
           event.preventDefault();
           void router.navigate({ hash: id, search: true, resetScroll: false, hashScrollIntoView: false });
         }}
-        pending={sessionState === 'unknown' || (sessionState === 'signed-in' && exposure.isPending)}
+        admission={collectionsAdmission}
       />
       <div className="min-w-0">
         {sections.map(({ id }) => (

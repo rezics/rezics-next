@@ -7,6 +7,7 @@ import {
   replaceOwnVote,
   votePairKey,
 } from '../src/ratings/own-votes/inventory';
+import { decodeOwnVotesPage, isOwnVoteActions } from '../src/ratings/own-votes/response';
 
 const accountId = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
 const terminalId = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
@@ -68,4 +69,21 @@ test('cursor bytes and page frontier survive sparse pages, same-key edits and cl
   expect(cleared.votes).toEqual([second]);
   expect(cleared.next).toBe(next);
   expect(page([], next).next).toBe(next);
+});
+
+test('the Workers-safe vote reader accepts additive envelopes and keeps consumed rows closed', () => {
+  const targetId = 'b2b2b2b2-d4d4-42d4-82d4-b2b2b2b2b2b2';
+  const questionId = 'd4d4d4d4-b2b2-44b2-84d4-d4d4d4d4d4d4';
+  const current = page([entry(targetId, questionId)]);
+  expect(decodeOwnVotesPage({ ...current, adviceVersion: 2 })).toEqual(current);
+  const vote = current.votes[0]!;
+  expect(
+    decodeOwnVotesPage({
+      ...current,
+      votes: [{ ...vote, question: { ...vote.question, grain: 'creator' } }],
+    }),
+  ).toBeNull();
+  expect(decodeOwnVotesPage({ ...current, votes: [{ ...vote, actions: { ...vote.actions, replay: true } }] })).toBeNull();
+  expect(isOwnVoteActions({ state: 'unavailable', reason: 'read_only' })).toBe(true);
+  expect(isOwnVoteActions({ state: 'unavailable', reason: 'read_only', put: '/forged' })).toBe(false);
 });

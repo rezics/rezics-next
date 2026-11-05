@@ -1,5 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import type { MouseEvent } from 'react';
+import type { OperationAdmission } from '../kernel/exposure';
 
 export type SettingsSection = {
   id:
@@ -56,12 +57,12 @@ export function settingsSections({
 /** A bounded anchor grid uses the existing section hashes for focused destinations. */
 export function SectionsNavigation({
   sections,
-  pending = false,
+  admission = 'unknown',
   selected = 'reading',
   onSelect,
 }: {
   sections: readonly SettingsSection[];
-  pending?: boolean;
+  admission?: OperationAdmission;
   selected?: SettingsSection['id'];
   onSelect?: (id: SettingsSection['id'], event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
@@ -83,9 +84,13 @@ export function SectionsNavigation({
           </li>
         ))}
       </ul>
-      {pending ? (
+      {admission !== 'available' ? (
         <p role="status" className="mt-3 text-sm text-muted-foreground">
-          {m.settings_sections_loading()}
+          {admission === 'unknown'
+            ? m.settings_sections_loading()
+            : admission === 'denied'
+              ? m.settings_closed_title()
+              : m.settings_unavailable_title()}
         </p>
       ) : null}
     </nav>

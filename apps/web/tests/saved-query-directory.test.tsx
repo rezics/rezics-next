@@ -61,7 +61,10 @@ test('an empty current page continues with the existing cursor and layout', () =
   expect(html).not.toContain('predicate');
 });
 
-test('a missing dynamic owner DTO is unavailable rather than a confirmed empty directory', () => {
+test('an empty admitted inventory is empty; unknown, denied and unavailable admission remain distinct', () => {
+  expect(directory({ capability: 'available' })).toContain(m.library_saved_queries_empty_page());
+  expect(directory({ capability: 'unknown' })).toContain('data-capability="unknown"');
+  expect(directory({ capability: 'denied' })).toContain('data-capability="denied"');
   const html = directory({ capability: 'unavailable', next: 'more' });
   expect(html).toContain(m.library_saved_queries_unavailable());
   expect(html).not.toContain(m.library_saved_queries_empty_page());

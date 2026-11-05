@@ -11,6 +11,26 @@ import {
 import { parseProfileWrite } from '../src/settings/profile-write-input';
 import { profileNeedsNavigationDecision } from '../src/settings/profile-navigation';
 
+function editing(accountId: string, kind: 'actor' | 'organization') {
+  const fields = {
+    displayName: { applicable: true as const, maxLength: 4096 as const },
+    biography: { applicable: true as const, maxLength: 4096 as const },
+    avatar: { applicable: true as const },
+    links: {
+      applicable: true as const,
+      maxItems: 5 as const,
+      labelMaxLength: 64 as const,
+      urlMaxLength: 2048 as const,
+    },
+    publicViews: { applicable: true as const, flags: ['posts', 'reviews', 'collections', 'realms'] as const },
+  };
+  return {
+    viewer: { accountId },
+    target: { accountId, kind },
+    fields: { ...fields, ...(kind === 'organization' ? { speakersListed: { applicable: true as const } } : {}) },
+  };
+}
+
 function initial(): ProfileValues {
   return {
     accountId: '019a0000-0000-7000-8000-000000000001',
@@ -77,7 +97,9 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
                 avatar: current.avatar,
                 links: current.links,
                 publicViews: current.publicViews,
+                ...(current.kind === 'organization' ? { speakersListed: current.speakersListed ?? false } : {}),
               },
+              editing: editing(current.accountId, current.kind),
             },
         { headers: { 'cache-control': 'private, no-store' } },
       );
@@ -95,7 +117,12 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
         attempt.idempotencyKey,
       ),
   };
-  return { io, writes, reads, current: () => current };
+  return {
+    io,
+    writes,
+    reads,
+    current: () => ({ ...current, editing: editing(current.accountId, current.kind) }),
+  };
 }
 
 test('An account edits its profile and public-view controls using the real self profile API and reloads confirmed values', async () => {
@@ -457,7 +484,12 @@ test('invalid profile submission keeps the exact draft and local avatar without 
 
 test('organization-only speaker listing and native avatar references use the ordinary patch boundary', async () => {
   const boundary = api();
-  const before = { ...initial(), kind: 'organization' as const, speakersListed: false };
+  const before = {
+    ...initial(),
+    kind: 'organization' as const,
+    speakersListed: false,
+    editing: editing(initial().accountId, 'organization'),
+  };
   await saveProfileRecord(
     createKernelClient('https://kernel.example.test', {
       fetch: (async (input, init) => {

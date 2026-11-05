@@ -6,6 +6,8 @@ import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch, createStoryRecordedKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { loadRoutePage, RoutePage } from '../src/features/pages/route.tsx';
+import { HomeCatalogue } from '../src/features/pages/home-catalogue';
+import { m } from '../src/paraglide/messages.js';
 
 const messages = {
   unknown: '不明',
@@ -64,10 +66,10 @@ test('the home type rows keep their heading and cards without repeating the type
   expect(html).not.toContain('data-slot="cover-card-secondary"');
 });
 
-test('a kernel without a home page falls back to the static home', async () => {
-  for (const [status, code] of [
-    [404, 'not_found'],
-    [503, 'presentation_not_ready'],
+test('only an absent page is missing; an inactive publication is unavailable', async () => {
+  for (const [status, code, expected] of [
+    [404, 'not_found', { kind: 'missing' }],
+    [503, 'presentation_not_ready', { kind: 'unavailable', status: 503, code: 'presentation_not_ready' }],
   ] as const) {
     const answer = (async () =>
       new Response(JSON.stringify({ type: 'about:blank', title: code, status, code }), {
@@ -75,8 +77,37 @@ test('a kernel without a home page falls back to the static home', async () => {
         headers: { 'content-type': 'application/problem+json' },
       })) as unknown as typeof fetch;
     const client = createKernelClient('https://kernel.invalid', { fetch: answer });
-    expect(await loadRoutePage(client, '/')).toEqual({ kind: 'missing' });
+    expect(await loadRoutePage(client, '/')).toEqual(expected);
   }
+});
+
+test('Home preserves rejected, missing and unavailable page reads as separate outcomes with deliberate recovery', async () => {
+  const response = (status: number, code: string) =>
+    createKernelClient('https://kernel.invalid', {
+      fetch: (async () =>
+        Response.json({ type: 'about:blank', title: code, status, code }, { status })) as typeof fetch,
+    });
+  const rejected = await loadRoutePage(response(400, 'unsupported_query'), '/');
+  const unavailable = await loadRoutePage(response(503, 'presentation_not_ready'), '/');
+  expect(rejected).toEqual({ kind: 'rejected', status: 400, code: 'unsupported_query' });
+  expect(unavailable).toEqual({ kind: 'unavailable', status: 503, code: 'presentation_not_ready' });
+  const network = await loadRoutePage(
+    createKernelClient('https://kernel.invalid', {
+      fetch: (async () => {
+        throw new TypeError('Failed to fetch');
+      }) as typeof fetch,
+    }),
+    '/',
+  );
+  expect(network).toEqual({ kind: 'unavailable', code: 'dependency_unavailable' });
+
+  const rejectedHtml = renderToString(createElement(HomeCatalogue, { result: rejected, locale: 'en' }));
+  const unavailableHtml = renderToString(createElement(HomeCatalogue, { result: unavailable, locale: 'en' }));
+  expect(rejectedHtml).toContain('data-home-catalogue-state="rejected"');
+  expect(rejectedHtml).toContain('data-response-code="unsupported_query"');
+  expect(unavailableHtml).toContain('data-home-catalogue-state="unavailable"');
+  expect(unavailableHtml).toContain(m.catalogue_result_read_unavailable());
+  expect(unavailableHtml).toContain(m.catalogue_retry_loading_result());
 });
 
 test('the home route renders the route page', async () => {

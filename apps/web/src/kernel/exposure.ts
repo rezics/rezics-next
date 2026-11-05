@@ -2,7 +2,7 @@ import { queryOptions, useQuery, QueryClient, QueryClientContext } from '@tansta
 import { createIsomorphicFn, createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { Fragment, createElement, useContext, useSyncExternalStore, type ReactNode } from 'react';
 import { useSession } from '../session/query';
-import { viewerExposureLifetime, viewerExposureQuery } from './viewer-exposure';
+import { viewerExposureLifetime, viewerExposureQuery, type ExposureReadState } from './viewer-exposure';
 
 /** The site's gated operations. Controls name an operation; OpenAPI owns its group. */
 export const operationGroups = {
@@ -102,27 +102,35 @@ export function operationIsAdmitted(operation: ExposureOperation, admitted: read
 
 const minute = 60_000;
 const closed: string[] = [];
+export type ExposureResult = { state: ExposureReadState; admitted: readonly string[] };
+export type OperationAdmission = 'unknown' | 'available' | 'denied' | 'unavailable';
+const closedResult: ExposureResult = { state: 'unavailable', admitted: closed };
 
 /** Both in-flight and failed anonymous reads share the same one-minute isolate entry. */
-let anonymous: { expires: number; pending: Promise<string[]> } | undefined;
-export const readAdmitted = createServerOnlyFn(async (authorization?: string): Promise<string[]> => {
+let anonymous: { expires: number; pending: Promise<ExposureResult> } | undefined;
+export const readAdmittedResult = createServerOnlyFn(async (authorization?: string): Promise<ExposureResult> => {
   const { kernelClient } = await import('./client');
   try {
     const result = await kernelClient().platform.exposure.get({
       ...(authorization ? { headers: { authorization } } : {}),
       fetch: { signal: AbortSignal.timeout(2_000) },
     });
-    if (result.error || !Array.isArray(result.data?.admitted)) return closed;
-    return result.data.admitted;
+    if (!result.error && result.status === 200 && Array.isArray(result.data?.admitted))
+      return { state: 'ready', admitted: result.data.admitted };
+    if (result.status === 401 || result.status === 403) return { state: 'denied', admitted: closed };
+    return closedResult;
   } catch {
-    return closed;
+    return closedResult;
   }
 });
+export const readAdmitted = createServerOnlyFn(async (authorization?: string): Promise<string[]> =>
+  (await readAdmittedResult(authorization)).admitted as string[],
+);
 
-async function anonymousAdmitted(): Promise<string[]> {
+async function anonymousAdmitted(): Promise<ExposureResult> {
   const now = Date.now();
   if (!anonymous || now >= anonymous.expires) {
-    anonymous = { expires: now + minute, pending: readAdmitted() };
+    anonymous = { expires: now + minute, pending: readAdmittedResult() };
   }
   return anonymous.pending;
 }
@@ -146,7 +154,7 @@ export const prepareExposure = createIsomorphicFn()
 const subscribe = () => () => {};
 // Standalone server-rendered previews have no query provider and remain closed.
 const previewClient = new QueryClient();
-export function useOperation(operation: ExposureOperation): boolean {
+export function useOperationAdmission(operation: ExposureOperation): OperationAdmission {
   const client = useContext(QueryClientContext) ?? previewClient;
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -157,24 +165,34 @@ export function useOperation(operation: ExposureOperation): boolean {
   useSession();
   const lifetime = viewerExposureLifetime(client);
   const admission = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot, lifetime.getServerSnapshot);
-  const { data: publicGroups } = useQuery(
+  const publicQuery = useQuery(
     { ...anonymousQuery, enabled: hydrated && admission.state === 'signed-out' },
     client,
   );
   const observation = admission.state === 'signed-in' ? admission.observation : undefined;
-  const { data: viewerExposure } = useQuery(
+  const viewerQuery = useQuery(
     { ...viewerExposureQuery(observation), enabled: hydrated && observation !== undefined },
     client,
   );
-  const viewerGroups =
-    viewerExposure && viewerExposure.subject === observation?.subject ? viewerExposure.admitted : undefined;
-  const admitted =
-    !hydrated || admission.state === 'signed-out'
-      ? publicGroups
-      : admission.state === 'signed-in'
-        ? viewerGroups
-        : undefined;
-  return operationIsAdmitted(operation, admitted);
+  if (!hydrated || admission.state === 'unknown' || admission.state === 'inactive') return 'unknown';
+  if (admission.state === 'signed-out') {
+    if (publicQuery.isError) return 'unavailable';
+    const result = publicQuery.data;
+    if (!result) return 'unknown';
+    if (result.state === 'unavailable') return 'unavailable';
+    return operationIsAdmitted(operation, result.admitted) ? 'available' : 'denied';
+  }
+  if (!observation) return 'unknown';
+  if (viewerQuery.isError) return 'unavailable';
+  const result = viewerQuery.data;
+  if (!result || result.subject !== observation.subject) return 'unknown';
+  if (result.state === 'unavailable') return 'unavailable';
+  if (result.state === 'denied') return 'denied';
+  return operationIsAdmitted(operation, result.admitted) ? 'available' : 'denied';
+}
+
+export function useOperation(operation: ExposureOperation): boolean {
+  return useOperationAdmission(operation) === 'available';
 }
 
 export function Exposure({ operation, children }: { operation: ExposureOperation; children: ReactNode }) {

@@ -1,6 +1,6 @@
 import { admitMineCollectionsAddress, type MineCollectionsAddressError } from './mine-collections-address';
 import { MineCollectionsAddressRecovery } from './mine-collections-address-recovery';
-import { Exposure, useOperation } from '../kernel/exposure';
+import { Exposure, useOperation, useOperationAdmission } from '../kernel/exposure';
 import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
@@ -218,6 +218,7 @@ export function MineCollectionsPageView({
   const canCreate = useOperation('collection.create');
   const canReadLibrary = useOperation('library_entry.list');
   const canEditRules = useOperation('collection.update');
+  const savedQueryCapability = useOperationAdmission('collection.create');
   const loaded = page.signedIn && (!page.state || page.state === 'loaded');
   const requestedAddress = admitMineCollectionsAddress({ cursor, layout, addressError: page.invalidAddress });
   const requestedCursor = requestedAddress.cursor;
@@ -270,7 +271,7 @@ export function MineCollectionsPageView({
         {loaded && viewerId ? (
           <SavedQueryDirectory
             collections={page.collections}
-            capability={page.savedQueryCapability ?? 'unavailable'}
+            capability={savedQueryCapability}
             viewerId={viewerId}
             canEditRules={canEditRules}
             currentHref={currentHref}

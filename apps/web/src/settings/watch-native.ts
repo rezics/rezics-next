@@ -216,7 +216,6 @@ function decodeActions(value: unknown): WatchActions {
 export function decodeWatchPage(value: unknown, kind: WatchKind): WatchPage {
   if (
     !isRecord(value) ||
-    !exactKeys(value, ['viewer', 'actions', 'items', 'next']) ||
     !Array.isArray(value.items) ||
     value.items.length > 20 ||
     !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))

@@ -61,8 +61,10 @@ Decision: after return, retain only the exact original pair as a short-lived in-
   - Native indexed raw-page and cold summary/account/Realm costs belong to Content's producer acceptance. Native
     256/1024/4096 growth is not asserted by this frontend.
 
-Decision: until Content publishes the own-votes route in `@rezics/client`, Web uses a server-only adapter validated
-by the native schema while vote commands and readback use the existing typed client.
+Decision: until Content publishes the own-votes route in `@rezics/client`, Web uses a server-only adapter with a
+Workers-safe response validator shaped by the root-derived client contract; the outer envelope is additive while
+entries and action advice remain closed. Vote commands and readback use the existing typed client. This removes the
+runtime Kernel schema import from the Web module graph without adding a second native schema meaning.
 
 The installed producer exports `createOwnVotesReader(deps).page(actor, { cursor? }, deadline)` and the register DTOs
 and schemas. Its source examples in `services/kernel/test/rating/own-votes-page.test.ts` cover populated zero,

@@ -476,6 +476,13 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, identity);
   client.setQueryData(exposureQuery.queryKey, []);
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+  const exposureLifetime = viewerExposureLifetime(client);
+  const stopExposure = exposureLifetime.subscribe(() => {});
+  const exposureSnapshot = exposureLifetime.getSnapshot();
+  if (exposureSnapshot.state !== 'signed-in') throw new Error('Expected a current viewer observation');
+  const currentExposureKey = viewerExposureQuery(exposureSnapshot.observation).queryKey;
+  client.setQueryData(currentExposureKey, { subject: 'alice', admitted: ['collections'], state: 'ready' });
   let writes = 0;
   const preferenceIO = {
     read: async () => page,
@@ -511,6 +518,17 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
         ),
       );
     });
+    expect(host.querySelector('#privacy')).not.toBeNull();
+    expect(host.textContent).not.toContain(m.settings_sections_loading());
+    await act(async () => {
+      client.setQueryData(currentExposureKey, { subject: 'alice', admitted: [], state: 'denied' });
+    });
+    expect(host.querySelector('#privacy')).toBeNull();
+    expect(host.textContent).toContain(m.settings_closed_title());
+    await act(async () => {
+      client.setQueryData(currentExposureKey, { subject: 'alice', admitted: [], state: 'unavailable' });
+    });
+    expect(host.textContent).toContain(m.settings_unavailable_title());
     const toggle = host.querySelector('[role="switch"]');
     expect(toggle).not.toBeNull();
     await act(async () => {
@@ -550,6 +568,7 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
         root.unmount();
       });
     host.remove();
+    stopExposure();
     client.clear();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

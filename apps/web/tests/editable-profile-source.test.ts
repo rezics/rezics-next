@@ -20,17 +20,49 @@ const profile: EditableProfile = {
   avatar: null,
   publicViews: { posts: false, reviews: true, collections: false, realms: true },
 };
+const editing = {
+  viewer: { accountId: profile.id },
+  target: { accountId: profile.id, kind: 'actor' as const },
+  fields: {
+    displayName: { applicable: true as const, maxLength: 4096 as const },
+    biography: { applicable: true as const, maxLength: 4096 as const },
+    avatar: { applicable: true as const },
+    links: { applicable: true as const, maxItems: 5 as const, labelMaxLength: 64 as const, urlMaxLength: 2048 as const },
+    publicViews: { applicable: true as const, flags: ['posts', 'reviews', 'collections', 'realms'] as const },
+  },
+};
 
-test('the editable source rejects incomplete, foreign and non-closed native bodies without a draft or write', async () => {
+test('the editable source accepts additive envelope fields but rejects malformed profile and advice identities', async () => {
   const { bio, ...incomplete } = profile;
   for (const body of [
-    { profile: incomplete },
-    { profile: { ...profile, id: 'another-account' } },
-    { profile: { ...profile, state: 'deleted' } },
-    { profile: { ...profile, publicViews: { posts: false } } },
-    { profile: { ...profile, avatar: { media: 'incomplete-avatar' } } },
-    { profile: { ...profile, kind: 'organization' } },
-    { profile, accounts: [] },
+    { profile: incomplete, editing },
+    { profile: { ...profile, id: 'another-account' }, editing },
+    { profile: { ...profile, state: 'deleted' }, editing },
+    { profile: { ...profile, bio: 'x'.repeat(4097) }, editing },
+    { profile: { ...profile, links: [{ label: 'x'.repeat(65), url: 'https://example.test' }] }, editing },
+    { profile: { ...profile, links: [{ label: 'Home', url: `https://example.test/${'x'.repeat(2049)}` }] }, editing },
+    { profile: { ...profile, publicViews: { posts: false } }, editing },
+    { profile: { ...profile, avatar: { media: 'incomplete-avatar' } }, editing },
+    {
+      profile: {
+        ...profile,
+        avatar: {
+          media: profile.id,
+          width: 1,
+          height: 1,
+          placeholder: { thumbhash: 'hash', color: '#ffffff' },
+          variants: Array.from({ length: 13 }, () => ({ format: 'webp' as const, width: 1 })),
+          focalPoint: null,
+          credit: null,
+        },
+      },
+      editing,
+    },
+    { profile: { ...profile, kind: 'organization' }, editing },
+    { profile, editing: { ...editing, viewer: { accountId: 'another-account' } } },
+    { profile, editing: { ...editing, target: { ...editing.target, accountId: 'another-account' } } },
+    { profile, editing: { ...editing, fields: { ...editing.fields, links: { ...editing.fields.links, maxItems: 500 } } } },
+    { profile, editing: { ...editing, fields: { ...editing.fields, extra: true } } },
     { accounts: [{ id: profile.id, handle: null }] },
   ]) {
     let writes = 0;
@@ -59,6 +91,23 @@ test('the editable source rejects incomplete, foreign and non-closed native bodi
     await editor.submit('profile');
     expect(writes).toBe(0);
   }
+
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async () => Response.json({ profile, editing, permissions: { save: true } })) as typeof fetch,
+  });
+  const accepted = await loadProfileRecord(client, 'Bearer unchanged', profile.id);
+  expect(accepted).toMatchObject({ accountId: profile.id, editing });
+  expect(accepted).not.toHaveProperty('permissions');
+
+  const advice = {
+    ...editing,
+    fields: { ...editing.fields, displayName: { ...editing.fields.displayName, applicable: false } },
+  };
+  const disabledClient = createKernelClient('https://kernel.example.test', {
+    fetch: (async () => Response.json({ profile, editing: advice })) as typeof fetch,
+  });
+  expect((await loadProfileRecord(disabledClient, 'Bearer unchanged', profile.id)).editing?.fields.displayName)
+    .toEqual({ applicable: false, maxLength: 4096 });
 });
 
 test('native denial status survives the server boundary while transport failures retain the same-actor draft', async () => {

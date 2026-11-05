@@ -21,7 +21,11 @@ export type RoutePageData = {
   reads: Record<string, { status: number; body: JsonValue }>;
 };
 
-export type RoutePageLoad = { kind: 'missing' } | { kind: 'page'; page: RoutePageData };
+export type RoutePageLoad =
+  | { kind: 'missing' }
+  | { kind: 'page'; page: RoutePageData }
+  | { kind: 'rejected'; status: number; code: string }
+  | { kind: 'unavailable'; status?: number; code: string };
 
 export function routePageJsonLd(
   page: RoutePageData,
@@ -35,30 +39,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function problemError(value: unknown): Error {
-  const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
-  return new Error(code);
+function problemCode(value: unknown): string {
+  return isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
 }
 
 /** One `pages.read` for a route; an omitted locale leaves the read's labels available to the renderer. */
 export async function loadRoutePage(client: KernelClient, route: string, locale?: string): Promise<RoutePageLoad> {
-  const result = await client.pages.$read.post({
-    target: { route },
-    ...(locale === undefined ? {} : { languages: requestLanguages(locale) }),
-  });
+  let result: Awaited<ReturnType<typeof client.pages.$read.post>>;
+  try {
+    result = await client.pages.$read.post({
+      target: { route },
+      ...(locale === undefined ? {} : { languages: requestLanguages(locale) }),
+    });
+  } catch (error) {
+    if (error instanceof TypeError) return { kind: 'unavailable', code: 'dependency_unavailable' };
+    throw error;
+  }
   if (result.status === 404) return { kind: 'missing' };
-  if (
-    result.status === 503 &&
-    isRecord(result.error?.value) &&
-    'code' in result.error.value &&
-    result.error.value.code === 'presentation_not_ready'
-  )
-    return { kind: 'missing' };
   if (result.status === 200 && result.data) {
     const page = result.data as Omit<RoutePageData, 'route'>;
     return { kind: 'page', page: { ...page, route } };
   }
-  throw problemError(result.error?.value);
+  const code = problemCode(result.error?.value);
+  if (result.status >= 500) return { kind: 'unavailable', status: result.status, code };
+  if (result.status >= 400) return { kind: 'rejected', status: result.status, code };
+  throw new Error(`Unexpected pages.read response: ${result.status}`);
 }
 
 const slotsByType = new Map(pageDefinitions.map(({ type, slots }) => [type, slots]));

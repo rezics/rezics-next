@@ -369,6 +369,24 @@ describe('Complete saved rule and selected Publication owner authority preserves
     }
   });
 
+  test('new rule hydration keeps ready native definitions through current viewer admission', async () => {
+    const h = await mounted();
+    const page = rule('alice', null);
+    page.choices.release = { state: 'ready', digest: 'active-release', profiles: [] };
+    try {
+      await h.render(<CollectionRuleCurrent page={page} collectionId={null} />);
+      expect(h.host.querySelector('form')).toBeNull();
+      await h.authorize('alice', ['collections']);
+      expect(h.host.querySelector('form')).not.toBeNull();
+      expect(h.host.querySelector<HTMLInputElement>('input[required]')).not.toBeNull();
+      expect(h.host.textContent).not.toContain(m.condition_metadata_unavailable());
+      expect(h.host.textContent).not.toContain('active-release');
+      expect(ruleReads).toHaveLength(0);
+    } finally {
+      await h.close();
+    }
+  });
+
   test('new and edited uncertain rule intents survive healthy rotation, equivalent refresh, authority errors and independent admission churn exactly', async () => {
     for (const collectionId of [null, 'alpha']) {
       const h = await mounted();

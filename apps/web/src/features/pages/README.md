@@ -1,5 +1,9 @@
 # Subject page composition
 
+## Platform Home
+
+The anonymous catalogue reads the active native `/` composition once and renders its supplied `TypeList` windows with the existing Search owner, limits and total read budget. A 404 is missing, rejected native requests remain rejected, and 5xx or fetch dependency failures remain unavailable with deliberate reload. The checked-in platform profile continues to declare the four intended populations; changing its source does not activate it. The publisher owns active profile delivery.
+
 ## Work tag reading
 
 Decision: show at most 12 source-order tag associations per local page, count only labelled tags disclosed in the retained Subject reading, open the original Concept target, and gate each over-threshold association as a whole.

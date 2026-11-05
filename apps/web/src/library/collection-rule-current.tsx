@@ -32,16 +32,32 @@ export function CollectionRuleCurrent({
 }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', collectionId, resultsHref]), true);
   // A retired loader object cannot seed a returning viewer/address lifetime.
-  const history = useRef({ generation: owner.generation, seen: new Set<string>(), retired: new Set<string>() });
-  if (history.current.generation !== owner.generation) {
+  const history = useRef({
+    generation: owner.generation,
+    observationKey: owner.observationKey,
+    seen: new Set<string>(),
+    retired: new Set<string>(),
+  });
+  if (
+    history.current.generation !== owner.generation ||
+    history.current.observationKey !== owner.observationKey
+  ) {
     for (const value of history.current.seen) history.current.retired.add(value);
     history.current.seen.clear();
     history.current.generation = owner.generation;
+    history.current.observationKey = owner.observationKey;
   }
   const identity = page.state === 'ready' || page.state === 'new' ? JSON.stringify([page.viewerId, page.intent]) : '';
   const valid = matches(page, owner.subject, collectionId) && !history.current.retired.has(identity);
-  if (valid && owner.admitted) history.current.seen.add(identity);
-  const operations = owner.admitted
+  if (valid && owner.admissionState === 'available') history.current.seen.add(identity);
+  const currentPage: RulePage = !valid
+    ? { state: page.state === 'unavailable' ? 'unavailable' : 'denied' }
+    : owner.admissionState === 'available'
+      ? page
+      : owner.admissionState === 'denied'
+        ? { state: 'denied' }
+        : { state: 'unavailable' };
+  const operations = owner.admissionState === 'available'
     ? [
         'collection.create',
         'collection_rule.get',
@@ -52,7 +68,7 @@ export function CollectionRuleCurrent({
   return (
     <CollectionRuleEditor
       key={owner.generation}
-      page={valid ? page : { state: page.state === 'unavailable' ? 'unavailable' : 'denied' }}
+      page={currentPage}
       viewerId={owner.subject}
       collectionId={collectionId}
       resultsHref={resultsHref}

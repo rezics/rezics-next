@@ -8,6 +8,7 @@ import {
   profileReadFailure,
   type EditableProfileFailure,
   type EditableProfile,
+  type EditableProfileEditing,
   type EditableProfileSource,
 } from './editable-profile-source';
 
@@ -22,6 +23,7 @@ export type ProfileValues = {
   links: ProfileLink[];
   publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
   speakersListed?: boolean;
+  editing?: EditableProfileEditing;
 };
 export type ProfilePatch = {
   displayName?: string | null;
@@ -60,7 +62,7 @@ export function profileReadDenied(error: unknown): boolean {
   return !!failure && [401, 403, 404].includes(failure.status);
 }
 
-function accountProfile(value: EditableProfile): ProfileValues {
+function accountProfile(value: EditableProfile & { editing?: EditableProfileEditing }): ProfileValues {
   return {
     accountId: value.id,
     kind: value.kind,
@@ -69,6 +71,7 @@ function accountProfile(value: EditableProfile): ProfileValues {
     avatar: value.avatar,
     links: value.links,
     publicViews: value.publicViews,
+    ...(value.editing ? { editing: value.editing } : {}),
     ...(value.kind === 'organization' && value.speakersListed !== undefined
       ? { speakersListed: value.speakersListed }
       : {}),
@@ -99,11 +102,13 @@ export function profileChanges(before: ProfileValues, after: ProfileValues): Pro
   const body: ProfilePatch = {};
   if (before.displayName !== after.displayName) body.displayName = after.displayName;
   if (before.biography !== after.biography) body.biography = after.biography;
-  if (avatarReference(before.avatar) !== avatarReference(after.avatar)) body.avatar = avatarReference(after.avatar);
+  if (avatarReference(before.avatar) !== avatarReference(after.avatar))
+    body.avatar = avatarReference(after.avatar);
   if (JSON.stringify(before.links) !== JSON.stringify(after.links)) body.links = after.links;
   const publicViews: NonNullable<ProfilePatch['publicViews']> = {};
   for (const key of ['posts', 'reviews', 'collections', 'realms'] as const)
-    if (before.publicViews[key] !== after.publicViews[key]) publicViews[key] = after.publicViews[key];
+    if (before.publicViews[key] !== after.publicViews[key])
+      publicViews[key] = after.publicViews[key];
   if (Object.keys(publicViews).length) body.publicViews = publicViews;
   if (
     before.kind === 'organization' &&

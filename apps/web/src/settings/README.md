@@ -10,6 +10,12 @@
 
 **Decision:** After a Profile command is acknowledged, a failed current read retains that fact and offers deliberate read recovery only; a successful read adopts newer native values and preserves only edits outside the command or made after it for review.
 
+The profile reader accepts additive fields on the native `{ profile, editing }` response envelope while keeping the consumed profile and editing advice closed and identity-bound. Editing advice stays in the private reader result; the command retains its strict profile projection and frozen idempotency key.
+
+The Settings section notice observes the same current viewer exposure query used by its operation controls. Unknown
+admission stays pending, denied admission stays closed, and a failed exposure read stays unavailable; an empty
+admitted Watches page settles through its existing reader without a second exposure fetch.
+
 Embedded inventory, detail, action-entry and rename-entry reads use a ten-second deadline including response bodies, composed with caller cancellation; timeout releases pending state into the existing localized retry views, and only deliberate recovery rechecks the current account. Independent feeds retain valid cursors and usable pages on transient failure; session retirement discards late replies. Cancellation never proves that a dispatched command had no effect and never replays a mutation.
 
 Applicant verification requests use the same ten-second account budget, including headers and bodies, with caller cancellation and explicit recovery only. The private status read carries the native `{ verificationRequest, viewerActions }` envelope; Request and Withdraw follow returned admission plus local CSRF and lifetime, never browser-inferred state. A readable status may admit no command. Unavailable or malformed advice is never no request and never unlocks Request. Review and command readback never await optional subject titles: a separate cancellable title read enhances the existing generic label and cannot empty an admitted request. Subject suggestions require a fresh caller-bound eligibility release; unavailable reads remain retryable failures, never empty or definitive ineligibility. Withdrawal confirmation binds the current request identity, state and advice; a newer request or pending-to-approving transition needs a fresh decision. Uncertain commands retain their exact original input and key, and cancellation grants no replay or completion authority. Reviewer transport remains separate.

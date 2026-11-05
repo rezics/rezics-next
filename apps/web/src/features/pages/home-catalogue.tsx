@@ -14,6 +14,7 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
     page?.document.content.flatMap((node) =>
       isRecord(node) && node.type === 'TypeList' && isRecord(node.props) ? [node.props] : [],
     ) ?? [];
+  const failure = result?.kind === 'rejected' || result?.kind === 'unavailable' ? result : undefined;
   return (
     <section aria-labelledby="home-catalogue" className="min-w-0 space-y-6">
       <h2 id="home-catalogue" className="text-2xl font-semibold">
@@ -35,7 +36,24 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
           ))}
         </PageData>
       ) : (
-        <p role="status">{m.subject_section_failed({}, o)}</p>
+        <div
+          role={failure ? 'alert' : 'status'}
+          data-home-catalogue-state={result?.kind ?? 'missing'}
+          data-response-status={failure?.status ?? ''}
+          data-response-code={failure?.code ?? ''}
+          className="space-y-2"
+        >
+          <p>
+            {result?.kind === 'unavailable'
+              ? m.catalogue_result_read_unavailable({}, o)
+              : m.subject_section_failed({}, o)}
+          </p>
+          {failure ? (
+            <a href={`/${locale}`} className="text-primary underline underline-offset-4">
+              {m.catalogue_retry_loading_result({}, o)}
+            </a>
+          ) : null}
+        </div>
       )}
       <a
         href={`/${locale}/search`}
@@ -49,7 +67,7 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
 
 /** Stable public identity for the Home TypeList reads; private Library facts never enter this cache key. */
 export function homeCatalogueObservation(result?: RoutePageLoad): string {
-  if (result?.kind !== 'page') return 'unavailable';
+  if (result?.kind !== 'page') return JSON.stringify(['home-catalogue', result ?? { kind: 'missing' }]);
   const lists = result.page.document.content.flatMap((node) =>
     isRecord(node) && node.type === 'TypeList' && isRecord(node.props) && typeof node.props.id === 'string'
       ? [node.props.id]
