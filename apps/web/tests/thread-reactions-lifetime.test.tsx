@@ -6,6 +6,7 @@ import type { ChangeReactionInput, ReactionFailure } from '../src/threads/reacti
 
 // UNRUN: default-composition regressions for the controller's integration gate.
 // Only the changeReaction transport is gated; ThreadReactions, Reactions, their queue and session cache are real.
+// Recovery reads stay pending, so no retired visit settles from a read.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -52,6 +53,7 @@ mock.module('../src/threads/reactions', () => ({
     calls.push(call);
     return call.promise;
   },
+  readReaction: () => new Promise<never>(() => {}),
 }));
 const { createRoot } = await import('react-dom/client');
 const { renderToStaticMarkup } = await import('react-dom/server');
