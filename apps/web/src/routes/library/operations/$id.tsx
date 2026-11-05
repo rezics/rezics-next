@@ -84,12 +84,12 @@ function RecoveryReader({
   const visibleRead = readOwner === ownerKey ? read : { state: 'unavailable' as const, operationId };
   const visibleCancelState = cancelOwner === ownerKey ? cancelState : 'idle';
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    live.current = true;
+    return () => {
       live.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
     const version = () => JSON.stringify([origin.version('personal_library'), origin.read().csrfToken]);
