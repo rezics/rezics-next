@@ -31,6 +31,8 @@ export type TrainConflict = AttemptRef & {
   resolvedCommit?: string;
   fixTaskId?: string;
   detail?: string;
+  /** The dev lane replays a resolution onto a moved integration branch, so its target may move. */
+  allowTargetMove?: boolean;
 };
 export class TrainResolverInfrastructureError extends Error {}
 const profile: Profile = { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'codex' };
@@ -282,7 +284,7 @@ export class TrainResolver {
     const tree = this.tasks?.settings.mainCheckout ?? this.store.task(request.taskId).worktree;
     if (this.git(tree, 'rev-parse', `${request.branch}^{commit}`) !== conflict.sourceCommit)
       throw new Error('Accepted source ref changed during train resolution');
-    if (!allowTargetMove && this.git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
+    if (!allowTargetMove && !conflict.allowTargetMove && this.git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
       throw new Error('Integration ref changed during train resolution');
     const task = this.store.task(request.taskId);
     if (request.managerLanding && request.managerLanding.managerId !== task.brief.manager)
@@ -297,6 +299,7 @@ export class TrainResolver {
     source: string,
     frozen: readonly string[],
     logPath: string,
+    allowTargetMove = false,
   ): Promise<TrainConflict | undefined> {
     this.store.assertCurrent(request);
     if (this.git(tree, 'rev-parse', `${request.branch}^{commit}`) !== source)
@@ -352,6 +355,7 @@ export class TrainResolver {
       method: 'rerere',
       tokens: { input: 0, cached: 0, output: 0 },
     };
+    if (allowTargetMove) conflict.allowTargetMove = true;
     if (!prior)
       this.store.write(request, () => {
         this.event(request, 'train-conflict', conflict);

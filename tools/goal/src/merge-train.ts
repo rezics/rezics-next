@@ -13,6 +13,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
 import { controlPlaneReleaseBrief, matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
+import { selectAffectedChecks } from './check-plan.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type {
   AttemptFence,
@@ -95,7 +96,7 @@ export function integrationChecksForFiles(
   checks: readonly IntegrationCheck[],
   policy = defaultPolicy.brief,
 ): IntegrationCheck[] {
-  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths, policy)));
+  return selectAffectedChecks(changed, checks, policy);
 }
 
 export function rootTypecheckCommand(changed: readonly string[]): string[] {
@@ -180,7 +181,7 @@ export function landingAffectedChecks(
 ): AffectedTestCheck[] {
   const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
   const checks = [...(explicit ?? (testDefaults ? [] : defaults.affectedTests))];
-  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths, policy)));
+  return selectAffectedChecks(changed, checks, policy);
 }
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
@@ -3204,6 +3205,7 @@ export class MergeTrain {
             sourceCommit,
             frozen,
             outcome.logPath,
+            true,
           );
         } catch (error) {
           failure = String(error);

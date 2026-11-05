@@ -157,22 +157,81 @@ function attemptIntervals(
   return { durations, durationsByAttempt, observed, incomplete };
 }
 
-function nextIntervalBoundary(
-  events: FlowEvent[],
-  start: FlowEvent,
-  starts: string[],
-  ends: string[],
-): FlowEvent | undefined {
-  const index = events.indexOf(start);
-  return events
-    .slice(index + 1)
-    .find(
-      (event) =>
-        event.taskId === start.taskId &&
-        event.attempt === start.attempt &&
-        event.stage === start.stage &&
-        (starts.includes(event.action) || ends.includes(event.action) || event.action === 'closed'),
-    );
+const queueStages = ['start', 'check', 'landing', 'verification', 'promotion'] as const;
+type QueueStage = (typeof queueStages)[number];
+const waitEnds: Record<QueueStage, string[]> = {
+  start: ['started'],
+  check: ['acquired'],
+  landing: ['started'],
+  verification: ['verified'],
+  promotion: ['promoted'],
+};
+const requestActions = ['requested', 'enqueued'];
+const isQueueStage = (stage: FlowStage): stage is QueueStage => queueStages.includes(stage as QueueStage);
+
+function projectFlow(ordered: FlowEvent[]) {
+  const n = ordered.length;
+  const byTask = new Map<string, FlowEvent[]>();
+  const groups = new Map<string, number[]>();
+  const nextQueueAt = new Int32Array(n).fill(-1);
+  const nextWaitAt = new Int32Array(n).fill(-1);
+  const integrationCloses = new Uint8Array(n);
+  const integrationsByTask = new Map<string, { attempt: number; at: string }[]>();
+  const requestsByTask = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const event = ordered[i]!;
+    const taskEvents = byTask.get(event.taskId);
+    if (taskEvents) taskEvents.push(event);
+    else byTask.set(event.taskId, [event]);
+    const key = `${event.taskId}\t${event.attempt}\t${event.stage}`;
+    const group = groups.get(key);
+    if (group) group.push(i);
+    else groups.set(key, [i]);
+    if (event.stage === 'integration' && event.action === 'integrated') {
+      const integrations = integrationsByTask.get(event.taskId);
+      if (integrations) integrations.push({ attempt: event.attempt, at: event.at });
+      else integrationsByTask.set(event.taskId, [{ attempt: event.attempt, at: event.at }]);
+    }
+    if (isQueueStage(event.stage) && event.stage !== 'promotion' && requestActions.includes(event.action)) {
+      const requests = requestsByTask.get(event.taskId);
+      if (requests) requests.push(i);
+      else requestsByTask.set(event.taskId, [i]);
+    }
+  }
+  for (const indexes of groups.values()) {
+    let queue = -1;
+    let wait = -1;
+    for (let k = indexes.length - 1; k >= 0; k--) {
+      const i = indexes[k]!;
+      nextQueueAt[i] = queue;
+      nextWaitAt[i] = wait;
+      const event = ordered[i]!;
+      if (event.stage === 'manager') continue;
+      const starts = startActions[event.stage];
+      const ends = endActions[event.stage];
+      if (starts.includes(event.action) || ends.includes(event.action) || event.action === 'closed') queue = i;
+      if (
+        isQueueStage(event.stage) &&
+        (starts.includes(event.action) || waitEnds[event.stage].includes(event.action) || event.action === 'closed')
+      )
+        wait = i;
+    }
+  }
+  for (const [taskId, requests] of requestsByTask) {
+    const integrations = integrationsByTask.get(taskId) ?? [];
+    let maxAttempt = Number.NEGATIVE_INFINITY;
+    let j = integrations.length - 1;
+    for (let r = requests.length - 1; r >= 0; r--) {
+      const i = requests[r]!;
+      const event = ordered[i]!;
+      while (j >= 0 && integrations[j]!.at >= event.at) {
+        maxAttempt = Math.max(maxAttempt, integrations[j]!.attempt);
+        j--;
+      }
+      if (maxAttempt >= event.attempt) integrationCloses[i] = 1;
+    }
+  }
+  return { byTask, nextQueueAt, nextWaitAt, integrationCloses };
 }
 
 function stageDurations(events: FlowEvent[], stage: LifecycleStage): number[] {
@@ -254,8 +313,7 @@ export function readFlowTasks(db: Database): FlowTask[] {
 
 export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
   const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at));
-  const byTask = new Map<string, FlowEvent[]>();
-  for (const event of ordered) byTask.set(event.taskId, [...(byTask.get(event.taskId) ?? []), event]);
+  const { byTask, nextQueueAt, nextWaitAt, integrationCloses } = projectFlow(ordered);
   const stageSummaries = FLOW_STAGES.map((stage) => ({
     stage,
     ...summarize(
@@ -288,25 +346,23 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       efficiency: elapsed && working !== null ? working / elapsed : null,
     };
   });
-  const queues = (['start', 'check', 'landing', 'verification', 'promotion'] as const).map((stage) => {
-    const terminal = new Set(tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id));
-    const requests = ordered.filter((e) => e.stage === stage && ['requested', 'enqueued'].includes(e.action));
-    const pending = requests.filter(
-      (e) =>
-        !terminal.has(e.taskId) &&
-        !(
-          stage !== 'promotion' &&
-          ordered.some(
-            (x) =>
-              x.taskId === e.taskId &&
-              x.attempt >= e.attempt &&
-              x.stage === 'integration' &&
-              x.action === 'integrated' &&
-              x.at >= e.at,
-          )
-        ) &&
-        !nextIntervalBoundary(ordered, e, startActions[stage], endActions[stage]),
-    );
+  const terminalByStage = Object.fromEntries(
+    queueStages.map((stage) => [
+      stage,
+      new Set(tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id)),
+    ]),
+  ) as Record<QueueStage, Set<string>>;
+  const queues = queueStages.map((stage) => {
+    const terminal = terminalByStage[stage];
+    const pending: FlowEvent[] = [];
+    for (let i = 0; i < ordered.length; i++) {
+      const event = ordered[i]!;
+      if (event.stage !== stage || !requestActions.includes(event.action)) continue;
+      if (terminal.has(event.taskId)) continue;
+      if (stage !== 'promotion' && integrationCloses[i]) continue;
+      if (nextQueueAt[i] !== -1) continue;
+      pending.push(event);
+    }
     return {
       stage,
       length: pending.length,
@@ -349,33 +405,26 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       })),
     };
   });
-  const waitEnds: Record<(typeof queues)[number]['stage'], string[]> = {
-    start: ['started'],
-    check: ['acquired'],
-    landing: ['started'],
-    verification: ['verified'],
-    promotion: ['promoted'],
-  };
   const bottleneck =
     [...queues]
-      .map((q) => ({
-        stage: q.stage,
-        ms: ordered.reduce((sum, e) => {
-          if (e.stage !== q.stage || !['requested', 'enqueued'].includes(e.action)) return sum;
-          const boundary = nextIntervalBoundary(ordered, e, startActions[q.stage], waitEnds[q.stage]);
+      .map((q) => {
+        const terminal = terminalByStage[q.stage];
+        let ms = 0;
+        for (let i = 0; i < ordered.length; i++) {
+          const event = ordered[i]!;
+          if (event.stage !== q.stage || !requestActions.includes(event.action)) continue;
+          const boundaryIndex = nextWaitAt[i]!;
+          const boundary = boundaryIndex === -1 ? undefined : ordered[boundaryIndex];
           const end = boundary && waitEnds[q.stage].includes(boundary.action) ? boundary : undefined;
           // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
-          const terminal = tasks.some((task) => task.id === e.taskId && terminalCloses(task.terminalState, q.stage));
-          return (
-            sum +
-            (end
-              ? Math.max(0, Date.parse(end.at) - Date.parse(e.at))
-              : boundary || terminal
-                ? 0
-                : Math.max(0, now - Date.parse(e.at)))
-          );
-        }, 0),
-      }))
+          ms += end
+            ? Math.max(0, Date.parse(end.at) - Date.parse(event.at))
+            : boundary || terminal.has(event.taskId)
+              ? 0
+              : Math.max(0, now - Date.parse(event.at));
+        }
+        return { stage: q.stage, ms };
+      })
       .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
   return {
     urgent: {
