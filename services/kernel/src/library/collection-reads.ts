@@ -1129,7 +1129,7 @@ export function createCollectionReads(
         binding.input.collectionId !== collectionId ||
         binding.input.deadline > deadline ||
         binding.scope.key.source.kind !== 'library' ||
-        binding.scope.key.source.identity.scope !== 'private_builtin' ||
+        binding.scope.key.source.identity.scope === 'public_output' ||
         binding.scope.key.source.identity.accountId !== viewer.accountId ||
         binding.scope.key.source.identity.route !== route ||
         binding.scope.key.source.identity.generation !== saved.sourceGeneration

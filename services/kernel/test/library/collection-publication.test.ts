@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { releaseDigest } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
 import {
   collectionSelectedPublicationPlan,
@@ -339,3 +341,38 @@ test('selected-publication command bounds stay distinct from the activated publi
   expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.nativeRows).not.toBe(COLLECTION_PUBLICATION_STEP_CEILING.nativeRows);
   expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.bytes).toBeLessThan(COLLECTION_PUBLICATION_STEP_CEILING.bytes);
 });
+
+test('a saved selection retains its accepted release through fresh publication and exact receipt replay after activation changes', async () => {
+  const subject = await f.subject('Accepted saved meaning');
+  await f.entry(subject);
+  const collection = await saved();
+  await f.page(collection.id);
+  const original = await (await f.send('GET', '/v1/definitions/active')).json();
+  const release = structuredClone(bundledRelease);
+  release.catalogue.version = '999.0.1';
+  const digest = releaseDigest(release);
+  await f.grant(f.manager.accountId, ['definitions:publish', 'definitions:activate']);
+  expect((await f.send('POST', '/v1/definitions/releases', { release }, f.manager.bearer)).status).toBe(201);
+  const activated = await f.send('POST', `/v1/definitions/releases/${digest}:activate`, {
+    expected_head: original.head,
+  }, f.manager.bearer);
+  expect(activated.status).toBe(200);
+  try {
+    const input = { revision: collection.revision, subjectIds: [subject] };
+    const key = randomUUID();
+    const published = await f.send('POST', path(collection.id), input, f.owner, key);
+    expect(published.status).toBe(200);
+    const receipt = await published.json();
+    const beforeReplay = await native(collection.id);
+    const replay = await f.send('POST', path(collection.id), input, f.owner, key);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(receipt);
+    expect(await native(collection.id)).toEqual(beforeReplay);
+    expect(beforeReplay.members).toEqual([subject]);
+    expect((await f.send('POST', path(collection.id), input, f.reduced, key)).status).toBe(403);
+  } finally {
+    expect((await f.send('POST', `/v1/definitions/releases/${original.digest}:activate`, {
+      expected_head: (await activated.json()).head,
+    }, f.manager.bearer)).status).toBe(200);
+  }
+}, 120_000);
