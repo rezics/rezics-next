@@ -1,6 +1,7 @@
 -- receipt.key is the current versioned HMAC storage token, never caller text.
 WITH input AS NOT MATERIALIZED (
-  SELECT :partition_no::integer AS partition_no, :transaction_id::uuid AS transaction_id, :receipt::jsonb AS receipt
+  SELECT :partition_no::integer AS partition_no, :transaction_id::uuid AS transaction_id,
+         NULLIF(:receipt::jsonb, 'null'::jsonb) AS receipt
 ),
 observed AS MATERIALIZED (
   SELECT p.partition_no, p.epoch, p.position

@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import type { ZoneConfiguration } from '@rezics/composition';
 import type { AccessClient } from '../request/access.ts';
 import { readAccount } from '../access/account-data.ts';
@@ -58,7 +59,7 @@ export async function insertZone(
     id: input.id,
     owner_id: input.ownerId,
     visibility: input.visibility,
-    configuration: input.configuration,
+    configuration: jsonParameter(input.configuration),
     mounts: input.mounts,
     release_digest: input.releaseDigest,
     at: input.at,
@@ -97,7 +98,7 @@ export async function compareAndSetZone(
     owner_id: next.ownerId,
     state: next.state,
     visibility: next.visibility,
-    configuration: next.configuration,
+    configuration: jsonParameter(next.configuration),
     mounts: next.mounts,
     release_digest: next.releaseDigest,
     deleted_at: next.deletedAt,

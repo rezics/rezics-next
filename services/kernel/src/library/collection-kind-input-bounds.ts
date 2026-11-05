@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Finite Kind raw-original input. Values describe work only and never grant Type or catalogue admission. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { ProblemError } from '../http/problem.ts';
@@ -68,7 +69,7 @@ const statement = (
 ): Bound =>
   sumBounds(
     work(candidateKeys, nativeRows, nativePoints, extras.emptySeeks ?? 1, extras.statements ?? 1),
-    bytes(Buffer.byteLength(sql)),
+    bytes(statementBytes(sql)),
     bytes(extras.request ?? ENVELOPE),
     bytes(extras.escaped ?? ESCAPED_BODY),
     bytes(projection),
@@ -94,7 +95,7 @@ function custody() {
   return memoizedValue(custody, () =>
     sumBounds(
       work(0, 208, 10, 0, 7),
-      ...custodySql().map((query) => bytes(Buffer.byteLength(query.sql) + ENVELOPE + ENVELOPE)),
+      ...custodySql().map((query) => bytes(statementBytes(query) + ENVELOPE + ENVELOPE)),
     ),
   );
 }

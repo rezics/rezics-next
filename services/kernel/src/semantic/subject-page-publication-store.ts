@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import workHomes from './subject-page-publication-homes.sql';
 import generationWitnesses from './subject-page-publication-witnesses.sql';
 import deliveryTime from './subject-page-publication-delivery-time.sql';
@@ -256,7 +257,7 @@ export async function initializeSubjectPagePublication(tx: CommandTransaction, s
     completed_position: point.completed_position,
     position: point.change_position,
     effective_at: null,
-    witnesses: point.witnesses,
+    witnesses: jsonParameter(point.witnesses),
   });
 }
 
@@ -598,7 +599,7 @@ export async function commitSubjectPageRepairPage(
     completed_position: complete ? cp.replayPosition : point.completed_position,
     position: point.change_position,
     effective_at: effectiveAt,
-    witnesses: currentWitnesses,
+    witnesses: jsonParameter(currentWitnesses),
   });
   if (input.complete && updated[0]!.dirty)
     await enqueueSubjectPageRepair(tx, { subject: input.subject, cause: 'continuation' });

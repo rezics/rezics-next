@@ -1,3 +1,4 @@
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Closed nine-axis declarations for the existing saved-rule INSERT and CAS UPDATE statements. */
 import { declareBound, withinCeiling, type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';
@@ -32,7 +33,7 @@ function plan(
     // The filter is the exact original serialized JSON bind; UUID, time and metadata binds retain
     // their schema-valid inputs in the same snapshot instead of being repriced from a DTO.
     bytes:
-      Buffer.byteLength(query.sql) +
+      statementBytes(query) +
       Buffer.byteLength(JSON.stringify(frozen)) +
       (returned ? Buffer.byteLength(JSON.stringify({ revision: Number.MAX_SAFE_INTEGER })) : Buffer.byteLength('[]')),
     engineRequests: 0,

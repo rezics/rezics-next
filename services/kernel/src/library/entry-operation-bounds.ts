@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import { currentCommandWorkAssociation } from '../command/work.ts';
@@ -128,7 +129,7 @@ function statement(inputBytes: number, item: Statement): Bound {
     nativePoints: item.points ?? 1,
     witnessKeys: 0,
     statements: 1,
-    bytes: Buffer.byteLength(item.sql) + inputBytes + item.bindBytes + item.outputBytes,
+    bytes: statementBytes(item) + inputBytes + item.bindBytes + item.outputBytes,
     engineRequests: 0,
   });
 }
@@ -353,7 +354,7 @@ export function entryHistoryPagePlan(input: PageInput): EntryHistoryPagePlan {
       // This SQL leaf makes no Search engine call.
       engineRequests: 0,
     }),
-    byteWork(Buffer.byteLength(page.sql)),
+    byteWork(statementBytes(page)),
     // Include the original serialized operands independently of the output. JSON
     // names/escaping overbound the positional PostgreSQL parameter payload.
     byteWork(Buffer.byteLength(JSON.stringify(original))),
