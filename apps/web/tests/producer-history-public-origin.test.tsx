@@ -170,9 +170,7 @@ test('public Organization entry preserves Context and current return, refuses un
     expect(producerReads[0]!.data.id).toBe(producerStudioId);
     expect(producerReads[0]!.data.context).toBeUndefined();
     const pageReturn = link(messages.m.producer_history_back());
-    expect(new URL(pageReturn.getAttribute('href')!, 'https://site.test').searchParams.get('via')).toBe(
-      admittedReturn,
-    );
+    expect(pageReturn.getAttribute('href')).toBe(admittedReturn);
 
     await navigate(
       `/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${unsupportedContext}`,
