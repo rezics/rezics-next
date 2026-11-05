@@ -9,11 +9,7 @@ import {
   type AgentVerificationRequest,
   type Operation,
 } from '../src/account-verification/transport';
-import {
-  readVerification,
-  requestVerification,
-  withdrawVerification,
-} from '../src/settings/verification-core';
+import { readVerification, requestVerification, withdrawVerification } from '../src/settings/verification-core';
 import {
   canRequestVerification,
   canRetryVerification,
@@ -233,15 +229,13 @@ test('an applicant reads current status, keeps original operands through uncerta
     calls.push(`${incoming.method} ${url.pathname}`);
     if (url.pathname === `/v1/accounts/${accountId}/verification`) {
       reads++;
-      if (reads === 1)
-        return Response.json({ verificationRequest: null, viewerActions: requestAdvice });
+      if (reads === 1) return Response.json({ verificationRequest: null, viewerActions: requestAdvice });
       if (reads === 2)
         return Response.json(
           { detail: 'Current status unavailable', code: 'overloaded', retryable: true, request_id: 'status-1' },
           { status: 503, headers: { 'Retry-After': '5' } },
         );
-      if (reads === 3)
-        return Response.json({ verificationRequest: request, viewerActions: pendingAdvice });
+      if (reads === 3) return Response.json({ verificationRequest: request, viewerActions: pendingAdvice });
       return Response.json({
         verificationRequest: { ...request, state: 'withdrawn' },
         viewerActions: requestAdvice,

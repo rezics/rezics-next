@@ -199,8 +199,7 @@ export async function readVerification(
     if (!validStatus(data, accountId))
       throw new VerificationReadError({
         status: result.status || 0,
-        message:
-          data == null ? m.settings_verification_request_failed() : m.settings_verification_load_failed(),
+        message: data == null ? m.settings_verification_request_failed() : m.settings_verification_load_failed(),
       });
     return data;
   } catch (error) {
