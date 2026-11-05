@@ -4,15 +4,7 @@ import type { Locale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import type { PersonalLibraryEntry } from '../entries-read';
 
-function Instant({
-  value,
-  locale,
-  isCurrent,
-}: {
-  value: string;
-  locale: string;
-  isCurrent: () => boolean;
-}) {
+function Instant({ value, locale, isCurrent }: { value: string; locale: string; isCurrent: () => boolean }) {
   const exactId = useId();
   const formatted = new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
@@ -88,9 +80,7 @@ export function ReceivedEntryDates({
         <dd className="min-w-0 break-words">
           <Instant value={entry.updatedAt} locale={locale} isCurrent={isCurrent} />
         </dd>
-        <dt className="break-words text-muted-foreground">
-          {m.library_entry_reading_last_activity({}, options)}
-        </dt>
+        <dt className="break-words text-muted-foreground">{m.library_entry_reading_last_activity({}, options)}</dt>
         <dd className="min-w-0 break-words">
           <DateValue value={entry.lastActivityAt} locale={locale} isCurrent={isCurrent} />
         </dd>

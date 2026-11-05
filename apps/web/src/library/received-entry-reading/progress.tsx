@@ -18,17 +18,13 @@ function exactAmount(progress: ProgressLabelInput): string | null {
   return progress.amount;
 }
 
-export function ReceivedEntryProgress({
-  progress,
-  locale,
-}: {
-  progress: ProgressLabelInput | null;
-  locale: string;
-}) {
+export function ReceivedEntryProgress({ progress, locale }: { progress: ProgressLabelInput | null; locale: string }) {
   const descriptionId = useId();
   const options = { locale: locale as Locale };
   if (progress === null)
-    return <p className="py-4 text-sm text-muted-foreground">{m.library_entry_reading_progress_unavailable({}, options)}</p>;
+    return (
+      <p className="py-4 text-sm text-muted-foreground">{m.library_entry_reading_progress_unavailable({}, options)}</p>
+    );
 
   const view = progressView(progress, locale);
   const amount = exactAmount(progress);
@@ -39,7 +35,11 @@ export function ReceivedEntryProgress({
         ? m.library_entry_reading_progress_cursor_meaning({}, options)
         : m.library_entry_reading_progress_units_meaning({}, options);
   return (
-    <section aria-labelledby="received-entry-progress" className="min-w-0 space-y-3 py-4" data-entry-reading-progress="">
+    <section
+      aria-labelledby="received-entry-progress"
+      className="min-w-0 space-y-3 py-4"
+      data-entry-reading-progress=""
+    >
       <h3 id="received-entry-progress" className="font-medium">
         {m.library_entry_reading_progress_heading({}, options)}
       </h3>

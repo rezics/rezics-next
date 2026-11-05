@@ -62,9 +62,7 @@ export function ReceivedEntryRecord({
   const state = statePresentation(entry, locale);
   const context = currentShelfWorkContext(entry, locale);
   const workHref =
-    entry.subject && title
-      ? subjectHref({ id: entry.subject.id, label: title.text }, locale).href
-      : null;
+    entry.subject && title ? subjectHref({ id: entry.subject.id, label: title.text }, locale).href : null;
   if (!isCurrent()) return null;
 
   return (
@@ -101,7 +99,10 @@ export function ReceivedEntryRecord({
           {workHref ? (
             <a
               href={workHref}
-              className={buttonVariants({ variant: 'outline', className: 'h-auto min-h-11 whitespace-normal break-words' })}
+              className={buttonVariants({
+                variant: 'outline',
+                className: 'h-auto min-h-11 whitespace-normal break-words',
+              })}
               aria-label={m.library_entry_reading_open_work_named({ title: title!.text }, options)}
               data-received-entry-work-destination=""
               onClick={(event) => {

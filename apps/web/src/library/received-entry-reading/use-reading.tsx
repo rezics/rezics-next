@@ -20,9 +20,7 @@ type Reading = { visit: ReceivedEntryVisit; row: ShelfRow };
 type TriggerReference = { observation: string; element: HTMLButtonElement };
 
 /** A local, one-row reading state that consumes the shelf's admitted page and original origin. */
-export function useReceivedEntryReading(
-  source: Omit<ReceivedEntryReadSource, 'origin'>,
-) {
+export function useReceivedEntryReading(source: Omit<ReceivedEntryReadSource, 'origin'>) {
   const navigate = useNavigate();
   const origin = useContext(PersonalShelfOrigin);
   const currentSource: ReceivedEntryReadSource = { ...source, origin };
@@ -35,7 +33,11 @@ export function useReceivedEntryReading(
   readingRef.current = reading;
   const mounted = useRef(true);
   const retireFocus = useRef(false);
-  const focusOrigin = useRef<{ visit: ReceivedEntryVisit; entry: PersonalLibraryEntry; element: HTMLButtonElement } | null>(null);
+  const focusOrigin = useRef<{
+    visit: ReceivedEntryVisit;
+    entry: PersonalLibraryEntry;
+    element: HTMLButtonElement;
+  } | null>(null);
   const triggerElements = useRef(new Map<string, TriggerReference>());
   const shelf = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -62,10 +64,7 @@ export function useReceivedEntryReading(
         receivedEntryObservation(row.entry) === visit.entryObservation,
     );
   const visitCurrent = (visit: ReceivedEntryVisit, candidate = latest.current) =>
-    mounted.current &&
-    hydrated &&
-    receivedEntryVisitIsCurrent(visit, candidate) &&
-    !!currentRow(visit, candidate);
+    mounted.current && hydrated && receivedEntryVisitIsCurrent(visit, candidate) && !!currentRow(visit, candidate);
   const focusShelf = () => shelf.current?.focus();
   const retire = (focus = true) => {
     const active = readingRef.current;
@@ -129,10 +128,7 @@ export function useReceivedEntryReading(
   const trigger = (row: ShelfRow) => {
     const entry = row.entry;
     const observation = receivedEntryObservation(entry);
-    const position =
-      currentSource.population.findIndex(
-        (received) => received.subjectId === entry.subjectId,
-      ) + 1;
+    const position = currentSource.population.findIndex((received) => received.subjectId === entry.subjectId) + 1;
     if (!hydrated || position < 1 || !currentSource.isCurrent()) return null;
     const title = entry.subject ? displayLibraryTitle(entry.subject.label, currentSource.locale).text : null;
     const titleText = title ?? m.library_subject_unavailable({}, { locale: currentSource.locale as Locale });
@@ -174,9 +170,7 @@ export function useReceivedEntryReading(
           setFocusRequest((value) => value + 1);
         }}
       >
-        {selected
-          ? m.library_entry_reading_selected({}, options)
-          : m.library_entry_reading_open({}, options)}
+        {selected ? m.library_entry_reading_selected({}, options) : m.library_entry_reading_open({}, options)}
       </Button>
     );
   };
@@ -184,12 +178,7 @@ export function useReceivedEntryReading(
   const active = reading && visitCurrent(reading.visit, currentSource) ? reading : null;
   const activeRow = active ? currentRow(active.visit, currentSource) : undefined;
   const openProgress = (visit: ReceivedEntryVisit, entry: PersonalLibraryEntry) => {
-    if (
-      !visitCurrent(visit) ||
-      !latest.current.progressAdmitted() ||
-      !entry.subject
-    )
-      return;
+    if (!visitCurrent(visit) || !latest.current.progressAdmitted() || !entry.subject) return;
     visit.active = false;
     readingRef.current = null;
     setReading(null);

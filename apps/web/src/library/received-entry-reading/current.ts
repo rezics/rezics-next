@@ -37,7 +37,10 @@ export function receivedEntryObservation(entry: PersonalLibraryEntry): string {
 }
 
 function samePopulation(captured: readonly string[], current: readonly PersonalLibraryEntry[]): boolean {
-  return captured.length === current.length && captured.every((key, index) => key === receivedEntryObservation(current[index]!));
+  return (
+    captured.length === current.length &&
+    captured.every((key, index) => key === receivedEntryObservation(current[index]!))
+  );
 }
 
 function sameIdentity(visit: ReceivedEntryVisit, entry: PersonalLibraryEntry): boolean {
@@ -51,10 +54,7 @@ function sameIdentity(visit: ReceivedEntryVisit, entry: PersonalLibraryEntry): b
 }
 
 /** Capture the exact received row and the current shelf authority at the deliberate opening action. */
-export function captureReceivedEntryVisit(
-  source: ReceivedEntryReadSource,
-  row: ShelfRow,
-): ReceivedEntryVisit | null {
+export function captureReceivedEntryVisit(source: ReceivedEntryReadSource, row: ShelfRow): ReceivedEntryVisit | null {
   const { entry } = row;
   const entryObservation = receivedEntryObservation(entry);
   const currentRow = source.rows.find((current) => current.entry.subjectId === entry.subjectId);
@@ -87,10 +87,7 @@ export function captureReceivedEntryVisit(
 }
 
 /** A visit survives display changes only while the same page, row and original read authority remain current. */
-export function receivedEntryVisitIsCurrent(
-  visit: ReceivedEntryVisit,
-  source: ReceivedEntryReadSource,
-): boolean {
+export function receivedEntryVisitIsCurrent(visit: ReceivedEntryVisit, source: ReceivedEntryReadSource): boolean {
   if (
     !visit.active ||
     visit.originKey !== source.originKey ||
@@ -106,8 +103,6 @@ export function receivedEntryVisitIsCurrent(
 
   const row = source.rows.find((current) => current.entry.subjectId === visit.subjectId);
   return (
-    !!row &&
-    sameIdentity(visit, row.entry) &&
-    source.population.some((entry) => entry.subjectId === visit.subjectId)
+    !!row && sameIdentity(visit, row.entry) && source.population.some((entry) => entry.subjectId === visit.subjectId)
   );
 }

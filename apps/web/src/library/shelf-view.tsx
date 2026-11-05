@@ -721,9 +721,7 @@ export function ShelfEntries(props: ShelfEntriesProps) {
   });
   const pageEntries = useMemo(
     () =>
-      props.entries.filter(
-        (entry) => !source.landedEntries.some((landed) => matchesRemovedShelfEntry(entry, landed)),
-      ),
+      props.entries.filter((entry) => !source.landedEntries.some((landed) => matchesRemovedShelfEntry(entry, landed))),
     [props.entries, source.landedEntries],
   );
   const latest = useRef(props.isCurrent);
