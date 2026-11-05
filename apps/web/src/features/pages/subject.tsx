@@ -874,12 +874,6 @@ export function SubjectPage({
                 realm={realm}
                 continuation={page.continuation}
                 viewer={page.requestedReader ?? null}
-                admission={readingAdmission}
-                currentHref={currentHref}
-                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                propertyLabels={
-                  page.catalogue?.state === 'released' ? page.catalogue.definitions?.properties : undefined
-                }
               />
             ) : null}
             {!overview && heading && (
@@ -948,6 +942,12 @@ export function SubjectPage({
                 realm={realm}
                 continuation={page.continuation}
                 viewer={page.requestedReader ?? null}
+                admission={readingAdmission}
+                currentHref={currentHref}
+                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                propertyLabels={
+                  page.catalogue?.state === 'released' ? page.catalogue.definitions?.properties : undefined
+                }
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
                 windows={profileRelationWindows(page)}
                 reader={reader ?? defaultReader}
