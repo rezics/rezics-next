@@ -121,10 +121,11 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/account-public-views.test.ts test/access/account-profile-read.test.ts test/access/account-profile-http.test.ts test/access/agent-profile-outcomes.test.ts`.
 
-**Web consumer regressions:** `accounts-profile-editor.test.ts`, `managed-profile-confirmation-presentation.test.tsx`
-and `upload-stream-lifetime.test.ts` under `apps/web/tests/` cover delegated viewer/target binding, exact retry-key
-encoding, visible acknowledgement after failed readback and retained bytes after unknown avatar completion. A matching
-GET does not acknowledge an unknown command. Seeded native and mounted browser acceptance remain deferred to integration.
+**Executed Web consumer check:** `bun apps/web/scripts/focused.ts --private-network -- bun test tests/accounts-profile-editor.test.ts tests/managed-profile-confirmation-presentation.test.tsx tests/upload-stream-lifetime.test.ts tests/editable-profile-source.test.ts tests/upload-memory.test.ts` — 23 passed.
+These regressions cover delegated viewer/target binding, exact retry-key encoding, visible acknowledgement after
+failed readback, retained bytes after unknown avatar completion, input-error provenance, rejected-storage cleanup
+and bounded streaming. A matching GET does not acknowledge an unknown command. Seeded native and mounted browser
+acceptance remain deferred to integration; this consumer check does not establish their acceptance.
 
 ## follow-owner-counts
 
