@@ -117,6 +117,7 @@ export function PeopleNamesView({
                     maxLength={PEOPLE_NAME_FILTER_LENGTH}
                     aria-describedby={`${id}-scope`}
                     type="search"
+                    className="h-11 min-h-11"
                     onChange={(event) => {
                       setQuery(event.target.value.slice(0, PEOPLE_NAME_FILTER_LENGTH));
                       setPage(0);
