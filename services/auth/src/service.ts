@@ -1,4 +1,8 @@
 import {
+  isRecoveryResponseProjection,
+  recoveryAcknowledgement,
+  recoveryNativeError,
+  recoveryResponseByteBounds,
   CONSENT_PAGE_MAX_SCOPES,
   securityScopeLimit,
   securityResponseByteBudgets,
@@ -101,6 +105,11 @@ class Denied extends Error {
     super('Authentication denied');
   }
 }
+class RecoveryProjectionError extends Error {
+  constructor() {
+    super('Invalid native recovery response projection');
+  }
+}
 class AccountSuspended extends Denied {
   constructor(readonly account: AccessAccount) {
     super();
@@ -157,13 +166,27 @@ function fields(body: Record<string, unknown>, names: string[]): void {
   if (Object.keys(body).some((key) => !names.includes(key))) throw new Denied(400);
 }
 function json(data: unknown, status = 200, cookies: string[] = []): Response {
+  return jsonText(JSON.stringify(data), status, cookies);
+}
+function jsonText(body: string, status: number, cookies: string[] = []): Response {
   const headers = new Headers({
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   });
   for (const cookie of cookies) headers.append('set-cookie', cookie);
-  return new Response(JSON.stringify(data), { status, headers });
+  return new Response(body, { status, headers });
+}
+function recoveryJson(data: unknown, status = 200): Response {
+  const body = JSON.stringify(data);
+  const maxBytes = status === 200 ? recoveryResponseByteBounds.acknowledgement : recoveryResponseByteBounds.nativeError;
+  if (
+    body === undefined ||
+    !isRecoveryResponseProjection(data, status) ||
+    new TextEncoder().encode(body).byteLength > maxBytes
+  )
+    throw new RecoveryProjectionError();
+  return jsonText(body, status);
 }
 async function bodyOf(request: Request): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json') throw new Denied(415);
@@ -2307,18 +2330,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           '/recovery/complete': '/reset-password',
         }[url.pathname];
         if (attemptPath && !attemptDispatch.getStore()) {
+          const recoveryCommand = url.pathname === '/recovery/start' || url.pathname === '/recovery/complete';
           const response = await attemptDispatch.run(
             () => service.handler(request),
             () => getAuth().handler(nativeAttemptRequest(request, options.issuer, attemptPath)),
           );
           if (response.status === 429) {
-            const denied = json({ error: 'authentication_denied' }, 429);
+            const denied = recoveryCommand
+              ? recoveryJson(recoveryNativeError, 429)
+              : json({ error: 'authentication_denied' }, 429);
             // The pinned router emits X-Retry-After; expose the standard header
             // without forwarding endpoint bodies or releasing session cookies.
             denied.headers.set('retry-after', response.headers.get('x-retry-after') ?? '1');
             return denied;
           }
-          if (response.status >= 500) return json({ error: 'authentication_denied' }, 503);
+          if (response.status >= 500)
+            return recoveryCommand
+              ? recoveryJson(recoveryNativeError, 503)
+              : json({ error: 'authentication_denied' }, 503);
           return response;
         }
         const body = await bodyOf(request);
@@ -2354,7 +2383,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           void deliverRecovery(email).catch(() => {
             emitAuthDiagnostic('recovery_start_failed');
           });
-          return json({ success: true });
+          return recoveryJson(recoveryAcknowledgement);
         }
         if (url.pathname === '/recovery/complete') {
           fields(body, ['account_id', 'token', 'new_password']);
@@ -2388,7 +2417,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               throw new Denied();
             await trustedAccess.completeRecovery(completed.reference);
             await recordRecoveryCompletion(database, completed.reference);
-            return json({ success: true });
+            return recoveryJson(recoveryAcknowledgement);
           }
           // Native adapter reads use the same pool. Finish them before leasing a
           // transaction connection, including with a real max=1 pool.
@@ -2535,7 +2564,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           }
           await trustedAccess.completeRecovery(proof.reference);
           await recordRecoveryCompletion(database, proof.reference);
-          return json({ success: true });
+          return recoveryJson(recoveryAcknowledgement);
         }
         if (url.pathname === '/signin/passkey/options' || url.pathname === '/passkeys/register/options') {
           fields(body, []);
@@ -3032,6 +3061,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (error instanceof SuspendedSignIn) return json({ error: 'account_suspended', code: error.body?.code }, 403);
         if (error instanceof StepUpRequired)
           return json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
+        if (error instanceof RecoveryProjectionError) throw error;
         const status =
           error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
             ? error.status
@@ -3039,6 +3069,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               ? error.statusCode
               : 503;
         const credentialRoute = new URL(request.url).pathname.startsWith('/passkeys/');
+        const recoveryCommand =
+          new URL(request.url).pathname === '/recovery/start' || new URL(request.url).pathname === '/recovery/complete';
+        if (recoveryCommand && isRecoveryResponseProjection(recoveryNativeError, status))
+          return recoveryJson(recoveryNativeError, status);
         return respond(
           credentialRoute
             ? { error: 'credential_effect_denied', effect_status: 'not_applied' }

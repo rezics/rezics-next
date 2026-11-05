@@ -177,3 +177,27 @@ test('acknowledged start retains generic history; a new document without mounted
     await page.close();
   }
 });
+
+test('a deliberate newer start acknowledgement does not settle an earlier unknown send', async () => {
+  const page = await setup();
+  try {
+    await submit(page.host, 'private@example.test');
+    expect(page.calls).toHaveLength(1);
+    await flush(() => page.calls[0]!.resolve(new Response('', { status: 503 })));
+    expect(page.host.textContent).toContain('result is unknown');
+    await flush(() => button(page.host, 'Request a new recovery link')!.click());
+    expect(page.host.textContent).toContain('This sends a new request');
+    await flush(() => send(page.host));
+    expect(page.calls).toHaveLength(2);
+    await flush(() => page.calls[1]!.resolve(Response.json({ success: true })));
+    expect(page.host.textContent).toContain('result is unknown');
+
+    await flush(() => transition('pagehide'));
+    await flush(() => transition('pageshow'));
+    expect(page.host.textContent).toContain('result is unknown');
+    expect(page.host.textContent).not.toContain('private@example.test');
+    expect(page.calls).toHaveLength(2);
+  } finally {
+    await page.close();
+  }
+});

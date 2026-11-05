@@ -180,7 +180,9 @@ afterAll(async () => {
 
 test('recovery by email answers the same success, delivers one link, and completion resets the password', async () => {
   for (const body of [{ email: 'not-an-email' }, { account_id: activeId }, {}, { email: '' }]) {
-    expect((await request('/recovery/start', body)).status).toBe(400);
+    const invalid = await shot(await request('/recovery/start', body));
+    expect(invalid.status).toBe(400);
+    expect(invalid.body).toBe('{"error":"authentication_denied"}');
   }
   expect((await pool.query('SELECT key FROM auth_attempt_counter')).rows).toEqual([]);
 
@@ -241,12 +243,13 @@ test('recovery by email answers the same success, delivers one link, and complet
   expect(signedIn.status).toBe(200);
   const session = cookieOf(signedIn);
   expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [activeId])).rows).toHaveLength(1);
-  const completed = await request('/recovery/complete', {
+  const completed = await shot(await request('/recovery/complete', {
     account_id: params.get('account_id'),
     token: params.get('token'),
     new_password: replacement,
-  });
+  }));
   expect(completed.status).toBe(200);
+  expect(completed.body).toBe('{"success":true}');
   expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [activeId])).rows).toEqual([]);
   expect((await request('/session', undefined, session)).status).toBeGreaterThanOrEqual(400);
   expect(

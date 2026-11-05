@@ -672,6 +672,15 @@ human. Unknown, automated and inactive addresses get the same HTTP answer and no
 message. Completion still denies automation and organizations, missing evidence,
 inactive accounts and Access outages.
 
+Both commands project the exact acknowledgement `{"success":true}` (16 UTF-8
+bytes). Their native error projection is exactly `{"error":"authentication_denied"}`
+(33 UTF-8 bytes): status 400 covers request or password validation, completion
+status 401 covers token, credential or currentness denial, status 429 is native
+attempt admission and carries `Retry-After` as a header, and dependency failures
+project as status 503. The producer validates the closed body and byte bound at
+the HTTP projection boundary. The error body allowance is unchanged by the
+retry header; start does not synchronously look up an account or delivery result.
+
 `deliveryId` is the actual newly inserted Better Auth verification row ID. The
 supported native Kysely adapter commits that INSERT, its typed ownership
 projection and `auth_recovery_copy_source` together, before the after-create hook

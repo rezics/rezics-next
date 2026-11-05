@@ -208,6 +208,14 @@ Successful completion revokes the account's sessions and sends the person to `/l
 An invalid or expired link offers a new recovery link. Rate limits show a valid `Retry-After` duration, and outages
 ask the person to try again later.
 
+The installed command transport accepts only the exact 16-byte `{"success":true}`
+acknowledgement or a matching closed native refusal within 33 UTF-8 bytes. It
+preserves compatible one-field browser fixtures, uses the existing five-second
+POST lifetime through fetch and complete streamed-body parsing, and treats every
+unadmitted response or post-dispatch error as unknown. Completion retries keep
+the immutable original account, token and password until admitted success or
+owned retirement.
+
 Leaving or replacing the recovery journey discards its browser results and private inputs; returning from a cached
 document starts a fresh form without retrying a mutation. Departure cannot undo a completed native password change.
 an unknown completion retains the original account, token and password only in the mounted attempt; explicit retry sends that exact submission, while restart or departure discards it without asserting cancellation. Definitive first validation refusals allow correction; a later refusal cannot resolve an earlier unknown outcome. Start acknowledgement confirms acceptance only.
@@ -258,6 +266,9 @@ one command. Language changes and displaying history make no requests. Read advi
 Decision: recovery advice uses the installed `readJsonBounded` reader with the existing `privateAuthRead` signal; the
 native 4 KiB response ceiling, browser five-second whole-call deadline and one-read request cost stay unchanged.
 Reader cleanup releases ownership without awaiting stream cancellation.
+
+Decision: recovery commands use exact native envelopes and the existing five-second POST bound; every other response
+preserves mounted uncertainty and the original completion input until admitted success or retirement.
 
 ## Sign-up
 
