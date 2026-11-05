@@ -1,24 +1,26 @@
-import { afterAll, afterEach, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, afterEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { startAuthStack } from './auth-stack.ts';
+import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
 import { createLibraryEntry } from './library-navigation-fixture.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const stacks: NativeWebStack[] = [];
 const authStacks: Awaited<ReturnType<typeof startAuthStack>>[] = [];
 const browsers: Browser[] = [];
+const lifecycle = new NativeTestLifecycle('native personal-score library walk');
 const standardQuestion = '00000000-0000-7000-8000-000000000001';
 const evidence = resolve(import.meta.dir, '../../../../.temp/library-personal-score');
 const label = 'Native library member';
 
 setDefaultTimeout(300_000);
 
-beforeAll(async () => {
+nativeBeforeAll(lifecycle, 600_000, async () => {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   stacks.push(await startNativeWebStack());
-}, 600_000);
+});
 
 afterEach(async () => {
   for (const auth of authStacks.splice(0).reverse()) await auth.stop();
@@ -28,6 +30,7 @@ afterAll(async () => {
   for (const browser of browsers.splice(0).reverse()) await browser.close();
   for (const stack of stacks.splice(0).reverse()) await stack.stop();
 }, 180_000);
+nativeAfterAll(lifecycle, 180_000);
 
 function key() {
   return `"${crypto.randomUUID()}"`;
