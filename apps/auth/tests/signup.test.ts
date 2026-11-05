@@ -160,7 +160,7 @@ const fake = Bun.serve({
       if (signupStatus === 429) headers.set('retry-after', String(retryAfter));
       const error = signupStatus === 429 ? 'rate_limited' : signupStatus === 503 ? 'unavailable' : signupError;
       return Response.json(
-        { error, message: signupStatus === 429 ? misleadingRetry : leaked },
+        { error },
         { status: signupStatus, headers },
       );
     }
@@ -604,7 +604,7 @@ test(
 );
 
 test(
-  'an unreadable 201 body confirms creation and a failed automatic sign-in keeps the created account panel',
+  'an unreadable 201 body retains uncertainty and sends no sign-in',
   async () => {
     signInStatus = 503;
     calls.length = 0;
@@ -620,24 +620,12 @@ test(
     });
     try {
       const controls = await fill(page);
-      await Promise.all([
-        page.waitForResponse(
-          (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
-        ),
-        controls.submit.click(),
-      ]);
-      await page.getByRole('status').filter({ hasText: 'Your account was created' }).waitFor();
-      await page.getByRole('alert').waitFor();
+      await controls.submit.click();
+      await page.getByRole('button', { name: 'Retry original attempt', exact: true }).waitFor();
       expect(bodies).toHaveLength(1);
       expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
-      expect(signIns).toHaveLength(1);
-      expect(JSON.parse(signIns[0]!.body)).toEqual({
-        email: email.toLowerCase(),
-        password,
-        client_id: 'login',
-        scope: [],
-      });
+      expect(signIns).toHaveLength(0);
       expect(signupCalls()).toHaveLength(0);
     } finally {
       await page.context().close();
@@ -818,7 +806,7 @@ test(
 );
 
 test(
-  'rate limits retain uncertainty and honor retry-after without automatically resending',
+  'unsupported rate-limit output retains uncertainty without automatically resending',
   async () => {
     signupStatus = 429;
     signupError = 'registration_denied';
@@ -837,9 +825,8 @@ test(
       const message = (await page.getByRole('alert').innerText()).trim();
       expect(message).toMatch(/try again|later|wait/i);
       expect(message).not.toContain(misleadingRetry);
-      expect(message).toContain(String(retryAfter));
-      expect(message).toMatch(/seconds?/i);
-      expect(await retry.isDisabled()).toBe(true);
+      expect(message).not.toContain(String(retryAfter));
+      expect(await retry.isDisabled()).toBe(false);
       expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
       expect(signupCalls()).toHaveLength(1);
     } finally {

@@ -100,6 +100,7 @@ async function finishSignupDispatch(
   onResolution: (resolution: ReturnType<SignupAttemptController['resolveAttempt']>) => void,
   onSignInFailure: () => void,
 ) {
+  const target = signInTarget(journey.query, window.location.origin);
   const result = await submitSignup(body, limits);
   if (journey.requestBody === body) {
     clearSignupPayload(body);
@@ -129,7 +130,7 @@ async function finishSignupDispatch(
   if (!journey.active) return;
   if (signInResult.ok) {
     journey.attempt.finishSignIn(true);
-    window.location.assign(signInTarget(journey.query, window.location.origin));
+    window.location.assign(target);
   } else {
     journey.attempt.finishSignIn(false, explainSignIn(signInResult));
     onSignInFailure();

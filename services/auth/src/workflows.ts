@@ -1,3 +1,4 @@
+import { registrationAccountId, registrationAcknowledgement } from '@rezics/auth-contract';
 import type {
   AccountWorkflowPorts,
   AccountOperation as ContractAccountOperation,
@@ -346,6 +347,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const creation = binding === undefined ? null : businessOperation(binding as AccountOperation);
     const id = randomBytes(24).toString('base64url');
     const accountId = access.registrationTarget(request);
+    // Reject unsupported historical producer IDs before staging or reserving creation.
+    if (!registrationAccountId(accountId)) throw new Error('Registration target outside public contract');
     const operation = binding as AccountOperation | undefined;
     const context = operation && 'authorization' in operation ? await approved(operation) : undefined;
     const actors = await nativeActors(context, creation === null);
@@ -2037,7 +2040,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             email: input.email as string,
             password: input.password as string,
           });
-          return response(await activateRegistration(ref.registrationId), 201);
+          const acknowledgement = await activateRegistration(ref.registrationId);
+          // A historical completed result can no longer be refused as not applied.
+          if (!registrationAcknowledgement(acknowledgement)) return response({ error: 'registration_denied' }, 503);
+          return response(acknowledgement, 201);
         } catch (error) {
           if (error instanceof RegistrationFailure) return response({ error: error.code }, 409);
         }

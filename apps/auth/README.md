@@ -269,8 +269,8 @@ visibility are independent, and both password fields use Auth's native length bo
 
 `POST /signup` sends `{ key, handle, email, password, turnstile_token }` as JSON with same-origin credentials. The
 captured handle is lowercase, email is trimmed and lowercase, and the password is preserved exactly. In development
-that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. A 201 response confirms creation even if its
-body cannot be read, and sets no session. Creation and automatic sign-in are distinct stages: after 201 the form and
+that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. Only an admitted exact 201 `{ accountId }`
+acknowledgement confirms creation; it sets no session. Creation and automatic sign-in are distinct stages: after acknowledgement the form and
 retained creation credentials are cleared, and the page signs in once with the captured email and exact password.
 On success it resumes with `signInTarget`. If sign-in fails or its response is uncertain, the created-account panel
 and sign-in/recovery links retain the original query; repairing sign-in uses the existing login page and never
@@ -308,7 +308,21 @@ Only a first-response 409 `handle_unavailable` establishes the safe handle-corre
 account effects; after choosing a different valid handle, the page starts a new request with a new key. A 400
 `registration_denied` before any uncertain result permits the same draft to continue with a fresh challenge. Generic
 409 responses remain non-enumerating and offer sign-in/recovery without opening a changed registration request.
-Network failures, unread responses and 503 responses stay uncertain. A malformed 201 body still confirms creation.
+Network failures, unread responses and 503 responses stay uncertain. Malformed 201, unsupported 200, extra fields,
+invalid IDs and malformed refusal envelopes cannot establish creation or refusal. Native refusal is the exact
+`{ error: "registration_denied" }` at 400 or 409, or `{ error: "handle_unavailable" }` at 409. The mounted native
+writer has no 429 branch; unsupported rate-limit output stays uncertain without a Retry-After gate.
+
+Decision: registration uses its own closed public projection, with opaque nonempty account IDs of at most 128
+UTF-16 units for historical callback hosts; native Access supplies a routed UUID from `registrationTarget(key)`.
+The compact success allowance is `16 + 6 * 128 = 784` UTF-8 bytes, including punctuation and worst-case escaping;
+the two exact compact refusal envelopes need at most 31 bytes. `readJsonBounded` admits actual streamed bytes
+before fatal UTF-8 decoding and JSON parsing; Content-Length cannot enlarge either allowance. One five-second
+submission lifetime covers fetch and body completion even when abort is ignored. This adds no native call.
+Only the still-owned acknowledged attempt releases its frozen credentials to one existing separate sign-in;
+its original destination is captured before submission. Replacement and departure retire old completions.
+Focused source/mounted fixtures do not establish native or browser acceptance; broader acceptance is deferred
+until integration.
 
 ## Consent
 

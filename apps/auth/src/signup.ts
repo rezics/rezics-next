@@ -1,4 +1,6 @@
-import { authPost, failureMessage } from './api';
+import { AUTH_POST_TIMEOUT_MS, failureMessage } from './api';
+import { REGISTRATION_ACK_MAX_BYTES, REGISTRATION_ERROR_MAX_BYTES, registrationAcknowledgement, registrationError, type RegistrationAcknowledgement } from '@rezics/auth-contract';
+import { readJsonBounded } from './private-auth-json';
 import type { SignInResult } from './sign-in';
 import { m } from './paraglide/messages.js';
 
@@ -30,7 +32,7 @@ export type SignupFailure =
   | { kind: 'rate-limited'; status: 429; code: string; retryAfter: string | null; message: string }
   | { kind: 'uncertain'; status: number; code: string; retryAfter: string | null; message: string };
 
-export type SignupSubmission = { ok: true } | { ok: false; failure: SignupFailure };
+export type SignupSubmission = { ok: true; acknowledgement: RegistrationAcknowledgement } | { ok: false; failure: SignupFailure };
 export type SignupPasswordLimits = { minLength: number; maxLength: number };
 
 export function createSignupKey(): string {
@@ -63,10 +65,38 @@ export async function submitSignup(input: SignupBody, limits: SignupPasswordLimi
       },
     };
   }
-  const result = await authPost<{ accountId: string }>('/signup', input);
-  // The shared client treats only HTTP 200 as success. Registration answers 201 and issues no session.
-  if (result.ok || (!result.ok && result.status === 201)) return { ok: true };
-  return { ok: false, failure: explainSignup(result.status, result.code, result.retryAfter) };
+  const controller = new AbortController();
+  const uncertain = (): SignupSubmission => ({ ok: false, failure: explainSignup(503, 'unavailable', null) });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<SignupSubmission>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(uncertain());
+      controller.abort();
+    }, AUTH_POST_TIMEOUT_MS);
+  });
+  const send = async (): Promise<SignupSubmission> => {
+    try {
+      const response = await fetch('/signup', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: controller.signal,
+      });
+      const body = await readJsonBounded(response,
+        response.status === 201 ? REGISTRATION_ACK_MAX_BYTES : REGISTRATION_ERROR_MAX_BYTES, controller.signal);
+      if (response.status === 201 && registrationAcknowledgement(body))
+        return { ok: true, acknowledgement: body };
+      if (registrationError(body) && (
+        (response.status === 400 && body.error === 'registration_denied') || response.status === 409
+      )) return { ok: false, failure: explainSignup(response.status, body.error, null) };
+      return uncertain();
+    } catch {
+      return uncertain();
+    }
+  };
+  try {
+    return await Promise.race([send(), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function explainSignup(status: number, code: string, retryAfter: string | null): SignupFailure {

@@ -194,3 +194,23 @@ test('a newly signed-in viewer closes pending signup advice and fences its late 
   expect(p.calls).toHaveLength(1); // A stale 201 cannot start sign-in or redirect this viewer.
   expect(document.body.textContent).toContain('You are already signed in');
 });
+
+test('malformed acknowledgement retains exact retry; admitted retry starts only one separate sign-in', async () => {
+  const p = await setup();
+  await p.ready();
+  await flush(() => p.calls[0]!.resolve(new Response('{', { status: 201 })));
+  expect(p.calls).toHaveLength(1);
+  expect(p.host.querySelector('#signup-uncertain-panel')).not.toBeNull();
+  await p.choose('Retry original attempt');
+  expect(p.calls).toHaveLength(1);
+  await p.token('new-verification');
+  await p.choose('Retry original attempt');
+  const { turnstile_token: _, ...original } = p.calls[0]!.body;
+  expect(p.calls[1]!.body).toEqual({ ...original, turnstile_token: 'new-verification' });
+  await flush(() => p.calls[1]!.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
+  expect(p.calls).toHaveLength(3);
+  expect(p.calls[2]!.body).toMatchObject({ email: original.email, password: original.password, client_id: 'login' });
+  await flush(() => p.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  expect(p.host.querySelector('a[href^="/login"]')?.getAttribute('href')).toBe(`/login${p.query}`);
+  expect(p.calls).toHaveLength(3);
+});

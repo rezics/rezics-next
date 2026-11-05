@@ -951,6 +951,21 @@ to Access; public sign-up supplies none. Expected old handles retain lookup vali
 The page read returns password bounds from Better Auth's native password configuration;
 the signup endpoint and credential writer use that same configuration.
 
+Registration returns native 201 with exactly `{ accountId }` after begin/install/activate, without a session.
+Its public projection accepts nonempty opaque IDs of at most 128 UTF-16 units: native Access's
+`registrationTarget(key)` uses `derivedId` in Kernel's route producer (a routed UUID), while historical callback
+hosts are supported only within this explicit allowance, not assumed to generate UUIDs. Unsupported targets fail
+before staging/reservation; an invalid historical completed echo returns uncertain 503, never not-applied.
+Compact success costs `16 + 6 * 128 = 784` UTF-8 bytes including punctuation and worst-case escaping.
+Exact compact errors cost at most 31 bytes: 400 `registration_denied` for request/verification refusal,
+409 `handle_unavailable` or `registration_denied` from RegistrationFailure, and 503 `registration_denied`
+for dependency/ambiguous execution. There is no mounted workflow 429 variant. No diagnostic fields are public.
+The browser spends one five-second lifetime on fetch plus bounded streamed body admission before decoding/parsing.
+Only an exact admitted 201 starts its original attempt's one separate existing sign-in; malformed or lost output
+retains immutable exact-key recovery with fresh verification. No receiving probe or automatic resend is added.
+Native and browser acceptance of this projection remain integration qualifications; local fixtures alone do not prove them.
+
+
 Production uses `await createAuthHost(options)`, exported from `src/index.ts` with
 `AuthHostOptions` and `AuthHostConfigurationError`. Supply the migrated Auth
 `database` pool, the existing service options, persistent Auth-only 32-byte

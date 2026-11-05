@@ -156,7 +156,7 @@ export class SignupAttemptController {
       return { kind: 'ignored' };
 
     if (result.ok) {
-      const credentials = { email: attempt.email, password: attempt.password };
+      const credentials = { email: current.attempt.email, password: current.attempt.password };
       this.#set({ kind: 'created' });
       return { kind: 'created', credentials };
     }

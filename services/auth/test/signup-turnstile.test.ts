@@ -67,7 +67,7 @@ const ports: AccountWorkflowPorts = {
   registrationTarget(key) {
     registrationCalls += 1;
     registrationOrder.push('registration-target');
-    return `signup-account-${key}`;
+    return key === 'maximal-echo' ? '\u0001'.repeat(128) : `signup-account-${key}`;
   },
   async reserveHandle(input) {
     registrationCalls += 1;
@@ -432,3 +432,13 @@ test('a taken handle refuses without account effects and a corrected new request
     takenHandles.delete(input.handle);
   }
 });
+
+test('native registration projects maximal escaped IDs without a session', async () => {
+  resetSiteverify();
+  const response = await signup(body('maximal-echo'));
+  expect(response.status).toBe(201);
+  expect(response.headers.get('set-cookie')).toBeNull();
+  const text = await response.text();
+  expect(new TextEncoder().encode(text).byteLength).toBe(784);
+  expect(JSON.parse(text)).toEqual({ accountId: '\u0001'.repeat(128) });
+}, 30000);

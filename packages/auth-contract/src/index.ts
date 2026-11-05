@@ -685,3 +685,4 @@ export {
 } from './security-response-bounds.ts';
 
 export * from './automated-page-response-bounds.ts';
+export * from './registration-response-bounds.ts';

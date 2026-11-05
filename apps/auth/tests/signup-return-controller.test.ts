@@ -25,7 +25,7 @@ test('only unresolved dispatches and confirmed creation survive as secret-free s
   created.updateDraft('email', 'reader@example.test');
   created.updateDraft('password', 'private-password');
   const createdDispatch = created.dispatch('private-token')!;
-  created.resolve(createdDispatch.attempt, { ok: true });
+  created.resolve(createdDispatch.attempt, { ok: true, acknowledgement: { accountId: 'created' } });
   expect(summarizeSignupOutcome(created.phase)).toEqual({ kind: 'created' });
   created.beginSignIn();
   created.finishSignIn(false, 'Unavailable.');
