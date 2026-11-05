@@ -1,4 +1,11 @@
 {
+  "manga_origin_invalid": "修正アドレスが無効です。現在の閲覧ページから開き直してください。",
+  "manga_origin_unsupported": "このContextまたはRealmはGlobal修正エディターでは対応していません。",
+  "manga_origin_changed": "作品またはDefinitionが変更されました。再度閲覧するか、新しいGlobal修正を開始してください。",
+  "manga_origin_return": "現在の公開閲覧に戻る",
+  "manga_origin_global": "別のGlobal修正を開始",
+  "manga_origin_no_exact_return": "選択したContextへの正確な復帰には対応していません。",
+  "manga_origin_general": "一般の公開作品ページへ",
   "addon_origin_invalid": "この修正アドレスは無効です。現在のアドオンの公開ページから修正を開き直してください。",
   "addon_origin_unsupported": "このアドオンを表示した Context または Realm は、Global 専用の編集画面では扱えません。公開ページに戻るか、別途 Global の修正を開いてください。",
   "addon_origin_changed": "公開ページの閲覧後に、アドオンまたは Definition が変更されました。戻って読み直すか、Global の修正を新たに開いて現在の操作案内を取得してください。",

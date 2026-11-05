@@ -1,4 +1,11 @@
 {
+  "manga_origin_invalid": "잘못된 수정 주소입니다. 현재 읽기에서 다시 여세요.",
+  "manga_origin_unsupported": "Global 수정 편집기는 이 Context 또는 Realm을 지원하지 않습니다.",
+  "manga_origin_changed": "만화 또는 Definition이 변경되었습니다. 다시 읽거나 새 Global 수정을 시작하세요.",
+  "manga_origin_return": "현재 공개 읽기로 돌아가기",
+  "manga_origin_global": "별도의 Global 수정 시작",
+  "manga_origin_no_exact_return": "선택한 Context로 정확히 돌아갈 수 없습니다.",
+  "manga_origin_general": "일반 공개 만화 페이지 방문",
   "addon_origin_invalid": "이 수정 주소는 유효하지 않습니다. 현재 애드온 공개 페이지에서 수정을 다시 여세요.",
   "addon_origin_unsupported": "이 애드온을 읽은 Context 또는 Realm은 Global 전용 편집기에서 지원하지 않습니다. 공개 페이지로 돌아가거나 별도의 새로운 Global 수정을 여세요.",
   "addon_origin_changed": "공개 페이지를 읽은 후 애드온 또는 Definition이 변경되었습니다. 돌아가서 다시 읽거나 새로운 Global 수정을 열어 현재 수정 안내를 받으세요.",

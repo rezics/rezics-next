@@ -1,4 +1,11 @@
 {
+  "manga_origin_invalid": "Dirección de corrección inválida. Ábrala desde la lectura actual.",
+  "manga_origin_unsupported": "El editor Global no admite este Context o Realm.",
+  "manga_origin_changed": "El cómic o su Definition ha cambiado. Vuelva a leerlo o abra una nueva corrección Global.",
+  "manga_origin_return": "Volver a la lectura pública actual",
+  "manga_origin_global": "Iniciar una corrección Global independiente",
+  "manga_origin_no_exact_return": "No se admite el retorno exacto a este Context.",
+  "manga_origin_general": "Visitar la página pública general",
   "addon_origin_invalid": "Esta dirección de corrección no es válida. Vuelve a abrir la corrección desde la página pública actual del complemento.",
   "addon_origin_unsupported": "El Context o Realm de esta lectura del complemento no es compatible con este editor exclusivo de Global. Vuelve a la página pública o abre expresamente una nueva corrección Global independiente.",
   "addon_origin_changed": "El complemento o su Definition ha cambiado desde esta lectura pública. Vuelve a leer la página o abre una nueva corrección Global para obtener las indicaciones actuales.",
