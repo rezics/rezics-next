@@ -1247,7 +1247,7 @@ export function createCollectionReads(
           filter: admission.filter!,
           release: { digest: saved.releaseDigest, release: admission.release! },
           limit,
-          cursor: options.cursor,
+          ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
           scope: { access, actor: viewer, routeKey: dependencies.routeKey, nativeT: time, deadline },
           async revalidate() {
             const finalTime = await withConnection(pool, (client) =>
