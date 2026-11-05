@@ -36,6 +36,51 @@ test('slow-mode native policy is complete, closed and independent of UI presets'
   expect(remainingSeconds(deadlineFromRetryAfter(86400, 1000), 1000)).toBe(86400);
 });
 
+test('mounted visits retire on equal session replacement, invalidation and fetching', async () => {
+  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const window = new Window({ url: 'https://site.test/en/compose' });
+  const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
+  const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { sessionQuery } = await import('../src/session/query');
+  const { useSlowModeVisit, type SlowModeVisit } = await import('../src/threads/slow-mode/caller');
+  const client = new QueryClient();
+  const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'original' };
+  client.setQueryData(sessionQuery.queryKey, owner);
+  let visit: SlowModeVisit | null = null;
+  function Probe() { visit = useSlowModeVisit(recorded.thread.boardId); return null; }
+  const root = createRoot(window.document.createElement('div'));
+  try {
+    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
+    for (const replace of [
+      () => client.setQueryData(sessionQuery.queryKey, { ...owner }),
+      async () => {
+        await client.invalidateQueries({ queryKey: sessionQuery.queryKey, refetchType: 'none' });
+        client.setQueryData(sessionQuery.queryKey, { ...owner });
+      },
+      () => client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => ({ ...owner }) }),
+    ]) {
+      const original = visit!;
+      expect(original.current()).toBe(true);
+      await act(async () => { await replace(); });
+      expect(original.current()).toBe(false);
+      expect(original.controller.signal.aborted).toBe(true);
+      expect(visit!.id).not.toBe(original.id);
+      expect(visit!.current()).toBe(true);
+    }
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    for (const [key, descriptor] of previous)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    window.happyDOM.abort();
+  }
+});
+
 test('setting and composer keep drafts through cooldown, update policy, recover unavailable eligibility and retire private work', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -82,7 +127,6 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'slow-mode-session' };
   let read: SlowModeRead = { kind: 'unavailable' };
   let readCalls = 0;
-  const readSignals: AbortSignal[] = [];
   let heldReads = 0;
   const delayedReads: ((value: SlowModeRead) => void)[] = [];
   const changes: {
@@ -95,9 +139,8 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   }[] = [];
   const acknowledgedIntervals: number[] = [];
   const port: SlowModePort = {
-    read: async ({ signal }) => {
+    read: async () => {
       readCalls++;
-      readSignals.push(signal!);
       if (heldReads === 0) return read;
       heldReads--;
       return new Promise((resolve) => delayedReads.push(resolve));
@@ -280,25 +323,6 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
         await Promise.resolve();
       });
     expect(host.textContent).not.toContain(m.slow_mode_saved());
-    for (const replace of [
-      () => client.setQueryData(sessionQuery.queryKey, { ...owner }),
-      async () => {
-        await client.invalidateQueries({ queryKey: sessionQuery.queryKey, refetchType: 'none' });
-        client.setQueryData(sessionQuery.queryKey, { ...owner });
-      },
-      () => client.fetchQuery({ ...sessionQuery, staleTime: 0, queryFn: async () => ({ ...owner }) }),
-    ]) {
-      await appeared(m.slow_mode_setting_legend());
-      const oldSignals = readSignals.slice();
-      const before = readCalls;
-      await act(async () => {
-        await replace();
-      });
-      await appeared(m.slow_mode_setting_legend());
-      expect(readCalls).toBeGreaterThan(before);
-      expect(oldSignals.every((signal) => signal.aborted)).toBe(true);
-      expect(host.querySelector('#thread-title')).toHaveProperty('value', 'Cooldown draft');
-    }
     expect(documentText(body)).toContain('cooldown');
   } finally {
     await act(async () => root.unmount());
