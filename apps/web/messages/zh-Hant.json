@@ -6817,6 +6817,8 @@
   "collection_discovery_retry": "重試",
   "collection_discovery_restart": "重新開始",
   "collection_discovery_restart_required": "此續頁已失效。請從第一頁重新開始。",
+  "collection_discovery_previous": "上一頁",
+  "collection_discovery_first": "第一頁",
   "collection_discovery_more": "更多合集",
   "inbox_kind_thread_activity": "關注討論串的動態",
   "inbox_kind_board_activity": "關注看板的動態",

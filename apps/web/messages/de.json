@@ -6809,6 +6809,8 @@
   "collection_discovery_retry": "Erneut versuchen",
   "collection_discovery_restart": "Neu starten",
   "collection_discovery_restart_required": "Diese Fortsetzung ist nicht mehr verfügbar. Beginne wieder auf der ersten Seite.",
+  "collection_discovery_previous": "Zurück",
+  "collection_discovery_first": "Erste Seite",
   "collection_discovery_more": "Weitere Collections",
   "inbox_kind_thread_activity": "Aktivität in beobachtetem Thema",
   "inbox_kind_board_activity": "Aktivität im beobachteten Forum",

@@ -6901,6 +6901,8 @@
   "collection_discovery_retry": "Retry",
   "collection_discovery_restart": "Start over",
   "collection_discovery_restart_required": "This continuation is no longer available. Start from the first page.",
+  "collection_discovery_previous": "Previous",
+  "collection_discovery_first": "First",
   "collection_discovery_more": "More Collections",
   "inbox_kind_thread_activity": "Watched thread activity",
   "inbox_kind_board_activity": "Watched board activity",

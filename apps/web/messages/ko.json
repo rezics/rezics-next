@@ -6809,6 +6809,8 @@
   "collection_discovery_retry": "다시 시도",
   "collection_discovery_restart": "처음부터 보기",
   "collection_discovery_restart_required": "이 페이지 이어보기는 더 이상 사용할 수 없습니다. 첫 페이지부터 다시 시작하세요.",
+  "collection_discovery_previous": "이전",
+  "collection_discovery_first": "첫 페이지",
   "collection_discovery_more": "더 보기",
   "inbox_kind_thread_activity": "관심 스레드 활동",
   "inbox_kind_board_activity": "관심 게시판 활동",
