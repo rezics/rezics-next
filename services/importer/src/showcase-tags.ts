@@ -73,6 +73,15 @@ export type ShowcaseTagVocabularyRecord = Readonly<{
   state: 'adopted' | 'proposed' | 'unavailable';
 }>;
 
+/** Source evidence only; current native hierarchy admission is a separate publication step. */
+export type ShowcaseTagSourceParent = Readonly<{
+  child: string;
+  parent: string;
+  main: boolean;
+  category: VndbPublicTagCategory;
+  path: string;
+}>;
+
 export type ShowcaseTagManifest = Readonly<{
   selectedWorks: readonly string[];
   vocabulary: readonly ShowcaseTagVocabularyRecord[];
@@ -81,6 +90,7 @@ export type ShowcaseTagManifest = Readonly<{
 
 export type ShowcaseTagPlan = VndbPublicTagPlan & {
   vocabulary: ShowcaseTagVocabularyRecord[];
+  sourceParents: ShowcaseTagSourceParent[];
   truncated: boolean;
 };
 
@@ -205,6 +215,7 @@ export async function projectShowcaseTagTables(
   gaps: CrossMediaGap[];
   truncated: boolean;
   dictionary: Map<string, VndbPublicTagDictionaryRow>;
+  sourceParents: ShowcaseTagSourceParent[];
 }> {
   const selected = selectedWorkIds(selectedVids);
   const gaps: CrossMediaGap[] = [];
@@ -242,6 +253,7 @@ export async function projectShowcaseTagTables(
   }
 
   const parentByChild = new Map<string, string[]>();
+  const parentEvidence = new Map<string, ReturnType<typeof projectVndbPublicTagParent>>();
   let parentCount = 0;
   for await (const row of input.rows('vndb', 'tags_parents')) {
     if (parentCount >= vndbPublicTagLimits.parents) {
@@ -255,6 +267,7 @@ export async function projectShowcaseTagTables(
       gap('tags_parents', row, 'Invalid VNDB tag parent row');
       continue;
     }
+    parentEvidence.set(`${projected.id}/${projected.parent}`, projected);
     const parents = parentByChild.get(projected.id) ?? [];
     parents.push(projected.parent);
     parentByChild.set(projected.id, parents);
@@ -279,18 +292,6 @@ export async function projectShowcaseTagTables(
     }
     frontier = next;
   }
-  for (const [id, parents] of parentByChild) {
-    if (!closed.has(id)) continue;
-    for (const parent of parents) {
-      if (closed.has(id) && closed.has(parent))
-        gap(
-          'tags_parents',
-          { id, parent },
-          'Parent tag relationship is not admitted for native writes; taxonomy closure keeps the dictionary record only',
-        );
-    }
-  }
-
   const dictionary = new Map<string, VndbPublicTagDictionaryRow>();
   const tagRows: Row[] = [];
   for await (const row of input.rows('vndb', 'tags')) {
@@ -309,6 +310,59 @@ export async function projectShowcaseTagTables(
     dictionary.set(projected.id, projected);
     tagRows.push(row);
   }
+
+  // Compute the complete source ancestry height once per selected dictionary node.
+  // A cycle, missing endpoint or category crossing invalidates dependent ancestry,
+  // without suppressing independent work facts or claiming native admission.
+  const heights = new Map<string, number>();
+  const visiting = new Set<string>();
+  const height = (id: string): number => {
+    const cached = heights.get(id);
+    if (cached !== undefined) return cached;
+    if (visiting.has(id)) {
+      gap('tags_parents', { id }, 'Cyclic source tag ancestry');
+      return Infinity;
+    }
+    visiting.add(id);
+    let result = 0;
+    for (const parent of parentByChild.get(id) ?? []) {
+      const childRow = dictionary.get(id);
+      const parentRow = dictionary.get(parent);
+      if (!childRow || !parentRow) {
+        gap('tags_parents', { id, parent }, 'Missing source tag parent dictionary endpoint');
+        result = Infinity;
+      } else if (childRow.category !== parentRow.category) {
+        gap('tags_parents', { id, parent }, 'Source tag parent crosses Scheme category');
+        result = Infinity;
+      } else {
+        result = Math.max(result, 1 + height(parent));
+      }
+    }
+    visiting.delete(id);
+    heights.set(id, result);
+    return result;
+  };
+  const sourceParents: ShowcaseTagSourceParent[] = [];
+  for (const id of closed) {
+    const depth = height(id);
+    if (depth > vndbPublicTagLimits.closureDepth) {
+      if (Number.isFinite(depth)) gap('tags_parents', { id }, 'Source tag ancestry exceeds closure depth');
+      continue;
+    }
+    for (const parent of new Set(parentByChild.get(id) ?? [])) {
+      const evidence = parentEvidence.get(`${id}/${parent}`)!;
+      sourceParents.push({
+        child: id,
+        parent,
+        main: evidence.main,
+        category: dictionary.get(id)!.category,
+        path: `/tags_parents/${id}/${parent}`,
+      });
+      gap('tags_parents', { id, parent },
+        'Parent tag relationship is not admitted for native writes; taxonomy closure keeps the dictionary record only');
+    }
+  }
+  sourceParents.sort((left, right) => left.path.localeCompare(right.path));
 
   const vnRows: Row[] = [];
   const titleRows: Row[] = [];
@@ -378,6 +432,7 @@ export async function projectShowcaseTagTables(
     gaps,
     truncated: truncated.value,
     dictionary,
+    sourceParents,
   };
 }
 
@@ -451,6 +506,7 @@ function composePlan(
     ...plan,
     gaps: mergeGaps([...projected.gaps, ...plan.gaps]),
     vocabulary: markProposed(vocabularyRecords(projected.dictionary, bindings), known),
+    sourceParents: projected.sourceParents,
     truncated: projected.truncated,
   };
 }
@@ -502,6 +558,7 @@ export async function planShowcaseTags(input: {
 
 export type ShowcaseTagsResult = VndbPublicTagsResult & {
   vocabulary: ShowcaseTagVocabularyRecord[];
+  sourceParents: ShowcaseTagSourceParent[];
   truncated: boolean;
   bindings: SourceVocabularyBindings;
   associationBindings: ShowcaseTagAssociation[];
