@@ -1,5 +1,4 @@
 import { expect, expectTypeOf, mock, spyOn, test } from 'bun:test';
-import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
 import * as routes from '../../src/content/routes.ts';
@@ -7,8 +6,6 @@ import type { ContentRuntime } from '../../src/content/runtime.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
-
-type KernelContent = ContentRuntime & { cursorNow?: () => number } & { readConsent?: CurrentConsentReader };
 
 test('trusted optional content runtime types retain exactly the three native ports', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
@@ -19,7 +16,7 @@ test('trusted optional content runtime types retain exactly the three native por
     }>
   >();
   expectTypeOf<keyof ContentRuntime>().toEqualTypeOf<'fetchConfig' | 'workflows' | 'anonymousVerifier'>();
-  expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
+  expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<ContentRuntime | undefined>();
   expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<(() => number) | undefined>();
   expectTypeOf<Pick<routes.Dependencies, keyof ContentRuntime>>().toEqualTypeOf<ContentRuntime>();
   expectTypeOf<Parameters<typeof routes.contentRoutes>[1]>().toEqualTypeOf<routes.Dependencies>();
@@ -51,20 +48,27 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
     for (const field of Object.keys(runtime)) expect(Object.hasOwn(omitted, field)).toBe(false);
 
     for (let mask = 0; mask < 8; mask++) {
-      const content: KernelContent = {
+      const content: ContentRuntime = {
         ...(mask & 1 ? { fetchConfig } : {}),
         ...(mask & 2 ? { workflows } : {}),
         ...(mask & 4 ? { anonymousVerifier } : {}),
-        cursorNow,
       };
       // Extra JavaScript properties cannot introduce another clock or request authority.
-      const provided = { ...content, clock: forbidden, actor: forbidden, provider: forbidden, permission: forbidden };
+      const provided = {
+        ...content,
+        cursorNow,
+        readConsent: forbidden,
+        clock: forbidden,
+        actor: forbidden,
+        provider: forbidden,
+        permission: forbidden,
+      };
       const kernel = createKernel({ ...base, content: provided });
       const received = compose.mock.calls.at(-1)![1];
       expect(received.fetchConfig).toBe(content.fetchConfig);
       expect(received.workflows).toBe(content.workflows);
       expect(received.anonymousVerifier).toBe(content.anonymousVerifier);
-      expect(received.cursorNow).toBe(content.cursorNow);
+      expect(received.cursorNow).toBeUndefined();
       expect(received.pool).toBe(pool);
       expect(received.tokens).toBe(tokens);
       expect(received.routeKey).toBe(base.routeKey);

@@ -105,6 +105,7 @@ function publishedSignatures(): void {
         postId: string,
         context: model.ReadContext,
         revisionId?: string,
+        retain?: reads.RetainContentRead<reads.PostEntry>,
       ) => Promise<model.Anchored<reads.PostEntry | null>>
     >
   >();

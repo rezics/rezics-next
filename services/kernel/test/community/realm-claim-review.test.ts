@@ -155,7 +155,7 @@ test('GET native pending Realm claim review, preserving sole Accounts approval',
   expect(await grants()).toEqual(before);
   const operation = openApiDocument(system.kernel).paths['/v1/realms/{realmId}/claimRequests']!.get!;
   expect(operation).toMatchObject({ 'x-exposure': 'public', 'x-action': 'realm:approve_claim' });
-  expect(operation.parameters?.map((parameter) => parameter.name)).toContain('inspectRequestId');
+  expect(operation.parameters).toContainEqual(expect.objectContaining({ name: 'inspectRequestId' }));
   // Reading grants nothing. The pre-existing Accounts command is the only approval path.
   const approved = await approveRealmClaim(
     deps(),

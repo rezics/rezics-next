@@ -23,7 +23,16 @@ function same<T extends true>(..._proof: T[]): void {}
 // Checked by tsc, never invoked: factory implementations may own real resources.
 function fixtureContracts(): void {
   same<Equal<typeof createContentSystem, (options: ContentSystemOptions) => Promise<ContentSystem>>>();
-  same<Equal<ContentSystemOptions, { readonly databaseUrl: string; readonly namespace?: string }>>();
+  same<
+    Equal<
+      ContentSystemOptions,
+      {
+        readonly databaseUrl: string;
+        readonly namespace?: string;
+        readonly authPoolFactory?: (databaseUrl: string) => Promise<{ readonly pool: Pool; close(): Promise<void> }>;
+      }
+    >
+  >();
   same<Equal<ContentCredential, { readonly bearer: string; readonly actor: AccountActor }>>();
   same<Equal<Actor, AccountActor | { kind: 'anonymous' }>>();
   same<
@@ -72,6 +81,8 @@ function fixtureContracts(): void {
           refresh(input: { readonly refreshToken: string }): Promise<ContentCredential>;
         };
         readonly access: Access;
+        readonly createFreshAccess: (observeJwks?: (request: Request, response: Response) => Promise<void>) => Access;
+        readonly createKernelForPool: (pool: Pool, access: Access) => Kernel;
         readonly actions: ActionCatalogue;
         readonly clock: {
           setCommandTime(instant: string): Promise<void>;

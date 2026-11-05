@@ -97,7 +97,7 @@ test.serial(
       });
       await runtime.consume(erased.envelopes);
       expect((await source()).contributions.map(({ postId }) => postId)).toEqual([first.value.post.id, thread.postId]);
-      expect((await activity.confirm(populated, Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect((await activity.confirm([populated], Date.now() + 30_000))[0]!.status).toBe('withheld');
       expect((await activity.select([thread.id], Date.now() + 30_000))[0]).toMatchObject({
         status: 'current',
         replyCount: { kind: 'exact', value: 1 },
