@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { migrate } from './database.ts';
+import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -55,6 +56,9 @@ export const importerScopes = [
   'subject:read',
   'context:accept',
   'context:adopt',
+];
+export const developmentPersonaScopes = [
+  ...new Set([...importerScopes, ...developmentCollectionScopes, 'account:manage', 'exposure:open']),
 ];
 const personaClient = 'rezics-dev-importer';
 export type DevelopmentKeys = {
@@ -373,7 +377,7 @@ export async function assemble(options?: {
   await service.internal.registerClient({
     clientId: personaClient,
     firstParty: true,
-    scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+    scopes: developmentPersonaScopes,
   });
   await host.start();
   const stop = async () => {
@@ -444,7 +448,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
           email: 'developer@rezics.test',
           password: keys.password,
           client_id: personaClient,
-          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+          scope: developmentPersonaScopes,
         }),
       }),
     );

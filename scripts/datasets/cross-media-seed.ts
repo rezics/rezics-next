@@ -6,6 +6,11 @@ import { createImportTransport } from '../../services/importer/src/import-client
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
+import {
+  createDevelopmentShowcaseRequest,
+  developmentCollectionScopes,
+  seedDevelopmentShowcase,
+} from './development-showcase.ts';
 
 /** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
 export const developmentShowcaseSelection = {
@@ -30,7 +35,7 @@ export async function runDevelopmentSeed(
     seedCatalogue?: typeof seedReviewedCatalogue;
     root?: string;
   } = {},
-): Promise<void> {
+): ReturnType<typeof runCrossMediaSeedCli> {
   const env = options.env ?? process.env;
   const accountKey = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT_KEY', env);
   const account = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT', env);
@@ -84,10 +89,19 @@ export async function runDevelopmentSeed(
   ];
   if (gameGenreBindings) args.push('--bangumi-game-genre-bindings', gameGenreBindings);
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
-  await (options.runSeed ?? runCrossMediaSeedCli)(args, {
+  const creatorToken = await (options.createTokenProvider ?? createAccountTokenProvider)({
+    accountKeyPath: accountKey,
+    account,
+    client,
+    authOrigin: auth,
+    scopes: developmentCollectionScopes,
+  });
+  const request = createDevelopmentShowcaseRequest({ origin: api, token: creatorToken });
+  return (options.runSeed ?? runCrossMediaSeedCli)(args, {
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
     reviewedCatalogueSubjects: reviewedCatalogue.subjects,
     selection: developmentShowcaseSelection,
+    composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
   });
 }
 if (import.meta.main) {

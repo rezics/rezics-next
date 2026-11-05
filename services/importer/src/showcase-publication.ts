@@ -64,6 +64,7 @@ type JournalActionRow = {
   idempotency_key: string;
   state: 'prepared' | 'acknowledged' | 'refused';
   error_code: string | null;
+  result_id: string | null;
 };
 
 function json(value: unknown): string {
@@ -125,6 +126,10 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         error_code TEXT
       ) STRICT;
     `);
+    // Native fixture creates need their acknowledged UUID alongside the sealed action.
+    const actionColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_action)').all();
+    if (!actionColumns.some((column) => column.name === 'result_id'))
+      this.#db.exec('ALTER TABLE showcase_action ADD COLUMN result_id TEXT');
     const coverColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_cover_source)').all();
     if (!coverColumns.some((column) => column.name === 'response_digest')) {
       const receipts = this.#db
@@ -273,8 +278,12 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
     );
   }
 
-  acknowledgeAction(actionKey: string): void {
-    this.#db.query("UPDATE showcase_action SET state='acknowledged',error_code=NULL WHERE action_key=?").run(actionKey);
+  acknowledgeAction(actionKey: string, resultId?: string): void {
+    this.#db
+      .query(
+        "UPDATE showcase_action SET state='acknowledged',error_code=NULL,result_id=COALESCE(result_id,?) WHERE action_key=?",
+      )
+      .run(resultId ?? null, actionKey);
   }
 
   refuseAction(actionKey: string, errorCode: string): void {

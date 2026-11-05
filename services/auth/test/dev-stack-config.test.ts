@@ -14,10 +14,18 @@ import {
   privateFile,
   retireDevelopmentSeedState,
   resetLocalContentMedia,
+  developmentPersonaScopes,
+  importerScopes,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
+
+test('persona creator capabilities are registered separately from ordinary importer scopes', () => {
+  const creator = ['collection:create', 'collection:read', 'collection:update'];
+  expect(developmentPersonaScopes).toEqual(expect.arrayContaining(creator));
+  expect(importerScopes.some((scope) => creator.includes(scope))).toBe(false);
+});
 
 test('a fresh local database gets a new search namespace while ordinary setup preserves it', () => {
   const prefix = (env: string) => env.split('\n').find((line) => line.startsWith('KERNEL_SEARCH_PREFIX='));

@@ -52,6 +52,7 @@ test('development seed fetches the shared cache once and passes the local person
   const args: string[] = [];
   let passedOptions: unknown;
   let fetches = 0;
+  const credentialScopes: string[][] = [];
   const report = { persona: { status: 'incomplete', collections: [] } };
   try {
     const result = await runDevelopmentSeed({
@@ -76,6 +77,10 @@ test('development seed fetches the shared cache once and passes the local person
         };
       },
       seedCatalogue: async () => ({ subjects: {}, facts: [] }),
+      createTokenProvider: async (configuration) => {
+        credentialScopes.push([...configuration.scopes]);
+        return async () => 'local-unit-credential';
+      },
       runSeed: async (argv, seedOptions) => {
         args.push(...argv);
         passedOptions = seedOptions;
@@ -101,7 +106,12 @@ test('development seed fetches the shared cache once and passes the local person
       vndb: ['v2002', 'v4'],
       includeReleases: true,
     });
-    expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
+    expect(passedOptions).toMatchObject({
+      selection: developmentShowcaseSelection,
+      composePersona: expect.any(Function),
+    });
+    expect(credentialScopes[0]).not.toContain('collection:create');
+    expect(credentialScopes[1]).toEqual(['subject:read', 'collection:create', 'collection:read', 'collection:update']);
   } finally {
     await rm(keyDirectory, { recursive: true, force: true });
   }
