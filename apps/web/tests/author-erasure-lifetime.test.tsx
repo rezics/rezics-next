@@ -447,6 +447,66 @@ test('browser away/back retires a queued entry import and a progress read withou
   });
 });
 
+test('entry source replacement and locale departure retire sent results and preserve unavailable recovery', async () => {
+  await withUi(async (ui) => {
+    const owner = { state: 'signed-in' as const, subject: authorA, csrfToken: 'csrf-a' };
+    ui.setSession(owner);
+    const sent = gate<ErasureEnqueue>();
+    const callbacks: string[] = [];
+    const entry = createElement(ui.AuthorErasureEntry, {
+      threadId: threadA,
+      viewerId: authorA,
+      admission: { kind: 'current', authorId: authorA, mayErase: true },
+      send: async () => sent.promise,
+      onAccepted: (id) => {
+        callbacks.push(id);
+      },
+    });
+    await ui.render(entry);
+    await ui.click(ui.m.author_erasure_action());
+    await ui.confirm();
+    await ui.click(ui.m.author_erasure_confirm());
+    const otherClient = ui.newClient();
+    otherClient.setQueryData(['session'], owner);
+    await ui.renderWithClient(otherClient, entry);
+    sent.resolve({ kind: 'accepted', operationId: operationA });
+    await ui.flush();
+    expect(callbacks).toEqual([]);
+    expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+    expect(ui.button(ui.m.author_erasure_retry()).disabled).toBe(true);
+    await ui.render(null);
+    otherClient.clear();
+
+    const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+    const originalLocale = getLocale;
+    const result = gate<ErasureEnqueue>();
+    const destinations: string[] = [];
+    ui.window.location.assign = (url) => {
+      destinations.push(String(url));
+    };
+    try {
+      await ui.render(
+        createElement(ui.AuthorErasureEntry, {
+          threadId: threadA,
+          viewerId: authorA,
+          admission: { kind: 'current', authorId: authorA, mayErase: true },
+          send: async () => result.promise,
+        }),
+      );
+      await ui.click(ui.m.author_erasure_action());
+      await ui.confirm();
+      await ui.click(ui.m.author_erasure_confirm());
+      overwriteGetLocale(() => (originalLocale() === 'fr' ? 'en' : 'fr'));
+      result.resolve({ kind: 'accepted', operationId: operationA });
+      await ui.flush();
+      expect(destinations).toEqual([]);
+      expect(ui.host.textContent).not.toContain(operationA);
+    } finally {
+      overwriteGetLocale(originalLocale);
+    }
+  });
+});
+
 test('operation initial, reader and session source replacements withhold prior private progress until a current read', async () => {
   await withUi(async (ui) => {
     ui.setSession({ state: 'signed-in', subject: authorA, csrfToken: 'csrf-a' });
@@ -622,6 +682,8 @@ test('operation refreshes stay visible-only and capped through authentication hy
       expect(reads).toBe(1);
 
       await act(async () => {
+        ui.setSession(owner);
+        await ui.client.fetchQuery({ queryKey: ['session'], queryFn: async () => owner, staleTime: 0 });
         await ui.client.invalidateQueries({ queryKey: ['session'], refetchType: 'none' });
         ui.client.removeQueries({ queryKey: ['session'] });
       });
