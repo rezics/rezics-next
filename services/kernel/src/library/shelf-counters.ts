@@ -2,7 +2,9 @@ import { routeOf } from '../route/route.ts';
 import type { ShelfCounters, ShelfPlacement, ShelfWrite } from './shelf-contract.ts';
 import { isLegacyEntryState } from './shelf-contract.ts';
 import { enterShelfWrite, NIL_SHELF_GENERATION } from './shelf-counter-owner.ts';
-import delta from './shelf-counter-delta.sql';
+import deltaQuery from './shelf-counter-delta.sql';
+import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
+const delta = shelfMaintenanceQuery(deltaQuery);
 
 type Delta = { bucket: string; type_id: string; delta: number };
 function placement(write: ShelfWrite, value: ShelfPlacement | null, sign: number): Delta[] {

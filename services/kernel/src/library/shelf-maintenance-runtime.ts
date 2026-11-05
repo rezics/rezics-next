@@ -1,5 +1,6 @@
 import { cleanupShelfTitleKeys } from './shelf-title-maintenance-store.ts';
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import canonicalize from 'canonicalize';
 import { shareAccount, fenceOperationalAccount } from '../access/account-share.ts';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
@@ -12,6 +13,10 @@ import {
   normalizeCommandKey,
   principalCommandIdentity,
   runCommand,
+  withSingleCommandAttempt,
+  type LegacyCommandOptions,
+  type PrincipalCommandOptions,
+  type CommandResult,
   CommandUnavailableError,
   IdempotencyConflictError,
   type CommandTransaction,
@@ -46,54 +51,109 @@ import {
   type ShelfMaintenanceTypeObservation,
   type ShelfOwner,
 } from './shelf-maintenance-ops-contract.ts';
-import { workStepDeadline } from './command-support.ts';
+import { runLibraryCommand, workStepDeadline } from './command-support.ts';
+import {
+  consumeShelfMaintenance,
+  shelfMaintenanceQuery,
+  withShelfMaintenanceAllocator,
+  shelfMaintenanceStatementPlan,
+  shelfMaintenanceEnqueuePlan,
+  shelfMaintenanceCommandPlan,
+  shelfMaintenanceSourceExecution,
+  SHELF_MAINTENANCE_OPERATIONS,
+} from './shelf-maintenance-bounds.ts';
+import accountShareQuery from '../access/account-share.sql';
 import { readMaintenanceSessions } from './maintenance-session-page.ts';
 import { readMaintenanceHistoryPage } from './maintenance-history-page.ts';
 import erasureProbe from './erasure-probe.sql';
 import { libraryErasureWorkflowId } from './erasure-participant.ts';
 import scope from './erasure-scope.sql';
-import gateEnsure from './shelf-maintenance-gate-ensure.sql';
-import gateRead from './shelf-maintenance-gate-read.sql';
-import gateLock from './shelf-maintenance-gate-lock.sql';
-import gateShare from './shelf-maintenance-gate-share.sql';
-import gateSave from './shelf-maintenance-gate-save.sql';
-import inputs from './shelf-maintenance-inputs.sql';
-import runRead from './shelf-maintenance-run-read.sql';
-import runLock from './shelf-maintenance-run-lock.sql';
-import runCreate from './shelf-maintenance-run-create.sql';
-import stepRead from './shelf-maintenance-step-read.sql';
-import stepSave from './shelf-maintenance-step-save.sql';
-import stepBind from './shelf-maintenance-step-bind.sql';
-import advance from './shelf-maintenance-advance.sql';
-import cancel from './shelf-maintenance-cancel.sql';
-import runnable from './shelf-maintenance-runnable.sql';
-import ack from './shelf-maintenance-ack.sql';
+import gateEnsureQuery from './shelf-maintenance-gate-ensure.sql';
+import gateReadQuery from './shelf-maintenance-gate-read.sql';
+import gateLockQuery from './shelf-maintenance-gate-lock.sql';
+import gateShareQuery from './shelf-maintenance-gate-share.sql';
+import gateSaveQuery from './shelf-maintenance-gate-save.sql';
+import inputsQuery from './shelf-maintenance-inputs.sql';
+import runReadQuery from './shelf-maintenance-run-read.sql';
+import runLockQuery from './shelf-maintenance-run-lock.sql';
+import runCreateQuery from './shelf-maintenance-run-create.sql';
+import stepReadQuery from './shelf-maintenance-step-read.sql';
+import stepSaveQuery from './shelf-maintenance-step-save.sql';
+import stepBindQuery from './shelf-maintenance-step-bind.sql';
+import advanceQuery from './shelf-maintenance-advance.sql';
+import cancelQuery from './shelf-maintenance-cancel.sql';
+import runnableQuery from './shelf-maintenance-runnable.sql';
+import ackQuery from './shelf-maintenance-ack.sql';
 import tombstone from './shelf-maintenance-tombstone.sql';
-import authorizedCollection from './shelf-maintenance-authorized-collection.sql';
-import entries from './shelf-maintenance-entries.sql';
-import entryBackfill from './shelf-maintenance-entry-backfill.sql';
-import stampIncarnation from './entry-legacy-incarnation-stamp.sql';
-import sessionScratch from './shelf-maintenance-session-scratch.sql';
-import sessions from './shelf-maintenance-sessions.sql';
-import headInputs from './shelf-maintenance-head-inputs.sql';
-import heads from './shelf-maintenance-heads.sql';
-import countEntries from './shelf-maintenance-count-entries.sql';
-import countCollections from './shelf-maintenance-count-collections.sql';
-import validate from './shelf-maintenance-validate.sql';
-import retireCounts from './shelf-maintenance-retire-counts.sql';
-import retireReservations from './shelf-maintenance-retire-reservations.sql';
-import scratchSessions from './shelf-maintenance-scratch-sessions.sql';
-import scratchHeads from './shelf-maintenance-scratch-heads.sql';
-import scratchSources from './shelf-maintenance-scratch-sources.sql';
-import scratchSteps from './shelf-maintenance-scratch-steps.sql';
-import sourceRead from './shelf-maintenance-source-read.sql';
-import sourceSave from './shelf-maintenance-source-save.sql';
-import sourceProgress from './shelf-maintenance-source-progress.sql';
-import sourceAttach from './shelf-maintenance-source-attach.sql';
-import sourceReset from './shelf-maintenance-source-reset.sql';
-import reservationBind from './shelf-maintenance-reservation-bind.sql';
-import reservationCheck from './shelf-maintenance-reservation-check.sql';
+import authorizedCollectionQuery from './shelf-maintenance-authorized-collection.sql';
+import entriesQuery from './shelf-maintenance-entries.sql';
+import entryBackfillQuery from './shelf-maintenance-entry-backfill.sql';
+import stampIncarnationQuery from './entry-legacy-incarnation-stamp.sql';
+import sessionScratchQuery from './shelf-maintenance-session-scratch.sql';
+import sessionsQuery from './shelf-maintenance-sessions.sql';
+import headInputsQuery from './shelf-maintenance-head-inputs.sql';
+import headsQuery from './shelf-maintenance-heads.sql';
+import countEntriesQuery from './shelf-maintenance-count-entries.sql';
+import countCollectionsQuery from './shelf-maintenance-count-collections.sql';
+import validateQuery from './shelf-maintenance-validate.sql';
+import retireCountsQuery from './shelf-maintenance-retire-counts.sql';
+import retireReservationsQuery from './shelf-maintenance-retire-reservations.sql';
+import scratchSessionsQuery from './shelf-maintenance-scratch-sessions.sql';
+import scratchHeadsQuery from './shelf-maintenance-scratch-heads.sql';
+import scratchSourcesQuery from './shelf-maintenance-scratch-sources.sql';
+import scratchStepsQuery from './shelf-maintenance-scratch-steps.sql';
+import sourceReadQuery from './shelf-maintenance-source-read.sql';
+import sourceSaveQuery from './shelf-maintenance-source-save.sql';
+import sourceProgressQuery from './shelf-maintenance-source-progress.sql';
+import sourceAttachQuery from './shelf-maintenance-source-attach.sql';
+import sourceResetQuery from './shelf-maintenance-source-reset.sql';
+import reservationBindQuery from './shelf-maintenance-reservation-bind.sql';
+import reservationCheckQuery from './shelf-maintenance-reservation-check.sql';
 import bulkPending from './shelf-maintenance-bulk-pending.sql';
+
+const gateEnsure = shelfMaintenanceQuery(gateEnsureQuery);
+const gateRead = shelfMaintenanceQuery(gateReadQuery);
+const gateLock = shelfMaintenanceQuery(gateLockQuery);
+const gateShare = shelfMaintenanceQuery(gateShareQuery);
+const gateSave = shelfMaintenanceQuery(gateSaveQuery);
+const inputs = shelfMaintenanceQuery(inputsQuery);
+const runRead = shelfMaintenanceQuery(runReadQuery);
+const runLock = shelfMaintenanceQuery(runLockQuery);
+const runCreate = shelfMaintenanceQuery(runCreateQuery);
+const stepRead = shelfMaintenanceQuery(stepReadQuery);
+const stepSave = shelfMaintenanceQuery(stepSaveQuery);
+const stepBind = shelfMaintenanceQuery(stepBindQuery);
+const advance = shelfMaintenanceQuery(advanceQuery);
+const cancel = shelfMaintenanceQuery(cancelQuery);
+const runnable = shelfMaintenanceQuery(runnableQuery);
+const ack = shelfMaintenanceQuery(ackQuery);
+const authorizedCollection = shelfMaintenanceQuery(authorizedCollectionQuery);
+const entries = shelfMaintenanceQuery(entriesQuery);
+const entryBackfill = shelfMaintenanceQuery(entryBackfillQuery);
+const stampIncarnation = shelfMaintenanceQuery(stampIncarnationQuery);
+const sessionScratch = shelfMaintenanceQuery(sessionScratchQuery);
+const sessions = shelfMaintenanceQuery(sessionsQuery);
+const headInputs = shelfMaintenanceQuery(headInputsQuery);
+const heads = shelfMaintenanceQuery(headsQuery);
+const countEntries = shelfMaintenanceQuery(countEntriesQuery);
+const countCollections = shelfMaintenanceQuery(countCollectionsQuery);
+const validate = shelfMaintenanceQuery(validateQuery);
+const retireCounts = shelfMaintenanceQuery(retireCountsQuery);
+const retireReservations = shelfMaintenanceQuery(retireReservationsQuery);
+const scratchSessions = shelfMaintenanceQuery(scratchSessionsQuery);
+const scratchHeads = shelfMaintenanceQuery(scratchHeadsQuery);
+const scratchSources = shelfMaintenanceQuery(scratchSourcesQuery);
+const scratchSteps = shelfMaintenanceQuery(scratchStepsQuery);
+const sourceRead = shelfMaintenanceQuery(sourceReadQuery);
+const sourceSave = shelfMaintenanceQuery(sourceSaveQuery);
+const sourceProgress = shelfMaintenanceQuery(sourceProgressQuery);
+const sourceAttach = shelfMaintenanceQuery(sourceAttachQuery);
+const sourceReset = shelfMaintenanceQuery(sourceResetQuery);
+const reservationBind = shelfMaintenanceQuery(reservationBindQuery);
+const reservationCheck = shelfMaintenanceQuery(reservationCheckQuery);
+const accountShare = shelfMaintenanceQuery(accountShareQuery);
+
+const pageDeadlines = new AsyncLocalStorage<number>();
 
 export const SHELF_MAINTENANCE_WORKFLOW = 'library.shelfMaintenance';
 export const SHELF_MAINTENANCE_EVENT = 'com.rezics.library.shelf-maintenance.advanced.v1';
@@ -190,6 +250,13 @@ function live(tx: CommandTransaction, owner: ShelfOwner) {
     throw new TypeError('Shelf maintenance requires a live authorized owner command');
   return command;
 }
+async function shareShelfAccount(tx: CommandTransaction, accountId: string) {
+  const plan = shelfMaintenanceStatementPlan(
+    accountShareQuery.sql,
+    accountShareQuery.params.map((name) => (name === 'route' ? routeOf(accountId)! : accountId)),
+  )!;
+  return consumeShelfMaintenance('account', plan.total, () => shareAccount(tx, accountId));
+}
 async function ownerAuthority(tx: CommandTransaction, owner: ShelfOwner) {
   const command = live(tx, owner);
   if (command.authorization!.resource.id === owner.accountId && command.authorization!.resource.route === owner.route)
@@ -230,7 +297,7 @@ async function createRun(tx: CommandTransaction, owner: ShelfOwner, gate: Gate, 
 /** Called only in an already admitted live owner command. No absent-row empty inference. */
 async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
   await ownerAuthority(tx, owner);
-  await shareAccount(tx, owner.accountId);
+  await shareShelfAccount(tx, owner.accountId);
   let gate = await gateRead.run(tx, ownerArgs(owner));
   if (!gate) {
     await gateEnsure.run(tx, ownerArgs(owner));
@@ -310,7 +377,7 @@ async function derivedAuthority(tx: CommandTransaction, page: ShelfDerivedPage) 
     BigInt(run.sequence) !== BigInt(proof.run.sequence)
   )
     unavailable(proof.owner);
-  await shareAccount(tx, proof.owner.accountId);
+  await shareShelfAccount(tx, proof.owner.accountId);
   if (!proof.keys) unavailable(proof.owner);
   return { ...proof, keys: proof.keys };
 }
@@ -331,7 +398,9 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
       const proof = await derivedAuthority(tx, page);
       if (proof.source !== source) throw new TypeError('Shelf source is not bound to this live page');
       const result = await withShelfDerivedTypePreparation(tx, page, null, () =>
-        proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType),
+        withShelfMaintenanceAllocator(tx, source.fullType, () =>
+          proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType),
+        ),
       );
       if (!result.done) {
         const rows = await reservationBind.run(tx, {
@@ -359,7 +428,9 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
       )
         throw new TypeError('Reservation is not bound to this live shelf page');
       return withShelfDerivedTypePreparation(tx, page, reservationId, () =>
-        proof.keys.continue({ client: tx, ...proof.owner }, { reservationId }),
+        withShelfMaintenanceAllocator(tx, undefined, () =>
+          proof.keys.continue({ client: tx, ...proof.owner }, { reservationId }),
+        ),
       );
     },
   };
@@ -530,8 +601,16 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         dependencies.shelfTypeDigest === undefined ? undefined : { digest: dependencies.shelfTypeDigest },
       ),
     sources: dependencies.sources ?? {
-      observe: (id) => observePreparationSource(dependencies, id),
-      observeIdentity: (id) => observePreparationIdentity(dependencies, id),
+      observe: (id) =>
+        observePreparationSource(
+          { ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
+          id,
+        ),
+      observeIdentity: (id) =>
+        observePreparationIdentity(
+          { ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
+          id,
+        ),
     },
   };
   const { pool, clock, access } = deps;
@@ -543,6 +622,23 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         ? Promise.resolve(deps.client)
         : (work ??= createWorkClient(pool.options.connectionString ?? '', pool));
   const ports = createShelfMaintenanceDerivedPorts();
+  function command<T>(
+    options: LegacyCommandOptions | PrincipalCommandOptions,
+    body: (
+      tx: CommandTransaction,
+      context: { transactionId: string; time: import('../command/command.ts').AuthoritativeTime },
+    ) => Promise<CommandResult<T>>,
+    policy: 'rebuild' | 'purge' = 'rebuild',
+  ) {
+    const dispatch = () => ('principal' in options ? runCommand(pool, options, body) : runCommand(pool, options, body));
+    // Erasure retains its own command retry policy and cost owner.
+    if (policy === 'purge') return dispatch();
+    const declaration = shelfMaintenanceCommandPlan(pool, options);
+    return runLibraryCommand(
+      () => withSingleCommandAttempt(dispatch),
+      (run) => consumeShelfMaintenance('command', declaration.total, run),
+    );
+  }
   async function requestRebuild(
     actor: Parameters<ShelfMaintenanceOps['requestRebuild']>[0],
     input: Parameters<ShelfMaintenanceOps['requestRebuild']>[1],
@@ -564,14 +660,14 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       anchor: {
         resource,
         async validate(tx) {
-          await shareAccount(tx, owner.accountId);
-          return true;
+          // Access preparation supplies its released native client, before Core owns a transaction.
+          const account = await accountShare.run(tx, ownerArgs(owner));
+          return account?.state === 'active' && !account.fenced;
         },
       },
       context: { pool, deadline, partition: partitionOf(owner.route) },
     });
-    const result = await runCommand(
-      pool,
+    const result = await command(
       {
         ...identity,
         partition: partitionOf(owner.route),
@@ -617,8 +713,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     const owner = { route: routeOf(data.accountId)!, accountId: data.accountId };
     ownerCheck(owner);
     if (Number(match[1]) !== partitionOf(owner.route)) throw new TypeError('Foreign shelf purge envelope');
-    const result = await runCommand(
-      pool,
+    const result = await command(
       {
         partition: partitionOf(owner.route),
         deadline: workStepDeadline(),
@@ -668,6 +763,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         const requested = await createRun(tx, owner, gate, 'purge');
         return { value: requested, events: [event(owner)] };
       },
+      'purge',
     );
     return result.value;
   }
@@ -678,7 +774,10 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
   ): Promise<ShelfMaintenanceReceipt> {
     const owner = { route: binding.route, accountId: binding.accountId };
     const args = { ...runArgs(owner, binding.runId), epoch: BigInt(binding.epoch), sequence: BigInt(binding.sequence) };
-    const header = await withConnection(pool, (client) => stepRead.run(client, args));
+    const { header, scheduledRun } = await withConnection(pool, async (client) => {
+      const header = await stepRead.run(client, args);
+      return { header, scheduledRun: header ? await runRead.run(client, runArgs(owner, binding.runId)) : null };
+    });
     if (!header) throw new TypeError('Unknown native shelf maintenance step');
     const cursor = cursorOf(header);
     let admitted: { gate: Gate; run: Run } | undefined;
@@ -686,13 +785,12 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     // On replay the applied header supplies that exact commitment without a source read.
     let typeInput: Awaited<ReturnType<typeof prepareType>> | undefined;
     if (header.inputIdentity === null && (header.phase === 'types' || header.phase === 'validate')) {
-      const current = await withConnection(pool, (c) => runRead.run(c, runArgs(owner, binding.runId)));
       if (
-        current &&
-        !current.cancelled &&
-        BigInt(current.epoch) === args.epoch &&
-        BigInt(current.sequence) === args.sequence &&
-        (header.phase === 'types' || current.kind === 'backfill')
+        scheduledRun &&
+        !scheduledRun.cancelled &&
+        BigInt(scheduledRun.epoch) === args.epoch &&
+        BigInt(scheduledRun.sequence) === args.sequence &&
+        (header.phase === 'types' || scheduledRun.kind === 'backfill')
       )
         typeInput = await prepareType(deps, owner, header, binding.runId);
     }
@@ -703,8 +801,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       `shelf:${binding.runId}:${binding.epoch}:${binding.sequence}`,
     );
     try {
-      const outcome = await runCommand<ShelfMaintenanceReceipt>(
-        pool,
+      const outcome = await command<ShelfMaintenanceReceipt>(
         {
           partition: partitionOf(owner.route),
           deadline,
@@ -737,7 +834,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
               if (!current) throw new GrantDeniedError();
               if (current.kind === 'purge') {
                 if (!(await scope.run(tx, ownerArgs(owner)))) throw new GrantDeniedError();
-              } else await shareAccount(tx, owner.accountId);
+              } else await shareShelfAccount(tx, owner.accountId);
               const gate = await gateLock.run(tx, ownerArgs(owner));
               const run = await runLock.run(tx, runArgs(owner, binding.runId));
               if (
@@ -1019,12 +1116,17 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           };
           return { value, events: [event(owner)] };
         },
+        scheduledRun?.kind === 'purge' ? 'purge' : 'rebuild',
       );
       return outcome.value;
     } catch (error) {
       // A concurrent winner may have captured another current observation. Its
       // immutable native header, never that losing observation, defines replay.
-      if (retry === 0 && error instanceof IdempotencyConflictError) return executePage(binding, 1, deadline);
+      if (
+        retry < SHELF_MAINTENANCE_OPERATIONS.page.conflictReconciliations &&
+        error instanceof IdempotencyConflictError
+      )
+        return executePage(binding, retry + 1, deadline);
       throw error;
     }
   }
@@ -1033,7 +1135,8 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     validateShelfMaintenanceBinding(original);
     // Preparation and the one conflict reconciliation share the original page
     // budget. Re-reading a winner's header must not renew command execution time.
-    return executePage(original, 0, workStepDeadline());
+    const deadline = workStepDeadline();
+    return pageDeadlines.run(deadline, () => executePage(original, 0, deadline));
   }
   async function recover(input: Parameters<ShelfMaintenanceOps['recover']>[0]) {
     closed(input, ['after', 'limit']);
@@ -1047,12 +1150,14 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         !uuid.test(input.after[2]))
     )
       throw new TypeError('Invalid shelf recovery cursor');
+    const after = input.after ? Object.freeze([...input.after] as const) : null;
+    const limit = input.limit;
     const rows = await withConnection(pool, (c) =>
       runnable.run(c, {
-        after_route: input.after?.[0] ?? -1,
-        after_account: input.after?.[1] ?? EMPTY_SHELF_GENERATION,
-        after_run: input.after?.[2] ?? EMPTY_SHELF_GENERATION,
-        page_limit: input.limit,
+        after_route: after?.[0] ?? -1,
+        after_account: after?.[1] ?? EMPTY_SHELF_GENERATION,
+        after_run: after?.[2] ?? EMPTY_SHELF_GENERATION,
+        page_limit: limit,
       }),
     );
     const client = rows.length ? await workClient() : null;
@@ -1078,8 +1183,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         );
       await enqueueShelfMaintenance(client!, binding, BigInt(row.attempt).toString());
       // Conditional acknowledgement cannot erase a concurrently advanced successor intent.
-      await runCommand(
-        pool,
+      await command(
         { partition: partitionOf(owner.route), deadline: workStepDeadline(), clock },
         async (tx) => {
           await ack.run(tx, {
@@ -1091,13 +1195,14 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           });
           return noEffect(null);
         },
+        row.kind === 'purge' ? 'purge' : 'rebuild',
       );
       enqueued.push(binding);
     }
     const last = rows.at(-1);
     return {
       enqueued,
-      next: rows.length === input.limit && last ? ([last.route, last.accountId, last.runId] as const) : null,
+      next: rows.length === limit && last ? ([last.route, last.accountId, last.runId] as const) : null,
     };
   }
   return Object.freeze({ initialize, requestRebuild, requestPurge, page, recover });
@@ -1107,15 +1212,19 @@ export async function enqueueShelfMaintenance(
   binding: ShelfMaintenanceBinding,
   attempt = '0',
 ): Promise<void> {
-  validateShelfMaintenanceBinding(binding);
-  await client.enqueue(
-    {
-      workflowName: SHELF_MAINTENANCE_WORKFLOW,
-      queueName: 'maintenance',
-      workflowID: `shelf:${binding.accountId}:${binding.runId}:${binding.epoch}:${binding.sequence}:${binding.segment}:${attempt}`,
-      workflowIDReusePolicy: 'return-existing',
-    },
-    binding,
+  const original = Object.freeze({ ...binding });
+  validateShelfMaintenanceBinding(original);
+  const declaration = shelfMaintenanceEnqueuePlan({ binding: original, attempt });
+  await consumeShelfMaintenance('enqueue', declaration.total, () =>
+    client.enqueue(
+      {
+        workflowName: SHELF_MAINTENANCE_WORKFLOW,
+        queueName: 'maintenance',
+        workflowID: `shelf:${original.accountId}:${original.runId}:${original.epoch}:${original.sequence}:${original.segment}:${attempt}`,
+        workflowIDReusePolicy: 'return-existing',
+      },
+      original,
+    ),
   );
 }
 
@@ -1142,10 +1251,20 @@ export async function registerShelfMaintenanceWork(
   );
   DBOS.registerWorkflow(
     async (start: ShelfMaintenanceBinding) => {
-      let binding: ShelfMaintenanceBinding | null = start;
-      for (let n = 0; n < 100 && binding && binding.segment === start.segment; n++)
-        binding = (await page(binding)).next;
-      if (binding) await continuation(binding);
+      const original = Object.freeze({ ...start });
+      let binding: ShelfMaintenanceBinding | null = original;
+      for (
+        let n = 0;
+        n < SHELF_MAINTENANCE_OPERATIONS.segment.pages && binding && binding.segment === original.segment;
+        n++
+      ) {
+        const locator: ShelfMaintenanceBinding = binding;
+        binding = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(locator, () => page(locator))).next;
+      }
+      if (binding) {
+        const successor = binding;
+        await SHELF_MAINTENANCE_OPERATIONS.segment.step(successor, () => continuation(successor));
+      }
     },
     { name: SHELF_MAINTENANCE_WORKFLOW },
   );
@@ -1156,25 +1275,35 @@ export async function registerShelfMaintenanceWork(
   type Recovery = { root: string; segment: number; after: readonly [number, string, string] | null };
   const next = DBOS.registerStep(
     async (input: Recovery) => {
-      await context.client.enqueue(
-        {
-          workflowName: 'library.shelfMaintenanceRecoverySegment',
-          queueName: 'maintenance',
-          workflowID: `shelf-recovery:${input.root}:${input.segment}`,
-          workflowIDReusePolicy: 'return-existing',
-        },
-        input,
+      const original = Object.freeze({
+        ...input,
+        after: input.after ? Object.freeze([...input.after] as const) : null,
+      });
+      const declaration = shelfMaintenanceEnqueuePlan(original);
+      await consumeShelfMaintenance('recovery.enqueue', declaration.total, () =>
+        context.client.enqueue(
+          {
+            workflowName: 'library.shelfMaintenanceRecoverySegment',
+            queueName: 'maintenance',
+            workflowID: `shelf-recovery:${original.root}:${original.segment}`,
+            workflowIDReusePolicy: 'return-existing',
+          },
+          original,
+        ),
       );
     },
     { name: 'library.shelfMaintenanceRecoveryContinue', ...COMMAND_STEP_RETRIES },
   );
   const sweep = async (input: Recovery) => {
-    let after = input.after;
-    for (let n = 0; n < 100; n++) {
-      after = (await recover(after)).next;
+    const original = Object.freeze({ ...input, after: input.after ? Object.freeze([...input.after] as const) : null });
+    let after = original.after;
+    for (let n = 0; n < SHELF_MAINTENANCE_OPERATIONS.segment.pages; n++) {
+      const cursor = after;
+      after = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(cursor, () => recover(cursor))).next;
       if (!after) return;
     }
-    await next({ ...input, segment: input.segment + 1, after });
+    const successor = Object.freeze({ ...original, segment: original.segment + 1, after });
+    await SHELF_MAINTENANCE_OPERATIONS.segment.step(successor, () => next(successor));
   };
   DBOS.registerWorkflow(sweep, { name: 'library.shelfMaintenanceRecoverySegment' });
   DBOS.registerWorkflow(() => sweep({ root: DBOS.workflowID!, segment: 0, after: null }), {

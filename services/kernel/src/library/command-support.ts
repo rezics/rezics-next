@@ -1,3 +1,4 @@
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -37,7 +38,7 @@ export function runLibraryBoundedStep<T>(operation: string, bound: Bound, dispat
 
 /** Shared deadline policy for native Library work steps outside actor commands. */
 export function workStepDeadline(): number {
-  return deadlineFor(WORK_STEP_DEADLINE_MS);
+  return currentCommandWorkAssociation()?.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
 }
 
 type CommandContext = { transactionId: string; time: AuthoritativeTime };

@@ -1,6 +1,8 @@
 import type { PoolClient } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
-import historyPage from './maintenance-history-page.sql';
+import historyPageQuery from './maintenance-history-page.sql';
+import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
+const historyPage = shelfMaintenanceQuery(historyPageQuery);
 
 export type MaintenanceHistoryPage = {
   count: number;

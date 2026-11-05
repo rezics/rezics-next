@@ -1,10 +1,14 @@
 import { currentCommand, CommandUnavailableError } from '../command/command.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { ShelfWrite } from './shelf-contract.ts';
-import initialize from './shelf-counter-owner-initialize.sql';
-import read from './shelf-counter-owner-read.sql';
+import initializeQuery from './shelf-counter-owner-initialize.sql';
+import readQuery from './shelf-counter-owner-read.sql';
 import { enterShelfWrite as enterNativeShelfWrite } from './shelf-maintenance-runtime.ts';
-import complete from './shelf-counter-owner-complete.sql';
+import completeQuery from './shelf-counter-owner-complete.sql';
+import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
+const initialize = shelfMaintenanceQuery(initializeQuery);
+const read = shelfMaintenanceQuery(readQuery);
+const complete = shelfMaintenanceQuery(completeQuery);
 
 export const NIL_SHELF_GENERATION = '00000000-0000-0000-0000-000000000000';
 export type ShelfNativeOwner = Readonly<{

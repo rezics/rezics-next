@@ -194,14 +194,41 @@ enter DBOS payloads. This protocol adds neither an input cap nor a per-type sour
 
 ## Cost
 
+Decision: compose costs at the existing request/page/recovery/segment owner, preserving phase semantics and replay;
+select Core's existing one-attempt maintenance hook and DBOS's eight attempts without renewing the deadline.
+Use causal additions to the existing native maintenance/page/activity suites, retaining growth and Search receiving.
+There is no finite whole-account rebuild declaration; erasure retains its separate command retry and worker policy.
+
+The closed declarations in [shelf-maintenance-bounds.ts](shelf-maintenance-bounds.ts) retain literal SQL and original
+serialized binds before dispatch. Schema-specific projection shapes account for JSON escaping, UUIDs, bigint decimals,
+timestamps, the 2,048-byte cursor and commitment. Logical results remain separate from examined rows, points,
+statements and bytes. Each EOF probe costs work; a full page needs its subsequent EOF page. Session UPDATE includes
+old/new statistics, insights, current-progress measures, native/fact fences and its transition-table trigger. Entry
+updates include profile/fact/native/title/score effects and activity refreshes. Four pre-grouping counter contributions
+per Entry remain candidates even when discarded. Empty Collection aggregates still write their zero counter.
+
+SQL-only declarations state zero engine requests: these bound native SQL and pinned DBOS status/input enqueue work,
+not a search engine producer. The existing native boundary receives an explicit eight-axis translation. The original
+command frame owns admission; declarations never allocate a new allowance. Core scaffold, Access, phase statements
+and enqueue are disjoint consumers. Reserving the scaffold before Core includes time/connection/transaction controls,
+receipt candidates from the original retained key ring, response serialization, failed terminal controls and rollback.
+Core owns drain and release, exactly once, even after expiry. Ordinary SQL dispatch settles its full declaration on
+failure and never uses returned rowCount to refund examined work.
+
 ### Type source revalidation
 
-- Touches: each independently anchored origin/survivor partition's ownership, indexed identity and redirect points.
-- Bound: fixed rows, statements and result bytes per bounded page, independent of source input length and unrelated
-  revisions; initial accepted input and final exact native publication remain O(input bytes).
-- Growth check: `specs/library-type-metadata-outcomes.test.ts`, “native continuation verifies identity without
-  retransferring staged source text”, requires actual repeated-page typeBytes=0 and same-client metadata. The source
-  adapter and semantic helper own native statement/byte and population measurements; this is no measurement claim.
+Released preparation and identity checks precede parent locks and retain the same absolute five-second page deadline.
+A native size point in the same RR snapshot prices an unbounded full Type/address projection before reading it. It
+changes neither source meaning nor authorization. Initial source bytes and root comparisons use exact native lengths;
+staged continuation stays at 100 edges of 256 bytes. Reservation publication prices whole-value work using the native
+reservation length; retirement measures at most 100 indexed old-generation lengths before deleting them. These scalar
+lengths are cost operands, never source/currentness evidence. Historical null staging bytes still charge their full text. Original and current identities still use the existing
+independent observations, and the same private transaction-bound allocator admission repeats every native check.
+
+Page and segment limits remain 100, command deadline 5,000ms, workflow 4,096 bytes, cursor 2,048 bytes, edge 256 bytes
+and staging 25,600 bytes. Each worker segment retains the original run/epoch/sequence/segment and enqueues its successor;
+recovery enqueues the exact indexed intent before conditional acknowledgement. Publication and retirement remain native
+phase outcomes, never matching counts or arithmetic evidence. See [invocation custody](performance-contract.md#shelf-rebuild-invocation-custody).
 
 ## Purge authority, inventory and honest completion
 
@@ -257,20 +284,14 @@ separately outstanding retention evidence; `sharedEvidence='separate-contract'` 
 
 ## Implementation and executable evidence
 
-Implement each row below in <=400 changed implementation lines / <=8 files; split again when necessary. Depend on
-concrete code/DDL ports, not research reports or other workers' unfinished runtime files. The existing Library WorkModule now installs the native runtime. Allocator and scoped source composition still
-require their concrete owners; source typing does not establish native outcome or cost proof.
+The native runtime owns initialization, request, exact durable page execution, indexed recovery, generation publication
+and old-generation retirement. The allocator/source adapters are installed together at that owner. A copied locator,
+header, digest, plan or TypeScript brand supplies no authority. Purge retains its separate erasure worker and evidence.
 
-| Slice                 | Concrete prerequisites                                                  | Required evidence                                                                |
-| --------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Initialization/intent | account share, amended gate/run DDL, normal guard                       | empty first-reader/writer races; legacy cold recovery; no false-ready probe      |
-| Field backfill pages  | phase/scratch DDL, real source observations, derived allocator guard    | session/history/heads/activity/finish/types restart and unavailable reads        |
-| Counter rebuild       | guarded counters, native receipts, generation DDL                       | all states, old complete reads, exact atomic publication and cleanup             |
-| Purge pages           | Accounts tombstone event binding, inventory indexes, native purge guard | barrier precedence, child/remote bounds, retained artifacts and terminal receipt |
-| Final composition     | preceding concrete modules plus listing prerequisites separately        | full production driver outcomes, no raw-fixture readiness claim                  |
-
-Run `bun test specs/library-shelf-maintenance-contract.test.ts` for the frozen pure rules, root
-`bun scripts/typecheck.ts`, and `bun scripts/stack-lease.ts shelf-maintenance-verifier -- bun specs/support/verify-outcome-suite.ts specs/library-shelf-maintenance-outcomes.test.ts LIBRARY_SHELF_MAINTENANCE_DRIVER 'Library shelf maintenance outcome driver is required'` for no-driver integrity.
-Acquire the verifier's slot outside its short child timeout so queued admission can finish normally.
-The real outcome suite must pass with a production adapter before deployment. Its red verifier establishes only
-executable specification integrity. No passing native outcome, cost measurement or finished purge is claimed here.
+The existing native maintenance suite covers current authorization, interrupted work with exact retry, duplicate and
+out-of-order locators, rollback after a real counter insert, visible publication and acknowledged retirement. Existing
+session/page/activity suites retain full-page EOF and growth assertions. Native operation/currentness/serialization and
+causal continuation results, including the five Search receiving suites, must reach the controller after integration.
+Run changed Kernel tests with `bun run --cwd services/kernel check <files>` and Kernel typecheck with
+`bun run --cwd services/kernel typecheck`. Supported regeneration/runtime receiving belongs to the controller; compiler
+output or authored assertions alone do not establish a native pass.

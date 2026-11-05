@@ -1,8 +1,12 @@
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ProgressActivity, ShelfHeads, ShelfWrite } from './shelf-contract.ts';
-import ensureHead from './shelf-head-ensure.sql';
-import touchHead from './shelf-head-touch.sql';
-import raiseEntry from './shelf-entry-raise.sql';
+import ensureHeadQuery from './shelf-head-ensure.sql';
+import touchHeadQuery from './shelf-head-touch.sql';
+import raiseEntryQuery from './shelf-entry-raise.sql';
+import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
+const ensureHead = shelfMaintenanceQuery(ensureHeadQuery);
+const touchHead = shelfMaintenanceQuery(touchHeadQuery);
+const raiseEntry = shelfMaintenanceQuery(raiseEntryQuery);
 
 function parameters(write: ShelfWrite, subjectId: string) {
   partitionOf(write.route);
