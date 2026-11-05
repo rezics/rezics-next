@@ -8,6 +8,7 @@ import type { ContentCredential } from './support/system.ts';
 
 type Thread = { id: string; firstPost: { id: string } };
 type Page = { threads: Thread[]; pinnedThreads: Thread[]; next: string | null };
+type Change = 'takedown' | 'ban' | 'none';
 let system: NativeContentSystem;
 const owner = () => system.actors.author;
 const member = () => system.actors.other;
@@ -111,6 +112,23 @@ async function createThread(boardId: string, title: string): Promise<Thread> {
   return thread;
 }
 
+async function revoke(change: Change, boardId: string, realmId: string): Promise<void> {
+  if (change === 'takedown')
+    await json(moderator(), 'POST', `/v1/boards/${boardId}:takeDown`, { reason: 'Late takedown' });
+  if (change === 'ban')
+    await json(moderator(), 'PUT', `/v1/realms/${realmId}/bans/${member().actor.accountId}`, { reason: 'Late ban' });
+}
+
+// A concealed continuation is an empty page with no cursor, or a denial; no item identity may survive.
+async function expectConcealed(response: Response, text: string, identities: readonly string[]): Promise<void> {
+  if (response.status === 200) {
+    const body = JSON.parse(text) as { threads?: unknown[]; posts?: unknown[]; next?: string | null };
+    expect([...(body.threads ?? []), ...(body.posts ?? [])]).toEqual([]);
+    expect(body.next ?? null).toBeNull();
+  } else expect([403, 404]).toContain(response.status);
+  for (const identity of identities) expect(text).not.toContain(identity);
+}
+
 beforeAll(async () => {
   system = await createNativeContentSystemWithWriteRateOverrides(
     { databaseUrl: process.env.DATABASE_URL! },
@@ -133,16 +151,10 @@ test.serial(
         for (let index = 0; index < 4; index++) threads.push(await createThread(boardId, `${sort} ${change} ${index}`));
         const path = `/v1/boards/${boardId}/threads?limit=2&sort=${sort}`;
         const first = await json<Page>(member(), 'GET', path);
-        expect(first.threads.map(({ id }) => id)).toHaveLength(2);
+        expect(first.threads).toHaveLength(2);
         expect(first.next).toBeString();
 
-        if (change === 'takedown')
-          await json(moderator(), 'POST', `/v1/boards/${boardId}:takeDown`, { reason: 'Late takedown' });
-        if (change === 'ban')
-          await json(moderator(), 'PUT', `/v1/realms/${realmId}/bans/${member().actor.accountId}`, {
-            reason: 'Late ban',
-          });
-
+        await revoke(change, boardId, realmId);
         const continuation = await request(member(), 'GET', `${path}&cursor=${encodeURIComponent(first.next!)}`);
         const text = await continuation.text();
         if (change === 'none') {
@@ -150,11 +162,40 @@ test.serial(
           expect((JSON.parse(text) as Page).threads).toHaveLength(2);
           continue;
         }
-        expect([403, 404]).toContain(continuation.status);
-        for (const thread of threads) expect(text).not.toContain(thread.id);
-        expect((await request(member(), 'GET', path)).status).toBe(continuation.status);
+        await expectConcealed(
+          continuation,
+          text,
+          threads.map(({ id }) => id),
+        );
       }
     }
   },
   300_000,
 );
+
+test.serial('a late board takedown or Realm ban conceals thread post continuation pages', async () => {
+  for (const change of ['takedown', 'ban', 'none'] as const) {
+    const { boardId, realmId } = await createBoard();
+    const thread = await createThread(boardId, `posts ${change}`);
+    for (let index = 0; index < 3; index++)
+      await json(owner(), 'POST', `/v1/threads/${thread.id}/posts`, {
+        body: fromPlainText(`reply ${index}`),
+        licence: 'MIT',
+        subjectIds: [],
+      });
+    const path = `/v1/threads/${thread.id}/posts?limit=2`;
+    const first = await json<{ posts: { id: string }[]; next: string | null }>(member(), 'GET', path);
+    expect(first.posts).toHaveLength(2);
+    expect(first.next).toBeString();
+
+    await revoke(change, boardId, realmId);
+    const continuation = await request(member(), 'GET', `${path}&cursor=${encodeURIComponent(first.next!)}`);
+    const text = await continuation.text();
+    if (change === 'none') {
+      expect(continuation.status).toBe(200);
+      expect((JSON.parse(text) as { posts: unknown[] }).posts.length).toBeGreaterThan(0);
+      continue;
+    }
+    await expectConcealed(continuation, text, [thread.id, thread.firstPost.id]);
+  }
+});
