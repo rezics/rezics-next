@@ -330,7 +330,9 @@ test('a validated receipt survives a failed read, then yields to the newer curre
   const current: VerificationSnapshot = {
     ...empty,
     verificationRequest: newer,
-    viewerActions: [{ action: 'account:update', operations: ['account.request_verification', 'account.withdraw_verification'] }],
+    viewerActions: [
+      { action: 'account:update', operations: ['account.request_verification', 'account.withdraw_verification'] },
+    ],
   };
   const sent: unknown[] = [];
   let reads = 0;
