@@ -2686,7 +2686,7 @@ new tabs still restart honestly. The consumer adds no other handoff, source read
 
 ## Choose a supplied work synopsis
 
-The About section for Visual Novels (wd:Q689445), anime films/series (schema:Movie, schema:TVSeries) and books (schema:Book) shows only disclosed, best-rank schema:abstract assertions. Document languages stay separate; fallback selects the initial choice without changing interface locale or implying source language, authorship, verification or translation. Person/Character readers stay unchanged.
+The About section for Visual Novels (wd:Q689445), anime films/series (schema:Movie, schema:TVSeries) and books (schema:Book) shows only disclosed best-rank schema:abstract assertions. Document languages stay separate; fallback selects the initial choice without changing interface locale or implying source language, authorship, verification or translation. Person/Character readers stay unchanged.
 
 Keep each selected document bound under statementDocument to Subject, candidate, document ID/digest, exact language and availability. A filled body needs no request; selecting a missing body or retrying makes one readPublicSubjectDocument request whose fresh result repeats the binding. Empty is success; unavailable references, missing bodies and failed reads stay distinct. Short-description fallback stays labeled. Qualifiers/references stay with the assertion, never a page source record; text and evidence share the whole-association spoiler gate.
 
