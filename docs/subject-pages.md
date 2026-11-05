@@ -269,12 +269,20 @@ bounded Relations view.
 
 ## Read a music place, area, event or instrument
 
-The ordinary Subject overview recognizes released `schema:Place`, `schema:AdministrativeArea`, `schema:Event` and
-`schema:MusicInstrument` identities (including their admitted descendants). It names the exact released Type and reads
-the finite forward and inverse relationship streams admitted for that Type. Related event, area, participant and
-instrument destinations retain their native direction, qualifiers, references, partial dates and exact readable
-identity. Hidden summaries do not link; coordinate strings do not become locations. Unsupported Types have a named
-unsupported state while generic Subject facts and correction access remain available.
+Decision: `schema:Place` and `schema:Event` are concrete generic identities; `schema:MusicVenue` and
+`schema:MusicEvent` refine them; `schema:AdministrativeArea` is a Place; and Wikidata `wd:Q34379` identifies a
+musical instrument. `wdt:P1303` qualifies the exact `schema:performer` statement that records instrument use. Shared
+`schema:startDate` and `schema:endDate` live in the core catalogue with source-precision and calendar-preserving time
+values. No Schema.org `MusicInstrument` Type is defined.
+
+The dedicated MusicContext reader binds its result to the current admitted Subject, Type, Context, session and
+definition release. It reads independently disclosed scalar facts from the public Subject and one selected native
+relation page, capped at 20 rows. If the relation component fails after the Subject read succeeds, facts and their
+sources remain visible while the selected relation window is marked unavailable and can be retried at the same
+Context, stream and cursor. A completed empty page remains distinct from unavailable, denied, missing stream and
+preparing. A failed continuation keeps only the previously admitted window for the same current Subject revision;
+the failed cursor is retried against that original reader. Hidden endpoint or qualifier summaries omit their values
+and links together. Coordinate strings remain unsupported evidence.
 
 Decision: related Subjects open in a same-locale new tab; closing it returns keyboard focus to the source relation link.
 
@@ -295,13 +303,12 @@ A `returnTo` cannot point back to another music-context route; the single `via` 
 A disclosed related Subject can open this reader with the same Context only when its current released Type is admitted.
 Other targets are labeled as general Subject visits; if their destination cannot carry the selected Context, the reader
 states that exact target/return is unsupported. Realm-bearing observations do not create target links that imply Realm
-continuity. The current Global correction link stays Global-only. The existing [reader Cost](../apps/web/src/features/catalogue/music-location-reader/README.md#cost)
-continues to bound each current Subject and one selected relation window, with no target hydration or writes. Each
-music-context operation retains the existing admission/release work, one current Subject read and at most one selected
-relation read limited by `MUSIC_CONTEXT_PAGE_CAP` (20 rows). Context adds no native request, row, target hydration or
-mutation; source bytes are the current selected Subject and relation responses under their existing native bounds. The
-serialized current address is capped at 32,768 UTF-8 bytes, and the reader keeps at most eight cursor addresses plus its
-current accepted page in memory.
+continuity. The current Global correction link stays Global-only. Each music-context operation retains one current
+Subject read and at most one selected relation read limited by `MUSIC_CONTEXT_PAGE_CAP` (20 rows). The native relation
+read uses its existing bounded related-summary batch for disclosed endpoints and item qualifiers; the reader adds no
+per-row request, recursive traversal or write. Context adds no native request or row. Source bytes are the current
+Subject and selected relation responses under their native bounds. The serialized current address is capped at 32,768
+UTF-8 bytes, and the reader keeps at most eight cursor addresses plus its current accepted page in memory.
 
 ## Create a catalogue subject
 
