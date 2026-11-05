@@ -65,8 +65,7 @@ export function reviewedPersonMergeInput(value: unknown): ReviewedPersonMerge {
     v.subjects[0] === v.subjects[1] ||
     !v.expectedIdentity.endpoints.every(
       (endpoint, index) => isReviewedPersonEndpoint(endpoint) && endpoint.subject === v.subjects[index],
-    ) ||
-    v.expectedIdentity.endpoints[0].source === v.expectedIdentity.endpoints[1].source
+    )
   )
     throw new TypeError('Invalid reviewed Person merge');
   return {
@@ -86,7 +85,7 @@ export function reviewedPersonMergeInput(value: unknown): ReviewedPersonMerge {
   };
 }
 
-/** Transport seam until emit-client can publish the native 202 merge signatures. */
+/** The released native routes retain their generated request and response types. */
 export function reviewedPersonRequests(client: KernelClient) {
   return {
     read(
@@ -96,18 +95,25 @@ export function reviewedPersonRequests(client: KernelClient) {
     ) {
       return client.subjects({ id }).get({
         ...options,
+        fetch: { ...options.fetch, redirect: 'manual' },
         query: {
           reviewIdentitySource: source.source,
           reviewIdentityExternalId: source.externalId,
           includeViewerActions: true,
         },
-      } as never);
+      });
+    },
+    operation(
+      id: string,
+      options: { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } } = {},
+    ) {
+      return client.subjectIdentityOperations({ id }).get(options);
     },
     merge(
       body: ReviewedPersonMerge,
       options: { headers: Record<string, string> & { 'idempotency-key': string }; fetch?: { signal?: AbortSignal } },
     ) {
-      return client.subjects.$merge.post(body as never, options);
+      return client.subjects.$merge.post(body, options);
     },
   };
 }

@@ -12,6 +12,7 @@ import {
   searchProviderContextsAction,
   resolveProviderContextAction,
   compareProviderPersonsAction,
+  readPersonPublicationAction,
   mergeProviderPersonsAction,
 } from './provider-queue-actions';
 import { ProviderQueue } from './provider-queue-view';
@@ -132,6 +133,7 @@ export function ProviderQueueJourney({
           resolve: (id) => admitted(() => resolveProviderContextAction({ data: { id }, headers })),
         };
     const persons: PersonReviewTransport = installed?.persons ?? {
+      publication: (data) => admitted(() => readPersonPublicationAction({ data, headers })),
       compare: (data) => admitted(() => compareProviderPersonsAction({ data, headers })),
       merge: (data) => admitted(() => mergeProviderPersonsAction({ data, headers })),
     };
