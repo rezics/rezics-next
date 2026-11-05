@@ -47,13 +47,7 @@ function InspectionReader({ failure = false }: { failure?: boolean }) {
           Inspect the illustration and return to the same prepared post. The reader retains its existing retry control
           if the admitted derivative is unavailable.
         </p>
-        <ThreadPostReadingBody
-          post={visit.post}
-          documentMedia={visit.documentMedia}
-          mentions={null}
-          pageIndex={0}
-          locale={locale}
-        />
+        <ThreadPostReadingBody post={visit.post} documentMedia={visit.documentMedia} mentions={{}} locale={locale} />
       </main>
     </PatternStory>
   );

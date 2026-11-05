@@ -49,7 +49,7 @@ const page: ThreadReadingPage = {
   },
   subjects: [],
   provenanceSubjects: [],
-  mentions: null,
+  mentions: {},
   verification: { sitekey: '', scriptUrl: '' },
   now: first.createdAt,
 };

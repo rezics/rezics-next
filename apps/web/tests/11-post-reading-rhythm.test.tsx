@@ -233,12 +233,7 @@ test('1, 10 and 100 admitted blocks add linear nodes and no transport, retaining
     const post = { ...supplied.post, body };
     expect(
       renderToStaticMarkup(
-        <ThreadPostReadingBody
-          post={post}
-          documentMedia={supplied.page.documentMedia}
-          mentions={null}
-          pageIndex={0}
-        />,
+        <ThreadPostReadingBody post={post} documentMedia={supplied.page.documentMedia} mentions={{}} />,
       ),
     ).toContain(`Block ${blocks}`);
   }

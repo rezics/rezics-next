@@ -29,8 +29,7 @@ function WideDocumentReader({ retirement = false }: { retirement?: boolean }) {
         <ThreadPostReadingBody
           post={prepared.post}
           documentMedia={prepared.page.documentMedia}
-          mentions={null}
-          pageIndex={0}
+          mentions={{}}
           readerIdentity={readerKey}
           locale="en"
         />

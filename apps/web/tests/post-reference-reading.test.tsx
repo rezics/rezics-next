@@ -175,8 +175,7 @@ async function mountPublishedReader(body: DocumentSnapshot) {
         </button>
         <ThreadPostReadingBody
           post={{ ...initial, body }}
-          mentions={null}
-          pageIndex={0}
+          mentions={{}}
           readerIdentity={visit}
           isReaderCurrent={() => true}
         />

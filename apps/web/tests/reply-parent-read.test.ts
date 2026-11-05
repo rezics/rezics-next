@@ -117,7 +117,7 @@ test('Default thread reading identifies a currently disclosed parent and explici
       authors: { [author.id]: author },
       subjects: [],
       provenanceSubjects: [],
-      mentions: null,
+      mentions: {},
       verification: { sitekey: '', scriptUrl: '' },
       now: parent.createdAt,
     };

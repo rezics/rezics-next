@@ -39,7 +39,7 @@ function currentPage(post: ThreadPost): ThreadReadingPage {
     posts: { posts: [post], next: null, reactionsAsOf: null },
     authors: null,
     viewerId: owned.thread.authorId,
-    mentions: null,
+    mentions: {},
     subjects: [],
     provenanceSubjects: [],
     verification: { sitekey: '', scriptUrl: '' },
@@ -64,7 +64,7 @@ async function controls(refresh: () => Promise<ThreadReadingPage | undefined>) {
   const region = createElement(ThreadReadingPost, {
     post: original,
     authors: null,
-    mentions: null,
+    mentions: {},
     now: '2026-10-24T00:00:00.000Z',
     viewerId: owned.thread.authorId,
     personalReady: true,

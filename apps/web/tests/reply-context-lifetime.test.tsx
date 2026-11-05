@@ -137,7 +137,7 @@ function page(): ThreadReadingPage {
     authors: { [first.authorId]: author },
     subjects: [],
     provenanceSubjects: [],
-    mentions: null,
+    mentions: {},
     verification: { sitekey: '', scriptUrl: '' },
     now: first.createdAt,
   };

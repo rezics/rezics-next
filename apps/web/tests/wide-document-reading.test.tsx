@@ -178,9 +178,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
 
   try {
     await act(async () =>
-      root.render(
-        <ThreadPostReadingBody post={post} mentions={null} pageIndex={0} locale="en" readerIdentity="viewer-a" />,
-      ),
+      root.render(<ThreadPostReadingBody post={post} mentions={{}} locale="en" readerIdentity="viewer-a" />),
     );
 
     const codeRegion = host.querySelector<HTMLElement>('pre.wide-document-code-content');
@@ -255,15 +253,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
       'replacement revision',
     );
     await act(async () =>
-      root.render(
-        <ThreadPostReadingBody
-          post={replacement}
-          mentions={null}
-          pageIndex={0}
-          locale="en"
-          readerIdentity="viewer-b"
-        />,
-      ),
+      root.render(<ThreadPostReadingBody post={replacement} mentions={{}} locale="en" readerIdentity="viewer-b" />),
     );
     expect(window.document.body.querySelector('[role="dialog"]')).toBeNull();
     expect(host.textContent).not.toContain(m.wide_document_code_copied());
@@ -275,17 +265,13 @@ test('published reader preserves exact code, table semantics, clipboard recovery
     expect(host.textContent).not.toContain(m.wide_document_code_copied());
 
     const oversized = withCode(replacement, 'x'.repeat(MAX_WIDE_CODE_BYTES + 1));
-    await act(async () =>
-      root.render(<ThreadPostReadingBody post={oversized} mentions={null} pageIndex={0} locale="en" />),
-    );
+    await act(async () => root.render(<ThreadPostReadingBody post={oversized} mentions={{}} locale="en" />));
     expect(button(host, m.wide_document_code_copy())?.disabled).toBe(true);
     expect(host.textContent).toContain(m.wide_document_code_too_large());
     expect(host.querySelector('pre.wide-document-code-content')?.textContent).toHaveLength(MAX_WIDE_CODE_BYTES + 1);
 
     const unavailable = { ...oversized, availability: 'unavailable' } as unknown as ThreadPost;
-    await act(async () =>
-      root.render(<ThreadPostReadingBody post={unavailable} mentions={null} pageIndex={0} locale="en" />),
-    );
+    await act(async () => root.render(<ThreadPostReadingBody post={unavailable} mentions={{}} locale="en" />));
     expect(button(host, m.wide_document_code_copy())).toBeNull();
     expect(button(host, m.wide_document_code_inspect())).toBeNull();
     expect(network).not.toHaveBeenCalled();
