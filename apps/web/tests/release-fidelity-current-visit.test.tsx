@@ -182,6 +182,7 @@ test('selected Context release visit keeps exact duplicate occurrence, date, evi
     const back = destination.searchParams.get('via')!;
     expect(subjectVisitReturn(back, 'en')).toBe(back);
     await visit.click(link);
+    const oldSession = data.calls.findLast((call) => call.session)?.session;
     data.calls.length = 0;
     await act(async () => {
       visit.window.dispatchEvent(new visit.window.Event('popstate'));
@@ -191,7 +192,8 @@ test('selected Context release visit keeps exact duplicate occurrence, date, evi
     );
     expect(data.calls.filter((call) => call.path.includes('/subjects/'))).toHaveLength(3);
     expect(data.calls.some((call) => call.cursor === 'later')).toBe(true);
-    expect(data.calls.every((call) => call.session === null)).toBe(true);
+    expect(data.calls.find((call) => call.path.endsWith(source))?.session).toBeNull();
+    expect(data.calls.every((call) => !oldSession || call.session !== oldSession)).toBe(true);
     expect(visit.host.querySelectorAll('[aria-current="location"]')).toHaveLength(1);
     data.remove();
     data.calls.length = 0;
