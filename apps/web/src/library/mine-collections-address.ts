@@ -1,3 +1,5 @@
+export const mineCollectionsCursorLimit = 4096;
+
 /** Bounded text only: never render arbitrary search objects or turn them into a list selector. */
 export type MineCollectionsAddressError = { cursor?: string; layout?: string };
 export type MineCollectionsSearch = {
@@ -26,14 +28,14 @@ export function admitMineCollectionsAddress(input: unknown): MineCollectionsSear
   if (input !== undefined && (!input || typeof input !== 'object')) errors.cursor = describe(input);
   if (
     source.cursor !== undefined &&
-    (typeof source.cursor !== 'string' || source.cursor.length === 0 || source.cursor.length > 4096)
+    (typeof source.cursor !== 'string' || source.cursor.length === 0 || source.cursor.length > mineCollectionsCursorLimit)
   )
     errors.cursor =
       typeof source.cursor === 'string' && source.cursor.length === 0 ? 'empty string' : describe(source.cursor);
   if (source.layout !== undefined && source.layout !== 'rows' && source.layout !== 'previews')
     errors.layout = describe(source.layout);
   return {
-    ...(typeof source.cursor === 'string' && source.cursor.length > 0 && source.cursor.length <= 4096
+    ...(typeof source.cursor === 'string' && source.cursor.length > 0 && source.cursor.length <= mineCollectionsCursorLimit
       ? { cursor: source.cursor }
       : {}),
     layout: source.layout === 'previews' ? 'previews' : 'rows',

@@ -29,7 +29,7 @@ Collection; it does not delete Library facts. Unknown commands keep their origin
 operands for retry. Reading current metadata is an explicit recovery that retires that retry. Session, Collection,
 reader and locale replacement retire the private editor state and pending response callbacks.
 
-Decision: row navigation carries a validated same-locale cursor/layout return address so confirmed deletion returns to the exact bounded Library page.
+Decision: row navigation and confirmed deletion retain the exact same-locale directory cursor and rows/previews layout. Delete returns reuse directory admission of up to 4096 logical cursor characters; their finite encoded envelope allows nine characters per UTF-16 unit plus the origin, path and fixed operands.
 
 Decision: manager UI callbacks are bound to their originating controller, preserving its draft, ports, command recovery and retirement.
 
