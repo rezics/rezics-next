@@ -46,6 +46,7 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
   let source = 0;
   let locale = 'en';
   let href = '/en/subjects/one/reviews?cursor=same&node=reviews';
+  let currentHref = '/en/subjects/one/work';
   let origin!: ReturnType<typeof useSubjectCommunityReading>;
   const realm = '01a1a000-0000-7000-8000-000000000096';
   const nativeThread = (place = GLOBAL) => {
@@ -136,6 +137,7 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
               subject={communitySubject}
               locale={locale}
               href={href}
+              currentHref={currentHref}
               paged
               node="reviews"
             />
@@ -191,6 +193,9 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
       expect(late.isCurrent()).toBe(false);
     }
     for (const replace of [
+      () => {
+        currentHref += '?context=changed';
+      },
       () => {
         locale = 'fr';
       },

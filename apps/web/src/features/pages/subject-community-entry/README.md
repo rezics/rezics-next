@@ -32,3 +32,8 @@ Decision: consume only the showcase's supplied native Board/work association thr
 
 Decision: preserve the complete originating Subject region URL, including its cursor and Realm/node context,
 as the return target through admitted Board entry and sign-in.
+
+Creation acknowledgement carries that original region inside the existing thread `boardReturn` address.
+The thread reader offers a direct return to the region while its Board reading remains current; redirects,
+replies and pagination retain the same address. Changing the originating URL retires the mounted community
+reading until a new source observation arrives, even when its full-list destination stays the same.

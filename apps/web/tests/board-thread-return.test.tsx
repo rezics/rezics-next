@@ -200,6 +200,7 @@ test('actual mounted Board, duplicate row, reply, sign-in and canonical routes c
     expect(rows[1]!.textContent).not.toContain('reader-2');
     await visit.navigate(destination.pathname + destination.search + '#reply');
     expect(visit.link(m.board_reading_return())?.getAttribute('href')).toBe(original);
+    expect(visit.host.querySelector('[data-slot="thread-subject-return"]')?.getAttribute('href')).toBe(subjectReturn);
     expect(
       visit.host.querySelector('nav[aria-label="' + m.board_context_label() + '"] a:last-child')?.getAttribute('href'),
     ).toBe(original);
@@ -263,6 +264,7 @@ test('actual mounted Board, duplicate row, reply, sign-in and canonical routes c
     expect(visit.router.state.location.search.post).toBe(parentId);
     expect(visit.link(m.board_reading_return())?.getAttribute('href')).toBe(original);
     expect(visit.host.querySelector('form')).toBeNull();
+    expect(visit.host.querySelector('[data-slot="thread-subject-return"]')?.getAttribute('href')).toBe(subjectReturn);
     const next = visit.link(m.threads_next_page());
     expect(new URL(next.href).searchParams.get('boardReturn')).toBe(original);
     await act(async () => {
@@ -270,6 +272,7 @@ test('actual mounted Board, duplicate row, reply, sign-in and canonical routes c
         visit.client.setQueryData(query.queryKey, query.state.data);
     });
     expect(visit.link(m.board_reading_return())).toBeUndefined();
+    expect(visit.host.querySelector('[data-slot="thread-subject-return"]')).toBeNull();
     expect(visit.host.textContent).toContain(m.board_reading_return_unavailable());
     const retiredRestart = new URL(visit.link(m.board_reading_restart()).href);
     expect(retiredRestart.searchParams.has('cursor')).toBe(false);
