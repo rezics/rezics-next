@@ -9,6 +9,8 @@ The browser keeps this activity alongside the admitted page, independently of lo
 Zero and null remain native facts: zero is rendered and a null timestamp adds no time label. Continuations and selected
 post visits use that same native page. Retry and accepted replies refresh the original page request through the existing
 reader owner; the composer keeps uncertain command intent. Page/session retirement hides the whole observation.
+Decision: activity retry admits one in-flight refresh synchronously, including two activations before React commits
+the disabled button. It releases that slot after settlement; only the originating reader may update its pending UI.
 Activity uses the reader's exact query key, the shared browser observation/cache subscription and a retiring address
 lease. Fetching, invalidation, replacement and session changes retire displayed advice without retiring readable bodies
 or taking over refresh. Equal session replacement and away/back transitions cannot reactivate a retired observation.
