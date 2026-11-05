@@ -606,11 +606,9 @@ const accessPreparation = sumBounds(
     emptySeeks: 1,
   }),
   sumBounds(
-    ...[
-      'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-      'COMMIT',
-      'ROLLBACK',
-    ].map((text) => dimensions({ statements: 1, bytes: sql(text) })),
+    ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((text) =>
+      dimensions({ statements: 1, bytes: sql(text) }),
+    ),
     dimensions({ nativePoints: 2, emptySeeks: 2 }),
   ),
 );
@@ -670,12 +668,12 @@ const placementFence = query(COLLECTION_ORDER_SQL.editFence, bindParent, 4 * big
   nativePoints: 2,
   emptySeeks: 2,
 });
-const memberReadCost = query(
-  memberRead.sql,
-  routeBytes + 2 * uuidBytes,
-  memberResultBytes,
-  { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
-);
+const memberReadCost = query(memberRead.sql, routeBytes + 2 * uuidBytes, memberResultBytes, {
+  candidateKeys: 1,
+  nativeRows: 1,
+  nativePoints: 1,
+  emptySeeks: 1,
+});
 const deferredConstraint = query(collectionDefer.sql, 0, 0, {});
 const generatedWindowKeys = dimensions({ bytes: GENERATED_ORDINAL_KEY_LENGTH * (ORDER_WINDOW_SIZE + 1) });
 const structurePosition = sumBounds(
@@ -737,19 +735,16 @@ const insertMemberCost = query(
   memberResultBytes,
   { nativeRows: 3, nativePoints: 2, witnessKeys: 1 },
 );
-const moveMemberCost = query(
-  memberMove.sql,
-  routeBytes + 2 * uuidBytes + ordinalBytes + uuidBytes,
-  memberResultBytes,
-  { nativeRows: 1, nativePoints: 1, witnessKeys: 1 },
-);
+const moveMemberCost = query(memberMove.sql, routeBytes + 2 * uuidBytes + ordinalBytes + uuidBytes, memberResultBytes, {
+  nativeRows: 1,
+  nativePoints: 1,
+  witnessKeys: 1,
+});
 const moveSetting = query(COLLECTION_ORDER_SQL.moveMemberSetting, uuidBytes, uuidBytes, { nativeRows: 0 });
-const touchStructural = query(
-  COLLECTION_ORDER_SQL.touchCollection,
-  29 + uuidBytes + bindParent + 1,
-  integerBytes,
-  { nativeRows: 1, nativePoints: 1 },
-);
+const touchStructural = query(COLLECTION_ORDER_SQL.touchCollection, 29 + uuidBytes + bindParent + 1, integerBytes, {
+  nativeRows: 1,
+  nativePoints: 1,
+});
 const respaceBody = (count: number): Bound =>
   query(
     membersRespace.sql,
@@ -849,15 +844,8 @@ const partitionProbe = query(
   }),
   { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
 );
-const actorRecovery = repeatBound(
-  sumBounds(actorTimeMint, partitionProbe),
-  1 + Math.ceil(WORK_STEP_DEADLINE_MS / 25),
-);
-const shelfWrite = sumBounds(
-  sessionShelfWork(65535, uuid, true),
-  shelfCurator,
-  accountShareCost,
-);
+const actorRecovery = repeatBound(sumBounds(actorTimeMint, partitionProbe), 1 + Math.ceil(WORK_STEP_DEADLINE_MS / 25));
+const shelfWrite = sumBounds(sessionShelfWork(65535, uuid, true), shelfCurator, accountShareCost);
 const currentAuthorization = (includeBarrier: boolean): Bound =>
   sumBounds(
     authorizationCollection,
@@ -888,7 +876,11 @@ const actorEnvelope = (
   );
 
 const addPlacementDirect = neighborSeek;
-const addPlacementWindow = sumBounds(neighborSeek, windowSeek(COLLECTION_ORDER_SQL.editLeft), windowSeek(COLLECTION_ORDER_SQL.editRight));
+const addPlacementWindow = sumBounds(
+  neighborSeek,
+  windowSeek(COLLECTION_ORDER_SQL.editLeft),
+  windowSeek(COLLECTION_ORDER_SQL.editRight),
+);
 const addPlacementFailed = sumBounds(addPlacementWindow, placementFence);
 const addInsert = sumBounds(insertMemberCost, memberGuardTriggers, structureAppend);
 const addRespace = (count: number) => sumBounds(deferredConstraint, respaceRewrites(count), generatedWindowKeys);
@@ -930,7 +922,15 @@ const addReplay = sumBounds(
 const movePlacementDirect = sumBounds(memberReadCost, neighborSeek);
 const movePlacementWindow = sumBounds(memberReadCost, addPlacementWindow);
 const movePlacementFailed = sumBounds(memberReadCost, addPlacementFailed);
-const moveWrite = sumBounds(moveSetting, moveMemberCost, moveSetting, memberGuardTriggers, structurePending, structureAppend, touchStructural);
+const moveWrite = sumBounds(
+  moveSetting,
+  moveMemberCost,
+  moveSetting,
+  memberGuardTriggers,
+  structurePending,
+  structureAppend,
+  touchStructural,
+);
 const moveSuccessDirect = sumBounds(
   actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes, memberEventBytes, true),
   movePlacementDirect,
