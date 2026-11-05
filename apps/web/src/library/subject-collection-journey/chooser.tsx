@@ -1,7 +1,8 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { SubjectRef, type SubjectReference } from '../subject-ref';
+import { ReceivedCollectionDetails } from '../subject-collection-choice-reading/details';
 import {
   collectionReadFailure,
   emptyCollectionPage,
@@ -26,6 +27,13 @@ export type ChooserCollectionsRead = {
   collections: ChooserCollectionRow[] | null;
   next: string | null;
   state: 'loaded' | 'expired' | 'closed' | 'unavailable';
+};
+
+type InspectedDestination = {
+  row: ChooserCollectionRow;
+  page: BoundCollectionPage<ChooserCollectionRow>;
+  episode: number;
+  trigger: HTMLButtonElement;
 };
 
 export function CollectionChooserPanel({
@@ -68,25 +76,92 @@ export function CollectionChooserPanel({
   const heading = useRef<HTMLHeadingElement>(null);
   const live = useRef(true);
   const version = useRef(0);
-  const callbacks = useRef({ current, readPage, onSelect });
-  callbacks.current = { current, readPage, onSelect };
+  const callbacks = useRef({ current, readPage, onSelect, hydrated, csrfToken, admitted });
+  callbacks.current = { current, readPage, onSelect, hydrated, csrfToken, admitted };
   const [page, setPage] = useState<BoundCollectionPage<ChooserCollectionRow>>(() =>
     loaded ? replaceCollectionPage(undefined, collections ?? [], next, firstCollectionVisit()) : emptyCollectionPage(),
   );
   const [issue, setIssue] = useState<'expired' | 'closed' | 'unavailable' | null>(problem);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<CapturedChooserTarget | null>(null);
+  const [inspection, setInspection] = useState<InspectedDestination | null>(null);
+  const inspectionRef = useRef(inspection);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const busyRef = useRef(false);
+  const issueRef = useRef(issue);
+  issueRef.current = issue;
+  const received = useRef({ collections, next, loaded, problem });
+
+  // External refresh replaces the received page, independently of the captured add target.
+  // An in-flight explicit read already retires its page and installs its own response below.
+  useLayoutEffect(() => {
+    const previous = received.current;
+    received.current = { collections, next, loaded, problem };
+    if (
+      previous.collections === collections &&
+      previous.next === next &&
+      previous.loaded === loaded &&
+      previous.problem === problem
+    )
+      return;
+    if (busyRef.current) return;
+    version.current++;
+    retireInspection(true);
+    setIssue(problem);
+    setPage((previousPage) =>
+      loaded
+        ? replaceCollectionPage(previousPage, collections ?? [], next, previousPage.visit)
+        : emptyCollectionPage(previousPage.generation + 1),
+    );
+  }, [collections, next, loaded, problem]);
+
   useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
       version.current++;
+      inspectionRef.current = null;
     };
   }, []);
   const retained = (episode: number) => live.current && episode === version.current && callbacks.current.current();
 
+  function retireInspection(focus: boolean) {
+    const previous = inspectionRef.current;
+    inspectionRef.current = null;
+    setInspection(null);
+    if (focus && previous) heading.current?.focus();
+  }
+
+  function rowCurrent(source: BoundCollectionPage<ChooserCollectionRow>, row: ChooserCollectionRow, episode: number) {
+    return (
+      retained(episode) &&
+      !busyRef.current &&
+      !issueRef.current &&
+      pageRef.current === source &&
+      source.rows.includes(row)
+    );
+  }
+
+  function inspect(row: ChooserCollectionRow, trigger: HTMLButtonElement) {
+    if (!callbacks.current.hydrated || !rowCurrent(page, row, version.current)) return;
+    const receivedRow = { row, page, episode: version.current, trigger };
+    inspectionRef.current = receivedRow;
+    setInspection(receivedRow);
+  }
+
+  function closeInspection(receivedRow: InspectedDestination) {
+    if (inspectionRef.current !== receivedRow) return;
+    const restoreTrigger = rowCurrent(receivedRow.page, receivedRow.row, receivedRow.episode);
+    retireInspection(false);
+    if (restoreTrigger) receivedRow.trigger.focus();
+    else heading.current?.focus();
+  }
+
   async function load(visit: SubjectCollectionVisit, focus: boolean) {
     const episode = ++version.current;
+    busyRef.current = true;
+    retireInspection(focus);
     setBusy(true);
     setIssue(null);
     setPage((currentPage) => replaceCollectionPage(currentPage, [], null, visit));
@@ -102,12 +177,23 @@ export function CollectionChooserPanel({
     } catch (error) {
       if (retained(episode)) setIssue(collectionReadFailure(error));
     } finally {
-      if (retained(episode)) setBusy(false);
+      if (retained(episode)) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
-  function choose(row: ChooserCollectionRow) {
-    if (!isCuratedWriteDestination(row) || !csrfToken || !admitted) return;
+  function choose(row: ChooserCollectionRow, source: BoundCollectionPage<ChooserCollectionRow>, episode: number) {
+    const admission = callbacks.current;
+    if (
+      !rowCurrent(source, row, episode) ||
+      !isCuratedWriteDestination(row) ||
+      !admission.hydrated ||
+      !admission.csrfToken ||
+      !admission.admitted
+    )
+      return;
     const target = { id: row.id, title: row.title };
     setSelected(target);
     callbacks.current.onSelect(target);
@@ -115,8 +201,10 @@ export function CollectionChooserPanel({
 
   const destinations = issue ? [] : page.rows.filter(isCuratedWriteDestination);
   const selectedStill = selected;
+  const episode = version.current;
+  const inspected = inspection && rowCurrent(inspection.page, inspection.row, inspection.episode) ? inspection : null;
   return (
-    <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-72">
+    <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-80">
       <h3 ref={heading} tabIndex={-1} className="mb-2 text-sm font-medium">
         {m.library_subject_chooser_heading()}
       </h3>
@@ -178,14 +266,37 @@ export function CollectionChooserPanel({
                     type="button"
                     aria-pressed={selectedStill?.id === collection.id}
                     disabled={!hydrated || !csrfToken || !admitted}
-                    onClick={() => choose(collection)}
+                    onClick={() => choose(collection, page, episode)}
                   >
                     <span className="min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>
                     <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
                   </button>
+                  <button
+                    type="button"
+                    className={`${linkClass} ${controlClass} rounded-md px-2`}
+                    data-collection-inspect
+                    aria-label={m.library_destination_inspect_named({ title: collection.title })}
+                    aria-expanded={inspected?.row === collection}
+                    disabled={!hydrated}
+                    onClick={(event) => inspect(collection, event.currentTarget)}
+                  >
+                    {m.library_destination_inspect()}
+                  </button>
                 </li>
               ))}
             </ul>
+          ) : null}
+          {inspected ? (
+            <ReceivedCollectionDetails
+              row={inspected.row}
+              canChoose={hydrated && !!csrfToken && admitted}
+              onClose={() => closeInspection(inspected)}
+              onChoose={() => {
+                if (inspectionRef.current !== inspected) return;
+                choose(inspected.row, inspected.page, inspected.episode);
+                closeInspection(inspected);
+              }}
+            />
           ) : null}
           {!issue ? (
             <div className="mt-3 flex min-w-0 flex-wrap gap-2">
@@ -228,7 +339,7 @@ export function CollectionChooserPanel({
       ) : null}
       {selectedStill ? (
         <div data-add-collection-review className="mt-4 space-y-2 border-t border-border pt-3">
-          <p className="text-sm [overflow-wrap:anywhere]">
+          <p role="status" className="text-sm [overflow-wrap:anywhere]">
             {m.library_subject_chooser_selected({ title: selectedStill.title })}
           </p>
           <p className="text-sm [overflow-wrap:anywhere]">

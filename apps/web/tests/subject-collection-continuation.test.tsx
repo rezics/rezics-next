@@ -313,7 +313,10 @@ test('a Subject reader continues three public pages, adds a later curated Collec
       provenance: { viewer: 'A', csrfToken: 'csrf-A' },
     }),
   );
-  await click('Owned 412');
+  await act(async () => host.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
+  expect(host.textContent).toContain(m.library_destination_curator_unavailable());
+  expect(members).toHaveLength(0);
+  await click(m.library_destination_choose());
   expect(members).toHaveLength(0);
   await click(m.library_subject_add_confirm());
   expect(members[0]!.data).toEqual({
@@ -385,6 +388,9 @@ test('empty continuing pages, expired cursors, denied add and original retry sta
   expect(original.collectionId).toBe(id(101));
   await act(async () => members[0]!.reject(new Error('lost member')));
   expect(host.textContent).toContain(m.library_subject_unavailable());
+  await act(async () => host.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
+  await click(m.library_destination_choose());
+  expect(members).toHaveLength(1);
   await click(m.library_selection_retry());
   expect(members[1]!.data).toEqual(original);
   await act(async () => members[1]!.resolve({ result: 'dynamic' }));
@@ -409,9 +415,21 @@ test('sign-out and Subject replacement retire private chooser work and keep a pu
     host.querySelector<HTMLButtonElement>('[data-add-to-collection]')!.click();
   });
   await submit('form:has(input[name="slot"])');
+  await act(async () =>
+    pickers[0]!.resolve({
+      state: 'loaded',
+      collections: [owned(1)],
+      next: 'later',
+      provenance: { viewer: 'A', csrfToken: 'csrf-A' },
+    }),
+  );
+  await act(async () => host.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
+  expect(host.querySelector('[data-collection-inspection]')).not.toBeNull();
+  await click(m.library_subject_continuation_next());
+  expect(host.querySelector('[data-collection-inspection]')).toBeNull();
   await click(m.library_subject_continuation_next());
   const pendingPublic = publics[0]!;
-  const pendingChooser = pickers[0]!;
+  const pendingChooser = pickers[1]!;
   await act(async () => client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null }));
   expect(host.querySelector('[data-add-to-collection]')).toBeNull();
   expect(host.textContent).toContain(m.library_subject_public_collections({ count: 50 }));
