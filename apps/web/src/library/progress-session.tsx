@@ -388,8 +388,9 @@ export function CurrentProgressDetail({
           const admittedAddress = { ...address };
           delete admittedAddress.changes;
           delete admittedAddress.units;
-          if (visit.paths.changes.current !== undefined) admittedAddress.changes = visit.paths.changes.current;
-          if (visit.paths.units.current !== undefined) admittedAddress.units = visit.paths.units.current;
+          const paths = visitRef.current!.paths;
+          if (paths.changes.current !== undefined) admittedAddress.changes = paths.changes.current;
+          if (paths.units.current !== undefined) admittedAddress.units = paths.units.current;
           const fresh = await readDetail(admittedAddress, current);
           if (!current() || !matchingDetail(fresh, viewer, admittedAddress))
             return { signedIn: false, idempotencyKey: '' };

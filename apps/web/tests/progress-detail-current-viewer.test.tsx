@@ -591,12 +591,13 @@ test('B detail, record and publication remain independently usable while A detai
     await h.show({ session: viewer('B'), address });
     h.absent();
     await h.resolveRead(detail('B'));
-    await h.fill(m.library_logs_publish_note(), 'B note');
+    await h.publish('B note');
+    const currentPublication = writes[2]!;
     await h.record('0');
-    const currentRecord = writes[2]!;
+    const currentRecord = writes[3]!;
     // A detached callback must not dispatch with B's current credential.
     await settle(oldSubmit);
-    expect(writes).toHaveLength(3);
+    expect(writes).toHaveLength(4);
     await settle(() => oldDetail.work.resolve(detail('A', { ...address, logs: 'A:other-page' })));
     await settle(() => oldRecord.work.resolve(recorded(detail('A'))));
     await settle(() => oldPublication.work.resolve(Response.json({ publishedLog: { id: 'old-public' } })));
@@ -605,12 +606,12 @@ test('B detail, record and publication remain independently usable while A detai
     expect((h.host.querySelector('textarea') as HTMLTextAreaElement).value).toBe('B note');
     expect(h.body.queryAllByRole('alert').map((alert) => alert.textContent)).toEqual([]);
     await h.click(m.library_progress_record());
-    expect(writes).toHaveLength(3);
+    expect(writes).toHaveLength(4);
     await act(async () => {
       await userEvent.setup({ document }).keyboard('{Escape}');
     });
-    await h.click(m.library_logs_publish());
-    const currentPublication = writes[3]!;
+    expect(h.body.getAllByRole('alertdialog')).toHaveLength(1);
+    await h.click(m.library_progress_draft_navigation_stay());
     await settle(() => currentPublication.work.resolve(Response.json({ publishedLog: { id: 'returned-public-B' } })));
     expect(h.navigation).toEqual(['/logs/returned-public-B']);
     await settle(() => currentRecord.work.resolve(Response.json({ code: 'conflict' }, { status: 409 })));
