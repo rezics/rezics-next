@@ -135,7 +135,7 @@ test('malformed execution preserves submitted custody through a later proven ref
   const saved = readPendingAccountOperationStepUp()!;
   expect(saved.submitted).toBe(true);
   expect(page.calls).toHaveLength(2);
-  await flush(() => button(page.host, 'Refresh requirements')!.click());
+  await flush(() => button(page.host, 'Refresh deletion review')!.click());
   await submit(page.host);
   expect(page.calls[2]!.body).toEqual({ operationKey: saved.operationKey, operation: saved.operation });
   await flush(() =>
