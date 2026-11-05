@@ -4,7 +4,6 @@ import { parseConceptPublicVisit } from '../../features/catalogue/source-concept
 import { getLocale } from '../../paraglide/runtime.js';
 import { originatingConceptReturn } from '../../features/pages/source-concept-reading/origin';
 import {
-  conceptVisitWorkIntent,
   conceptVisitPosition,
   encodeConceptHierarchyAddress,
   parseConceptHierarchyAddress,
@@ -12,6 +11,7 @@ import {
 } from '../../features/pages/source-concept-reading/navigation';
 import { m } from '../../paraglide/messages.js';
 import type { ConceptWorksRoutePatch } from '../../features/catalogue/concept-works/view';
+import { conceptWorksRouteFor, patchConceptWorksSearch } from '../../features/pages/source-concept-reading/works-route';
 
 export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
   staticData: { publicCache: false },
@@ -68,7 +68,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       scheme: typeof scheme === 'string' && /^[0-9a-f-]{36}$/i.test(scheme) ? scheme : undefined,
       type: typeof type === 'string' && type.length <= 128 ? type : undefined,
       ...(sort === 'name' || sort === 'rating' ? { sort: sort as 'name' | 'rating' } : {}),
-      includeChildren: children === 'true' || children === true,
+      includeChildren: children === undefined ? undefined : children === 'true' || children === true,
       ...(spoiler === '1' || spoiler === '2'
         ? { spoilerThreshold: spoiler === '1' ? (1 as const) : (2 as const) }
         : {}),
@@ -116,20 +116,19 @@ function ConceptsRoute() {
   const navigate = Route.useNavigate();
   const resume = conceptVisitDescriptor?.subject === id ? conceptVisitDescriptor : undefined;
   const roleValue = role ?? resume?.role;
-  const workIntent = resume ? conceptVisitWorkIntent(resume) : undefined;
-  const propertyValue = property ?? workIntent?.property;
-  const schemeValue = scheme ?? workIntent?.scheme;
-  const typeValue = type ?? workIntent?.type;
-  const sortValue =
-    sort === 'name' || sort === 'rating'
-      ? sort
-      : workIntent?.sort === 'name' || workIntent?.sort === 'rating'
-        ? workIntent.sort
-        : undefined;
-  const childrenValue = includeChildren ?? workIntent?.includeChildren;
-  const spoilerValue = spoilerThreshold ?? workIntent?.spoilerThreshold;
-  const conditionValue = conditionText ?? workIntent?.conditionText;
-  const tagQualifiersValue = tagQualifiersText ?? workIntent?.tagQualifiersText;
+  const {
+    property: propertyValue,
+    scheme: schemeValue,
+    type: typeValue,
+    sort: sortValue,
+    includeChildren: childrenValue,
+    spoilerThreshold: spoilerValue,
+    conditionText: conditionValue,
+    tagQualifiersText: tagQualifiersValue,
+  } = conceptWorksRouteFor(
+    { property, scheme, type, sort, includeChildren, spoilerThreshold, conditionText, tagQualifiersText },
+    resume,
+  );
   const hierarchyMismatch =
     !!hierarchyAddress && (hierarchyAddress.subject !== id || hierarchyAddress.role !== roleValue);
   const effectiveHierarchy =
@@ -137,58 +136,7 @@ function ConceptsRoute() {
   const onWorksChange = (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => {
     void navigate({
       replace: options?.replace === true,
-      search: (previous) => {
-        const next = { ...previous } as Record<string, unknown>;
-        const savedWorks = conceptVisitDescriptor?.subject === id ? conceptVisitDescriptor.works : undefined;
-        const retainedCondition =
-          typeof next.conditionText === 'string' ? next.conditionText : savedWorks?.conditionText;
-        const retainedTagQualifiers =
-          typeof next.tagQualifiersText === 'string' ? next.tagQualifiersText : savedWorks?.tagQualifiersText;
-        const retainedChildren = next.includeChildren === true || savedWorks?.includeChildren === true;
-        const retainedSpoiler =
-          typeof next.spoilerThreshold === 'number' ? next.spoilerThreshold : (savedWorks?.spoilerThreshold ?? 0);
-        const retainedProperty = typeof next.property === 'string' ? next.property : savedWorks?.property;
-        const retainedScheme = typeof next.scheme === 'string' ? next.scheme : savedWorks?.scheme;
-        const retainedType = typeof next.type === 'string' ? next.type : savedWorks?.type;
-        const retainedSort = next.sort === 'name' || next.sort === 'rating' ? next.sort : savedWorks?.sort;
-        for (const key of [
-          'conditionText',
-          'tagQualifiersText',
-          'sort',
-          'includeChildren',
-          'spoilerThreshold',
-          'invalid',
-          'pinUnsupported',
-          'conceptVisitDescriptor',
-          'hierarchyAddress',
-          'invalidConceptVisit',
-          'invalidHierarchy',
-        ])
-          delete next[key];
-        const set = (key: string, value: string | undefined) => {
-          if (value === undefined || value === '') delete next[key];
-          else next[key] = value;
-        };
-        if ('property' in patch) set('property', patch.property);
-        else set('property', retainedProperty);
-        if ('scheme' in patch) set('scheme', patch.scheme);
-        else set('scheme', retainedScheme);
-        if ('type' in patch) set('type', patch.type);
-        else set('type', retainedType);
-        if ('sort' in patch) set('sort', patch.sort);
-        else set('sort', retainedSort);
-        if ('includeChildren' in patch) set('children', patch.includeChildren ? 'true' : undefined);
-        if ('spoilerThreshold' in patch)
-          set('spoiler', patch.spoilerThreshold ? String(patch.spoilerThreshold) : undefined);
-        else if (retainedSpoiler) set('spoiler', String(retainedSpoiler));
-        if (!('includeChildren' in patch) && retainedChildren) set('children', 'true');
-        if ('condition' in patch) set('condition', patch.condition ? JSON.stringify(patch.condition) : undefined);
-        else set('condition', retainedCondition);
-        if ('cursor' in patch) set('cursor', patch.cursor);
-        if ('tagQualifiersText' in patch) set('tagQualifiers', patch.tagQualifiersText);
-        else set('tagQualifiers', retainedTagQualifiers);
-        return next as typeof previous;
-      },
+      search: (previous) => patchConceptWorksSearch(previous, patch, resume),
     });
   };
   const onHierarchyChange = (
