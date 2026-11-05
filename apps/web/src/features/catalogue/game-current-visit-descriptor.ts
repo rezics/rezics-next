@@ -35,7 +35,19 @@ export function gameClassificationReturn(fragment: string): GameClassificationRe
   if (!fragment.startsWith(gameClassificationReturnPrefix) || !bounded(fragment)) return;
   const params = new URLSearchParams(fragment.slice(gameClassificationReturnPrefix.length));
   const keys = [...params.keys()];
-  const allowed = ['source', 'holder', 'context', 'realm', 'type', 'locale', 'release', 'reader', 'property', 'statement', 'focus'];
+  const allowed = [
+    'source',
+    'holder',
+    'context',
+    'realm',
+    'type',
+    'locale',
+    'release',
+    'reader',
+    'property',
+    'statement',
+    'focus',
+  ];
   if (
     keys.length < allowed.length - 1 ||
     keys.length > allowed.length ||

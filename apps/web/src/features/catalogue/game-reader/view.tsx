@@ -146,9 +146,9 @@ export function GameReader(props: Props) {
           current={reading.isCurrent}
           focusHeading={() => heading.current?.focus()}
           focusAssertion={(statement) => {
-            const target = [...(section.current?.querySelectorAll<HTMLElement>('[data-game-current-assertion]') ?? [])].find(
-              (node) => node.dataset.gameCurrentAssertion === statement,
-            );
+            const target = [
+              ...(section.current?.querySelectorAll<HTMLElement>('[data-game-current-assertion]') ?? []),
+            ].find((node) => node.dataset.gameCurrentAssertion === statement);
             if (!target) return false;
             target.focus();
             return true;
@@ -169,7 +169,18 @@ export function GameReader(props: Props) {
 }
 
 type GameReaderReturnResult =
-  | { kind: 'pending' | 'changed' | 'removed' | 'concealed' | 'unavailable' | 'withheld' | 'unknown' | 'no-value' | 'unsupported' }
+  | {
+      kind:
+        | 'pending'
+        | 'changed'
+        | 'removed'
+        | 'concealed'
+        | 'unavailable'
+        | 'withheld'
+        | 'unknown'
+        | 'no-value'
+        | 'unsupported';
+    }
   | { kind: 'current'; statement: GameStatement };
 
 function resolveGameReaderReturn(

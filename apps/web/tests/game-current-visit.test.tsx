@@ -45,10 +45,8 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
   const { GameReader } = await import('../src/features/catalogue/game-reader/view');
   const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
   const { gameVisitSearch, parseGameVisit } = await import('../src/features/catalogue/game-current-visit');
-  const {
-    consumeGameClassificationReturn,
-    gameClassificationReturn,
-  } = await import('../src/features/catalogue/game-current-visit-descriptor');
+  const { consumeGameClassificationReturn, gameClassificationReturn } =
+    await import('../src/features/catalogue/game-current-visit-descriptor');
   const { readGameProfile } = await import('../src/features/catalogue/game-profile');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { candidateContext } = await import('../src/subject/candidates');
@@ -192,7 +190,9 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
         .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     });
     const chosenFirst = within(host).getByRole('heading', { name: m.game_visit_inspection_title() });
-    expect(chosenFirst.parentElement!.parentElement!.getAttribute('data-game-inspected-assertion')).toBe(firstAssertion);
+    expect(chosenFirst.parentElement!.parentElement!.getAttribute('data-game-inspected-assertion')).toBe(
+      firstAssertion,
+    );
     expect(chosenFirst.parentElement!.parentElement!.querySelector(`a[href="${firstEvidence}"]`)).not.toBeNull();
     expect(chosenFirst.parentElement!.parentElement!.querySelector(`a[href="${secondEvidence}"]`)).toBeNull();
     await act(async () => {
@@ -200,7 +200,9 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
         .getByRole('button', { name: m.game_visit_close_inspection() })
         .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     });
-    await waitFor(() => expect(within(host).queryByRole('heading', { name: m.game_visit_inspection_title() })).toBeNull());
+    await waitFor(() =>
+      expect(within(host).queryByRole('heading', { name: m.game_visit_inspection_title() })).toBeNull(),
+    );
     await act(async () => {
       within(host)
         .getByRole('button', { name: m.game_profile_refresh() })
@@ -306,19 +308,15 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
       resolveReader(readerReady);
       await readPage;
     });
-    await waitFor(() =>
-      expect(readerHost.querySelectorAll('[data-game-current-assertion]')).toHaveLength(2),
-    );
-    expect(readerHost.querySelector('[data-current-return-selection]')?.getAttribute('data-game-current-assertion')).toBe(
-      secondAssertion,
-    );
+    await waitFor(() => expect(readerHost.querySelectorAll('[data-game-current-assertion]')).toHaveLength(2));
+    expect(
+      readerHost.querySelector('[data-current-return-selection]')?.getAttribute('data-game-current-assertion'),
+    ).toBe(secondAssertion);
     await waitFor(() =>
       expect(window.document.activeElement?.getAttribute('data-game-current-assertion')).toBe(secondAssertion),
     );
     const changedPublicRead = structuredClone(currentPublicRead);
-    changedPublicRead.subject.statements['schema:genre'] = [
-      changedPublicRead.subject.statements['schema:genre']![0]!,
-    ];
+    changedPublicRead.subject.statements['schema:genre'] = [changedPublicRead.subject.statements['schema:genre']![0]!];
     const changedReady = {
       ...readerReady,
       public: changedPublicRead,
@@ -326,7 +324,10 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
         ...group,
         fields: group.fields.map((field) => ({
           ...field,
-          statements: field.property === 'schema:genre' ? changedPublicRead.subject.statements['schema:genre']! : field.statements,
+          statements:
+            field.property === 'schema:genre'
+              ? changedPublicRead.subject.statements['schema:genre']!
+              : field.statements,
         })),
       })),
     } as GameReaderReady;

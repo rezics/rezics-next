@@ -562,7 +562,15 @@ function hasOnlyTitle(page: SubjectPageData): boolean {
 /** The view's name and a way back to the subject, above the tabs of every view but the overview. */
 export type ViewHeading = { title: string; label: string; href: string };
 
-type GameReturnStatus = 'lost' | 'changed' | 'removed' | 'concealed' | 'unavailable' | 'unknown' | 'no-value' | 'unsupported';
+type GameReturnStatus =
+  | 'lost'
+  | 'changed'
+  | 'removed'
+  | 'concealed'
+  | 'unavailable'
+  | 'unknown'
+  | 'no-value'
+  | 'unsupported';
 type GameReturnCheck = { selection?: GameClassificationReturn; status?: GameReturnStatus };
 
 /** Re-admit a return locator against the current public Subject before mounting the reader intent. */
@@ -580,7 +588,8 @@ function currentGameReturn(
   if (!release || !page.catalogue?.digest) return { status: 'unsupported' };
   if (
     descriptor.locale !== locale ||
-    descriptor.source !== `${new URL(descriptor.source, 'https://rezics.invalid').pathname}${new URL(descriptor.source, 'https://rezics.invalid').search}` ||
+    descriptor.source !==
+      `${new URL(descriptor.source, 'https://rezics.invalid').pathname}${new URL(descriptor.source, 'https://rezics.invalid').search}` ||
     descriptor.context !== (page.context?.id ?? read.subject.context) ||
     descriptor.realm !== realm ||
     descriptor.type !== read.subject.type ||

@@ -518,15 +518,14 @@ function GameCorrection({
       selection: inspection.closed ? null : (incomingSelection ?? null),
       closed: inspection.closed,
     });
-  const selected = inspection.owner === read.public ? inspection.selection : incomingSelection ?? null;
+  const selected = inspection.owner === read.public ? inspection.selection : (incomingSelection ?? null);
   const selectedStatement = selected
     ? subject.statements[selected.property]?.find((statement) => statement.id === selected.statement)
     : undefined;
   const correctionReturn = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!visit?.source) return;
     const link = event.currentTarget;
-    const sameTab =
-      event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+    const sameTab = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
     if (!sameTab) return;
     const focus = event.detail === 0 && link.ownerDocument.activeElement === link ? 'keyboard' : 'none';
     if (!selected) {
@@ -550,18 +549,19 @@ function GameCorrection({
     link.ownerDocument.defaultView?.sessionStorage.setItem(gameClassificationReturnStorageKey, target);
     link.href = target;
   };
-  const selectedReturnHref = selected && visit?.source
-    ? gameClassificationReturnHref({
-        visit,
-        holder: subject.id,
-        type: subject.type,
-        locale,
-        release: read.digest,
-        reader,
-        selection: selected,
-        focus: 'none',
-      }) ?? href
-    : href;
+  const selectedReturnHref =
+    selected && visit?.source
+      ? (gameClassificationReturnHref({
+          visit,
+          holder: subject.id,
+          type: subject.type,
+          locale,
+          release: read.digest,
+          reader,
+          selection: selected,
+          focus: 'none',
+        }) ?? href)
+      : href;
   const groups = gameGroups(read.release, subject.type);
   const fields = useMemo(
     () => relationFields(read.release, subject.type, locale),
@@ -604,7 +604,11 @@ function GameCorrection({
               {visit.realm ? ` · ${m.game_visit_realm({ realm: visit.realm }, o)}` : ''}
             </p>
           )}
-          <a className="inline-flex min-h-11 items-center underline" href={selectedReturnHref} onClick={correctionReturn}>
+          <a
+            className="inline-flex min-h-11 items-center underline"
+            href={selectedReturnHref}
+            onClick={correctionReturn}
+          >
             {m.game_visit_return({}, o)}
           </a>
           <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
@@ -656,7 +660,7 @@ function GameCorrection({
                           <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
                         )}
                         <ol className="space-y-3">
-                          {(subject.statements[property] ?? []).map((statement) => (
+                          {(subject.statements[property] ?? []).map((statement) =>
                             group === 'classification' ? (
                               <li key={statement.id} className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
                                 <Button
@@ -678,8 +682,8 @@ function GameCorrection({
                               </li>
                             ) : (
                               <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
-                            )
-                          ))}
+                            ),
+                          )}
                         </ol>
                       </dd>
                     </div>

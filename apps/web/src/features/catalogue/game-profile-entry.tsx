@@ -16,12 +16,23 @@ export type GameProfileEntryProps = {
 };
 
 /** Both the standalone link and the installed contribution menu use this same source intent. */
-export function gameProfileEntry({ id, type, label = '', locale, context, realm, release, reader, selection }: GameProfileEntryProps) {
+export function gameProfileEntry({
+  id,
+  type,
+  label = '',
+  locale,
+  context,
+  realm,
+  release,
+  reader,
+  selection,
+}: GameProfileEntryProps) {
   const entry = catalogueEntries.gameProfile({ id, type, label, locale });
   if (!entry) return;
-  const href = id && type && context
-    ? gameCorrectionHref({ id, type, label, locale, context, realm, release, reader, selection })
-    : entry.href;
+  const href =
+    id && type && context
+      ? gameCorrectionHref({ id, type, label, locale, context, realm, release, reader, selection })
+      : entry.href;
   return href ? { ...entry, href } : undefined;
 }
 
