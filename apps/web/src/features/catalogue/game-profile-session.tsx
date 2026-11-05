@@ -18,7 +18,12 @@ import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
 import { relationTargetSearch } from './relation-editor-search';
 
-function GameProfileSessionLive({ id, locale, visit, address }: {
+function GameProfileSessionLive({
+  id,
+  locale,
+  visit,
+  address,
+}: {
   id?: string;
   locale: string;
   visit?: GameCurrentVisit | undefined;
@@ -44,9 +49,7 @@ function GameProfileSessionLive({ id, locale, visit, address }: {
         window.location.assign(href);
       }}
       transport={{
-        load: () => loadGameProfile({ data: id && visit
-          ? { id, locale, search: gameVisitSearch(visit) }
-          : id }),
+        load: () => loadGameProfile({ data: id && visit ? { id, locale, search: gameVisitSearch(visit) } : id }),
         create: (data) => createCatalogueGame({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         eligibility,
         read: (data) => readCreatedCatalogueSubject({ data }),

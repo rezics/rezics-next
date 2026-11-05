@@ -13,9 +13,22 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/catalogue/game' });
   const globals = {
-    ...Object.fromEntries(['document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'HTMLSelectElement',
-      'HTMLButtonElement', 'Node', 'Element', 'Document', 'DocumentFragment', 'MutationObserver', 'ResizeObserver']
-      .map((key) => [key, Reflect.get(window, key)])),
+    ...Object.fromEntries(
+      [
+        'document',
+        'navigator',
+        'HTMLElement',
+        'HTMLInputElement',
+        'HTMLSelectElement',
+        'HTMLButtonElement',
+        'Node',
+        'Element',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+        'ResizeObserver',
+      ].map((key) => [key, Reflect.get(window, key)]),
+    ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -43,8 +56,15 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
   const fixture = gameProfileFixture('ready', 'en', true);
   const realm = '00000000-0000-4000-8000-00000000f201';
   const context = '00000000-0000-4000-8000-00000000f202';
-  const props = { id: gameId, type: 'schema:VideoGame', label: 'The Lantern Game', locale: 'en',
-    context: candidateContext, realm, release: fixture.publicRead.subject.release };
+  const props = {
+    id: gameId,
+    type: 'schema:VideoGame',
+    label: 'The Lantern Game',
+    locale: 'en',
+    context: candidateContext,
+    realm,
+    release: fixture.publicRead.subject.release,
+  };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
@@ -66,34 +86,51 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
       gameVisitSearch({ ...parsed.visit, source: parsed.visit.source!.replace('/en/', '/ja/') }),
       gameVisitSearch({ ...parsed.visit, source: parsed.visit.source + '&context=' + context }),
       '?source=' + '😀'.repeat(600),
-    ]) expect(parseGameVisit(search, gameId, 'en').valid).toBe(false);
+    ])
+      expect(parseGameVisit(search, gameId, 'en').valid).toBe(false);
     expect(parseGameVisit('', gameId, 'en')).toEqual({ valid: true, visit: { context: candidateContext } });
 
     let loads = 0;
     let hold: Promise<void> | undefined;
     let releaseRead!: () => void;
     const render = async (visit = parsed.visit, reader = gameId) => {
-      await act(async () => root.render(
-        <QueryClientProvider client={client}>
-          <CandidateReaderBoundary observed={{ state: 'signed-in', subject: reader, csrfToken: reader }}
-            address={gameVisitSearch(visit)}>
-            <GameProfile id={gameId} locale="en" session="signed-in" visit={visit}
-              transport={{ ...fixture.transport, load: async () => {
-                loads++;
-                const result = await readGameProfile(fixture.client, gameId, visit);
-                if (hold) await hold;
-                return result;
-              } }} search={async () => []} onNavigate={() => {}} />
-          </CandidateReaderBoundary>
-        </QueryClientProvider>,
-      ));
+      await act(async () =>
+        root.render(
+          <QueryClientProvider client={client}>
+            <CandidateReaderBoundary
+              observed={{ state: 'signed-in', subject: reader, csrfToken: reader }}
+              address={gameVisitSearch(visit)}
+            >
+              <GameProfile
+                id={gameId}
+                locale="en"
+                session="signed-in"
+                visit={visit}
+                transport={{
+                  ...fixture.transport,
+                  load: async () => {
+                    loads++;
+                    const result = await readGameProfile(fixture.client, gameId, visit);
+                    if (hold) await hold;
+                    return result;
+                  },
+                }}
+                search={async () => []}
+                onNavigate={() => {}}
+              />
+            </CandidateReaderBoundary>
+          </QueryClientProvider>,
+        ),
+      );
     };
     await render();
     await waitFor(() => expect(host.textContent).toContain(m.game_profile_current()));
     // Actual generated native read and existing correction controls, not a URL-only assertion.
     expect(host.textContent).toContain('Example platform');
     expect(host.querySelector('[data-slot="game-classification"]')).not.toBeNull();
-    expect(within(host).getByRole('link', { name: m.game_visit_return() }).getAttribute('href')).toBe(parsed.visit.source!);
+    expect(within(host).getByRole('link', { name: m.game_visit_return() }).getAttribute('href')).toBe(
+      parsed.visit.source!,
+    );
     expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
     const before = loads;
     fixture.publicRead.subject.context = context;
@@ -108,19 +145,24 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     fixture.publicRead.subject.context = candidateContext;
     const wrongType = { ...parsed.visit, type: 'wd:Q689445' };
     expect(await readGameProfile(fixture.client, gameId, wrongType)).toEqual({ ok: false, reason: 'stale' });
-    expect(await readGameProfile(fixture.client, gameId, { ...parsed.visit, release: 'sha256:' + '0'.repeat(64) }))
-      .toEqual({ ok: false, reason: 'stale' });
+    expect(
+      await readGameProfile(fixture.client, gameId, { ...parsed.visit, release: 'sha256:' + '0'.repeat(64) }),
+    ).toEqual({ ok: false, reason: 'stale' });
 
     fixture.publicRead.subject.labels.en = 'X'.repeat(2 * 1024 * 1024);
     expect(await readGameProfile(fixture.client, gameId, parsed.visit)).toEqual({ ok: false, reason: 'unavailable' });
     fixture.publicRead.subject.labels.en = 'The Lantern Game';
-    hold = new Promise((resolve) => { releaseRead = resolve; });
+    hold = new Promise((resolve) => {
+      releaseRead = resolve;
+    });
     await render(parsed.visit);
     const readerB = '00000000-0000-4000-8000-00000000f203';
     await render(parsed.visit, readerB);
     await render(parsed.visit);
     expect(host.textContent).not.toContain('Example platform');
-    await act(async () => { releaseRead(); });
+    await act(async () => {
+      releaseRead();
+    });
     await waitFor(() => expect(host.textContent).toContain(m.game_profile_current()));
     expect(loads).toBeGreaterThan(before + 3);
     expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);

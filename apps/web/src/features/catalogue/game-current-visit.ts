@@ -39,8 +39,7 @@ export function parseGameVisit(search: string, id: string, locale: string): Game
     return { valid: false };
   const params = new URLSearchParams(search);
   const keys = ['context', 'realm', 'source', 'type', 'release'];
-  for (const key of params.keys())
-    if (!keys.includes(key) || params.getAll(key).length !== 1) return { valid: false };
+  for (const key of params.keys()) if (!keys.includes(key) || params.getAll(key).length !== 1) return { valid: false };
   const context = params.get('context') ?? candidateContext;
   const realm = params.get('realm') ?? undefined;
   const source = params.get('source') ?? undefined;
@@ -51,7 +50,8 @@ export function parseGameVisit(search: string, id: string, locale: string): Game
     (realm !== undefined && (!uuid.test(realm) || !params.has('context') || !source)) ||
     (type !== undefined && !propertyId.test(type)) ||
     (release !== undefined && !digest.test(release)) ||
-    (source !== undefined && (!params.has('context') || !type || sourceAddress(source, id, locale, realm) !== source)) ||
+    (source !== undefined &&
+      (!params.has('context') || !type || sourceAddress(source, id, locale, realm) !== source)) ||
     (context !== candidateContext && !realm && source !== undefined)
   )
     return { valid: false };

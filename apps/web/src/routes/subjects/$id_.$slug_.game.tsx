@@ -31,18 +31,19 @@ const canonicalGame = createServerFn({ method: 'GET', strict: false })
     const intent = parseGameVisit(data.search, data.id, data.locale);
     if (!intent.valid) return { id: data.id, intent };
     const { kernelClient } = await import('../../kernel/client');
-    const current = await kernelClient(data.locale).subjects({ id: data.id }).get({
-      query: { context: intent.visit.context },
-      fetch: { redirect: 'manual' },
-    });
+    const current = await kernelClient(data.locale)
+      .subjects({ id: data.id })
+      .get({
+        query: { context: intent.visit.context },
+        fetch: { redirect: 'manual' },
+      });
     if ([403, 404, 308].includes(current.status)) throw notFound();
     if (current.status !== 200 || !current.data) throw new Error('Game reading unavailable');
     if (encodedBytes(current.data) > 2 * 1024 * 1024) throw new Error('Game reading unavailable');
     const subject = current.data.subject;
     if (subject.id !== data.id || subject.context !== intent.visit.context) throw notFound();
     const canonical = subjectHref({ id: subject.id, label: pickText(subject.labels, data.locale).text }, data.locale);
-    if (canonical.params.slug !== data.slug)
-      throw redirect(canonicalRedirect(`${canonical.href}/game`, data.search));
+    if (canonical.params.slug !== data.slug) throw redirect(canonicalRedirect(`${canonical.href}/game`, data.search));
     return { id: subject.id, intent };
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/game')({

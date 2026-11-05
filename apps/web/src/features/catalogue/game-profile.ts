@@ -83,8 +83,7 @@ export async function readGameProfile(client: KernelClient, id?: string, visit?:
         (visit?.release !== undefined && active.data.digest !== visit.release))
     )
       return { ok: false, reason: 'stale' };
-    if (subject?.data && encodedBytes(subject.data) > 2 * 1024 * 1024)
-      return { ok: false, reason: 'unavailable' };
+    if (subject?.data && encodedBytes(subject.data) > 2 * 1024 * 1024) return { ok: false, reason: 'unavailable' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== active.data.digest)
       return { ok: false, reason: 'unavailable' };
