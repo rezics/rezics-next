@@ -611,6 +611,9 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       retired('F');
       await show(session('F'), ['personal_library', 'library_label.list']);
       retired('F');
+      const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.subject_view_retry());
+      expect(retry).toBeDefined();
+      await act(async () => (retry as HTMLButtonElement).click());
       await settleRead(18, response('F', search));
       expect(host.textContent).toContain('Private F');
       expect(host.querySelector('input[name="operation"]')).toBeNull();
