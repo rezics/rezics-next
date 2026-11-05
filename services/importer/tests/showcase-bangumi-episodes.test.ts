@@ -164,7 +164,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
           ? { property: 'schema:url', value: bangumiRecordUrl(key) }
           : { property: 'wdt:P5732', value: key }
         : undefined;
-      return ({
+      return {
         subject: {
           id,
           type: types.get(id) ?? 'schema:Thing',
@@ -176,9 +176,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
               }
             : {},
         },
-      }) as Awaited<
-        ReturnType<CrossMediaPort['readReviewedSubject']>
-      >;
+      } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
   };
 }
