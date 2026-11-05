@@ -271,11 +271,17 @@ test('refresh reads native progress at the exact current cursor and rejects over
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const request = new Request(input, init);
-      const url = new URL(request.url); requests.push(url);
+      const url = new URL(request.url);
+      requests.push(url);
       expect(request.cache).toBe('no-store');
-      return Response.json(url.pathname.endsWith('/outcomes')
-        ? { outcomes: Array.from({ length: oversized ? 21 : 20 }, (_, i) => outcome('applied', String(i))), next: null }
-        : { operation: operation('applying') });
+      return Response.json(
+        url.pathname.endsWith('/outcomes')
+          ? {
+              outcomes: Array.from({ length: oversized ? 21 : 20 }, (_, i) => outcome('applied', String(i))),
+              next: null,
+            }
+          : { operation: operation('applying') },
+      );
     },
   });
   const refreshed = await readBulkOperationFromNative(client, operationId, 'Bearer viewer', 'exact+/=');
@@ -283,6 +289,8 @@ test('refresh reads native progress at the exact current cursor and rejects over
   expect(requests).toHaveLength(2);
   expect(requests[1]?.searchParams.get('cursor')).toBe('exact+/=');
   oversized = true;
-  expect(await readBulkOperationPageFromNative(client, operationId, 'exact+/=', 'Bearer viewer'))
-    .toEqual({ state: 'unavailable', operationId });
+  expect(await readBulkOperationPageFromNative(client, operationId, 'exact+/=', 'Bearer viewer')).toEqual({
+    state: 'unavailable',
+    operationId,
+  });
 });

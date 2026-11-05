@@ -185,8 +185,14 @@ export class BulkOutcomeWindows {
   predecessors: Array<string | undefined> = [];
   target: { cursor: string | undefined; kind: 'next' | 'previous' | 'first' | 'refresh' } | undefined;
   stage(kind: 'next' | 'previous' | 'first' | 'refresh', next?: string | null) {
-    const cursor = kind === 'first' ? undefined : kind === 'previous'
-      ? this.predecessors.at(-1) : kind === 'next' ? next ?? undefined : this.cursor;
+    const cursor =
+      kind === 'first'
+        ? undefined
+        : kind === 'previous'
+          ? this.predecessors.at(-1)
+          : kind === 'next'
+            ? (next ?? undefined)
+            : this.cursor;
     this.target = { cursor, kind };
     return this.target;
   }

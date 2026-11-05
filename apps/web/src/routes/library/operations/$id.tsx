@@ -140,7 +140,11 @@ function RecoveryReader({
     setReadOwner(owner);
   }
 
-  async function readWindow(kind: 'next' | 'previous' | 'first' | 'refresh' | 'retry', id = operationId, cursor?: string) {
+  async function readWindow(
+    kind: 'next' | 'previous' | 'first' | 'refresh' | 'retry',
+    id = operationId,
+    cursor?: string,
+  ) {
     const owner = ownerKey;
     const lease = origin.capture('personal_library');
     if (!addressCurrent(pathname, owner, lease) || id !== operationId || busy.current) return;
@@ -156,17 +160,29 @@ function RecoveryReader({
     setReadFailed(false);
     try {
       // Refresh includes the bounded operation read so progress and deadlines remain native facts.
-      const result = target.cursor === undefined || target.kind === 'refresh'
-        ? await readBulkOperationRecovery({ data: { operationId: id, ...(target.cursor === undefined ? {} : { cursor: target.cursor }) } })
-        : await readBulkOperationRecoveryPage({ data: { operationId: id, cursor: target.cursor } });
+      const result =
+        target.cursor === undefined || target.kind === 'refresh'
+          ? await readBulkOperationRecovery({
+              data: { operationId: id, ...(target.cursor === undefined ? {} : { cursor: target.cursor }) },
+            })
+          : await readBulkOperationRecoveryPage({ data: { operationId: id, cursor: target.cursor } });
       if (!addressCurrent(pathname, owner, lease) || windows.current !== path || path.target !== target) return;
       if (result.state === 'available') {
-        const next = 'operation' in result ? result : previous.state === 'available'
-          ? target.kind === 'next'
-            ? appendBulkOutcomePage({ addressOperationId: requestedId ?? '', authorized: lease(), requestedOperationId: id,
-                requestedCursor: target.cursor!, current: previous, page: result.page })
-            : { ...previous, outcomes: result.page.outcomes, next: result.page.next }
-          : previous;
+        const next =
+          'operation' in result
+            ? result
+            : previous.state === 'available'
+              ? target.kind === 'next'
+                ? appendBulkOutcomePage({
+                    addressOperationId: requestedId ?? '',
+                    authorized: lease(),
+                    requestedOperationId: id,
+                    requestedCursor: target.cursor!,
+                    current: previous,
+                    page: result.page,
+                  })
+                : { ...previous, outcomes: result.page.outcomes, next: result.page.next }
+              : previous;
         path.commit(target);
         updateRead(next, owner);
       } else if (result.state === 'invalid' && target.cursor !== undefined) {
