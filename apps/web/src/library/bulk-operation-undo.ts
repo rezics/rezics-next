@@ -67,8 +67,8 @@ export class BulkOperationUndo {
   private reading = false;
   private sending = false;
   private predecessors: (string | undefined)[] = [];
-  private target?: { cursor: string | undefined; movement: 'current' | 'more' | 'previous' | 'first' };
-  private evidenceCurrent?: () => boolean;
+  private target: { cursor: string | undefined; movement: 'current' | 'more' | 'previous' | 'first' } | undefined;
+  private evidenceCurrent: (() => boolean) | undefined;
 
   /** Coordinates retire with read authority; captured commands retain their separate lifetime. */
   retireEvidence() {
