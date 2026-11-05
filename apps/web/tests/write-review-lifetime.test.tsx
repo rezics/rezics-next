@@ -427,7 +427,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   expect(destinationCalls()).toHaveLength(boardsBeforeMany + 2);
   expect(destinationCalls()[boardsBeforeMany]?.query).not.toContain('cursor=');
   expect(destinationCalls()[boardsBeforeMany + 1]?.query).toContain('cursor=review-cursor');
-  expect(surface.host.querySelectorAll('li')).toHaveLength(2);
+  expect(surface.host.querySelectorAll('section[aria-labelledby="review-board-heading"] li')).toHaveLength(2);
   expect(navigations).toHaveLength(1);
 
   // A same-account-compatible component lifetime still retires on account replacement; the new
