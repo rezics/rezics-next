@@ -397,6 +397,32 @@ test('Native public Source repair step and complete original cut are durably rev
 
     const job = await publicationJob(f, source, query.queried.consumer);
     const publication = { ...request, job };
+    // The genuine native query has dispatched. Lose only the reply after the original
+    // Source association commits, before the completion reader can adopt/settle it.
+    let interrupted = false;
+    const losingReply = new Proxy(f.db.pool, {
+      get(target, key) {
+        if (key === 'query')
+          return async (statement: string, values?: unknown[]) => {
+            const result = await target.query(statement, values);
+            if (!interrupted && statement.includes('SET publication_job=')) {
+              interrupted = true;
+              throw new Error('Lost original Source publication association reply');
+            }
+            return result;
+          };
+        const value = Reflect.get(target, key, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    await expect(
+      readNativePublicFilterPublicationCompletion(
+        createPublicFilterSourceBinding(losingReply, f.config.routeKey, f.config.access),
+        publication,
+        readContext(),
+      ),
+    ).rejects.toThrow('Lost original Source publication association reply');
+    expect(interrupted).toBe(true);
     expect((await readNativePublicFilterPublicationCompletion(binding, publication, readContext())).status).not.toBe(
       'complete',
     );
@@ -542,6 +568,10 @@ test('Native public Source repair step and complete original cut are durably rev
       ).status,
     ).not.toBe('complete');
     expect((await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext())).status).toBe(
+      'complete',
+    );
+    await consumer.recreate();
+    expect((await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext())).status).not.toBe(
       'complete',
     );
   } finally {
