@@ -103,7 +103,8 @@ Threads owns localized stage/recovery copy, while the editor remains the sole in
 
 Decision: Publish-with-attachment acceptance is the native host walk of a Global Work Board post, a second-member
 reply, exact reservation retry, type-refusal replacement, one Stay decision, and an anonymous fresh read. Component
-and fake-kernel composer tests remain focused regressions, not that walk.
+and fake-kernel composer tests remain focused regressions, not that walk. Type-refusal replacement uses a native 415
+on an admitted PNG; the editor chooser never creates a row for a locally unsupported type such as SVG.
 
 This behavior protects against accidental departure. Signed-in, admitted new-thread and reply editors also offer
 optional [browser-only writing recovery](#browser-only-writing-recovery). Unsaved changes and current-visit exact
