@@ -431,7 +431,7 @@ describe('Search Concept conditions', () => {
       });
       expect(parseFilter(applied!)).toEqual(applied);
       expect(submissions).toBe(0);
-      expect(host.ownerDocument.activeElement === controlButton(host, 'Edit')).toBe(true);
+      expect(host.ownerDocument.activeElement === controlButton(host, 'Change Concept tag')).toBe(true);
     });
   });
 
