@@ -253,7 +253,11 @@ function parseAdoptionHead(value: unknown): number | null {
   return positiveInteger(adoption.head, 'candidate adoption head');
 }
 
-function parseListing(value: unknown): { candidates: ImportedCandidate[]; adoptionHead: number | null; next: string | null } {
+function parseListing(value: unknown): {
+  candidates: ImportedCandidate[];
+  adoptionHead: number | null;
+  next: string | null;
+} {
   const response = record(value, 'candidate listing');
   const candidates = array(response.candidates, 'candidate listing rows')
     .map(parseCandidate)
@@ -263,11 +267,7 @@ function parseListing(value: unknown): { candidates: ImportedCandidate[]; adopti
   return { candidates, adoptionHead: parseAdoptionHead(response.adoption), next };
 }
 
-async function candidateListing(
-  origin: URL,
-  subjectId: string,
-  member: Persona = 'member',
-): Promise<CandidateListing> {
+async function candidateListing(origin: URL, subjectId: string, member: Persona = 'member'): Promise<CandidateListing> {
   const candidates: ImportedCandidate[] = [];
   let cursor: string | null = null;
   let adoptionHead: number | null | undefined;
@@ -281,7 +281,8 @@ async function candidateListing(
     const response = await nativeRequest(origin, 'GET', path, member);
     const parsed = parseListing(status(response, 200, 'native candidate listing'));
     if (adoptionHead === undefined) adoptionHead = parsed.adoptionHead;
-    else if (adoptionHead !== parsed.adoptionHead) throw new Error('Global adoption changed while reading candidate pages');
+    else if (adoptionHead !== parsed.adoptionHead)
+      throw new Error('Global adoption changed while reading candidate pages');
     candidates.push(...parsed.candidates);
     if (parsed.next === null) return { candidates, adoptionHead: adoptionHead ?? null };
     cursor = parsed.next;
@@ -296,8 +297,7 @@ function nestedTypeLists(value: unknown, output: RecordValue[] = []): RecordValu
   }
   if (!isRecord(value)) return output;
   if (value.type === 'TypeList' && isRecord(value.props)) output.push(value);
-  if (isRecord(value.props))
-    for (const child of Object.values(value.props)) nestedTypeLists(child, output);
+  if (isRecord(value.props)) for (const child of Object.values(value.props)) nestedTypeLists(child, output);
   return output;
 }
 
@@ -378,7 +378,10 @@ function parseEditionLinks(value: unknown): EditionLink[] {
     expect(bundledRelease.types[type]).toBeDefined();
     expect(descendantOf(type, 'schema:CreativeWork')).toBe(true);
     if (link.assertion !== undefined) {
-      const assertionProperty = record(record(link.assertion, 'edition assertion').property, 'edition assertion property');
+      const assertionProperty = record(
+        record(link.assertion, 'edition assertion').property,
+        'edition assertion property',
+      );
       expect(assertionProperty.id).toBe('schema:exampleOfWork');
     }
     return { subject, property, statement, type };
@@ -401,12 +404,7 @@ async function editionPair(origin: URL, bookId: string): Promise<EditionPair> {
   return { anonymous: anonymousLinks, member: memberLinks };
 }
 
-async function readSubject(
-  origin: URL,
-  subjectId: string,
-  type: string,
-  persona: Persona,
-): Promise<RecordValue> {
+async function readSubject(origin: URL, subjectId: string, type: string, persona: Persona): Promise<RecordValue> {
   const response = await nativeRequest(
     origin,
     'GET',
@@ -423,7 +421,9 @@ async function readSubject(
 function statementsFor(subject: RecordValue, property: string): RecordValue[] {
   const statements = record(subject.statements, 'current Subject statements');
   const value = statements[property];
-  return value === undefined ? [] : array(value, `current ${property} statements`).map((item) => record(item, 'statement'));
+  return value === undefined
+    ? []
+    : array(value, `current ${property} statements`).map((item) => record(item, 'statement'));
 }
 
 function selectedAbstracts(subject: RecordValue): { candidate: string; rank: CandidateRank }[] {
@@ -549,12 +549,7 @@ async function assertPrivateSynopsis(origin: URL, synopsisValue: Synopsis, type:
   for (const persona of ['anonymous', 'member'] as const) {
     const subject = await readSubject(origin, synopsisValue.binding.subjectId, type, persona);
     expect(abstractIds(subject)).not.toContain(synopsisValue.candidate.id);
-    const document = await nativeRequest(
-      origin,
-      'GET',
-      `/v1/documents/${synopsisValue.documentId}`,
-      persona,
-    );
+    const document = await nativeRequest(origin, 'GET', `/v1/documents/${synopsisValue.documentId}`, persona);
     status(document, 404, `${persona} unadopted document read`);
   }
 }
@@ -574,7 +569,10 @@ async function publishSynopsis(origin: URL, synopsisValue: Synopsis, type: strin
         { context: GLOBAL_CONTEXT, expected_head: current.head },
         true,
       );
-      const acceptance = record(status(accepted, 200, 'native candidate acceptance').acceptance, 'candidate acceptance');
+      const acceptance = record(
+        status(accepted, 200, 'native candidate acceptance').acceptance,
+        'candidate acceptance',
+      );
       expect(acceptance).toMatchObject({ context: GLOBAL_CONTEXT, candidate: candidate.id, decision: 'accept' });
     } else if (current.decision !== 'accepted') {
       throw new Error('Unadopted summary candidate is not eligible for acceptance');
@@ -640,7 +638,10 @@ async function assertPublicSynopsis(origin: URL, synopsisValue: Synopsis, type: 
     statementIds.push(abstractIds(subject));
 
     const response = await nativeRequest(origin, 'GET', `/v1/documents/${synopsisValue.documentId}`, persona);
-    const document = record(status(response, 200, `${persona} independent authored document read`).document, 'public document');
+    const document = record(
+      status(response, 200, `${persona} independent authored document read`).document,
+      'public document',
+    );
     expect(document).toMatchObject({
       id: synopsisValue.documentId,
       subjectId: synopsisValue.binding.subjectId,
@@ -734,8 +735,7 @@ describe.skipIf(!retainedStackAvailable)('retained doctor catalogue readback', (
     const unknownTypeBody = status(unknownType, 400, 'unknown released Type refusal');
     expect(unknownTypeBody.code).toBe('invalid_request');
 
-    if (anime.target.candidate.rank === null)
-      await assertPrivateSynopsis(origin, anime.target, 'schema:TVSeries');
+    if (anime.target.candidate.rank === null) await assertPrivateSynopsis(origin, anime.target, 'schema:TVSeries');
     await assertPrivateSynopsis(origin, anime.unadopted, 'schema:TVSeries');
     if (book.target.candidate.rank === null) await assertPrivateSynopsis(origin, book.target, 'schema:Book');
     await assertPrivateSynopsis(origin, book.unadopted, 'schema:Book');
