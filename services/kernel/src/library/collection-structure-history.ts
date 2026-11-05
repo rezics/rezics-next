@@ -81,7 +81,7 @@ type CurrentCollection = Pick<CollectionResourceView, 'id' | 'curatorAccountId'>
 };
 type Current = (actor: Actor, collectionId: string, deadline: number) => Promise<CurrentCollection>;
 type PageRow = Awaited<ReturnType<typeof historyPage.run>>[number];
-type HeadRow = Awaited<ReturnType<typeof historyHead.run>>[number];
+type HeadRow = NonNullable<Awaited<ReturnType<typeof historyHead.run>>>;
 
 type Head = {
   nextChangeNo: string;
@@ -227,19 +227,22 @@ function decodePosition(ring: KeyRing, cursorBinding: CursorBinding, token: stri
   if (!token || token.length > MAX_CURSOR_LENGTH) throw invalidCursor();
   const decoded = decodeCursor(ring, cursorBinding, token);
   if (!decoded.ok) throw invalidCursor();
-  const [changeNo, through, unknown, pruned] = decoded.after;
+  const [changeNo, through, unknownValue, prunedValue] = decoded.after;
   if (
     decoded.epoch !== 1 ||
     decoded.after.length !== 4 ||
     !validSequence(changeNo) ||
     !validSequence(through) ||
-    typeof unknown !== 'boolean' ||
-    typeof pruned !== 'boolean' ||
+    (unknownValue !== '0' && unknownValue !== '1') ||
+    (prunedValue !== '0' && prunedValue !== '1') ||
     BigInt(changeNo) < 1n ||
     BigInt(changeNo) > BigInt(through) + 1n
   )
     throw invalidCursor();
-  return { changeNo, basis: { through, unknown, pruned } };
+  return {
+    changeNo,
+    basis: { through, unknown: unknownValue === '1', pruned: prunedValue === '1' },
+  };
 }
 
 function addressFor(
@@ -252,7 +255,7 @@ function addressFor(
 ): string {
   return encodeCursor(ring, binding(addressOperation, route, collectionId, owner), {
     epoch: 1,
-    after: [changeNo, basis.through, basis.unknown, basis.pruned],
+    after: [changeNo, basis.through, basis.unknown ? '1' : '0', basis.pruned ? '1' : '0'],
   });
 }
 
@@ -365,7 +368,12 @@ export function createCollectionStructureHistory(dependencies: { pool: Pool; tok
       hasMore && last
         ? encodeCursor(tokens, pageBinding, {
             epoch: 1,
-            after: [last.changeNo, result.basis.through, result.basis.unknown, result.basis.pruned],
+            after: [
+              last.changeNo,
+              result.basis.through,
+              result.basis.unknown ? '1' : '0',
+              result.basis.pruned ? '1' : '0',
+            ],
           })
         : null;
     return {

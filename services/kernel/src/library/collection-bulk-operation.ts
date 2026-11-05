@@ -39,7 +39,7 @@ import {
   captureCollectionBulkOccurrencesForSubjects,
   explicitCollectionOccurrenceRemoval,
 } from './collection-bulk-occurrence-admission.ts';
-import type { BulkAdmission, BulkCounters, OperationResult, OutcomeQuery } from './bulk-contract.ts';
+import type { BulkAdmission, BulkCounters, BulkReason, OperationResult, OutcomeQuery, TargetState } from './bulk-contract.ts';
 import {
   captureCollectionBulkAddTargets,
   explicitCollectionBulkAdd,
@@ -207,7 +207,7 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
       [key.route, key.operationId, key.accountId],
     )
   ).rows[0]!;
-  const rows = await tx.query<{ state: string; reason: string | null; n: number }>(
+  const rows = await tx.query<{ state: TargetState; reason: BulkReason | null; n: number }>(
     `SELECT state,reason,count(*)::integer AS n FROM library.bulk_target WHERE route=$1 AND operation_id=$2
       AND account_id=$3 GROUP BY state,reason`,
     [key.route, key.operationId, key.accountId],
@@ -427,9 +427,9 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                       attempt,
                       context.deadline,
                     );
-                return { ...base, input, targets };
+                return { ...base, kind: 'remove_from_collection' as const, input, targets };
               } catch (error) {
-                return { ...base, input, targets: [] as CollectionBulkTarget[], error };
+                return { ...base, kind: 'remove_from_collection' as const, input, targets: [] as CollectionBulkTarget[], error };
               }
             }
             if (executable.action === 'remove_from_library') {
@@ -437,10 +437,11 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
               const input = explicitLibraryRemoval(executable);
               try {
                 const resolved = await resolveLibraryRemovalSubjects(deps, owner, input, attempt.time, context);
-                return { ...base, input, resolved };
+                return { ...base, kind: 'remove_from_library' as const, input, resolved };
               } catch (error) {
                 return {
                   ...base,
+                  kind: 'remove_from_library' as const,
                   input,
                   resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
                   error,
@@ -452,10 +453,11 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
               const input = explicitCollectionBulkAdd(executable);
               try {
                 const resolved = await prepareCollectionBulkAddAdmission(deps, owner, input, attempt.time, context);
-                return { ...base, input, resolved };
+                return { ...base, kind: 'add_to_collection' as const, input, resolved };
               } catch (error) {
                 return {
                   ...base,
+                  kind: 'add_to_collection' as const,
                   input,
                   resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
                   error,
@@ -475,50 +477,59 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                 }
               }
             } catch (error) {
-              return { ...base, input: explicitBulkStatus(executable), resolved, error };
+              return {
+                ...base,
+                kind: 'set_status' as const,
+                input: explicitBulkStatus(executable),
+                resolved,
+                error,
+              };
             }
-            return { ...base, input: explicitBulkStatus(executable), resolved };
+            return { ...base, kind: 'set_status' as const, input: explicitBulkStatus(executable), resolved };
           },
         },
         async (tx, command, prepared) => {
           if ('error' in prepared) throw prepared.error;
-          const targets: CollectionBulkTarget[] =
-            prepared.input.action === 'remove_from_collection'
-              ? prepared.targets
-              : prepared.input.action === 'remove_from_library'
-                ? await captureLibraryRemovalTargets(tx, owner, prepared.resolved)
-                : prepared.input.action === 'add_to_collection'
-                  ? await captureCollectionBulkAddTargets(
-                      tx,
-                      route,
-                      owner.accountId,
-                      prepared.input.collectionId,
-                      prepared.resolved,
-                    )
-                  : await (async () => {
-                      const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
-                        `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
-                      WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,
-                        [route, owner.accountId, prepared.resolved.map((subject) => subject.subjectId)],
-                      );
-                      const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
-                      return prepared.resolved.map((subject): CollectionBulkTarget => {
-                        const entry = entries.get(subject.subjectId);
-                        if (entry && !entry.incarnation) throw new ProblemError('dependency_unavailable');
-                        return {
-                          kind: 'subject',
-                          ...subject,
-                          expected: entry
-                            ? {
-                                kind: 'present',
-                                incarnation: entry.incarnation!,
-                                admissionSequence: '0',
-                                revision: entry.revision,
-                              }
-                            : { kind: 'absent', slotGeneration: '0' },
-                        };
-                      });
-                    })();
+          const targets: CollectionBulkTarget[] = await (async () => {
+            switch (prepared.kind) {
+              case 'remove_from_collection':
+                return prepared.targets;
+              case 'remove_from_library':
+                return captureLibraryRemovalTargets(tx, owner, prepared.resolved);
+              case 'add_to_collection':
+                return captureCollectionBulkAddTargets(
+                  tx,
+                  route,
+                  owner.accountId,
+                  prepared.input.collectionId,
+                  prepared.resolved,
+                );
+              case 'set_status': {
+                const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
+                  `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
+                  WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,
+                  [route, owner.accountId, prepared.resolved.map((subject) => subject.subjectId)],
+                );
+                const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
+                return prepared.resolved.map((subject): CollectionBulkTarget => {
+                  const entry = entries.get(subject.subjectId);
+                  if (entry && !entry.incarnation) throw new ProblemError('dependency_unavailable');
+                  return {
+                    kind: 'subject',
+                    ...subject,
+                    expected: entry
+                      ? {
+                          kind: 'present',
+                          incarnation: entry.incarnation!,
+                          admissionSequence: '0',
+                          revision: entry.revision,
+                        }
+                      : { kind: 'absent', slotGeneration: '0' },
+                  };
+                });
+              }
+            }
+          })();
           const selection: CollectionBulkIntent['selection'] = prepared.selectionSource
             ? {
                 kind: 'query',

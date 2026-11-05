@@ -165,9 +165,10 @@ export async function reconcileCollectionAddTarget(
   dependencies: BulkDependencies,
   command: TargetCommand,
 ): Promise<AttemptResult | null> {
-  if (command.target.kind !== 'subject' || !command.target.collectionId)
+  const target = command.target;
+  if (target.kind !== 'subject' || !target.collectionId)
     return { kind: 'stop', reason: 'evidence_missing' };
-  const collectionRoute = routeOf(command.target.collectionId);
+  const collectionRoute = routeOf(target.collectionId);
   if (collectionRoute === null || collectionRoute === command.source.route) return null;
   return withConnection(dependencies.pool, async (client) => {
     const key = {
@@ -181,10 +182,10 @@ export async function reconcileCollectionAddTarget(
       operation.phase === 'preview' ||
       operation.sourceDigest !== command.sourceDigest ||
       operation.request.action !== 'add_to_collection' ||
-      operation.request.collectionId !== command.target.collectionId
+      operation.request.collectionId !== target.collectionId
     )
       return { kind: 'stop', reason: 'evidence_missing' };
-    const ordinal = Number(command.target.ordinal);
+    const ordinal = Number(target.ordinal);
     if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= 1_000)
       return { kind: 'stop', reason: 'evidence_missing' };
     const [manifest] = await pageCollectionBulkManifest(client as CommandTransaction, {
@@ -194,8 +195,8 @@ export async function reconcileCollectionAddTarget(
     });
     if (
       !manifest ||
-      manifest.ordinal !== command.target.ordinal ||
-      !sameJson(manifest.target, capturedSubject(command.target)) ||
+      manifest.ordinal !== target.ordinal ||
+      !sameJson(manifest.target, capturedSubject(target)) ||
       !sameJson(manifest.receipt, command.receipt)
     )
       return { kind: 'stop', reason: 'evidence_missing' };
