@@ -121,17 +121,20 @@ export const catalogueEntries = {
     work?: string | undefined;
     context?: string | undefined;
     realm?: string | undefined;
-  }): CatalogueEntry => ({
-    group: id ? 'edit' : 'create',
-    label: m.character_title({}, options(locale)),
-    href: id
-      ? `${subject({ id, label: label ?? '', locale })}/character${
-          context || realm
-            ? `?${new URLSearchParams({ ...(context ? { context } : {}), ...(realm ? { realm } : {}) })}`
-            : ''
-        }`
-      : `/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`,
-  }),
+  }): CatalogueEntry => {
+    const search = new URLSearchParams({
+      ...(work ? { work } : {}),
+      ...(context ? { context } : {}),
+      ...(realm ? { realm } : {}),
+    });
+    return {
+      group: id ? 'edit' : 'create',
+      label: m.character_title({}, options(locale)),
+      href: id
+        ? `${subject({ id, label: label ?? '', locale })}/character${search.size ? `?${search}` : ''}`
+        : `/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`,
+    };
+  },
   characterRelationships: ({
     id,
     label,
