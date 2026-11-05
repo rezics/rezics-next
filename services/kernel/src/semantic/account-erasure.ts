@@ -1,9 +1,16 @@
 import { minimizeSemanticRecordPayload } from './retention-payload.ts';
 import type { Pool } from 'pg';
-import { noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
+import { compareAndSetZone, lockZoneHeadByErasureKey } from '../zones/resource-store.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 import { SEMANTIC_EVENTS } from './events.ts';
 import type { Effect } from '../events/effects.ts';
@@ -307,16 +314,28 @@ async function minimizePayload(
     return;
   }
   if (store === 'zone') {
-    await tx.query(
-      `UPDATE zones.zone SET
-      configuration=CASE WHEN visibility='public' AND state='active' AND public_ever THEN configuration ELSE NULL END,
-      mounts=CASE WHEN visibility='public' AND state='active' AND public_ever THEN mounts ELSE '{}'::uuid[] END,
-      owner_id=CASE WHEN owner_id=$4::uuid THEN NULL ELSE owner_id END,
-      state=CASE WHEN visibility='public' AND state='active' AND public_ever THEN state ELSE 'purged' END,
-      withholding='{}',write_fenced=true,deleted_at=NULL,restore_until=NULL
-      WHERE route BETWEEN $1 AND $2 AND erasure_key=$3 AND (transaction_id=$5 OR owner_id=$4)`,
-      [...values, accountId, locator.source_transaction_id],
+    const zone = await lockZoneHeadByErasureKey(tx, partition, key);
+    if (!zone) throw new Error('semantic_zone_erasure_source_missing');
+    if (zone.ownerId !== accountId && zone.transactionId !== locator.source_transaction_id) return;
+    const publicRetained = zone.visibility === 'public' && zone.state === 'active' && zone.publicEver;
+    const command = currentCommand(tx);
+    const changed = await compareAndSetZone(
+      tx,
+      zone,
+      {
+        ...zone,
+        configuration: publicRetained ? zone.configuration : null,
+        mounts: publicRetained ? zone.mounts : [],
+        ownerId: zone.ownerId === accountId ? null : zone.ownerId,
+        state: publicRetained ? zone.state : 'purged',
+        withholding: {},
+        writeFenced: true,
+        deletedAt: null,
+        restoreUntil: null,
+      },
+      { at: authoritativeTimeValue(command.time), transactionId: command.transactionId },
     );
+    if (!changed) throw new Error('semantic_zone_erasure_cas_failed');
     return;
   }
   const where = 'route BETWEEN $1 AND $2 AND erasure_key=$3';

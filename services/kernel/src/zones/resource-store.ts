@@ -39,6 +39,20 @@ export async function lockZoneHead(tx: CommandTransaction, route: number, id: st
   const row = await lock.run(tx, { route, id });
   return row ? model(row) : null;
 }
+/** Resolve and lock the exact Zone named by a captured Semantic erasure key. */
+export async function lockZoneHeadByErasureKey(
+  tx: CommandTransaction,
+  partition: number,
+  erasureKey: string,
+): Promise<ZoneHead | null> {
+  const result = await tx.query<{ route: number; id: string }>(
+    `SELECT route,zone_id::text AS id FROM zones.zone
+     WHERE route BETWEEN $1 AND $2 AND erasure_key=$3 FOR UPDATE`,
+    [partition * 16, partition * 16 + 15, erasureKey],
+  );
+  const row = result.rows[0];
+  return row ? lockZoneHead(tx, row.route, row.id) : null;
+}
 export async function insertZone(
   tx: CommandTransaction,
   input: {

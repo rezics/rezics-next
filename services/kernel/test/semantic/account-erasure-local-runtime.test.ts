@@ -93,6 +93,12 @@ test('indexed native local cleanup resumes committed pages and remains idle pend
     'if-match': JSON.stringify(archived.body.zone.revision),
   });
   expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+  const erasedZoneIds = [zoneId, unlisted.body.zone.id as string, archived.body.zone.id as string];
+  const zoneVersionsBefore = await f.db.admin.query(
+    `SELECT zone_id::text,revision::text,lifecycle_revision::text,transaction_id::text
+     FROM zones.zone WHERE zone_id=ANY($1::uuid[]) ORDER BY zone_id`,
+    [erasedZoneIds],
+  );
 
   await f.grant(GLOBAL_CONTEXT, other, ['zone:create']);
   const survivor = await f.call(other, 'POST', '/v1/zones', createBody());
@@ -355,6 +361,20 @@ test('indexed native local cleanup resumes committed pages and remains idle pend
           )
         ).rows,
       ).toEqual(erasedZone.rows);
+    }
+    const zoneVersionsAfter = await f.db.admin.query(
+      `SELECT zone_id::text,revision::text,lifecycle_revision::text,transaction_id::text
+       FROM zones.zone WHERE zone_id=ANY($1::uuid[]) ORDER BY zone_id`,
+      [erasedZoneIds],
+    );
+    expect(zoneVersionsAfter.rows).toHaveLength(zoneVersionsBefore.rows.length);
+    for (let index = 0; index < zoneVersionsBefore.rows.length; index++) {
+      const before = zoneVersionsBefore.rows[index]!;
+      const after = zoneVersionsAfter.rows[index]!;
+      expect(after.zone_id).toBe(before.zone_id);
+      expect(after.revision).toBe((BigInt(before.revision) + 1n).toString());
+      expect(after.lifecycle_revision).toBe((BigInt(before.lifecycle_revision) + 1n).toString());
+      expect(after.transaction_id).not.toBe(before.transaction_id);
     }
     expect(
       (
