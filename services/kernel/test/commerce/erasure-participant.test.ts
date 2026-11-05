@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
-import { RELEASE_FORMAT, type Release } from '@rezics/definitions';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import {
   advanceCommerceErasure,
@@ -19,13 +18,14 @@ import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas, type Persona } from '../support/personas.ts';
 import { testKernel, type TestKernel } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { createNativeEditionFixture, type NativeContentEdition } from './support/native-edition-fixture.ts';
 import { inspectNativeRetainedOrder, prepareNativeRetainedOrder } from './support/order-retention-fixture.ts';
 import { until } from './support/work-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
@@ -36,30 +36,13 @@ let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let kernel: TestKernel;
 let personas: Awaited<ReturnType<typeof createPersonas>>;
 let worker: ReturnType<typeof Bun.spawn> | undefined;
-let targetSubjectId: string;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let provider: ReturnType<typeof startWorkStripe>;
 let stripe: ReturnType<typeof createStripePort>;
 let commands: ReturnType<typeof createCommerceCommands>;
+let grants: ReturnType<typeof createGrantCommands>;
+let contentEdition: NativeContentEdition;
 const urls = { successUrl: 'https://example.test/success', cancelUrl: 'https://example.test/cancel' };
-// Released native metadata supplies the real subject used by both purchase cases.
-const targetRelease: Release = {
-  format: RELEASE_FORMAT,
-  catalogue: { id: 'https://kernel.test/commerce-erasure', version: '1' },
-  generator: { name: 'commerce-erasure-native-fixture', version: '1' },
-  prefixes: { schema: 'http://schema.org/' },
-  types: {
-    'schema:Book': {
-      iri: 'http://schema.org/Book',
-      labels: { en: 'Book' },
-      mappings: [],
-      bases: [],
-      properties: [],
-      facets: [],
-    },
-  },
-  properties: {},
-};
 
 async function request(persona: Persona, path: string, body?: unknown) {
   return kernel.handle(
@@ -83,6 +66,20 @@ async function accepted(persona: Persona, path: string, body: unknown) {
   const value = await response.json();
   if (!response.ok) throw new Error(`${path}: ${response.status} ${JSON.stringify(value)}`);
   return value;
+}
+async function grant(subject: Persona, resource: { route: number; id: string }, actions: string[]) {
+  const deadline = Date.now() + 30_000;
+  const actor = await kernel.testAccess.authenticate(personas.staff.bearer, { pool, deadline });
+  await grants.create(
+    { pool, actor, deadline },
+    {
+      resource,
+      subject: { kind: 'account', id: subject.accountId },
+      actions,
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    },
+  );
 }
 async function erase(persona: Persona) {
   const barrier = await deletePersona({ version: 1, pool, auth }, persona);
@@ -169,6 +166,7 @@ async function stopCommerceWorker() {
 }
 
 beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
   auth = await nativeFixture(pool);
   client = await createWorkClient(process.env.DATABASE_URL!);
   provider = startWorkStripe();
@@ -186,37 +184,30 @@ beforeAll(async () => {
     pool,
     auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
     writeRate: createWriteRateLimiter({ secret: 'commerce-erasure-native-secret-32-bytes' }),
+    content: { cursorNow: () => Date.now() },
     commerce: { stripe, ...urls, webhookSecrets: [provider.fake.webhookSecret], work: createCommerceWork(client) },
   });
   personas = await createPersonas(kernel, { version: 1, pool, auth });
   for (const group of ['purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
-  const grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
-  const grantor = await kernel.testAccess.authenticate(personas.staff.bearer, { pool, deadline: Date.now() + 30_000 });
-  await grants.create(
-    { pool, actor: grantor, deadline: Date.now() + 30_000 },
-    {
-      resource: PLATFORM_RESOURCE,
-      subject: { kind: 'account', id: personas.staff.accountId },
-      actions: ['offer:create'],
-      valid: '(,)',
-      key: Bun.randomUUIDv7(),
-    },
+  grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
+  const seller = personas.orgOwner;
+  await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
+  await grant(seller, PLATFORM_RESOURCE, ['offer:create', 'board:create', 'subject:create']);
+  const editionPublisher = createNativeEditionFixture(async (method, path, body, headers = {}) =>
+    kernel.handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    ),
   );
-  await grants.create(
-    { pool, actor: grantor, deadline: Date.now() + 30_000 },
-    {
-      resource: { route: 0, id: GLOBAL_CONTEXT },
-      subject: { kind: 'account', id: personas.staff.accountId },
-      actions: ['subject:create'],
-      valid: '(,)',
-      key: Bun.randomUUIDv7(),
-    },
-  );
-  await bootstrapRelease(pool, targetRelease);
-  targetSubjectId = (
-    await accepted(personas.staff, '/v1/subjects', { type: 'schema:Book', labels: { en: 'Commerce erasure book' } })
-  ).subject.id;
+  contentEdition = await editionPublisher.publish({
+    title: 'Native erasure book',
+    subjectTitle: 'Native erasure source',
+    body: 'Exact native content edition bytes',
+  });
   commands = createCommerceCommands({ pool, access: kernel.testAccess });
   // Auth owns the parent's DBOS singleton. The kernel's default executor runs in
   // its own process against this same database and the parent's loopback provider.
@@ -254,15 +245,10 @@ test('the native financial participant minimizes an explicitly retained real ord
 
   // The real seller creates a root and the buyer obtains both a paid and an unsettled order.
   const seller = personas.orgOwner;
-  await accepted(personas.staff, '/v1/grants', {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: seller.accountId },
-    actions: ['offer:create'],
-    valid: '(,)',
-  });
   const offer = (
     await accepted(seller, '/v1/offers', {
-      targetSubjectId,
+      targetSubjectId: contentEdition.targetSubjectId,
+      contentEditionId: contentEdition.contentEditionId,
       title: 'Native erasure book',
       currency: 'usd',
       unitAmountMinor: 1200,
@@ -270,25 +256,10 @@ test('the native financial participant minimizes an explicitly retained real ord
     })
   ).offer as { id: string; revision: number };
   const buyer = personas.alice;
-  const initialOffer = (
-    await accepted(personas.staff, '/v1/offers', {
-      targetSubjectId,
-      title: 'Initial paid book',
-      currency: 'usd',
-      unitAmountMinor: 1200,
-      taxCode: 'txcd_10302000',
-    })
-  ).offer as { id: string; revision: number };
-  await accepted(personas.staff, '/v1/grants', {
-    resource: { route: routeOf(initialOffer.id)!, id: initialOffer.id },
-    subject: { kind: 'account', id: buyer.accountId },
-    actions: ['offer:manage'],
-    valid: '(,)',
-  });
+  await grant(buyer, { route: routeOf(offer.id)!, id: offer.id }, ['order:create']);
   const typedBuyer = await kernel.testAccess.authenticate(buyer.bearer, { pool, deadline: Date.now() + 90_000 });
-  const first = (
-    await accepted(buyer, '/v1/orders', { offerId: initialOffer.id, expectedOfferRevision: initialOffer.revision })
-  ).order as { id: string };
+  const first = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
+    .order as { id: string };
   const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;
   provider.fake.pay(firstNative.checkoutSessionId!);
   await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
@@ -395,11 +366,9 @@ test('the native financial participant minimizes an explicitly retained real ord
       GrantDeniedError,
     );
     await erase(seller);
-    await expect(commands.delistOffer(typedBuyer, initialOffer.id, crypto.randomUUID())).rejects.toThrow(
-      GrantDeniedError,
-    );
+    await expect(commands.delistOffer(typedBuyer, offer.id, crypto.randomUUID())).rejects.toThrow(GrantDeniedError);
     await expect(
-      commands.reviseOffer(typedBuyer, initialOffer.id, { unitAmountMinor: 1300 }, crypto.randomUUID()),
+      commands.reviseOffer(typedBuyer, offer.id, { unitAmountMinor: 1300 }, crypto.randomUUID()),
     ).rejects.toThrow(GrantDeniedError);
     expect((await request(personas.staff, '/v1/orders', { offerId: offer.id })).status).toBe(409);
     expect(await commerceOutcome(buyer.accountId)).toMatchObject({
