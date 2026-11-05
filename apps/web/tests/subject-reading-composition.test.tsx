@@ -5,11 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import { createFakeKernelFetch, createRecordedKernelFetch } from '../src/kernel/fake';
+import { createRecordedKernelFetch } from '../src/kernel/fake';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import { SubjectViewError } from '../src/subject/view-error';
 import { m } from '../src/paraglide/messages.js';
-import fixtures from '../src/kernel/fixtures.json';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { continuationSubject } from '../src/kernel/fake/view-continuation';
 import { subjectTabs } from '../src/features/pages/views';
@@ -84,7 +83,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   for (const key of subjectKeys) recorded.page.reads[key] = { status: 200, body: structuredClone(recordedSubject) };
   const labels = viewTabLabels();
   const messages = subjectPageMessages();
-  const client = createKernelClient('https://kernel.invalid', { fetch: createFakeKernelFetch(fixtures as never) });
+  const client = createKernelClient('https://kernel.invalid', { fetch: createRecordedKernelFetch() });
   let content: ReactNode = (
     <SubjectPage
       page={recorded.page}
