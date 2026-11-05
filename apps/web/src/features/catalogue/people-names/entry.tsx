@@ -36,7 +36,15 @@ export function PeopleNamesEntry({
   }
   const lifetime = useNamesLifetime(
     reading.public,
-    JSON.stringify([subject.id, subject.type, subject.context, subject.release, subject.revision, reading.locale, identity.current]),
+    JSON.stringify([
+      subject.id,
+      subject.type,
+      subject.context,
+      subject.release,
+      subject.revision,
+      reading.locale,
+      identity.current,
+    ]),
   );
   const host = useRef<HTMLDivElement>(null);
   const focused = useRef<EventTarget | null>(null);
@@ -54,11 +62,7 @@ export function PeopleNamesEntry({
         focused.current = event.target;
       }}
     >
-      <PeopleNamesVisit
-        key={lifetime.generation}
-        {...{ names, reading, lifetime, adviceLoader, address }}
-      />
+      <PeopleNamesVisit key={lifetime.generation} {...{ names, reading, lifetime, adviceLoader, address }} />
     </div>
   );
 }
-
