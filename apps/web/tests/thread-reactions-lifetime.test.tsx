@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
-import type { ChangeReactionInput, ReactionFailure } from '../src/threads/reaction-request';
+import type { ChangeReactionInput, ReactionFailure, ReactionSnapshot } from '../src/threads/reaction-request';
 
 // UNRUN: default-composition regressions for the controller's integration gate.
 // Only the changeReaction transport is gated; ThreadReactions, Reactions, their queue and session cache are real.
@@ -52,6 +52,8 @@ mock.module('../src/threads/reactions', () => ({
     calls.push(call);
     return call.promise;
   },
+  // The read transport stays pending: these cases gate only change outcomes.
+  readReaction: () => deferred<ReactionSnapshot | ReactionFailure>().promise,
 }));
 const { createRoot } = await import('react-dom/client');
 const { renderToStaticMarkup } = await import('react-dom/server');
