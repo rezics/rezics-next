@@ -73,11 +73,12 @@ function attemptStorageSkeleton(reference: boolean, submitted: boolean) {
 function attemptStorageStringUnits(reference: boolean) {
   return (
     AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
-    2 * AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH +
     2 * AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
     2 * AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH +
-    AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH +
-    (reference ? AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH : 0)
+    6 *
+      (2 * AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH +
+        AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH +
+        (reference ? AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH : 0))
   );
 }
 const automatedAttemptStorageVariants = [false, true].flatMap((reference) =>
@@ -86,7 +87,8 @@ const automatedAttemptStorageVariants = [false, true].flatMap((reference) =>
   ),
 );
 /** Maximum canonical JSON string length in UTF-16 code units, including all
- * reference/submitted marker combinations and worst-case JSON escaping. */
+ * reference/submitted marker combinations. UUIDs/handles are fixed ASCII;
+ * operation keys, display names and approval references use six-unit escaping. */
 export const AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16 = Math.max(...automatedAttemptStorageVariants);
 export function automatedId(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.exec(value)?.[0] === value;

@@ -2918,14 +2918,13 @@ partial review. Historical rows that exceed the current producer ceiling remain
 stored and produce unavailable advice until their source is corrected.
 
 `@rezics/auth-contract` exports these field ceilings and the fixed
-`AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES` ceiling of 25,649 UTF-8 bytes. Its budget is the maximum
-over all four readiness/action variants of `UTF8(JSON skeleton) + 6 × variable
-UTF-16 units`. The closed skeleton includes all JSON keys, quotes, syntax, fixed
-handle rules, the 36-unit viewer identity, the optional 36-unit selected UUID,
-and `organization` as the longest kind. Review adds the 64-unit handle and
-4,096-unit display name; non-review variants carry `operator: null`. Six bytes
-per code unit covers UTF-8 and worst-case JSON escaping, including lone
-surrogates; null labels are shorter than their allowed non-null maxima.
+`AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES` ceiling of 24,969 UTF-8 bytes. Its
+budget is the maximum over all four readiness/action variants of the ASCII JSON
+skeleton plus 36 ASCII viewer-ID bytes, and for review 36 ASCII selected-ID
+bytes, 64 allowed ASCII handle bytes and six bytes for each of 4,096 display
+name UTF-16 units. Six bytes cover JSON escaping and UTF-8, including lone
+surrogates; UUID and handle rules restrict those fields to ASCII, and null
+labels are shorter than their allowed non-null maxima.
 
 The existing browser/Auth admission remains the case-insensitive generic
 8-4-4-4-12 hexadecimal UUID shape. Kernel `routeOf` is narrower: it requires a
