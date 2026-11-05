@@ -219,14 +219,22 @@ export function CurrentProgressDetail({
     location.state.key,
   ]);
   const [instance] = useState(() => crypto.randomUUID());
-  type Boundary = { signature: string; identity: object; active: boolean; epoch: number; seed?: ProgressDetail };
+  type Boundary = {
+    signature: string;
+    identity: object;
+    location: object;
+    active: boolean;
+    epoch: number;
+    seed?: ProgressDetail;
+  };
   const ref = useRef<Boundary | null>(null);
   const enrolled = useRef(false);
   if (
     !ref.current ||
     !ref.current.active ||
     ref.current.signature !== signature ||
-    ref.current.identity !== snapshot.identity
+    ref.current.identity !== snapshot.identity ||
+    ref.current.location !== location
   ) {
     const previous = ref.current;
     if (previous) previous.active = false;
@@ -238,6 +246,7 @@ export function CurrentProgressDetail({
     ref.current = {
       signature,
       identity: snapshot.identity,
+      location,
       active: true,
       epoch: (previous?.epoch ?? 0) + 1,
       ...(seed ? { seed } : {}),
@@ -375,7 +384,7 @@ export function CurrentProgressDetail({
   const healthyPause = browser && snapshot.healthyPause;
   // Admission consumes actual returned cursors: a stale native cursor may have restarted.
   const focus = useRef<{ visit: Visit; section: HistorySection; element: Element | null } | null>(null);
-  if (detail && originatingCurrent() && visit.admitted !== detail) {
+  if (detail && isCurrent() && (!browser || checkEvidence()) && visit.admitted !== detail) {
     const staged = visit.staged;
     const target = staged && sameAddress(staged.address, address) ? staged.target : undefined;
     if (visit.admitted && !target) visit.paths = historyPaths();
