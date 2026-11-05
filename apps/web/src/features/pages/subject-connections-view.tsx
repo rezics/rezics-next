@@ -20,6 +20,7 @@ import { formatCount } from '../count';
 import { subjectBody, type SubjectPageData } from './subject';
 import {
   connectionGroups,
+  connectionCreditVisit,
   type ConnectionAddress,
   type ConnectionGraph,
   type ConnectionGroup,
@@ -381,6 +382,7 @@ function ConnectionsReading({
             : titles[group];
           const busy = snapshot.pending.has(group);
           const section = current?.section;
+          const currentCreditVisit = current ? connectionCreditVisit(rowValue, current) : undefined;
           const characterCurrent = current?.section.ok ? { ...current, section: current.section } : undefined;
           const listed = section?.ok
             ? current?.stream.direction === 'in'
@@ -554,6 +556,7 @@ function ConnectionsReading({
                           )}
                           value={rowValue}
                           label={titles[group]}
+                          creditVisit={currentCreditVisit}
                         />
                       )}
                     </div>
