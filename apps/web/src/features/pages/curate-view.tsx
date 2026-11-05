@@ -34,7 +34,7 @@ const publicationTransport: CurationEditorTransport = {
     publishCurationOnly({ data: { intent, expectedReader }, headers: csrfHeaders() }),
   activate: (intent, expectedReader) =>
     activateCuration({ data: { ...intent, expectedReader }, headers: csrfHeaders() }),
-  readOpening: (expectedReader) => readCuration({ data: { expectedReader }, headers: csrfHeaders() }),
+  readOpening: (expectedReader, signal) => readCuration({ data: { expectedReader }, signal, headers: csrfHeaders() }),
 };
 
 /** The subject's private curation region shares the existing prepared BFF transport. */

@@ -18,6 +18,7 @@ import {
 } from './curate';
 import { admitCurationReads, type NativeReadResponse } from './curation-read-response';
 import { admitCurationOpening, type CurationAdvice } from './curation-advice';
+import { readNativeCurationOpening, type NativeCurationOpeningClient } from './curation-opening-read';
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
 import {
@@ -154,20 +155,20 @@ async function curationAdmission() {
 export const readCuration = createServerFn({ method: 'POST', strict: false })
   .validator(expectedReaderInput)
   .handler(async ({ data }): Promise<CurationRead> => {
+    const { signal } = getRequest();
     const { authorization, reader } = await curationAdmission();
+    signal.throwIfAborted();
     if (!authorization) return { ok: false, reason: 'signed-out' };
     if (!reader || (data?.expectedReader !== undefined && data.expectedReader !== reader))
       return { ok: false, reason: 'forbidden', admissionChanged: true };
     try {
       // Keep the additive consumer shape local until the complete mounted client declarations can be emitted.
-      const client = kernelClient() as unknown as {
-        presentation: {
-          curation: { get(input: { headers: { authorization: string } }): Promise<NativeReadResponse> };
-        };
-      };
-      const result = await client.presentation.curation.get({ headers: { authorization } });
+      const client = kernelClient() as unknown as NativeCurationOpeningClient<NativeReadResponse>;
+      const result = await readNativeCurationOpening(client, authorization, signal);
+      signal.throwIfAborted();
       return admitCurationOpening(reader, result);
     } catch {
+      signal.throwIfAborted();
       return { ok: false, reason: 'unavailable' };
     }
   });

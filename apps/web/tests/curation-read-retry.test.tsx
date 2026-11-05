@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, StrictMode } from 'react';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import type { CurationRead } from '../src/features/pages/curate-actions';
 import {
@@ -109,9 +109,14 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: reader, csrfToken: null });
   const admission = new CurationReaderAdmission(client, null);
-  const stop = admission.attach();
+  let stop = admission.attach();
   const reads: ReturnType<typeof deferred<CurationRead>>[] = [];
+  const signals: AbortSignal[] = [];
   const transport = {
+    readOpening: (_reader: string, signal: AbortSignal) => {
+      signals.push(signal);
+      return transport.read();
+    },
     read: async () => {
       const work = deferred<CurationRead>();
       reads.push(work);
@@ -120,12 +125,16 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
     publish: async () => ({ ok: false as const, reason: 'unavailable' as const, outcome: 'unknown' as const }),
   };
   const tree = () =>
-    createElement(PresentationViewEditor, {
-      initial: { ok: false, reason: 'unavailable' },
-      locale: 'en',
-      transport,
-      admission,
-    });
+    createElement(
+      StrictMode,
+      null,
+      createElement(PresentationViewEditor, {
+        initial: { ok: false, reason: 'unavailable' },
+        locale: 'en',
+        transport,
+        admission,
+      }),
+    );
   const settle = async (ready: () => boolean, label: string) => {
     for (let attempt = 0; attempt < 80 && !ready(); attempt++)
       await act(async () => {
@@ -139,6 +148,7 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
   try {
     await act(async () => root.render(tree()));
     await settle(() => reads.length === 1, 'fresh admission read');
+    expect(signals[0]!.aborted).toBe(false); // Effect reattachment shares the visit-owned promise.
     await act(async () => reads[0]!.resolve(limited));
     await settle(() => !!button(m.curation_reload()), 'rate-limited retry control');
     expect(host.textContent).toContain(m.curation_limited());
@@ -197,6 +207,25 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
     await act(async () => root.render(tree()));
     expect(reads).toHaveLength(4);
     expect(host.textContent).toContain(m.curation_signed_out());
+
+    await act(async () => client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: reader }));
+    await settle(() => reads.length === 5, 'fresh opening after reader retirement');
+    await act(async () => reads[4]!.resolve({ ok: false, reason: 'unavailable' }));
+    await act(async () => button(m.curation_reload())!.click());
+    await settle(() => reads.length === 6, 'explicit retry is pending');
+    stop();
+    await act(async () => root.render(null));
+    expect(signals[5]!.aborted).toBe(true);
+    stop = admission.attach();
+    await act(async () => root.render(tree()));
+    await settle(() => reads.length === 7, 'fresh return owns a new opening');
+    await act(async () => reads[5]!.resolve({ ...limited, retryAfter: 999 }));
+    expect(host.textContent).not.toContain(m.curation_limited());
+    await act(async () => reads[6]!.resolve(success(profile, 9)));
+    await settle(() => host.textContent?.includes(m.curation_heading()) === true, 'current return can edit');
+    expect(host.textContent).toContain(
+      m.presentation_editor_version_reference({ head: 9, digest: profileDigest(profile) }),
+    );
   } finally {
     stop();
     await act(async () => root.unmount());

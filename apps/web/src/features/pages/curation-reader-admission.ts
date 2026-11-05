@@ -112,6 +112,7 @@ class Lease implements CurationAdmissionLease {
  * equal session data after a health loss can only create a new lease after a fresh curation read.
  */
 export class CurationReaderAdmission {
+  private readonly openingRetirements = new Set<() => void>();
   private listeners = new Set<() => void>();
   private stopCache: (() => void) | null = null;
   private raw: SessionCacheSnapshot;
@@ -168,6 +169,10 @@ export class CurationReaderAdmission {
   };
 
   private publish(session: CurationSessionObservation, lease: Lease | null, incrementVersion = true, notify = true) {
+    if (incrementVersion) {
+      for (const retire of this.openingRetirements) retire();
+      this.openingRetirements.clear();
+    }
     this.snapshot = {
       version: this.snapshot.version + (incrementVersion ? 1 : 0),
       session,
@@ -342,6 +347,16 @@ export class CurationReaderAdmission {
       session.state === 'signed-in' &&
       session.subject === reader
     );
+  }
+
+  /** The installed visit owns work even when an effect subscriber releases its result handler. */
+  ownOpeningRead(reader: string, version: number, retire: () => void): () => void {
+    if (!this.canRead(reader, version)) {
+      retire();
+      return () => {};
+    }
+    this.openingRetirements.add(retire);
+    return () => this.openingRetirements.delete(retire);
   }
 
   /** A successful same-reader BFF read is the only way to establish an owner after retirement. */

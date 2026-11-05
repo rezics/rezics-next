@@ -106,14 +106,15 @@ test('mounted curation retires every stale cache owner and recovers only an expl
   let profileA = profileFor('/private-a', 'A saved source');
   const profileB = profileFor('/private-b', 'B private source');
   let initial = readFor(readerA, profileA, 7);
-  const reads: { reader: string; work: Deferred<CurationRead> }[] = [];
+  const reads: { reader: string; work: Deferred<CurationRead>; signal?: AbortSignal }[] = [];
   const publishes: { reader: string; input: PublishInput; work: Deferred<PublishResult> }[] = [];
   const transport = {
-    read: (reader: string) => {
+    read: (reader: string, signal?: AbortSignal) => {
       const work = deferred<CurationRead>();
-      reads.push({ reader, work });
+      reads.push({ reader, work, signal });
       return work.promise;
     },
+    readOpening: (reader: string, signal: AbortSignal) => transport.read(reader, signal),
     publish: (input: PublishInput, reader: string) => {
       const work = deferred<PublishResult>();
       publishes.push({ reader, input: structuredClone(input), work });
@@ -467,7 +468,20 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     root = createRoot(host as unknown as HTMLElement);
     await show();
     await settle(() => reads.length === 9, 'fresh admission after unmount');
-    await act(async () => reads[8]!.work.resolve(readFor(readerA, profileA, 7)));
+    // Leaving during a delayed mounted opening retires native work, even if it ignores abort.
+    const interrupted = reads[8]!;
+    expect(interrupted.signal?.aborted).toBe(false);
+    await act(async () => {
+      root?.unmount();
+    });
+    expect(interrupted.signal?.aborted).toBe(true);
+    root = createRoot(host as unknown as HTMLElement);
+    await show();
+    await settle(() => reads.length === 10, 'fresh opening after interrupted return');
+    expect(reads[9]!.signal?.aborted).toBe(false);
+    await act(async () => interrupted.work.resolve(readFor(readerA, profileB, 99)));
+    expect(host.textContent).not.toContain('/private-b');
+    await act(async () => reads[9]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'unmounted intent recovered');
     const recoveredUnmountSelect = templateControl(m.curation_template()) as InstanceType<
       typeof window.HTMLSelectElement

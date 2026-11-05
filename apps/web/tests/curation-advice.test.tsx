@@ -115,9 +115,13 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
   const publishKeys: string[] = [];
   let activationCalls = 0;
   let lastReceiptDigest = '';
+  const readSignals: AbortSignal[] = [];
   const transport: CurationEditorTransport = {
     read: async () => ({ ok: true, reader, digest, head: 7, profile }),
-    readOpening: (expectedReader) => refresh(expectedReader),
+    readOpening: (expectedReader, signal) => {
+      readSignals.push(signal);
+      return refresh(expectedReader);
+    },
     publish: async () => ({ ok: false, reason: 'unavailable', outcome: 'unknown' }),
     publishOnly: async (input) => {
       publishKeys.push(input.keys.publish);
@@ -133,15 +137,17 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
       return { ok: true, digest: input.digest, head: input.expectedHead + 1 };
     },
   };
+  let interfaceLocale = 'en';
+  let mountedTransport = transport;
   const show = (value: CurationAdvice, identity = reader) =>
     act(async () =>
       root.render(
         createElement(PresentationViewEditor, {
           key: identity,
           initial: { ...opening(value), reader: identity },
-          locale: 'en',
+          locale: interfaceLocale,
           observedSession: { state: 'signed-in', subject: identity },
-          transport: { ...transport, readOpening: (expectedReader) => refresh(expectedReader) },
+          transport: mountedTransport,
         }),
       ),
     );
@@ -169,6 +175,26 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
     expect(ready()).toBe(true);
   };
   try {
+    const reloadReader = `${reader}-interrupted-reload`;
+    let finishRead!: (value: CurationRead) => void;
+    refresh = () =>
+      new Promise((resolve) => {
+        finishRead = resolve;
+      });
+    await show(advice('allowed', 'allowed'), reloadReader);
+    await act(async () => button(m.curation_reload()).click());
+    const replacedRead = readSignals.at(-1)!;
+    expect(replacedRead.aborted).toBe(false);
+    mountedTransport = { ...transport };
+    await show(advice('allowed', 'allowed'), reloadReader);
+    expect(replacedRead.aborted).toBe(true);
+    await act(async () => finishRead({ ok: false, reason: 'rate-limited', retryAfter: 999 }));
+    expect(host.textContent).not.toContain(m.curation_limited());
+    refresh = async (expectedReader) => ({ ...opening(advice('allowed', 'allowed')), reader: expectedReader });
+    await act(async () => button(m.curation_reload()).click());
+    await settle(() => host.textContent?.includes(m.curation_reloaded()) === true);
+    await act(async () => root.render(null));
+
     for (const [publish, activate] of [
       ['denied', 'denied'],
       ['allowed', 'denied'],
@@ -193,6 +219,28 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
     await act(async () => button(m.curation_advice_refresh()).click());
     await settle(() => host.textContent?.includes(m.curation_unavailable()) === true);
     expect(host.textContent).toContain('/books');
+    expect(host.textContent).toContain(m.curation_unsaved());
+
+    refresh = () =>
+      new Promise((resolve) => {
+        finishRead = resolve;
+      });
+    await act(async () => button(m.curation_advice_refresh()).click());
+    const retiredAdvice = readSignals.at(-1)!;
+    const readCount = readSignals.length;
+    await act(async () => button(m.curation_reload()).click());
+    expect(readSignals).toHaveLength(readCount);
+    interfaceLocale = 'zh-TW';
+    await show(advice('allowed', 'denied'), account);
+    expect(retiredAdvice.aborted).toBe(true);
+    await act(async () => finishRead({ ok: false, reason: 'rate-limited', retryAfter: 999 }));
+    expect(host.textContent).toContain('/books');
+    interfaceLocale = 'en';
+    await show(advice('allowed', 'denied'), account);
+    expect(host.textContent).not.toContain(m.curation_limited());
+    refresh = async (expectedReader) => ({ ...opening(advice('allowed', 'denied')), reader: expectedReader });
+    await act(async () => button(m.curation_advice_refresh()).click());
+    await settle(() => !button(m.curation_advice_refresh()).disabled);
     expect(host.textContent).toContain(m.curation_unsaved());
 
     const recoveryReader = `${reader}-activation-recovery`;
