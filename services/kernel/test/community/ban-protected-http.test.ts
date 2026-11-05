@@ -245,9 +245,7 @@ test.serial(
 
     await worker.stop();
     try {
-      const { ban: committed } = await json<{ ban: { workflowId: string } }>(
-        await ban(c.realm, fixture.member),
-      );
+      const { ban: committed } = await json<{ ban: { workflowId: string } }>(await ban(c.realm, fixture.member));
       expect(committed.workflowId).toEqual(expect.any(String));
       // Prove the ban's authorization barrier while the real removal is still queued.
       expect(await membership()).toEqual([{ role: 'member' }]);
