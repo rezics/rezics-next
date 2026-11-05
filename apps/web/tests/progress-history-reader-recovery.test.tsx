@@ -128,6 +128,7 @@ function page(values: Partial<LoadedPage['session']> = {}): LoadedPage {
   };
 }
 async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
+  window.history.replaceState({}, '', '/en/library/progress');
   setLocale('en', { reload: false });
   admitted.clear();
   admitted.add('progress_session.changes');
@@ -177,6 +178,7 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
       await act(async () => root.unmount());
       host.remove();
       client.clear();
+      window.history.replaceState({}, '', '/en/library/progress');
       setLocale('en', { reload: false });
     },
   };
@@ -391,7 +393,11 @@ test('Absent operations hide only their navigation and retired origin/capture/lo
     try {
       const links = [...h.region('changes').querySelectorAll('a'), ...h.region('units').querySelectorAll('a')];
       expect(links).toHaveLength(4);
-      if (retirement === 'locale') setLocale('ja', { reload: false });
+      if (retirement === 'locale') {
+        window.history.replaceState({}, '', '/ja/library/progress');
+        setLocale('ja', { reload: false });
+        expect(getLocale()).toBe('ja');
+      }
       else current = false;
       await act(async () => {
         // A dispatch may render new handlers; each stale callback gets its own retained render.
