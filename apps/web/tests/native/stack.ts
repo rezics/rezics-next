@@ -957,7 +957,7 @@ async function startStack(): Promise<
     const actionScopes = [...actionCatalogue(sourceApp).keys()];
     governorScopes = [...actionScopes.filter((scope) => scope !== 'media:complete'), 'gate:any'];
     const { mountedWebsiteConfiguration } = await import('../../../../services/auth/scripts/website-composition.ts');
-    const { scopes } = mountedWebsiteConfiguration(sourceApp);
+    const { scopes } = mountedWebsiteConfiguration(actionCatalogue(sourceApp));
     const key = await generateKeyPair('ES256', { extractable: true });
     const kid = `native-web-${randomBytes(8).toString('hex')}`;
     await auth.service.internal.registerWebsiteClient({
