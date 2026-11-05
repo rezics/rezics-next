@@ -1,4 +1,3 @@
-import { isUnavailableIdentifierResolution } from '../../../importer/src/importer.ts';
 import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';

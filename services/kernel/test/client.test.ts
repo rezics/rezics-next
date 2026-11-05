@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { assertNoServiceImports, clientDeclarations, committedDeclarations } from '../scripts/client.ts';
-import { prepareReyloAnalysisCache } from '../scripts/typecheck.ts';
+import { prepareReyloAnalysisCache } from '../scripts/reylo-cache.ts';
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
 const timeout = 60_000;

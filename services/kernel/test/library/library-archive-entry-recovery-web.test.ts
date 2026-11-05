@@ -99,7 +99,6 @@ function receiver(owner: Identity, loseAck = false) {
     route: '/library/recover-archive',
     locale: 'en',
     exposure: 'native-current',
-    admission: 'native-current',
   };
   const port = archiveRecoveryNative(client, `Bearer ${owner.bearer}`);
   const journey = new ArchiveEntryRecoveryJourney(port, () => binding, Date.now() + 300_000);
