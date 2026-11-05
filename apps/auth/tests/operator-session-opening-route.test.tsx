@@ -104,14 +104,12 @@ async function open(
   return Object.assign(
     { host, requests, read, respond, click, submit },
     {
-      async review(wait = true) {
+      async review() {
         await flush(() => {
           fill(host.querySelector('#opening-subject')!, subject);
           fill(host.querySelector('#opening-operator')!, operator);
         });
-        const pendingReview = submit();
-        if (wait) await pendingReview;
-        else void pendingReview;
+        await submit();
         await flush(() => Promise.resolve());
       },
       confirm: () => flush(() => host.querySelector<HTMLInputElement>('#opening-confirm')!.click()),
@@ -210,7 +208,7 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
           reviewStarted.resolve();
           return late.promise;
         });
-      await p.review(stage !== 'review');
+      await p.review();
       if (stage === 'review') await reviewStarted.promise;
       if (stage !== 'review') {
         await p.confirm();
