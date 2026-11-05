@@ -60,7 +60,7 @@ test('generated Web label methods reopen actual admitted rows, preserve source d
   await json(path + ':apply', 'POST', { confirmations: [{ ordinal: 0, reviewId: stateReview.review.id }] });
   // Independent native Progress and vote facts must survive every label effect and replay.
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
-  const votes = createVoteCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+  const votes = createVoteCommands({ pool: f.pool, access: f.access });
   await votes.putVoteOutcome(
     f.owner.actor,
     { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 7 },
