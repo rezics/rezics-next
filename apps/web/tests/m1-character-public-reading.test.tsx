@@ -10,10 +10,12 @@ import definitions from '../../../packages/definitions/release/rezics.json';
 import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ConnectionAddress, ConnectionVisit } from '../src/features/pages/subject-connections';
-import { characterPublicExample } from '../src/features/catalogue/character-public-reading/examples';
+import type { ConnectionRead } from '../src/features/pages/subject-connections-window';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
+const { characterPublicExample } = await import('../src/features/catalogue/character-public-reading/examples');
+const { connectionReturnWindow } = await import('../src/features/pages/subject-visit-navigation');
 const { CharacterReader } = await import('../src/features/pages/showcase-people/character');
 const { m } = await import('../src/paraglide/messages.js');
 const { OverviewContext } = await import('../src/features/pages/overview');
@@ -94,10 +96,10 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   const fixture = characterPublicExample();
   let calls: ConnectionAddress[] = [];
-  let response: (address: ConnectionAddress) => Promise<ConnectionVisit> = fixture.read;
-  const read = async (address: ConnectionAddress) => {
+  let response: ConnectionRead = fixture.read;
+  const read: ConnectionRead = async (address, signal) => {
     calls.push(address);
-    return response(address);
+    return response(address, signal);
   };
   let shared: ReturnType<typeof createConnectionWindow> | undefined;
   const render = async (source: object, viewer: string | null = null, context?: string) =>
@@ -116,20 +118,19 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
               },
             },
             shared
-              ? createElement(
-                  CharacterAssociationBridge,
-                  { source },
-                  createElement(
-                    CharacterAssociationBinding,
-                    { source, window: shared },
-                    createElement(CharacterReader, {
+              ? createElement(CharacterAssociationBridge, {
+                  source,
+                  children: createElement(CharacterAssociationBinding, {
+                    source,
+                    window: shared,
+                    children: createElement(CharacterReader, {
                       public: fixture.profile.read,
                       release: fixture.profile.release,
                       locale: 'en',
                       associations: { source, viewer, read },
                     }),
-                  ),
-                )
+                  }),
+                })
               : createElement(CharacterReader, {
                   public: fixture.profile.read,
                   release: fixture.profile.release,
@@ -168,6 +169,17 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     await click(m.subject_connections_next());
     expect(calls.at(-1)?.selection?.characters?.cursor).toBe('native-next');
     expect(host.textContent).toContain('STEINS;GATE 0');
+    const work = [...host.querySelectorAll('a')].find((node) => node.textContent === 'STEINS;GATE 0')!;
+    const via = new URL(work.href).searchParams.get('via')!;
+    expect(connectionReturnWindow(new URL(via, 'https://site.test').hash)).toMatchObject({
+      cursor: 'native-next',
+      reading: 'b'.repeat(64),
+      index: 1,
+      history: [
+        { reading: 'a'.repeat(64), page: 1 },
+        { cursor: 'native-next', reading: 'b'.repeat(64), page: 2 },
+      ],
+    });
     await click(m.subject_connections_previous());
     expect(calls.at(-1)?.selection?.characters?.reading).toBe('a'.repeat(64));
     expect(host.textContent).not.toContain('STEINS;GATE 0');
