@@ -125,7 +125,7 @@ test('late reads cannot revive a replaced visit; queue return restores the origi
   );
   cache.setQueryData(['session'], { ...session, subject: 'replacement-account' });
   resolve(await load());
-  expect((await pending).readerBinding?.retired).toBe(true);
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host);

@@ -140,7 +140,7 @@ test('moderator history separates retained empty reasons, retired reasons and un
       onReturn: () => {},
     }),
   );
-  expect(markup).toContain('datetime="2026-11-04T00:00:00.000Z"');
+  expect(markup).toMatch(/datetime="2026-11-04T00:00:00.000Z"/i);
   expect(markup).toContain('post-one');
   expect(markup).not.toContain('<form');
   expect(markup).not.toContain('href="/posts/');

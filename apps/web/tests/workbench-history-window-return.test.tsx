@@ -15,6 +15,7 @@ const globals = {
   Element: window.Element,
   Node: window.Node,
   MutationObserver: window.MutationObserver,
+  scrollTo: window.scrollTo.bind(window),
   getComputedStyle: window.getComputedStyle.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
@@ -96,8 +97,8 @@ test('the production route rereads three native windows, retries Previous, close
     },
     boardReports: async (_board, cursor) => {
       queueReads++;
-      expect(cursor).toBe('queue-original');
-      return { reports: [], next: 'queue-next' };
+      expect(['queue-original', 'queue-next']).toContain(cursor);
+      return { reports: [], next: cursor === 'queue-original' ? 'queue-next' : null };
     },
     boardAppeals: async () => {
       throw new Error('unexpected appeals');
@@ -155,6 +156,8 @@ test('the production route rereads three native windows, retries Previous, close
         </QueryClientProvider>,
       );
     });
+    await click(m.threads_next_page());
+    expect(router.state.location.search.cursor).toBe('queue-next');
     await click(m.moderation_workbench_history());
     expect(reads).toEqual([undefined]);
     await click(m.threads_next_page());
@@ -185,12 +188,15 @@ test('the production route rereads three native windows, retries Previous, close
     await click(m.moderation_workbench_first());
     expect(router.state.location.search.historyCursor).toBeUndefined();
     await click(m.moderation_workbench_history_return());
-    expect(queueReads).toBe(2);
-    expect(router.state.location.search.cursor).toBe('queue-original');
+    expect(queueReads).toBe(3);
+    expect(router.state.location.search.cursor).toBe('queue-next');
     expect(router.state.location.search.targetKind).toBe('post');
     expect(router.state.location.search.order).toBe('oldest');
     expect(window.document.activeElement?.id).toBe('workbench-queue-reports');
     expect(exactReads).toBe(2);
+    await click(m.moderation_workbench_previous());
+    expect(router.state.location.search.cursor).toBe('queue-original');
+    expect(queueReads).toBe(4);
   } finally {
     await act(async () => root.unmount());
     host.remove();
