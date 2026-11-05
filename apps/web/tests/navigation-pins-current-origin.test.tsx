@@ -168,6 +168,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   const { sessionQuery } = await import('../src/session/query');
   const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { browserObservation } = await import('../src/session/observation');
+  const { workspaceAdmission } = await import('../src/reader/workspace-admission');
   const { useCurrentLibraryNavigation } = await import('../src/library/pins-current');
   const { usePinControlActions: useActions, PinControlNotice } = await import('../src/library/pin-control');
   const { LibraryNavigation } = await import('../src/library/library-nav');
@@ -208,6 +209,8 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   };
   client.setQueryData(sessionQuery.queryKey, session('A'));
   admit(['personal_library', 'collections']);
+  const currentAdmission = workspaceAdmission(client, ['library_pin.list', 'collection.list']);
+  expect(currentAdmission.read().allowed).toEqual([true, true]);
   const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
   const invalidate = spyOn(router, 'invalidate').mockResolvedValue(undefined);
   const cache = spyOn(client, 'invalidateQueries').mockResolvedValue(undefined);
@@ -281,6 +284,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
       client.setQueryData(sessionQuery.queryKey, session('B'));
       admit(['personal_library', 'collections']);
     });
+    expect(currentAdmission.read().allowed).toEqual([true, true]);
     await tick();
     expect(pendingReads).toHaveLength(2);
     await settle(1, response('B', ['a', 'x', 'b', 'c']));
