@@ -13,7 +13,7 @@ import { RealmMembership } from './realm-membership';
 import { RealmCommunityBoards } from './realm-community/boards';
 import { RealmBansPanel } from './realm-bans-panel';
 import { RealmMembersEntry } from './members/entry';
-import type { PublishedSubject, RealmHome, SpacePageData } from './space';
+import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
 import { SpaceSetupEntry, useSpaceSetupRead } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
