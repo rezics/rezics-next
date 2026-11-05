@@ -74,3 +74,27 @@ edit and its source-fence and event effects. Cancellation commits prior accepted
 
 Focused journey coverage is in `services/kernel/test/library/entry-annotation-correction.test.ts`. Native64/512/4096
 growth acceptance and full caller measurements remain deferred to the controller's frozen acceptance.
+
+## Web selected correction
+
+Decision: Web captures at most 16 explicit loaded native Entry identities when the owner opens selected correction,
+starts note and priority independently at preserve, retains the original confirmation and encrypted sender until
+reconciliation, and requires deliberate fresh review for stale identities. The existing Entries selection, mutation
+lease, source lifetime and departure owner compose this review. The receiving guide is
+[Selected correction](../apps/web/src/library/selected-entry-correction.md).
+
+The consumer uses generated create/read/confirm/cancel calls and the installed addressed personal-entry reader.
+Review pages contain four comparisons and exact intended values. Acknowledged confirmation refreshes the current
+bounded Entries page at its original address; it does not locally reorder priority or replace source/filter/order.
+Reopening a page reads at most four personal Entries separately from native outcomes. An uncertain confirmation
+retains its original body, epoch, position, logical key and encrypted original authorization. Cancellation reconciles
+that command before native cancellation fences further work. A lost create response cannot have confirmed any item;
+it may be left to expire, without replaying admission as acknowledgement.
+
+Composed per-page cost adds at most four addressed personal reads to the native four-row review read. Confirmation
+adds one existing native item command, at most four current personal reads and one existing bounded Entries refresh.
+Cancellation adds the native review lock/fence and one four-row reopening plus at most four addressed reads. Local
+memory retains one four-row native page, at most four separate current facts, up to 16 fixed selected identities and
+one uncertain command. Native account/Subject preparation, review/item locks, Entry/annotation CAS, original receipts,
+History/events and source fences retain the costs and replay/no-effect distinctions above. No query or History scan
+is introduced. Native limits, expiry, retention and response ceilings remain unchanged.

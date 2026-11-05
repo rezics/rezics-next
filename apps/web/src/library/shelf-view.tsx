@@ -1,3 +1,4 @@
+import { SelectedEntryCorrection } from './selected-entry-correction/view';
 import { useReceivedAssignmentReading } from './received-label-assignment-reading/use-reading';
 import { useConsolidationSelection } from './label-consolidation/selection';
 import { ShelfWorkContextView } from './shelf-work-context/view';
@@ -688,6 +689,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
 type ShelfEntriesProps = {
   mutationLease?: ShelfMutationLease;
   isCurrent?: () => boolean;
+  refreshEntries?: () => Promise<void>;
   empty?: ReactNode;
   type?: string;
   entries: PersonalLibraryEntry[];
@@ -786,6 +788,7 @@ function ShelfEntriesPage({
   empty,
   population,
   readingOrigin,
+  refreshEntries,
 }: ShelfEntriesProps & {
   mutationLease: ShelfMutationLease;
   onBulkRemovalLanded: (targets: readonly ShelfRemovalIdentity[]) => void;
@@ -870,6 +873,7 @@ function ShelfEntriesPage({
           {m.library_bulk_status_preview_error()}
         </p>
       ) : null}
+      <SelectedEntryCorrection entries={shelfRows.rows.map((row) => row.entry)} selected={shelfRows.selected} isCurrent={shelfRows.isCurrent} lease={mutationLease} refreshEntries={refreshEntries ?? (async () => {})} />
       <ShelfSelectionBar controls={controls} bulkRemoval={bulkRemoval} selectionLimitReached={selectionLimitReached} />
       <BulkStatusReview controls={controls} />
       <BulkLibraryRemovalReviewView controller={bulkRemoval} pending={shelfRows.pending} />

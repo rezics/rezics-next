@@ -329,6 +329,7 @@ export function PersonalLibraryPage({
           <ShelfEntries
             key={`${page.type ?? ''}:${page.state ?? 'all'}:${sort.orderBy}:${sort.direction}:${effectiveCursor ?? ''}`}
             mutationLease={mutationLease}
+            {...(titlePreparation ? { refreshEntries: titlePreparation.refresh } : {})}
             {...(isCurrent ? { isCurrent } : {})}
             {...typeSearch}
             sort={sort}
