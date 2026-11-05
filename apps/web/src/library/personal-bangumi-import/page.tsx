@@ -12,6 +12,7 @@ import { BangumiResultPage } from './results';
 import { BangumiReviewPage } from './review';
 import type { RowDraft } from './row';
 import { scoreSelectionFromDraft } from './score';
+import type { BangumiLabelPanelState } from './contract';
 import { BangumiApplying, BangumiCancelledNotice, BangumiRemovedNotice, BangumiSignedOut } from './states';
 import { BangumiUploadForm } from './upload';
 import { useBangumiVisit, type BangumiVisit } from './visit';
@@ -37,7 +38,15 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
   const journey = useRef<BangumiJourney | null>(null);
   if (!journey.current) journey.current = createBangumiJourney({ port, visit });
   const [snap, setSnap] = useState<BangumiJourneySnapshot>(() => journey.current!.snapshot());
+  const [labelPanels, setLabelPanels] = useState<Record<string, BangumiLabelPanelState>>({});
   useEffect(() => () => visit.retire(), [visit]);
+
+  function changeLabelPanel(key: string, update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState) {
+    setLabelPanels((previous) => {
+      const current = previous[key];
+      return { ...previous, [key]: update(current) };
+    });
+  }
 
   async function act(run: (current: BangumiJourney) => Promise<BangumiJourneySnapshot> | BangumiJourneySnapshot) {
     if (!journey.current) return;
@@ -58,7 +67,8 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
     });
   }
 
-  const locked = snap.busy || snap.notice?.kind === 'unknown';
+  const labelPending = Object.values(labelPanels).some((panel) => panel.busy || panel.command !== null);
+  const locked = snap.busy || snap.notice?.kind === 'unknown' || labelPending;
   return (
     <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_bangumi_title()}</PageHeading>
@@ -78,7 +88,11 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
       {snap.stage === 'review' ? (
         <BangumiReviewPage
           snap={snap}
-          busy={locked}
+          busy={snap.busy}
+          port={port}
+          visit={visit}
+          labelPanels={labelPanels}
+          onLabelPanelChange={changeLabelPanel}
           onSave={(draft) => void saveReview(draft)}
           onChoose={(draft) =>
             act((current) =>
@@ -126,8 +140,14 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
             <BangumiAction
               type="button"
               variant="outline"
-              disabled={locked}
-              onClick={() => void act((current) => current.cancelAdmission())}
+              disabled={snap.busy || snap.notice?.kind === 'unknown'}
+              onClick={() =>
+                void act(async (current) => {
+                  const next = await current.cancelAdmission();
+                  if (next.cancelled) setLabelPanels({});
+                  return next;
+                })
+              }
             >
               {snap.busy ? m.library_bangumi_cancelling() : m.library_bangumi_cancel()}
             </BangumiAction>
@@ -136,7 +156,13 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
             type="button"
             variant="outline"
             disabled={locked}
-            onClick={() => void act((current) => current.discard())}
+            onClick={() =>
+              void act(async (current) => {
+                const next = await current.discard();
+                if (next.stage === 'removed' || !next.uploadId) setLabelPanels({});
+                return next;
+              })
+            }
           >
             {m.library_bangumi_discard()}
           </BangumiAction>
@@ -145,7 +171,13 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
       <BangumiDeparture
         active={!!snap.uploadId && snap.stage !== 'removed'}
         locked={locked}
-        onDiscard={() => void act((current) => current.discard())}
+        onDiscard={() =>
+          void act(async (current) => {
+            const next = await current.discard();
+            if (next.stage === 'removed' || !next.uploadId) setLabelPanels({});
+            return next;
+          })
+        }
       />
     </main>
   );

@@ -1,8 +1,8 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
+import { getLocale } from '../../paraglide/runtime.js';
 import { sessionQuery } from '../../session/query';
 import { browserObservation } from '../../session/observation';
-import { getLocale } from '../../paraglide/runtime.js';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
 
@@ -10,6 +10,7 @@ export type BangumiVisit = {
   subject: string;
   csrfToken: string;
   identity: number;
+  locale: string;
   controller: AbortController;
   current: (signal?: AbortSignal) => boolean;
   retire: () => void;
@@ -55,6 +56,7 @@ export function useBangumiVisit(): BangumiVisit | null {
       owner,
       subject,
       csrfToken,
+      locale,
       retire() {
         state.retired = true;
         state.controller.abort();

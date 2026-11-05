@@ -9,6 +9,10 @@ URL, persistent browser storage, logs or public metadata. Viewer, CSRF-session o
 rows, late delivery and retry authority. Unmatched target search reuses the existing authenticated subject picker;
 only the UUID submitted as `review.target` is identity.
 
+Decision: the first retained tag read captures the existing encrypted private-entry credential envelope for this
+mounted import session; label review and apply retries reuse the same envelope and exact command, while assignment
+readback uses a fresh credential after current viewer/CSRF checks.
+
 ## Native methods
 
 Mounted under `/v1/libraryImports/bangumi` after Commerce dependency `fd3f1482`. Web binds the installed
@@ -20,6 +24,9 @@ Mounted under `/v1/libraryImports/bangumi` after Commerce dependency `fd3f1482`.
 | Upload  | `POST :preview` `{ upload }` with quoted Idempotency-Key                                   | File stays local until submit; bytes drop after native ownership                         |
 | Preview | `GET :uploadId?after=-1` pages of 10                                                       | Current page only; titles assist display/search, never automatic identity                |
 | Review  | `POST :uploadId:review` `{ ordinal, target?, score? }`                                     | Target and native score choice are reviewed together; target IDs are explicit            |
+| Tags    | `GET :uploadId/rows/:ordinal/tags?after=-1` pages of 32                                   | Original values and validity stay visible; only supported values can be mapped          |
+| Labels  | `POST :uploadId:reviewLabels`, then `POST :uploadId:applyLabels`                          | Explicit label ID or deliberate new name, exact native review and separate confirmation |
+| Readback| `GET /v1/libraryLabelAssignments?subjectId=…&view=FULL&limit=32`                           | Fresh current assignments show actual label and assignment identities                   |
 | Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip, score }] }`, up to 5 | Default score action is `preserve`; set and clear repeat the choice with `consent: true` |
 | Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply                       | Separate typed command; record id is `subject_id`; date-like failed parse is unsupported |
 | Inspect | `libraryEntries({ subjectId }).get(libraryFullQuery())` and, when supplied,                | One deliberate point read after an acknowledged effect; explicit Refresh can repeat it   |
@@ -63,6 +70,12 @@ does not renew evidence or admit a new effect, and is owned by Commerce.
   No row background hydration or directory scan runs. Full 5-row batches reduce Q to `ceil(M/5)`; single-row choices
   keep `Q = M`. Source admission is a
   separate typed command after apply and is omitted from this import cost formula.
+- Label work adds `Rr * (P + S + V + A + F) + X`,
+  where `Rr` rows are opened for adoption, P is bounded 32-value tag-page reads, S is bounded owned-label searches,
+  V is native label reviews, A is confirmations, F is current assignment readbacks and X is exact retries. The
+  complete native label caller also includes addressed label/name probes, create/assign receipts, Subject/profile
+  preparation, owner controls, upload locks, events/History, source fences, reservations and parent locks. Source
+  admission is a separate typed command after state apply.
 
 Decision: Confirm without the two source checkboxes still applies the import; the confirmation page disables Confirm
 until both are checked. Date-like failed parses stay unsupported; non-date tokens stay unknown.
@@ -80,3 +93,5 @@ Web consumes the producer's score fields and renders unavailable and admitted sc
 component. The Content atomic vote authorization/write guard and its positive producer result are outside Web; full
 positive producer/journey acceptance remains open until Content supplies that result. Browser, native and root
 acceptance run after integration. Stories and authored fixtures demonstrate presentation only.
+- Label adoption references: `apps/web/tests/personal-bangumi-label-adoption.test.tsx` and
+  `services/kernel/test/library/list-import-bangumi-labels-web.test.ts`.

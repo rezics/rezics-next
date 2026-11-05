@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
-import type { BangumiApplyState, BangumiRow, BangumiRowMeta } from './contract';
+import type { BangumiApplyState, BangumiImportPort, BangumiLabelPanelState, BangumiRow, BangumiRowMeta } from './contract';
 import { BangumiAction, BangumiCheck } from './controls';
 import { BangumiEvidencePanel } from './fields';
+import { BangumiLabelAdoption } from './labels';
 import {
   bangumiCanChooseTarget,
   bangumiHasUnsupportedProposal,
@@ -13,6 +14,7 @@ import {
 } from './meaning';
 import { BangumiTargetSearch } from './target';
 import { BangumiScoreReviewPanel, scoreDraftFrom, scoreSelectionFromDraft, type BangumiScoreDraft } from './score';
+import type { BangumiVisit } from './visit';
 
 export type RowDraft = {
   ordinal: number;
@@ -35,12 +37,22 @@ export function draftFromMeta(row: BangumiRow, meta?: BangumiRowMeta): RowDraft 
 export function BangumiRowReview({
   row,
   meta,
+  uploadId,
+  port,
+  visit,
+  labelPanel,
+  onLabelPanelChange,
   busy,
   onSave,
   onChoose,
 }: {
   row: BangumiRow;
   meta?: BangumiRowMeta;
+  uploadId: string | null;
+  port: BangumiImportPort;
+  visit: BangumiVisit;
+  labelPanel: BangumiLabelPanelState | undefined;
+  onLabelPanelChange: (update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState) => void;
   busy: boolean;
   onSave: (draft: RowDraft) => void;
   onChoose: (draft: RowDraft) => void;
@@ -91,6 +103,18 @@ export function BangumiRowReview({
           base={base}
           disabled={busy || !reviewed}
           onChange={(score) => update({ ...draft, score })}
+        />
+      ) : null}
+      {uploadId ? (
+        <BangumiLabelAdoption
+          uploadId={uploadId}
+          ordinal={row.ordinal}
+          rowRevision={row.review?.token ?? null}
+          port={port}
+          visit={visit}
+          panel={labelPanel}
+          onChange={onLabelPanelChange}
+          disabled={busy}
         />
       ) : null}
       {row.review?.current || meta?.current ? (

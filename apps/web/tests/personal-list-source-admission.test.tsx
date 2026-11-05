@@ -164,8 +164,10 @@ function visit(): AniListVisit & BangumiVisit & MalVisit {
   const controller = new AbortController();
   let retired = false;
   return {
+    identity: 1,
     subject: 'alice',
     csrfToken: 'csrf-1',
+    locale: 'en',
     controller,
     retire() {
       retired = true;
@@ -474,6 +476,36 @@ test('AniList and Bangumi retry captured production source admissions and advanc
     },
     async delete() {
       return { kind: 'deleted' };
+    },
+    async tags(command) {
+      return {
+        kind: 'tags',
+        page: { ordinal: command.ordinal, rowRevision: token, evidence: 'missing', tags: [], next: null, labels: null },
+        custody: command.custody ?? { viewer: 'alice', csrfToken: 'csrf', credential: 'encrypted' },
+      };
+    },
+    async searchLabels() {
+      return { kind: 'label-options', labels: [] };
+    },
+    async reviewLabels(command) {
+      return {
+        kind: 'labels-reviewed',
+        ordinal: command.ordinal,
+        labels: {
+          review: { token, rowRevision: command.rowRevision, subject: null, evidence: 'missing', items: [] },
+          confirmed: false,
+          outcomes: [],
+        },
+      };
+    },
+    async applyLabels(command) {
+      return {
+        kind: 'labels-applied',
+        result: { uploadId: command.uploadId, ordinal: command.ordinal, outcomes: [], remaining: [] },
+      };
+    },
+    async readAssignments(subjectId) {
+      return { kind: 'assignments', subjectId, assignments: [] };
     },
   };
   const bangumiVisit = visit();
