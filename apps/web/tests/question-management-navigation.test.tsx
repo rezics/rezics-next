@@ -341,6 +341,7 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
     expect(reads).toHaveLength(1);
     await ui.click(window.document, m.library_my_ratings_stay());
     expect(input.value).toBe(' raw draft ');
+    expect(button(ui.captions(), m.realm_question_history_more()).disabled).toBe(false);
     await ui.click(ui.captions(), m.realm_question_history_more(), true);
     expect(histories).toHaveLength(1);
     await ui.click(window.document, m.library_my_ratings_stay());

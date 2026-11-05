@@ -18,12 +18,14 @@ export function OwnVotesDeparture({
   locked,
   isCurrent,
   onLeave,
+  onStay,
   confirmMovement,
 }: {
   dirty: boolean;
   locked: boolean;
   isCurrent: () => boolean;
   onLeave?: () => void;
+  onStay?: () => void;
   confirmMovement?: { current: (() => Promise<boolean>) | null };
 }) {
   const live = useRef<{
@@ -31,13 +33,15 @@ export function OwnVotesDeparture({
     locked: boolean;
     isCurrent: () => boolean;
     onLeave: (() => void) | undefined;
+    onStay: (() => void) | undefined;
   }>({
     dirty,
     locked,
     isCurrent,
     onLeave,
+    onStay,
   });
-  live.current = { dirty, locked, isCurrent, onLeave };
+  live.current = { dirty, locked, isCurrent, onLeave, onStay };
   const [open, setOpen] = useState(false);
   const waiting = useRef<((leave: boolean) => void) | null>(null);
   const stay = useRef<HTMLButtonElement>(null);
@@ -49,6 +53,7 @@ export function OwnVotesDeparture({
     const resolve = waiting.current;
     waiting.current = null;
     setOpen(false);
+    if (resolve && !leave) live.current.onStay?.();
     resolve?.(leave);
   }
 
