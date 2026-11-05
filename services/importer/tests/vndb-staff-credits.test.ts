@@ -22,8 +22,8 @@ function authoredTables() {
     'vndb/vn_titles': [{ id: 'v1', lang: 'en', official: true, title: 'Authored visual novel', latin: null }],
     'vndb/entry_meta': [{ id: 'v1', revision: '7', lastmod: '2026-10-25 00:00:00+00' }],
     'vndb/vn_staff': [
-      { id: 'v1', aid: '10', role: 'scenario', note: 'Writer Alias' },
-      { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
+      { id: 'v1', aid: '10', role: 'scenario', note: 'Common route, After Story routes' },
+      { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
       { id: 'v1', aid: '30', role: 'unknown', note: 'Lost role' },
       { id: 'v1', aid: '40', role: 'scenario', note: 'Missing alias' },
       { id: 'v1', aid: '50', role: 'scenario', note: 'Studio' },
@@ -170,7 +170,7 @@ test('operator plans two aliases for one person and imports exact roles through 
     expect(qualifiers(voice)).toEqual(
       expect.arrayContaining([
         { property: { id: 'wdt:P453' }, value: { type: 'value', content: expect.any(String) } },
-        { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Voice Alias' } },
+        { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Writer Alias' } },
       ]),
     );
     expect(proposed.some((command) => command.statement.property.id === 'schema:musicBy')).toBe(false);

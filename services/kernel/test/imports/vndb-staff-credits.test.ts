@@ -24,8 +24,8 @@ function tables(overrides: Record<string, Record<string, unknown>[]> = {}) {
     vn_titles: [{ id: 'v1', lang: 'en', official: true, title: 'Authored visual novel', latin: null }],
     entry_meta: [{ id: 'v1', revision: '7', lastmod: '2026-10-25 00:00:00+00' }],
     vn_staff: [
-      { id: 'v1', aid: '10', role: 'scenario', note: 'Writer Alias' },
-      { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
+      { id: 'v1', aid: '10', role: 'scenario', note: 'Common route, After Story routes' },
+      { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
     ],
     vn_seiyuu: [{ id: 'v1', aid: '10', cid: 'c3', note: 'Voice Alias' }],
     staff_alias: [
@@ -290,7 +290,7 @@ test('production operator imports two VNDB staff aliases through ordinary accept
       tables: tables({
         vn_staff: [
           { id: 'v1', aid: '10', role: 'director', note: 'Writer Alias' },
-          { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
+          { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
         ],
       }),
       path,
@@ -353,7 +353,7 @@ test('production operator imports two VNDB staff aliases through ordinary accept
       tables: tables({
         vn_staff: [
           { id: 'v1', aid: '10', role: 'scenario', note: 'Restored spelling after fence.' },
-          { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
+          { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
         ],
       }),
       path,

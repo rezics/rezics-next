@@ -62,11 +62,7 @@ function fieldsOf(table: string, record: Row): string[] {
 function staffPersonId(value: string): boolean {
   return /^s[1-9][0-9]*$/.test(value);
 }
-function creditedSpelling(note: unknown, aliasName: string | undefined): { value?: string; invalid?: true } {
-  if (note !== undefined && note !== null && note !== '') {
-    if (typeof note === 'string' && note.isWellFormed() && note.trim() && note.length <= 1500) return { value: note };
-    return { invalid: true };
-  }
+function creditedSpelling(aliasName: string | undefined): { value?: string; invalid?: true } {
   if (aliasName === undefined) return {};
   if (aliasName.isWellFormed() && aliasName.trim() && aliasName.length <= 1500) return { value: aliasName };
   return { invalid: true };
@@ -373,7 +369,7 @@ export async function planVndbStaffCredits(input: CrossMediaTables): Promise<Vnd
       gap(table, row, 'Staff kind is not a person identity');
       continue;
     }
-    const spelling = creditedSpelling(row.note, aliasNames.get(aid));
+    const spelling = creditedSpelling(aliasNames.get(aid));
     if (spelling.invalid) {
       gap(table, row, 'Credited spelling is not admitted as a native qualifier');
       continue;

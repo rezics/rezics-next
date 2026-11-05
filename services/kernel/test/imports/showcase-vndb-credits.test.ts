@@ -58,8 +58,8 @@ function selectedVn(voiceAliasId = '10') {
       { id: 'v3', revision: '9', lastmod: '2026-10-25 00:00:00+00' },
     ],
     vn_staff: [
-      { id: 'v1', aid: '10', role: 'scenario', note: 'Writer Alias' },
-      { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
+      { id: 'v1', aid: '10', role: 'scenario', note: 'Common route, After Story routes' },
+      { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
     ],
     vn_seiyuu: [{ id: 'v1', aid: voiceAliasId, cid: 'c3', note: 'Voice Alias' }],
     staff_alias: [
@@ -428,14 +428,14 @@ test('selected-VN credits reach adopted current facts through exact current bind
       (candidate) =>
         candidate.statement.value.content === correctedVoiceId &&
         byQualifier(candidate, 'wdt:P453', characterId) &&
-        byQualifier(candidate, 'wdt:P1932', 'Voice Alias') &&
+        byQualifier(candidate, 'wdt:P1932', 'Corrected Voice Alias') &&
         byCitation(candidate, 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
     );
     expect(authorCandidate.statement.references).toBeDefined();
     expect(voiceCandidate.statement.qualifiers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ property: { id: 'wdt:P453' }, value: { content: characterId } }),
-        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Voice Alias' } }),
+        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Corrected Voice Alias' } }),
       ]),
     );
 
@@ -477,7 +477,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(voice?.qualifiers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ property: { id: 'wdt:P453' }, value: { content: characterId } }),
-        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Voice Alias' } }),
+        expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Corrected Voice Alias' } }),
       ]),
     );
     expect(current.statements['schema:illustrator']).toBeUndefined();
