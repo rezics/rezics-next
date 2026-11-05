@@ -2,10 +2,13 @@
 
 ## Recommendation and evidence boundary
 
-Reuse the native membership/union producers for a UUID-ordered GET, with default-profile locators into bounded server preparation and the existing safe Subject summary shape. Do not forward POST tokens or extract a partial common document.
+Reuse the native membership/union producers for a UUID-ordered GET, with default-profile locators into bounded server preparation and the existing
+safe Subject summary shape. Do not forward POST tokens or extract a partial common document.
 Research choice: recommend explicit retained preparation for GET, subject to transport adoption; this report adopts no product contract and changes no owner document or exposure gate.
-Both the supplied base and the inspected current `dev:services/kernel/src/zones/http.ts` mount metadata, configuration, owned lists and POST readPage, but no Subject GET. This finding is code inspection, not an executed native/browser pass.
-Authority remains [Zones](../zones.md#routes-and-native-declarations), [membership](../zone-membership.md), and [filtered lists](../filtered-lists.md). Collection metadata GET is a separate mounted-source outcome, outside this design.
+Both the supplied base and the inspected current `dev:services/kernel/src/zones/http.ts` mount metadata, configuration, owned lists and POST
+readPage, but no Subject GET. This finding is code inspection, not an executed native/browser pass.
+Authority remains [Zones](../zones.md#routes-and-native-declarations), [membership](../zone-membership.md), and [filtered
+lists](../filtered-lists.md). Collection metadata GET is a separate mounted-source outcome, outside this design.
 Confidence is high in the call graph and codec constraints; finite sparse completion and compliant complete-observation safety require owner implementation and measured native evidence below.
 
 ## Current native call graph
@@ -37,8 +40,10 @@ Paths below are relative to `services/kernel/src/` unless otherwise qualified; n
 | Preparation | POST demonstrates 202 `{next}`, private/no-store; 503 Problem + Retry-After without cursor | Recommend analogous GET 202 with **default** token, but GET status/body/schema and client handling require adoption. POST declarations do not authorize it. |
 | Invalidity | Existing Problems | 400 invalid_request/invalid_cursor for invalid shape/tampering/rebinding; 422 unsupported_query for admitted-shape unsupported plan; dependency/readiness 503; concealed target 404. |
 
-Use `private, no-store` for success and preparation; no public cache or ETag permits replaying old inclusion or absence. Carry native request/session components, not public source positions or configuration. Preserve supplied session behavior rather than inventing a new minimum-position protocol.
-Native held-token suspension is 401 invalid_credentials with Bearer invalid_token; suspended sign-in is Accounts' 403 account_suspended. Preserve defensive account denial and insufficient-scope errors; do not reinterpret older membership prose as anonymous fallback.
+Use `private, no-store` for success and preparation; no public cache or ETag permits replaying old inclusion or absence. Carry native request/session
+components, not public source positions or configuration. Preserve supplied session behavior rather than inventing a new minimum-position protocol.
+Native held-token suspension is 401 invalid_credentials with Bearer invalid_token; suspended sign-in is Accounts' 403 account_suspended. Preserve
+defensive account denial and insufficient-scope errors; do not reinterpret older membership prose as anonymous fallback.
 
 ## Field-by-field default cursor proposal
 
@@ -55,28 +60,46 @@ Use `tokens/list-cursor.ts:encodeListCursor` and `decodeListCursor` with omitted
 | `after[2]` | Decimal retained CAS revision: exact coordinate, not source truth. |
 | Additional keys | None. Page start/floor, pending group and discovery locators stay server-side. No owner token vector, permissions, facts or summary payload. |
 
-Three keys use `64 + 36 + d` ASCII bytes, where d is the database bigint revision's decimal length, at most 19: 119 bytes. Each fits 256 bytes, versus eight keys/2,048 aggregate key bytes; route ≤256 and canonical query ≤2,048 bytes also remain independently enforced.
-The default token limit is 4,096 unpadded base64url characters: ≤3,072 envelope bytes, 34 bytes envelope overhead and ≤3,038 plaintext capacity. The encoder enforces resulting token length; retain all independent string/batch/schema limits.
-Anonymous encoding is deterministic for an identical binding/position/key and timeless: synthetic salt, no issued-at field. Account encoding uses random salt and issued time, 15-minute lifetime and 60-second future allowance. Do not add Zone expiry, anonymous time, random per-encode salt or Search's 4,864-character allowance.
+Three keys use `64 + 36 + d` ASCII bytes, where d is the database bigint revision's decimal length, at most 19: 119 bytes. Each fits 256 bytes,
+versus eight keys/2,048 aggregate key bytes; route ≤256 and canonical query ≤2,048 bytes also remain independently enforced.
+The default token limit is 4,096 unpadded base64url characters: ≤3,072 envelope bytes, 34 bytes envelope overhead and ≤3,038 plaintext capacity. The
+encoder enforces resulting token length; retain all independent string/batch/schema limits.
+Anonymous encoding is deterministic for an identical binding/position/key and timeless: synthetic salt, no issued-at field. Account encoding uses
+random salt and issued time, 15-minute lifetime and 60-second future allowance. Do not add Zone expiry, anonymous time, random per-encode salt or Search's 4,864-character allowance.
 Determinism does not make state immortal: generations change on actual replacement and coordinates change on progress. An unchanged anonymous coordinate encodes identically; an evicted coordinate conveys no authority.
-Recommend 400 for cryptographically invalid/rebound tokens and 409 stale_cursor for expired or valid-but-incompatible/evicted coordinates, consistent with GET witnesses in Zones. Exact expired/eviction mapping needs adoption; the codec exposes `invalid` versus `expired` and does not choose HTTP status.
+Recommend 400 for cryptographically invalid/rebound tokens and 409 stale_cursor for expired or valid-but-incompatible/evicted coordinates, consistent
+with GET witnesses in Zones. Exact expired/eviction mapping needs adoption; the codec exposes `invalid` versus `expired` and does not choose HTTP status.
 
 ## Bounded retained preparation and repair
 
-The existing migration `services/kernel/db/zones/migrations/20261031010001_page_preparation.sql` allows 32 slots per Zone/viewer, one JSON position ≤1,048,576 bytes per row, keyed by route/Zone/viewer digest/slot. Thus position payload ≤32 MiB per Zone/viewer, not a global/per-account storage quota.
-`zonePageWork` hashes normalized request body to a slot, checks request/basis/generation/revision, and CAS-writes a new revision only for changed position. Its SQL checks an active configured Zone; the FK cascades purge and Zone configuration/lifecycle/owner/release/withholding updates delete retained rows transactionally.
-Use an operation-tagged normalized GET descriptor for the slot hash; include operation and P to prevent POST/GET request confusion. Hash collisions may evict other requests, never borrow their state. The token's AAD remains the independent operation boundary.
-Existing storage supports a disposable bounded page frontier, not an unbounded complete result table, autonomous retry queue, per-viewer global quota or retained authority. Search/Commerce retain their own prepared results and durable maintenance. Do not add a second scheduler or Zone membership engine.
-Retain one `ZoneUnionPosition`: basis, settled `after`, ≤P selected row locators, at most one unfinished group, and optional discovery `{next,rows,covered,exhausted}`. Discovery rows are ≤min(100,2×remainingSlots+1); source ordinal ≤32. Stored row source is a preferred lookup hint only.
-The union queries every source through a common covered watermark before settling that interval. Partial discovery retains the next source ordinal and common minimum coverage; it does not retain 32 owner cursors. Canonical `[id]` comparison is bytewise; duplicate IDs must have the same key.
-When one source is unfinished, independent current true may settle OR **only inside the completely discovered interval**. Unknown is never negative or EOF. Floor stays before the unresolved group; actual Collection alias/source progress or Search leaf progress survives.
-Definitive false advances floor; true appends a locator once. A full page can retain an undisclosed discovery suffix. After final publication, clear emitted rows in the following coordinate while preserving floor, suffix and pending progress; never replay the previous page's final leaves as the next page.
-POST already models this clearing in `page-runtime.ts` before `preparation.progress(following)`. GET must preserve that separation of preparation coordinate and successor coordinate; no partial 200 window, private seen set or UUID post-sort.
-Final revalidation reruns actual current OR, preferring the located witness. A definitive negative removes that row and resumes filling after the settled floor; unknown preserves its actual progress and gives preparation only after change. Do not drop a row merely because its summary is missing.
-If membership stays true but native summary cannot be disclosed/current, return readiness and let the native owner repair/reject the locator. Otherwise a withheld summary could falsely prove exhaustion. Final summary observation also protects representative editions, covers and foreign source tuples.
-Basis changes cannot reinterpret an old floor under new canonical meaning. Reauthorize Zone and source gate first, then reject stale GET coordinates and require an explicit new traversal; do not silently restart at zero on every request. Under stable basis, resume retained intervals without resetting.
-Pending identity within the actual complete Source dependencies yields readiness; disjoint identity work must not create a universal gate. Changed source/configuration, release/meaning or identity invalidates old membership and absence, including already successful cursor coordinates.
-Existing CAS is finite but one-slot latest-revision storage is not replay history: a lost response after save makes the old token unusable. Recommend retaining one predecessor transition beside the successor in the same JSON row, still ≤1 MiB total, rather than restarting a healthy traversal after each lost response.
+The existing migration `services/kernel/db/zones/migrations/20261031010001_page_preparation.sql` allows 32 slots per Zone/viewer, one JSON position
+≤1,048,576 bytes per row, keyed by route/Zone/viewer digest/slot. Thus position payload ≤32 MiB per Zone/viewer, not a global/per-account storage quota.
+`zonePageWork` hashes normalized request body to a slot, checks request/basis/generation/revision, and CAS-writes a new revision only for changed
+position. Its SQL checks an active configured Zone; the FK cascades purge and Zone configuration/lifecycle/owner/release/withholding updates delete retained rows transactionally.
+Use an operation-tagged normalized GET descriptor for the slot hash; include operation and P to prevent POST/GET request confusion. Hash collisions
+may evict other requests, never borrow their state. The token's AAD remains the independent operation boundary.
+Existing storage supports a disposable bounded page frontier, not an unbounded complete result table, autonomous retry queue, per-viewer global quota
+or retained authority. Search/Commerce retain their own prepared results and durable maintenance. Do not add a second scheduler or Zone membership engine.
+Retain one `ZoneUnionPosition`: basis, settled `after`, ≤P selected row locators, at most one unfinished group, and optional discovery
+`{next,rows,covered,exhausted}`. Discovery rows are ≤min(100,2×remainingSlots+1); source ordinal ≤32. Stored row source is a preferred lookup hint only.
+The union queries every source through a common covered watermark before settling that interval. Partial discovery retains the next source ordinal
+and common minimum coverage; it does not retain 32 owner cursors. Canonical `[id]` comparison is bytewise; duplicate IDs must have the same key.
+When one source is unfinished, independent current true may settle OR **only inside the completely discovered interval**. Unknown is never negative
+or EOF. Floor stays before the unresolved group; actual Collection alias/source progress or Search leaf progress survives.
+Definitive false advances floor; true appends a locator once. A full page can retain an undisclosed discovery suffix. After final publication, clear
+emitted rows in the following coordinate while preserving floor, suffix and pending progress; never replay the previous page's final leaves as the next page.
+POST already models this clearing in `page-runtime.ts` before `preparation.progress(following)`. GET must preserve that separation of preparation
+coordinate and successor coordinate; no partial 200 window, private seen set or UUID post-sort.
+Final revalidation reruns actual current OR, preferring the located witness. A definitive negative removes that row and resumes filling after the
+settled floor; unknown preserves its actual progress and gives preparation only after change. Do not drop a row merely because its summary is missing.
+If membership stays true but native summary cannot be disclosed/current, return readiness and let the native owner repair/reject the locator.
+Otherwise a withheld summary could falsely prove exhaustion. Final summary observation also protects representative editions, covers and foreign source tuples.
+Basis changes cannot reinterpret an old floor under new canonical meaning. Reauthorize Zone and source gate first, then reject stale GET coordinates
+and require an explicit new traversal; do not silently restart at zero on every request. Under stable basis, resume retained intervals without resetting.
+Pending identity within the actual complete Source dependencies yields readiness; disjoint identity work must not create a universal gate. Changed
+source/configuration, release/meaning or identity invalidates old membership and absence, including already successful cursor coordinates.
+Existing CAS is finite but one-slot latest-revision storage is not replay history: a lost response after save makes the old token unusable. Recommend
+retaining one predecessor transition beside the successor in the same JSON row, still ≤1 MiB total, rather than restarting a healthy traversal after each lost response.
 For preparation replay, the predecessor locates the committed successor and returns its continuation; for a lost 200, retain the emitted page's locators and start/floor so the same page is rebuilt under fresh native checks before returning its successor. Store no DTO or verdict. Commit both coordinates atomically before responding; conflicting/older coordinates are explicitly stale. This is a proposed bounded store extension, not existing helper behavior or a public ABI.
 The two positions may hold ≤2P selected locators and ≤200 discovery locators; enforce the existing byte ceiling before CAS. Replay always spends fresh authorization/final-use budget. Owner checkpoints resume actual input work with at most one uncommitted step reread; they do not certify old leaves. First-page retries can reuse the keyed initial preparation until completion; a deliberate no-cursor traversal still means First.
 
