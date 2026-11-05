@@ -452,7 +452,10 @@ test('the native financial participant minimizes an explicitly retained real ord
   const resolvedAt = resolvedStatus?.participants.commerce?.retained[0]?.resolvedAt;
   expect(resolvedAt).not.toBeNull();
   expect(Date.parse(resolvedAt!)).toBeGreaterThanOrEqual(expiresAt.getTime());
-  await resolveRetention({ pool }, { accountId: buyer.accountId, participant: 'commerce', store: ORDER_RETENTION_STORE });
+  await resolveRetention(
+    { pool },
+    { accountId: buyer.accountId, participant: 'commerce', store: ORDER_RETENTION_STORE },
+  );
   expect((await readErasureStatus(pool, buyer.accountId))?.participants.commerce?.retained[0]?.resolvedAt).toBe(
     resolvedAt,
   );
