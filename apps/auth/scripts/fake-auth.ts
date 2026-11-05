@@ -286,7 +286,7 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
             { error: 'account_operation_denied', effect_status: 'not_applied' },
             { status: 409, headers },
           );
-        const reference = `approval-${operationKey}`;
+        const reference = `approval-${operationKey}.${'a'.repeat(43)}`;
         approvals.set(operationKey, { operation: payload.operation, reference });
         return Response.json({ reference, expiresAt: new Date(Date.now() + 60_000).toISOString() }, { headers });
       }

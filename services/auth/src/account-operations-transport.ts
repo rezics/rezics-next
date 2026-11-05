@@ -1,4 +1,8 @@
-import { parseRenameApprovalResponse, parseRenameExecutionResponse } from '@rezics/auth-contract';
+import {
+  parseAccountOperationApprovalResponse,
+  parseRenameExecutionResponse,
+  parseOrganizationExecutionResponse,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
 import { managementCallerMatches } from './auth-management-client.ts';
@@ -182,7 +186,10 @@ export function accountOperationTransport(
         });
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
-        if (operation.kind === 'rename' && !parseRenameApprovalResponse(projected))
+        if (
+          (operation.kind === 'rename' || operation.kind === 'organization') &&
+          !parseAccountOperationApprovalResponse(projected)
+        )
           return response({ error: 'unavailable' }, 503);
         return response(projected);
       }
@@ -219,8 +226,13 @@ export function accountOperationTransport(
           );
           return result ? response(result) : denied(503);
         }
-        case 'organization':
-          return response(await workflows.createOrganization({ ...input, handle: operation.handle as string }));
+        case 'organization': {
+          const result = parseOrganizationExecutionResponse(
+            await workflows.createOrganization({ ...input, handle: operation.handle as string }),
+          );
+          // An incomplete/incompatible workflow reply may follow native effects.
+          return result ? response(result) : response({ error: 'unavailable' }, 503);
+        }
         case 'rename': {
           const result = parseRenameExecutionResponse(
             await workflows.renameHandle({

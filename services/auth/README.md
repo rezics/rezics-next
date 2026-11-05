@@ -1106,24 +1106,31 @@ identity or reason; action loss may retain an admitted profile. Both require sam
 requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
 before/final snapshots, one Access formula), eight closed source entries/matches; no inventory or availability lookup.
 
-Decision: rename alone uses public `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`.
-Access `workflow-approvals.ts` seals base64url body + dot + SHA-256 MAC43; native unseal/execute cap it at 4096 ASCII
-characters. Expiry is canonical `Date.toISOString()` (maximum 27 ASCII bytes). The UTF-8 allowance is the closed
-empty-string JSON skeleton plus `4096 + 27`; references stay opaque. Invalid approval returns 503 unavailable. Workflow/replay return only `{accountId}`; its compatible opaque ID
-ceiling is 4096 UTF-16 units and allowance is the closed skeleton plus `6 * 4096`, covering escapes/lone surrogates.
-Mismatched/extra/expired/error completion returns `{error:'unavailable'}`/503 without invented not_applied. Other
-kinds' shapes and in-process workflows remain unchanged.
+Decision: rename and organization creation share public `account-operation-response-bounds.ts`. Approval is exactly
+`{ reference, expiresAt }`. Access seals ASCII base64url body + dot + MAC43; unseal/execute cap references at 4,096
+units. Canonical ISO expiry has at most 27 ASCII units: closed producer JSON costs `31 + 4096 + 27 = 4154` bytes.
+The browser requires usable expiry before dispatch. Workflow success/replay is exactly `{ accountId }`, with a
+nonempty opaque ID of at most 4,096 UTF-16 units: `16 + 6 × 4096 = 24592` bytes covers worst-case escaping.
+Incomplete, extra-field or mismatched rename results answer `{ error: "unavailable" }`/503, never fabricated
+not-applied. Organization output carries no invented handle or command binding; original browser custody binds it.
+Approval incompatibility also answers unavailable. Other kinds' shapes/in-process workflows keep their contracts.
 
-Error allowance is max serialized bytes of `{error:'account_operation_denied',effect_status:'not_applied'}` and
-`{error:'step_up_required',effect_status:'not_applied'}`. Denial supports 400/401/403/409/413/415/503; step-up only 401.
-Browser refusal handling requires the exact envelope/status/effect; bare 4xx cannot reset submitted work. Later
-refusal/current equality never settles prior unknown execution. Only original-account acknowledgement settles it,
-independently of failed/retired readback. Exact cleanup cannot consume replacement storage; mounted history is generic.
+Closed errors are `{ error, effect_status: "not_applied" }`: `account_operation_denied`/400,401,403,409,413,415,503;
+`step_up_required`/401; organization `platform_closed`/403. The additional supported envelope is
+`{ error: "unavailable" }`/503. Maximum closed error JSON is 69 bytes. Browser byte admission precedes fatal UTF-8
+and parsing, regardless of Content-Length. Unknown/malformed output cannot acknowledge work. Later refusal or
+session equality cannot settle prior unknown execution; exact cleanup cannot consume replacement storage.
 
-Each POST independently keeps five seconds through headers/body, releases abort-ignoring waits, and admits actual
-bytes before fatal decoding/parsing. Retirement before dispatch is unsent; later abort cannot undo native work.
-Key/descriptor, live-only reference/expiry, fresh proof, expectedHandle, profile, Access deadline/preparation and
-workflow CAS/replay remain. No native call, permission or automatic retry is added.
+Each POST independently keeps five seconds through headers/body, releasing abort-ignoring waits. Retirement before
+dispatch sends nothing; later abort cannot undo effects. Existing fresh-human proof, scope, organization gate,
+Access approval resolution, preparations, uniqueness, idempotency/CAS and workflow authority remain intact.
+Organization approval retries only supported unavailable once; execution never retries or renews approval
+automatically. Its entry/command sequence is session/session/approval/execution/session: five calls, six with
+approval retry. Deliberate same-command retry costs four, or five with approval retry; read Retry/restoration
+cost one session read and zero commands. A current original acknowledgement becomes generic history before final
+session observation, surviving failure/account change. Private handle/ID requires unchanged original caller and
+descriptor custody. Rename retains live-only reference/expiry, expectedHandle and its existing recovery below.
+Native/browser acceptance and native workflow/replay growth evidence remain separate from injected fixtures.
 Review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
 Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
 with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.

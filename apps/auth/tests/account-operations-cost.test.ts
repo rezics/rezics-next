@@ -150,7 +150,7 @@ test(
 );
 
 test(
-  'creating an organization makes at most three Auth requests whatever the person holds',
+  'creating an organization makes five Auth requests whatever the person holds',
   async () => {
     for (const scale of [1, 10, 100]) {
       reset(scale, 'organization');
@@ -164,8 +164,14 @@ test(
           ),
           page.getByRole('button', { name: 'Create organization', exact: true }).click(),
         ]);
-        await page.getByRole('status').waitFor();
-        await assertThreeRequests();
+        await page.getByText(`The organization @scale-${scale} was created.`, { exact: true }).waitFor();
+        expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+          'GET /session',
+          'GET /session',
+          'POST /account-operations/approve',
+          'POST /account-operations/execute',
+          'GET /session',
+        ]);
       } finally {
         await context.close();
       }

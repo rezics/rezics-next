@@ -485,7 +485,7 @@ test(
       expect(postBodies('/account-operations/execute')[0]).toEqual({
         operationKey: approve.operationKey,
         operation: { kind: 'organization', handle: 'team-alpha' },
-        reference: 'approval-' + approve.operationKey,
+        reference: 'approval-' + approve.operationKey + '.' + 'a'.repeat(43),
       });
     } finally {
       await page.context().close();
