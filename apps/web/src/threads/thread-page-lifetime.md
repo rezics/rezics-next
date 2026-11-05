@@ -56,6 +56,17 @@ only after its query function completed for the exact current target, session re
 only when its viewer still matches the session subject. Old callbacks cannot invalidate, remember a slug, refresh or
 navigate after their admission retires.
 
+## Review header handoff
+
+Decision: the mounted review header consumes only the official installed `ReadingPageResponse.reviewContext`. It
+passes citation references through the existing [post-history reader and return lifetime](post-history-lifetime.md),
+preserving source post, source revision, question and vote revision as independent identities. Historical question
+labels and scales remain unavailable; no second history reader or lifetime host is added.
+
+The disclosure uses `browserObservation` and `subscribeCache` with a retiring lease scoped to the mounted page.
+Invalidation or fetching, equal session replacement, remount and an observed away-and-back session transition retire
+the old advice. Re-entry requires a new page admission.
+
 `ThreadReading` keeps its keyed post components mounted while a private page is unavailable. It replaces their page
 input with an empty document and removes page authors, title, board and realm, media, subjects, provenance and personal
 reaction or vote state. This keeps dirty editor and reply drafts, departure protection and uncertain command state in
