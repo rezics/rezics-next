@@ -1,8 +1,8 @@
-import type { QueryClient } from '@tanstack/react-query';
+import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { sessionQuery } from '../session/query';
 import { browserObservation } from '../session/observation';
 import { useRouter } from '@tanstack/react-router';
-import { useMemo, useRef, useSyncExternalStore } from 'react';
+import { useContext, useMemo, useRef, useSyncExternalStore } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import type { ErasureEnqueue, ErasureIntent } from './author-erasure';
 
@@ -81,6 +81,7 @@ export type AuthorErasureBrowserVisit = {
 /** Observe departure, including away/back before React gets a render. Never intercept navigation. */
 export function useAuthorErasureBrowserVisit(scope = ''): AuthorErasureBrowserVisit {
   const router = useRouter({ warn: false });
+  const client = useContext(QueryClientContext);
   const visit = useMemo(() => {
     const locale = getLocale();
     const address = typeof window === 'undefined' ? undefined : window.location.href;
@@ -105,6 +106,7 @@ export function useAuthorErasureBrowserVisit(scope = ''): AuthorErasureBrowserVi
         const changed = () => {
           current();
         };
+        const stopCache = client && browserObservation(client).subscribeCache(changed);
         const stop = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
           if (toLocation.href !== route) retire();
         });
@@ -117,6 +119,7 @@ export function useAuthorErasureBrowserVisit(scope = ''): AuthorErasureBrowserVi
         return () => {
           listeners.delete(notify);
           stop?.();
+          stopCache?.();
           if (typeof window !== 'undefined') {
             window.removeEventListener('popstate', changed);
             window.removeEventListener('hashchange', changed);
@@ -125,7 +128,7 @@ export function useAuthorErasureBrowserVisit(scope = ''): AuthorErasureBrowserVi
         };
       },
     };
-  }, [router, scope]);
+  }, [router, client, scope]);
   const previous = useRef(visit);
   if (previous.current !== visit) previous.current.retire();
   previous.current = visit;
