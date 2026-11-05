@@ -432,7 +432,8 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await resolve(7, contextA, 'Changed source release', contextA, nextRelease);
     await until(() => host.querySelector('[role="alert"]') !== null);
     expect(host.textContent).not.toContain('Changed source release');
-    expect(relationCalls).toHaveLength(7);
+    expect(relationCalls).toHaveLength(8);
+    expect(relationCalls.at(-1)?.query.context).toBe(contextA);
     const sourceRetry = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Retry this page'),
     );
@@ -440,7 +441,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await act(async () => sourceRetry.click());
     await until(() => subjectCalls.length === 9);
     await resolve(8, contextA, 'Fresh source release', contextA, nextRelease);
-    await until(() => relationCalls.length === 8 && host.textContent?.includes('Fresh source release') === true);
+    await until(() => relationCalls.length === 9 && host.textContent?.includes('Fresh source release') === true);
     expect(relationCalls.at(-1)?.query.context).toBe(contextA);
     expect(host.textContent).toContain('exact selected Context');
     const generalTarget = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
@@ -456,7 +457,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await resolve(9, contextB, 'Mismatched Context', contextA);
     await until(() => host.querySelector('[role="alert"]') !== null);
     expect(host.textContent).not.toContain('Mismatched Context');
-    expect(relationCalls).toHaveLength(8);
+    expect(relationCalls).toHaveLength(9);
 
     await render(candidateContext);
     await until(() => subjectCalls.length === 11);
@@ -483,7 +484,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await act(async () => retrySelected.click());
     await until(() => subjectCalls.length === 14);
     await resolve(13, contextA, 'Retried selected Context');
-    await until(() => relationCalls.length === 12 && host.textContent?.includes('Retried selected Context') === true);
+    await until(() => relationCalls.length === 13 && host.textContent?.includes('Retried selected Context') === true);
     expect(subjectCalls.at(-1)?.query.context).toBe(contextA);
     expect(relationCalls.at(-1)?.query.context).toBe(contextA);
 
