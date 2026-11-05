@@ -10843,5 +10843,8 @@
   "library_yearly_goal_retry_exact": "同じ更新を再試行",
   "library_yearly_goal_saved": "目標を保存しました。現在の年を読み直しています。",
   "library_yearly_goal_invalid_target": "1〜1000 の整数を入力してください。",
-  "library_yearly_goal_loading": "今年の目標と進捗を読み込んでいます…"
+  "library_yearly_goal_loading": "今年の目標と進捗を読み込んでいます…",
+  "library_window_previous": "前へ",
+  "library_window_first": "最初へ",
+  "library_window_retry": "この表示範囲を再試行"
 }

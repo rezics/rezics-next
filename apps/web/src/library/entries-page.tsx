@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -38,10 +38,14 @@ import {
   type ShelfSummaryPresentation,
 } from './shelf-summary-view';
 
+import type { EntriesWindowControls } from './entries-window-navigation';
+
 type Display = ShelfDisplay;
 
 export function PersonalLibraryPage({
   page,
+  windowControls,
+  windowRetry,
   presentation,
   summary,
   locale,
@@ -62,6 +66,8 @@ export function PersonalLibraryPage({
   isCurrent,
 }: {
   page: PersonalLibraryView;
+  windowControls?: EntriesWindowControls;
+  windowRetry?: ReactNode;
   presentation?: ShelfPresentationResolution;
   summary?: ShelfSummaryPresentation;
   locale: string;
@@ -178,7 +184,7 @@ export function PersonalLibraryPage({
       )}
       <section hidden={!entriesAdmitted} aria-labelledby="tracked-entries-heading" className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
+          <h2 tabIndex={-1} id="tracked-entries-heading" className="text-2xl font-semibold">
             {heading}
           </h2>
           <Exposure operation="library_entry.list">
@@ -304,17 +310,38 @@ export function PersonalLibraryPage({
             }
           />
         )}
-        {page.next && !page.readState ? (
-          <a
-            className={buttonVariants({ variant: 'outline' })}
-            href={shelfHref(locale, {
-              ...firstPage,
-              cursor: page.next,
-            })}
-          >
-            {m.library_next_page()}
-          </a>
-        ) : null}
+        <nav className="flex flex-wrap gap-3" aria-label={m.library_tracked_entries()}>
+          {windowRetry}
+          {windowControls?.previous !== undefined ? (
+            <a className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              aria-disabled={windowControls.busy}
+              href={windowControls.href(windowControls.previous)}
+              onClick={(event) => {
+                if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                if (!windowControls.busy) windowControls.move('previous', windowControls.previous!, event.detail === 0);
+              }}>{m.library_window_previous()}</a>
+          ) : null}
+          {windowControls?.first ? (
+            <a className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              aria-disabled={windowControls.busy} href={windowControls.href(null)}
+              onClick={(event) => {
+                if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                if (!windowControls.busy) windowControls.move('first', null, event.detail === 0);
+              }}>{m.library_window_first()}</a>
+          ) : null}
+          {page.next && !page.readState ? (
+            <a className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+              aria-disabled={windowControls?.busy}
+              href={windowControls ? windowControls.href(page.next) : shelfHref(locale, { ...firstPage, cursor: page.next })}
+              onClick={windowControls ? (event) => {
+                if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                if (!windowControls.busy) windowControls.move('next', page.next!, event.detail === 0);
+              } : undefined}>{m.library_next_page()}</a>
+          ) : null}
+        </nav>
       </section>
     </div>
   );

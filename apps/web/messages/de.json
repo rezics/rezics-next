@@ -10749,5 +10749,8 @@
   "library_yearly_goal_retry_exact": "Änderung exakt wiederholen",
   "library_yearly_goal_saved": "Ziel gespeichert. Das aktuelle Jahr wird erneut gelesen.",
   "library_yearly_goal_invalid_target": "Gib eine ganze Zahl von 1 bis 1000 ein.",
-  "library_yearly_goal_loading": "Jahresziel und Fortschritt werden geladen…"
+  "library_yearly_goal_loading": "Jahresziel und Fortschritt werden geladen…",
+  "library_window_previous": "Zurück",
+  "library_window_first": "Anfang",
+  "library_window_retry": "Genau dieses Fenster erneut laden"
 }

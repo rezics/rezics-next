@@ -10749,5 +10749,8 @@
   "library_yearly_goal_retry_exact": "동일 업데이트 재시도",
   "library_yearly_goal_saved": "목표를 저장했습니다. 현재 연도를 다시 읽는 중입니다.",
   "library_yearly_goal_invalid_target": "1부터 1000까지의 정수를 입력하세요.",
-  "library_yearly_goal_loading": "올해 목표와 진행 상황을 불러오는 중…"
+  "library_yearly_goal_loading": "올해 목표와 진행 상황을 불러오는 중…",
+  "library_window_previous": "이전",
+  "library_window_first": "처음",
+  "library_window_retry": "이 창 다시 시도"
 }

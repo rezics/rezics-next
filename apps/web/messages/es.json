@@ -10749,5 +10749,8 @@
   "library_yearly_goal_retry_exact": "Reintentar actualización exacta",
   "library_yearly_goal_saved": "Objetivo guardado. Volviendo a leer el año actual.",
   "library_yearly_goal_invalid_target": "Introduce un número entero del 1 al 1000.",
-  "library_yearly_goal_loading": "Cargando el objetivo y el progreso de este año…"
+  "library_yearly_goal_loading": "Cargando el objetivo y el progreso de este año…",
+  "library_window_previous": "Anterior",
+  "library_window_first": "Primera",
+  "library_window_retry": "Reintentar esta ventana exacta"
 }

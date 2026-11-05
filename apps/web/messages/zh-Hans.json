@@ -10761,5 +10761,8 @@
   "library_yearly_goal_retry_exact": "原样重试更新",
   "library_yearly_goal_saved": "目标已保存。正在重新读取当前年份。",
   "library_yearly_goal_invalid_target": "请输入 1 到 1000 的整数。",
-  "library_yearly_goal_loading": "正在加载本年度目标和进度…"
+  "library_yearly_goal_loading": "正在加载本年度目标和进度…",
+  "library_window_previous": "上一页",
+  "library_window_first": "首页",
+  "library_window_retry": "重试此页"
 }
