@@ -332,7 +332,6 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     } as GameReaderReady;
     const outside = window.document.createElement('button');
     outside.textContent = 'Continue';
-    cancelledHost.append(outside);
     await act(async () =>
       cancelledRoot.render(
         <QueryClientProvider client={client}>
@@ -350,6 +349,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
         </QueryClientProvider>,
       ),
     );
+    cancelledHost.append(outside);
     await act(async () => {
       window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
       outside.focus();
