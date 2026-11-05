@@ -5,7 +5,6 @@ import { readPublicCollectionDiscovery } from './read';
 export function publicCollectionDiscoveryQueryOptions(locale: string, cursor?: string) {
   return queryOptions({
     ...publicRead,
-    staleTime: 0,
     gcTime: 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
