@@ -34,6 +34,7 @@ const globals = {
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -128,6 +129,7 @@ const { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } =
 const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
 const { ManagedAccountDetail } = await import('../src/settings/managed-account-detail');
 const { ManagedAccountActions } = await import('../src/settings/managed-account-actions');
+const { closedProfileEditing } = await import('../src/settings/editable-profile-source');
 const identity = (id = viewerId) => ({
   id,
   kind: 'actor' as const,
@@ -615,6 +617,7 @@ function responseFor(request: Request) {
         avatar: null,
         publicViews: { posts: true, reviews: true, collections: true, realms: true },
       },
+      editing: closedProfileEditing({ id: viewerId, kind: 'actor' }, viewerId),
     };
   return {}; // viewerActions body is supplied from the exact request selection in answer().
 }
