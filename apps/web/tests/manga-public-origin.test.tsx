@@ -65,6 +65,11 @@ test('selected Context without Realm has honest unsupported exact return; delibe
   expect(parse(mangaPublicCorrectionHref(base, selected))).toEqual({ kind: 'origin', origin: selected });
   const realm = { ...origin, context: other, realm: other, returnHref: `${publicHref}?realm=${other}` };
   expect(parse(mangaPublicCorrectionHref(base, realm))).toEqual({ kind: 'origin', origin: realm });
+  const japanese = mangaObservedOrigin({
+    ...origin,
+    returnHref: publicHref.replace('comic', '紙の天文台') + '#manga-reader',
+  });
+  expect(parse(mangaPublicCorrectionHref(base, japanese))).toEqual({ kind: 'origin', origin: japanese });
   const fresh = mangaGlobalVisitHref(id, 'en', realm.returnHref);
   expect(fresh).not.toContain('origin=');
   expect(parse(fresh)).toEqual({ kind: 'global', returnHref: realm.returnHref });
@@ -106,6 +111,7 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const credentials = (csrfToken: string) =>
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: other, csrfToken });
+  client.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   credentials('first');
   const host = window.document.createElement('main');
   window.document.body.append(host);
@@ -143,6 +149,7 @@ test('mounted installed route and session retain canonical origin, acquire fresh
     ).toBe(href);
     for (const visit of [
       parse(mangaPublicCorrectionHref(base, mangaObservedOrigin({ ...origin, context: other }))),
+      parse(mangaPublicCorrectionHref(base, { ...origin, realm: other, returnHref: `${publicHref}?realm=${other}` })),
       { kind: 'invalid' } as const,
     ]) {
       await render(visit);

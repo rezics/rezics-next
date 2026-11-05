@@ -161,8 +161,7 @@ export function mangaUnsupportedVisit(visit: MangaPublicVisit | undefined): bool
 /** Public callers already own the observed read. This descriptor performs no producer read. */
 export function mangaObservedOrigin(origin: MangaPublicOrigin): MangaPublicOrigin {
   const { returnHref, ...observed } = origin;
-  return {
-    ...observed,
-    ...(returnHref && (origin.context === candidateContext || origin.realm) ? { returnHref } : {}),
-  };
+  if (!returnHref || (origin.context !== candidateContext && !origin.realm)) return observed;
+  const address = new URL(returnHref, 'https://rezics.invalid');
+  return { ...observed, returnHref: `${address.pathname}${address.search}${address.hash}` };
 }
