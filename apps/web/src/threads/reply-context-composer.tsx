@@ -5,6 +5,7 @@ import type { CreatedPost, WriteFailure } from './actions';
 import { PostComposer } from './composer';
 import { ReplyContext, type ReplyParents } from './reply-context';
 import type { ReplyCommand } from './reply-context-intent';
+import type { SlowModeVisitOwner } from './slow-mode/contract';
 
 export function ThreadReplyComposer({
   parentId,
@@ -22,6 +23,8 @@ export function ThreadReplyComposer({
   initialKey: string;
   canSubmit?: boolean;
   slowModeAdvice?: import('./thread-page').ThreadPageObservation['slowMode'] | undefined;
+  slowModeSource?: SlowModeVisitOwner;
+  slowModeSelection?: SlowModeVisitOwner;
   containerId: string;
   boardId?: string;
   credentialMode: string;
@@ -35,7 +38,14 @@ export function ThreadReplyComposer({
       {...composer}
       canSubmit={canSubmit}
       replyTargetId={parentId}
-      slowModeScopeKey={JSON.stringify([composer.boardId, composer.containerId, parentId, getLocale(), credentialMode])}
+      slowModeScopeKey={JSON.stringify([
+        composer.boardId,
+        composer.containerId,
+        parentId,
+        composer.focusRequest,
+        getLocale(),
+        credentialMode,
+      ])}
       slowModeCredentialMode={credentialMode}
       replyContext={
         parentId === null || !canSubmit ? null : (

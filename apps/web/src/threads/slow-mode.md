@@ -32,6 +32,9 @@ replacement, fetching and invalidation retire the original visit, including tran
 Current inspection cannot acknowledge an original command. Source-object replacement still requires the caller's
 original source identity in addition to its selection scope.
 
+Decision: private slow-mode reads bind to their supplying source and exact selection owners; source replacement,
+owner invalidation and A-B-A selection permanently retire the prior visit.
+
 ## Native refusal recovery
 
 A cooldown refusal keeps the draft and shows the native retry time. The person explicitly resubmits when they choose

@@ -37,6 +37,7 @@ import { ThreadReplyComposer } from './reply-context-composer';
 import { AuthorErasureEntry } from './author-erasure-entry';
 import { authorErasureSessionSource } from './author-erasure-lifetime';
 import { ThreadActivity } from './thread-activity/view';
+import type { SlowModeVisitOwner } from './slow-mode/contract';
 
 export type ThreadReadingPage = LoadedThreadPage & {
   authors: PageAuthors;
@@ -242,6 +243,44 @@ export function ThreadReading({
     parentId: null,
     focusRequest: 0,
   });
+  const replyTargetRef = useRef(replyTarget);
+  replyTargetRef.current = replyTarget;
+  const slowModeSourceIdentity = useMemo(() => ({}), [page, pageCallbackRevision]);
+  const slowModeSourceState = useRef({
+    identity: slowModeSourceIdentity,
+    pageCurrent,
+    isCurrent: isPageCallbackCurrent,
+  });
+  slowModeSourceState.current = { identity: slowModeSourceIdentity, pageCurrent, isCurrent: isPageCallbackCurrent };
+  const slowModeSource = useMemo(() => {
+    const identity = slowModeSourceIdentity;
+    let admitted = false;
+    let retired = false;
+    return {
+      identity,
+      current: () => {
+        const state = slowModeSourceState.current;
+        const current = state.identity === identity && state.pageCurrent && state.isCurrent();
+        if (current) admitted = true;
+        else if (admitted) retired = true;
+        return current && !retired;
+      },
+    } satisfies SlowModeVisitOwner;
+  }, [slowModeSourceIdentity]);
+  const slowModeSelection = useMemo(() => {
+    const identity = replyTarget;
+    let admitted = false;
+    let retired = false;
+    return {
+      identity,
+      current: () => {
+        const current = replyTargetRef.current === identity;
+        if (current) admitted = true;
+        else if (admitted) retired = true;
+        return current && !retired;
+      },
+    } satisfies SlowModeVisitOwner;
+  }, [replyTarget]);
   const [replyPending, setReplyPending] = useState(false);
   const branches = useMemo(() => conversationPageModel(thread.id, posts.posts), [thread.id, posts.posts]);
   const replyParents = useMemo(
@@ -367,7 +406,9 @@ export function ThreadReading({
 
   function selectReplyParent(parentId: string | null) {
     if (replyPending) return;
-    setReplyTarget((current) => ({ parentId, focusRequest: current.focusRequest + 1 }));
+    const next = { parentId, focusRequest: replyTargetRef.current.focusRequest + 1 };
+    replyTargetRef.current = next;
+    setReplyTarget(next);
   }
   function updatePost(post: ThreadPost) {
     if (!isPageCallbackCurrent()) return;
@@ -533,6 +574,8 @@ export function ThreadReading({
                       : { state: 'unavailable', retryable: true }
                     : undefined
                 }
+                slowModeSource={slowModeSource}
+                slowModeSelection={slowModeSelection}
                 containerId={thread.id}
                 boardId={thread.boardId}
                 credentialMode={session === 'signed-in' ? 'session' : 'anonymous'}

@@ -87,7 +87,7 @@ function BoardPage() {
         credentialMode: router.options.context.credentialMode,
       }}
     >
-      {(currentPage, reactionOrigin) => (
+      {(currentPage, reactionOrigin, slowModeSource) => (
         <>
           {search.returnTo ? (
             <a
@@ -120,6 +120,7 @@ function BoardPage() {
                   boardId={id}
                   scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
                   credentialMode={router.options.context.credentialMode}
+                  source={slowModeSource}
                   onApplied={() => void router.invalidate()}
                 />
               ) : null

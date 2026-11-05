@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -18,6 +19,7 @@ import { BoardCommunityStatus } from './board-community';
 import type { BoardOpeningReactionOrigin } from './board-opening';
 import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardPageRead, BoardPageReaderOrigin } from './reads';
+import type { SlowModeVisitOwner } from './slow-mode/contract';
 
 export type BoardPageCallerInput = {
   id: string;
@@ -856,12 +858,29 @@ function BoardPageVisit({
 }: {
   result: BoardPageLoadResult;
   input: BoardPageCallerInput;
-  children: (page: CommunityBoardPage, reactionOrigin: BoardOpeningReactionOrigin) => ReactNode;
+  children: (
+    page: CommunityBoardPage,
+    reactionOrigin: BoardOpeningReactionOrigin,
+    source: SlowModeVisitOwner,
+  ) => ReactNode;
 }) {
   const client = useContext(QueryClientContext);
   const router = useRouter();
   const [caller] = useState(() => (client ? currentCallerForResult(client, result, input) : undefined));
   const lifecycle = useCallerLifecycle(caller, input);
+  const source = useMemo(() => {
+    let observed = false;
+    let retired = false;
+    return {
+      identity: result,
+      current: () => {
+        const current = caller?.ownsResult(result) ?? false;
+        if (current) observed = true;
+        else if (observed) retired = true;
+        return current && !retired;
+      },
+    } satisfies SlowModeVisitOwner;
+  }, [caller, result]);
   const hydrated = useSyncExternalStore(
     browserHydration.subscribe,
     browserHydration.getSnapshot,
@@ -885,10 +904,10 @@ function BoardPageVisit({
     caller.isTransferredResult &&
     caller.ownsReceipt(result)
   )
-    return children(result, caller.reactionOrigin(result));
+    return children(result, caller.reactionOrigin(result), source);
   if (!lifecycle.current || !caller || (!caller.ownsResult(result) && !caller.canDisplayTransferredPublic))
     return createElement(BoardCommunityStatus, { state: 'loading' });
-  return children(result, caller.reactionOrigin(result));
+  return children(result, caller.reactionOrigin(result), source);
 }
 
 /** Admission sits outside the shared renderer and existing participation/start/menu controllers. */
@@ -899,7 +918,11 @@ export function BoardPageCallerHost({
 }: {
   result: BoardPageLoadResult;
   input: BoardPageCallerInput;
-  children: (page: CommunityBoardPage, reactionOrigin: BoardOpeningReactionOrigin) => ReactNode;
+  children: (
+    page: CommunityBoardPage,
+    reactionOrigin: BoardOpeningReactionOrigin,
+    source: SlowModeVisitOwner,
+  ) => ReactNode;
 }) {
   const key = result.caller?.id ?? currentPageKey(input);
   return createElement(BoardPageVisit, { key, result, input, children });

@@ -12,7 +12,7 @@ import { sessionQuery } from '../../session/query';
 import { browserObservation } from '../../session/observation';
 import { useReaderAddress } from '../../reader/current-origin';
 import { getLocale } from '../../paraglide/runtime.js';
-import type { SlowModePort, SlowModeRead } from './contract';
+import type { SlowModePort, SlowModeRead, SlowModeVisitOwner } from './contract';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
 
@@ -66,6 +66,8 @@ export function useSlowModeVisit(
   boardId: string | undefined,
   scopeKey = 'board',
   credentialMode = 'session',
+  source?: SlowModeVisitOwner,
+  selection?: SlowModeVisitOwner,
 ): SlowModeVisit | null {
   const client = useContext(QueryClientContext);
   const observation = client ? browserObservation(client) : undefined;
@@ -86,6 +88,8 @@ export function useSlowModeVisit(
     session.csrfToken.length > 0;
   const visit = useMemo(() => {
     if (!ready || !boardId || !session?.subject || !session.csrfToken) return null;
+    let sourceWasCurrent = false;
+    let selectionWasCurrent = false;
     const state: SlowModeVisit & { retired: boolean } = {
       id: String(++nextVisitId),
       controller: new AbortController(),
@@ -101,11 +105,35 @@ export function useSlowModeVisit(
       },
       current(signal = state.controller.signal) {
         if (observation?.getSnapshot() !== owner || !address.isCurrent()) state.retire();
-        return !state.retired && !signal.aborted && signal === state.controller.signal;
+        const sourceCurrent = source?.current() ?? true;
+        const selectionCurrent = selection?.current() ?? true;
+        if (sourceCurrent) sourceWasCurrent = true;
+        else if (sourceWasCurrent) state.retire();
+        if (selectionCurrent) selectionWasCurrent = true;
+        else if (selectionWasCurrent) state.retire();
+        return (
+          !state.retired &&
+          !signal.aborted &&
+          signal === state.controller.signal &&
+          sourceCurrent &&
+          selectionCurrent
+        );
       },
     };
     return state;
-  }, [boardId, client, credentialMode, owner, ready, scopeKey, session?.csrfToken, session?.subject, address.key]);
+  }, [
+    boardId,
+    client,
+    credentialMode,
+    owner,
+    ready,
+    scopeKey,
+    session?.csrfToken,
+    session?.subject,
+    address.key,
+    source,
+    selection,
+  ]);
   // Render replacement retires the previous owner before any retained callback can dispatch.
   const previous = useRef(visit);
   if (previous.current !== visit) previous.current?.retire();
@@ -139,6 +167,8 @@ export function useSlowModeRead(
   boardId: string | undefined,
   scopeKey = 'board',
   credentialMode = 'session',
+  source?: SlowModeVisitOwner,
+  selection?: SlowModeVisitOwner,
 ): {
   visit: SlowModeVisit | null;
   read: SlowModeRead | undefined;
@@ -146,7 +176,7 @@ export function useSlowModeRead(
   reload: () => void;
 } {
   const port = useSlowModePort();
-  const visit = useSlowModeVisit(boardId, scopeKey, credentialMode);
+  const visit = useSlowModeVisit(boardId, scopeKey, credentialMode, source, selection);
   const query = useQuery({
     staleTime: 0,
     enabled: !!visit,

@@ -9,6 +9,11 @@ export type SlowModePolicy = NonNullable<
 
 export type SlowModeRead = { kind: 'available'; policy: SlowModePolicy } | { kind: 'denied' } | { kind: 'unavailable' };
 
+export type SlowModeVisitOwner = {
+  identity: object;
+  current: () => boolean;
+};
+
 export type SlowModeChange =
   | { kind: 'applied'; policy: SlowModePolicy }
   | { kind: 'denied' }
