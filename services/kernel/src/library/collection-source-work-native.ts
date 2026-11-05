@@ -7,7 +7,9 @@ import { currentOperationalResources, hasLiveOperationalTransaction } from '../c
 import { deadlineClient } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
-import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
+// Search work context is loaded on use: a static import leaves COLLECTION_SOURCE_WORK_COST
+// uninitialized during Collection Source / Members declaration cycles.
+import type { ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
 import {
   CANONICAL_SOURCE_RECEIVING_COST,
@@ -24,7 +26,9 @@ import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } fr
 import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 
-export type CollectionSourceWorkDefinition = Awaited<ReturnType<typeof readScopeWorkDefinition>>;
+export type CollectionSourceWorkDefinition = Awaited<
+  ReturnType<(typeof import('../search/scope-work-context.ts'))['readScopeWorkDefinition']>
+>;
 export type CollectionSourceWorkState = Readonly<{
   metadata: NativeCollectionMetadata;
   basis: CanonicalBasis;
@@ -83,6 +87,7 @@ export async function readCollectionSourceWorkState(
 ): Promise<CollectionSourceWorkState> {
   const current = frame(options.deadline);
   try {
+    const { readScopeWorkDefinition } = await import('../search/scope-work-context.ts');
     const native = await readScopeWorkDefinition(work, { pool, access: options.access, deadline: options.deadline });
     if (!hasLiveOperationalTransaction(work.tx)) throw new ProblemError('semantic_not_ready');
     const resources = currentOperationalResources(work.tx);

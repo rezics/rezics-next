@@ -13,7 +13,7 @@ import {
   type CollectionSourceContext,
 } from '../library/collection-source.ts';
 import { nativeCollectionOrdinalPageBound } from '../library/collection-source-native.ts';
-import { COLLECTION_SOURCE_WORK_COST } from '../library/collection-source-work-native.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
 import type {
   NativeOrdinalFrontier,
   NativeOrdinalKey,
@@ -37,7 +37,7 @@ const nativeOrdinal = nativeCollectionOrdinalPageBound(ordinalPath.rawOrdinalRow
 const ordinalTerms = Object.freeze({
   metadataPrefix: MEMBERS_PREPARATION_SOURCE_TERMS.metadataPrefix,
   searchBody: MEMBERS_PREPARATION_SOURCE_TERMS.searchBody,
-  collectionState: repeatBound(sourceBound(COLLECTION_SOURCE_WORK_COST.state), ordinalPath.membersSnapshots),
+  collectionState: repeatBound(sourceBound(CANONICAL_SOURCE_RECEIVING_COST.state), ordinalPath.membersSnapshots),
   nativeOrdinal: repeatBound(sourceBound(nativeOrdinal.work), ordinalPath.rawOrdinalRowsMaximum),
   sourceTransaction: MEMBERS_PREPARATION_SOURCE_TERMS.sourceTransaction,
 });
