@@ -664,8 +664,16 @@ export function createAniListImport(deps: Dependencies) {
       let currentScore = null;
       if (row.payload.review?.score) {
         try {
-          const native = await votes.readVoteReview(actor, STANDARD_QUESTION_ID, row.payload.review.score.native.target.subjectId);
-          currentScore = { status: 'current' as const, question: nativeQuestion(native.question), vote: native.currentVote };
+          const native = await votes.readVoteReview(
+            actor,
+            STANDARD_QUESTION_ID,
+            row.payload.review.score.native.target.subjectId,
+          );
+          currentScore = {
+            status: 'current' as const,
+            question: nativeQuestion(native.question),
+            vote: native.currentVote,
+          };
         } catch (error) {
           if (!(error instanceof VoteReviewUnavailableError)) throw error;
           currentScore = { status: 'unavailable' as const, reason: error.reason };
@@ -760,7 +768,9 @@ export function createAniListImport(deps: Dependencies) {
             identityEpoch: observation.epoch,
             matchFingerprint: matching.fingerprint,
           },
-          currentVote: native ? { status: 'current', vote: native.currentVote } : { status: 'unavailable', reason: unavailable! },
+          currentVote: native
+            ? { status: 'current', vote: native.currentVote }
+            : { status: 'unavailable', reason: unavailable! },
           commandKey: randomUUID(),
           consentKey: randomUUID(),
           consented: false,
@@ -1131,9 +1141,16 @@ export function createAniListImport(deps: Dependencies) {
         continue;
       }
       // Current native exposure is required even before replaying an importer result.
-      if (reviewed.score) await prepareVoteTarget(deps, actor, {
-        questionId: reviewed.score.native.question.id, targetId: reviewed.score.native.target.subjectId,
-      }, deadline);
+      if (reviewed.score)
+        await prepareVoteTarget(
+          deps,
+          actor,
+          {
+            questionId: reviewed.score.native.question.id,
+            targetId: reviewed.score.native.target.subjectId,
+          },
+          deadline,
+        );
       let scoreCurrent: 'current' | 'stale' | null = null;
       if (reviewed.score && !reviewed.score.native.consented) {
         const question = await readScoreQuestion(actor);
@@ -1226,11 +1243,21 @@ export function createAniListImport(deps: Dependencies) {
           scoreOutcome = { status: 'skipped', reason: 'Native vote effects were not separately confirmed.' };
           if (status === 'unsupported') status = 'skipped';
         } else if (!reviewed.score.native.guard) {
-          scoreOutcome = { status: 'unavailable', ...(reviewed.score.native.reason === undefined ? {} : { reason: reviewed.score.native.reason }) };
-        } else if (reviewed.score.action === 'vote' && reviewed.score.native.currentVote.status === 'current' &&
-          reviewed.score.native.currentVote.vote?.units !== null && reviewed.score.native.currentVote.vote !== null &&
-          !reviewed.input.replace) {
-          scoreOutcome = { status: 'skipped', reason: 'The current native vote was preserved; replacement was not selected.' };
+          scoreOutcome = {
+            status: 'unavailable',
+            ...(reviewed.score.native.reason === undefined ? {} : { reason: reviewed.score.native.reason }),
+          };
+        } else if (
+          reviewed.score.action === 'vote' &&
+          reviewed.score.native.currentVote.status === 'current' &&
+          reviewed.score.native.currentVote.vote?.units !== null &&
+          reviewed.score.native.currentVote.vote !== null &&
+          !reviewed.input.replace
+        ) {
+          scoreOutcome = {
+            status: 'skipped',
+            reason: 'The current native vote was preserved; replacement was not selected.',
+          };
         } else {
           if (signal?.aborted || Date.now() >= deadline) break;
           const admission = await save(
@@ -1257,16 +1284,21 @@ export function createAniListImport(deps: Dependencies) {
           );
           if (admission.value.reviewId === null) break;
           try {
-            await votes.putVoteOutcome(actor, {
-              questionId: reviewed.score!.native.question.id,
-              targetId: reviewed.score!.native.target.subjectId,
-              units: reviewed.score!.units,
-              guard: reviewed.score!.native.guard!,
-            }, reviewed.score!.native.commandKey);
+            await votes.putVoteOutcome(
+              actor,
+              {
+                questionId: reviewed.score!.native.question.id,
+                targetId: reviewed.score!.native.target.subjectId,
+                units: reviewed.score!.units,
+                guard: reviewed.score!.native.guard!,
+              },
+              reviewed.score!.native.commandKey,
+            );
             scoreOutcome = { status: 'applied' };
           } catch (error) {
             if (error instanceof VoteReviewStaleError) scoreOutcome = { status: 'stale', reason: error.reason };
-            else if (error instanceof VoteReviewUnavailableError) scoreOutcome = { status: 'unavailable', reason: error.reason };
+            else if (error instanceof VoteReviewUnavailableError)
+              scoreOutcome = { status: 'unavailable', reason: error.reason };
             else throw error;
           }
           if (status === 'unsupported') status = scoreOutcome.status;

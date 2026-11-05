@@ -262,7 +262,12 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     conversion: 'owner-selected-native-units',
     native: {
       availability: 'available',
-      guard: { version: 1, question: { revision: 1, lifecycleRevision: 1 }, subject: { canonicalId: subjectId }, ownVote: { state: 'present' } },
+      guard: {
+        version: 1,
+        question: { revision: 1, lifecycleRevision: 1 },
+        subject: { canonicalId: subjectId },
+        ownVote: { state: 'present' },
+      },
       question: { id: STANDARD_QUESTION_ID, revision: 1, minimumUnits: 0, maximumUnits: 20, stepUnits: 1 },
       currentVote: { status: 'current', vote: { units: 11 } },
       consented: false,
@@ -276,7 +281,10 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
   });
   expect(consented.status).toBe(200);
-  expect(await consented.json()).toMatchObject({ complete: false, outcomes: [{ score: { status: 'unavailable', reason: 'atomic_guard_unavailable' } }] });
+  expect(await consented.json()).toMatchObject({
+    complete: false,
+    outcomes: [{ score: { status: 'unavailable', reason: 'atomic_guard_unavailable' } }],
+  });
   expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 11 });
   const scorePage = await f.send(importer.bearer, 'GET', path2);
   expect(scorePage.status).toBe(200);
@@ -287,15 +295,29 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
   });
   expect(exactRetry.status).toBe(200);
-  expect(await exactRetry.json()).toMatchObject({ complete: false, outcomes: [{ score: {
-    status: 'unavailable', reason: 'atomic_guard_unavailable',
-  } }] });
-  await votes.putVoteOutcome(importer.actor, { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 13 }, crypto.randomUUID());
+  expect(await exactRetry.json()).toMatchObject({
+    complete: false,
+    outcomes: [
+      {
+        score: {
+          status: 'unavailable',
+          reason: 'atomic_guard_unavailable',
+        },
+      },
+    ],
+  });
+  await votes.putVoteOutcome(
+    importer.actor,
+    { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 13 },
+    crypto.randomUUID(),
+  );
   const staleVote = await f.send(importer.bearer, 'POST', path2 + ':apply', {
     confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
   });
   expect(staleVote.status).toBe(200);
-  expect(await staleVote.json()).toMatchObject({ outcomes: [{ score: { status: 'stale', reason: 'own_vote_changed' } }] });
+  expect(await staleVote.json()).toMatchObject({
+    outcomes: [{ score: { status: 'stale', reason: 'own_vote_changed' } }],
+  });
   expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 13 });
   const refreshedScore = await f.send(importer.bearer, 'POST', path2 + ':review', {
     ordinal: 1,

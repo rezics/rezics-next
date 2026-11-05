@@ -562,36 +562,52 @@ export function createVoteCommands(config: Dependencies) {
     const deadline = deadlineFor(5_000);
     const { question, target } = await prepareVoteTarget(config, actor, { questionId, targetId }, deadline);
     const epochs = await readIdentityRatingEpochs(
-      pool, [targetId, target.subjectId].map((id) => partitionOf(requireRoute(id))), deadline,
+      pool,
+      [targetId, target.subjectId].map((id) => partitionOf(requireRoute(id))),
+      deadline,
     );
-    return withReadTransaction(pool, async (client) => {
-      const route = requireRoute(owner.accountId);
-      await partitionReadClient(client, partitionOf(route));
-      assertCurrentAccount(owner, await readAccount(client, route, owner.accountId));
-      const slots = await readVoteReviewSlots(client, {
-        ownerId: owner.accountId, questionId, targetIds: [targetId, target.subjectId],
-      });
-      // The counted-target index selects the native merge winner, including a raw redirected slot.
-      const effective = (await client.query<VoteRow>(`
+    return withReadTransaction(
+      pool,
+      async (client) => {
+        const route = requireRoute(owner.accountId);
+        await partitionReadClient(client, partitionOf(route));
+        assertCurrentAccount(owner, await readAccount(client, route, owner.accountId));
+        const slots = await readVoteReviewSlots(client, {
+          ownerId: owner.accountId,
+          questionId,
+          targetIds: [targetId, target.subjectId],
+        });
+        // The counted-target index selects the native merge winner, including a raw redirected slot.
+        const effective =
+          (
+            await client.query<VoteRow>(
+              `
         SELECT target_id AS "targetId", units, revision, counted_revision AS "countedRevision",
           counted_target AS "countedTarget",
           to_char(changed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "changedAt",
           transaction_id AS "transactionId", voter_id AS "voterId", question_id AS "questionId", route
         FROM rating.vote WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND counted_target=$4`,
-        [route, owner.accountId, questionId, target.subjectId])).rows[0] ?? null;
-      const guard: VoteReviewGuard = {
-        version: 1,
-        question: { revision: question.revision, lifecycleRevision: question.lifecycleRevision },
-        subject: { canonicalId: target.subjectId, epochs },
-        ownVote: ownVoteReviewWitness({
-          ownerId: owner.accountId, questionId, requestedTargetId: targetId, canonicalId: target.subjectId,
-          original: slots.find((slot) => slot.targetId === targetId)!.vote,
-          canonical: slots.find((slot) => slot.targetId === target.subjectId)!.vote,
-          effective: asReviewRow(effective),
-        }),
-      };
-      return { question, guard, currentVote: effective ? asVote(effective) : null };
-    }, deadline);
+              [route, owner.accountId, questionId, target.subjectId],
+            )
+          ).rows[0] ?? null;
+        const guard: VoteReviewGuard = {
+          version: 1,
+          question: { revision: question.revision, lifecycleRevision: question.lifecycleRevision },
+          subject: { canonicalId: target.subjectId, epochs },
+          ownVote: ownVoteReviewWitness({
+            ownerId: owner.accountId,
+            questionId,
+            requestedTargetId: targetId,
+            canonicalId: target.subjectId,
+            original: slots.find((slot) => slot.targetId === targetId)!.vote,
+            canonical: slots.find((slot) => slot.targetId === target.subjectId)!.vote,
+            effective: asReviewRow(effective),
+          }),
+        };
+        return { question, guard, currentVote: effective ? asVote(effective) : null };
+      },
+      deadline,
+    );
   }
 
   return { putVote, putVoteOutcome, readOwnVote, readRatingQuestion, readVoteReview };
