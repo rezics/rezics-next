@@ -4417,7 +4417,7 @@ export class MergeTrain {
             retryMovedControlPlaneRefs();
             continue;
           }
-          const release = this.prepareControlPlaneRelease(
+          const release = await this.prepareControlPlaneRelease(
             request,
             [
               {
@@ -6921,7 +6921,7 @@ export class MergeTrain {
             assertIdentities();
             if (!proof.lifecycleEvidence || !proof.compatibilityCommand)
               throw new Error('Control-plane batch has no exact native release evidence');
-            const release = this.prepareControlPlaneRelease(
+            const release = await this.prepareControlPlaneRelease(
               preparedMembers[0]!.request,
               preparedMembers.map((member) => ({
                 entry: { id: member.entryId, request: member.request },
@@ -7362,7 +7362,7 @@ export class MergeTrain {
     }
   }
 
-  private prepareControlPlaneRelease(
+  private async prepareControlPlaneRelease(
     request: LandingRequest,
     owners: readonly DevLandingSourceOwner[],
     snapshot: ControlPlaneReleaseSnapshot,
