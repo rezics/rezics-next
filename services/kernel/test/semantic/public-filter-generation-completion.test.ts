@@ -132,6 +132,7 @@ test('generation restart keeps the original Source proof through lost observatio
         }
         if (result.status === 'drained' && !drainLost) {
           drainLost = true;
+          await f.propose(book, await f.create());
           throw new SearchUnavailableError('Lost completed native drain reply');
         }
         return result;

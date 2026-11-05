@@ -962,7 +962,12 @@ export function createSearchGenerationPublication(
   async function restart(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
     // Roll back only our exact alias intent, under the still-held native admission/copy fence.
     if (job.phase === 'intent') {
-      await held(job, context, meter);
+      // Source may have changed after the alias request. Recover admission custody independently
+      // before restoring this exact intent; a publication-completion verdict cannot authorize abort.
+      const retained = await writerGuard.fencePublication(reference(job), context);
+      add(meter, retained.cost);
+      if (retained.status !== 'fenced' || !same(retained.fence, fence(job)))
+        throw new Pending('source_pending');
       const current = await aliasTarget(job, context, meter);
       if (current === job.physical_target) {
         const previous = job.previous_target;
@@ -1106,24 +1111,24 @@ export function createSearchGenerationPublication(
             if (!(await completeSource(job, client, context, meter))) return preparing();
             await installFence(job, client, context, meter);
           }
-          if (!job.fenced_pass) {
-            const result = await writerGuard.drainPublication(fence(job), context);
-            add(meter, result.cost);
-            if ('reason' in result) throw new Pending(result.reason);
-            if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
-            if (result.status === 'draining') return preparing();
-            await held(job, context, meter);
-            // Revisit the real finite key population under the continuously held writer/copy barrier.
-            job.fenced_pass = true;
-            job.pass = (BigInt(job.pass) + 1n).toString();
-            job.phase = 'subject';
-            job.home = 0;
-            job.after_id = null;
-            job.after_route = null;
-            await save(client, job, meter);
-            return preparing();
-          }
           try {
+            if (!job.fenced_pass) {
+              const result = await writerGuard.drainPublication(fence(job), context);
+              add(meter, result.cost);
+              if ('reason' in result) throw new Pending(result.reason);
+              if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
+              if (result.status === 'draining') return preparing();
+              await held(job, context, meter);
+              // Revisit the real finite key population under the continuously held writer/copy barrier.
+              job.fenced_pass = true;
+              job.pass = (BigInt(job.pass) + 1n).toString();
+              job.phase = 'subject';
+              job.home = 0;
+              job.after_id = null;
+              job.after_route = null;
+              await save(client, job, meter);
+              return preparing();
+            }
             await held(job, context, meter);
             const queried = await adopt(job, context, meter, true);
             if (!queried) throw new Pending('source_pending');
