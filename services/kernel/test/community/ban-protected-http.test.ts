@@ -221,6 +221,75 @@ test.serial(
 );
 
 test.serial(
+  'a protected ban hides ordinary member reads and denies both admissions before native removal settles',
+  async () => {
+    const c = await community('protected');
+    const membership = () =>
+      queryCommunityDatabase(
+        'SELECT role FROM community.realm_member WHERE realm_id=$1 AND account_id=$2 AND upper_inf(valid)',
+        [c.realm.realmId, fixture.member.id],
+      );
+    const following = () =>
+      queryCommunityDatabase(
+        `SELECT reason FROM library.follow
+          WHERE account_id=$1 AND target_type='space' AND target_id=$2 AND state='following'`,
+        [fixture.member.id, c.space.spaceId],
+      );
+    // This Realm has no independent read grant: only settled membership opens its reads.
+    await hidden(c);
+    await json(await add(c.realm, fixture.member), 202);
+    await driver.settle();
+    expect(await membership()).toEqual([{ role: 'member' }]);
+    expect(await following()).toEqual([{ reason: 'membership' }]);
+    for (const [path] of reads(c)) expect((await call('GET', path, fixture.member)).status).toBe(200);
+
+    await worker.stop();
+    try {
+      const { ban: committed } = await json<{ ban: { workflowId: string } }>(
+        await ban(c.realm, fixture.member),
+      );
+      expect(committed.workflowId).toEqual(expect.any(String));
+      // Prove the ban's authorization barrier while the real removal is still queued.
+      expect(await membership()).toEqual([{ role: 'member' }]);
+      await hidden(c);
+
+      const beforeJoin = await footprint();
+      expect((await call('POST', `${realmPath(c.realm)}/membership`, fixture.member)).status).toBe(403);
+      expect(await footprint()).toEqual(beforeJoin);
+
+      const beforeAdd = await footprint();
+      expect((await add(c.realm, fixture.member)).status).toBe(403);
+      expect(await footprint()).toEqual(beforeAdd);
+      expect(await membership()).toEqual([{ role: 'member' }]);
+    } finally {
+      await restartWorker();
+      await driver.settle();
+    }
+
+    expect(await membership()).toEqual([]);
+    expect(await following()).toEqual([]);
+    await hidden(c);
+    expect((await call('DELETE', `${realmPath(c.realm)}/bans/${fixture.member.id}`)).status).toBe(204);
+    await driver.settle();
+    expect(await membership()).toEqual([]);
+    expect(await following()).toEqual([]);
+    await hidden(c);
+
+    await json(await add(c.realm, fixture.member), 202);
+    await driver.settle();
+    expect(await membership()).toEqual([{ role: 'member' }]);
+    expect(await following()).toEqual([{ reason: 'membership' }]);
+    expect((await call('GET', `${realmPath(c.realm)}/members/me`, fixture.member)).status).toBe(200);
+    for (const [path] of reads(c)) expect((await call('GET', path, fixture.member)).status).toBe(200);
+    const { space } = await json<{ space: { realmId: string | null } }>(
+      await call('GET', `/v1/spaces/${c.space.spaceId}`, fixture.member),
+    );
+    expect(space.realmId).toBe(c.realm.realmId);
+  },
+  120_000,
+);
+
+test.serial(
   'a banned account cannot be added or join until unbanned and the refusal writes nothing',
   async () => {
     const c = await community('public');

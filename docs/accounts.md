@@ -412,12 +412,12 @@ roles; creating a Realm does not create an owner membership. The
 [Realms/Spaces report](research/accounts-design-realms-spaces.md) supports retaining the current public self-join
 and direct manager-add model. There is no implicit invitation, recipient approval or request-to-join feature.
 
-Ban and membership transitions retain current authorization at publication. A current protected-ban veto cannot
-be bypassed through an independent grant, own-list candidate or pending inverse cleanup; public anonymous
-disclosure retains its existing floor. Unban restores neither membership nor follow. The existing membership
-transition producer owns exact settled hold retirement and account deletion entry: it must establish the real
-committed/cancelled generation. Inverse release, a synthetic settlement or requiring leave to bypass a settled
-hold cannot substitute for that transition.
+Ban and membership publication retain current authorization. Protected bans override independent grants,
+own-list candidates and pending inverse cleanup; public anonymous disclosure keeps its floor. Unban restores
+neither membership nor follow. Native acceptance holds ordinary-member cleanup for protected reads and both
+admission denials, separately from independent-grant and public controls. The membership transition producer
+owns settled hold retirement and account deletion entry, establishing the committed/cancelled generation.
+Inverse release, synthetic settlement or leave to bypass a settled hold cannot replace that transition.
 
 Web can settle pending join/leave using existing member and participation reads. Accepted 202 is not settled
 membership; arbitrary participation denial is not evidence of a ban. No workflow-status API is selected here.
