@@ -708,7 +708,9 @@ export function createImportTransport(options: ImportTransportOptions) {
     let current = id;
     while (!visited.has(current)) {
       visited.add(current);
-      const reply = await client.subjects({ id: current }).get({ fetch: { signal, redirect: 'manual' } });
+      const reply = await client.subjects({ id: current }).get({
+        fetch: { ...(signal === undefined ? {} : { signal }), redirect: 'manual' },
+      });
       if (reply.status !== 308) {
         const result = await response(async () => reply, 200, signal);
         const read = result.body as ReviewedSubjectRead;

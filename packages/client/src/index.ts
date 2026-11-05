@@ -8,6 +8,7 @@ import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/
 import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
+import type { ReviewedPersonEndpoint, ReviewedPersonAdmission, ReviewedPersonOperation } from './reviewed-person-identity.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
@@ -147,7 +148,46 @@ type SharedRoutes<Mounted, Original> = Original extends { body: unknown; respons
     };
 
 // Many modules inherit subjectRoutes. Intersecting their repeated anonymous 422 unions grows exponentially.
-type SubjectRoutes = SharedRoutes<Routes['subjects'], ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']>;
+type InstalledSubjectRoutes = SharedRoutes<Routes['subjects'], ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']>;
+type InstalledSubjectGet = InstalledSubjectRoutes[':id']['get'];
+type InstalledMergePost = InstalledSubjectRoutes['$merge']['post'];
+// The native reviewed merge routes are released; declaration publication currently also
+// depends on unrelated Kernel modules. Keep this bounded wire seam until that output lands.
+type SubjectRoutes = Omit<InstalledSubjectRoutes, ':id' | '$merge'> & {
+  ':id': Omit<InstalledSubjectRoutes[':id'], 'get'> & {
+    get: Omit<InstalledSubjectGet, 'query' | 'response'> & {
+      query: InstalledSubjectGet['query'] & {
+        includeViewerActions?: boolean;
+        reviewIdentitySource?: ReviewedPersonEndpoint['source'];
+        reviewIdentityExternalId?: string;
+      };
+      response: Omit<InstalledSubjectGet['response'], 200> & {
+        200: InstalledSubjectGet['response'][200] & { reviewedIdentity?: ReviewedPersonEndpoint | null };
+      };
+    };
+  };
+  '$merge': {
+    post: Omit<InstalledMergePost, 'body' | 'response'> & {
+      body: InstalledMergePost['body'] & {
+        expectedIdentity?: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
+      };
+      response: Omit<InstalledMergePost['response'], 200> & { 202: ReviewedPersonAdmission };
+    };
+  };
+};
+type SubjectIdentityOperationRoutes = {
+  ':id': {
+    get: {
+      body: unknown;
+      params: { id: string };
+      query: unknown;
+      headers: unknown;
+      response: Pick<InstalledMergePost['response'], 401 | 404 | 503> & {
+        200: { operation: ReviewedPersonOperation };
+      };
+    };
+  };
+};
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.
@@ -159,7 +199,10 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects'> & { subjects: SubjectRoutes }
+      ? Omit<Routes, 'subjects' | 'subjectIdentityOperations'> & {
+          subjects: SubjectRoutes;
+          subjectIdentityOperations: SubjectIdentityOperationRoutes;
+        }
       : KernelType['~Routes'][Prefix];
   }
 >;

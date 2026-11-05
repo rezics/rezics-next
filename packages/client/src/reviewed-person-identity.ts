@@ -18,6 +18,9 @@ export type ReviewedPersonMerge = {
   expectedIdentity: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
 };
 export type ReviewedPersonAdmission = { operation: { id: string } };
+export type ReviewedPersonOperation =
+  | { id: string; done: false }
+  | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
