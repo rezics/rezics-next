@@ -40,17 +40,41 @@ task seed:dev
 ```
 
 The one persona task provisions `developer@rezics.test`, prints its generated password and account ID, installs its
-importer key through native credential authorization and writes `.temp/local-stack/seed.env` for `seed:dev`.
+importer credential through native credential authorization and writes `.temp/local-stack/seed.env` for `seed:dev`.
 Native Auth startup also provisions this persona, so first-run public reads work without a separate manual bootstrap.
 `seed:dev` repeats `dev:persona` before invoking the existing dump/seed producer, reloading the private `seed.env`
 even on its first invocation. Keep `task dev` running and wait for normal readiness before seeding. Repeating either
-task reuses the developer, importer key and ordinary exposure command keys; no manual platform grant is needed.
+task reuses the developer, account key and ordinary exposure command keys; the native local bootstrap receipt does not
+restore a grant that an operator later revokes.
 The persona owns the development platform governance role, including `gate:any`, Access grant authority and the
 cross-media importer's subject, statement, source-statistic, source-fence and media-import permissions. The importer
-client requests only its import scopes. The same person can sign into Web using the printed password. Local database setup supplies a finite
+client requests only its import scopes. The separate `rezics-dev-showcase` first-party client requests only Board,
+thread, source-read, edition and Commerce scopes. The local stack installs that developer's direct `board:create`
+grant on Global Context using a one-time native bootstrap receipt; Board creation itself uses the ordinary authenticated
+`POST /v1/boards` command and current Access checks. This grants no production authority and does not change the
+platform governance policy. The same person can sign into Web using the printed password. Local database setup supplies a finite
 100,000-command/minute write budget for new and member accounts through the ordinary deployment override, so
 a fresh persona can submit the bounded dataset batches. Explicit existing overrides are preserved; all other rate
 families, authorization and operator checks retain their normal policy.
+
+`seed:dev` first finishes the existing finite import and publication. Its local showcase stage binds the selected
+VNDB `v2002` work from the returned native read identities, creates or resumes one published Global discussion Board,
+confirms it in the anonymous discussion directory, then creates one original `CC-BY-4.0` thread on that Board. The
+same thread supplies the exact authored source for native Content edition creation and separate publication. The
+Commerce step reads the current money schema and uses its minimum configured sale amount in an ordinary offer create;
+Content or the seed does not infer eligibility. The native creator edition and offer lists must both return the exact
+source binding before the outcome is complete.
+
+The local Board, thread, edition, and offer commands reuse the `showcase.sqlite` action journal, fixed command keys,
+original client and credential identities. Unknown delivery retries the frozen request; refusals and unavailable
+readback are recorded separately and stop the dependent steps. A successful result adds `developmentShowcase` to
+`.temp/cross-media-seed/result.json`, including actual work, Board, thread, post, edition and offer IDs without
+credentials. Repeating `seed:dev` resumes the same native commands. `task dev:reset` retires the complete active seed
+directory first, so the new database imports and binds fresh native identities.
+
+Decision: keep the importer client import-only, use a separate local first-party showcase client, bootstrap only
+`board:create` on Global Context for the developer, and bind the ordinary published discussion Board plus authored
+edition and eligible offer to the exact selected VNDB `v2002` native Subject identity.
 
 Decision: local persona setup opens mounted anonymous GET exposure groups plus the explicit M1 `search` (path 9,
 mixed Search), `search_advanced` (path 10, filters and POST `/v1/subjects:facets`), and `personal_library` for the

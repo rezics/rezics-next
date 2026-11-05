@@ -2998,7 +2998,7 @@ export type CrossMediaSeedCliOptions = {
 export async function runCrossMediaSeedCli(
   argv: readonly string[],
   options: CrossMediaSeedCliOptions = {},
-): Promise<void> {
+): Promise<CrossMediaSeedResult | undefined> {
   const {
     composeVndbCharacterVocabularyBindings,
     parseVndbCharacterVocabularyProfile,
@@ -3035,7 +3035,7 @@ export async function runCrossMediaSeedCli(
         requiredFlags.map((flag) => flag + ' <value>').join(' ') +
         ' [--bangumi-character-bindings <json>] [--bangumi-game-genre-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>] [--vndb-release-state-bindings <json>]\n',
     );
-    return;
+    return undefined;
   }
   ensure(
     argv.length % 2 === 0 && argv.length >= requiredFlags.length * 2 && argv.length <= flags.length * 2,
@@ -4052,6 +4052,7 @@ export async function runCrossMediaSeedCli(
       !showcase || showcase.status === 'published',
       'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
     );
+    return combinedResult;
   } finally {
     journal?.close();
   }

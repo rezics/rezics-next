@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { migrate } from './database.ts';
+import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -49,7 +50,15 @@ export const importerScopes = [
   'context:accept',
   'context:adopt',
 ];
-const personaClient = 'rezics-dev-importer';
+export const localClientIds = {
+  importer: 'rezics-dev-importer',
+  showcase: 'rezics-dev-showcase',
+} as const;
+const personaClient = localClientIds.importer;
+const showcaseClient = localClientIds.showcase;
+export function localShowcaseClientRegistration() {
+  return { clientId: showcaseClient, firstParty: true, scopes: [...DEVELOPMENT_SHOWCASE_SCOPES] } as const;
+}
 export type DevelopmentKeys = {
   secret: string;
   staging: string;
@@ -290,6 +299,7 @@ export async function assemble(options?: {
     firstParty: true,
     scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
   });
+  await service.internal.registerClient(localShowcaseClientRegistration());
   await host.start();
   const stop = async () => {
     try {
@@ -340,7 +350,11 @@ export async function openLocalShowcase(
 
 export async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>, directory = state) {
   const { host, access, kernelPool, keys, kernel } = composition;
-  const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../kernel/src/access/bootstrap-governance.ts');
+  const {
+    bootstrapGovernance,
+    bootstrapLocalShowcaseBoardCreation,
+    PLATFORM_RESOURCE,
+  } = await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
   const { createExposureCommands } = await import('../../kernel/src/access/gates/catalogue.ts');
   const person = await host.workflows.register({
@@ -350,6 +364,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
     password: developmentRegistrationPassword(keys),
   });
   await bootstrapGovernance(kernelPool, person.accountId);
+  await bootstrapLocalShowcaseBoardCreation(kernelPool, person.accountId);
   const signIn = () =>
     host.handler(
       new Request(`${origins.issuer}/signin`, {
@@ -438,6 +453,8 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
       REZICS_DEV_PERSONA_ACCOUNT: person.accountId,
       REZICS_DEV_PERSONA_CLIENT: personaClient,
+      REZICS_DEV_SHOWCASE_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
+      REZICS_DEV_SHOWCASE_CLIENT: showcaseClient,
       AUTH_ORIGIN: origins.issuer,
       KERNEL_ORIGIN: origins.kernel,
     })

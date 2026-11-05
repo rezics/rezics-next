@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -11,6 +12,7 @@ import { installStandingParentGrant } from './standing-parent.ts';
 import type { AccountActor } from '../request/access.ts';
 import { PLATFORM_RESOURCE } from './governance-reach.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import createGrant from './grant-create.sql';
 
 export { PLATFORM_RESOURCE } from './governance-reach.ts';
 
@@ -30,6 +32,74 @@ export type BootstrapGovernanceResult = {
   resource: typeof PLATFORM_RESOURCE;
   replayed: boolean;
 };
+
+/** Local-stack setup may install one direct Global Board-creation grant after
+ * the governance marker is established. The grant is recorded through the
+ * native command executor and a durable receipt; normal HTTP commands still
+ * perform current Access checks. This helper is not mounted or used in
+ * production composition.
+ */
+export async function bootstrapLocalShowcaseBoardCreation(
+  pool: Pool,
+  accountId: string,
+): Promise<Readonly<{ resource: typeof PLATFORM_RESOURCE; subjectId: string; actions: readonly ['board:create'] }>> {
+  if (routeOf(accountId) === null) throw new BootstrapGovernanceUnavailableError();
+  const deadline = deadlineFor(BOOTSTRAP_GOVERNANCE_DEADLINE_MS);
+  const value = {
+    resource: PLATFORM_RESOURCE,
+    subjectId: accountId,
+    subjectRole: '' as const,
+    actions: ['board:create'] as const,
+  };
+  const authorization: CommandAuthorization = {
+    action: 'access:grant',
+    resource: PLATFORM_RESOURCE,
+    denied: () => new BootstrapGovernanceUnavailableError(),
+    async authorize(tx) {
+      const current = await bootstrapRead.run(tx, {
+        route: PLATFORM_RESOURCE.route,
+        resource_id: PLATFORM_RESOURCE.id,
+      });
+      if (!current?.global || !current.bootstrapped || current.account_id !== accountId)
+        throw new BootstrapGovernanceUnavailableError();
+      return 'execute';
+    },
+  };
+  const digest = createHash('sha256').update(JSON.stringify(value)).digest();
+  await runCommand(
+    pool,
+    {
+      partition: 0,
+      deadline,
+      authorization,
+      receipt: {
+        actorAccountId: accountId,
+        kind: 'access.local-showcase.board-create',
+        key: accountId,
+        digest,
+      },
+    },
+    async (tx, { transactionId, time }) => {
+      const valid = `[${authoritativeTimeValue(time)},)`;
+      const rows = await createGrant.run(tx, {
+        route: PLATFORM_RESOURCE.route,
+        resource_id: PLATFORM_RESOURCE.id,
+        subject_kind: 'identity',
+        subject_id: accountId,
+        subject_role: '',
+        actions: value.actions,
+        valid,
+        transaction_id: transactionId,
+      });
+      if (rows.length !== value.actions.length) throw new BootstrapGovernanceUnavailableError();
+      return {
+        value: { ...value, valid },
+        events: [{ type: 'com.rezics.access.grant.create.v1', subject: PLATFORM_RESOURCE.id, data: { ...value, valid } }],
+      };
+    },
+  );
+  return { resource: value.resource, subjectId: value.subjectId, actions: value.actions };
+}
 
 // Private control flow ends the native read transaction without a receipt,
 // partition fence or event. It cannot be supplied as an authorization capability.
