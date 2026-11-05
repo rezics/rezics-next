@@ -401,35 +401,44 @@ async function reinstall(
 // Commands
 
 export type ResidentHealth = {
+  /** Mean number of live workers over the window's samples. */
   liveWorkers: number;
   passedGates: number;
+  /** Landings merged in the window. */
   landings: number;
-  workReady?: boolean;
+  /** A sample saw an undelivered landing request whose task is in the landing state. */
   landingsRequested?: boolean;
 };
+/** Samples `sampleMs` apart; a single sample is an instant reading with no wait. */
+export type ResidentWindow = { samples: number; sampleMs: number };
 export type ResidentControl = {
-  observe(checkout: string): Promise<ResidentHealth>;
+  observe(checkout: string, sampling: ResidentWindow): Promise<ResidentHealth>;
   restart(checkout: string, options?: { install: boolean }): Promise<void>;
 };
 
-/** A complete ten-minute window on each side of publication; sample worker width once per minute. */
+/** The reading at publication: publication never waits for an observation window. */
+const INSTANT: ResidentWindow = { samples: 1, sampleMs: 0 };
+/** The window after publication: `residentSamples` readings `residentSampleMs` apart. */
+const residentWindow = (): ResidentWindow => ({
+  samples: scriptPolicy().cpSync.residentSamples,
+  sampleMs: scriptPolicy().cpSync.residentSampleMs,
+});
+
+/** Reads worker width and landings from the live database; samples after the first wait `pause` for `sampleMs`. */
 export async function observeResident(
   checkout: string,
+  sampling: ResidentWindow,
   pause: (milliseconds: number) => Promise<unknown> = (milliseconds) => Bun.sleep(milliseconds),
 ): Promise<ResidentHealth> {
   const file = join(checkout, '.temp/goal/goal.sqlite');
   const db = new Database(file, { readonly: true });
   const start = new Date().toISOString();
   let workers = 0;
-  let workReady = false,
-    landingsRequested = false;
+  let landingsRequested = false;
   try {
     const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
     const hasQueue = !!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landing_queue'").get();
-    for (let minute = 0; minute < scriptPolicy().cpSync.residentSamples; minute++) {
-      workReady ||= !!db
-        .query("SELECT 1 FROM worker_tasks WHERE json_extract(body, '$.state') = 'ready' LIMIT 1")
-        .get();
+    for (let sample = 0; sample < sampling.samples; sample++) {
       if (hasQueue)
         landingsRequested ||= !!db
           .query(`SELECT 1 FROM landing_queue q JOIN worker_tasks t
@@ -454,15 +463,14 @@ export async function observeResident(
           if (!['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
         }
       }
-      await pause(scriptPolicy().cpSync.residentSampleMs);
+      if (sample + 1 < sampling.samples) await pause(sampling.sampleMs);
     }
     const events = db
       .query(`SELECT body FROM worker_events WHERE kind = 'gate-outcome' AND at >= ? AND at < ?`)
       .all(start, new Date().toISOString()) as { body: string }[];
     const passed = events.map((row) => JSON.parse(row.body)).filter((outcome) => outcome.passed);
     return {
-      liveWorkers: workers / scriptPolicy().cpSync.residentSamples,
-      workReady,
+      liveWorkers: workers / sampling.samples,
       landingsRequested,
       passedGates: passed.length,
       landings: passed.filter((outcome) => outcome.stage === 'merge' && outcome.mergedCommit).length,
@@ -543,13 +551,17 @@ export async function restartResident(
   }
 }
 
-export function residentRegression(_before: ResidentHealth, after: ResidentHealth): boolean {
-  return (
-    (after.workReady === true && after.liveWorkers === 0) || (after.landingsRequested === true && after.landings === 0)
-  );
+/**
+ * A release rolls back only on a real signal: live workers fell by more than half, or landings already in flight before
+ * publication merged none in the window. Lower counts within half, and quiet windows, are normal.
+ */
+export function residentRegression(before: ResidentHealth, after: ResidentHealth): boolean {
+  const workersFell = before.liveWorkers > 0 && after.liveWorkers < before.liveWorkers / 2;
+  const landingsStopped = before.landingsRequested === true && after.landings === 0;
+  return workersFell || landingsStopped;
 }
 const residentControl: ResidentControl = {
-  observe: observeResident,
+  observe: (checkout, sampling) => observeResident(checkout, sampling),
   restart: (checkout, options) => restartResident(checkout, residentCommand, options?.install),
 };
 
@@ -816,8 +828,7 @@ export async function sync(options: Options = {}): Promise<number> {
         }
 
         const resident = options.resident ?? residentControl;
-        print('cp-sync: observing resident workers and gate outcomes for ten minutes before publication.');
-        const before = await resident.observe(checkout);
+        const before = await resident.observe(checkout, INSTANT);
         publicationStarted = true;
         const published = publishCpSyncRefs(refs, 'sync', main, commit, paths, source, print);
         try {
@@ -852,12 +863,12 @@ export async function sync(options: Options = {}): Promise<number> {
             throw new Refusal('The main checkout install failed.');
           await resident.restart(checkout);
           if (interrupted) throw new Refusal('Publication interrupted.');
-          print('cp-sync: observing resident workers and gate outcomes for ten minutes after publication.');
-          const after = await resident.observe(checkout);
+          print('cp-sync: observing resident workers and gate outcomes for three minutes after publication.');
+          const after = await resident.observe(checkout, residentWindow());
           print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
           if (residentRegression(before, after))
             throw new Refusal(
-              'Resident produced no live workers with ready work or no landings with pending requests.',
+              'Resident lost more than half of its live workers, or landings running before publication merged none.',
             );
         } catch (error) {
           print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);

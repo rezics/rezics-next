@@ -213,6 +213,8 @@ export class WorkerJob implements GateOutcomeSink {
     private readonly acquireOrphanLease: (path: string) => DirectoryLease = (path) =>
       acquireDirectoryLease(path, tasks.settings.policy?.leases),
     private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
+    // False once this host retires for a newer tools/goal: the attempts it already follows continue, but none starts.
+    private readonly startsAllowed: () => boolean = () => true,
   ) {}
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
@@ -243,6 +245,7 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   private async runRetryIntent(ref: AttemptRef): Promise<void> {
+    if (!this.startsAllowed()) return;
     const key = `${ref.taskId}:${ref.attempt}`;
     if (this.retryIntentsInProgress.has(key)) return;
     this.retryIntentsInProgress.add(key);
@@ -359,6 +362,7 @@ export class WorkerJob implements GateOutcomeSink {
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
+    if (!this.startsAllowed()) return;
     const task = this.tasks.store.task(taskId);
     if (
       task.currentAttempt > 0 &&
@@ -434,7 +438,7 @@ export class WorkerJob implements GateOutcomeSink {
   /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
   private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
-    if (this.starting.has(taskId)) return;
+    if (!this.startsAllowed() || this.starting.has(taskId)) return;
     this.starting.add(taskId);
     try {
       try {
@@ -482,6 +486,7 @@ export class WorkerJob implements GateOutcomeSink {
     return observed.status === 'pending' ? null : observed.resumeText;
   }
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
+    if (!this.startsAllowed()) return;
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const failureCount = () =>
       this.tasks.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')

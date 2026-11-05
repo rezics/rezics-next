@@ -23,6 +23,10 @@ export type IntegrationRuntime = {
   /** Reload the effective train settings between landings in a long-lived train process. */
   refreshTrainConfiguration?: TrainConfigurationReloader;
   hostSweepIntervalMs?: number;
+  /** The published tools/goal object id this process loaded; a host retires when main publishes another one. */
+  loadedCodeVersion?: string;
+  /** Set once this process retires for newer tools/goal: from then on it starts no new attempt. */
+  codeRetirement?: { retiring: boolean };
   hourlyEfficiencyReport?: { enabled: boolean; timeoutMs: number };
   recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>;
   deliverReminders?(): number | Promise<number>;
