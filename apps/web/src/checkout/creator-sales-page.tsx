@@ -157,12 +157,15 @@ export function CreatorSalesPage({
           {page.projectionState === 'preparing' && (
             <div className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground" role="status">
               <p>{m.creator_sales_preparing()}</p>
-              <a
-                className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-                href={creatorSalesHref(locale)}
-              >
-                {m.statements_refresh()}
-              </a>
+              {refresh ? (
+                <Button variant="outline" className="min-h-11 min-w-11" disabled={refreshing} onClick={refresh}>
+                  {m.statements_refresh()}
+                </Button>
+              ) : (
+                <a className="inline-flex min-h-11 items-center text-primary underline underline-offset-4" href={href}>
+                  {m.statements_refresh()}
+                </a>
+              )}
             </div>
           )}
           {page.sales.length === 0 ? (

@@ -290,7 +290,7 @@ test('three windows return through exact Previous and failed Restart retry witho
     await click('Older sales');
     await click('Inspect sale');
     expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
-    await click('Open current offer');
+    await click('Open offer');
     await act(async () => { window.dispatchEvent(new window.Event('pagehide')); });
     window.history.replaceState(null, '', 'https://site.test/en/creator/sales?cursor=second%2B%2F%3D');
     await act(async () => { window.dispatchEvent(new window.Event('pageshow')); });
