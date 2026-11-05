@@ -358,9 +358,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
         node.getAttribute('data-preview-occurrence'),
       ),
     ).toEqual([members[1]!.id, members[0]!.id, members[2]!.id]);
-    expect(host.querySelector('[data-local-occurrence-preview] [data-ratio]')?.getAttribute('data-ratio')).toBe(
-      '1:1',
-    );
+    expect(host.querySelector('[data-local-occurrence-preview] [data-ratio]')?.getAttribute('data-ratio')).toBe('1:1');
     await act(async () => {
       host
         .querySelector('#collection-edit-form')!
