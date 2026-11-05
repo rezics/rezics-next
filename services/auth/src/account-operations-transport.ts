@@ -210,7 +210,7 @@ export function accountOperationTransport(
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
         if (
-          ['rename', 'delete', 'organization'].includes(operation.kind) &&
+          ['opening', 'rename', 'delete', 'organization'].includes(operation.kind) &&
           !parseAccountOperationApprovalResponse(projected)
         )
           return response({ error: 'unavailable' }, 503);

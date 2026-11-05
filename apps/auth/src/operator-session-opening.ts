@@ -1,15 +1,18 @@
 import { createServerFn } from '@tanstack/react-start';
 import {
+  ACCOUNT_OPERATION_MAX_ERROR_BYTES,
+  isAccountOperationReference,
   isManagementOperation,
   isOperatorPageId,
   isOperatorPageVersion,
   OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES,
+  parseAccountOperationRefusal,
+  securityResponseByteBudgets,
   securityResponseLimits,
   managementOperationProfile,
   type ManagementOperationInput,
   type SessionProof,
 } from '@rezics/auth-contract';
-import { authPost } from './api';
 import { approveManagementOperation } from './management-operations';
 import { markManagementOpeningSubmitted } from './management-operation-step-up';
 import { privateAuthRead } from './private-auth-read';
@@ -40,6 +43,17 @@ export type OpeningOutcome =
 export type OpeningRead =
   | { kind: 'ready'; metadata: OpeningMetadata }
   | { kind: 'refused' | 'step-up' | 'unavailable' };
+export type OperatorOpeningIssueInput = { input: OpeningInput; reference: string };
+
+function isOperatorOpeningIssueInput(value: unknown): value is OperatorOpeningIssueInput {
+  return (
+    record(value) &&
+    fields(value, ['input', 'reference']) &&
+    isOpeningInput(value.input) &&
+    isAccountOperationReference(value.reference)
+  );
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -259,6 +273,8 @@ const nativeOpeningPage = createServerFn({ method: 'POST' })
 export const operatorOpeningBrowserTransport = {
   metadata: (input: OpeningInput, signal: AbortSignal) => nativeOpeningPage({ data: input, signal }),
   session: (input: OpeningInput, signal: AbortSignal) => nativeOpenedSession({ data: input, signal }),
+  issue: (issue: OperatorOpeningIssueInput, signal: AbortSignal) =>
+    nativeOperatorSessionIssue({ data: issue, signal }),
 };
 export async function loadOpeningMetadata(input: OpeningInput, signal?: AbortSignal): Promise<OpeningRead> {
   if (!isOpeningInput(input)) return { kind: 'unavailable' };
@@ -289,6 +305,109 @@ export function openedSession(value: unknown, input: OpeningInput): SessionProof
   )
     return null;
   return value as unknown as SessionProof;
+}
+
+/** The issued proof bound uses the native mounted catalogue and exact requested profile. */
+export function operatorOpeningSessionResponseBudget(scopeCatalogueLimit: number) {
+  const requestedScopeLimit = managementOperationProfile('opening').scope.length;
+  const scopeLimit = Math.min(scopeCatalogueLimit, requestedScopeLimit);
+  const sessionBytes = securityResponseByteBudgets(scopeLimit).session;
+  return { scopeLimit, maxBytes: Math.max(sessionBytes, ACCOUNT_OPERATION_MAX_ERROR_BYTES) };
+}
+
+/** Receive one native issuance reply. Cookies are forwarded before body projection, even
+ * when a malformed or excess body leaves the effect unknown. */
+export async function receiveOperatorOpeningSessionResponse(
+  response: Response,
+  input: OpeningInput,
+  scopeCatalogueLimit: number,
+  forwardSetCookies?: (cookies: string[]) => void,
+  signal?: AbortSignal,
+): Promise<OpeningOutcome> {
+  const cookies = response.headers.getSetCookie();
+  if (cookies.length) forwardSetCookies?.(cookies);
+  const { scopeLimit, maxBytes } = operatorOpeningSessionResponseBudget(scopeCatalogueLimit);
+  let body: unknown;
+  try {
+    body = await readJsonBounded(response, maxBytes, signal ?? new AbortController().signal);
+  } catch {
+    return { kind: 'unknown' };
+  }
+  if (response.status === 200) {
+    const outcome = parseOpenedSessionObservation(body, input, scopeLimit);
+    const requestedScopes = managementOperationProfile('opening').scope;
+    if (
+      outcome.kind !== 'opened' ||
+      outcome.session.scope.length !== requestedScopes.length ||
+      !outcome.session.scope.every((scope, index) => scope === requestedScopes[index])
+    )
+      return { kind: 'unknown' };
+    return outcome;
+  }
+  const refusal = parseAccountOperationRefusal(body, response.status);
+  if (refusal?.error === 'step_up_required') return { kind: 'step-up' };
+  if (refusal?.error === 'account_operation_denied' && response.status !== 503) return { kind: 'refused' };
+  return { kind: 'unknown' };
+}
+
+function raceAbort<T>(signal: AbortSignal, promise: Promise<T>): Promise<T> {
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  return Promise.race([promise, aborted]).finally(() => signal.removeEventListener('abort', onAbort));
+}
+
+/** One native issuance request. The caller's privateAuthRead signal owns its five-second
+ * lifetime through issuer headers, bounded body parsing and BFF completion. */
+export async function requestOperatorOpeningSession(
+  issue: OperatorOpeningIssueInput,
+  request: Request,
+  issuer: string,
+  scopeCatalogueLimit: number,
+  forwardSetCookies: (cookies: string[]) => void,
+): Promise<OpeningOutcome> {
+  const origin = new URL(request.url).origin;
+  if (
+    request.headers.get('sec-fetch-site') === 'cross-site' ||
+    (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer)
+  )
+    return { kind: 'unknown' };
+  const signal = request.signal;
+  signal.throwIfAborted();
+  let response: Response;
+  try {
+    response = await raceAbort(
+      signal,
+      fetch(new URL('/operator-sessions/open', issuer), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Origin: issuer,
+          Cookie: request.headers.get('cookie') ?? '',
+        },
+        body: JSON.stringify({
+          ...issue.input,
+          reference: issue.reference,
+        }),
+        redirect: 'manual',
+        cache: 'no-store',
+        signal,
+      }),
+    );
+  } catch {
+    return { kind: 'unknown' };
+  }
+  return receiveOperatorOpeningSessionResponse(
+    response,
+    issue.input,
+    scopeCatalogueLimit,
+    forwardSetCookies,
+    signal,
+  );
 }
 /** The readback admits the full native proof, independently of human advice.
  * Issuance acknowledgement retains its command parser above. */
@@ -326,6 +445,24 @@ const nativeOpenedSession = createServerFn({ method: 'POST' })
       );
     });
   });
+
+const nativeOperatorSessionIssue = createServerFn({ method: 'POST' })
+  .validator((value: unknown): OperatorOpeningIssueInput => {
+    if (!isOperatorOpeningIssueInput(value)) throw new Error('Invalid opening issuance');
+    return value;
+  })
+  .handler(async ({ data }): Promise<OpeningOutcome> => {
+    const configuration = await trustedSecurityResponseConfiguration();
+    if (!configuration) return { kind: 'unknown' };
+    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    const request = getRequest();
+    const origin = new URL(request.url).origin;
+    const issuer = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
+    setResponseHeader('Cache-Control', 'private, no-store');
+    return requestOperatorOpeningSession(data, request, issuer, configuration.scopeLimit, (cookies) => {
+      setResponseHeader('Set-Cookie', cookies);
+    });
+  });
 /** Read only: never renew cached metadata, replay issuance, restore a human
  * cookie, or treat readback as evidence that this request created the session. */
 export async function readOpenedSession(input: OpeningInput, signal?: AbortSignal): Promise<OpeningOutcome> {
@@ -341,30 +478,27 @@ export async function submitOperatorOpening(
   input: OpeningInput,
   isCurrent: () => boolean = () => true,
   onPhase?: (phase: 'approval' | 'possibly-sent' | 'acknowledged' | 'unconfirmed' | 'refused') => void,
+  signal?: AbortSignal,
 ): Promise<OpeningOutcome> {
   if (!isOpeningInput(input)) return { kind: 'refused' };
   onPhase?.('approval');
-  const approved = await approveManagementOperation(input, 'opening', isCurrent);
+  const approved = await approveManagementOperation(input, 'opening', isCurrent, signal);
   if (!isCurrent()) return { kind: 'unavailable' };
   if (approved.kind !== 'approved') return approved;
   const snapshot = approved.input;
   if (!isOpeningInput(snapshot)) return { kind: 'refused' };
   if (!markManagementOpeningSubmitted(snapshot)) return { kind: 'unavailable' };
   onPhase?.('possibly-sent');
-  const result = await authPost('/operator-sessions/open', { ...snapshot, reference: approved.reference });
-  if (!isCurrent()) return { kind: 'unavailable' };
-  if (!result.ok) {
-    if (
-      [400, 401, 403, 409, 413, 415].includes(result.status) &&
-      ['account_operation_denied', 'step_up_required'].includes(result.code)
-    ) {
-      onPhase?.('refused');
-      return { kind: 'refused' };
-    }
-    onPhase?.('unconfirmed');
-    return { kind: 'unknown' };
+  let result: OpeningOutcome;
+  try {
+    result = await privateAuthRead(
+      (readSignal) => operatorOpeningBrowserTransport.issue({ input: snapshot, reference: approved.reference }, readSignal),
+      signal,
+    );
+  } catch {
+    result = { kind: 'unknown' };
   }
-  const session = openedSession(result.body, snapshot);
-  onPhase?.(session ? 'acknowledged' : 'unconfirmed');
-  return session ? { kind: 'opened', session } : { kind: 'unknown' };
+  if (!isCurrent()) return { kind: 'unavailable' };
+  onPhase?.(result.kind === 'unknown' ? 'unconfirmed' : result.kind === 'opened' ? 'acknowledged' : 'refused');
+  return result;
 }

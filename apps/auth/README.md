@@ -1233,6 +1233,24 @@ and C entries; there is no scope-membership requirement. C is the native mounted
 under [private review reads](#private-review-reads). Missing, malformed or overflowing configuration makes no GET.
 A matching current observation and every refused observation leave earlier unknown issuance unresolved.
 
+Decision: Opening approval uses `authPostBounded` with the closed native approval envelope
+`ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES = JSON.stringify({ reference: '', expiresAt: '' }).length + 4096 + 27`.
+It admits only the exact ASCII base64url reference and canonical ISO expiry before marking submitted. Malformed,
+excess or expired approval output sends no issuance request.
+
+Issuance remains one native `POST /operator-sessions/open`, received through the Auth server function so the bound
+uses trusted `AUTH_SECURITY_SCOPE_CONFIGURATION` value C and the exact opening profile. The JSON limit is
+`max(securityResponseByteBudgets(min(C, managementOperationProfile('opening').scope.length)).session,
+ACCOUNT_OPERATION_MAX_ERROR_BYTES)`. It includes punctuation, escaping, opaque native proof IDs (1,024 UTF-16 units),
+profile-limited receipt scopes (128 units each), safe numeric fields and the closed operator `amr`. The proof must
+match the original subject, exact client and requested scope profile. The displayed scopes remain the native
+receipt-bound values. Native `Set-Cookie` values, including cleanup values, are forwarded before body projection and
+unchanged. Only `step_up_required/401/not_applied` and `account_operation_denied` with
+`400/401/403/409/413/415` plus `not_applied` are refusals; `503/unknown`, a status alone,
+malformed/excess output or a mismatched proof stays unknown. Each command POST has one five-second lifetime through
+headers and body. A late reply after departure is discarded without restoring the private review; issuance is never
+replayed. The `/session` reader above remains a distinct observation consumer and does not settle command outcome.
+
 Opening metadata uses `OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES` from the public browser-safe
 `operator-page-response-bounds` module before UTF-8 decoding or JSON parsing. Its own C-independent closed envelope
 counts the opaque native viewer ID as S(1024), three routed UUID36 IDs, canonical PostgreSQL nonnegative bigint19,
@@ -1396,8 +1414,8 @@ submission. Recovery and step-up each make one Auth request per submit. Successf
 ### Operated session opening and return
 
 - **Touches:** page entry reads one human `GET /session`; review reads the human session and makes one `POST /account-management/operators/opening-page`. Before confirmation is sent, the page repeats that bounded native point observation, the existing approval stage reads the current human session and makes one `POST /account-operations/approve`, then one `POST /operator-sessions/open` issues the session. The approval reference remains only in the request stack. Submitted return and each explicit current-session Retry make one `GET /session` through `readOpenedSession`.
-- **Bound:** a complete opening uses at most 3 `GET /session` reads, 2 bounded opening-page observations, 1 approval request and 1 issuance request; each unsent Retry repeats at most 1 human-session read and 1 opening-page observation. A submitted return or read Retry uses exactly 1 `GET /session` and 0 metadata, approval or issuance calls, with one five-second browser read allowance per observation through body/BFF completion. Each ordinary focus validation adds at most 1 human-session read. There is no inventory scan, poll or automatic issuance replay. Required fresh sign-in remains the existing native step-up flow; each native opening-page service read retains its separate ten-second deadline.
-- **Growth check:** `tests/operator-opening-return-cost.test.ts` verifies one readback request and no approval or issuance; `tests/operator-opening-return.test.tsx` verifies cached return, replacement cookies, released late reads and zero replay after Retry.
+- **Bound:** a complete opening uses at most 3 `GET /session` reads, 2 bounded opening-page observations, 1 approval request and 1 issuance request; finite reply receiving adds no native requests. Each command POST has one five-second allowance through headers/body; each unsent Retry repeats at most 1 human-session read and 1 opening-page observation. A submitted return or read Retry uses exactly 1 `GET /session` and 0 metadata, approval or issuance calls, with one five-second browser read allowance through body/BFF completion. Each ordinary focus validation adds at most 1 human-session read. There is no inventory scan, poll or automatic issuance replay. Required fresh sign-in remains the existing native step-up flow; each native opening-page service read retains its separate ten-second deadline.
+- **Growth check:** `tests/operator-session-opening-route.test.tsx` covers exact proof acknowledgement, narrow refusal mapping, bounded/malformed replies and late completion; `tests/operator-opening-return-cost.test.ts` verifies one readback request and no approval or issuance; `tests/operator-opening-return.test.tsx` verifies cached return, replacement cookies and zero replay after Retry. Broader native/browser qualification remains with the controller.
 
 ## Security headers
 

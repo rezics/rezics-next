@@ -82,6 +82,15 @@ async function open(
     return promise;
   }) as typeof fetch;
   const readback = openingReadbackFixture();
+  const issue = spyOn(opening.operatorOpeningBrowserTransport, 'issue').mockImplementation(async (input, signal) => {
+    const response = await fetch('/operator-sessions/open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...input.input, reference: input.reference }),
+      signal,
+    });
+    return opening.receiveOperatorOpeningSessionResponse(response, input.input, 4, undefined, signal);
+  });
   const read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const session = spyOn(managementOperations, 'loadManagementSession').mockResolvedValue(initialSession);
   const approve = spyOn(managementOperations, 'approveManagementOperation').mockImplementation(async (input) => ({
@@ -132,6 +141,7 @@ async function open(
         read.mockRestore();
         session.mockRestore();
         approve.mockRestore();
+        issue.mockRestore();
       },
     },
     { session, approve },
@@ -268,3 +278,153 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
       await p.close();
     }
   });
+
+const responseInput: OpeningInput = {
+  accountId: human,
+  operationKey: 'native-opening-response',
+  operation,
+};
+const nativeReference = `bmF0aXZl.${'a'.repeat(43)}`;
+
+test('native issued proof and every genuine session or cleanup cookie pass through the opening receiver', async () => {
+  const original = globalThis.fetch;
+  const forwarded: string[][] = [];
+  const headers = new Headers({ 'cache-control': 'no-store' });
+  headers.append('set-cookie', '__Host-rezics_session=issued; Path=/; HttpOnly; Secure; SameSite=Lax');
+  headers.append('set-cookie', 'old_session=; Path=/; Max-Age=0; HttpOnly; Secure');
+  globalThis.fetch = (async (url, init) => {
+    expect(String(url)).toBe('https://auth.test/operator-sessions/open');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('origin')).toBe('https://auth.test');
+    expect(new Headers(init?.headers).get('cookie')).toBe('human=1');
+    expect(JSON.parse(String(init?.body))).toEqual({ ...responseInput, reference: nativeReference });
+    return new Response(JSON.stringify(proof(true)), { status: 200, headers });
+  }) as typeof fetch;
+  try {
+    const response = await opening.requestOperatorOpeningSession(
+      { input: responseInput, reference: nativeReference },
+      new Request('https://auth.test/automated/open', {
+        method: 'POST',
+        headers: { origin: 'https://auth.test', cookie: 'human=1' },
+      }),
+      'https://auth.test',
+      4,
+      (cookies) => forwarded.push(cookies),
+    );
+    expect(response).toEqual({ kind: 'opened', session: proof(true) });
+    expect(forwarded).toEqual([headers.getSetCookie()]);
+    expect(opening.operatorOpeningSessionResponseBudget(4).scopeLimit).toBe(1);
+    expect(opening.operatorOpeningSessionResponseBudget(4).maxBytes).toBeGreaterThan(0);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('opening acknowledgement requires the exact native subject, profile and operator proof', async () => {
+  const invalid = [
+    { ...proof(true), account_id: human },
+    { ...proof(true), client_id: 'another-client' },
+    { ...proof(true), scope: ['another:scope'] },
+    { ...proof(true), amr: ['pwd'] },
+    { ...proof(true), amr: ['operator', 'pwd'] },
+    { ...proof(true), authn_epoch: Number.MAX_SAFE_INTEGER + 1 },
+    { ...proof(true), auth_time: Math.floor(Date.now() / 1000) + 1 },
+    { ...proof(true), extra: 'not in SessionProof' },
+  ];
+  for (const body of invalid)
+    expect(await opening.receiveOperatorOpeningSessionResponse(Response.json(body), responseInput, 4)).toEqual({
+      kind: 'unknown',
+    });
+});
+
+test('only closed native refusal and effect combinations settle issuance', async () => {
+  expect(
+    await opening.receiveOperatorOpeningSessionResponse(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+      responseInput,
+      4,
+    ),
+  ).toEqual({ kind: 'refused' });
+  expect(
+    await opening.receiveOperatorOpeningSessionResponse(
+      Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+      responseInput,
+      4,
+    ),
+  ).toEqual({ kind: 'step-up' });
+  for (const response of [
+    new Response(null, { status: 403 }),
+    Response.json({ error: 'account_operation_denied' }, { status: 403 }),
+    Response.json({ error: 'account_operation_denied', effect_status: 'unknown' }, { status: 503 }),
+    Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 403 }),
+  ])
+    expect(await opening.receiveOperatorOpeningSessionResponse(response, responseInput, 4)).toEqual({
+      kind: 'unknown',
+    });
+});
+
+test('malformed and over-budget issuance bodies stay unknown before proof projection', async () => {
+  const budget = opening.operatorOpeningSessionResponseBudget(4).maxBytes;
+  expect(
+    await opening.receiveOperatorOpeningSessionResponse(new Response('{"account_id":'), responseInput, 4),
+  ).toEqual({ kind: 'unknown' });
+  expect(
+    await opening.receiveOperatorOpeningSessionResponse(
+      new Response(' '.repeat(budget + 1), { status: 200 }),
+      responseInput,
+      4,
+    ),
+  ).toEqual({ kind: 'unknown' });
+});
+
+test('stalled response body and late transport completion cannot acknowledge a departed opening', async () => {
+  const bodyOwner = new AbortController();
+  const bodyStarted = Promise.withResolvers<void>();
+  const stalledBody = new ReadableStream<Uint8Array>({
+    pull() {
+      bodyStarted.resolve();
+      return new Promise<void>(() => {});
+    },
+    cancel() {
+      return new Promise<void>(() => {});
+    },
+  });
+  const reading = opening.receiveOperatorOpeningSessionResponse(
+    new Response(stalledBody),
+    responseInput,
+    4,
+    undefined,
+    bodyOwner.signal,
+  );
+  await bodyStarted.promise;
+  bodyOwner.abort();
+  expect(await reading).toEqual({ kind: 'unknown' });
+
+  const original = globalThis.fetch;
+  const headerOwner = new AbortController();
+  const late = Promise.withResolvers<Response>();
+  const forwarded: string[][] = [];
+  globalThis.fetch = (() => late.promise) as typeof fetch;
+  try {
+    const request = new Request('https://auth.test/automated/open', {
+      method: 'POST',
+      headers: { origin: 'https://auth.test', cookie: 'human=1' },
+      signal: headerOwner.signal,
+    });
+    const pending = opening.requestOperatorOpeningSession(
+      { input: responseInput, reference: nativeReference },
+      request,
+      'https://auth.test',
+      4,
+      (cookies) => forwarded.push(cookies),
+    );
+    await Promise.resolve();
+    headerOwner.abort();
+    expect(await pending).toEqual({ kind: 'unknown' });
+    late.resolve(Response.json(proof(true), { headers: { 'set-cookie': 'late=issued; Path=/' } }));
+    await Promise.resolve();
+    expect(forwarded).toEqual([]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

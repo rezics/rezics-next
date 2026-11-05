@@ -1,5 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
-import { securityResponseLimits } from '@rezics/auth-contract';
+import {
+  ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES,
+  parseAccountOperationApprovalResponse,
+  parseAccountOperationRefusal,
+  securityResponseLimits,
+} from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
 import { readJsonBounded } from './private-auth-json';
 import {
@@ -10,7 +15,7 @@ import {
   type ManagementSession,
   type ManagementSessionResult,
 } from '@rezics/auth-contract';
-import { authPost, type AuthPostResult } from './api';
+import { authPost, authPostBounded, type AuthPostResult, type BoundedAuthPostResult } from './api';
 import {
   pendingManagementOperationMatches,
   pendingManagementOperationStepUpState,
@@ -113,6 +118,13 @@ function failure(
   return { kind: 'unavailable' };
 }
 
+function approvalFailure(result: Exclude<BoundedAuthPostResult, { ok: true }>): Exclude<ManagementApprovalResult, { kind: 'approved' }> {
+  const refusal = parseAccountOperationRefusal(result.body, result.status);
+  if (refusal?.error === 'step_up_required') return { kind: 'step-up' };
+  if (refusal?.error === 'account_operation_denied') return { kind: 'refused' };
+  return { kind: 'unavailable' };
+}
+
 type ManagementApprovalResult =
   | { kind: 'approved'; input: ManagementOperationInput; reference: string; expiresAt: string }
   | Exclude<ManagementOperationResult, { kind: 'complete' }>;
@@ -123,6 +135,7 @@ export async function approveManagementOperation(
   input: ManagementOperationInput,
   path: 'mutation' | 'opening' = 'mutation',
   isCurrent: () => boolean = () => true,
+  signal?: AbortSignal,
 ): Promise<ManagementApprovalResult> {
   if (!isCurrent()) return { kind: 'unavailable' };
   let snapshot: ManagementOperationInput;
@@ -150,12 +163,26 @@ export async function approveManagementOperation(
       (!pendingManagementOperationMatches(continuation.value, snapshot) || continuation.value.phase !== 'returned'))
   )
     return { kind: 'refused' };
-  const current = await loadManagementSession();
+  const current = await loadManagementSession(signal);
   if (!isCurrent()) return { kind: 'unavailable' };
   if (current.kind === 'unavailable') return { kind: 'unavailable' };
   if (current.kind === 'signed-out') return { kind: 'step-up' };
   if (current.accountId !== snapshot.accountId) return { kind: 'refused' };
   if (!managementSessionMatches(current, snapshot)) return { kind: 'step-up' };
+
+  if (path === 'opening') {
+    const approved = await authPostBounded(
+      '/account-operations/approve',
+      snapshot,
+      ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES,
+      signal,
+    );
+    if (!isCurrent()) return { kind: 'unavailable' };
+    if (!approved.ok) return approvalFailure(approved);
+    const approval = parseAccountOperationApprovalResponse(approved.body);
+    if (!approval || Date.parse(approval.expiresAt) <= Date.now()) return { kind: 'unavailable' };
+    return { kind: 'approved', input: snapshot, reference: approval.reference, expiresAt: approval.expiresAt };
+  }
 
   const approved = await authPost('/account-operations/approve', snapshot);
   if (!isCurrent()) return { kind: 'unavailable' };
