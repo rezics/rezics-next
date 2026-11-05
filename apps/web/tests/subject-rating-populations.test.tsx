@@ -590,7 +590,9 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   expect(new URL(paths('/ratings', true).at(-1)!.url).searchParams.getAll('population')).toEqual(ids.slice(1));
   await act(async () => button(m.rating_population_clear()).click());
   expect(paths('/ratings', true).at(-1)!.signal.aborted).toBe(true);
-  cleared.resolve(Response.json({ subject: subjectId, question: QUESTION, figures: ids.slice(1).map(aggregateFigure) }));
+  cleared.resolve(
+    Response.json({ subject: subjectId, question: QUESTION, figures: ids.slice(1).map(aggregateFigure) }),
+  );
   aggregateFailed = false;
   await act(async () => {
     const restart = button(m.rating_population_restart());
