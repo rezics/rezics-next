@@ -33,11 +33,17 @@ function record(value: unknown): value is Record<string, unknown> {
 function parseOrganizationDeletionResponse(body: unknown, organizationId: string): OrganizationDeletionRead {
   if (!record(body)) return { kind: 'unavailable' };
   const keys = Object.keys(body).sort().join(',');
-  if (
-    keys === 'kind' &&
-    ['signed-out', 'hidden', 'denied', 'missing', 'changed', 'unavailable'].includes(String(body.kind))
-  )
-    return { kind: body.kind as OrganizationDeletionRead['kind'] };
+  if (keys === 'kind') {
+    switch (body.kind) {
+      case 'signed-out':
+      case 'hidden':
+      case 'denied':
+      case 'missing':
+      case 'changed':
+      case 'unavailable':
+        return { kind: body.kind };
+    }
+  }
   if (
     !('humanAccountId' in body) ||
     !isAccountId(body.humanAccountId) ||
