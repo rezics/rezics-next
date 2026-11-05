@@ -48,7 +48,7 @@ Descriptors are ≤8 KiB. A run adds ≤1 intent per bound record, or two when a
 
 ## Registered source vocabulary mapping
 
-Importer selection owns source traversal and exact endpoint binding. The mapper consumes provider output without label or equivalence inference and validates released properties and endpoint types. VNDB relations preserve mapped direction, row fields and holder citation; `ser` is omitted and `official` is moderation metadata. Missing or unselected endpoints remain bounded gaps.
+Importer selection owns source traversal and exact endpoint binding. The mapper consumes provider output without label or equivalence inference and validates released properties and endpoint types. VNDB relations preserve mapped direction, row fields and holder citation; `ser` is omitted and `official` is moderation metadata. Missing, fenced or unselected endpoints remain bounded gaps.
 
 Bangumi/VNDB vocabulary rows cap at 128 per call and use only room remaining in the 100-command batch. Scheme/Concept bindings and diagnostics are bounded; unknown subtrees are not traversed. Proposals stay separate from current reads, acceptance, adoption and public return.
 
@@ -160,7 +160,7 @@ Source rows stream; at most 4,096 retained relation rows coalesce by unordered e
 
 ### Selected VNDB work relation results
 
-VNDB results add one indexed evidence read per selected relation; publication adds no acquisition or transport call.
+VNDB delivery checks each distinct row tuple home once; results add one indexed local evidence read per selected relation. Publication adds no source acquisition.
 
 ### Resume a sealed generation without its dump
 

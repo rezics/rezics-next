@@ -356,6 +356,7 @@ export class CrossMediaGraph {
       sourceTarget: string;
       bytes: string;
     }[] = [];
+    const sourceFactFences = new Map<string, Promise<{ fenced: boolean; securityRevision: string | null }>>();
     for (const draft of drafts) {
       const releaseSupersession = isVndbReleaseSupersession(draft);
       const holder = input.claim({ source: draft.alias, external_id: draft.holder });
@@ -397,13 +398,24 @@ export class CrossMediaGraph {
           continue;
         }
       }
-      if (
-        draft.fenceFacts &&
-        (await input.fence({ source: draft.alias, externalId: draft.holder, fieldGroup: 'facts' })).fenced
-      ) {
-        unresolved.push({ ...draft, reason: 'fenced_source_facts' });
-        mark.run('unresolved', null, graphEdgeKey(draft));
-        continue;
+      const sourceFactOwner =
+        draft.source === 'vndb' && draft.table === 'vn_relations'
+          ? String(draft.record.id)
+          : draft.fenceFacts
+            ? draft.holder
+            : undefined;
+      if (sourceFactOwner !== undefined) {
+        const fenceKey = `${draft.alias}\0${sourceFactOwner}`;
+        let fence = sourceFactFences.get(fenceKey);
+        if (!fence) {
+          fence = input.fence({ source: draft.alias, externalId: sourceFactOwner, fieldGroup: 'facts' });
+          sourceFactFences.set(fenceKey, fence);
+        }
+        if ((await fence).fenced) {
+          unresolved.push({ ...draft, reason: 'fenced_source_facts' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
       }
       if (draft.relation) {
         let fenced = false;
