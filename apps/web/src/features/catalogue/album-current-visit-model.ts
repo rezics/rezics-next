@@ -263,7 +263,8 @@ export function albumCurrentVisitFromReturnHash(
   if (!hash.startsWith(prefix)) return;
   const token = hash.slice(prefix.length);
   if (!token || token.includes('&') || token.includes('=')) return { token };
-  return { token, origin: decodeOrigin(token, locale, validateAddress) };
+  const origin = decodeOrigin(token, locale, validateAddress);
+  return origin ? { token, origin } : { token };
 }
 
 export function albumCurrentVisitSourceAddress(value: string): string {
