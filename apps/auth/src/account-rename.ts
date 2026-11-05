@@ -153,6 +153,7 @@ export function parseRenamePage(body: unknown, accountId: string): RenameRead {
       !record(operation.resource) ||
       Object.keys(operation.resource).sort().join(',') !== 'id,route' ||
       operation.resource.id !== accountId ||
+      accountId.length !== 36 ||
       !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(operation.resource.id as string) ||
       !Number.isSafeInteger(operation.resource.route)
     )

@@ -44,6 +44,7 @@ function fixture() {
     available: true,
     revalidate: true,
     selected: accountId,
+    unrelated: false,
     count: 1,
     route: 1,
     actionsAvailable: true,
@@ -103,8 +104,8 @@ function fixture() {
           ? { state: 'unavailable' }
           : {
               state: 'ready',
-              operations: Array.from({ length: state.count }, () => ({
-                operationId: 'auth.account.rename',
+              operations: Array.from({ length: state.count }, (_, index) => ({
+                operationId: state.unrelated && index === 0 ? 'unrelated' : 'auth.account.rename',
                 action: 'account:update',
                 resource: { route: state.route, id: state.selected },
               })),
@@ -240,6 +241,11 @@ test('native projection and production reader retain maximal identities, eight a
   const emitted = await f.handler(pageRequest());
   expect((await emitted.clone().arrayBuffer()).byteLength).toBeLessThanOrEqual(RENAME_PAGE_MAX_RESPONSE_BYTES);
   expect((await emitted.json()).authActions.operations).toHaveLength(8);
+  f.state.unrelated = true;
+  expect((await (await f.handler(pageRequest())).json()).authActions.operations).toHaveLength(7);
+  f.state.unrelated = false;
+  f.state.route = Number.MAX_SAFE_INTEGER;
+  expect((await nativeRenameSource.readCurrent()).kind).toBe('ready');
   f.state.actionsAvailable = false;
   expect(await nativeRenameSource.readCurrent()).toMatchObject({ kind: 'unavailable', target: { accountId } });
   f.state.actionsAvailable = true;
