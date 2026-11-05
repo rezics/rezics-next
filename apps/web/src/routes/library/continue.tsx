@@ -67,12 +67,9 @@ function ContinuePage() {
     [queryClient, locale, sessionQuery, sessionState?.dataUpdateCount, sessionState?.dataUpdatedAt],
   );
 
-  const requestOwner = useRef({ locationKey: location.key, searchStr: location.searchStr, owner });
-  if (
-    requestOwner.current.locationKey !== location.key ||
-    requestOwner.current.searchStr !== location.searchStr
-  )
-    requestOwner.current = { locationKey: location.key, searchStr: location.searchStr, owner };
+  const requestOwner = useRef({ searchStr: location.searchStr, owner });
+  if (requestOwner.current.searchStr !== location.searchStr)
+    requestOwner.current = { searchStr: location.searchStr, owner };
 
   const loaderOwner = useRef({ data: loaderData, owner });
   if (loaderOwner.current.data !== loaderData)
@@ -84,7 +81,8 @@ function ContinuePage() {
     loaderData.address.cursor === address.cursor && loaderData.address.malformed === address.malformed;
   const loaderOwnerMatches = sameContinueWindowOwner(loaderOwner.current.owner, owner);
   const savedVisit = queryClient.getQueryData<ContinueWindowVisit>(CONTINUE_WINDOW_QUERY_KEY);
-  const savedVisitOwnerChanged = savedVisit?.visitId === visitId && !sameContinueWindowOwner(savedVisit.owner, owner);
+  const savedVisitOwnerChanged =
+    savedVisit !== undefined && savedVisit.visitId === visitId && !sameContinueWindowOwner(savedVisit.owner, owner);
   const initial = loaderAddressMatches && loaderOwnerMatches && !savedVisitOwnerChanged ? loaderData.result : undefined;
   const ownerChangedForLoader =
     (loaderOwner.current.data === loaderData && !loaderOwnerMatches) || savedVisitOwnerChanged;
