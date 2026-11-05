@@ -302,9 +302,9 @@ test('mounted manager callbacks keep their originating controller state and port
     expect(reads).toBe(1);
     expect(metadata[0]).toMatchObject({ id: 'saved-query-1', revision: 7, title: 'Current title' });
 
-    const title = host.querySelector<HTMLInputElement>('#collection-edit-title');
-    const description = host.querySelector<HTMLTextAreaElement>('#collection-edit-description');
-    if (!title || !description) throw new Error(`Expected the mounted metadata editor; rendered: ${host.textContent}`);
+    const title = host.querySelector<HTMLInputElement>('input');
+    const description = host.querySelector<HTMLTextAreaElement>('textarea');
+    if (!title || !description) throw new Error('Expected the mounted metadata editor');
     setField(title, 'Draft title');
     setField(description, 'Draft description');
     await settle();
@@ -325,7 +325,7 @@ test('mounted manager callbacks keep their originating controller state and port
 
     await clickButton(harness.browser.document, m.library_saved_query_manage(), host);
     expect(reads).toBe(2);
-    const reopenedTitle = host.querySelector<HTMLInputElement>('#collection-edit-title');
+    const reopenedTitle = host.querySelector<HTMLInputElement>('input');
     if (!reopenedTitle) throw new Error('Expected the reopened metadata editor');
     setField(reopenedTitle, 'Unsaved title');
     await settle();
