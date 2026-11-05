@@ -158,6 +158,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     import('../src/paraglide/messages'),
   ]);
   const { within } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
+  const { userEvent } = await import('storybook/test');
   const oldLocale = getLocale();
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -220,9 +221,14 @@ test('the mounted Subject, canonical route, correction session and existing read
     );
     // Menu submenus render through a body portal, so query the same mounted surface as the addon flow.
     const publicDom = within(window.document.body);
-    await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
-    await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
-    return host.querySelector<HTMLAnchorElement>('a[href*="/story-arc?"]')?.getAttribute('href');
+    const trigger = publicDom.getByRole('button', { name: m.contribute_title() });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const menu = await publicDom.findByRole('dialog', { name: m.contribute_title() });
+    const edit = within(menu).getByRole('button', { name: m.contribute_edit() });
+    edit.focus();
+    await userEvent.keyboard('{Enter}');
+    return (await publicDom.findByRole('link', { name: m.story_arc_title() })).getAttribute('href');
   };
   const routeLoader = Route.options.loader;
   if (typeof routeLoader !== 'function') throw new Error('Expected the installed StoryArc route loader.');
