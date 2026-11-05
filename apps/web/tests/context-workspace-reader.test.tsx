@@ -19,6 +19,7 @@ const { Window } = await import(
 const window = new Window({ url: 'https://context.invalid/en/my/contexts' });
 const globals = {
   window,
+  scrollTo: window.scrollTo.bind(window),
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
