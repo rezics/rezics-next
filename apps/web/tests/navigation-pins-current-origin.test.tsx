@@ -389,10 +389,8 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => writes[4]!.work.resolve({ ok: true, revision: 43 }));
     expect(control.pending).toBe(false);
 
-    const dynamicAdmissionRead = pendingReads.length;
     await act(async () => admit(['personal_library', 'collections']));
     await tick();
-    await settle(dynamicAdmissionRead, response('C', ['b'], 43));
 
     const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
     const embedded = response('A');
