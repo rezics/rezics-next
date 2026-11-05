@@ -14,6 +14,8 @@ type SelectedResult = Pick<NativeResult, 'ordinal' | 'section' | 'status'> & {
   subjectId: string | null;
   labelId?: string;
   sessionId?: string;
+  provider?: string;
+  recordId?: string;
 };
 
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
