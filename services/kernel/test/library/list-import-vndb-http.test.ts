@@ -661,6 +661,7 @@ test('an original score intent cannot admit a fresh effect after source change, 
     'question',
     'meaning',
     'scale',
+    'identity',
     'cancel',
     'expire',
     'remove',
@@ -732,6 +733,10 @@ test('an original score intent cannot admit a fresh effect after source change, 
       await f.pool.query('UPDATE rating.question SET maximum_units=maximum_units+1 WHERE id=$1', [
         STANDARD_QUESTION_ID,
       ]);
+    if (change === 'identity')
+      await f.pool.query(
+        'UPDATE semantic.identity_epoch_control SET allocated_epoch=allocated_epoch+1, published_epoch=published_epoch+1 WHERE partition_no=0',
+      );
     if (change === 'cancel') await c.send('POST', `${base}/${uploadId}:cancel`);
     if (change === 'expire')
       await f.pool.query(
@@ -759,6 +764,10 @@ test('an original score intent cannot admit a fresh effect after source change, 
         await f.pool.query('UPDATE rating.question SET maximum_units=maximum_units-1 WHERE id=$1', [
           STANDARD_QUESTION_ID,
         ]);
+      if (change === 'identity')
+        await f.pool.query(
+          'UPDATE semantic.identity_epoch_control SET allocated_epoch=allocated_epoch-1, published_epoch=published_epoch-1 WHERE partition_no=0',
+        );
       if (change !== 'remove') await c.send('DELETE', `${base}/${uploadId}`);
     }
   }
