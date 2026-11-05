@@ -9,6 +9,7 @@ import {
   storePendingRenameReviewStepUp,
 } from '../src/management-operation-step-up';
 import { managementOperationProfile } from '../src/management-operations';
+import * as managementOperations from '../src/management-operations';
 
 creationFixture();
 const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
@@ -187,35 +188,34 @@ test('a replaced management marker preserves replacement after a fresh exact hum
   await pagehide();
 
   const original = globalThis.fetch;
-  const session = Promise.withResolvers<Response>();
+  const session = Promise.withResolvers<Awaited<ReturnType<typeof managementOperations.loadManagementSession>>>();
   const observingSession = Promise.withResolvers<void>();
   const calls: string[] = [];
+  const readSession = spyOn(managementOperations, 'loadManagementSession').mockImplementation(async () => {
+    observingSession.resolve();
+    return session.promise;
+  });
   const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const path = String(input);
     calls.push(path);
     if (path === '/recovery/page') return Promise.resolve(nativeAdvice(replacementAccount, 'replacement@example.test'));
-    if (path === '/session') {
-      observingSession.resolve();
-      return session.promise;
-    }
     return original(input, init);
   });
   await pageshow();
   await observingSession.promise;
   expect(storePendingRenameReviewStepUp(replacementAccount)).toBe(true);
   const profile = managementOperationProfile('rename');
-  session.resolve(
-    Response.json({
-      account_id: firstAccount,
-      client_id: profile.client_id,
-      scope: profile.scope,
-      authn_epoch: 1,
-      auth_time: Math.floor(Date.now() / 1000),
-      amr: ['pwd'],
-    }),
-  );
+  session.resolve({
+    kind: 'ready',
+    accountId: firstAccount,
+    clientId: profile.client_id,
+    scopes: profile.scope,
+    authnEpoch: 1,
+    authTime: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  });
   await settle();
-  expect(calls).toEqual(['/recovery/page', '/session']);
+  expect(calls).toEqual(['/recovery/page']);
   expect(page.host.textContent).toContain(m.auth_step_up_continuation_changed());
   expect(page.host.textContent).toContain(m.auth_step_up_return_unknown());
   expect(page.host.textContent).not.toContain('former@example.test');
@@ -232,6 +232,7 @@ test('a replaced management marker preserves replacement after a fresh exact hum
   expect(page.host.textContent).toContain(m.auth_step_up_return_unknown());
   expect(page.assign).not.toHaveBeenCalled();
   request.mockRestore();
+  readSession.mockRestore();
 });
 
 test('an oversized rename-review marker refuses the old return before a native session read', async () => {

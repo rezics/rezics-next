@@ -21,6 +21,12 @@ test('loadManagementSession bounds the complete human proof and never approves r
       setResponseHeader() {},
     }));
     globalThis.__AUTH_ORIGIN__ = '';
+    const sessionStorage = new Map();
+    globalThis.window = { sessionStorage: {
+      getItem: key => sessionStorage.get(key) ?? null,
+      setItem: (key, value) => sessionStorage.set(key, value),
+      removeItem: key => sessionStorage.delete(key),
+    } };
     const { securityResponseByteBudgets, securityResponseLimits } = await import('@rezics/auth-contract');
     const { loadManagementSession, managementOperationProfile, managementProfileSessionMatches, approveManagementOperation } =
       await import('./apps/auth/src/management-operations.ts');
