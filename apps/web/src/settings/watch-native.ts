@@ -143,6 +143,10 @@ export async function removeWatchNative(
   input: StopWatch,
   authorization: string,
 ): Promise<StopWatchResult> {
+  const headers = {
+    authorization,
+    'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey),
+  };
   try {
     const result = await client
       .accounts({ accountId: input.accountId })
@@ -151,10 +155,7 @@ export async function removeWatchNative(
         { expectedRevision: input.expectedRevision },
         {
           query: { kind: input.kind },
-          headers: {
-            authorization,
-            'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey),
-          },
+          headers,
         },
       );
     if (!result.error && result.status === 200 && result.data?.removed === true) return { kind: 'removed' };

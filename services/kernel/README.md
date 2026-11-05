@@ -46,7 +46,8 @@ Publication fixture assertions use native retained-candidate discriminants and c
 complete native references, and fetch callables with their connection API. The command-capture adapter preserves
 the supplied port type so review commands remain available to the existing native journeys. Archive result readback
 retains each confirmed choice across later edits; private-entry callers retain native authorization and idempotency
-headers through the generated command signatures. Ordinary Search evidence remains required; only grouped release
+headers through the generated command signatures. Watch removal retains the same native credentials, and bodyless
+Library export creation sends credentials and its original key as request options. Ordinary Search evidence remains required; only grouped release
 evidence is optional. Native basis composition retains the original SQL query identities used by its bound and
 projection maps. Static Source costs re-export the canonical leaf declaration, and ordinal SQL initializes before
 runtime dependencies can request its bound during module assembly.
@@ -100,6 +101,10 @@ published candidate is revalidated before completing interrupted cleanup. A live
 result refuses concurrent receiving. Missing/malformed lock custody fails closed. Repeating the same terminal result
 checks the receipt and entire current catalogue without replacing it. The original foreground command, cancellation,
 parent-group closure, receiving fence and cleanup retain their existing lifetime; this profile adds no retry/launcher.
+
+Decision: Realm presentation schemas and the Search scope work ledger initialize in dependency-free native leaves.
+Their existing entrypoints re-export the same definitions, preserving readers, media validation and work ceilings
+while avoiding the cold-import errors exposed by the original native tests.
 
 ## Development database
 
