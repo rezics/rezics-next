@@ -97,9 +97,14 @@ export function memberRetentionPagePlan(purgeCommand: Bound) {
   return sumBounds(repeatBound(attempt, COMMAND_STEP_RETRIES.maxAttempts), SELECTED_COST.result);
 }
 export function memberRetentionContinuationPlan(input: unknown, options: unknown) {
-  return sumBounds(SELECTED_COST.enqueue, retentionCost({ engineRequests: 1, bytes: size([input, options]) }));
+  return sumBounds(SELECTED_COST.enqueue, retentionCost({ bytes: size([input, options]) }));
 }
 export function memberRetentionSegmentPlan(page: Bound, continuation: Bound) {
   return sumBounds(repeatBound(page, MEMBER_RETENTION_LIMITS.pages),
     repeatBound(continuation, COMMAND_STEP_RETRIES.maxAttempts));
+}
+
+/** The mounted adapter still owns encoding. Account for this sizing pass and its output encoding. */
+export function serializeMemberRetention<T>(name: string, value: T): Promise<T> {
+  return consumeMemberRetention(name, retentionCost({ bytes: 2 * size(value) }), async () => value);
 }
