@@ -246,6 +246,7 @@ const { within, userEvent } = await import('storybook/test');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { progressReturnLocationState } = await import('../src/library/progress-start-draft-navigation');
 setLocale('en', { reload: false });
 const settle = async (action: () => void) =>
   act(async () => {
@@ -317,6 +318,18 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
       ],
     }),
   });
+  if (routed)
+    router.history.replace(
+      router.history.location.href,
+      progressReturnLocationState({
+        indexHref: '/en/library/progress?state=active&cursor=return%2F%2B%3D%3D',
+        indexSearch: { state: 'active', cursor: 'return/+==' },
+        locale: 'en',
+        sessionId: initial.progress.session.id,
+        subjectId: initial.progress.session.subjectId,
+        startedAt: initial.progress.session.startedAt,
+      }) as never,
+    );
   await router.load();
   const host = document.createElement('div');
   document.body.append(host);
@@ -823,7 +836,7 @@ test('routed detail traverses independent native windows, retries an exact faile
         ...(section === 'units' ? { changes: 'third-changes' } : {}),
       };
       expect(h.reads.at(-1)!.data).toEqual(target);
-      await admit();
+      await admit(true); // An empty page with native next remains traversable.
       await move(section, m.library_progress_more());
       await admit(true);
       expect(region(section).queryByRole('link', { name: m.library_progress_more() })).toBeNull();
@@ -842,6 +855,7 @@ test('routed detail traverses independent native windows, retries an exact faile
     expect(h.reads.at(-1)!.data.units).toBe(units);
     await admit();
     expect(region('changes').queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+    expect(region('changes').getByText('A:history')).toBeTruthy();
     await move('units', m.library_collections_first_page());
     expect(h.reads.at(-1)!.data).toEqual({ ...address, units: undefined });
     await admit();
@@ -858,6 +872,8 @@ test('routed detail traverses independent native windows, retries an exact faile
         .click(h.body.getByRole('link', { name: m.library_progress_return_to_progress(), exact: true })),
     );
     expect(document.body.textContent).toContain('Progress index');
+    expect(h.router.state.location.search).toEqual({ state: 'active', cursor: 'return/+==' });
+    expect(h.router.state.location.state).toMatchObject({ progressReturnSelection: { sessionId: address.id } });
   } finally {
     await h.close();
   }
@@ -891,6 +907,12 @@ test('a native section restart clears only its predecessors; replacement retires
         name: m.library_window_previous(),
       }),
     ).toBeTruthy();
+    await h.record();
+    await settle(() => writes[0]!.work.resolve(recorded(detail())));
+    expect(h.reads.at(-1)!.data.changes).toBeUndefined();
+    expect(h.reads.at(-1)!.data.units).toBe('next-units');
+    const refreshed = detail('A', h.reads.at(-1)!.data, 8);
+    await h.resolveRead(refreshed);
     await more('changes');
     const late = h.reads.at(-1)!;
     await h.show({ session: viewer('B') });
