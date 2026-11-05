@@ -389,13 +389,13 @@ export function SubjectOverview({
     useQuery(subjectRatingQuery(id, locale, 'global')),
     useQuery(subjectRatingQuery(id, locale, 'statistics')),
   ];
-  const outcome = (query: typeof questionQuery, source: RatingSource) =>
-    query.data?.[source] ?? (query.isError ? { kind: 'failed' as const } : { kind: 'idle' as const });
   const publicRatings: RatingSources = {
-    question: outcome(questionQuery, 'question'),
-    figure: outcome(figureQuery, 'figure'),
-    global: outcome(globalQuery, 'global'),
-    statistics: outcome(statisticsQuery, 'statistics'),
+    question:
+      questionQuery.data?.question ?? (questionQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
+    figure: figureQuery.data?.figure ?? (figureQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
+    global: globalQuery.data?.global ?? (globalQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
+    statistics:
+      statisticsQuery.data?.statistics ?? (statisticsQuery.isError ? { kind: 'failed' } : { kind: 'idle' }),
   };
   const retryRatingSource = (source: RatingSource) => {
     const request = {
