@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { assertNoServiceImports, clientDeclarations, committedDeclarations } from '../scripts/client.ts';
+import { prepareReyloAnalysisCache } from '../scripts/typecheck.ts';
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
 const timeout = 60_000;
@@ -13,23 +14,48 @@ const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
 
 test(
   'the client package carries the declarations the kernel emits for its HTTP contract',
-  () => {
-    const emitted = clientDeclarations();
-    expect([...clientDeclarations()]).toEqual([...emitted]);
-    expect([...emitted.keys()]).toEqual(expect.arrayContaining(['http/kernel.d.ts', 'http/request.d.ts']));
-    let sawSqlDeclaration = false;
-    for (const [key, content] of emitted) {
-      for (const match of content.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+\.sql)['"]/g)) {
-        const target = resolve(dirname(resolve('/client', key)), match[1]!);
-        const declaration = relative('/client', `${target}.d.ts`).split(sep).join('/');
-        expect(emitted.has(declaration)).toBe(true);
-        expect(declaration.endsWith('.sql.d.ts')).toBe(true);
-        sawSqlDeclaration = true;
+  async () => {
+    const environment = { ...process.env };
+    delete environment.REYLO_CONFIG;
+    const analysis = await prepareReyloAnalysisCache(environment);
+    const previousConfig = process.env.REYLO_CONFIG;
+    const previousDatabase = process.env.DATABASE_URL;
+    const cache = mkdtempSync(resolve(PROJECT_ROOT, '.temp/kernel-client-clean-'));
+    try {
+      expect(analysis.available).toBe(true);
+      process.env.REYLO_CONFIG = analysis.environment.REYLO_CONFIG!;
+      delete process.env.DATABASE_URL;
+      const emitted = clientDeclarations(undefined, { cacheDirectory: cache });
+      expect([...clientDeclarations(undefined, { cacheDirectory: cache })]).toEqual([...emitted]);
+      expect([...emitted.keys()]).toEqual(expect.arrayContaining(['http/kernel.d.ts', 'http/request.d.ts']));
+      let sawSqlDeclaration = false;
+      for (const [key, content] of emitted) {
+        for (const match of content.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+\.sql)['"]/g)) {
+          const target = resolve(dirname(resolve('/client', key)), match[1]!);
+          const declaration = relative('/client', `${target}.d.ts`).split(sep).join('/');
+          expect(emitted.has(declaration)).toBe(true);
+          expect(declaration.endsWith('.sql.d.ts')).toBe(true);
+          sawSqlDeclaration = true;
+        }
       }
+      expect(sawSqlDeclaration).toBe(true);
+      const committed = committedDeclarations();
+      const different = [...new Set([...committed.keys(), ...emitted.keys()])].filter(
+        (file) => committed.get(file) !== emitted.get(file),
+      );
+      if (different.length)
+        throw new Error(
+          `packages/client/src/kernel is stale: ${different.join(', ')}; run ` +
+            '`bun run --cwd services/kernel typecheck --emit-client --emit-openapi`',
+        );
+    } finally {
+      if (previousConfig === undefined) delete process.env.REYLO_CONFIG;
+      else process.env.REYLO_CONFIG = previousConfig;
+      if (previousDatabase === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = previousDatabase;
+      rmSync(cache, { recursive: true, force: true });
+      analysis.dispose();
     }
-    expect(sawSqlDeclaration).toBe(true);
-    if (JSON.stringify([...committedDeclarations()]) !== JSON.stringify([...emitted]))
-      throw new Error('packages/client/src/kernel is stale; run `bun run --cwd services/kernel client`');
   },
   kernelDeclarationTimeout,
 );
@@ -79,14 +105,14 @@ test(
       );
       writeFileSync(resolve(specs, 'frozen.ts'), 'export interface FrozenSpec { readonly name: string }\n');
 
-      const first = clientDeclarations(kernel);
+      const first = clientDeclarations(kernel, { repositoryRoot: workspace });
       expect([...first.keys()]).toEqual(['http/kernel.d.ts', 'http/request.d.ts']);
       expect(first.get('http/kernel.d.ts')).toContain("from './request.js'");
       expect(first.has('test/driver.d.ts')).toBe(false);
       expect(first.has('specs/frozen.d.ts')).toBe(false);
 
       writeFileSync(resolve(source, 'request.ts'), 'export interface Request { id: string; version: number }\n');
-      const changed = clientDeclarations(kernel);
+      const changed = clientDeclarations(kernel, { repositoryRoot: workspace });
       expect(changed.get('http/request.d.ts')).not.toBe(first.get('http/request.d.ts'));
       expect(changed.get('http/request.d.ts')).toContain('version: number');
 
@@ -100,7 +126,7 @@ test(
         resolve(source, 'kernel.ts'),
         "import type { Port } from '@fixture/service';\nexport interface Kernel { port: Port }\n",
       );
-      expect(() => clientDeclarations(kernel)).toThrow(
+      expect(() => clientDeclarations(kernel, { repositoryRoot: workspace })).toThrow(
         'Client declaration http/kernel.d.ts imports service package @fixture/service',
       );
     } finally {

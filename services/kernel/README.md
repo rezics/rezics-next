@@ -108,6 +108,10 @@ Decision: Realm presentation schemas and the Search scope work ledger initialize
 Their existing entrypoints re-export the same definitions, preserving readers, media validation and work ceilings
 while avoiding the cold-import errors exposed by the original native tests.
 
+Declaration freshness tests use the official complete SQL analysis preparation, then a fresh declaration cache and an
+incremental emit. Both must equal the committed public closure. Generator fixtures enter the migrated Kernel lane
+through `test/client-generator.test.ts`; route inventory lists each distinct mounted method/path exactly once.
+
 ## Development database
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write
