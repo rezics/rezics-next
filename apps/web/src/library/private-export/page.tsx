@@ -77,7 +77,12 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
   return (
     <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_export_title()}</PageHeading>
-      <a className="inline-flex min-h-11 items-center rounded-md border px-3 py-2" href={localizeHref('/library/recover-progress')}>{m.library_archive_progress_title()}</a>
+      <a
+        className="inline-flex min-h-11 items-center rounded-md border px-3 py-2"
+        href={localizeHref('/library/recover-progress')}
+      >
+        {m.library_archive_progress_title()}
+      </a>
       {text ? (
         <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite">
           {text}
