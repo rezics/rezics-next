@@ -272,13 +272,6 @@ test('production route replaces three windows, retries exact reads independently
     });
     expect(router.state.location.pathname).toBe(`/library/operations/${otherId}`);
     expect(host.textContent).not.toContain(m.library_bulk_recovery_address_pending());
-    console.log(
-      'address-debug',
-      host.innerHTML,
-      client.getQueryData(sessionQuery.queryKey),
-      lifetime.getSnapshot(),
-      client.getQueriesData({ queryKey: ['exposure'] }),
-    );
     expect(reads.at(-1)?.operationId).toBe(otherId);
     expect(host.textContent).not.toContain('subject-b-');
   } finally {
