@@ -305,7 +305,9 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
         reads++;
         if (reads === 2)
           return await new Promise<{ signedIn: true; preferences: ReadingPreferences; securityHref: null }>(
-            (resolve) => { finishLateRead = resolve; },
+            (resolve) => {
+              finishLateRead = resolve;
+            },
           );
         return { signedIn: true, preferences: reads >= 3 ? newer : initial, securityHref: null };
       },
@@ -320,57 +322,67 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
     },
   );
   try {
-  draft.edit({ layout: 'table' }, 'layout');
-  await draft.submit();
-  const original = draft.snapshot().pending?.input;
-  draft.edit({ gridSize: 'small' }, 'gridSize');
-  await draft.reload();
-  const before = timers.delays().length;
-  let settled = false;
-  const retrying = draft.retry().then(() => { settled = true; });
-  await timers.flush();
-  expect(timers.delays().slice(before)).toEqual([10_000, 10_000]);
-  expect(draft.snapshot().writeReceipt).toEqual({ shelf: receipt.shelf, version: 2 });
-  timers.fireNext(); await timers.flush(); expect(settled).toBe(true); await retrying;
-  expect(draft.snapshot()).toMatchObject({ readBusy: false, current: false, pending: null,
-    confirmedWrite: { input: original }, readResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 } });
-  expect(commands).toHaveLength(2);
-  expect(commands[1]).toBe(original);
-  expect(draft.snapshot().pending).toBeNull();
-  expect(draft.snapshot().phase).toBe('review');
-  expect(draft.snapshot().confirmedWrite?.input).toBe(original);
-  expect(draft.snapshot().comparison?.input).toBe(original);
-  expect(draft.snapshot().current).toBe(false);
-  expect(draft.snapshot().dirty.has('layout')).toBe(false);
-  expect(draft.snapshot().dirty.has('gridSize')).toBe(true);
-  expect(draft.snapshot().draft.gridSize).toBe('small');
-  expect(Object.isFrozen(original)).toBe(true);
+    draft.edit({ layout: 'table' }, 'layout');
+    await draft.submit();
+    const original = draft.snapshot().pending?.input;
+    draft.edit({ gridSize: 'small' }, 'gridSize');
+    await draft.reload();
+    const before = timers.delays().length;
+    let settled = false;
+    const retrying = draft.retry().then(() => {
+      settled = true;
+    });
+    await timers.flush();
+    expect(timers.delays().slice(before)).toEqual([10_000, 10_000]);
+    expect(draft.snapshot().writeReceipt).toEqual({ shelf: receipt.shelf, version: 2 });
+    timers.fireNext();
+    await timers.flush();
+    expect(settled).toBe(true);
+    await retrying;
+    expect(draft.snapshot()).toMatchObject({
+      readBusy: false,
+      current: false,
+      pending: null,
+      confirmedWrite: { input: original },
+      readResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 },
+    });
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(original);
+    expect(draft.snapshot().pending).toBeNull();
+    expect(draft.snapshot().phase).toBe('review');
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.snapshot().comparison?.input).toBe(original);
+    expect(draft.snapshot().current).toBe(false);
+    expect(draft.snapshot().dirty.has('layout')).toBe(false);
+    expect(draft.snapshot().dirty.has('gridSize')).toBe(true);
+    expect(draft.snapshot().draft.gridSize).toBe('small');
+    expect(Object.isFrozen(original)).toBe(true);
 
-  expect(reads).toBe(2);
-  await draft.reload();
-  expect(reads).toBe(3);
-  expect(draft.snapshot().known.version).toBe(3);
-  expect(draft.snapshot().current).toBe(true);
-  expect(draft.snapshot().draft.layout).toBe('grid');
-  expect(draft.snapshot().draft.gridSize).toBe('small');
-  expect(draft.snapshot().confirmedWrite?.input).toBe(original);
-  expect(draft.canSubmit()).toBe(false);
-  finishLateRead({ signedIn: true, preferences: receipt, securityHref: null });
-  await timers.flush();
-  expect(draft.snapshot().known.version).toBe(3);
-  expect(draft.snapshot().draft.layout).toBe('grid');
-  draft.keepLocal();
-  expect(commands).toHaveLength(2);
-  expect(draft.snapshot().confirmedWrite).toBeNull();
-  expect(draft.snapshot().comparison).toBeNull();
-  expect(draft.snapshot().phase).toBe('idle');
-  expect(draft.snapshot().draft.layout).toBe('grid');
-  expect(draft.snapshot().draft.gridSize).toBe('small');
-  expect(draft.canSubmit()).toBe(true);
-  await draft.submit();
-  expect(commands[2]?.expectedVersion).toBe(3);
-  expect(commands[2]?.shelf).toEqual({ gridSize: 'small' });
-  expect(commands[2]?.idempotencyKey).not.toBe(original?.idempotencyKey);
+    expect(reads).toBe(2);
+    await draft.reload();
+    expect(reads).toBe(3);
+    expect(draft.snapshot().known.version).toBe(3);
+    expect(draft.snapshot().current).toBe(true);
+    expect(draft.snapshot().draft.layout).toBe('grid');
+    expect(draft.snapshot().draft.gridSize).toBe('small');
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.canSubmit()).toBe(false);
+    finishLateRead({ signedIn: true, preferences: receipt, securityHref: null });
+    await timers.flush();
+    expect(draft.snapshot().known.version).toBe(3);
+    expect(draft.snapshot().draft.layout).toBe('grid');
+    draft.keepLocal();
+    expect(commands).toHaveLength(2);
+    expect(draft.snapshot().confirmedWrite).toBeNull();
+    expect(draft.snapshot().comparison).toBeNull();
+    expect(draft.snapshot().phase).toBe('idle');
+    expect(draft.snapshot().draft.layout).toBe('grid');
+    expect(draft.snapshot().draft.gridSize).toBe('small');
+    expect(draft.canSubmit()).toBe(true);
+    await draft.submit();
+    expect(commands[2]?.expectedVersion).toBe(3);
+    expect(commands[2]?.shelf).toEqual({ gridSize: 'small' });
+    expect(commands[2]?.idempotencyKey).not.toBe(original?.idempotencyKey);
   } finally {
     timers.restore();
   }

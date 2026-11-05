@@ -80,10 +80,15 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
 test('a stalled reset becomes uncertain and its late receipt cannot settle the original', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   const timers = controlledDeadlines();
-  const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 1,
-    shelf: { layouts: { all: 'list' }, gridSize: 'large' } });
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' }, gridSize: 'large' },
+  });
   const receipt = withShelfAdvice({ ...initial, version: 2, shelf: {} });
-  let finish!: (result: { ok: true; preferences: ReadingPreferences }) => void, reads = 0;
+  let finish!: (result: { ok: true; preferences: ReadingPreferences }) => void,
+    reads = 0;
   let original!: Readonly<PreferenceChange>;
   const draft = new ShelfPreferenceDraftRecovery(
     initial,
@@ -98,11 +103,23 @@ test('a stalled reset becomes uncertain and its late receipt cannot settle the o
     const sending = draft.submit(true).then(() => (settled = true));
     expect(timers.delays()).toEqual([10_000]);
     expect(original).toMatchObject({ expectedVersion: 1, shelf: null, idempotencyKey: expect.any(String) });
-    timers.fireNext(); await timers.flush(); expect(settled).toBe(true); await sending;
-    finish({ ok: true, preferences: receipt }); await timers.flush(); expect(reads).toBe(0);
-    expect(draft.snapshot()).toMatchObject({ phase: 'uncertain', current: false, writeBusy: false,
-      pending: { input: original }, known: { shelf: initial.shelf, version: 1 }, confirmedWrite: null,
-      writeReceipt: null, writeResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 } });
+    timers.fireNext();
+    await timers.flush();
+    expect(settled).toBe(true);
+    await sending;
+    finish({ ok: true, preferences: receipt });
+    await timers.flush();
+    expect(reads).toBe(0);
+    expect(draft.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      current: false,
+      writeBusy: false,
+      pending: { input: original },
+      known: { shelf: initial.shelf, version: 1 },
+      confirmedWrite: null,
+      writeReceipt: null,
+      writeResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 },
+    });
   } finally {
     timers.restore();
   }
