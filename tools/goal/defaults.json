@@ -581,12 +581,12 @@
       "systemdCommandTimeoutMs": 25000
     },
     "prompt": {
-      "workerRoleBytes": 3500,
+      "workerRoleBytes": 10000,
       "conditionBytes": 1500,
       "workerTotalBytes": 20000,
       "managerRoleBytes": 5000,
       "managerOpeningBytes": 30000,
-      "researchRoleBytes": 2500
+      "researchRoleBytes": 9000
     },
     "brief": {
       "bytes": 12288,

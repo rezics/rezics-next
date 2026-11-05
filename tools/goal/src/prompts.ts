@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { formatModuleMap, loadManifest } from '../../../scripts/architecture.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { workerTestCommands } from './affected-tests.ts';
 import { CONTINUATION_DIRECTORY, continuesItself } from './continuation.ts';
@@ -72,6 +73,7 @@ const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
 
 type TemplateCache = { mtimeMs: number; size: number; text: string; sha: string };
 const templateCache = new Map<string, TemplateCache>();
+const promptSourceRoot = resolve(import.meta.dir, '../../..');
 
 export type PromptView = Record<string, string>;
 export type RenderedPrompt = {
@@ -306,6 +308,8 @@ function promptView(input: WorkerPromptInput): PromptView {
   const proofInvocation = registeredProof(brief, authorization)
     ? ordinaryProofCommand(brief.acceptance.command).invocation.map(shellQuote).join(' ')
     : '';
+  const moduleRoot = existsSync(join(mainCheckout, 'docs/architecture/modules.json')) ? mainCheckout : promptSourceRoot;
+  const moduleMap = formatModuleMap(loadManifest(moduleRoot));
   const localRun = runner
     ? `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`
     : `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`;
@@ -314,6 +318,7 @@ function promptView(input: WorkerPromptInput): PromptView {
     goal: brief.goal ?? '',
     manager,
     mainCheckout,
+    moduleMap,
     worktree: task.worktree,
     researchWriteScope: research ? ` and the reference clones under ${mainCheckout}/.reference/` : '',
     mergeRule:
@@ -416,6 +421,16 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
         ].join('\n\n'),
       )
     : collapse(fillTemplate(roleFile.text, view, policy));
+  const roleWithModuleMap =
+    roleText.includes(view.moduleMap!)
+      ? roleText
+      : collapse(
+          [
+            roleText,
+            'Architecture module map (module|kind|public entries|allowed dependencies):',
+            view.moduleMap,
+          ].join('\n\n'),
+        );
   const selected = selectConditions(input);
   const renderedConditions = selected.map((id) => loadCondition(directory, id, view, policy));
   const conditionText = renderedConditions
@@ -459,18 +474,18 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     selected.includes('local-placement') ? [view.localRun, view.wrapperResult].filter(Boolean).join(' ') : '',
     input.evidence ? `Continue from this retry manifest:\n${view.evidenceManifest}` : '',
     input.landingDiagnostic
-      ? `Dev landing compiler diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}`
+      ? `Dev landing repair diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}`
       : '',
     renderLaunchContext(input.launchContext, policy.launchContext),
     view.consultation,
     deferredSentence(deferred),
   ].filter(Boolean);
   const prompt = collapse(
-    [roleText, prefixText, 'The task contract follows:', briefText, ...taskGuidance, ...extras, suffixText]
+    [roleWithModuleMap, prefixText, 'The task contract follows:', briefText, ...taskGuidance, ...extras, suffixText]
       .filter(Boolean)
       .join('\n\n'),
   );
-  const roleBytes = bytes(roleText);
+  const roleBytes = bytes(roleWithModuleMap);
   const conditionBytes = conditionBodyBytes;
   const briefBytes = bytes(briefText);
   const totalBytes = bytes(prompt);
@@ -505,6 +520,7 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
       conditions: Object.fromEntries(renderedConditions.map((item) => [item.id, item.sha])),
       brief: gitBlobSha(task.brief.markdown),
       policy: policyHash(policy),
+      architectureModules: gitBlobSha(view.moduleMap!),
       ...budgetManifest,
     },
   };

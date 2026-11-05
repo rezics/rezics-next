@@ -510,16 +510,26 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     measuredImport: 0,
     measuredCleanup: 0,
   };
+  const architecture = {
+    successfulChecks: 0,
+    repairHandbacks: 0,
+    unavailable: 0,
+    measuredChecks: 0,
+    totalMs: 0,
+    changedFiles: 0,
+  };
   for (const event of ordered) {
     if (event.stage !== 'landing' || !event.detail) continue;
-    if (event.action !== 'dev-transpile' && event.action !== 'dev-kernel-import') continue;
+    if (event.action !== 'dev-transpile' && event.action !== 'dev-architecture' && event.action !== 'dev-kernel-import')
+      continue;
     let detail: Record<string, unknown>;
     try {
       detail = JSON.parse(event.detail) as Record<string, unknown>;
     } catch {
       continue;
     }
-    const target = event.action === 'dev-kernel-import' ? kernelImport : transpile;
+    const target =
+      event.action === 'dev-kernel-import' ? kernelImport : event.action === 'dev-architecture' ? architecture : transpile;
     if (detail.outcome === 'passed') target.successfulChecks++;
     else if (detail.outcome === 'repair-handback') target.repairHandbacks++;
     else if (detail.outcome === 'unavailable') target.unavailable++;
@@ -530,6 +540,8 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     if (event.action === 'dev-transpile') {
       if (typeof detail.changedFileCount === 'number') transpile.changedFiles += detail.changedFileCount;
       if (typeof detail.typescriptFileCount === 'number') transpile.typescriptFiles += detail.typescriptFileCount;
+    } else if (event.action === 'dev-architecture') {
+      if (typeof detail.changedFileCount === 'number') architecture.changedFiles += detail.changedFileCount;
     } else {
       if (typeof detail.setupMs === 'number' && Number.isFinite(detail.setupMs)) {
         kernelImport.measuredSetup++;
@@ -635,6 +647,10 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     devTranspile: {
       ...transpile,
       totalMs: transpile.measuredChecks ? transpile.totalMs : null,
+    },
+    devArchitecture: {
+      ...architecture,
+      totalMs: architecture.measuredChecks ? architecture.totalMs : null,
     },
     devKernelImport: {
       successfulChecks: kernelImport.successfulChecks,

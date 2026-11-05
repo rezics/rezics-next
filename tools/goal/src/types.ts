@@ -39,6 +39,7 @@ export type PromptManifest = PromptBudgetManifest & {
   conditions: Record<string, string>;
   brief: string;
   policy: string;
+  architectureModules?: string;
   layers: { role: number; conditions: number; brief: number; total: number };
 };
 /** Original integrated acceptance identity; metadata alone never authorizes native execution. */

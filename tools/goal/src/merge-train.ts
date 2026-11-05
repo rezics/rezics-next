@@ -48,6 +48,11 @@ import {
   transpileLandingCandidate,
   type LandingTranspileResult,
 } from './landing-transpile.ts';
+import {
+  LandingArchitectureInterruptedError,
+  checkLandingArchitectureCandidate,
+  type LandingArchitectureResult,
+} from './landing-architecture.ts';
 import { regenerateLandingSchema, SCHEMA_MIGRATION_PATHS, type LandingSchemaResult } from './landing-schema.ts';
 import {
   importLandingKernelCandidate,
@@ -1414,6 +1419,32 @@ function transpileHandoff(
   };
 }
 
+function architectureHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  changedFiles: readonly string[],
+  result: LandingArchitectureResult,
+): DevLandingTranspileHandoff {
+  if (result.outcome !== 'diagnostic' || result.elapsedMs === null || result.diagnostics.length === 0)
+    throw new Error('dev landing architecture handoff requires a measured architecture diagnostic');
+  return {
+    kind: 'dev-landing-transpile',
+    guard: 'dev-landing-architecture',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base: result.base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    diagnostic: { file: null, line: null, column: null, message: result.diagnostics.join('\n') },
+  };
+}
+
 /** A failed Kernel entry import returns through the transpile handback; its diagnostic is the first useful error. */
 function kernelImportHandoff(
   entry: Pick<LandingEntry, 'id' | 'request'>,
@@ -1471,6 +1502,26 @@ function kernelImportOwner<T>(
   );
 }
 
+function architectureOwner<T>(
+  members: readonly T[],
+  changedFilesOf: (member: T) => readonly string[],
+  cwd: string,
+  result: LandingArchitectureResult,
+): T {
+  const diagnosticFile = result.diagnostics
+    .map((line) => /^(?:rule\s+\d+|parser):\s+([^:]+):/.exec(line)?.[1])
+    .find((file): file is string => Boolean(file));
+  return (
+    (diagnosticFile
+      ? members.find((member) =>
+          changedFilesOf(member).some(
+            (path) => resolve(cwd, path) === resolve(cwd, diagnosticFile) || diagnosticFile.endsWith(`/${path}`),
+          ),
+        )
+      : undefined) ?? members[0]!
+  );
+}
+
 /** A failed schema regeneration returns through the transpile handback; its diagnostic is the first error line. */
 function schemaHandoff(
   entry: Pick<LandingEntry, 'id' | 'request'>,
@@ -1519,6 +1570,12 @@ class LandingTranspileUnavailableError extends Error {
   constructor(readonly result: LandingTranspileResult) {
     super(result.infrastructureError ?? 'dev landing transpile command unavailable');
     this.name = 'LandingTranspileUnavailableError';
+  }
+}
+class LandingArchitectureUnavailableError extends Error {
+  constructor(readonly result: LandingArchitectureResult) {
+    super(result.infrastructureError ?? 'dev landing architecture command unavailable');
+    this.name = 'LandingArchitectureUnavailableError';
   }
 }
 class LandingKernelImportUnavailableError extends Error {
@@ -1645,6 +1702,29 @@ export class MergeTrain {
         changedFileCount: result.changedFileCount,
         typescriptFileCount: result.typescriptFileCount,
         elapsedMs: null,
+        logPath: result.logPath,
+        infrastructureError: result.infrastructureError ?? null,
+      }),
+    });
+  }
+
+  private recordDevArchitectureCheck(
+    request: LandingRequest,
+    result: LandingArchitectureResult,
+    outcome: 'passed' | 'unavailable',
+  ): void {
+    if (!(this.options.fence instanceof WorkerStore)) return;
+    recordFlow(this.options.fence.db, {
+      ...request,
+      stage: 'landing',
+      action: 'dev-architecture',
+      at: new Date().toISOString(),
+      detail: JSON.stringify({
+        outcome,
+        base: result.base,
+        candidate: result.candidate,
+        changedFileCount: result.changedFileCount,
+        elapsedMs: result.elapsedMs,
         logPath: result.logPath,
         infrastructureError: result.infrastructureError ?? null,
       }),
@@ -2528,6 +2608,55 @@ export class MergeTrain {
             throw new LandingTranspileUnavailableError(transpiled);
           }
           if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
+          const architecture = await checkLandingArchitectureCandidate({
+            cwd: trainTree,
+            base,
+            candidate: finalCandidate,
+            changedFiles: finalChangedFiles,
+            logPath: batchLog,
+          });
+          let staleDuringArchitecture: LandingEntry | undefined;
+          for (const member of prepared) {
+            try {
+              o.fence.assertCurrent(member.entry.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleDuringArchitecture = member.entry;
+              break;
+            }
+          }
+          if (staleDuringArchitecture) {
+            skipped.add(staleDuringArchitecture.id);
+            pending = pending.filter((entry) => entry.id !== staleDuringArchitecture!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (architecture.outcome === 'diagnostic') {
+            const owner = architectureOwner(
+              prepared,
+              (member) => member.result.changedFiles,
+              trainTree,
+              architecture,
+            );
+            return returnRepair(
+              owner,
+              architectureHandoff(
+                owner.entry,
+                owner.entry.request.workerCommit ?? finalCandidate,
+                finalChangedFiles,
+                architecture,
+              ),
+            );
+          }
+          if (architecture.outcome === 'unavailable') {
+            this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, 'unavailable');
+            throw new LandingArchitectureUnavailableError(architecture);
+          }
+          this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, 'passed');
         }
         if (
           !existsSync(join(trainTree, 'node_modules')) &&
@@ -2787,8 +2916,10 @@ export class MergeTrain {
         if (committed) throw error;
         if (
           error instanceof LandingTranspileUnavailableError ||
+          error instanceof LandingArchitectureUnavailableError ||
           error instanceof LandingKernelImportUnavailableError ||
-          error instanceof LandingTranspileInterruptedError
+          error instanceof LandingTranspileInterruptedError ||
+          error instanceof LandingArchitectureInterruptedError
         )
           throw error;
         if (error instanceof StaleAttemptError) {
@@ -4060,6 +4191,32 @@ export class MergeTrain {
             throw new LandingTranspileUnavailableError(transpiled);
           }
           if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
+          const architecture = await checkLandingArchitectureCandidate({
+            cwd: trainTree,
+            base,
+            candidate,
+            changedFiles: result.changedFiles,
+            logPath,
+          });
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (architecture.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${candidate} was not published; returning its architecture violations to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return architectureHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? candidate,
+              result.changedFiles,
+              architecture,
+            );
+          }
+          if (architecture.outcome === 'unavailable') {
+            this.recordDevArchitectureCheck(request, architecture, 'unavailable');
+            throw new LandingArchitectureUnavailableError(architecture);
+          }
+          this.recordDevArchitectureCheck(request, architecture, 'passed');
           stage = 'gate';
           if (
             !existsSync(join(trainTree, 'node_modules')) &&
@@ -4673,8 +4830,10 @@ export class MergeTrain {
         custody?.signal.aborted ||
         error instanceof StaleAttemptError ||
         error instanceof LandingTranspileUnavailableError ||
+        error instanceof LandingArchitectureUnavailableError ||
         error instanceof LandingKernelImportUnavailableError ||
-        error instanceof LandingTranspileInterruptedError
+        error instanceof LandingTranspileInterruptedError ||
+        error instanceof LandingArchitectureInterruptedError
       )
         throw error;
       const message = String(error);
@@ -7456,6 +7615,26 @@ export class MergeTrain {
           this.recordUnavailableDevTranspile(devLanding.owners[0]!.entry.request, transpiled);
           throw new LandingTranspileUnavailableError(transpiled);
         }
+        const architecture = await checkLandingArchitectureCandidate({
+          cwd: tree,
+          base: targetHead,
+          candidate: commit,
+          changedFiles: changed,
+          logPath,
+        });
+        for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
+        if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (architecture.outcome === 'diagnostic') {
+          const owner = architectureOwner(devLanding.owners, (item) => item.changedFiles, tree, architecture);
+          return {
+            transpileHandoff: architectureHandoff(owner.entry, owner.sourceCommit, changed, architecture),
+          };
+        }
+        if (architecture.outcome === 'unavailable') {
+          this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, 'unavailable');
+          throw new LandingArchitectureUnavailableError(architecture);
+        }
+        this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, 'passed');
         const imported = await importLandingKernelCandidate({
           cwd: tree,
           base: targetHead,

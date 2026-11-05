@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 
@@ -114,6 +115,7 @@ const pathMappingsCache = new Map<string, { baseUrl: string; paths: Record<strin
 const transpilerCache = new Map<string, Bun.Transpiler>();
 const jsonCache = new Map<string, Record<string, unknown> | undefined>();
 const globCache = new Map<string, RegExp>();
+const fileOverrides = new Map<string, string | null>();
 
 function slash(path: string): string {
   return path.split(sep).join('/');
@@ -125,6 +127,16 @@ function sha256(value: string | Uint8Array): string {
 
 function canonical(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function readText(path: string): string {
+  const absolute = resolve(path);
+  if (fileOverrides.has(absolute)) {
+    const value = fileOverrides.get(absolute);
+    if (value === null) throw new Error(`File is absent from the captured architecture base: ${absolute}`);
+    return value!;
+  }
+  return readFileSync(absolute, 'utf8');
 }
 
 function globRegex(pattern: string): RegExp {
@@ -177,7 +189,7 @@ function readJson(path: string): Record<string, unknown> | undefined {
   const absolute = resolve(path);
   if (jsonCache.has(absolute)) return jsonCache.get(absolute);
   try {
-    const result = JSON.parse(readFileSync(absolute, 'utf8')) as Record<string, unknown>;
+    const result = JSON.parse(readText(absolute)) as Record<string, unknown>;
     jsonCache.set(absolute, result);
     return result;
   } catch {
@@ -362,7 +374,7 @@ function readPathMappings(root: string, sourcePath: string): { baseUrl: string; 
     visiting.add(absolute);
     let config: Record<string, unknown> = {};
     try {
-      config = JSON.parse(parseJsonc(readFileSync(absolute, 'utf8'))) as Record<string, unknown>;
+      config = JSON.parse(parseJsonc(readText(absolute))) as Record<string, unknown>;
     } catch {
       visiting.delete(absolute);
       return { baseUrl: dirname(absolute), paths: {} };
@@ -665,7 +677,7 @@ function environmentHash(root: string, manifest: ArchitectureManifest): string {
   }
   const values = [...paths].sort().map((path) => {
     try {
-      return [path, sha256(readFileSync(join(root, path)))];
+      return [path, sha256(readText(join(root, path)))];
     } catch {
       return [path, 'missing'];
     }
@@ -1279,17 +1291,7 @@ const COMPACT_KIND: Record<ModuleKind, string> = {
   'composition root': 'r',
   'UI/transport library': 'u',
 };
-const COMPACT_OWNER: Record<string, string> = {
-  accounts: 'a',
-  commerce: 'c',
-  content: 't',
-  imports: 'i',
-  performance: 'p',
-  platform: 'l',
-  search: 's',
-  semantic: 'm',
-  web: 'w',
-};
+export const MAX_MODULE_MAP_CHARACTERS = 7_000;
 
 function compactModuleId(id: string): string {
   return id.replace(/^kernel-/, 'k').replace(/^web-/, 'w');
@@ -1331,16 +1333,18 @@ function moduleEntryLabel(module: ArchitectureModule): string {
 
 export function formatModuleMap(manifest: ArchitectureManifest): string {
   const legend =
-    'kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; owner a=accounts,c=commerce,t=content,i=imports,p=performance,l=platform,s=search,m=semantic,w=web; path k=kernel,w=web,p=package,@=rezics';
+    'row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; ' +
+    'path k=kernel,w=web,p=package,@=rezics; - = none';
   const rows = manifest.modules
     .slice()
     .sort((left, right) => left.id.localeCompare(right.id))
-    .map(
-      (module) =>
-        `${compactModuleId(module.id)}|${COMPACT_KIND[module.kind]}|${COMPACT_OWNER[module.owner] ?? module.owner}|${moduleEntryLabel(module)}`,
-    );
+    .map((module) => {
+      const dependencies = module.allowedDependencies.map(compactModuleId).sort().join(',') || '-';
+      return [compactModuleId(module.id), COMPACT_KIND[module.kind], moduleEntryLabel(module) || '-', dependencies].join('|');
+    });
   const result = [legend, ...rows].join('\n');
-  if (result.length > 2_000) throw new Error(`Generated module map is ${result.length} characters; maximum is 2000.`);
+  if (result.length > MAX_MODULE_MAP_CHARACTERS)
+    throw new Error(`Generated module map is ${result.length} characters; maximum is ${MAX_MODULE_MAP_CHARACTERS}.`);
   return result;
 }
 
@@ -1352,8 +1356,228 @@ export function loadBaseline(rootInput: string): BoundaryBaseline {
   return JSON.parse(readFileSync(join(resolve(rootInput), BASELINE_PATH), 'utf8')) as BoundaryBaseline;
 }
 
-function parseArguments(args: string[]): { changed: string[]; map: boolean } {
+function gitOutput(root: string, args: string[], allowMissing = false): string | undefined {
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    if (allowMissing) return undefined;
+    throw new Error((result.stderr || `git ${args.join(' ')} exited ${result.status}`).trim());
+  }
+  return result.stdout ?? '';
+}
+
+function gitBaseFiles(root: string, base: string, manifest: ArchitectureManifest): string[] {
+  const paths = gitOutput(root, ['ls-tree', '-r', '--name-only', '-z', base])!.split('\0').filter(Boolean);
+  return paths
+    .filter((path) => {
+      return manifest.sourceRoots.some((candidate) => {
+        const prefix = candidate.path.endsWith('/') ? candidate.path : `${candidate.path}/`;
+        if (!path.startsWith(prefix) || !isIncludedByRoot(path, candidate)) return false;
+        const relativePath = path.slice(prefix.length);
+        return !relativePath.split('/').slice(0, -1).some((part) => part.startsWith('.') || part === 'node_modules');
+      });
+    })
+    .sort();
+}
+
+function gitBaseText(root: string, base: string, path: string): string | undefined {
+  return gitOutput(root, ['show', `${base}:${path}`], true);
+}
+
+function architectureEnvironmentPaths(manifest: ArchitectureManifest): Set<string> {
+  const paths = new Set<string>(['tsconfig.base.json']);
+  for (const sourceRoot of manifest.sourceRoots) {
+    const workspace = workspaceForPath(sourceRoot.path);
+    if (workspace) {
+      paths.add(`${workspace}/package.json`);
+      paths.add(`${workspace}/tsconfig.json`);
+    }
+  }
+  return paths;
+}
+
+function changedArchitectureGraph(
+  root: string,
+  base: string,
+  currentManifest: ArchitectureManifest,
+  currentGraph: ArchitectureGraph,
+  changedPaths: readonly string[],
+): { manifest: ArchitectureManifest; baseline: BoundaryBaseline; graph: ArchitectureGraph } {
+  const baseManifestText = gitBaseText(root, base, MANIFEST_PATH);
+  const baseBaselineText = gitBaseText(root, base, BASELINE_PATH);
+  if (!baseManifestText || !baseBaselineText)
+    throw new Error('Captured base is missing the architecture manifest or boundary baseline.');
+  const manifest = JSON.parse(baseManifestText) as ArchitectureManifest;
+  const baseline = JSON.parse(baseBaselineText) as BoundaryBaseline;
+
+  const environmentPaths = new Set([
+    ...architectureEnvironmentPaths(manifest),
+    ...architectureEnvironmentPaths(currentManifest),
+  ]);
+
+  const baseFiles = gitBaseFiles(root, base, manifest);
+  const baseFileSet = new Set(baseFiles);
+  const currentFiles = new Set(Object.keys(currentGraph.hashes));
+  const baseImports = new Map<string, ImportEdge[]>();
+  const baseHashes: Record<string, string> = {};
+  const parseErrors: string[] = [];
+  const changedSet = new Set(changedPaths);
+
+  for (const file of baseFiles) {
+    const source = changedSet.has(file) || !currentFiles.has(file) ? gitBaseText(root, base, file) : undefined;
+    if (source !== undefined) {
+      baseHashes[file] = sha256(source);
+      const parsed = collectImports(source, file);
+      parseErrors.push(...parsed.errors);
+      baseImports.set(file, parsed.imports);
+    } else {
+      baseHashes[file] = currentGraph.hashes[file]!;
+      baseImports.set(file, currentGraph.imports[file] ?? []);
+      parseErrors.push(...currentGraph.parseErrors.filter((error) => error.startsWith(`${file}:`)));
+    }
+  }
+
+  const baseOverrides = new Map<string, string | null>();
+  for (const path of environmentPaths) baseOverrides.set(resolve(root, path), gitBaseText(root, base, path) ?? null);
+  fileOverrides.clear();
+  for (const [path, value] of baseOverrides) fileOverrides.set(path, value);
+  pathMappingsCache.clear();
+  jsonCache.clear();
+  try {
+    const unchangedResolution =
+      canonical(currentManifest) === canonical(manifest) &&
+      currentGraph.environmentHash === environmentHash(root, manifest) &&
+      baseFiles.length === currentFiles.size &&
+      baseFiles.every((file) => currentFiles.has(file));
+    const packages = packageRoots(root, manifest);
+    const imports: Record<string, ImportEdge[]> = {};
+    for (const file of baseFiles) {
+      if (unchangedResolution && !changedSet.has(file)) {
+        imports[file] = currentGraph.imports[file] ?? [];
+      } else {
+        imports[file] = (baseImports.get(file) ?? []).map((edge) => ({
+          ...edge,
+          targets: resolveSpecifier(root, file, edge.specifier, packages, baseFileSet),
+        }));
+      }
+    }
+    return {
+      manifest,
+      baseline,
+      graph: {
+        version: 1,
+        manifestHash: sha256(canonical(manifest)),
+        environmentHash: environmentHash(root, manifest),
+        hashes: baseHashes,
+        imports,
+        parseErrors,
+      },
+    };
+  } finally {
+    fileOverrides.clear();
+    pathMappingsCache.clear();
+    jsonCache.clear();
+  }
+}
+
+function newBaselineEntries(previous: BoundaryBaseline, current: BoundaryBaseline): string[] {
+  const existing = new Set<string>();
+  for (const [moduleId, group] of Object.entries(previous.modules)) {
+    for (const violation of group.violations)
+      existing.add(`${moduleId}\n${baselineKey(violation)}`);
+  }
+  const added: string[] = [];
+  for (const [moduleId, group] of Object.entries(current.modules)) {
+    for (const violation of group.violations) {
+      const key = `${moduleId}\n${baselineKey(violation)}`;
+      if (!existing.has(key)) added.push(`${violation.file}: ${violation.edge}`);
+    }
+  }
+  return added.sort();
+}
+
+function architectureErrorIdentity(error: string): string {
+  return error.replace(/ #\d+ =>/g, ' =>');
+}
+
+function changedPathsFromBase(root: string, base: string): string[] {
+  const tracked = gitOutput(root, ['diff', '--name-only', '--no-renames', '-z', base, '--'])!;
+  const untracked = gitOutput(root, ['ls-files', '--others', '--exclude-standard', '-z'])!;
+  return [...new Set(`${tracked}\0${untracked}`.split('\0').filter(Boolean).map((path) => slash(relative(root, resolve(root, path)))))].sort();
+}
+
+function architectureInputsUnchanged(
+  root: string,
+  base: string,
+  manifest: ArchitectureManifest,
+  baseline: BoundaryBaseline,
+): boolean {
+  const baseManifestText = gitBaseText(root, base, MANIFEST_PATH);
+  const baseBaselineText = gitBaseText(root, base, BASELINE_PATH);
+  if (!baseManifestText || !baseBaselineText) return false;
+  const baseManifest = JSON.parse(baseManifestText) as ArchitectureManifest;
+  const baseBaseline = JSON.parse(baseBaselineText) as BoundaryBaseline;
+  if (canonical(baseManifest) !== canonical(manifest) || canonical(baseBaseline) !== canonical(baseline)) return false;
+
+  const currentFiles = enumerateProductionFiles(root, manifest);
+  const baseFiles = gitBaseFiles(root, base, manifest);
+  if (currentFiles.length !== baseFiles.length || currentFiles.some((file, index) => file !== baseFiles[index]))
+    return false;
+
+  const environmentPaths = architectureEnvironmentPaths(manifest);
+  const relevantPaths = new Set([MANIFEST_PATH, BASELINE_PATH, ...environmentPaths]);
+  for (const path of changedPathsFromBase(root, base)) {
+    if (relevantPaths.has(path) || manifest.sourceRoots.some((sourceRoot) => isIncludedByRoot(path, sourceRoot)))
+      return false;
+  }
+  for (const path of environmentPaths) {
+    const baseText = gitBaseText(root, base, path);
+    let currentText: string | undefined;
+    try {
+      currentText = readFileSync(join(root, path), 'utf8');
+    } catch {
+      currentText = undefined;
+    }
+    if (baseText !== currentText) return false;
+  }
+  return true;
+}
+
+function architectureDeltaErrors(
+  root: string,
+  base: string,
+  manifest: ArchitectureManifest,
+  baseline: BoundaryBaseline,
+  currentGraph: ArchitectureGraph,
+  currentResult: AuditResult,
+): AuditResult {
+  const changedPaths = changedPathsFromBase(root, base);
+  const previous = changedArchitectureGraph(root, base, manifest, currentGraph, changedPaths);
+  const previousResult = auditArchitecture(root, previous.manifest, previous.baseline, previous.graph);
+  const previousCounts = new Map<string, number>();
+  for (const error of previousResult.errors) {
+    const identity = architectureErrorIdentity(error);
+    previousCounts.set(identity, (previousCounts.get(identity) ?? 0) + 1);
+  }
+  const errors: string[] = [];
+  for (const error of currentResult.errors) {
+    const identity = architectureErrorIdentity(error);
+    const count = previousCounts.get(identity) ?? 0;
+    if (count) previousCounts.set(identity, count - 1);
+    else errors.push(error);
+  }
+  for (const added of newBaselineEntries(previous.baseline, baseline))
+    errors.push(`rule 8: boundary baseline may only shrink; added ${added}`);
+  return {
+    errors: [...new Set(errors)].sort(),
+    warnings: currentResult.warnings,
+    violations: currentResult.violations,
+  };
+}
+
+function parseArguments(args: string[]): { changed: string[]; changedBase?: string; map: boolean } {
   const changed: string[] = [];
+  let changedBase: string | undefined;
   let map = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
@@ -1361,13 +1585,17 @@ function parseArguments(args: string[]): { changed: string[]; map: boolean } {
       map = true;
     } else if (argument === '--changed') {
       while (args[index + 1] && !args[index + 1]!.startsWith('--')) changed.push(args[++index]!);
-      if (!changed.length) throw new Error('--changed requires one or more file paths.');
+      if (!changed.length) throw new Error('--changed requires a base commit or one or more file paths.');
     } else {
       throw new Error(`Unknown option: ${argument}`);
     }
   }
-  if (map && changed.length) throw new Error('--map and --changed are separate modes.');
-  return { changed, map };
+  if (changed.length === 1 && /^[0-9a-f]{7,64}$/i.test(changed[0]!)) {
+    changedBase = changed.pop();
+  }
+  if (map && changed.length + Number(Boolean(changedBase)) > 0)
+    throw new Error('--map and --changed are separate modes.');
+  return { changed, ...(changedBase ? { changedBase } : {}), map };
 }
 
 async function main(): Promise<void> {
@@ -1406,20 +1634,49 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.changedBase) {
+    try {
+      gitOutput(root, ['rev-parse', '--verify', `${args.changedBase}^{commit}`]);
+      if (architectureInputsUnchanged(root, args.changedBase, manifest, baseline)) {
+        console.log(`Architecture check passed (production architecture inputs unchanged against base ${args.changedBase}).`);
+        return;
+      }
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 2;
+      return;
+    }
+  }
+
   let graph: ArchitectureGraph;
   try {
-    graph = args.changed.length ? changedGraph(root, manifest, args.changed) : buildGraph(root, manifest);
-    if (!args.changed.length) writeGraphCache(root, graph);
+    graph = args.changedBase ? buildGraph(root, manifest) : args.changed.length ? changedGraph(root, manifest, args.changed) : buildGraph(root, manifest);
+    if (args.changedBase || !args.changed.length) writeGraphCache(root, graph);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 2;
     return;
   }
-  const result = auditArchitecture(root, manifest, baseline, graph);
+  const audited = auditArchitecture(root, manifest, baseline, graph);
+  let result = audited;
+  if (args.changedBase) {
+    try {
+      result = architectureDeltaErrors(root, args.changedBase, manifest, baseline, graph, audited);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 2;
+      return;
+    }
+  }
   for (const warning of result.warnings) console.warn(warning);
   for (const error of result.errors) console.error(error);
   if (result.errors.length) process.exitCode = 1;
-  else console.log(`Architecture check passed (${Object.keys(graph.hashes).length} production files).`);
+  else
+    console.log(
+      args.changedBase
+        ? `Architecture check passed (${Object.keys(graph.hashes).length} production files against base ${args.changedBase}).`
+        : `Architecture check passed (${Object.keys(graph.hashes).length} production files).`,
+    );
 }
 
 if (import.meta.main) await main();
