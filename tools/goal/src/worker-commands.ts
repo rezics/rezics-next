@@ -21,10 +21,9 @@ import { submitOwnerDecision } from './owner-decisions.ts';
 import { projectToolIncidentStatus } from './tool-incidents.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { trainLaneStatus } from './lease.ts';
-import { countAllowanceWaiting, poolBurnStatus } from './allowance.ts';
+import { poolBurnStatus } from './allowance.ts';
 import { defaultPolicy } from './policy.ts';
 import { readRetainedPoolReadings } from './pacing.ts';
-import { admissionProfiles, readRouting } from './routing.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -196,30 +195,12 @@ export async function runWorkerCommand(
       };
       const selectedTasks = cohort.map(show);
       const trains = trainLaneStatus(settings.stateDirectory);
-      const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
-      const now = Date.now();
-      const readings = readRetainedPoolReadings(settings.stateDirectory);
-      const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
-      const waiting = table
-        ? countAllowanceWaiting(
-            selectedTasks.flatMap((task) => {
-              if (task.state !== 'ready' || task.brief.urgent === true) return [];
-              try {
-                return [admissionProfiles(task.brief, table, task.sequence)];
-              } catch {
-                // Status already shows malformed task rows; they are not allowance waiters.
-                return [];
-              }
-            }),
-            settings.pools ?? [],
-            readings,
-            { now, spanMs, history: readings, policy: settings.policy?.provider },
-          )
-        : {};
-      const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs).map((pool) => ({
-        ...pool,
-        waiting: waiting[pool.name] ?? 0,
-      }));
+      const pools = poolBurnStatus(
+        settings.pools ?? [],
+        readRetainedPoolReadings(settings.stateDirectory),
+        Date.now(),
+        settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs,
+      );
       print(
         JSON.stringify(
           arg

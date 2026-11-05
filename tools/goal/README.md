@@ -439,7 +439,7 @@ failures exclude all aliases of that allowance immediately. There is no credit p
 
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
 minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A reset is not burn. `status` lists
-each pool's rate and the ready tasks waiting on it.
+each pool's rate.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
@@ -637,7 +637,6 @@ protocol or representation meaning; they are not operator limits.
 | `policy.backlog.stoppedTaskLimitMs`                   | `3600000`                            | Stopped product task age before cancellation into failed backlog (ms).                                                                                                                      |
 | `policy.backlog.stoppedTasksPerGoalPerRun`            | `20`                                 | Maximum stopped tasks cancelled per Goal per sweep.                                                                                                                                         |
 | `policy.backlog.dispatchesPerSweep`                   | `4`                                  | Maximum briefs dispatched by one synchronous sweep.                                                                                                                                         |
-| `policy.backlog.allowanceWaitingBound`                | `10`                                 | Ready tasks waiting only on allowance count toward the dispatch cap only past this many.                                                                                                    |
 | `policy.backlog.settleMs`                             | `10000`                              | Minimum unchanged brief age before dispatch (ms).                                                                                                                                           |
 | `policy.backlog.refusalBriefs`                        | `4`                                  | Maximum refused briefs listed in a notification.                                                                                                                                            |
 | `policy.backlog.refusalReasonCharacters`              | `160`                                | Maximum characters per listed refusal reason.                                                                                                                                               |
@@ -738,8 +737,6 @@ protocol or representation meaning; they are not operator limits.
 | `policy.pacing.alertUnusedPercent`                    | `20`                                 | Unused allowance percentage triggering a near-reset pacing alert.                                                                                                                           |
 | `policy.pacing.alertResetHours`                       | `24`                                 | Remaining reset hours qualifying for an unused-allowance alert.                                                                                                                             |
 | `policy.pacing.alertEveryMs`                          | `10800000`                           | Minimum interval between pacing alerts for the same allowance (ms).                                                                                                                         |
-| `policy.pacing.nearCeilingPercent`                    | `25`                                 | Burn-rate proximity to a pool ceiling that starts gradual admission (%).                                                                                                                    |
-| `policy.pacing.nearCeilingStarts`                     | `2`                                  | Maximum new starts per sweep on a pool in the near-ceiling band.                                                                                                                            |
 | `policy.manager.sleepAlarmPerHour`                    | `10`                                 | Sleep calls allowed per manager per UTC hour before one alarm.                                                                                                                              |
 | `policy.manager.sleepHistoryHours`                    | `24`                                 | UTC-hour sleep-counter history retained per manager.                                                                                                                                        |
 | `policy.manager.inboxPollMs`                          | `2000`                               | Manager inbox filesystem watcher fallback interval (ms).                                                                                                                                    |
@@ -2196,14 +2193,9 @@ process, like promotion: dispatch runs Git and dependency installation synchrono
 host's socket. The host skips the minute while the previous child is still running, and the run holds the
 `leases/backlog` lease, so only one run exists even across a host restart. Each run:
 
-- **Dispatch.** While running tasks and ready tasks that are not waiting only on allowance, plus ready tasks waiting
-  only on allowance beyond `policy.backlog.allowanceWaitingBound`, are fewer than the cap (`maxWorkers` in
-  `<state>/capacity.json`, else 32), the sweep dispatches up to four `*.md` briefs. Before claiming, it routes each
-  candidate and prefers briefs whose profile or a fallback has an allowed pool now; oldest-first within each group,
-  round-robin across Goals, starting with the Goal served longest ago. A pool whose burn is within
-  `policy.pacing.nearCeilingPercent` of its ceiling admits at most `policy.pacing.nearCeilingStarts` new starts that
-  sweep. Ready tasks waiting only on allowance never occupy slots used to dispatch a brief that can start now. A brief
-  changed in the last ten seconds waits for the next run. It uses
+- **Dispatch.** While running and ready tasks are fewer than the cap (`maxWorkers` in `<state>/capacity.json`, else
+  32), the sweep dispatches up to four of the oldest `*.md` briefs, by modification time, round-robin across Goals,
+  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next run. It uses
   the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
   next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
   `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
@@ -2249,9 +2241,8 @@ directories. The run's one-line JSON results are appended to `<state>/backlog-ru
 
 #### Cost: backlog run
 
-- **Touches:** one indexed count of running tasks, current ready-task bodies to classify allowance waiters when routing
-  is configured, the stopped tasks through the task-state index with one latest-event lookup each, the running manager
-  rows, and the backlog directories' entries.
+- **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
+  latest-event lookup each, the running manager rows, and the backlog directories' entries.
 - **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
   is proportional to stopped tasks, not task history.
 - **Growth check:** `tools/goal/src/backlog-growth.test.ts`: `backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps`. It scales settled task/event history with fixed selected work, stopped tasks, and ready entries independently; it records SQLite executions and returned rows, JSON-decoded bytes, and actual backlog-directory enumerations and returned entries. Query plans and returned rows are not physical scan counts. The scenario includes empty backlog and cap continuation; `backlog.test.ts` covers interrupted uncommitted claims and replay after committed dispatch.
