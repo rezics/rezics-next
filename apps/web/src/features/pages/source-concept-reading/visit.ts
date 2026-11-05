@@ -131,7 +131,6 @@ function publish(
       read: result,
       history: firstChangePage(),
       index: 0,
-      focus: undefined,
       notice: 'currentness',
       noticeSection: destination.address?.focus?.section ?? 'hierarchy',
     };
@@ -147,14 +146,15 @@ function publish(
       failed: { ...destination, state: result.narrower.state },
     };
   }
-  return {
+  const published: VisitState = {
     ...done,
     read: result,
     ...position(state, result, destination),
-    focus: destination.mode === 'restore' ? destination.address?.focus : undefined,
-    notice: destination.mode === 'refresh' ? state.notice : undefined,
-    noticeSection: destination.mode === 'refresh' ? state.noticeSection : undefined,
+    ...(destination.mode === 'restore' && destination.address?.focus ? { focus: destination.address.focus } : {}),
+    ...(destination.mode === 'refresh' && state.notice ? { notice: state.notice } : {}),
+    ...(destination.mode === 'refresh' && state.noticeSection ? { noticeSection: state.noticeSection } : {}),
   };
+  return published;
 }
 
 function addressKey(address: ConceptHierarchyAddress | undefined) {
@@ -310,27 +310,27 @@ export function useConceptVisit({
     pendingRestore.current = undefined;
     const wanted = pending.address;
     if (!wanted) {
-      const reset = {
+      const reset: VisitState = {
         ...state,
         history: firstChangePage(),
         index: 0,
-        focus: undefined,
-        notice: undefined,
-        noticeSection: undefined,
       };
+      delete reset.focus;
+      delete reset.notice;
+      delete reset.noticeSection;
       stateRef.current = reset;
       setState(reset);
       return;
     }
     if (!currentnessMatches(state.read, wanted)) {
-      const changed = {
+      const changed: VisitState = {
         ...state,
         history: firstChangePage(),
         index: 0,
-        focus: undefined,
         notice: 'currentness' as const,
         noticeSection: wanted.focus?.section ?? 'hierarchy',
       };
+      delete changed.focus;
       stateRef.current = changed;
       setState(changed);
       expectedAddressKey.current = '';
@@ -350,14 +350,15 @@ export function useConceptVisit({
       );
       return;
     }
-    const restored = {
+    const restored: VisitState = {
       ...state,
       history: { addresses: wanted.addresses.map((item) => item ?? undefined), truncated: wanted.truncated },
       index: wanted.index,
-      focus: wanted.focus,
-      notice: undefined,
-      noticeSection: undefined,
     };
+    delete restored.focus;
+    delete restored.notice;
+    delete restored.noticeSection;
+    if (wanted.focus) restored.focus = wanted.focus;
     stateRef.current = restored;
     setState(restored);
   }, [state.completed, state.loading, state.busy, state.read, admission]);
@@ -393,12 +394,12 @@ export function useConceptVisit({
     restart: () => run({ input: {}, mode: 'restart' }, true, state),
     reportFocusMissing: () => {
       if (!state.focus || !admission.active()) return;
-      const missing = {
+      const missing: VisitState = {
         ...state,
-        focus: undefined,
         notice: 'row-missing' as const,
         noticeSection: state.focus.section,
       };
+      delete missing.focus;
       stateRef.current = missing;
       setState(missing);
       const position = conceptHierarchyAddressFor(missing.read!, missing.history, missing.index, undefined);

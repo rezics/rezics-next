@@ -120,6 +120,7 @@ function ConceptWorksVisit({
   locale,
   route,
   onChange,
+  conceptReturnForResult,
   request,
   selectionKey,
   selection,
@@ -356,7 +357,7 @@ function ConceptWorksVisit({
             renderPersonal={personal.renderPersonal}
             subjectHrefFor={(subject: SubjectHrefInput) => {
               const returnAddress =
-                props.conceptReturnForResult?.(subject) ?? routeHref(read.public.subject.id, title, locale, route, false);
+                conceptReturnForResult?.(subject) ?? routeHref(read.public.subject.id, title, locale, route, false);
               return subjectVisitHref(subjectHref(subject, locale).href, returnAddress);
             }}
           />
