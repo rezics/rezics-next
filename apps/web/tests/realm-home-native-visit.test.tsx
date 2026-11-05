@@ -54,7 +54,10 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale, locales } = await import('../src/paraglide/runtime.js');
+const { getLocale, overwriteGetLocale, locales } = await import('../src/paraglide/runtime.js');
+const originalGetLocale = getLocale;
+let visitLocale: (typeof locales)[number] = 'en';
+overwriteGetLocale(() => visitLocale);
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const input = { realmId: id(1), spaceId: id(2), languages: ['en'], credentialMode: 'session' as const };
 type FixtureViewer = 'anonymous' | 'none' | 'member';
@@ -405,11 +408,12 @@ afterEach(async () => {
   joinAdviceReads.length = 0;
   joinAdvice = { state: 'current', allowed: true };
   session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
-  setLocale('en', { reload: false });
+  visitLocale = 'en';
 });
 afterAll(async () => {
   await settle(() => root.unmount());
   host.remove();
+  overwriteGetLocale(originalGetLocale);
   mock.restore();
   for (const [key, value] of previous) {
     if (value) Object.defineProperty(globalThis, key, value);
@@ -434,6 +438,7 @@ test('one typed native page renders 0/1/6/12 works and explicit nonmember advice
 
 test('unavailable, refused and empty Realm advice never hide public reading or invent a join control', async () => {
   native = fixture(0, 'none');
+  native.publications.next = null;
   joinAdvice = { state: 'unavailable' };
   await paint(await readNativeRealmHome(operations, input));
   expect(joinAdviceReads).toEqual([id(1)]);
@@ -504,7 +509,7 @@ test('presentation replacement and credential, account or reader retirement disc
     } else {
       if (replacement === 'credential') session = { ...session, csrfToken: 'two' };
       if (replacement === 'account') session = { ...session, subject: 'replacement-reader' };
-      if (replacement === 'locale') setLocale('ja', { reload: false });
+      if (replacement === 'locale') visitLocale = 'ja';
       await paint(page, replacement === 'reader' ? { ...operations } : operations);
     }
     await settle(() =>
@@ -529,7 +534,7 @@ test('presentation replacement and credential, account or reader retirement disc
     expect(host.textContent).not.toContain('Original presentation');
     if (replacement !== 'presentation') {
       session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
-      setLocale('en', { reload: false });
+      visitLocale = 'en';
       await paint(page);
       expect(host.textContent).toBe('');
       await paint(await readNativeRealmHome(operations, input));
@@ -540,7 +545,7 @@ test('presentation replacement and credential, account or reader retirement disc
 
 test('anonymous advice remains localized and a missing or replaced carrier never becomes a home', async () => {
   for (const locale of locales) {
-    setLocale(locale, { reload: false });
+    visitLocale = locale;
     session = { state: 'signed-out', subject: '', csrfToken: '' };
     native = fixture(0, 'anonymous');
     await paint(await readNativeRealmHome(operations, input));
