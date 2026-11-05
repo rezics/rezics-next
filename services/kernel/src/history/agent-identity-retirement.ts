@@ -32,7 +32,6 @@ import {
   type AgentIdentityWorkSource,
 } from './agent-identity-source.ts';
 import {
-  AGENT_IDENTITY_SDK_FENCE_CONSUMER,
   IDENTITY_HISTORY_HANDOFF_UNAVAILABLE,
   readAgentIdentitySDKFence,
   readAgentIdentitySDKReceivingBinding,
@@ -82,7 +81,7 @@ export type AgentIdentityRetirementResult =
 export const AGENT_IDENTITY_SDK_RETIREMENT = Object.freeze({
   sdkVersion: '5.5.3-preview',
   futureWriters: 'native-sdk-fence-requires-source-transfer',
-  gap: AGENT_IDENTITY_SDK_FENCE_CONSUMER.gap,
+  gap: 'identity-source-terminal-transfer-unavailable',
 } as const);
 
 const pending = (gap: string) => ({ state: 'pending', gap }) as const;
