@@ -173,6 +173,7 @@ test('mounted menu and production relation route gate unsupported origins before
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
+  const user = userEvent.setup({ document: window.document });
   const { EditorialEntry } = await import('../src/features/catalogue/editorial-entry');
   const { sessionQuery } = await import('../src/session/query');
   const { Route } = await import('../src/routes/subjects/$id_.$slug_.relation-edit');
