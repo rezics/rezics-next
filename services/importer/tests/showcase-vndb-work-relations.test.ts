@@ -108,4 +108,21 @@ test('selected VNDB relation handoff keeps mapped direction, cited source and ex
       candidateId,
     },
   ]);
+  expect(
+    buildVndbWorkRelationOutcomes({
+      plan,
+      evidence: [{ draft: edge, status: 'unresolved' }],
+      readings: [reading('v7983', holderId)],
+      unresolved: [{ ...edge, reason: 'missing_endpoint:v4' }],
+    }),
+  ).toMatchObject([
+    {
+      holderSubjectId: holderId,
+      targetSubjectId: null,
+      citation: 'https://vndb.org/v7983',
+      delivery: 'unavailable',
+      publication: 'pending',
+      reason: 'missing_endpoint:v4',
+    },
+  ]);
 });

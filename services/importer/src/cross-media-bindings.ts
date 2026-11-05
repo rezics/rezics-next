@@ -748,6 +748,7 @@ export class CrossMediaGraph {
           const journaled = !!(
             entry.draft.relation ||
             entry.draft.producerParent ||
+            (entry.draft.source === 'vndb' && entry.draft.table === 'vn_relations') ||
             isVndbReleaseSupersession(entry.draft)
           );
           if (status === 200) {

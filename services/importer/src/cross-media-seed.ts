@@ -35,6 +35,7 @@ import {
   type GraphEdgeEvidence,
   type ReleaseEndpointCurrentness,
   type GraphEdgeDraft,
+  type UnresolvedEdge,
 } from './cross-media-bindings.ts';
 import {
   attachShowcaseWorkLinks,
@@ -2078,10 +2079,29 @@ export type CrossMediaSeedResult = {
   characterDiagnostics: SourceVocabularyGap[];
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
+  vndbWorkRelations: VndbWorkRelationOutcome[];
   releaseSupersessions?: GraphEdgeEvidence[];
   bangumiGenrePublication?: BangumiGenrePublication;
   bangumiGameGenrePublication?: BangumiGameGenrePublication;
 };
+
+export type VndbWorkRelationOutcome = Readonly<{
+  sourceRecordKey: string;
+  relatedRecordKey: string;
+  relation: string;
+  holderKey: string;
+  targetKey: string;
+  property: string;
+  holderSubjectId: string | null;
+  targetSubjectId: string | null;
+  fields: readonly string[];
+  citation: string | null;
+  delivery: 'acknowledged' | 'unavailable';
+  publication: 'pending' | 'published' | 'withheld';
+  candidateId?: string;
+  reason?: string;
+  publicationReason?: string;
+}>;
 
 function subjectRoute(read: ReviewedSubjectRead): string {
   const subject = (read as { subject?: { id?: string; labels?: Record<string, string> } }).subject;
@@ -2099,6 +2119,57 @@ function currentWorkRead(read: ReviewedSubjectRead): CurrentWorkRead | undefined
   )
     return undefined;
   return { subjectId, route: subjectRoute(read) };
+}
+
+function vndbRelationCitation(command: GraphEdgeEvidence['command']): string | null {
+  if (command?.op !== 'propose') return null;
+  for (const reference of command.statement.references ?? []) {
+    for (const part of reference.parts) {
+      if (part.property.id === 'schema:url' && part.value.type === 'value' && typeof part.value.content === 'string')
+        return part.value.content;
+    }
+  }
+  return null;
+}
+
+/** Carry the selected relation's acknowledged command and current endpoint bindings to the parent seed result. */
+export function buildVndbWorkRelationOutcomes(input: {
+  plan: Pick<CrossMediaPlan, 'edges'>;
+  evidence: readonly GraphEdgeEvidence[];
+  readings: readonly CrossMediaReading[];
+  unresolved: readonly UnresolvedEdge[];
+}): VndbWorkRelationOutcome[] {
+  const evidenceByKey = new Map(input.evidence.map((entry) => [graphEdgeKey(entry.draft), entry]));
+  const unresolvedByKey = new Map(input.unresolved.map((entry) => [graphEdgeKey(entry), entry.reason]));
+  const readings = new Map(
+    input.readings
+      .filter((reading) => reading.source === 'vndb')
+      .map((reading) => [reading.externalId, currentWorkRead(reading.subject)?.subjectId ?? null]),
+  );
+  return input.plan.edges
+    .filter((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')
+    .map((edge) => {
+      const key = graphEdgeKey(edge);
+      const evidence = evidenceByKey.get(key);
+      const acknowledged = evidence?.status === 'proposed' && evidence.candidate !== undefined;
+      const unresolvedReason = unresolvedByKey.get(key);
+      return {
+        sourceRecordKey: String(edge.record.id),
+        relatedRecordKey: String(edge.record.vid),
+        relation: String(edge.record.relation),
+        holderKey: edge.holder,
+        targetKey: edge.target,
+        property: edge.property,
+        holderSubjectId: readings.get(edge.holder) ?? null,
+        targetSubjectId: readings.get(edge.target) ?? null,
+        fields: edge.fields,
+        citation: vndbRelationCitation(evidence?.command) ?? (acknowledged ? null : edge.url),
+        delivery: acknowledged ? ('acknowledged' as const) : ('unavailable' as const),
+        publication: 'pending' as const,
+        ...(acknowledged ? { candidateId: evidence.candidate } : {}),
+        ...(!acknowledged ? { reason: unresolvedReason ?? 'candidate-not-acknowledged' } : {}),
+      };
+    });
 }
 
 function currentReleaseReadFailure(error: unknown): ReleaseEndpointCurrentness {
@@ -2696,6 +2767,15 @@ export async function seedCrossMedia(
       property: edge.property,
       reason: edge.reason,
     }));
+    const vndbWorkRelationEdges = graphEdges.filter(
+      (edge) => edge.source === 'vndb' && edge.table === 'vn_relations',
+    );
+    const vndbWorkRelations = buildVndbWorkRelationOutcomes({
+      plan: { edges: vndbWorkRelationEdges },
+      evidence: graph.evidence(vndbWorkRelationEdges),
+      readings,
+      unresolved: delivered.unresolved,
+    });
     const baseResult: CrossMediaSeedResult = {
       status:
         plan.gaps.length ||
@@ -2739,6 +2819,7 @@ export async function seedCrossMedia(
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
+      vndbWorkRelations,
       releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
     };
     const vocabulary = extras?.prepareBangumiCreatorCreditBindings
@@ -2953,6 +3034,7 @@ export async function seedCrossMedia(
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
+      vndbWorkRelations,
       releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
       ...(bangumiGenrePublication ? { bangumiGenrePublication } : {}),
       ...(bangumiGameGenrePublication ? { bangumiGameGenrePublication } : {}),
@@ -4103,7 +4185,11 @@ export async function runCrossMediaSeedCli(
         tagWeightObservations: publicTags.tagWeightObservations,
         tagWeightRefreshes: publicTags.tagWeightRefreshes,
       });
-    const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResult } = combinedResult;
+    const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
+    const publicCombinedResult = {
+      ...publicCombinedResultFields,
+      vndbWorkRelations: showcase?.vndbWorkRelations ?? combinedResult.vndbWorkRelations,
+    };
     const persona =
       options.composePersona && journal && options.selection
         ? await options.composePersona({ result: publicCombinedResult, selection: options.selection, journal })

@@ -179,7 +179,7 @@ async function createNative<S extends typeof collectionReply | typeof memberRepl
 }
 
 export type DevelopmentShowcaseContext = {
-  result: Pick<CrossMediaSeedResult, 'readings' | 'workLinks'>;
+  result: Pick<CrossMediaSeedResult, 'readings' | 'workLinks' | 'vndbWorkRelations'>;
   selection: CrossMediaSelection;
   journal: ShowcaseJournal;
 };
