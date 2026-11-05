@@ -39,9 +39,10 @@ function serverFunction() {
 mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: serverFunction }));
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const originalSessionQuery = await import('../src/session/query');
 mock.module('../src/session/query', () => ({
+  ...originalSessionQuery,
   useSession: () => sessionObservation,
-  sessionQuery: { queryKey: ['session'] },
 }));
 mock.module('../src/features/pages/graph-browser/actions', () => ({
   exploreContext: async (_locale: string, expectedReader?: string | null) => {
