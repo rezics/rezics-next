@@ -1,9 +1,10 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, createElement, useState, type ReactElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { MineFollowingRead } from '../src/library/mine-following-actions';
+import type { FollowingKind } from '../src/library/following-kind-navigation/address';
 import type { FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
 import type { SessionEnv } from '../src/session/client';
 
@@ -47,6 +48,47 @@ mock.module('cloudflare:workers', () => ({ env }));
 const query = await import('../src/kernel/query');
 // This file installs its browser after server-reader imports have evaluated query defaults.
 Object.defineProperty(query.personalRead, 'enabled', { value: true });
+mock.module('@rezics/ui/menu', () => ({
+  Menu: ({ trigger, entries = [] }: {
+    trigger: ReactElement<{ 'aria-label'?: string; children?: ReactNode; disabled?: boolean }>;
+    entries?: { type: string; label?: string; onSelect?: () => void; disabled?: boolean }[];
+  }) => {
+    const [open, setOpen] = useState(false);
+    return createElement(
+      'div',
+      null,
+      createElement(
+        'button',
+        {
+          type: 'button',
+          'aria-label': trigger.props['aria-label'],
+          disabled: trigger.props.disabled,
+          onClick: () => setOpen(true),
+        },
+        trigger.props.children,
+      ),
+      open
+        ? entries.map((entry, index) =>
+            entry.type === 'item' || entry.type === 'destructive'
+              ? createElement(
+                  'button',
+                  {
+                    key: index,
+                    type: 'button',
+                    disabled: entry.disabled,
+                    onClick: () => {
+                      setOpen(false);
+                      entry.onSelect?.();
+                    },
+                  },
+                  entry.label,
+                )
+              : null,
+          )
+        : null,
+    );
+  },
+}));
 afterAll(() => mock.restore());
 
 // Server readers import UI summaries before the mounted cases install their windows.
@@ -93,24 +135,26 @@ test('the actual Following server exports refuse stale preparation without priva
     const page = { signedIn: false, follows: [], next: null };
     expect(await actions.readMineFollowingForViewer({ data: { cursor: 'private/address+' } })).toEqual({
       subject: null,
-      kind: 'all',
       cursor: 'private/address+',
       locale: 'en',
+      kind: 'all',
       page,
     });
     expect(current.preparations - before).toBe(1);
     expect(await actions.readMineFollowingPage({ data: {} })).toEqual(page);
     expect(sessionSubject(actualRequest)).toBe('prepared-owner'); // A stale WeakMap entry is not provenance.
     current.status = 'unavailable';
-    await expect(actions.readMineFollowingForViewer({ data: {} })).rejects.toThrow('session_unavailable');
+    await expect(actions.readMineFollowingForViewer({ data: {} })).rejects.toMatchObject({
+      problem: { status: 502, code: 'session_unavailable' },
+    });
     actualRequest = new Request(`${origin}/en/library/following`, {
       headers: { authorization: 'Bearer browser-asserted-identity' },
     });
     expect(await actions.readMineFollowingForViewer({ data: { cursor: '' } })).toEqual({
       subject: null,
-      kind: 'all',
       cursor: null,
       locale: 'en',
+      kind: 'all',
       page,
     });
     expect(privateCalls).toBe(0);
@@ -231,10 +275,12 @@ const loaded = (
   cursor: string | null,
   title: string,
   next: string | null = `${subject}-next`,
+  kind: FollowingKind = 'all',
 ): MineFollowingRead => ({
   subject,
   cursor,
   locale: 'en',
+  kind,
   page: {
     signedIn: true,
     follows: [
@@ -323,6 +369,11 @@ test('the mounted default Following composition retires viewer, cursor and row l
     return call.promise;
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const admitCurrentViewer = async () => {
+    const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('No current viewer exposure observation');
+    await client.ensureQueryData(exposure.viewerExposureQuery(snapshot.observation));
+  };
   const viewer = (subject: string, token: string | null = 'csrf-one') => ({
     state: 'signed-in',
     subject,
@@ -351,12 +402,14 @@ test('the mounted default Following composition retires viewer, cursor and row l
       call.resolve(result);
       await tick();
     });
-  const key = (cursor: string | null) => mineFollowingQuery('B', cursor, getLocale()).queryKey;
-  const refetch = (cursor: string | null) =>
+  const key = (subject: string, cursor: string | null) =>
+    mineFollowingQuery(subject, cursor, getLocale()).queryKey;
+  const refetchFor = (subject: string, cursor: string | null) =>
     act(async () => {
-      void client.refetchQueries({ queryKey: key(cursor) });
+      void client.refetchQueries({ queryKey: key(subject, cursor) });
       await tick();
     });
+  const refetch = (cursor: string | null) => refetchFor('B', cursor);
   const remove = async () => {
     for (
       let i = 0;
@@ -366,13 +419,17 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await act(async () => {
         await tick();
       });
-    expect(host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.disabled).toBe(false);
+    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
+    expect(trigger.disabled).toBe(false);
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      trigger.click();
       await tick();
     });
-    const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
+    const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
+      (item) => item.textContent === m.library_follow_unfollow(),
+    );
     expect(action?.textContent).toBe(m.library_follow_unfollow());
+    expect((action as HTMLButtonElement).disabled).toBe(false);
     await act(async () => {
       action!.click();
       await tick();
@@ -381,7 +438,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const expectRetired = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
     expect(host.querySelector('[data-slot="follow-control"]')).toBeNull();
-    expect(host.querySelector(`nav[aria-label="${m.library_following_heading()}"]`)).toBeNull();
+    expect(
+      [...host.querySelectorAll('nav')].some((nav) => nav.getAttribute('aria-label') === m.library_following_heading()),
+    ).toBe(false);
     expect(host.textContent).not.toContain(m.library_follow_removed());
   };
   try {
@@ -398,25 +457,28 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await remove();
     expect(writes).toHaveLength(0);
     await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, viewer('A'));
+      await admitCurrentViewer();
       await tick();
     });
     expect(writes).toHaveLength(0);
     await act(async () => {
-      void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
+      client.setQueryData(sessionQuery.queryKey, viewer('A'));
+      await admitCurrentViewer();
       await tick();
     });
+    expect(writes).toHaveLength(0);
+    await refetchFor('A', null);
+    expect(reads).toHaveLength(1);
     await settle(reads[0]!, loaded('A', null, 'A private title'));
     await remove();
+    expect(writes).toHaveLength(1);
     const aRemoval = writes[0]!;
-    await act(async () => {
-      void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
-      await tick();
-    });
+    await refetchFor('A', null);
     expect(reads).toHaveLength(2);
     const aRead = reads[1]!;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      await admitCurrentViewer();
       await tick();
     });
     expectRetired();
@@ -440,17 +502,21 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(reads.at(-1)!.cursor).toBeUndefined();
     await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
     expect(writes).toHaveLength(2);
+    expect(host.textContent).not.toContain(m.library_follow_conflict_recovery_review());
+    expect(host.textContent).toContain(m.library_follow_conflict_recovery_ready());
     await remove();
     const uncertain = writes.at(-1)!;
     expect(uncertain.input.targetId).toBe(rejected.input.targetId);
     expect(uncertain.input.idempotencyKey).not.toBe(rejected.input.idempotencyKey);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B', 'csrf-rotated'));
+      await admitCurrentViewer();
       await tick();
     });
     await refetch(null);
     await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
-    expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('[data-slot="follow-control"]')?.getAttribute('aria-busy')).toBe('false');
+    expect(host.textContent).toContain(m.error_message());
     await settle(uncertain, { ok: false, reason: 'unavailable' });
     await remove();
     const retry = writes.at(-1)!;
@@ -508,7 +574,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain(m.library_follow_removed());
     expect(host.textContent).toContain(m.library_following_page_empty());
     expect(host.querySelector('[data-slot="empty"] a')?.getAttribute('href')).toBe('/en/search');
-    const more = host.querySelector<HTMLAnchorElement>(`nav[aria-label="${m.library_following_heading()}"] a`);
+    const more = [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent === m.library_collection_more(),
+    );
     expect(new URL(more!.href).searchParams.get('cursor')).toBe('bounded-more');
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
@@ -552,9 +620,9 @@ test('the actual Following reset envelope preserves the originating prepared vie
     const result = await actions.readMineFollowingForViewer({ data: { cursor: 'expired/original+address=' } });
     expect(result).toEqual({
       subject: 'reset-owner',
-      kind: 'all',
       cursor: 'expired/original+address=',
       locale: 'en',
+      kind: 'all',
       page: { signedIn: true, follows: [], next: null, cursorReset: true },
     });
     expect(current.preparations - before).toBe(1);
@@ -569,13 +637,12 @@ test('the actual Following reset envelope preserves the originating prepared vie
     expect(normal.cursor).toBeNull();
     expect(normal.page.addressInvalid).toBe(true);
     expect(calls).toHaveLength(2);
-    current.subject = 'reset-owner';
     const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
     expect(invalid).toMatchObject({
       subject: 'reset-owner',
       kind: 'all',
       cursor: null,
-      page: { addressInvalid: true },
+      page: { signedIn: true, addressInvalid: true },
     });
     expect(calls).toHaveLength(2);
   } finally {
@@ -630,10 +697,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   const followActions = await import('../src/library/follow-actions');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale } = await import('../src/paraglide/runtime.js');
-  const reads: (ReturnType<typeof deferred<MineFollowingRead>> & { cursor?: string })[] = [];
+  const reads: (ReturnType<typeof deferred<MineFollowingRead>> & { cursor?: string; kind?: FollowingKind })[] = [];
   const writes: ReturnType<typeof deferred<FollowWriteResult>>[] = [];
   const read = spyOn(actions, 'readMineFollowingForViewer').mockImplementation(({ data }) => {
-    const call = { ...deferred<MineFollowingRead>(), cursor: data.cursor };
+    const call = { ...deferred<MineFollowingRead>(), cursor: data.cursor, kind: data.kind };
     reads.push(call);
     return call.promise;
   });
@@ -643,6 +710,11 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     return call.promise;
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const admitCurrentViewer = async () => {
+    const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('No current viewer exposure observation');
+    await client.ensureQueryData(exposure.viewerExposureQuery(snapshot.observation));
+  };
   const viewer = (subject: string) => ({ state: 'signed-in', subject, csrfToken: 'current-csrf' });
   client.setQueryData(sessionQuery.queryKey, viewer('A'));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
@@ -672,6 +744,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
       (link) => link.textContent === m.library_collections_first_page(),
     );
+  const link = (label: string) =>
+    [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find((item) => item.textContent === label);
+  const previousLink = () => link(m.following_navigation_previous());
+  const next = () => link(m.library_collection_more());
   const expectPageEmpty = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
     expect(host.textContent).toContain(m.library_following_page_empty());
@@ -686,6 +762,9 @@ test('Following recovery stays page-local through terminal pages, last-row remov
         `[data-slot="list-row"], [data-slot="follow-control"], nav[aria-label="${m.library_following_heading()}"]`,
       ),
     ).toBeNull();
+    expect(
+      [...host.querySelectorAll('nav')].some((nav) => nav.getAttribute('aria-label') === m.library_following_heading()),
+    ).toBe(false);
     expect(host.textContent).not.toContain(m.library_collections_cursor_reset());
     expect(host.textContent).not.toContain(m.library_follow_removed());
     expect(host.textContent).not.toContain(m.library_following_empty());
@@ -710,12 +789,15 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       await act(async () => {
         await tick();
       });
-    expect(host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.disabled).toBe(false);
+    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
+    expect(trigger.disabled).toBe(false);
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      trigger.click();
       await tick();
     });
-    const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
+    const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
+      (item) => item.textContent === m.library_follow_unfollow(),
+    );
     expect(action?.textContent).toBe(m.library_follow_unfollow());
     await act(async () => {
       action!.click();
@@ -732,6 +814,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       );
       await tick();
     });
+    await act(async () => {
+      await admitCurrentViewer();
+      await tick();
+    });
     expect(host.textContent).toContain(m.library_my_ratings_denied());
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('button')]
@@ -742,8 +828,16 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(reads).toHaveLength(1);
     expect(host.textContent).toContain(m.library_my_ratings_denied());
     expect(host.querySelector('[data-slot="empty"], [data-slot="follow-control"]')).toBeNull();
+    const kindNavigation = [...host.querySelectorAll('nav')].find(
+      (nav) => nav.getAttribute('aria-label') === m.following_kind_label(),
+    );
+    expect(kindNavigation?.querySelectorAll('button')).toHaveLength(4);
+    expect([...kindNavigation!.querySelectorAll<HTMLButtonElement>('button')].every((button) => button.disabled)).toBe(
+      true,
+    );
     await settle(reads[0]!, initial);
     expect(host.textContent).toContain('Last visible row');
+    expect(previousLink()).toBeUndefined(); // A direct cursor visit does not invent an in-app predecessor.
     expect(restart()).toBeDefined(); // Populated later pages also have a way back.
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('button')]
@@ -808,7 +902,9 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(host.textContent).toContain('Reset first-page row');
     expect(router.state.location.search).toEqual({ cursor: 'expired/page+' });
     const oldRestart = restart()!;
-    const oldNext = host.querySelector<HTMLAnchorElement>(`nav[aria-label="${m.library_following_heading()}"] a`)!;
+    const oldNext = [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent === m.library_collection_more(),
+    )!;
     expect(new URL(oldNext.href).searchParams.get('cursor')).toBe('bounded/next+');
     await remove();
     const oldRemoval = writes.at(-1)!;
@@ -817,6 +913,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     const beforeRetirement = reads.length;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      await admitCurrentViewer();
       // Exercise still-connected old handlers before React replaces the retired page.
       oldRestart.click();
       oldNext.click();
@@ -847,6 +944,131 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expectPageEmpty();
     expect(host.textContent).toContain(m.library_collections_cursor_reset());
     expect(host.textContent).not.toContain(m.library_follow_removed());
+
+    const subjectKind = link(m.following_kind_subject());
+    expect(subjectKind).toBeDefined();
+    await act(async () => {
+      subjectKind!.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    expect(reads.at(-1)!.cursor).toBeUndefined();
+    expect(reads.at(-1)!.kind).toBe('subject');
+    const subjectFirst = loaded('B', null, 'Subject first window', 'subject-next', 'subject');
+    subjectFirst.page.follows[0]!.idempotencyKey = crypto.randomUUID();
+    await settle(reads.at(-1)!, subjectFirst);
+    expect(previousLink()).toBeUndefined();
+
+    await remove();
+    const pendingRemoval = writes.at(-1)!;
+    const beforeBlockedMove = reads.length;
+    const blockedNext = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.library_collection_more(),
+    )!;
+    const blockedKind = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.following_kind_subject(),
+    )!;
+    expect(blockedNext.disabled).toBe(true);
+    expect(blockedKind.disabled).toBe(true);
+    await act(async () => {
+      blockedNext.click();
+      blockedKind.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    expect(reads).toHaveLength(beforeBlockedMove);
+    expect(host.textContent).toContain(m.following_navigation_recover_removal());
+    expect([...host.querySelectorAll<HTMLButtonElement>('button')].some((button) => button.disabled)).toBe(true);
+    await settle(pendingRemoval, { ok: false, reason: 'unavailable' });
+    expect(host.textContent).toContain(m.following_navigation_recover_removal());
+    await remove();
+    const exactRetry = writes.at(-1)!;
+    expect(exactRetry.input).toEqual(pendingRemoval.input);
+    await settle(exactRetry, { ok: true, following: false });
+    expect(host.textContent).not.toContain(m.following_navigation_recover_removal());
+    const firstPageNext = next()!;
+    const beforeDuplicate = reads.length;
+    await act(async () => {
+      firstPageNext.click();
+      firstPageNext.click();
+      await tick();
+    });
+    expect(reads).toHaveLength(beforeDuplicate + 1);
+    expect(reads.at(-1)!.cursor).toBe('subject-next');
+    expect(reads.at(-1)!.kind).toBe('subject');
+    const subjectSecond = loaded('B', 'subject-next', 'Subject sparse window', 'subject-third', 'subject');
+    subjectSecond.page.follows = [];
+    await settle(reads.at(-1)!, subjectSecond);
+    expect(host.textContent).toContain(m.library_following_page_empty());
+    expect(next()).toBeDefined();
+    expect(new URL(previousLink()!.href).searchParams.has('cursor')).toBe(false);
+
+    const secondNext = next()!;
+    await act(async () => {
+      secondNext.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBe('subject-third');
+    const wrongThird = loaded('B', 'wrong-third', 'Wrong cursor response', null, 'subject');
+    await settle(reads.at(-1)!, wrongThird);
+    expect(host.textContent).toContain(m.library_follow_unavailable());
+    const retryButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.library_follow_retry(),
+    )!;
+    await act(async () => {
+      retryButton.click();
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBe('subject-third');
+    expect(reads.at(-1)!.kind).toBe('subject');
+    const subjectThird = loaded('B', 'subject-third', 'Subject terminal window', null, 'subject');
+    subjectThird.page.follows = [];
+    await settle(reads.at(-1)!, subjectThird);
+    expect(host.textContent).toContain(m.library_following_page_empty());
+    expect(next()).toBeUndefined();
+    expect(previousLink()).toBeDefined();
+
+    await act(async () => {
+      previousLink()!.click();
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBe('subject-next');
+    const returnedSecond = loaded('B', 'subject-next', 'Subject sparse window', 'subject-third', 'subject');
+    returnedSecond.page.follows = [];
+    await settle(reads.at(-1)!, returnedSecond);
+    expect(new URL(restart()!.href).searchParams.has('cursor')).toBe(false);
+
+    await act(async () => {
+      restart()!.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    expect(reads.at(-1)!.cursor).toBeUndefined();
+    const afterFirst = loaded('B', null, 'Subject first after First', 'subject-next', 'subject');
+    await settle(reads.at(-1)!, afterFirst);
+    expect(previousLink()).toBeUndefined();
+    expect(window.document.activeElement?.tagName).toBe('H1'); // Keyboard Next focuses the accepted page heading.
+
+    const beforeBack = reads.length;
+    await act(async () => {
+      router.history.back();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ cursor: 'subject-next', kind: 'subject' });
+    if (reads.length > beforeBack) {
+      const backRead = loaded('B', 'subject-next', 'Browser Back page', 'subject-third', 'subject');
+      backRead.page.follows = [];
+      await settle(reads.at(-1)!, backRead);
+    }
+    expect(previousLink()).toBeUndefined();
+    const beforeForward = reads.length;
+    await act(async () => {
+      router.history.forward();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    if (reads.length > beforeForward) await settle(reads.at(-1)!, afterFirst);
+
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
       await tick();

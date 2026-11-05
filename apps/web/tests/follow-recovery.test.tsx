@@ -23,6 +23,7 @@ test('failed edge reads recover through exact retry, retire confirmed keys and r
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const writes: FollowWriteInput[] = [];
+  const unsettled: boolean[] = [];
   const boundary = { id: 'mounted-owner', lifetime: {} };
   mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
   mock.module('../src/library/history-current-origin', () => ({
@@ -68,7 +69,11 @@ test('failed edge reads recover through exact retry, retire confirmed keys and r
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
-          <FollowTargetControl targetId="hidden-original" idempotencyKey="123e4567-e89b-42d3-a456-426614174000" />
+          <FollowTargetControl
+            targetId="hidden-original"
+            idempotencyKey="123e4567-e89b-42d3-a456-426614174000"
+            onRemovalUnsettledChange={(_targetId, pending) => unsettled.push(pending)}
+          />
         </QueryClientProvider>,
       );
       await tick();
@@ -78,6 +83,7 @@ test('failed edge reads recover through exact retry, retire confirmed keys and r
     await click('Follow');
     await click('Unfollow');
     expect(writes.map((input) => input.following)).toEqual([false, false, true, false]);
+    expect(unsettled).toEqual([true, false, true, false]);
     expect(writes[1]).toBe(writes[0]);
     expect(new Set(writes.map((input) => input.idempotencyKey)).size).toBe(3);
     expect(writes.every((input) => input.targetId === 'hidden-original')).toBe(true);

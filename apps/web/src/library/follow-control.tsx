@@ -27,6 +27,7 @@ export type FollowControlProps = {
   idempotencyKey?: string;
   menuTitle?: string;
   onChange?: (following: boolean) => void;
+  onRemovalUnsettledChange?: (unsettled: boolean) => void;
   onRetry?: () => void;
   /** Explicit, permitted own-edge or current-list review; never a target read or a write. */
   onReview?: () => Promise<FollowState | null>;
@@ -87,6 +88,13 @@ export function FollowControl(props: FollowControlProps) {
             },
           }
         : {})}
+      {...(props.onRemovalUnsettledChange
+        ? {
+            onRemovalUnsettledChange: (unsettled: boolean) => {
+              if (origin.active && origin.mounted) props.onRemovalUnsettledChange?.(unsettled);
+            },
+          }
+        : {})}
       isCurrent={(next) =>
         origin.active &&
         origin.mounted &&
@@ -110,6 +118,7 @@ function FollowControlState({
   idempotencyKey,
   menuTitle,
   onChange,
+  onRemovalUnsettledChange,
   onRetry,
   onReview,
   isCurrent,
@@ -135,8 +144,21 @@ function FollowControlState({
   } | null>(null);
   const committed = useRef<Pick<
     FollowControlProps,
-    'ready' | 'canFollow' | 'canRemove' | 'write' | 'onChange' | 'isCurrent' | 'readLifetime' | 'onAccepted'
+    | 'ready'
+    | 'canFollow'
+    | 'canRemove'
+    | 'write'
+    | 'onChange'
+    | 'onRemovalUnsettledChange'
+    | 'isCurrent'
+    | 'readLifetime'
+    | 'onAccepted'
   > | null>(null);
+  const runningCurrent = (
+    running: NonNullable<typeof inFlight.current>,
+    currentCheck = committed.current?.isCurrent ?? running.isCurrent,
+  ) => !currentCheck || currentCheck(running.input.following);
+  const reportedRemoval = useRef(false);
   const signedOut = initial.state === 'signed-out';
   const following = initial.state === 'ready' ? initial.following : undefined;
   const initialKey = JSON.stringify([readLifetime, initial.state, following]);
@@ -157,7 +179,7 @@ function FollowControlState({
     (!ready ||
       signedOut ||
       !(running.input.following ? canFollow : canRemove) ||
-      (running.isCurrent && !running.isCurrent(running.input.following)))
+      !runningCurrent(running, isCurrent))
   ) {
     inFlight.current = null;
     setPending(false);
@@ -172,6 +194,7 @@ function FollowControlState({
       write,
       ...(readLifetime !== undefined ? { readLifetime } : {}),
       ...(onChange ? { onChange } : {}),
+      ...(onRemovalUnsettledChange ? { onRemovalUnsettledChange } : {}),
       ...(isCurrent ? { isCurrent } : {}),
       ...(onAccepted ? { onAccepted } : {}),
     };
@@ -202,9 +225,15 @@ function FollowControlState({
     if (!committed.current || !conflict.current || intent.current !== input) return;
     intent.reject(input);
     conflict.current = false;
+    if (!input.following) reportRemovalUnsettled(false);
     setFailure(null);
     setCurrent(edge);
     setRemoved(false);
+  }
+  function reportRemovalUnsettled(unsettled: boolean) {
+    if (reportedRemoval.current === unsettled) return;
+    reportedRemoval.current = unsettled;
+    committed.current?.onRemovalUnsettledChange?.(unsettled);
   }
   async function reviewConflict() {
     const input = intent.current;
@@ -236,6 +265,7 @@ function FollowControlState({
     )
       return;
     const input = intent.begin(targetId, next, idempotencyKey);
+    if (!next) reportRemovalUnsettled(true);
     const running = {
       input,
       isCurrent: live.isCurrent,
@@ -254,23 +284,25 @@ function FollowControlState({
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
-    if (inFlight.current !== running || (running.isCurrent && !running.isCurrent(input.following))) return;
+    if (inFlight.current !== running || !runningCurrent(running)) return;
     try {
       if (result.ok) {
         intent.confirm(input);
-        const accepted = running.onAccepted?.(result.following, input) ?? true;
-        if (running.isCurrent && !running.isCurrent(input.following)) return;
+        if (!input.following) reportRemovalUnsettled(false);
+        const onAccepted = committed.current?.onAccepted ?? running.onAccepted;
+        const accepted = onAccepted?.(result.following, input) ?? true;
+        if (!runningCurrent(running)) return;
         if (accepted && committed.current?.readLifetime === running.readLifetime) {
           setCurrent({ state: 'ready', following: result.following });
           setRemoved(!result.following);
         }
-        if (!running.onAccepted) running.onChange?.(result.following);
+        if (!onAccepted) (committed.current?.onChange ?? running.onChange)?.(result.following);
       } else {
         conflict.current = result.reason === 'conflict';
         setFailure(result.reason);
       }
     } finally {
-      if (inFlight.current === running && (!running.isCurrent || running.isCurrent(input.following))) {
+      if (inFlight.current === running && runningCurrent(running)) {
         inFlight.current = null;
         setPending(false);
       }

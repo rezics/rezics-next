@@ -66,6 +66,7 @@ export function FollowTargetControl({
   idempotencyKey,
   menuTitle,
   onRemoved,
+  onRemovalUnsettledChange,
   onReview,
   disabled = false,
   origin: parent,
@@ -75,6 +76,8 @@ export function FollowTargetControl({
   idempotencyKey?: string;
   menuTitle?: string;
   onRemoved?: () => void;
+  /** Reports a current removal until success or the existing explicit recovery settles it. */
+  onRemovalUnsettledChange?: (targetId: string, unsettled: boolean) => void;
   /** Supplied rows review only through their existing current list reader. */
   onReview?: (() => Promise<FollowState | null>) | undefined;
   /** Retained rows can show recovery while their list read is unavailable. */
@@ -158,6 +161,13 @@ export function FollowTargetControl({
         ready={!disabled && (origin.allowed[1] === true || origin.allowed[2] === true)}
         {...(idempotencyKey ? { idempotencyKey } : {})}
         {...(menuTitle ? { menuTitle } : {})}
+        {...(onRemovalUnsettledChange
+          ? {
+              onRemovalUnsettledChange: (unsettled: boolean) => {
+                if (isCurrent(false)) onRemovalUnsettledChange(targetId, unsettled);
+              },
+            }
+          : {})}
         {...(following !== undefined
           ? onReview
             ? { onReview }
