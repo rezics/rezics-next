@@ -158,7 +158,7 @@ test('screen episode windows retain ordered original memberships, disclosures, c
   );
   expect(html).toContain(`/en/subjects/${seasonId}/season-one`);
   expect(html).toContain(`/en/subjects/${episodeId}/the-special`);
-  expect(html).toContain('SP 1');
+  expect(html).not.toContain('SP 1');
   expect(html).toContain('https://example.invalid/source');
   expect(html).toContain(`statement=${seasonMembership}`);
   expect(html).not.toMatch(/type="checkbox"|aria-checked|Mark watched|completed/i);
