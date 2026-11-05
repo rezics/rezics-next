@@ -24,13 +24,14 @@ import {
   releaseNativeOwnerFilterRead,
   revalidateOwnerFilterDisclosure,
   nativeOwnerFilterBinding,
+  nativeOwnerFilterPagePlan,
   withNativeOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
 import { readNativeOwnerFilterClosure } from './owner-filter-native-closure.ts';
 import { createMembersPreparation } from './members-preparation.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import {
-  createCollectionSource,
+  createOrdinaryCollectionPageSource,
   type CollectionSourceObservation,
   type PrepareCollectionSource,
   type PreparedCollectionSource,
@@ -51,6 +52,7 @@ import {
   type OwnerFilterFactLocator,
   type OwnerFilterNativeFact,
 } from './owner-filter.ts';
+import { ordinaryCollectionPagePlan, type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -88,8 +90,9 @@ export async function bindOwnerFilterRead(
   admission: CollectionMemberAdmission,
   deadline: number,
   attempt?: CommandAttempt,
+  pagePlan?: OrdinaryCollectionPagePlan,
 ): Promise<Unavailable | Readonly<{ status: 'bound'; binding: OwnerFilterReadBinding }>> {
-  return bindNativeOwnerFilterRead(dependencies, actor, collectionId, admission, deadline, attempt);
+  return bindNativeOwnerFilterRead(dependencies, actor, collectionId, admission, deadline, attempt, pagePlan);
 }
 
 /** Complete native original/fact closure, independently of positive candidate enumeration.
@@ -257,9 +260,14 @@ export async function readBoundOwnerFilterPage(
   options: CollectionMemberQuery,
   binding: OwnerFilterReadBinding,
 ): Promise<{ members: { kind: 'dynamic'; subjectId: string }[]; next: string | null } | { preparing: true }> {
+  const limit = options.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
+  const plan =
+    nativeOwnerFilterPagePlan(binding) ??
+    ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
   const work = new NativeCollectionWork(binding.input.allowance, binding.input.deadline);
   return withNativeOwnerFilterSource(binding, work, () =>
-    readWorkingOwnerFilterPage(deps, admission, options, binding, work),
+    readWorkingOwnerFilterPage(deps, admission, options, binding, work, plan),
   );
 }
 
@@ -269,12 +277,13 @@ async function readWorkingOwnerFilterPage(
   options: CollectionMemberQuery,
   binding: OwnerFilterReadBinding,
   work: NativeCollectionWork,
+  plan: OrdinaryCollectionPagePlan,
 ): Promise<{ members: { kind: 'dynamic'; subjectId: string }[]; next: string | null } | { preparing: true }> {
   const input = binding.input;
   const limit = options.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   requireAccessDeadline(input.deadline);
-  const source = createCollectionSource(deps);
+  const source = createOrdinaryCollectionPageSource(deps);
   const prepared = await work.compose((allowance) => source.prepare({ ...input, allowance }));
   const current = prepared.source;
   if (
@@ -332,20 +341,15 @@ async function readWorkingOwnerFilterPage(
   const members: { kind: 'dynamic'; subjectId: string }[] = [];
   let exhausted = false;
   // The existing direct plan has at most three refill rounds. The transferred allowance is never renewed.
-  for (let round = 0; round < 3 && members.length < limit && !exhausted; round++) {
+  for (let round = 0; round < plan.rounds && members.length < limit && !exhausted; round++) {
     const quota = Math.min(100, 2 * (limit - members.length) + 1);
     const prefix = await work.compose((allowance) =>
       source.prefix({
         ...input,
         source: current,
-        allowance: {
-          ...allowance,
-          remaining: {
-            ...allowance.remaining,
-            candidateKeys: Math.min(allowance.remaining.candidateKeys, quota),
-          },
-        },
+        allowance,
         afterSubjectId: after,
+        candidateLimit: Math.min(plan.prefixGroupLimit, quota),
       }),
     );
     if (!compatible(current.observation, prefix.observation)) throw new ProblemError('stale_cursor');
@@ -450,8 +454,11 @@ export async function readOwnerFilterPage(
   options: CollectionMemberQuery,
   deadline: number,
 ) {
+  const limit = options.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
+  const plan = ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
   const admission = await admitCollectionMemberQuery(deps, actor, options, deadline);
-  const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline);
+  const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, undefined, plan);
   if (bound.status !== 'bound') throw unavailable();
   if (
     bound.binding.input.actor !== actor ||

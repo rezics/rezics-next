@@ -2,6 +2,8 @@
 
 Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative.
 
+The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-witness/3-seek/12-statement/80-KiB term plus `c` repetitions of 16 rows, 8 points, 8 witnesses and 5,120 bytes. The fixed term includes initial/final Source preparation and currentness, identity and authority checks, and transaction controls; the per-candidate term includes canonical membership and negative/order work. The existing plan caps pages at three prefix rounds, 100 groups per prefix, 100 aliases per canonical group and six Source drivers. FULL adds at most 100 repetitions of its 32-row/2-identity-row/8-point/12-statement/64-KiB facts term. `engineRequests` is zero for this SQL-only Library plan; the adapter rejects a nonzero value rather than folding it into the older eight-axis SQL observer. `owner-filter-growth.test.ts` is the named growth oracle; this declaration does not claim native acceptance.
+
 transport-contract.ts owns the public Progress session and Continue response schemas consumed by
 Progress, Continue and Content Feed. The Progress record and Continue list wire/security metadata
 comes from the immutable operation declarations composed by createKernel; native commands,
@@ -164,11 +166,12 @@ Current implementation evidence is narrower than the capability:
 - The common members route now accepts the adopted JSON `filter` and `sort=id` inputs through
   `owner-filter.ts`. It uses strict JSON and shared release admission, expands saved filters before private-family
   admission, binds owner facts to the authenticated viewer, and checks each family's native list scopes and gates.
-  BASIC and FULL requests both reach that admission. Filtered/canonical execution remains explicitly
-  `dependency_unavailable`: the native owner directory exists, but complete Source execution is not integrated.
-  Admission consumes the actual `compileCurrentOwnerFilter` exports, which share Search's Boolean
-  interpreter with catalogue-only compilation. No raw ordinal window is returned as
-  a filtered page. Existing unfiltered occurrence reads retain their current contract.
+  BASIC and FULL requests both reach that admission. `readBoundOwnerFilterPage` composes the current native Source,
+  complete original/fact closure, bounded refill rounds, final whole-Source disclosure revalidation and optional
+  FULL facts attachment. An incomplete prefix still enters the existing preparing path; missing or changed native
+  evidence remains unavailable. Admission consumes the actual `compileCurrentOwnerFilter` exports, which share
+  Search's Boolean interpreter with catalogue-only compilation. No raw ordinal window is returned as a filtered
+  page. Native receiving acceptance remains controller-owned.
 - Admission now also returns `owner: OwnerFilterLeafProvider | null`. Its full-key native entry, live-parent label,
   retained session and retained copy points are bound to that admitted viewer and private family set, with the
   original request deadline. The caller must use its source-authorized snapshot and the same `NativeCollectionWork`
