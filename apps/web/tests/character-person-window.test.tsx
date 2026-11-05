@@ -254,6 +254,16 @@ test('request A/B/A and locale replacement start fresh reads for the current add
     setLocale('de', { reload: false });
     await router.navigate({ href: characterPersonHref('de', searchB) });
   });
+  if (reads.length !== 4)
+    throw new Error(
+      JSON.stringify({
+        pageLocale,
+        pathname: router.state.location.pathname,
+        publicHref: router.state.location.publicHref,
+        search: router.state.location.search,
+        reads: reads.map((read) => read.search),
+      }),
+    );
   expect(reads).toHaveLength(4);
   expect(reads.at(-1)!.search).toEqual(searchB);
   await finish();
