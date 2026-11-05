@@ -174,6 +174,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       subjectRequestReader({ data: { realm: deps.realm }, signal }),
     );
     if (!isView(params.view) || params.view === 'overview') throw notFound();
+    const view = params.view as View;
     const cursor = validateViewCursor(deps.cursor);
     let canonical = await awaitSubjectRoute(signal, () =>
       readView({
@@ -182,7 +183,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
           reader,
           id: params.id,
           slug: params.slug,
-          view: params.view,
+          view,
           locale: getLocale(),
           search: keepSearch('', location.searchStr, location.hash),
           cursor,
@@ -193,7 +194,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     // Reuse the current native reading for the head, never a retained navigation result.
     const loaded = await awaitSubjectRoute(signal, () =>
       context.queryClient.fetchQuery(
-        subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node, reader),
+        subjectViewPagesQuery(params.id, getLocale(), view, cursor, deps.realm, deps.node, reader),
       ),
     );
     signal.throwIfAborted();
@@ -207,7 +208,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     if (loaded.kind === 'redirect') {
       if (loaded.target === 'account')
         throw redirect({
-          href: keepSearch(accountHref(getLocale(), loaded.id, params.view), location.searchStr, location.hash),
+          href: keepSearch(accountHref(getLocale(), loaded.id, view), location.searchStr, location.hash),
           statusCode: 301,
           headers: { 'Cache-Control': 'private, no-store' },
         });
@@ -218,7 +219,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
-        href: keepSearch(subjectUrlForView(survivor.value, params.view), location.searchStr, location.hash),
+        href: keepSearch(subjectUrlForView(survivor.value, view), location.searchStr, location.hash),
         statusCode: 301,
         headers: { 'Cache-Control': 'private, no-store' },
       });
@@ -226,15 +227,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     if (deps.realm) {
       const address = contextSubjectAddress(loaded.overview, getLocale());
       if (address.slug !== params.slug)
-        throw redirect(canonicalRedirect(subjectUrlForView(address, params.view), location.searchStr, location.hash));
-      canonical = { ...canonical, href: address.href, paths: subjectViewPaths(address.paths, params.view) };
+        throw redirect(canonicalRedirect(subjectUrlForView(address, view), location.searchStr, location.hash));
+      canonical = { ...canonical, href: address.href, paths: subjectViewPaths(address.paths, view) };
     }
     const frame = subjectFrame(loaded.overview, getLocale());
     if (!frame) throw notFound();
     const tabs = subjectTabs(loaded.overview);
     if (
-      (loaded.overview.views !== undefined && !loaded.overview.views.includes(params.view)) ||
-      ((params.view === 'reviews' || params.view === 'discussion') && !tabs.some((tab) => tab.view === params.view))
+      (loaded.overview.views !== undefined && !loaded.overview.views.includes(view)) ||
+      ((view === 'reviews' || view === 'discussion') && !tabs.some((tab) => tab.view === view))
     ) {
       const survivor = await readSubjectCanonicalQuery(
         context.queryClient,
@@ -252,12 +253,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       : {};
     const nextHref =
       loaded.next !== undefined
-        ? `${canonical.href}/${encodeURIComponent(params.view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}${deps.via ? `&via=${encodeURIComponent(deps.via)}` : ''}`
+        ? `${canonical.href}/${encodeURIComponent(view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}${deps.via ? `&via=${encodeURIComponent(deps.via)}` : ''}`
         : undefined;
     return {
       ...canonical,
       reader,
-      view: params.view,
+      view,
       page: loaded.page,
       shareCard: loaded.shareCard,
       type: typeData,

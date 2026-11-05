@@ -1,11 +1,11 @@
 import { QueryObserver, type QueryClient, type QueryKey, type QueryObserverOptions } from '@tanstack/react-query';
 
-export type SubjectCanonicalQueryOptions<T> = QueryObserverOptions<T, Error, T, T, QueryKey>;
+export type SubjectCanonicalQueryOptions<T, TQueryKey extends QueryKey> = QueryObserverOptions<T, Error, T, T, TQueryKey>;
 
 /** Stop this route from waiting without cancelling another observer of the same query. */
-export function readSubjectCanonicalQuery<T>(
+export function readSubjectCanonicalQuery<T, TQueryKey extends QueryKey>(
   client: QueryClient,
-  options: SubjectCanonicalQueryOptions<T>,
+  options: SubjectCanonicalQueryOptions<T, TQueryKey>,
   signal: AbortSignal,
 ): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
