@@ -79,6 +79,9 @@ The shared rules are owned by [architecture](../architecture.md),
 the [document package](../../packages/document/README.md) and [deletion](../deletion.md). Consumers adapt to
 producer-owned interfaces; Content does not copy another module's storage or authority.
 
+Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
+changing behavior.
+
 ## Dependencies
 
 Requires Accounts membership, role, ban, preference and lifecycle ports; Access authorization and resource grants;
