@@ -216,6 +216,7 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
     await act(async () => root.render(createElement(MangaReaderEntry, { ...props, source: {} })));
     expect(host.querySelector('[data-state="stale"]')).not.toBeNull();
     expect(host.querySelector('button')).toBeNull();
+    expect(browser.document.activeElement).toBe(host.querySelector('h2'));
     const recovery = host.querySelector('a')!;
     expect(recovery.getAttribute('href')).toBe(address);
     recovery.addEventListener('click', (event) => event.preventDefault());
@@ -252,6 +253,14 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
     expect(host.querySelector('[role="status"]')?.textContent).toContain('元の関連');
     expect(browser.document.activeElement).toBe(unrelated);
     unrelated.remove();
+
+    await act(async () =>
+      root.render(createElement(MangaReaderEntry, { ...props, key: 'unselected-focus', currentHref: address })),
+    );
+    const unselected = host.querySelector('button')!;
+    unselected.focus();
+    await act(async () => root.render(createElement(MangaReaderEntry, { ...props, key: 'unselected-focus', source: {} })));
+    expect(browser.document.activeElement).not.toBe(host.querySelector('h2'));
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous)

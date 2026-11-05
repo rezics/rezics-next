@@ -112,8 +112,15 @@ export function MangaReader({
     };
   }, []);
   useLayoutEffect(() => {
+    if (!retired) return;
     const target = focused.current;
-    if (retired && target instanceof Element && !target.isConnected && document.activeElement === document.body)
+    focused.current = null;
+    if (
+      target instanceof Element &&
+      target.closest('[data-selected="true"]') &&
+      !target.isConnected &&
+      document.activeElement === document.body
+    )
       heading.current?.focus();
   }, [retired]);
   const current = mangaReaderWindowScope(windows, definitions, view);
