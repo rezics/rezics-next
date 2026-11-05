@@ -17,7 +17,7 @@ import {
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
-import { resolveDiscoveryOwnerAdapters } from './discovery-registry.ts';
+import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';

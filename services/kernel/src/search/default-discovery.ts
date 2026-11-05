@@ -27,7 +27,7 @@ import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { AccountActor } from '../request/access.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
-import { resolveDiscoveryOwnerAdapters } from './discovery-registry.ts';
+import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import type {
   DiscoveryPage,
