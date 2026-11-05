@@ -281,6 +281,13 @@ test('exact HTTP receiving binds the original second/non-default selection and r
     { ...matched, release: 'other' },
     { ...matched, fact: { ...fact, id: documentId } },
     { ...matched, fact: { ...fact, value: { type: 'value', content: { document: documentId } } } },
+    {
+      ...matched,
+      fact: {
+        ...fact,
+        qualifiers: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'somevalue' }, document: documentId }],
+      },
+    },
   ])
     expect(await read()).toEqual({ kind: 'unavailable' });
   const count = requests.length;

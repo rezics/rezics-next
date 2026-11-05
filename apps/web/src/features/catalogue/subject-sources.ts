@@ -90,6 +90,7 @@ function selectedResponse(value: unknown): value is NonNullable<SubjectRead['sel
       );
     return ['somevalue', 'novalue'].includes(String(part.value.type)) && closed(part.value, ['type']);
   };
+  const part = (value: unknown) => isRecord(value) && closed(value, ['property', 'value']) && snak(value);
   return (
     closed(fact, ['id', 'rank', 'property', 'value', 'qualifiers', 'references']) &&
     typeof fact.id === 'string' &&
@@ -103,7 +104,7 @@ function selectedResponse(value: unknown): value is NonNullable<SubjectRead['sel
     fact.value.type === 'somevalue' &&
     Array.isArray(fact.qualifiers) &&
     fact.qualifiers.length <= 16 &&
-    fact.qualifiers.every(snak) &&
+    fact.qualifiers.every(part) &&
     Array.isArray(fact.references) &&
     fact.references.length <= 16 &&
     fact.references.every(
@@ -113,7 +114,7 @@ function selectedResponse(value: unknown): value is NonNullable<SubjectRead['sel
         typeof reference.hash === 'string' &&
         Array.isArray(reference.parts) &&
         reference.parts.length <= 16 &&
-        reference.parts.every(snak),
+        reference.parts.every(part),
     )
   );
 }

@@ -351,7 +351,7 @@ export function NamesTermsReturn({ id, locale, via }: { id: string; locale: stri
   );
 }
 
-/** Transfer only the closed history value; modified activation and new tabs use the real href. */
+/** Transfer closed history state; synopsis links keep private return operands out of the DOM href. */
 export function NamesReturnAnchor({
   href,
   locale,

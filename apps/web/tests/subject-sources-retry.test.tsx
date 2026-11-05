@@ -19,6 +19,7 @@ mock.module('../src/features/catalogue/subject-sources-actions', () => ({
     calls.push(data);
     return read();
   },
+  readCurrentSubjectSources: async () => read(),
 }));
 
 test('actual Sources retry returns focus locally and retires focus across reader, address and route lifetimes', async () => {
