@@ -221,16 +221,19 @@ beforeAll(async () => {
   port = {
     ...native,
     choices: async (id) => ({
-      subjectId: id,
-      choices: [
-        {
-          mode: 'scalar_amount',
-          units: [
-            { id: 'chapter', label: 'chapter', step: 'any', total: 'optional' },
-            { id: 'page', label: 'page', step: 'any', total: 'optional' },
-          ],
-        },
-      ],
+      kind: 'ok',
+      value: {
+        subjectId: id,
+        choices: [
+          {
+            mode: 'scalar_amount',
+            units: [
+              { id: 'chapter', label: 'chapter', step: 'any', total: 'optional' },
+              { id: 'page', label: 'page', step: 'any', total: 'optional' },
+            ],
+          },
+        ],
+      },
     }),
   };
 }, 120000);

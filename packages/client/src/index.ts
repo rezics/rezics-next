@@ -459,7 +459,19 @@ export type KernelClientOptions = {
 export function createKernelClient(origin: string, options: KernelClientOptions = {}): KernelClient {
   let session = options.session;
   const fetcher = options.fetch ?? globalThis.fetch;
+  const rawBody = Symbol('native-raw-body');
   const config = {
+    // Eden calls this hook before and after serialization. Keep a top-level Blob request-local:
+    // its JSON serializer would otherwise replace the original file bytes with {}.
+    onRequest(_path: string, request: RequestInit & { [rawBody]?: Blob }) {
+      const body = request[rawBody] ?? (request.body instanceof Blob ? request.body : undefined);
+      if (body === undefined) return;
+      return {
+        [rawBody]: body,
+        body,
+        headers: { 'content-type': body.type || 'application/octet-stream' },
+      };
+    },
     fetcher: ((input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       const path = url.pathname.replace(/\/\$([a-z][A-Za-z0-9]*)$/, ':$1');

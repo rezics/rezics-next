@@ -161,11 +161,18 @@ test('lost review response retains normalized operands; refreshed review uses a 
   };
   const journey = new ProgressRecoveryJourney(native, crypto.randomUUID(), () => true);
   await journey.upload(new File(['{}'], 'archive.json'));
-  const selection = { ...input, additionalMeasures: [{ sourceUnit: 'page', unit: 'chapter' }] };
+  const selection = {
+    ...input,
+    additionalMeasures: [
+      { sourceUnit: 'z.page', unit: 'chapter' },
+      { sourceUnit: 'a.page', unit: 'page' },
+    ],
+  };
   await journey.review(selection);
   selection.additionalMeasures[0]!.unit = 'mutated';
   await journey.retry();
   expect(bodies[1]).toEqual(bodies[0]);
+  expect(bodies[0]!.additionalMeasures.map(({ sourceUnit }) => sourceUnit)).toEqual(['a.page', 'z.page']);
   expect(keys[1]).toBe(keys[0]);
   await journey.review(input);
   expect(keys[2]).not.toBe(keys[0]);

@@ -113,11 +113,12 @@ export const progressRecoveryChoices = createServerFn({ method: 'POST' })
       progressRecoveryNative(client, authorization).subject(data.subjectId),
       readReleaseForCaller({ client, headers: { authorization } }),
     ]);
-    if (subject.kind !== 'ok') return { subjectId: data.subjectId, choices: undefined };
-    // A redirected historical Subject cannot silently select a canonical target.
-    if (subject.value.subject.id !== data.subjectId) return { subjectId: data.subjectId, choices: undefined };
+    if (subject.kind !== 'ok') return subject;
     return {
-      subjectId: data.subjectId,
-      choices: progressFormChoices(release, subject.value.subject.type, requestLocale(request) ?? 'en'),
+      kind: 'ok' as const,
+      value: {
+        subjectId: data.subjectId,
+        choices: progressFormChoices(release, subject.value.subject.type, requestLocale(request) ?? 'en'),
+      },
     };
   });

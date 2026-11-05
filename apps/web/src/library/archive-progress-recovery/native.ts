@@ -85,5 +85,5 @@ export type NativePort = ReturnType<typeof progressRecoveryNative>;
 
 /** Composition stays generic so native journey fixtures do not load Web server modules. */
 export type ProgressRecoveryPort<Choices = unknown> = Omit<NativePort, 'subject'> & {
-  choices(subjectId: string): Promise<{ subjectId: string; choices: Choices | undefined }>;
+  choices(subjectId: string): Promise<Reply<{ subjectId: string; choices: Choices | undefined }>>;
 };

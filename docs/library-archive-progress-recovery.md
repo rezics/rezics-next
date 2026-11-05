@@ -208,7 +208,8 @@ only the owner's selected IDs and measure mappings. Refresh always creates a new
 
 The authenticated `/library/recover-progress` journey is adjacent to private export. Original file bytes travel in a
 base64 server-function envelope and then a JSON Blob through the generated native upload method. The page never
-parses or clones the complete archive. On acknowledgement it drops that envelope and keeps only one holdings,
+parses or clones the complete archive. The shared client preserves top-level Blob bytes across Eden serialization;
+raw JSON whitespace and Unicode bytes remain unchanged. On acknowledgement Web drops that envelope and keeps only one holdings,
 occurrence and unit page, one selected occurrence, at most twenty selected IDs and the displayed review/result.
 Upload/review/apply commands retain their exact operands, key and sealed original sender before delivery. Unresolved
 commands survive mounted-visit retirement in private memory; matching bindings can reconcile them. Viewer,
