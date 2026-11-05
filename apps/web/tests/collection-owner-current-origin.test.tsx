@@ -380,7 +380,7 @@ describe('Complete saved rule and selected Publication owner authority preserves
       expect(h.host.querySelector('form')).not.toBeNull();
       expect(h.host.querySelector<HTMLInputElement>('input[required]')).not.toBeNull();
       expect(h.host.textContent).not.toContain(m.condition_metadata_unavailable());
-      expect(h.host.textContent).not.toContain('active-release');
+      expect(h.host.textContent).toContain('active-release');
       expect(ruleReads).toHaveLength(0);
     } finally {
       await h.close();
