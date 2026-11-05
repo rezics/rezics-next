@@ -227,12 +227,14 @@ function NativeMembership({
     const accepted = acknowledged.current;
     if (accepted?.command !== attempt) return;
     acknowledged.current = null;
-    const confirmed =
-      source.viewer.state === 'member' &&
-      (attempt.body.action === 'join'
+    if (
+      source.viewer.state !== 'member' ||
+      !(attempt.body.action === 'join'
         ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
-        : source.viewer.membership === 'none');
-    if (!confirmed || !accepted.caller.isCurrent() || !current()) {
+        : source.viewer.membership === 'none') ||
+      !accepted.caller.isCurrent() ||
+      !current()
+    ) {
       accepted.focus.cancel();
       return;
     }
