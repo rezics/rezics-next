@@ -43,8 +43,8 @@ function personPlan(payload: Record<string, unknown>) {
 
 test('ordinary CLI person JSON and selected PersonDetail reuse one cited birth date', async () => {
   const dump = [];
-  for await (const row of readDump('bangumi', [
-    new TextEncoder().encode(
+  async function* personDump() {
+    yield new TextEncoder().encode(
       `${JSON.stringify({
         id: pinned.id,
         type: pinned.type,
@@ -54,8 +54,9 @@ test('ordinary CLI person JSON and selected PersonDetail reuse one cited birth d
         birth_mon: pinned.birth_mon,
         birth_day: pinned.birth_day,
       })}\n`,
-    ),
-  ]))
+    );
+  }
+  for await (const row of readDump('bangumi', personDump()))
     dump.push(row);
   expect(dump).toEqual([
     expect.objectContaining({
@@ -115,7 +116,7 @@ test('ordinary CLI person JSON and selected PersonDetail reuse one cited birth d
     const failed = await acquireBangumiPersonSources(personPlan(archive), {
       fetch: (async () => {
         throw new TypeError('offline');
-      }) as typeof globalThis.fetch,
+      }) as unknown as typeof globalThis.fetch,
       sleep: async () => {},
     });
     expect(failed.entities.bangumi[0]!.payload).toEqual(archive);
