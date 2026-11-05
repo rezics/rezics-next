@@ -91,6 +91,12 @@ export type PutVoteOutcome = {
   component: SessionComponent | null;
 };
 
+/** Trusted caller source operands join the receipt digest; admission runs only in a fresh native body. */
+export type VoteCommandAdmission = {
+  input: unknown;
+  prepare(): Promise<(tx: import('../command/command.ts').CommandTransaction) => Promise<void>>;
+};
+
 export type VoteReviewCurrentVote = Exclude<OwnCountedVoteObservation, { state: 'unavailable' }>;
 export type VoteReview = Readonly<{
   question: RatingQuestion;
@@ -272,7 +278,12 @@ export function createVoteCommands(config: Dependencies) {
   });
   const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access });
 
-  async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
+  async function putVoteOutcome(
+    actor: Actor,
+    input: PutVoteInput,
+    idempotencyKey: string,
+    admission?: VoteCommandAdmission,
+  ): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
     if (
       !input ||
@@ -322,6 +333,7 @@ export function createVoteCommands(config: Dependencies) {
             units: input.units,
             ...(guard ? { guard } : {}),
             ...(observation ? { observation } : {}),
+            ...(admission ? { admission: admission.input } : {}),
           },
           // Current question provenance is checked again on each native attempt,
           // before ownAccountPrepared permits receipt disclosure or execution.
@@ -351,10 +363,12 @@ export function createVoteCommands(config: Dependencies) {
                 error = failure;
               }
             }
-            return { ...current, epochs, error };
+            const admit = await admission?.prepare();
+            return { ...current, epochs, error, admit };
           },
         },
         async (tx, command, prepared) => {
+          await prepared.admit?.(tx);
           const { question, target: resolved } = observation ? prepared : (initial ?? prepared);
           if (observation) assertVoteObservation(observation, question, resolved.subjectId);
           if (guard) {
