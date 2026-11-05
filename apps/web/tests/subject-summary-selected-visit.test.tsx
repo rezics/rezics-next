@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  createMemoryHistory,
+  createBrowserHistory,
   createRootRoute,
   createRoute,
   createRouter,
@@ -41,6 +41,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
         .map((name) => [name, Reflect.get(window, name)]),
     ),
     window,
+    scrollTo: window.scrollTo.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
@@ -150,9 +151,10 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     getParentRoute: () => rootRoute,
     loader: () => ({ id: fixture.id }),
   } as never);
+  window.history.replaceState({}, '', href);
   const router = createRouter({
     routeTree: rootRoute.addChildren([workRoute, destination]),
-    history: createMemoryHistory({ initialEntries: [href] }),
+    history: createBrowserHistory({ window }),
     defaultPendingMinMs: 0,
   });
   const host = window.document.createElement('main');

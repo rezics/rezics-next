@@ -245,7 +245,10 @@ function DraftReviewCard({
 export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLive>, 'work'>) {
   const subject = useRef<string | undefined>(undefined);
   if (props.initial.ok) subject.current = props.initial.public.subject.id;
-  const mount = useCandidateWork(JSON.stringify([subject.current, props.locale]), props.transport.reader);
+  const mount = useCandidateWork(
+    JSON.stringify([subject.current, props.locale, props.inspection]),
+    props.transport.reader,
+  );
   const active = useCurrentReadingActive();
   const work = useMemo(() => ({ ...mount, live: () => mount.live() && active() }), [mount, active]);
   if (!mount.live()) return null;
@@ -255,6 +258,7 @@ export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLiv
 function AuthoredFieldLive({
   initial,
   locale,
+  inspection,
   transport,
   confirm,
   work,
@@ -262,6 +266,7 @@ function AuthoredFieldLive({
   work: CandidateWork;
   initial: AuthoredRead;
   locale: string;
+  inspection?: string | undefined;
   transport: AuthoredTransport;
   confirm: CandidateTransport['confirm'];
 }) {
@@ -316,6 +321,17 @@ function AuthoredFieldLive({
   const running = useRef(false);
   const session = useRef(initial.ok ? initial.session : undefined);
   const requestedProperty = useRef(initial.ok ? initial.property : '');
+  const inspectionFocused = useRef(false);
+  useFocusLayoutEffect(() => {
+    if (!inspection || inspectionFocused.current || !visible || !work.live() || !current?.selected) return;
+    const target = selectedBoundary.current;
+    if (!target) return;
+    const document = target.ownerDocument;
+    // A delayed inspection must leave a reader who has already moved to another control alone.
+    if (document.activeElement !== document.body && document.activeElement !== document.documentElement) return;
+    inspectionFocused.current = true;
+    target.focus();
+  }, [inspection, visible, work, current]);
   const readGeneration = useRef(0);
   const comparisonGeneration = useRef(0);
   const readVersion = readGeneration.current;
@@ -928,7 +944,12 @@ function AuthoredFieldLive({
   );
   const selectedHeading = stage === 'compose' ? m.authored_selected({}, o) : m.authored_current_comparison({}, o);
   const selectedSection = current && (
-    <section ref={selectedBoundary} aria-label={selectedHeading} tabIndex={-1}>
+    <section
+      ref={selectedBoundary}
+      aria-label={selectedHeading}
+      tabIndex={-1}
+      className="focus-visible:outline-2 focus-visible:outline-ring"
+    >
       <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
         <ContentItemHeading className="text-lg font-semibold">{selectedHeading}</ContentItemHeading>
         {current.selected ? (
