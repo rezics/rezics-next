@@ -1,9 +1,5 @@
 import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../../catalogue/concept-works/view';
-import {
-  conceptVisitPosition,
-  encodeConceptHierarchyAddress,
-  type ConceptVisitDescriptor,
-} from './navigation';
+import { conceptVisitPosition, encodeConceptHierarchyAddress, type ConceptVisitDescriptor } from './navigation';
 
 /** URL selections override the saved visit; an absent selection resumes the original operand. */
 export function conceptWorksRouteFor(
@@ -54,13 +50,15 @@ export function patchConceptWorksSearch<Search extends Record<string, unknown>>(
     if (value === undefined || value === '') delete next[key];
     else next[key] = value;
   };
-  for (const key of ['property', 'scheme', 'type', 'sort'] as const)
-    set(key, key in patch ? patch[key] : route[key]);
+  for (const key of ['property', 'scheme', 'type', 'sort'] as const) set(key, key in patch ? patch[key] : route[key]);
   const children = 'includeChildren' in patch ? patch.includeChildren : route.includeChildren;
   const spoiler = 'spoilerThreshold' in patch ? patch.spoilerThreshold : route.spoilerThreshold;
   set('children', children ? 'true' : undefined);
   set('spoiler', spoiler ? String(spoiler) : undefined);
-  set('condition', 'condition' in patch ? (patch.condition ? JSON.stringify(patch.condition) : undefined) : route.conditionText);
+  set(
+    'condition',
+    'condition' in patch ? (patch.condition ? JSON.stringify(patch.condition) : undefined) : route.conditionText,
+  );
   set('tagQualifiers', 'tagQualifiersText' in patch ? patch.tagQualifiersText : route.tagQualifiersText);
   if ('cursor' in patch) set('cursor', patch.cursor);
   return next as Search;
