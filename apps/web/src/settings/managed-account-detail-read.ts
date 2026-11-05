@@ -336,13 +336,15 @@ export class ManagedAccountReader {
       retryAt: this.state.retryAt,
       // Restrictions withdraw proof regardless of which admitted sibling supplied them.
       authNavigation: restricted ? undefined : latestObservation ? result.authNavigation : this.state.authNavigation,
-      detail: latestObservation ? {
-        account: detail.account,
-        self: detail.self,
-        role: detail.role,
-        operator: detail.operator,
-        operated: detail.relation !== null,
-      } : this.state.detail,
+      detail: latestObservation
+        ? {
+            account: detail.account,
+            self: detail.self,
+            role: detail.role,
+            operator: detail.operator,
+            operated: detail.relation !== null,
+          }
+        : this.state.detail,
       pending: false,
       members:
         !section || section === 'members' || detail.members.state === 'denied'

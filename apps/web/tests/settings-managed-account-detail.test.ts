@@ -340,12 +340,10 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   const operations = [
     { operationId: 'auth.organization.delete', action: 'account:delete', resource: { route: 0, id: accountId } },
   ];
-  const authNavigation = projectManagedAuthNavigation(
-    { state: 'ready', operations },
-    value,
-    viewerId,
-    { AUTH_ISSUER: 'https://auth.test', AUTH_MANAGEMENT_PAGE_ROUTES: '["/organizations/delete"]' },
-  );
+  const authNavigation = projectManagedAuthNavigation({ state: 'ready', operations }, value, viewerId, {
+    AUTH_ISSUER: 'https://auth.test',
+    AUTH_MANAGEMENT_PAGE_ROUTES: '["/organizations/delete"]',
+  });
   const positive: DetailResult = { ok: true, viewerId, value, authNavigation };
   const olderPositive: DetailResult = { ok: true, viewerId, value: olderValue, authNavigation };
   const pending: ((result: DetailResult) => void)[] = [];
