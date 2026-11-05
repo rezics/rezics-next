@@ -289,6 +289,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
   await import('@tanstack/react-router');
 const { CurrentViewerProgressIndexPage } = await import('../src/library/progress-page');
 const { readProgressIndex, readCurrentViewerProgressIndex } = await import('../src/library/progress-server');
+const { progressIndexAdmission, progressIndexSession } = await import('../src/library/progress-index-origin');
 const { prepareSession } = await import('../src/session/request');
 const { sessionQuery } = await import('../src/session/query');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
@@ -334,6 +335,8 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
       client.setQueryData(query.queryKey, { subject: current.observation.subject, admitted: [] });
   };
   seedExposure();
+  expect(progressIndexSession(client, browser)).toMatchObject({ state: 'signed-in', subject: browser.subject });
+  expect(progressIndexAdmission(client, 'progress_session.list', true)).toBe(true);
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/library/progress'] }),
