@@ -183,6 +183,7 @@ Decision: Viewer entry lookup follows the installed Library read: exact subject 
 Decision: A public Collection session page may request one bounded authenticated FULL member page from the existing producer; Web joins only exact occurrence keys and source subject IDs, then opens the native Subject Library slot with the current filtered page and occurrence anchor as its return address. Collection and personal action gates remain independent.
 Decision: Collection personal navigation requires an exact occurrence's supplied personal grant; missing action delivery stays unavailable, and filtered rows without native occurrence IDs return to their bounded page without a fragment.
 Decision: Home and Collection use the callable `readViewerPersonalActionsPage` seam with the caller's admitted occurrence key, original Subject ID and disclosed resource type; a current empty allowed-action list remains distinct from unavailable admission.
+Decision: Collection action links open the canonical Subject page only for the exact current occurrence's supplied action/operation pairs; existing Subject hosts retain commands and readback, and their `via` return preserves the originating Collection occurrence.
 
 The installed `library/viewer-facts.ts` producer exports `prepareViewerFacts`, `readViewerFacts` and
 `viewerFactsCurrent` for staged callers, plus `readViewerFactsPage` for Library and Collection consumers.

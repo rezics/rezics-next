@@ -4,6 +4,23 @@ import type { CollectionViewerFacts, CollectionMember } from '../reads';
 type CurrentViewerFacts = Extract<CollectionViewerFacts, { state: 'current' }>;
 export type CollectionViewerFact = CurrentViewerFacts['rows'][number];
 export type CollectionViewerQuestion = CurrentViewerFacts['question'];
+type CurrentAllowedAction = Extract<CollectionViewerFact['actions'], { state: 'current' }>['allowed'][number];
+type PersonalActionPair = {
+  action: CurrentAllowedAction['action'];
+  operation: CurrentAllowedAction['operations'][number];
+};
+
+const entryAndProgressActions = [
+  { action: 'library_entry:update', operation: 'library_entry.put' },
+  { action: 'library_entry:delete', operation: 'library_entry.delete' },
+  { action: 'progress_session:create', operation: 'progress_session.create' },
+  { action: 'progress_session:update', operation: 'progress_session.update' },
+] as const satisfies readonly PersonalActionPair[];
+
+const standardScoreActions = [
+  { action: 'rating:vote_put', operation: 'rating.vote_put' },
+  { action: 'rating:vote_delete', operation: 'rating.vote_delete' },
+] as const satisfies readonly PersonalActionPair[];
 
 export type CollectionViewerMember = Pick<CollectionMember, 'subjectId' | 'subject'> & {
   id?: string;
@@ -59,19 +76,28 @@ export function collectionViewerVoteCurrent(row: CollectionViewerFact, question:
   );
 }
 
-/** The installed members.get row has no actions field. Facts never imply a grant.
- * Keep controls unavailable until the producer publishes its typed occurrence/account-bound closure.
- */
-export function collectionViewerActionsState(_row: CollectionViewerFact | undefined): 'current' | 'unavailable' {
-  return 'unavailable';
+/** A current empty list is an admitted no-action result; missing rows stay unavailable. */
+export function collectionViewerActionsState(row: CollectionViewerFact | undefined): 'current' | 'unavailable' {
+  return row?.actions.state === 'current' ? 'current' : 'unavailable';
 }
 
-/** The original Subject hosts remain the only Entry/progress/vote writers. */
+/** Route into the original Subject hosts only for a supplied, mounted action and operation pair. */
 export function collectionViewerHasPersonalAction(
-  _row: CollectionViewerFact | undefined,
-  _question: CollectionViewerQuestion,
+  row: CollectionViewerFact | undefined,
+  question: CollectionViewerQuestion,
 ): boolean {
-  return false;
+  if (!row || row.actions.state !== 'current') return false;
+  const hasAny = (pairs: readonly PersonalActionPair[]) =>
+    pairs.some(({ action, operation }) =>
+      row.actions.state === 'current' &&
+      row.actions.allowed.some(
+        (allowed) => allowed.action === action && allowed.operations.includes(operation),
+      ),
+    );
+  return (
+    hasAny(entryAndProgressActions) ||
+    (collectionViewerVoteCurrent(row, question) && hasAny(standardScoreActions))
+  );
 }
 
 const localOrigin = 'https://rezics.invalid';
