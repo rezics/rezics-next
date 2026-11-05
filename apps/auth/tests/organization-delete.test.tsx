@@ -30,7 +30,7 @@ const confirm = (host: HTMLElement, phrase: string) =>
 
 test('unavailable review recovers the selected organization and freshly confirms accepted deletion', async () => {
   let unavailable = true;
-  const selections: object[] = [];
+  const selections: Array<{ organizationId: string; signal?: AbortSignal | undefined }> = [];
   const read: OrganizationDeletionReader = async (selection) => {
     selections.push(selection);
     return unavailable ? { kind: 'unavailable' } : ready(selection.organizationId);
@@ -39,7 +39,8 @@ test('unavailable review recovers the selected organization and freshly confirms
   expect(page.host.querySelector('form')).toBeNull();
   unavailable = false;
   await flush(() => button(page.host, 'Retry')!.click());
-  expect(selections).toEqual(Array(2).fill({ organizationId: first }));
+  expect(selections.map(({ organizationId }) => organizationId)).toEqual([first, first]);
+  expect(selections.every(({ signal }) => signal instanceof AbortSignal)).toBe(true);
   await confirm(page.host, 'wrong');
   expect(page.calls).toHaveLength(0);
   await confirm(page.host, '@FIRST');
