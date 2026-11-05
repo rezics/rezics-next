@@ -3050,6 +3050,7 @@
   "public_account_more": "Autres pages du compte",
   "public_account_cursor_expired": "Ce lien de page a expiré ou est invalide. Reprenez à la première page.",
   "public_account_start_again": "Première page",
+  "public_account_previous_page": "Page précédente",
   "public_account_realm_owner": "Propriétaire",
   "public_account_realm_member": "Membre",
   "public_account_realms_more": "Aucun Realm visible sur cette page. Consultez la suite.",

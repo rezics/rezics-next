@@ -3111,6 +3111,7 @@
   "public_account_more": "More account views",
   "public_account_cursor_expired": "This page link has expired or is invalid. Start from the first page.",
   "public_account_start_again": "First page",
+  "public_account_previous_page": "Previous page",
   "public_account_realm_owner": "Owner",
   "public_account_realm_member": "Member",
   "public_account_realms_more": "No visible Realms on this page. Continue to see more.",
