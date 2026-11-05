@@ -286,7 +286,9 @@ function ReleaseFidelityLive({
       }
       const fresh = admittedPage(
         value,
-        value.returned === 'changed' ? { kind: 'page', stream: value.stream?.key } : request,
+        value.returned === 'changed'
+          ? { kind: 'page', ...(value.stream ? { stream: value.stream.key } : {}) }
+          : request,
         revision,
       );
       if (visit) {
@@ -304,7 +306,10 @@ function ReleaseFidelityLive({
           prior.address.stream === fresh.address.stream;
         if (!same || !request.cursor) setHistory([]);
         else if (!movingBack.current && prior.address.cursor !== request.cursor)
-          setHistory((items) => [...items, { ...prior.address, session: undefined }].slice(-8));
+          setHistory((items) => {
+            const { session: _session, ...address } = prior.address;
+            return [...items, address].slice(-8);
+          });
         movingBack.current = false;
         setReader({ kind: 'page', admitted: fresh });
         return;
@@ -423,7 +428,11 @@ function ReleaseFidelityLive({
       } else if (query.data.ok) {
         const intent: ReleaseReadIntent =
           returning && query.data.returned === 'restored'
-            ? { kind: 'page', stream: returning.stream, cursor: returning.cursor }
+            ? {
+                kind: 'page',
+                ...(returning.stream ? { stream: returning.stream } : {}),
+                ...(returning.cursor ? { cursor: returning.cursor } : {}),
+              }
             : current.intent;
         const page = admittedPage(query.data, intent, 0);
         if (returning) {
@@ -459,7 +468,16 @@ function ReleaseFidelityLive({
       const visit = outgoing.current ?? releaseVisitFromHash(window.location.hash);
       if (!visit || visit.id !== id || visit.context !== context || !lifetime.active()) return;
       outgoing.current = undefined;
-      void startRead({ kind: 'page', stream: visit.stream, cursor: visit.cursor }, undefined, undefined, visit);
+      void startRead(
+        {
+          kind: 'page',
+          ...(visit.stream ? { stream: visit.stream } : {}),
+          ...(visit.cursor ? { cursor: visit.cursor } : {}),
+        },
+        undefined,
+        undefined,
+        visit,
+      );
     };
     const visible = () => {
       if (document.visibilityState === 'visible' && outgoing.current) resume();
@@ -504,8 +522,8 @@ function ReleaseFidelityLive({
       context,
       digest: read.digest,
       revision: read.public.subject.revision,
-      stream: admitted.address.stream,
-      cursor: admitted.address.cursor,
+      ...(admitted.address.stream ? { stream: admitted.address.stream } : {}),
+      ...(admitted.address.cursor ? { cursor: admitted.address.cursor } : {}),
       focus,
       ...(occurrence && row?.statement && row.readability === 'readable'
         ? { occurrence: { ...occurrence, revision: row.statement.rezics.revision } }
@@ -731,12 +749,13 @@ function ReleaseFidelityLive({
                   )}
                   {read.work.readability === 'readable' &&
                     selectedStatements(read.public.subject.statements['schema:exampleOfWork']).map((statement) => (
-                      <ReleaseStatementEvidence
-                        key={statement.id}
-                        statement={statement}
-                        read={{ release: read.release, public: { related: read.public.related } }}
-                        locale={locale}
-                      />
+                      <ReleaseStatementGate key={statement.id} statement={statement} locale={locale}>
+                        <ReleaseStatementEvidence
+                          statement={statement}
+                          read={{ release: read.release, public: { related: read.public.related } }}
+                          locale={locale}
+                        />
+                      </ReleaseStatementGate>
                     ))}
                 </section>
               </ReleaseStatementGate>
@@ -1182,6 +1201,8 @@ function restoredReading(
     return { kind: 'page', admitted: page };
   if (!read.detail || read.detail.subject.context !== visit.context || read.detail.subject.id !== selection.target)
     return { kind: 'selection-unavailable', admitted: page, selection };
+  if (!Object.values(read.detail.subject.labels).some((label) => label.trim()))
+    return { kind: 'selection-concealed', admitted: page, selection };
   return { kind: 'selected', admitted: page, selection, detail: read.detail };
 }
 
