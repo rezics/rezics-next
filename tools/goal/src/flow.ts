@@ -529,7 +529,11 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       continue;
     }
     const target =
-      event.action === 'dev-kernel-import' ? kernelImport : event.action === 'dev-architecture' ? architecture : transpile;
+      event.action === 'dev-kernel-import'
+        ? kernelImport
+        : event.action === 'dev-architecture'
+          ? architecture
+          : transpile;
     if (detail.outcome === 'passed') target.successfulChecks++;
     else if (detail.outcome === 'repair-handback') target.repairHandbacks++;
     else if (detail.outcome === 'unavailable') target.unavailable++;

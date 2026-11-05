@@ -421,16 +421,13 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
         ].join('\n\n'),
       )
     : collapse(fillTemplate(roleFile.text, view, policy));
-  const roleWithModuleMap =
-    roleText.includes(view.moduleMap!)
-      ? roleText
-      : collapse(
-          [
-            roleText,
-            'Architecture module map (module|kind|public entries|allowed dependencies):',
-            view.moduleMap,
-          ].join('\n\n'),
-        );
+  const roleWithModuleMap = roleText.includes(view.moduleMap!)
+    ? roleText
+    : collapse(
+        [roleText, 'Architecture module map (module|kind|public entries|allowed dependencies):', view.moduleMap].join(
+          '\n\n',
+        ),
+      );
   const selected = selectConditions(input);
   const renderedConditions = selected.map((id) => loadCondition(directory, id, view, policy));
   const conditionText = renderedConditions

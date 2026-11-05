@@ -1340,7 +1340,12 @@ export function formatModuleMap(manifest: ArchitectureManifest): string {
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((module) => {
       const dependencies = module.allowedDependencies.map(compactModuleId).sort().join(',') || '-';
-      return [compactModuleId(module.id), COMPACT_KIND[module.kind], moduleEntryLabel(module) || '-', dependencies].join('|');
+      return [
+        compactModuleId(module.id),
+        COMPACT_KIND[module.kind],
+        moduleEntryLabel(module) || '-',
+        dependencies,
+      ].join('|');
     });
   const result = [legend, ...rows].join('\n');
   if (result.length > MAX_MODULE_MAP_CHARACTERS)
@@ -1374,7 +1379,10 @@ function gitBaseFiles(root: string, base: string, manifest: ArchitectureManifest
         const prefix = candidate.path.endsWith('/') ? candidate.path : `${candidate.path}/`;
         if (!path.startsWith(prefix) || !isIncludedByRoot(path, candidate)) return false;
         const relativePath = path.slice(prefix.length);
-        return !relativePath.split('/').slice(0, -1).some((part) => part.startsWith('.') || part === 'node_modules');
+        return !relativePath
+          .split('/')
+          .slice(0, -1)
+          .some((part) => part.startsWith('.') || part === 'node_modules');
       });
     })
     .sort();
@@ -1483,8 +1491,7 @@ function changedArchitectureGraph(
 function newBaselineEntries(previous: BoundaryBaseline, current: BoundaryBaseline): string[] {
   const existing = new Set<string>();
   for (const [moduleId, group] of Object.entries(previous.modules)) {
-    for (const violation of group.violations)
-      existing.add(`${moduleId}\n${baselineKey(violation)}`);
+    for (const violation of group.violations) existing.add(`${moduleId}\n${baselineKey(violation)}`);
   }
   const added: string[] = [];
   for (const [moduleId, group] of Object.entries(current.modules)) {
@@ -1503,7 +1510,14 @@ function architectureErrorIdentity(error: string): string {
 function changedPathsFromBase(root: string, base: string): string[] {
   const tracked = gitOutput(root, ['diff', '--name-only', '--no-renames', '-z', base, '--'])!;
   const untracked = gitOutput(root, ['ls-files', '--others', '--exclude-standard', '-z'])!;
-  return [...new Set(`${tracked}\0${untracked}`.split('\0').filter(Boolean).map((path) => slash(relative(root, resolve(root, path)))))].sort();
+  return [
+    ...new Set(
+      `${tracked}\0${untracked}`
+        .split('\0')
+        .filter(Boolean)
+        .map((path) => slash(relative(root, resolve(root, path)))),
+    ),
+  ].sort();
 }
 
 function architectureInputsUnchanged(
@@ -1638,7 +1652,9 @@ async function main(): Promise<void> {
     try {
       gitOutput(root, ['rev-parse', '--verify', `${args.changedBase}^{commit}`]);
       if (architectureInputsUnchanged(root, args.changedBase, manifest, baseline)) {
-        console.log(`Architecture check passed (production architecture inputs unchanged against base ${args.changedBase}).`);
+        console.log(
+          `Architecture check passed (production architecture inputs unchanged against base ${args.changedBase}).`,
+        );
         return;
       }
     } catch (error) {
@@ -1650,7 +1666,11 @@ async function main(): Promise<void> {
 
   let graph: ArchitectureGraph;
   try {
-    graph = args.changedBase ? buildGraph(root, manifest) : args.changed.length ? changedGraph(root, manifest, args.changed) : buildGraph(root, manifest);
+    graph = args.changedBase
+      ? buildGraph(root, manifest)
+      : args.changed.length
+        ? changedGraph(root, manifest, args.changed)
+        : buildGraph(root, manifest);
     if (args.changedBase || !args.changed.length) writeGraphCache(root, graph);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

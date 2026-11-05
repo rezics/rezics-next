@@ -2636,12 +2636,7 @@ export class MergeTrain {
             continue;
           }
           if (architecture.outcome === 'diagnostic') {
-            const owner = architectureOwner(
-              prepared,
-              (member) => member.result.changedFiles,
-              trainTree,
-              architecture,
-            );
+            const owner = architectureOwner(prepared, (member) => member.result.changedFiles, trainTree, architecture);
             return returnRepair(
               owner,
               architectureHandoff(

@@ -24,7 +24,11 @@ test('a final candidate returns only new architecture violations and lets existi
     git(root, 'config', 'user.name', 'Fixture');
     git(root, 'config', 'user.email', 'fixture@example.invalid');
     put(root, '.gitignore', '.temp/\n');
-    put(root, 'scripts/architecture.ts', readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'));
+    put(
+      root,
+      'scripts/architecture.ts',
+      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
+    );
     put(
       root,
       'docs/architecture/modules.json',

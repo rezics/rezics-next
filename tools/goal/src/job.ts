@@ -1818,33 +1818,33 @@ export class WorkerJob implements GateOutcomeSink {
       architectureRepair
         ? `Architecture check rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
         : schemaRepair
-        ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-        : kernelImportRepair
-          ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-          : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
+          ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+          : kernelImportRepair
+            ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+            : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
       `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
       architectureRepair
         ? `New architecture violations:\n${handoff.diagnostic.message}`
         : schemaRepair
-        ? `Regeneration error: ${handoff.diagnostic.message}`
-        : kernelImportRepair
-          ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
-          : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
+          ? `Regeneration error: ${handoff.diagnostic.message}`
+          : kernelImportRepair
+            ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
+            : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
       architectureRepair
         ? `Retained architecture log: ${handoff.logPath}`
         : schemaRepair
-        ? `Retained regeneration log: ${handoff.logPath}`
-        : kernelImportRepair
-          ? `Retained import log: ${handoff.logPath}`
-          : `Retained compiler log: ${handoff.logPath}`,
+          ? `Retained regeneration log: ${handoff.logPath}`
+          : kernelImportRepair
+            ? `Retained import log: ${handoff.logPath}`
+            : `Retained compiler log: ${handoff.logPath}`,
       kernelImportRepair && handoff.argv?.length ? `Argv: ${JSON.stringify(handoff.argv)}` : '',
       architectureRepair
         ? `Changed paths: ${handoff.changedFiles.join(', ')}`
         : schemaRepair
-        ? `Changed files: ${handoff.changedFiles.join(', ')}`
-        : kernelImportRepair
-          ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
-          : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
+          ? `Changed files: ${handoff.changedFiles.join(', ')}`
+          : kernelImportRepair
+            ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
+            : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
       `Repair ${schemaRepair ? 'the migration' : 'this source'} in place, then return through normal landing preparation in this same task session.`,
     ]
       .filter(Boolean)

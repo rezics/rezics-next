@@ -189,7 +189,8 @@ test('implementation, research and verification worker roles receive the current
   const kinds = ['implementation', 'research', 'verification'] as const;
   for (const kind of kinds) {
     const rendered = renderWorkerPrompt({ task: worker(contract({ kind })), mainCheckout: MAIN });
-    const roleBudget = kind === 'research' ? defaultPolicy.prompt.researchRoleBytes : defaultPolicy.prompt.workerRoleBytes;
+    const roleBudget =
+      kind === 'research' ? defaultPolicy.prompt.researchRoleBytes : defaultPolicy.prompt.workerRoleBytes;
     expect(rendered.prompt).toContain(moduleMap);
     expect(rendered.manifest.architectureModules).toBe(gitBlobSha(moduleMap));
     expect(rendered.roleBytes).toBeLessThanOrEqual(roleBudget);
