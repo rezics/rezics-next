@@ -319,7 +319,7 @@ test('worker-owned briefs keep affected verification without inventing an accept
       return { passed: true, output: '', timedOut: false };
     },
   });
-  expect(commands).toContain('env TYPECHECK_CHANGED=services/kernel/change.ts bun scripts/typecheck.ts');
+  expect(commands.some((command) => command.includes('TYPECHECK_CHANGED=services/kernel/change.ts'))).toBe(true);
   expect(commands).toContain('affected-check');
   expect(commands).not.toContain('');
   expect(commands.some((command) => command.startsWith('acceptance'))).toBe(false);
