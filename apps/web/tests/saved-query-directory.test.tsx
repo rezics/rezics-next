@@ -51,9 +51,7 @@ test.each(['rows', 'previews'] as const)(
     expect(html).toContain(m.library_collection_open());
     expect(html).toContain(m.library_collection_more());
     expect(html).toContain(`href="/en/library/collections?cursor=next%2B%2Fcursor%3D%3D&amp;layout=${layout}"`);
-    expect(html).toContain(
-      `href="/en/collections/saved%2Fquery?returnTo=${encodeURIComponent(currentHref)}"`,
-    );
+    expect(html).toContain(`href="/en/collections/saved%2Fquery?returnTo=${encodeURIComponent(currentHref)}"`);
     expect(html).toContain('href="/en/collections/saved%2Fquery/rule"');
     expect(html).not.toContain('other-owner');
     expect(html).not.toContain('state-view');
