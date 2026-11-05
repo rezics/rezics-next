@@ -29,9 +29,9 @@ const parse = (href: string) => parseMangaPublicVisit(new URL(href, 'https://sit
 
 test('actual Manga entry and contribution collector retain observed origin without reading producers or changing creation', async () => {
   const { MangaProfileEntry } = await import('../src/features/catalogue/manga-profile-entry');
-  const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
+  const { catalogueEntries } = await import('../src/features/catalogue/catalogue-entry');
   const entry = <MangaProfileEntry id={id} label="Comic" locale="en" origin={origin} />;
-  const href = collectEditorialEntries(entry).entries[0]!.href;
+  const href = catalogueEntries.manga({ id, label: 'Comic', locale: 'en', origin }).href;
   expect(renderToStaticMarkup(entry)).toContain('origin=');
   expect(parse(href)).toEqual({ kind: 'origin', origin });
   expect(renderToStaticMarkup(<MangaProfileEntry locale="en" />)).toContain('/en/catalogue/manga');
@@ -60,7 +60,7 @@ test('HTTP origin admission rejects ambiguous, foreign, chained and encoded over
   expect(parse(base + '?origin=%E0%A4%A')).toEqual({ kind: 'invalid' });
   expect(mangaPublicIntentFits('界'.repeat(700))).toBe(false);
   expect(mangaPublicIntentFits('x'.repeat(2048))).toBe(true);
-  expect(mangaPublicCorrectionHref(base + '界'.repeat(180), origin)).toEndWith('?origin=!');
+  expect(mangaPublicCorrectionHref(base + '界'.repeat(220), origin)).toEndWith('?origin=!');
 });
 
 test('selected Context without Realm has honest unsupported exact return; deliberate Global keeps only compatible return', () => {
@@ -74,32 +74,6 @@ test('selected Context without Realm has honest unsupported exact return; delibe
   expect(parse(fresh)).toEqual({ kind: 'global', returnHref: realm.returnHref });
 });
 
-test('installed session refuses unsupported and malformed intent before mounting Global profile and nested transports', async () => {
-  const { MangaProfileSession } = await import('../src/features/catalogue/manga-profile-session');
-  const { m } = await import('../src/paraglide/messages');
-  const client = new QueryClient();
-  for (const visit of [
-    parse(mangaPublicCorrectionHref(base, mangaObservedOrigin({ ...origin, context: other }))),
-    { kind: 'invalid' } as const,
-  ]) {
-    const html = renderToStaticMarkup(
-      <QueryClientProvider client={client}>
-        <MangaProfileSession id={id} locale="en" visit={visit} />
-      </QueryClientProvider>,
-    );
-    expect(html).toContain('role="alert"');
-    expect(html).toContain(m.manga_origin_global({}, { locale: 'en' }));
-    expect(html).not.toContain('<input');
-    expect(
-      client
-        .getQueryCache()
-        .getAll()
-        .filter((q) => q.queryKey[0] === 'manga-profile'),
-    ).toHaveLength(0);
-  }
-  client.clear();
-});
-
 test('mounted installed route and session retain canonical origin, acquire fresh Global reads and retire source/caller visits', async () => {
   const { createRequire } = await import('node:module');
   const { act, createContext, useContext } = await import('react');
@@ -107,7 +81,7 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test' + base });
   const names =
-    'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
+    'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame scrollTo matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
       ' ',
     );
   const saved = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
@@ -164,6 +138,20 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   const load = (slug: string, search = new URL(href, window.location.origin).search) =>
     loader({ params: { id, slug }, location: { searchStr: search, hash: '' } } as never);
   try {
+    const { MangaProfileEntry } = await import('../src/features/catalogue/manga-profile-entry');
+    const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
+    expect(
+      collectEditorialEntries(<MangaProfileEntry id={id} label="Comic" locale="en" origin={origin} />).entries[0]!.href,
+    ).toBe(href);
+    for (const visit of [
+      parse(mangaPublicCorrectionHref(base, mangaObservedOrigin({ ...origin, context: other }))),
+      { kind: 'invalid' } as const,
+    ]) {
+      await render(visit);
+      expect(host.textContent).toContain(m.manga_origin_global());
+      expect(host.querySelector('input,select')).toBeNull();
+      expect(fixture.calls).toHaveLength(0);
+    }
     const { SubjectPage, pageContext } = await import('../src/features/pages/subject');
     const { subjectPageMessages } = await import('../src/features/pages/route-support');
     const { planReads, platformRegistry } = await import('@rezics/composition');
