@@ -15,7 +15,9 @@ import {
   WorkbenchView,
   type WorkbenchSearch,
 } from '../../moderation/workbench-queue';
+import type { WorkbenchRead } from '../../moderation/workbench-queue/read';
 import { createWorkbenchLoader } from '../../moderation/workbench-queue/route-loader';
+import { workbenchHistoryWindows } from '../../moderation/workbench-history/window-history';
 import { workbenchQueueWindowHistory } from '../../moderation/workbench-queue/window-history';
 
 export const Route = createFileRoute('/moderation/workbench')({
@@ -35,8 +37,16 @@ export const Route = createFileRoute('/moderation/workbench')({
 });
 
 function WorkbenchRoute() {
-  const page = Route.useLoaderData();
-  const search = Route.useSearch();
+  return <WorkbenchRoutePage page={Route.useLoaderData()} search={Route.useSearch()} />;
+}
+
+export function WorkbenchRoutePage({
+  page,
+  search,
+}: {
+  page: WorkbenchRead & { navigationKey: string };
+  search: WorkbenchSearch;
+}) {
   const navigate = useNavigate({ from: '/moderation/workbench' });
   const router = useRouter();
   const client = useContext(QueryClientContext);
@@ -51,6 +61,13 @@ function WorkbenchRoute() {
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
           if ((toLocation.state.__TSR_key ?? toLocation.href) !== page.navigationKey) {
+            if (client)
+              workbenchHistoryWindows(client).navigate(
+                visitId,
+                { pathname: toLocation.pathname, search: toLocation.search as Record<string, unknown> },
+                search,
+                page,
+              );
             windowHistory?.navigate(
               visitId,
               { pathname: toLocation.pathname, search: toLocation.search as Record<string, unknown> },
@@ -67,7 +84,7 @@ function WorkbenchRoute() {
         };
       },
     }),
-    [router, page.navigationKey, page.generation, page.locale, page, search, visitId, windowHistory],
+    [client, router, page.navigationKey, page.generation, page.locale, page, search, visitId, windowHistory],
   );
   const onSearch = (next: WorkbenchSearch) => void navigate({ search: workbenchSearch(next) });
   return (

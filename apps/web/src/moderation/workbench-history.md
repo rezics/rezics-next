@@ -39,3 +39,21 @@ cannot substitute a different target from a newer summary. Unknown browser admis
 - Growth check: receiver tests pin actual transport operands, independent cursors, sparse pages, same-input retry,
   missing advice/source and exact-identity replacement. Native independent population/physical growth and rendered
   browser acceptance remain controller checks; fixed output size alone establishes no native physical bound.
+
+Decision: reuse the queue coordinate engine for an independent Board history path in the same Router/QueryClient
+visit and private-reader lifetime; commit movement only on admitted native history-page readiness, independently
+of the selected receipt. First drops only history continuation and selection. A failed First retains the accepted
+path until its deliberate retry succeeds. The queue-return owner still sequences beginHistory and current-page
+return admission. No additional session observer or reader host is installed.
+
+The path retains at most eight admitted predecessor opaque cursors, current, and one staged movement; it retains
+no rows or receipts. Direct later-cursor entry invents no predecessors. Previous rereads its admitted address;
+Next uses native continuation and truncates forward coordinates. Refresh and receipt Open/Close replace the
+current page. Empty pages replace their own rows and retain backward controls, including empty-with-next.
+Failed movement repeats its exact URL on Retry without consuming predecessors; stale cursors require explicit
+Restart. Board, history target kind, locale or reader admission replacement and departure retire the path.
+Keyboard movement focuses the admitted history heading once if eligible. Receipt Close instead restores its
+current exact row, or the heading if the row is absent. Current queue admission owns return focus. Each deliberate
+movement still costs one native 20-row page read and at most one permitted selected exact read; there is no replay,
+prefetch, refill, persistence or receipt cache. Native continuations exceeding the 4096-character address boundary
+are unavailable rather than becoming a different browser address.

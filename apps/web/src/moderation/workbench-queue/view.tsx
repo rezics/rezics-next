@@ -53,6 +53,9 @@ export type WorkbenchViewProps = {
   isCurrent?: () => boolean;
   onUnresolvedAppealChange?: (unresolved: boolean) => void;
   refreshBlocked?: boolean;
+  historyWindow?: WorkbenchWindowView;
+  onHistoryMove?: (move: WorkbenchWindowMove | 'retry', source?: HTMLButtonElement, keyboard?: boolean) => void;
+  onHistoryClose?: (source: HTMLButtonElement, keyboard: boolean) => void;
   queueWindow?: WorkbenchWindowView;
   retryWindow?: WorkbenchWindowRetry;
   onWindowMove?: (move: WorkbenchWindowMove, source?: HTMLButtonElement, keyboard?: boolean) => void;
@@ -131,6 +134,9 @@ export function WorkbenchView({
   isCurrent,
   onUnresolvedAppealChange,
   refreshBlocked,
+  historyWindow,
+  onHistoryMove,
+  onHistoryClose,
   queueWindow,
   retryWindow,
   onWindowMove,
@@ -182,7 +188,7 @@ export function WorkbenchView({
     </Button>
   );
   useEffect(() => {
-    if (search.historyReturn && (!isCurrent || isCurrent()))
+    if (page.state === 'ready' && search.historyReturn && (!isCurrent || isCurrent()))
       document.getElementById(`workbench-queue-${search.queue}`)?.focus();
   }, [search.historyReturn, search.queue, isCurrent]);
   const status =
@@ -397,6 +403,9 @@ export function WorkbenchView({
             <WorkbenchHistory
               page={page.history ?? { state: page.state, entries: [], next: null }}
               search={search}
+              windows={historyWindow}
+              onMove={onHistoryMove}
+              onClose={onHistoryClose}
               onSearch={onSearch}
               onReturn={() => onSearch(returnFromWorkbenchHistory(search))}
               {...(onRetry ? { onRetry } : {})}

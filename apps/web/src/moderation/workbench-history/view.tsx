@@ -1,3 +1,5 @@
+import type { MouseEvent } from 'react';
+import type { WorkbenchWindowMove, WorkbenchWindowView } from '../workbench-queue/window-history';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
@@ -12,7 +14,7 @@ const control =
 export function WorkbenchHistoryUnavailable({ onReturn, onRetry }: { onReturn: () => void; onRetry?: () => void }) {
   return (
     <section className="space-y-3" aria-labelledby="workbench-history-heading">
-      <h2 id="workbench-history-heading" className="text-xl font-semibold">
+      <h2 id="workbench-history-heading" tabIndex={-1} className="text-xl font-semibold">
         {m.moderation_workbench_history()}
       </h2>
       <p role="alert" className="max-w-prose text-muted-foreground">
@@ -102,13 +104,22 @@ export function WorkbenchHistory({
   onSearch,
   onReturn,
   onRetry,
+  windows,
+  onMove,
+  onClose,
 }: {
+  windows?: WorkbenchWindowView | undefined;
+  onMove?: ((move: WorkbenchWindowMove | 'retry', source?: HTMLButtonElement, keyboard?: boolean) => void) | undefined;
+  onClose?: ((source: HTMLButtonElement, keyboard: boolean) => void) | undefined;
   page: HistoryRead;
   search: WorkbenchSearch;
   onSearch: (search: WorkbenchSearch) => void;
   onReturn: () => void;
   onRetry?: () => void;
 }) {
+  function move(kind: WorkbenchWindowMove | 'retry', event: MouseEvent<HTMLButtonElement>) {
+    onMove?.(kind, event.currentTarget, event.detail === 0);
+  }
   const restart = () => onSearch(workbenchSearch({ ...search, historyCursor: undefined, historyDecision: undefined }));
   const status =
     page.state === 'denied'
@@ -118,7 +129,7 @@ export function WorkbenchHistory({
         : m.moderation_workbench_history_unavailable();
   return (
     <section aria-labelledby="workbench-history-heading" className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
-      <h2 id="workbench-history-heading" className="text-xl font-semibold">
+      <h2 id="workbench-history-heading" tabIndex={-1} className="text-xl font-semibold">
         {m.moderation_workbench_history()}
       </h2>
       <p className="max-w-prose text-muted-foreground">{m.moderation_history_private()}</p>
@@ -127,15 +138,57 @@ export function WorkbenchHistory({
           {m.moderation_workbench_history_return()}
         </Button>
         {page.state === 'stale' ? (
-          <Button type="button" variant="outline" className={control} onClick={restart}>
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            onClick={(event) => (onMove ? move('first', event) : restart())}
+          >
             {m.moderation_queue_restart()}
           </Button>
         ) : page.state === 'unavailable' && onRetry ? (
-          <Button data-workbench-retry type="button" variant="outline" className={control} onClick={onRetry}>
+          <Button
+            data-workbench-retry
+            type="button"
+            variant="outline"
+            className={control}
+            onClick={(event) => (onMove ? move('retry', event) : onRetry?.())}
+          >
             {m.moderation_queue_retry()}
           </Button>
         ) : null}
       </div>
+      {windows && page.state !== 'denied' ? (
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            disabled={!windows.previous}
+            onClick={(event) => move('previous', event)}
+          >
+            {m.moderation_workbench_previous()}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            disabled={!windows.refresh}
+            onClick={(event) => move('refresh', event)}
+          >
+            {m.moderation_workbench_refresh_window()}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={control}
+            disabled={!windows.first}
+            onClick={(event) => move('first', event)}
+          >
+            {m.moderation_workbench_first()}
+          </Button>
+        </div>
+      ) : null}
       {page.state !== 'ready' ? (
         <p role={page.state === 'denied' ? 'status' : 'alert'}>{status}</p>
       ) : (
@@ -195,6 +248,7 @@ export function WorkbenchHistory({
                       type="button"
                       className={control}
                       variant="outline"
+                      data-history-receipt={entry.id}
                       aria-expanded={search.historyDecision === entry.id}
                       onClick={() => onSearch(workbenchSearch({ ...search, historyDecision: entry.id }))}
                     >
@@ -214,7 +268,11 @@ export function WorkbenchHistory({
                 type="button"
                 variant="outline"
                 className={control}
-                onClick={() => onSearch(workbenchSearch({ ...search, historyDecision: undefined }))}
+                onClick={(event) =>
+                  onClose
+                    ? onClose(event.currentTarget, event.detail === 0)
+                    : onSearch(workbenchSearch({ ...search, historyDecision: undefined }))
+                }
               >
                 {m.moderation_history_close_receipt()}
               </Button>
@@ -229,8 +287,10 @@ export function WorkbenchHistory({
             <Button
               type="button"
               className={control}
-              onClick={() =>
-                onSearch(workbenchSearch({ ...search, historyCursor: page.next, historyDecision: undefined }))
+              onClick={(event) =>
+                onMove
+                  ? move('next', event)
+                  : onSearch(workbenchSearch({ ...search, historyCursor: page.next, historyDecision: undefined }))
               }
             >
               {m.threads_next_page()}
