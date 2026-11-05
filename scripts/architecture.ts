@@ -1298,17 +1298,14 @@ const COMPACT_OWNER: Record<string, string> = {
 };
 
 function compactModuleId(id: string): string {
-  return id.replace(/^kernel-/, 'k-').replace(/^web-/, 'w-');
+  return id.replace(/^kernel-/, 'k').replace(/^web-/, 'w');
 }
 
 function compactPublicEntry(entry: string): string {
   if (entry.startsWith('@rezics/')) return entry.replace('@rezics/', '@/');
   return entry
     .replace(/^services\/kernel\/src\//, 'k/')
-    .replace(/^services\/auth\/src\//, 's/')
-    .replace(/^services\/importer\/src\//, 'i/')
     .replace(/^apps\/web\/src\//, 'w/')
-    .replace(/^apps\/auth\/src\//, 'a/')
     .replace(/^packages\//, 'p/');
 }
 
@@ -1331,13 +1328,16 @@ function moduleEntryLabel(module: ArchitectureModule): string {
       other.push(entry);
     }
   }
-  const compact = [...byPackage.entries()].map(([prefix, values]) => `${prefix}:{${values.sort().join(',')}}`);
+  const compact = [...byPackage.entries()].map(([prefix, values]) => {
+    const sorted = values.sort();
+    return sorted.length === 1 && sorted[0] === '.' ? prefix : `${prefix}:{${sorted.join(',')}}`;
+  });
   return [...compact, ...other.sort()].join(',');
 }
 
 export function formatModuleMap(manifest: ArchitectureManifest): string {
   const legend =
-    'id k-=kernel-,w-=web-; kind t=contract,c=core,a=application,d=adapter,r=root,u=ui; owner a=accounts,c=commerce,t=content,i=imports,p=performance,l=platform,s=search,m=semantic,w=web; path k=services/kernel/src,s=services/auth/src,i=services/importer/src,w=apps/web/src,a=apps/auth/src,p=packages,@=rezics';
+    'kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; owner a=accounts,c=commerce,t=content,i=imports,p=performance,l=platform,s=search,m=semantic,w=web; path k=kernel,w=web,p=package,@=rezics';
   const rows = manifest.modules
     .slice()
     .sort((left, right) => left.id.localeCompare(right.id))

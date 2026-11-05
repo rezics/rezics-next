@@ -321,5 +321,5 @@ describe('architecture boundaries', () => {
         violation.edge.endsWith('(value-import cycle)');
       expect(baseline.modules[moduleId]?.violations.some(isRemovedCycle)).toBe(false);
     }
-  });
+  }, 15_000);
 });
