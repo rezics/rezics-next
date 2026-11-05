@@ -343,7 +343,8 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
   let root: ReturnType<typeof hydrateRoot> | undefined;
   const show = async (session: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, session);
+      if (session.state === 'unknown') client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+      else client.setQueryData(sessionQuery.queryKey, session);
       const exposure = exposureLifetime.getSnapshot();
       if (exposure.state === 'signed-in')
         client.setQueryData(viewerExposureQuery(exposure.observation).queryKey, {
