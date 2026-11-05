@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
+import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import type { NativeWebStack } from './stack.ts';
 
 type JsonObject = Record<string, unknown>;
@@ -65,7 +65,7 @@ export async function createPublishAttachmentWorkBoard(
   const alice = await stack.authPersona('alice');
   const suffix = randomUUID().slice(0, 8);
   await requireOk(stack, 'governor', 'POST', '/v1/grants', {
-    resource: { route: 0, id: GLOBAL_CONTEXT },
+    resource: { route: 0, id: PAGE_GLOBAL_CONTEXT },
     subject: { kind: 'account', id: alice.accountId },
     actions: ['subject:create', 'board:create'],
     valid: '(,)',
