@@ -226,5 +226,15 @@ function CurrentCopiesRead({
         ) : null}
       </div>
     );
-  return <CopiesPage key={origin.id} page={page} failure={failure} originating={operand ?? closed} />;
+  return (
+    <CopiesPage
+      key={origin.id}
+      page={page}
+      failure={failure}
+      originating={operand ?? closed}
+      onRetryInventory={() => {
+        if (origin.isCurrent('copy.list')) void query.refetch();
+      }}
+    />
+  );
 }

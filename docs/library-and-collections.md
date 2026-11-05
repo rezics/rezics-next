@@ -222,6 +222,9 @@ new profiled values, not historic reads, clearing or exact undo. Generic labels 
 profile binding or lookup, and never invent a default state.
 Decision: Commerce renders an ordinary denied progress-session list as a bounded permission state with no session
 facts or start controls; the state is neither an empty result nor start authority.
+Decision: Commerce receives ordinary Copy-list denial at the exact current address as a private permission state;
+accepted denial retires displayed inventory and inspection while preserving captured command uncertainty, and point
+inspection closure remains distinct.
 Copy location/source allow 200 Unicode scalar values each and notes 1,000; the editor shows localized limits and accessible field errors after an invalid submit, preserves exact draft text, and validates before capturing a new command.
 
 ### Physical copy condition
