@@ -16,7 +16,6 @@ type Identity = { subject: string | null; generation: number; lifetime: string; 
 type Snapshot = {
   identity: Identity;
   observation: ViewerObservation | undefined;
-  observationKey: string | null;
   admissionState: OperationAdmission;
   csrfToken: string;
   admitted: boolean;
@@ -33,7 +32,6 @@ const identity = (subject: string | null): Identity => ({
 const serverSnapshot: Snapshot = {
   identity: { subject: null, generation: 0, lifetime: '', active: false },
   observation: undefined,
-  observationKey: null,
   admissionState: 'unknown',
   csrfToken: '',
   admitted: false,
@@ -121,7 +119,6 @@ function ownerStore(client: QueryClient) {
       snapshot = {
         identity: snapshot.identity,
         observation,
-        observationKey: observation ? `${observation.subject}:${observation.id}` : null,
         admissionState,
         csrfToken: csrf ?? '',
         admitted: !!subject && operationIsAdmitted('collection.get', groups),
@@ -188,7 +185,6 @@ export function useCollectionOwnerCurrent(address: string, _withLabels = false) 
   return {
     subject: snapshot.identity.subject,
     observation: snapshot.observation,
-    observationKey: snapshot.observationKey,
     admissionState: snapshot.admissionState,
     admitted: snapshot.admitted,
     canLabel: snapshot.canLabel,

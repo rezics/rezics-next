@@ -32,20 +32,11 @@ export function CollectionRuleCurrent({
 }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', collectionId, resultsHref]), true);
   // A retired loader object cannot seed a returning viewer/address lifetime.
-  const history = useRef({
-    generation: owner.generation,
-    observationKey: owner.observationKey,
-    seen: new Set<string>(),
-    retired: new Set<string>(),
-  });
-  if (
-    history.current.generation !== owner.generation ||
-    history.current.observationKey !== owner.observationKey
-  ) {
+  const history = useRef({ generation: owner.generation, seen: new Set<string>(), retired: new Set<string>() });
+  if (history.current.generation !== owner.generation) {
     for (const value of history.current.seen) history.current.retired.add(value);
     history.current.seen.clear();
     history.current.generation = owner.generation;
-    history.current.observationKey = owner.observationKey;
   }
   const identity = page.state === 'ready' || page.state === 'new' ? JSON.stringify([page.viewerId, page.intent]) : '';
   const valid = matches(page, owner.subject, collectionId) && !history.current.retired.has(identity);
