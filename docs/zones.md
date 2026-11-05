@@ -9,17 +9,17 @@ nothing until a person submits a create command; subsequent definition releases 
 
 [Filtered lists](filtered-lists.md) owns complete indexed observations, current disclosure, direct/prepared plans,
 freshness, canonical identity and cost. [Zone membership](zone-membership.md) owns source composition obligations.
-The resource substrate, independent static configured-page reader and native-owner page composition are
-implemented. Actual ordered owner execution and native page/default proof, plus Zone-specific withholding,
-purge, account cleanup and scheduler work remain incomplete. Typed schemas, immutable loaders, cursor capacity
-and helper setup do not establish those capabilities; the
+The resource substrate, independent static configured-page reader, native-owner page composition and mounted
+Collection summary list are implemented. Actual ordered owner execution and native page/default proof, plus
+Zone-specific withholding, purge, account cleanup and scheduler work remain incomplete. Typed schemas, immutable
+loaders, cursor capacity and helper setup do not establish those capabilities; the
 [integration audit](research/semantic-integration-audit-zone-composition.md) remains evidence, not a completion gate.
 
 ## Public exposure boundary
 
 The public slice is configured static routed documents with no planned source reads, through current
 `zone:read` authority. The mounted `zone.read_page` operation remains public for this slice. Saved-scope
-and mounted-Collection unions, direct catalogue targets, source-dependent lists and retained preparation
+and mounted-Collection unions, direct catalogue targets, the separate Subject-source list and retained preparation
 execute only behind explicit `zone_sources` platform grants and actual native owner readiness. A source-dependent request first proves current Zone
 readability, preserving identical unknown/private concealment and the safe public shell, then calls native
 `admitGroup` with the real Actor, mounted client action, original deadline and configured clock. Anonymous
@@ -200,6 +200,30 @@ to `invalid_format`, prefixed with `/configuration`. Unknown envelope fields use
 | `POST /v1/platform/zones/{id}:purge`            | `Purge` → 200 `{id,state:'purge_pending'}`                   | `zone:purge` on existing Platform resource                               |
 | `POST /v1/platform/zones/{id}:hold`             | `{reason:string}` → 200 `{id,held:true}`                     | `zone:purge` on Platform                                                 |
 | `POST /v1/platform/zones/{id}:releaseHold`      | `{}` → 200 `{id,held:false}`                                 | `zone:purge` on Platform                                                 |
+
+Decision: `GET /v1/zones/{id}/collections` walks the current configured mount order, omits only native
+`not_found` Collection reads, and returns the Collection owner's existing safe resource projection. Its default
+list cursor contains the last disclosed Collection ID and current Zone revisions; it never stores a mount ordinal
+or hidden mount identity. Every page re-reads each configured mount and revalidates both source summaries and the
+Zone basis before publishing the envelope or cursor.
+
+### Mounted Collection summary list cost
+
+- Touches: one current `zone:read` admission and Zone basis read before the `zone_sources` gate; at most sixteen
+  native Collection reads in configured order; then a second pass of at most sixteen native Collection reads and
+  a final Zone basis read. Each Collection read retains its owner's current Access and summary projection. No
+  Collection members, histories, editor predicates or owner-list rows are read.
+- Bound: two Zone read-authority checks, six keyed Zone-head observations and four Zone-owner Account reads
+  across the two basis reads, plus one gate-group admission. At most 32 serial native Collection owner reads;
+  each releases its own native checkout before the next owner call. Each selected Collection performs its
+  existing `collection:read` check and one current resource projection per pass, with the Collection owner's
+  existing additional cover/currentness reads when applicable. No cross-home transaction or shared budget change
+  is introduced.
+- Output: at most sixteen safe Collection summary slots regardless of `limit` (1–100); no total field. The
+  default cursor profile stores three keys: the last disclosed Collection ID, Zone revision and lifecycle
+  revision. Its token stays within the existing 4,096-character limit; hidden mounts contribute no cursor key or
+  output slot. Encoded response bytes are the JSON encoding of those selected owner projections, the two-field
+  envelope and at most one default-profile cursor; no bytes are spent on source descriptors or hidden mounts.
 
 The last three routes are platform-exposed, never owner privilege or anonymous privilege. An early purge
 requires that separate action/path even after an ordinary delete. An order reference is required to purge

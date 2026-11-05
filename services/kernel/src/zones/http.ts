@@ -11,6 +11,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { actionForRequest, IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SearchService } from '../search/service-scope.ts';
+import { collectionResourceSchema } from '../library/collection-routes.ts';
 import {
   ZoneCreateInputSchema,
   ZoneConfigureInputSchema,
@@ -26,6 +27,7 @@ import { ZonePageQuerySchema, ZonePageReadProgressSchema } from './page-continua
 import { readStaticZonePage } from './page-runtime.ts';
 import { createZoneCommands, zoneIfMatch } from './resource-commands.ts';
 import { createZoneReads, requireZoneAccount } from './resource-reads.ts';
+import { readZoneCollections } from './mounted-collections.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String() }, closed);
@@ -159,6 +161,52 @@ export function zoneRoutes(
         const result = await admission.run('normal', job, () => reads().metadata(actor, params.id, job.deadline));
         cache(set, result.zone.revision);
         return { zone: result.zone };
+      },
+    )
+    .get(
+      '/v1/zones/:id/collections',
+      {
+        params,
+        query: zoneSchema(
+          t.Object(
+            {
+              limit: t.Optional(t.String({ pattern: '^(?:[1-9]|[1-9][0-9]|100)$' })),
+              cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          ...failures,
+          200: zoneSchema(
+            t.Object(
+              {
+                collections: t.Array(collectionResourceSchema, { maxItems: 100 }),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              closed,
+            ),
+          ),
+          403: t.Union([failures[403], problemSchema('platform_closed')]),
+          503: withHeaders(failures[503], { 'retry-after': t.String() }),
+        },
+        detail: detail('list_collections', 'zone:read', true),
+      },
+      async ({ params, query, actor, request, route, admission, job, set }) => {
+        cache(set);
+        return admission.run('normal', job, () =>
+          readZoneCollections(
+            { ...dependencies, access: dependencies.access() },
+            {
+              actor,
+              id: params.id,
+              ...(query.limit ? { limit: Number(query.limit) } : {}),
+              ...(query.cursor ? { cursor: query.cursor } : {}),
+              deadline: job.deadline,
+              clientAction: actionForRequest(app, request, route),
+            },
+          ),
+        );
       },
     )
     .get(

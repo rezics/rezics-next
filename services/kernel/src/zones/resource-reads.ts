@@ -66,6 +66,14 @@ export function zoneOwned(row: ZoneHead): ZoneOwned {
     restoreUntil: row.restoreUntil === null ? null : new Date(row.restoreUntil).toISOString(),
   };
 }
+
+export type ZoneCollectionBasis = {
+  mounts: string[];
+  revision: string;
+  lifecycleRevision: string;
+  visibility: ZoneHead['visibility'];
+  ownerId: string | null;
+};
 export async function zoneReadTransaction<T>(
   pool: Pool,
   work: (client: PoolClient) => Promise<T>,
@@ -111,10 +119,31 @@ function publicDocument(row: ZoneHead, index: number): CompositionDocument {
 
 export function createZoneReads(dependencies: { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }) {
   const { pool, access, tokens, clock } = dependencies;
+  async function publicRow(actor: Actor, id: string, deadline: number): Promise<ZoneHead> {
+    const identity = zoneIdentity(id);
+    const resource = { ...identity, eligibility: zoneReadEligibility(identity) };
+    const readCheck = await accessCheck(access, actor, 'zone:read', resource, { pool, deadline });
+    return zoneReadTransaction(pool, async (client) => {
+      const time = await mintReadTime(client, clock);
+      const row = await readZoneHead(client, identity.route, id);
+      if (!row || !row.configuration || !row.mounts || row.state === 'purged' || !zoneReadable(row))
+        throw new ProblemError('not_found');
+      if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
+      if (!(await readCheck(client, time))) {
+        if (actor.kind === 'account') {
+          const account = await readAccount(client, routeOf(actor.accountId)!, actor.accountId);
+          if (!account || account.state !== 'active' || account.fenced) throw new ProblemError('forbidden');
+        }
+        throw new ProblemError('not_found');
+      }
+      return row;
+    });
+  }
   function read(actor: Actor, id: string, configuration: false, deadline: number): Promise<ZoneMetadataResponse>;
   function read(actor: Actor, id: string, configuration: true, deadline: number): Promise<ZoneConfigurationResponse>;
   async function read(actor: Actor, id: string, configuration: boolean, deadline: number) {
     if (configuration) requireZoneAccount(actor);
+    if (!configuration) return { zone: zonePublic(await publicRow(actor, id, deadline)) };
     const identity = zoneIdentity(id);
     const resource = { ...identity, eligibility: zoneReadEligibility(identity) };
     const context = { pool, deadline };
@@ -127,17 +156,6 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
       if (!row || !row.configuration || !row.mounts || row.state === 'purged') throw new ProblemError('not_found');
       if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
       const allowed = await readCheck(client, time);
-      if (!configuration) {
-        if (!zoneReadable(row)) throw new ProblemError('not_found');
-        if (!allowed) {
-          if (actor.kind === 'account') {
-            const account = await readAccount(client, routeOf(actor.accountId)!, actor.accountId);
-            if (!account || account.state !== 'active' || account.fenced) throw new ProblemError('forbidden');
-          }
-          throw new ProblemError('not_found');
-        }
-        return { zone: zonePublic(row) };
-      }
       requireZoneAccount(actor);
       const owner = await hasZoneOwnerRole(client, identity.route, id, actor.accountId, at);
       const editable = await configureCheck!(client, time);
@@ -311,6 +329,16 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
   return {
     metadata: (actor: Actor, id: string, deadline: number) => read(actor, id, false, deadline),
     configuration: (actor: Actor, id: string, deadline: number) => read(actor, id, true, deadline),
+    async collectionBasis(actor: Actor, id: string, deadline: number): Promise<ZoneCollectionBasis> {
+      const row = await publicRow(actor, id, deadline);
+      return {
+        mounts: row.mounts!.filter((_, index) => !zoneWithheld(row, `/mounts/${index}`)),
+        revision: row.revision,
+        lifecycleRevision: row.lifecycleRevision,
+        visibility: row.visibility,
+        ownerId: row.ownerId,
+      };
+    },
     list,
     page,
   };
