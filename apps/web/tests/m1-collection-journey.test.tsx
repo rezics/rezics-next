@@ -127,12 +127,7 @@ test('native public discovery leads to ordered/mixed and grid reading, with exac
       expect(cursor).toBe('opaque+/=');
       expect(result.status).toBe('ready');
       const discovery = renderToStaticMarkup(
-        <PublicCollectionDiscoveryPage
-          locale={locale}
-          state={result}
-          onRetry={() => {}}
-          onSelect={() => {}}
-        />,
+        <PublicCollectionDiscoveryPage locale={locale} state={result} onRetry={() => {}} onSelect={() => {}} />,
       );
       expect(discovery).toContain(`href="/${locale}/collections/${card.id}"`);
       expect(discovery).toContain('native-next%2B%2F%3D');

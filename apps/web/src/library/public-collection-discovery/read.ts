@@ -86,8 +86,12 @@ const inputSchema = v.object({
     v.check((value) => locales.some((locale) => locale === value)),
   ),
   presentationKind: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
-  curator: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/))),
-  subject: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/))),
+  curator: v.optional(
+    v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)),
+  ),
+  subject: v.optional(
+    v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)),
+  ),
   order: v.optional(v.picklist(['recent', 'popular'])),
   cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4864))),
 });

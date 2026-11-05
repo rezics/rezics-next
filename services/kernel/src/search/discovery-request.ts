@@ -61,8 +61,7 @@ function collectionDirectorySelection(value: unknown): CollectionDirectorySelect
     )
       return invalid(`/collectionDirectory/${field}`);
   }
-  if (selection.order !== 'recent' && selection.order !== 'popular')
-    return invalid('/collectionDirectory/order');
+  if (selection.order !== 'recent' && selection.order !== 'popular') return invalid('/collectionDirectory/order');
   return {
     ...(selection.presentationKind === undefined ? {} : { presentationKind: selection.presentationKind as string }),
     ...(selection.curator === undefined ? {} : { curator: selection.curator as string }),
@@ -155,8 +154,12 @@ export function admitDiscoveryRequest(
     request.collectionDirectory === undefined ? undefined : collectionDirectorySelection(request.collectionDirectory);
   if (
     collectionDirectory &&
-    (text !== undefined || request.sort !== undefined || request.spaceId !== undefined ||
-      request.kindPage !== undefined || request.kindCountLeaf !== undefined || !onlyCollectionKind(filter))
+    (text !== undefined ||
+      request.sort !== undefined ||
+      request.spaceId !== undefined ||
+      request.kindPage !== undefined ||
+      request.kindCountLeaf !== undefined ||
+      !onlyCollectionKind(filter))
   )
     unsupported('/collectionDirectory');
   const sort = request.sort ?? (text ? 'relevance' : 'name');

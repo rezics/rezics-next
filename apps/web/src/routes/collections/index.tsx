@@ -92,7 +92,7 @@ export const Route = createFileRoute('/collections/')({
       ? { status: 'restart' }
       : invalidSelection
         ? { status: 'invalid-selection' }
-      : (query.data ?? { status: 'loading' });
+        : (query.data ?? { status: 'loading' });
     const { pathname, search, hash } = router.history.location;
     const href = (coordinate: Coordinate) => collectionWindowHref(pathname, search, hash, coordinate);
     const revision = visit.revision;

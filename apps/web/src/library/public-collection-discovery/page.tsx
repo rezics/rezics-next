@@ -200,13 +200,13 @@ export function PublicCollectionDiscoveryPage({
                 ? m.collection_discovery_preparing({}, options)
                 : state.status === 'restart'
                   ? m.collection_discovery_restart_required({}, options)
-                : state.status === 'invalid-selection'
-                  ? m.collection_discovery_invalid_selection({}, options)
-                  : state.status === 'denied'
-                    ? continuation
-                      ? m.collection_discovery_continuation_refused({}, options)
-                      : m.collection_discovery_denied({}, options)
-                    : m.collection_discovery_unavailable({}, options)}
+                  : state.status === 'invalid-selection'
+                    ? m.collection_discovery_invalid_selection({}, options)
+                    : state.status === 'denied'
+                      ? continuation
+                        ? m.collection_discovery_continuation_refused({}, options)
+                        : m.collection_discovery_denied({}, options)
+                      : m.collection_discovery_unavailable({}, options)}
           </p>
           {(state.status === 'preparing' ||
             state.status === 'not-ready' ||

@@ -3,10 +3,7 @@ import { publicRead } from '../../kernel/query';
 import { readPublicCollectionDiscovery } from './read';
 import type { PublicCollectionDirectoryAddress } from './address';
 
-export function publicCollectionDiscoveryQueryOptions(
-  locale: string,
-  address: PublicCollectionDirectoryAddress = {},
-) {
+export function publicCollectionDiscoveryQueryOptions(locale: string, address: PublicCollectionDirectoryAddress = {}) {
   return queryOptions({
     ...publicRead,
     gcTime: 60_000,
