@@ -230,6 +230,16 @@ work context, classification return, and later relation commands.
 - Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
 - Growth check: hold one Character type, one optional work, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Character create fixture.
 
+### Correct an existing Character from the selected reading
+
+Decision: carry the selected Subject Context and optional Realm through the Character correction address and current native Subject read. The visit is read-only unless it is a fresh Global address; opening that Global visit keeps the optional Work and classification handoff while retiring local evidence and focus intent. Work remains an independent Global read. Creation and Work-credit authority stay on their existing paths.
+
+The existing Subject GET accepts its native `context` query. The reader admits a selected result only when its returned Subject id and Context match the address, its Type is Character, and the definition bundle matches the released Subject definition. A missing or mismatched selected reading is shown as unsupported or unavailable; it is never displayed as Global under a selected Context. Existing correction and candidate operations stay Global-only.
+
+One profile load reads one active Definition pointer, one optional Character Subject, one optional independent Work Subject, and the selected released Definition (reusing the active bundle when its digest matches); an optional Work descriptor is one existing bounded descriptor read. There is no per-assertion request or page refill. The native Subject response carries the admitted assertions and their qualifier and reference groups within its existing response bound. A receiving exact-evidence visit must use holder, property, and statement identity from that current response, then reread the same Subject Context before restoring focus.
+
+The mounted current Character visit and exact evidence return are still required. Public Character association reads, their windows, disclosure gates, and native growth acceptance remain with the Subject pages owner.
+
 Scalar corrections reuse the multi-field workspace, with unchanged fields excluded and independent per-field
 results. Classification targets use the existing subject picker and the same statement, qualifier, grouped-reference,
 validation and sealed-command helpers. Character corrections review the exact changed classification set before
