@@ -11,6 +11,7 @@ import settings from './realm-media-settings.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
 import { RealmPresentationImageSchema } from './realm-media-schema.ts';
 import type { RealmPresentationImage } from './realm-media-schema.ts';
+import type { RealmPresentationOptional } from './realm-media-schema.ts';
 export { RealmPresentationImageSchema } from './realm-media-schema.ts';
 export type { RealmPresentationImage, RealmPresentationOptional } from './realm-media-schema.ts';
 const imageValidator = Compile(RealmPresentationImageSchema);
