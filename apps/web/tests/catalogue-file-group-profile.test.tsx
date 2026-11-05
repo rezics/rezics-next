@@ -9,7 +9,7 @@ import {
   rawIdentifier,
 } from '../src/features/catalogue/catalogue-file-profile/model';
 import { CatalogueFileProfileEntry } from '../src/features/catalogue/catalogue-file-profile/entry';
-import { CatalogueFileProfileContextUnavailable } from '../src/features/catalogue/catalogue-file-profile/session';
+import { CatalogueFileProfileContextUnavailable } from '../src/features/catalogue/catalogue-file-profile/context-unavailable';
 import {
   admittedCatalogueFileSelection,
   catalogueFileCorrectionOriginExpired,
