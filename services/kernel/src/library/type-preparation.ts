@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { PoolClient } from 'pg';
@@ -387,7 +388,7 @@ export function createNativeTypePreparationPorts(
         await writeHeader.run(tx, {
           ...locator(actor.accountId, preparationId),
           binding_digest: bindingDigest,
-          binding,
+          binding: jsonParameter(binding),
           origin: originBinding,
           principal_namespace: namespace,
           reservation_id: header.reservationId,
@@ -397,8 +398,8 @@ export function createNativeTypePreparationPorts(
           receipt,
           commitment,
           time: at,
-          source_identity: source.identity,
-          origin_identity: origin.identity,
+          source_identity: jsonParameter(source.identity),
+          origin_identity: jsonParameter(origin.identity),
         });
         await writeSlot.run(tx, { ...locator(actor.accountId, preparationId), binding_digest: bindingDigest });
         const p = await checkpoint(tx, header, resolved.done ? resolved.typeId : null, 0n);

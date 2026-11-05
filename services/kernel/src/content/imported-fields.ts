@@ -1,3 +1,5 @@
+import { Type } from 'typebox';
+import { jsonParameter } from '../sql/json.ts';
 import type { PoolClient } from 'pg';
 import { BatchReferenceSchema, SourceSchema } from '@rezics/definitions/bulk';
 import { Value } from 'typebox/value';
@@ -33,6 +35,17 @@ export type ImportedFieldView = ImportedFieldResult &
 export type StoredImportedField = ImportedFieldView;
 
 const controls = /[\u0000-\u001f\u007f-\u009f]/u;
+const ImportedSourceSchema = Type.Intersect([
+  SourceSchema,
+  Type.Object({ references: Type.Array(BatchReferenceSchema) }),
+]);
+
+const ImportedRightsSchema = Type.Object({
+  license: Type.String(),
+  obligations: Type.Array(Type.String()),
+  attribution: Type.String(),
+});
+
 function text(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= maximum && !controls.test(value);
 }
@@ -141,8 +154,8 @@ export async function appendImportedField(
     revision: input.revision,
     body: Buffer.from(document.canonicalBytes),
     body_sha256: Buffer.from(document.sha256, 'hex'),
-    source: input.source,
-    rights: input.rights,
+    source: jsonParameter(input.source),
+    rights: jsonParameter(input.rights),
     language: input.language,
   });
   return { id, digest: document.sha256 };
@@ -179,8 +192,8 @@ export async function readImportedField(
     revision: row.revision,
     body: row.body === null ? null : Buffer.from(row.body),
     availability: row.availability as ImportedFieldView['availability'],
-    source: row.source as ImportedSource,
-    rights: row.rights as Rights,
+    source: Value.Decode(ImportedSourceSchema, row.source),
+    rights: Value.Decode(ImportedRightsSchema, row.rights),
     language: row.language,
   };
 }
@@ -206,8 +219,8 @@ export async function readImportedFieldBounded(
     body: row.body === null ? null : Buffer.from(row.body),
     bodyTooLarge: row.bodyTooLarge ?? false,
     availability: row.availability as ImportedFieldView['availability'],
-    source: row.source as ImportedSource,
-    rights: row.rights as Rights,
+    source: Value.Decode(ImportedSourceSchema, row.source),
+    rights: Value.Decode(ImportedRightsSchema, row.rights),
     language: row.language,
   };
 }

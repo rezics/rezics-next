@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { collectSemanticRecordFacts } from './record-source-set.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { CommandTransaction } from '../command/command.ts';
@@ -170,7 +171,7 @@ export async function hiddenCandidateKeys(
 ): Promise<Set<string>> {
   if (entries.length === 0) return new Set();
   const hidden = (await readHiddenCandidates.run(tx, {
-    candidates: entries,
+    candidates: jsonParameter(entries),
     ...(await statementAudience(tx)),
   })) as { subject_id: string; candidate_id: string }[];
   return new Set(hidden.map((row) => `${row.subject_id}\n${row.candidate_id}`));
@@ -356,7 +357,7 @@ export async function expandSlot(
       slot_id: slot,
       property,
       rank: row.rank,
-      statement: row.statement,
+      statement: jsonParameter(row.statement),
       release: row.release,
       revision: row.revision,
       view_order: row.view_order,

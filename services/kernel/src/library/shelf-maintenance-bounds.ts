@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 /** Library-owned declarations. A declaration prices dispatch; it is never run authority. */
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { Pool, PoolClient, QueryResult } from 'pg';
@@ -560,9 +561,9 @@ export function shelfMaintenanceCommandPlan(
   ];
   const fenceStatements = receipt ? [commandFence, commandNoEffect] : [commandNoEffect];
   const sqlBytes =
-    Buffer.byteLength(commandTime.sql) +
-    fenceStatements.reduce((n, query) => n + Buffer.byteLength(query.sql), 0) +
-    (receipt ? Buffer.byteLength(commandReceipt.sql) : 0);
+    statementBytes(commandTime) +
+    fenceStatements.reduce((n, query) => n + statementBytes(query), 0) +
+    (receipt ? statementBytes(commandReceipt) : 0);
   const receiptBinds = receipt ? [options.partition, principal!.kind, principal!.id, receipt.kind, candidates] : [];
   const fenceBinds = receipt
     ? [
@@ -647,7 +648,7 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
         emptySeeks: 2,
         statements: 1,
         bytes:
-          Buffer.byteLength(sourceSize.sql) +
+          statementBytes(sourceSize) +
           size(sourceSize.params.map((key) => args[key as keyof typeof args])) +
           row({ partition_bytes: I, type_bytes: I }),
       }),
@@ -668,7 +669,7 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
       emptySeeks: full ? 6 : 4,
       statements: statements.length,
       bytes:
-        statements.reduce((n, query) => n + Buffer.byteLength(query.sql), 0) +
+        statements.reduce((n, query) => n + statementBytes(query), 0) +
         projectionBytes +
         size([args.partition_no]) +
         size([route, subjectId]) +

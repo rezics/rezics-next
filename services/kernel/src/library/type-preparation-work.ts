@@ -1,3 +1,9 @@
+import { Value } from 'typebox/value';
+import {
+  TypePreparationBindingSchema,
+  TypePreparationOriginSchema,
+  TypePreparationIdentitySchema,
+} from './type-preparation-contract.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { routeOf } from '../route/route.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -99,10 +105,10 @@ export async function registerTypePreparationWork(context: WorkContext) {
       for (const row of rows) {
         const evidence: TypePreparationEvidence = {
           preparationId: row.preparationId,
-          binding: row.binding as TypePreparationEvidence['binding'],
-          origin: row.origin as TypePreparationEvidence['origin'],
-          sourceIdentity: row.sourceIdentity as TypePreparationEvidence['sourceIdentity'],
-          originIdentity: row.originIdentity as TypePreparationEvidence['originIdentity'],
+          binding: Value.Decode(TypePreparationBindingSchema, row.binding),
+          origin: Value.Decode(TypePreparationOriginSchema, row.origin),
+          sourceIdentity: Value.Decode(TypePreparationIdentitySchema, row.sourceIdentity),
+          originIdentity: Value.Decode(TypePreparationIdentitySchema, row.originIdentity),
           reservationId: row.reservationId,
         };
         const chunk = Number(row.chunk),

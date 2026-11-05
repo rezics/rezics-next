@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { CatalogueArtifactError } from '@rezics/definitions';
 import nativeWithdrawalAck from './definition-catalogue-withdrawal-ack.sql';
 import nativeactivationCAS from './definition-catalogue-activation-cas.sql';
@@ -727,7 +728,7 @@ export function catalogueOperationCost(
   });
   return Object.freeze({
     ...operation.bound,
-    bytes: operation.bound.bytes + Buffer.byteLength(operation.sql) + inputBytes,
+    bytes: operation.bound.bytes + statementBytes(operation) + inputBytes,
   });
 }
 /** Additive package only. Core owns framework/auth/outbox/bootstrap.
@@ -886,7 +887,7 @@ export function catalogueLedgerCost(
   const maxima: Readonly<Record<string, number>> = operation.parameters;
   if (Object.keys(params).length !== Object.keys(maxima).length || Object.keys(params).some((key) => !(key in maxima)))
     throw new TypeError('Unknown catalogue ledger parameters');
-  let bytes = Buffer.byteLength(operation.sql);
+  let bytes = statementBytes(operation);
   for (const [key, max] of Object.entries(maxima)) {
     const length = catalogueParameterBytes(params[key]);
     if (length > max) throw new TypeError(`Catalogue ${id}.${key} exceeds its representation bound`);

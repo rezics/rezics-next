@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
@@ -344,7 +345,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
     witnesses: declared.witnessKeys,
     emptySeeks: declared.emptySeeks,
     // Access holds binds/projection; transport adds the literal SQL surface.
-    bytes: declared.bytes - Buffer.byteLength(collectionRead.sql),
+    bytes: declared.bytes - statementBytes(collectionRead),
   });
   return createResourcePublicEligibility({
     work: {

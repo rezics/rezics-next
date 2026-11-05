@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { Json } from 'reylo';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { subjectIndexName } from './indices.ts';
 import { subjectConsumer } from './consumer-name.ts';
@@ -110,8 +111,8 @@ function guard(value: CoverageGuard | HomeGuard, perHome = false): HomeGuard {
     revision: hasHome ? codec.bigint(v.revision) : 0n,
   };
 }
-function json(value: unknown): Record<string, unknown> | null {
-  return value === null ? null : (JSON.parse(codec.encode(value)) as Record<string, unknown>);
+function json(value: unknown): Json {
+  return value === null ? null : JSON.parse(codec.encode(value));
 }
 
 /** Current durable state only; every CAS holds its lifecycle lock until the transaction commits. */

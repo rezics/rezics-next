@@ -1,3 +1,5 @@
+import { jsonParameter } from '../sql/json.ts';
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
@@ -267,7 +269,7 @@ export function copyStatementPlan<Client, Input extends object, Result>(
   );
   const bound = sumBounds(
     completeWork(shape),
-    bytes(Buffer.byteLength(query.sql)),
+    bytes(statementBytes(query)),
     bytes(Buffer.byteLength(JSON.stringify(operands))),
     resultEnvelope,
   );
@@ -967,8 +969,8 @@ export function copyMutationOperationPlan(
       acquired_on: input.acquiredOn ?? null,
       disposed_on: input.disposedOn ?? null,
       note: input.note ?? null,
-      media_condition: input.mediaCondition ?? null,
-      packaging_condition: input.packagingCondition ?? null,
+      media_condition: jsonParameter(input.mediaCondition ?? null),
+      packaging_condition: jsonParameter(input.packagingCondition ?? null),
       kind: input.kind ?? ID64,
       library_profile_pin: PIN,
       transaction_id: UUID,
@@ -992,8 +994,8 @@ export function copyMutationOperationPlan(
       acquired_on: input.acquiredOn ?? '\0'.repeat(64),
       disposed_on: input.disposedOn ?? '\0'.repeat(64),
       note: input.note ?? '\0'.repeat(1000),
-      media_condition: input.mediaCondition ?? CONDITION,
-      packaging_condition: input.packagingCondition ?? CONDITION,
+      media_condition: jsonParameter(input.mediaCondition ?? CONDITION),
+      packaging_condition: jsonParameter(input.packagingCondition ?? CONDITION),
       library_profile_pin: PIN,
       transaction_id: UUID,
       time: COPY_TIME,

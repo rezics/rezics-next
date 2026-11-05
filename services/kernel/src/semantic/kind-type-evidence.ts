@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 /** Private native Kind evidence. References are locators, never read authority. */
 import type { Pool, QueryResultRow } from 'pg';
 import type { Access } from '../request/access.ts';
@@ -522,7 +523,7 @@ async function bodyQuery<R extends QueryResultRow>(
     invocation.current();
     if (result.rows.length > 1) throw new ProblemError('dependency_unavailable');
     reservation.settle({
-      bytes: Buffer.byteLength(statement.sql) + bytes(values) + bytes(result.rows),
+      bytes: statementBytes(statement) + bytes(values) + bytes(result.rows),
       emptySeeks: result.rows.length ? 0 : 1,
     });
     return result.rows;

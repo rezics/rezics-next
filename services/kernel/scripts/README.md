@@ -41,3 +41,24 @@ Cache-aware admission (`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`
 - Touches: one phase-file append per start/end, one optional cgroup `memory.stat` and `io.pressure` read, one `git rev-parse`.
 - Bound: constant in the number of Kernel phases (six outer pairs plus at most five nested compiler pairs).
 - Growth check: `test/scripts/command-phases.test.ts` pins pairing, nested compiler order, failed-`tsc` pairing, observation keys, one-run volume/slice args and a single throwaway database for compiler work.
+
+## Reylo native engine
+
+Use Reylo 0.7.0 with its optional platform engine installed; the removed per-database engine packages are unnecessary.
+The lockfile and Reylo's native engine launcher participate in SQL-analysis cache identity.
+
+Decision: SQL-derived work bounds include sqlcommenter bytes even though `.sql` omits the comment. Query modules use
+encoded source metadata; detached SQL declarations reserve a 512-byte comment envelope. Raw `.sql` dispatch may
+therefore consume less than its conservative declaration. Keep inferred cardinalities and nullability at call sites.
+The statement-byte regression test pins the envelope against all Kernel SQL paths and the actual Reylo transport.
+
+Compatibility follows the [0.7.0 release notes](https://github.com/colinhacks/reylo/releases/tag/v0.7.0).
+Decision: use one focused Kernel regression file for SQL transport byte bounds and the migrated server import graph;
+include a PostgreSQL round trip for JSON wire normalization and parameter subscripts; reuse workspace typechecks for inferred result contracts. Run it with
+`bun run --cwd services/kernel check test/scripts/reylo-compatibility.test.ts`.
+
+Decision: materialize JSON wire values at SQL parameter boundaries rather than asserting domain records are Reylo
+`Json`. Decode opaque JSON database responses with their owner shapes, retaining existing semantic checks. Readonly
+domain values and undefined object fields keep their JSON serialization semantics. These codecs stay at database I/O.
+The command fences normalize JSON null receipt/basis parameters to SQL NULL, preserving absence rather than trying
+to insert metadata without a principal. The compatibility regression covers both event and no-effect fences.

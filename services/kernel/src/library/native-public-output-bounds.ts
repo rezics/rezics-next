@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 /** Immutable Library plans for the activated public Collection output original command.
  * One closed native descriptor serves composition and adapter execution. Values describe work only;
  * native SQL, evidence, custody and dispatch stay Library-owned. `engineRequests` is zero because
@@ -69,7 +70,7 @@ const hex = 'f'.repeat(64);
 const decimal = '9'.repeat(20);
 const text = String.fromCharCode(1);
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
-const sqlBytes = (sql: string) => Buffer.byteLength(sql);
+const sqlBytes = statementBytes;
 const placeholders = (sql: string) => {
   let count = 0;
   for (const match of sql.matchAll(/\$(\d+)/g)) count = Math.max(count, Number(match[1]));

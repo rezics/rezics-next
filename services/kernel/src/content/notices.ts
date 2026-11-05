@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import type { Pool, PoolClient } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -131,7 +132,7 @@ export async function writeNotices(client: QueryClient, notices: readonly Notice
     written += (
       await writeNoticeRows.run(client, {
         partition,
-        notices: rows,
+        notices: jsonParameter(rows),
       })
     ).length;
   }

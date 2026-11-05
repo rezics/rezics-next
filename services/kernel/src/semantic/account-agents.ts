@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { recordSemanticProducerRole } from './erasure-producer.ts';
 import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';
@@ -155,7 +156,7 @@ async function syncAgentLabel(
     revision: row.revision + 1,
     transaction_id: transactionId,
     source: null,
-    labels: facts,
+    labels: jsonParameter(facts),
   });
   const subject = resolveItem(
     row.id,

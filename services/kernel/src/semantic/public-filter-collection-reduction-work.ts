@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { BOUND_AXES, declareBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import ownerRead from './public-filter-collection-reduction-owner.sql';
@@ -100,7 +101,7 @@ function valuesFor(query: Query, input: Readonly<Record<string, unknown>>): read
 
 function bound(statement: Statement, input: Readonly<Record<string, unknown>>): Bound {
   const values = valuesFor(statement.query, input);
-  const request = Buffer.byteLength(statement.query.sql) + Buffer.byteLength(JSON.stringify(values));
+  const request = statementBytes(statement.query) + Buffer.byteLength(JSON.stringify(values));
   const result = Buffer.byteLength(JSON.stringify([statement.projection]));
   return declareBound({ ...zero(), ...statement.work, statements: 1, bytes: request + result });
 }

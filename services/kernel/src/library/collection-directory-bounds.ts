@@ -1,3 +1,4 @@
+import { statementBytes } from '../sql/statement-bytes.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
@@ -77,7 +78,7 @@ function statement<Input extends object, Output>(
       // These execution closures dispatch exactly one native SQL statement.
       engineRequests: 0,
     }),
-    bytes(Buffer.byteLength(query.sql) + jsonBytes(original) + 2),
+    bytes(statementBytes(query) + jsonBytes(original) + 2),
     repeatBound(bytes(projectionBytes + 1), projectedRows),
   );
   return Object.freeze({ total, run: (client: Client) => query.run(client, original) });
