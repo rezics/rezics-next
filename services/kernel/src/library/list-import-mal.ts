@@ -1347,7 +1347,18 @@ export function createMalImport(deps: Dependencies) {
       }
       if (selected.fields.includes('score')) {
         const scoreReview = r.score;
-        if (!scoreReview) {
+        if (intent.score?.outcome && scoreReview) {
+          outcome.score = structuredClone(intent.score.outcome);
+          const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
+          if (outcome.score.status === 'applied') {
+            outcome.score.vote = current
+              ? { units: current.units, revision: current.revision, at: current.changedAt } : null;
+            outcome.applied.push('score');
+            outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
+            outcome.status = 'applied';
+          } else if (!outcome.applied.length) outcome.status = outcome.score.status;
+          outcome.reason = outcome.score.reason;
+        } else if (!scoreReview) {
           outcome.score = {
             action: null,
             status: 'unsupported',
@@ -1436,7 +1447,13 @@ export function createMalImport(deps: Dependencies) {
             }
           }
         }
-        if (intent.score) intent.score.outcome = outcome.score;
+        if (intent.score && !intent.score.outcome && outcome.score) {
+          const scoreOutcome = outcome.score;
+          await mutate(actor, id, `${intent.score.key}:outcome`, 'outcome', scoreOutcome, (doc) => {
+            doc.intents[selected.row]!.score!.outcome ??= scoreOutcome;
+          });
+          intent.score.outcome = scoreOutcome;
+        }
       }
       if (selected.fields.includes('tags') && review.labels && !review.skip) {
         const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
