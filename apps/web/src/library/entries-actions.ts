@@ -122,7 +122,10 @@ function validateRemove(input: unknown): LibraryRemoveInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid library entry');
   const identity = readIdentity(input as Record<string, unknown>);
   if (!identity) throw new Error('Invalid library entry');
-  return identity;
+  const credential = (input as Record<string, unknown>).credential;
+  if (credential !== undefined && (typeof credential !== 'string' || !/^[A-Za-z0-9_-]{1,3200}$/.test(credential)))
+    throw new Error('Invalid library entry');
+  return { ...identity, ...(credential ? { credential: credential as string } : {}) };
 }
 
 export const readPersonalLibrary = createServerFn({ method: 'GET' })

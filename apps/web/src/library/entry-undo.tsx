@@ -4,7 +4,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
-import type { LibraryRestoreReceipt, LibraryRestoreResult } from './entries-read';
+import type { LibraryRemoveInput, LibraryRestoreReceipt, LibraryRestoreResult } from './entries-read';
 import { LibraryTitle } from './title';
 
 export type EntryFormContext = { locale: string; csrfToken?: string | null; returnTo?: string };
@@ -69,12 +69,16 @@ export function EntryRemoveForm({
   revision,
   incarnationId,
   idempotencyKey,
+  credential,
+  disabled = false,
   ...context
 }: EntryFormContext & {
   subjectId: string;
   revision: number;
   incarnationId?: string | null;
   idempotencyKey: string;
+  credential?: string | undefined;
+  disabled?: boolean;
 }) {
   const client = useContext(QueryClientContext);
   const session = client?.getQueryData<{ csrfToken: string | null }>(['session']);
@@ -87,7 +91,8 @@ export function EntryRemoveForm({
         <input type="hidden" name="revision" value={revision} />
         {typeof incarnationId === 'string' ? <input type="hidden" name="incarnationId" value={incarnationId} /> : null}
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-        <button className={entryActionClassName} type="submit">
+        {credential ? <input type="hidden" name="credential" value={credential} /> : null}
+        <button className={entryActionClassName} type="submit" disabled={disabled}>
           {m.library_remove_from_library()}
         </button>
       </form>
@@ -143,6 +148,7 @@ export function EntryFormPage({
   returnTo,
   removed = false,
   conflict = false,
+  retryRemove,
 }: {
   locale: string;
   undo?: LibraryRestoreReceipt | undefined;
@@ -151,6 +157,7 @@ export function EntryFormPage({
   returnTo: string;
   removed?: boolean;
   conflict?: boolean;
+  retryRemove?: LibraryRemoveInput | undefined;
 }) {
   return (
     <main className="mx-auto min-w-0 max-w-2xl space-y-6 p-6 text-foreground [overflow-wrap:anywhere]">
@@ -163,6 +170,9 @@ export function EntryFormPage({
           csrfToken={csrfToken}
           returnTo={returnTo}
         />
+      ) : null}
+      {retryRemove ? (
+        <EntryRemoveForm {...retryRemove} locale={locale} csrfToken={csrfToken} returnTo={returnTo} />
       ) : null}
       {removed && !undo ? <p role="status">{m.library_removed()}</p> : null}
       {conflict ? <p role="status">{m.library_conflict()}</p> : null}
