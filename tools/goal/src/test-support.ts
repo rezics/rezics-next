@@ -528,6 +528,9 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
           outcomes.push(outcome);
           if (deliver) job.onGateOutcome(outcome);
         },
+      onDevLandingTranspileHandoff(handoff) {
+        job.onDevLandingTranspileHandoff(handoff);
+      },
       },
       ...(runGate ? { runGate } : {}),
       runLaunchSmoke:

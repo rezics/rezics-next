@@ -50,6 +50,9 @@ function train(h: ReturnType<typeof integrationHarness>): MergeTrain {
         h.outcomes.push(outcome);
         h.job.onGateOutcome(outcome);
       },
+      onDevLandingTranspileHandoff(handoff) {
+        h.job.onDevLandingTranspileHandoff(handoff);
+      },
     },
     trainResolver: new TrainResolver(h.store, h.tasks),
   });
