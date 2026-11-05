@@ -239,6 +239,9 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
 
+Kernel setup and launch bind the selected loopback Auth issuer, audience and JWKS URL together with the selected API
+port. An isolated stack must not retain the default stack's issuer identity from a generated `.env`.
+
 ## Cross-media dump cache
 
 `seed:dev` fetches the pinned Bangumi Archive release and a VNDB dump, verifies them, extracts source tables and seeds
