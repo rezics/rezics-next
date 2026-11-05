@@ -49,19 +49,21 @@ plans without the complete guard remain unavailable and require a deliberate new
 reinterpreted or migrated.
 
 `score.native.admission = {status: "reviewed", reason: "native_review_observed"}` means complete native operands were
-observed, not that an effect was admitted. A redirect between Library target observation and native review
-returns identity-observation unavailable instead of silently adopting the new canonical target. Confirmed set/clear calls `putVoteOutcome(actor,
-{questionId, targetId, units, guard}, originalKey)`. Current native authorization and exposure precede receipt replay;
-fresh native execution owns all conditional fences. Typed native stale and unavailable reasons pass through the score
-outcome. A selected unperformed score makes the row stale or unsupported even when independent state was applied.
-Unexpected delivery errors propagate with the frozen choice and original key unsettled; review cannot replace it.
-Every new score attempt clears an earlier acknowledgment before delivery, so retry uncertainty cannot be overwritten
-by a refreshed review. Preserve makes no vote attempt. Native zero remains a selected unit.
+observed, not that an effect was admitted. If native review redirects the Library-selected Subject, retain no vote
+guard for that selection and return identity-observation unavailable. The owner must explicitly select the canonical
+Subject and review it again before applying a score. Confirmed set/clear prepares the normalized command once with
+the exact source, match, review, question and native guard operands. Current native authorization and exposure precede
+receipt replay; fresh native execution admits the current source row and checks all conditional fences. Typed native
+stale and unavailable reasons pass through the score outcome. A selected unperformed score makes the row stale or
+unsupported even when independent state was applied. Unexpected delivery errors propagate with the frozen choice,
+actor and key unsettled; review cannot replace them. Every new score attempt clears an earlier acknowledgment before
+an exact retry. Preserve makes no vote attempt. Native zero remains a selected unit.
 
-The installed base producer still returns `atomic_guard_unavailable` for guarded effects. This consumer now calls that
-producer rather than declaring every review unavailable. Supported guarded commits and their positive whole-list
-acceptance remain Content delivery and integration work; unavailable-only execution is not a completed score journey.
-Current readback uses the existing owner Entry and native Rating readers, never the command receipt or retained source.
+After the seven-day source deadline, a started score with no acknowledgment retains only its bounded native receipt
+for the existing 24-hour recovery window. Receipt reconciliation is read-only: no receipt admits no new effect, and a
+historical receipt is followed by a fresh current Rating readback. Source evidence and reviewed operands are not
+restored. Current readback uses the existing owner Entry and native Rating readers, never the command receipt or
+retained source.
 The mounted request contract is unchanged; Web must receive the additive reviewed admission and native stale/unavailable
 outcomes through its normal owner handoff. Source expiry, cancellation and evidence removal retain their existing bounds;
 a removed upload does not undo native effects.
