@@ -244,9 +244,16 @@ export function createPersonalLabelCommands(config: {
       key,
       async (tx, command) => {
         const route = sameAccountRoute(owner.accountId, labelId);
-        const operation = labelRenamePlan({ route, accountId: owner.accountId, labelId, name: parsed.normalized,
-          revision: expected, transactionId: command.transactionId,
-          time: authoritativeTimeValue(command.time), includeRead: true });
+        const operation = labelRenamePlan({
+          route,
+          accountId: owner.accountId,
+          labelId,
+          name: parsed.normalized,
+          revision: expected,
+          transactionId: command.transactionId,
+          time: authoritativeTimeValue(command.time),
+          includeRead: true,
+        });
         return executeLabelOperation(operation, async () => {
           const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId);
           if (!current) throw new LibraryNotFoundError();
@@ -286,8 +293,16 @@ export function createPersonalLabelCommands(config: {
       async (tx, command) => {
         const route = sameAccountRoute(owner.accountId, labelId);
         const time = authoritativeTimeValue(command.time);
-        const operation = labelLifecyclePlan({ route, accountId: owner.accountId, labelId,
-          revision: expected, transactionId: command.transactionId, time, restore, includeRead: true });
+        const operation = labelLifecyclePlan({
+          route,
+          accountId: owner.accountId,
+          labelId,
+          revision: expected,
+          transactionId: command.transactionId,
+          time,
+          restore,
+          includeRead: true,
+        });
         return executeLabelOperation(operation, async () => {
           const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId, true);
           if (!current) throw new LibraryNotFoundError();

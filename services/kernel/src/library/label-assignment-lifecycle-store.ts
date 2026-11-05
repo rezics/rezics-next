@@ -70,11 +70,28 @@ export async function readStoredLabelAssignment(client: Client, input: Tuple): P
   const db = { query: client.query.bind(client) };
   const operands = { ...parameters(input), assignment_id: null, time: null };
   const plan = labelSqlPlan('assignment.read', read.sql, operands, {
-    candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1,
-    output: { route: 65_535, accountId: 'f'.repeat(36), subjectId: 'f'.repeat(36), labelId: 'f'.repeat(36),
-      id: 'f'.repeat(36), revision: 2_147_483_647, slotNo: 31, createdAt: '\u0000'.repeat(64),
-      updatedAt: '\u0000'.repeat(64), deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64),
-      transactionId: 'f'.repeat(36), identityMatches: false, started: false, expired: false }, outputRows: 1,
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 1,
+    output: {
+      route: 65_535,
+      accountId: 'f'.repeat(36),
+      subjectId: 'f'.repeat(36),
+      labelId: 'f'.repeat(36),
+      id: 'f'.repeat(36),
+      revision: 2_147_483_647,
+      slotNo: 31,
+      createdAt: '\u0000'.repeat(64),
+      updatedAt: '\u0000'.repeat(64),
+      deletedAt: '\u0000'.repeat(64),
+      purgeAfter: '\u0000'.repeat(64),
+      transactionId: 'f'.repeat(36),
+      identityMatches: false,
+      started: false,
+      expired: false,
+    },
+    outputRows: 1,
   });
   const row = await executeLabelSql(plan, (input) => read.run(db, input));
   return row ? record(row) : null;
@@ -87,23 +104,48 @@ async function observe(client: Client, input: Expected, context: Context, expect
        WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`;
     const values = [input.route, input.accountId, input.labelId] as const;
     const plan = labelSqlPlan('assignment.parent-revision', sql, values, {
-      candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1,
-      output: { revision: 2_147_483_647 }, outputRows: 1,
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      output: { revision: 2_147_483_647 },
+      outputRows: 1,
     });
-    const parent = await executeLabelSql(plan, (operands) => client.query<{ revision: number }>(plan.sql, [...operands]));
+    const parent = await executeLabelSql(plan, (operands) =>
+      client.query<{ revision: number }>(plan.sql, [...operands]),
+    );
     if (parent.rows[0]?.revision !== expectedLabelRevision) return { row: null, parentChanged: true as const };
   }
   const db = { query: client.query.bind(client) };
   const readInput = { ...parameters(input), assignment_id: input.assignmentId, time: context.time };
   const plan = labelSqlPlan('assignment.observe', read.sql, readInput, {
-    candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1,
-    output: { route: 65_535, accountId: 'f'.repeat(36), subjectId: 'f'.repeat(36), labelId: 'f'.repeat(36),
-      id: 'f'.repeat(36), revision: 2_147_483_647, slotNo: 31, createdAt: '\u0000'.repeat(64),
-      updatedAt: '\u0000'.repeat(64), deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64),
-      transactionId: 'f'.repeat(36), identityMatches: false, started: false, expired: false }, outputRows: 1,
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 1,
+    output: {
+      route: 65_535,
+      accountId: 'f'.repeat(36),
+      subjectId: 'f'.repeat(36),
+      labelId: 'f'.repeat(36),
+      id: 'f'.repeat(36),
+      revision: 2_147_483_647,
+      slotNo: 31,
+      createdAt: '\u0000'.repeat(64),
+      updatedAt: '\u0000'.repeat(64),
+      deletedAt: '\u0000'.repeat(64),
+      purgeAfter: '\u0000'.repeat(64),
+      transactionId: 'f'.repeat(36),
+      identityMatches: false,
+      started: false,
+      expired: false,
+    },
+    outputRows: 1,
   });
-  return executeLabelSql(plan, (operands) => read.run(db, operands))
-    .then((row) => ({ row, parentChanged: false as const }));
+  return executeLabelSql(plan, (operands) => read.run(db, operands)).then((row) => ({
+    row,
+    parentChanged: false as const,
+  }));
 }
 
 async function unassignStoredLabelAssignmentInOperation(
@@ -124,10 +166,16 @@ async function unassignStoredLabelAssignmentInOperation(
        WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`;
     const values = [input.route, input.accountId, expectedTarget.labelId] as const;
     const plan = labelSqlPlan('assignment.target-parent-revision', sql, values, {
-      candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1,
-      output: { revision: 2_147_483_647 }, outputRows: 1,
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      output: { revision: 2_147_483_647 },
+      outputRows: 1,
     });
-    const targetParent = await executeLabelSql(plan, (operands) => client.query<{ revision: number }>(plan.sql, [...operands]));
+    const targetParent = await executeLabelSql(plan, (operands) =>
+      client.query<{ revision: number }>(plan.sql, [...operands]),
+    );
     if (targetParent.rows[0]?.revision !== expectedTarget.labelRevision) return { kind: 'stale' };
     const target = await readStoredLabelAssignment(client, { ...input, labelId: expectedTarget.labelId });
     if (
@@ -147,13 +195,29 @@ async function unassignStoredLabelAssignmentInOperation(
     transaction_id: context.transactionId,
   };
   const unassignPlan = labelSqlPlan('assignment.unassign', unassign.sql, unassignInput, {
-    candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 0,
-    output: { route: 65_535, accountId: 'f'.repeat(36), subjectId: 'f'.repeat(36), labelId: 'f'.repeat(36),
-      id: 'f'.repeat(36), revision: 2_147_483_647, slotNo: 31, createdAt: '\u0000'.repeat(64),
-      updatedAt: '\u0000'.repeat(64), deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64),
-      transactionId: 'f'.repeat(36) }, outputRows: 1,
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 0,
+    output: {
+      route: 65_535,
+      accountId: 'f'.repeat(36),
+      subjectId: 'f'.repeat(36),
+      labelId: 'f'.repeat(36),
+      id: 'f'.repeat(36),
+      revision: 2_147_483_647,
+      slotNo: 31,
+      createdAt: '\u0000'.repeat(64),
+      updatedAt: '\u0000'.repeat(64),
+      deletedAt: '\u0000'.repeat(64),
+      purgeAfter: '\u0000'.repeat(64),
+      transactionId: 'f'.repeat(36),
+    },
+    outputRows: 1,
   });
-  const rows = await executeLabelSql(unassignPlan, (operands) => unassign.run({ query: client.query.bind(client) }, operands));
+  const rows = await executeLabelSql(unassignPlan, (operands) =>
+    unassign.run({ query: client.query.bind(client) }, operands),
+  );
   if (!rows[0]) throw new TypeError('Label assignment unassign lost its guarded observation');
   return { kind: 'applied', assignment: record(rows[0]) };
 }
