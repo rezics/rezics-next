@@ -713,8 +713,8 @@ replace these proofs. Current changes and late writers require native owner repa
 
 Before resolution the result is `PublicFilterBindingFailure`. Once resolved, incomplete repair returns
 `{status: 'pending'; publication: NativePublicFilterPublication; reason: PublicFilterBindingFailure['reason'];
-cost: PublicFilterCost}` so Search can resume the original tuple. This grants no completion.
-The complete branch carries that `publication`, `definition: PublicFilterSourceDefinition`, original
+cost: PublicFilterCost}` so Search resumes that tuple without completion.
+Completion carries `publication`, `definition: PublicFilterSourceDefinition`, original
 `covered: PrivacyReductionStart` and non-null joined `execution`, observed `observation`,
 `terminal: Readonly<{step: string; root: string}>`, `settlement: NativePublicFilterRepairSettlement` and
 `cost: PublicFilterCost`. The all-native-homes observation uses the original execution/start, complete routing
