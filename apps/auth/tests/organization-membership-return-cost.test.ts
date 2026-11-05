@@ -88,6 +88,15 @@ const { membershipProfile, newMembershipCommand, submitMembership, saveMembershi
       expect(await submitMembership(attempt)).toBe(expected);
       expect(readMembershipCommand()).toMatchObject({ unresolved });
     }
+    const refused = newMembershipCommand(accountId!, command.operation);
+    refused.reference = command.reference;
+    saveMembershipCommand(refused);
+    const executionsBeforeChangedReservation = calls.filter(c => c.path.endsWith('/execute')).length;
+    globalThis.fetch = ((input, init) => String(input).endsWith('/member')
+      ? Response.json({ organizationId, memberAccountId, membership: { role: 'member', reservationId: accountId } })
+      : ordinaryFetch(input, init)) as typeof fetch;
+    expect(await submitMembership(refused)).toBe('conflict');
+    expect(calls.filter(c => c.path.endsWith('/execute'))).toHaveLength(executionsBeforeChangedReservation);
     globalThis.fetch = ((input, init) => String(input).endsWith('/approve')
       ? Response.json({ reference: 'x'.repeat(4097), expiresAt: new Date(Date.now() + 60000).toISOString() })
       : ordinaryFetch(input, init)) as typeof fetch;

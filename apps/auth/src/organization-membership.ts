@@ -454,7 +454,7 @@ export async function submitMembership(
   if (!isActive()) return 'unavailable';
   if (!membershipSessionMatches(session, command.accountId)) return 'denied';
   if (command.unresolved && !command.reference) return 'unknown';
-  if (command.unresolved) {
+  if (command.reference) {
     const current = await loadSelectedMembership(command.operation.organizationId, command.operation.memberAccountId);
     if (!isActive()) return 'unavailable';
     if (current.kind !== 'ready')
