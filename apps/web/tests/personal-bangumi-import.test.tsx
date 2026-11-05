@@ -156,10 +156,7 @@ function reviewed(index: number, changes: Partial<BangumiReview> = {}): BangumiR
   };
 }
 
-function scoreReview(
-  selection: BangumiScoreSelection = { action: 'preserve' },
-  index = 0,
-): BangumiScoreReview {
+function scoreReview(selection: BangumiScoreSelection = { action: 'preserve' }, index = 0): BangumiScoreReview {
   return {
     source: {
       state: index === 0 ? 'unrated' : 'score',
@@ -385,7 +382,9 @@ test('preview does not apply, explicit target replacement and exact uncertain re
   });
   await click(m.library_bangumi_save_review());
   expect(reviews[0]).toMatchObject({ ordinal: 0, target: subject });
-  expect(host.textContent).toContain(m.library_bangumi_score_current_set({ units: 0, revision: 3, at: '2026-10-10T12:00:00Z' }));
+  expect(host.textContent).toContain(
+    m.library_bangumi_score_current_set({ units: 0, revision: 3, at: '2026-10-10T12:00:00Z' }),
+  );
   expect(host.textContent).toContain('native_review_observed');
   const replacement = host.querySelector('[data-bangumi-target]') as HTMLInputElement;
   await act(async () => {
@@ -414,7 +413,9 @@ test('preview does not apply, explicit target replacement and exact uncertain re
   });
   await click(m.library_bangumi_continue_confirm());
   expect(host.textContent).toContain(secondSubject);
-  expect(host.textContent).toContain(m.library_bangumi_score_confirm_set({ units: 8, question: questionId, revision: 7 }));
+  expect(host.textContent).toContain(
+    m.library_bangumi_score_confirm_set({ units: 8, question: questionId, revision: 7 }),
+  );
   await clickLabel(m.library_import_source_privacy_confirm());
   await clickLabel(m.library_import_source_timestamps_confirm());
   await click(m.library_bangumi_confirm());
@@ -444,7 +445,11 @@ test('score set and clear require row consent, retry exact choices, and keep poi
     score: { action: 'set', units: 8 },
   });
   expect(reviews[1]).toMatchObject({ target: secondSubject, score: { action: 'clear' } });
-  expect(snap.meta[0]?.scoreReview?.source).toMatchObject({ state: 'unrated', value: 0, scale: { minimum: 1, maximum: 10 } });
+  expect(snap.meta[0]?.scoreReview?.source).toMatchObject({
+    state: 'unrated',
+    value: 0,
+    scale: { minimum: 1, maximum: 10 },
+  });
   expect(snap.meta[0]?.scoreReview?.native.currentVote).toMatchObject({ state: 'set', units: 0 });
 
   journey.openConfirm();
@@ -470,8 +475,20 @@ test('score set and clear require row consent, retry exact choices, and keep poi
   const expected = {
     body: {
       rows: [
-        { ordinal: 0, reviewToken: `${token.slice(0, -1)}2`, state: 'preserve', skip: false, score: { action: 'set', units: 8, consent: true } },
-        { ordinal: 1, reviewToken: `${token.slice(0, -1)}1`, state: 'preserve', skip: false, score: { action: 'clear', consent: true } },
+        {
+          ordinal: 0,
+          reviewToken: `${token.slice(0, -1)}2`,
+          state: 'preserve',
+          skip: false,
+          score: { action: 'set', units: 8, consent: true },
+        },
+        {
+          ordinal: 1,
+          reviewToken: `${token.slice(0, -1)}1`,
+          state: 'preserve',
+          skip: false,
+          score: { action: 'clear', consent: true },
+        },
       ],
     },
   };
@@ -484,7 +501,11 @@ test('score set and clear require row consent, retry exact choices, and keep poi
   snap = journey.snapshot();
   expect(snap.stage).toBe('results');
   expect(snap.outcomes[0]?.status).toBe('applied');
-  expect(snap.outcomes[0]?.score).toMatchObject({ action: 'set', status: 'unavailable', reason: 'conditional_admission_unavailable' });
+  expect(snap.outcomes[0]?.score).toMatchObject({
+    action: 'set',
+    status: 'unavailable',
+    reason: 'conditional_admission_unavailable',
+  });
   expect(snap.outcomes[1]).toMatchObject({ status: 'failed', score: { action: 'clear', status: 'unavailable' } });
   expect(inspections).toHaveLength(0);
   snap = await journey.inspectCurrent(0);
@@ -551,7 +572,10 @@ test('an acknowledged own-vote result is reused while the affected Entry is read
   const inspected = await journey.inspectCurrent(0);
   expect(inspections).toEqual([{ subjectId: subject, questionId: null }]);
   expect(inspected.meta[0]?.entryReadback).toMatchObject({ status: 'present', revision: 9 });
-  expect(inspected.meta[0]?.voteReadback).toMatchObject({ status: 'current', vote: { state: 'set', units: 8, revision: 9 } });
+  expect(inspected.meta[0]?.voteReadback).toMatchObject({
+    status: 'current',
+    vote: { state: 'set', units: 8, revision: 9 },
+  });
   expect(inspected.cost.calls['entry-read']).toBe(1);
   expect(inspected.cost.calls['vote-read']).toBe(0);
 });
@@ -572,7 +596,12 @@ test('expired evidence retires score controls before a replacement upload', asyn
       pages += 1;
       if (pages === 2) return { kind: 'not-found' };
       if (command.uploadId === replacement)
-        return { kind: 'page', page: pageOf([row(0, { evidence: { ...evidence(0), source: { subject_id: 1, subject: { name: 'Replacement' } } } })]) };
+        return {
+          kind: 'page',
+          page: pageOf([
+            row(0, { evidence: { ...evidence(0), source: { subject_id: 1, subject: { name: 'Replacement' } } } }),
+          ]),
+        };
       return base.port.page(command);
     },
   };

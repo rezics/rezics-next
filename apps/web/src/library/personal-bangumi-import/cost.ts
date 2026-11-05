@@ -8,7 +8,15 @@ import {
 } from './contract';
 
 /** Machine-independent work at the Bangumi loader/controller boundary. */
-export type BangumiCallKind = 'preview' | 'page' | 'review' | 'apply' | 'entry-read' | 'vote-read' | 'cancel' | 'delete';
+export type BangumiCallKind =
+  | 'preview'
+  | 'page'
+  | 'review'
+  | 'apply'
+  | 'entry-read'
+  | 'vote-read'
+  | 'cancel'
+  | 'delete';
 
 export type BangumiCostSnapshot = {
   calls: Record<BangumiCallKind, number>;
@@ -51,7 +59,14 @@ export function emptyBangumiCost(): BangumiCostSnapshot {
 export function bangumiCallTotal(cost: BangumiCostSnapshot): number {
   const calls = cost.calls;
   return (
-    calls.preview + calls.page + calls.review + calls.apply + calls['entry-read'] + calls['vote-read'] + calls.cancel + calls.delete
+    calls.preview +
+    calls.page +
+    calls.review +
+    calls.apply +
+    calls['entry-read'] +
+    calls['vote-read'] +
+    calls.cancel +
+    calls.delete
   );
 }
 

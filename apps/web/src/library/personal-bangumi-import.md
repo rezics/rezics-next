@@ -15,17 +15,17 @@ Mounted under `/v1/libraryImports/bangumi` after Commerce dependency `fd3f1482`.
 `KernelClient.libraryImports.bangumi` methods (`$preview`, page GET, `$review`, `$apply`, `$cancel`, DELETE).
 `$review` and `$apply` use the installed score types and methods; Web does not create a client-side native engine.
 
-| Step    | Native                                                                                  | Page                                                                                          |
-| ------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Upload  | `POST :preview` `{ upload }` with quoted Idempotency-Key                                | File stays local until submit; bytes drop after native ownership                              |
-| Preview | `GET :uploadId?after=-1` pages of 10                                                    | Current page only; titles assist display/search, never automatic identity                     |
-| Review  | `POST :uploadId:review` `{ ordinal, target?, score? }`                                   | Target and native score choice are reviewed together; target IDs are explicit                 |
-| Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip, score }] }`, up to 5 | Default score action is `preserve`; set and clear repeat the choice with `consent: true`      |
-| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply                    | Separate typed command; record id is `subject_id`; date-like failed parse is unsupported      |
-| Inspect | `libraryEntries({ subjectId }).get(libraryFullQuery())` and, when supplied,               | One deliberate point read after an acknowledged effect; explicit Refresh can repeat it        |
-|         | `subjects({ id }).ratings({ questionId }).vote.get()`                                     | Current facts stay distinct from apply receipts                                               |
-| Stop    | `POST :uploadId:cancel`                                                                 | Stops new admission; acknowledged effects remain                                              |
-| Discard | `DELETE :uploadId`                                                                      | Clears this upload's evidence and reviews now; Library facts stay                             |
+| Step    | Native                                                                                     | Page                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Upload  | `POST :preview` `{ upload }` with quoted Idempotency-Key                                   | File stays local until submit; bytes drop after native ownership                         |
+| Preview | `GET :uploadId?after=-1` pages of 10                                                       | Current page only; titles assist display/search, never automatic identity                |
+| Review  | `POST :uploadId:review` `{ ordinal, target?, score? }`                                     | Target and native score choice are reviewed together; target IDs are explicit            |
+| Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip, score }] }`, up to 5 | Default score action is `preserve`; set and clear repeat the choice with `consent: true` |
+| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply                       | Separate typed command; record id is `subject_id`; date-like failed parse is unsupported |
+| Inspect | `libraryEntries({ subjectId }).get(libraryFullQuery())` and, when supplied,                | One deliberate point read after an acknowledged effect; explicit Refresh can repeat it   |
+|         | `subjects({ id }).ratings({ questionId }).vote.get()`                                      | Current facts stay distinct from apply receipts                                          |
+| Stop    | `POST :uploadId:cancel`                                                                    | Stops new admission; acknowledged effects remain                                         |
+| Discard | `DELETE :uploadId`                                                                         | Clears this upload's evidence and reviews now; Library facts stay                        |
 
 The envelope is `{ "format": "rezics.bangumi-collection.v1", "collections": [...] }`. It is a REZICS wrapper, not an
 official Bangumi export. Types 1/2/3/4/6 are book/anime/music/game/live action. Collection types 1–5 map to unique

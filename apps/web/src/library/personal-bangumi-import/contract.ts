@@ -63,9 +63,7 @@ export type BangumiEvidence = {
 export type BangumiGuard = NonNullable<KernelBangumiReview['guard']>;
 export type BangumiCurrent = NonNullable<KernelBangumiReview['current']>;
 type KernelScoreAdmission = KernelBangumiScoreReview['native']['admission'];
-export type BangumiScoreAdmission =
-  | KernelScoreAdmission
-  | { status: 'reviewed'; reason: 'native_review_observed' };
+export type BangumiScoreAdmission = KernelScoreAdmission | { status: 'reviewed'; reason: 'native_review_observed' };
 export type BangumiScoreReview = Omit<KernelBangumiScoreReview, 'native'> & {
   native: Omit<KernelBangumiScoreReview['native'], 'admission'> & { admission: BangumiScoreAdmission };
 };

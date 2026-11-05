@@ -49,9 +49,10 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
       const prior = current.snapshot().meta.find((item) => item.ordinal === draft.ordinal);
       const targetChanged = prior?.target !== draft.target;
       current.choose(draft.ordinal, { state: draft.state, skip: draft.skip, target: draft.target });
-      const score = targetChanged || !draft.target
-        ? { action: 'preserve' as const }
-        : scoreSelectionFromDraft(draft.score, prior?.scoreReview, true);
+      const score =
+        targetChanged || !draft.target
+          ? { action: 'preserve' as const }
+          : scoreSelectionFromDraft(draft.score, prior?.scoreReview, true);
       if (!score) return current.snapshot();
       return current.review(draft.ordinal, draft.target, score);
     });

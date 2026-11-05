@@ -625,16 +625,15 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
     if (!live()) return snapshot();
     row.entryReadback = result.entry;
-    row.voteReadback =
-      (suppliedVote
-        ? { status: 'current', vote: { state: 'set', ...suppliedVote } as const }
-        : result.vote) ?? {
-          status: 'unavailable',
-          reason:
-            row.scoreReview?.native.admission.status === 'unavailable'
-              ? row.scoreReview.native.admission.reason
-              : 'question_unavailable',
-        };
+    row.voteReadback = (suppliedVote
+      ? { status: 'current', vote: { state: 'set', ...suppliedVote } as const }
+      : result.vote) ?? {
+      status: 'unavailable',
+      reason:
+        row.scoreReview?.native.admission.status === 'unavailable'
+          ? row.scoreReview.native.admission.reason
+          : 'question_unavailable',
+    };
     retain();
     return snapshot();
   }

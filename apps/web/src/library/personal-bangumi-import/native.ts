@@ -145,7 +145,10 @@ function isCurrent(value: unknown): value is BangumiCurrent {
 function isScoreSource(value: unknown): value is BangumiScoreReview['source'] {
   return (
     record(value) &&
-    (value.state === 'score' || value.state === 'unrated' || value.state === 'absent' || value.state === 'unsupported') &&
+    (value.state === 'score' ||
+      value.state === 'unrated' ||
+      value.state === 'absent' ||
+      value.state === 'unsupported') &&
     record(value.scale) &&
     value.scale.minimum === 1 &&
     value.scale.maximum === 10 &&
@@ -254,13 +257,12 @@ function isOutcome(value: unknown): value is BangumiOutcome {
     !Array.isArray(value.retained)
   )
     return false;
-  const validStatus = (
+  const validStatus =
     value.status === 'applied' ||
     value.status === 'skipped' ||
     value.status === 'stale' ||
     value.status === 'unsupported' ||
-    value.status === 'failed'
-  );
+    value.status === 'failed';
   return validStatus && (!('score' in value) || isScoreOutcome(value.score));
 }
 
@@ -354,10 +356,13 @@ async function readCurrentVote(
   questionId: string,
   authorization: string,
 ): Promise<BangumiVoteReadback> {
-  const result = await client.subjects({ id: subjectId }).ratings({ questionId }).vote.get({
-    headers: { authorization },
-    fetch: { cache: 'no-store', redirect: 'manual' },
-  });
+  const result = await client
+    .subjects({ id: subjectId })
+    .ratings({ questionId })
+    .vote.get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
   if (result.status === 404) return { status: 'current', vote: { state: 'absent' } };
   if (result.error || !record(result.data)) return unavailableReadback(result);
   const vote = result.data;

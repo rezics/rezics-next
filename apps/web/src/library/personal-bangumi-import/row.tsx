@@ -12,12 +12,7 @@ import {
   bangumiTitle,
 } from './meaning';
 import { BangumiTargetSearch } from './target';
-import {
-  BangumiScoreReviewPanel,
-  scoreDraftFrom,
-  scoreSelectionFromDraft,
-  type BangumiScoreDraft,
-} from './score';
+import { BangumiScoreReviewPanel, scoreDraftFrom, scoreSelectionFromDraft, type BangumiScoreDraft } from './score';
 
 export type RowDraft = {
   ordinal: number;

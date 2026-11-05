@@ -17,12 +17,7 @@ export function scoreDraftFrom(review?: BangumiScoreReview | null): BangumiScore
   const current = review?.native.currentVote;
   return {
     action: selection.action,
-    units:
-      selection.action === 'set'
-        ? String(selection.units)
-        : current?.state === 'set'
-          ? String(current.units)
-          : '',
+    units: selection.action === 'set' ? String(selection.units) : current?.state === 'set' ? String(current.units) : '',
   };
 }
 
@@ -37,8 +32,7 @@ export function scoreSelectionFromDraft(
   if (!draft.units.trim()) return null;
   const units = Number(draft.units);
   const { minimum, maximum, step } = review.native.question.scale;
-  if (!Number.isSafeInteger(units) || units < minimum || units > maximum || (units - minimum) % step !== 0)
-    return null;
+  if (!Number.isSafeInteger(units) || units < minimum || units > maximum || (units - minimum) % step !== 0) return null;
   return { action: 'set', units };
 }
 
@@ -233,7 +227,9 @@ export function BangumiScoreConfirmation({
           {m.library_bangumi_score_admission_reviewed({ reason: review.native.admission.reason })}
         </p>
       ) : null}
-      {missingTarget ? <p className="text-sm text-muted-foreground">{m.library_bangumi_score_choose_target()}</p> : null}
+      {missingTarget ? (
+        <p className="text-sm text-muted-foreground">{m.library_bangumi_score_choose_target()}</p>
+      ) : null}
       {missingQuestion ? (
         <p className="text-sm text-muted-foreground">{m.library_bangumi_score_choose_preserve()}</p>
       ) : null}
@@ -260,7 +256,9 @@ export function BangumiScoreOutcomeView({ outcome }: { outcome: BangumiScoreOutc
       <p>
         {m.library_bangumi_score_outcome({ action: scoreAction(outcome.action), status: scoreStatus(outcome.status) })}
       </p>
-      {outcome.reason ? <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{outcome.reason}</p> : null}
+      {outcome.reason ? (
+        <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{outcome.reason}</p>
+      ) : null}
       {outcome.vote ? (
         <p className="text-sm [overflow-wrap:anywhere]">
           {m.library_bangumi_score_receipt_vote({
