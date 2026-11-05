@@ -200,6 +200,16 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     this.#armDeadline();
   }
 
+  restart(): boolean {
+    if (!this.#live()) return false;
+    if (retainsOriginal(this.#phase) || this.#phase === 'applying' || this.#phase === 'cancelling') return false;
+    this.#clearPrivate();
+    this.#evidenceExpired = false;
+    this.#deadline = this.#visitDeadline;
+    this.#armDeadline();
+    return true;
+  }
+
   retire(): void {
     this.#retired = true;
     clearTimeout(this.#timer);
@@ -443,6 +453,10 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     this.#cancelNeedsCheckpoint = false;
     this.#cancelCheckpointed = false;
     return true;
+  }
+
+  get viewer() {
+    return this.#live() ? this.#binding.viewer : null;
   }
 
   get state() {

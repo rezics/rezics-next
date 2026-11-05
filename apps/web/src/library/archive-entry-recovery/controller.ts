@@ -54,6 +54,8 @@ export class ArchiveEntryRecoveryJourney {
   #cancelAcknowledged = false;
   #cancelNeedsReconcile = false;
   #pendingUpload: { text: string; key: string; request: RecoveryRequest } | null = null;
+  #originalText: string | null = null;
+  #originalName = 'library.json';
   #evidenceId: string | null = null;
   #expiry: ReturnType<typeof setTimeout> | undefined;
 
@@ -79,6 +81,7 @@ export class ArchiveEntryRecoveryJourney {
       reviewed: state?.review ? this.#reviewed : [],
       readback: state ? this.#readback : null,
       uploadUncertain: this.#pendingUpload !== null,
+      hasOriginalArchive: this.#originalText !== null,
       retryOriginal:
         !!state &&
         (['uncertain', 'recoverable'].includes(state.phase) ||
@@ -145,6 +148,8 @@ export class ArchiveEntryRecoveryJourney {
     await this.#run(async () => {
       const text = await file.text();
       if (request.signal.aborted || !this.#current()) return;
+      this.#originalText = text;
+      this.#originalName = file.name;
       this.#pendingUpload = { text, key: crypto.randomUUID(), request };
       await this.#sendUpload();
     });
@@ -376,6 +381,21 @@ export class ArchiveEntryRecoveryJourney {
       }
       // Current facts never checkpoint the original archive command.
     });
+  }
+  restart() {
+    if (this.#busy || this.snapshot().retryOriginal) return;
+    this.#reviewed = [];
+    this.#readback = null;
+    this.#pendingUpload = null;
+    this.#notice = '';
+    this.#evidenceId = null;
+    this.visit.restart();
+    this.#emit();
+  }
+  async adoptOriginal() {
+    if (!this.#originalText || this.#busy || this.snapshot().retryOriginal) return;
+    const file = new File([this.#originalText], this.#originalName, { type: 'application/json' });
+    await this.upload(file);
   }
   async prune() {
     const id = this.#evidenceId!;

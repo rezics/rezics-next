@@ -283,6 +283,7 @@ function fakePort(
     reviews: unknown[];
     applies: unknown[];
     cancels: unknown[];
+    readbacks: unknown[];
   } = {
     upload: [],
     collections: [],
@@ -291,6 +292,7 @@ function fakePort(
     reviews: [],
     applies: [],
     cancels: [],
+    readbacks: [],
   };
   let cancelled = false;
   const port: RecoveryPort = {
@@ -343,6 +345,33 @@ function fakePort(
           selectedOccurrences: 2,
           collectionId: receivingCollectionId,
         }),
+      };
+    },
+    async receivingCollection(id, cursor) {
+      calls.readbacks.push({ id, cursor: cursor ?? null });
+      return {
+        kind: 'ok',
+        value: {
+          id: receivingCollectionId,
+          title: 'Restored private Collection',
+          visibility: 'private',
+          memberCount: 2,
+          next: null,
+          members: [
+            {
+              id: '00000000-0000-4000-8000-000000000008',
+              subjectId: targetId,
+              note: 'First archived note',
+              addedAt: '2024-01-01T00:00:00.000Z',
+            },
+            {
+              id: '00000000-0000-4000-8000-000000000010',
+              subjectId: targetId,
+              note: 'Repeated occurrence',
+              addedAt: '2024-01-01T00:00:01.000Z',
+            },
+          ],
+        },
       };
     },
   };
@@ -872,6 +901,63 @@ test('one native page and one bounded apply keep request counts constant as unre
     }
   }
   expect(measures.every((measure) => measure.join() === measures[0]!.join())).toBe(true);
+});
+
+test('cancel then restart reuses the original archive and native Collection readback shows restored order', async () => {
+  const fake = fakePort();
+  const { createArchiveCollectionRecoveryJourney } = await import('../src/library/archive-collection-recovery/controller');
+  const journey = createArchiveCollectionRecoveryJourney({ port: fake.port, visit: visit() });
+  try {
+    await journey.upload('e30=');
+    await journey.chooseCollection(collection);
+    const rows = occurrencesPage().occurrences;
+    journey.setSelection(new Map(rows.map((row) => [row.sourceOccurrenceId, row])));
+    journey.setTarget(subjectId, target);
+    journey.prepareReview();
+    await journey.reviewSelection();
+    await journey.apply();
+    await journey.readReceivingCollection();
+    const restored = journey.snapshot().receiving;
+    expect(restored?.id).toBe(receivingCollectionId);
+    expect(restored?.members.map((member) => member.note)).toEqual(['First archived note', 'Repeated occurrence']);
+    expect(fake.calls.readbacks).toEqual([{ id: receivingCollectionId, cursor: null }]);
+    await journey.cancel();
+    journey.restart();
+    expect(journey.snapshot()).toMatchObject({ stage: 'upload', hasOriginalArchive: true, uploadId: null });
+    await journey.adoptOriginalArchive();
+    expect(fake.calls.upload).toHaveLength(2);
+    expect(fake.calls.upload[1]).toMatchObject({ body: { archiveBase64: 'e30=' } });
+    expect((fake.calls.upload[1] as { key: string }).key).not.toBe((fake.calls.upload[0] as { key: string }).key);
+    expect(journey.snapshot().stage).toBe('collections');
+  } finally {
+    journey.retire();
+  }
+});
+
+test('another account is refused at the restored Collection reader', async () => {
+  const fake = fakePort();
+  fake.port.receivingCollection = async () => ({ kind: 'denied' });
+  const { createArchiveCollectionRecoveryJourney } = await import('../src/library/archive-collection-recovery/controller');
+  const journey = createArchiveCollectionRecoveryJourney({
+    port: fake.port,
+    visit: visit('other-member', 'epoch-other'),
+  });
+  try {
+    await journey.upload('e30=');
+    await journey.chooseCollection(collection);
+    const rows = occurrencesPage().occurrences;
+    journey.setSelection(new Map(rows.map((row) => [row.sourceOccurrenceId, row])));
+    journey.setTarget(subjectId, target);
+    journey.prepareReview();
+    await journey.reviewSelection();
+    await journey.apply();
+    await journey.readReceivingCollection();
+    expect(journey.snapshot().stage).toBe('denied');
+    expect(journey.snapshot().notice).toEqual({ kind: 'denied' });
+    expect(journey.snapshot().receiving).toBeNull();
+  } finally {
+    journey.retire();
+  }
 });
 
 test('a cursor window retains eight predecessors and abandons a forward branch after returning', () => {

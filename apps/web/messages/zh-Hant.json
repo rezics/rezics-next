@@ -11253,5 +11253,13 @@
   "moderation_manual_hint": "輸入看板 ID，或開啟目錄檢舉。每個佇列都會獨立檢查你目前的存取權限。",
   "moderation_manual_board": "看板 ID",
   "moderation_manual_open": "開啟看板佇列",
-  "moderation_manual_catalogue": "開啟目錄檢舉"
+  "moderation_manual_catalogue": "開啟目錄檢舉",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }

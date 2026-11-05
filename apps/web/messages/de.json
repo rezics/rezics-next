@@ -11139,5 +11139,13 @@
   "library_mal_retry_source_evidence": "Quellennachweis erneut übermitteln",
   "library_mal_score_zero_source": "{value} (null bedeutet nicht bewertet)",
   "library_mal_score_source_details": "Wert: {value}; MAL-Skala: {scale}",
-  "library_mal_score_source_scale": "MAL-Skala von {min} bis {max}, Schrittweite {step}"
+  "library_mal_score_source_scale": "MAL-Skala von {min} bis {max}, Schrittweite {step}",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }

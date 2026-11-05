@@ -239,6 +239,27 @@ hosts a and b.
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance.
 
+## Seeded journey walks
+
+One area outcome shares one admitted current-revision stack session and one supported `seed:dev` result. Obtain the
+controller-owned stack, browser and persona handles, then record the source revision, completed `result.json` and
+actual native identities. Missing credentials, private exports or required seeded roles are setup inputs for the
+controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
+
+The supported setup is `bun services/auth/scripts/dev-stack.ts` with the documented setup, start and persona actions
+and the existing seed pipeline. Follow current command help and this document's syntax. Ordinary member personas use
+actual signup; privileged roles come from native admission. Browser launch uses a short temporary root outside a
+deeply nested worktree so Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is
+unavailable.
+
+Execute real pages through the production BFF, API and native commands for every served persona. Trace and repair
+defects where they occur, then rerun the complete area journey. Record secret-free source, seed and persona
+provenance, route, request and response operands, visible DOM, and independent native readback after writes under
+`.temp`. Native and browser execution happen inside the attempt. Phone 390 and desktop 1280/1440, both themes, primary
+en/zh-Hant/ja labels and the eight launch locales use one session per authorized persona. Focus checks on actual
+repairs. Absent external input stays explicitly unaccepted. Apply native authorization, command lifetime and strict
+money contracts.
+
 ## Cross-media dump cache
 
 `seed:dev` fetches the pinned Bangumi Archive release and a VNDB dump, verifies them, extracts source tables and seeds

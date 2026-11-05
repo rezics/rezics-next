@@ -11139,5 +11139,13 @@
   "library_mal_retry_source_evidence": "출처 증거 등록 재시도",
   "library_mal_score_zero_source": "{value} (0은 미평가를 뜻함)",
   "library_mal_score_source_details": "값: {value}; MAL 척도: {scale}",
-  "library_mal_score_source_scale": "MAL 척도 {min}~{max}, 간격 {step}"
+  "library_mal_score_source_scale": "MAL 척도 {min}~{max}, 간격 {step}",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }
