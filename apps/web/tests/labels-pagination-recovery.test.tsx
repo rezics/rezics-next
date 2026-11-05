@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -21,6 +21,23 @@ const writes: { data: LabelInput; headers: HeadersInit }[] = [];
 let send: (input: LabelInput) => Promise<LabelResult> = async () => {
   throw new Error('Unexpected Labels write');
 };
+const read = mock(() => {
+  throw new Error('Recovery links must not fetch during rendering');
+});
+const readCurrent = mock(() => {
+  throw new Error('Unexpected current Labels read');
+});
+const labelsReadRouteModule = Bun.resolveSync('../src/library/labels-read-route', import.meta.dir);
+mock.module('../src/library/labels-actions', () => ({
+  manageLabel: () => {
+    throw new Error('Unexpected Labels server action');
+  },
+  labelsFormPost: () => {
+    throw new Error('Unexpected Labels form POST');
+  },
+}));
+mock.module(labelsReadRouteModule, () => ({ readLabelsPage: read, readLabelsCurrent: readCurrent }));
+afterAll(() => mock.restore());
 
 const query = '  読書 %_ + & ?  ';
 const cursor = 'exact+/cursor==';
