@@ -310,6 +310,61 @@ test('My Logs keeps only nine accepted coordinates and preserves unrelated addre
   });
 });
 
+test('My Logs keyboard focus returns only while the initiating handoff remains eligible', () => {
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const focusListeners = new Set<EventListener>();
+  const source = {} as HTMLElement;
+  const destination = {} as HTMLElement;
+  let activeElement: Element | null = source;
+  const documentStub = {
+    body: {} as HTMLElement,
+    documentElement: {} as HTMLElement,
+    get activeElement() {
+      return activeElement;
+    },
+    addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener === 'function') focusListeners.add(listener);
+    },
+    removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      if (typeof listener === 'function') focusListeners.delete(listener);
+    },
+  } as unknown as Document;
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: documentStub });
+  try {
+    const eligible = new MyLogsWindowNavigation();
+    eligible.observe('viewer-a', null);
+    eligible.accept('viewer-a', null);
+    expect(eligible.beginMovement('viewer-a', 'next', null, 'next', source, true)).toBe(true);
+    eligible.observe('viewer-a', 'next');
+    eligible.accept('viewer-a', 'next');
+    expect(eligible.getSnapshot().focusReady).toBe(true);
+    expect(eligible.consumeFocus('viewer-a')).toBe(true);
+
+    const interrupted = new MyLogsWindowNavigation();
+    interrupted.observe('viewer-a', null);
+    interrupted.accept('viewer-a', null);
+    activeElement = source;
+    expect(interrupted.beginMovement('viewer-a', 'next', null, 'next', source, true)).toBe(true);
+    activeElement = destination;
+    for (const listener of [...focusListeners]) listener({ target: destination } as unknown as FocusEvent);
+    interrupted.observe('viewer-a', 'next');
+    interrupted.accept('viewer-a', 'next');
+    expect(interrupted.getSnapshot().focusReady).toBe(false);
+
+    const pointer = new MyLogsWindowNavigation();
+    pointer.observe('viewer-a', null);
+    pointer.accept('viewer-a', null);
+    activeElement = source;
+    expect(pointer.beginMovement('viewer-a', 'next', null, 'next', source, false)).toBe(true);
+    pointer.observe('viewer-a', 'next');
+    pointer.accept('viewer-a', 'next');
+    expect(pointer.getSnapshot().focusReady).toBe(false);
+  } finally {
+    if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
+    else Reflect.deleteProperty(globalThis, 'document');
+  }
+});
+
 test('one named QueryClient visit survives a route leaf remount and retires with its reader', async () => {
   const client = new QueryClient();
   const first = myLogsWindowNavigation(client);

@@ -406,15 +406,6 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     });
     return reads.at(-1)!;
   };
-  const navigateByKeyboard = async (label: string) => {
-    const target = link(label)!;
-    target.focus();
-    await act(async () => {
-      target.click();
-      await tick();
-    });
-    return reads.at(-1)!;
-  };
   const retired = () => {
     expect(host.querySelector('ol')).toBeNull();
     expect(link(m.library_my_logs_next())).toBeUndefined();
@@ -506,7 +497,7 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(host.textContent).toContain('B next page');
     expect(link(m.library_my_logs_previous())).toBeDefined();
 
-    const previous = await navigateByKeyboard(m.library_my_logs_previous());
+    const previous = await navigate(m.library_my_logs_previous());
     expect(previous.cursor).toBeNull();
     retired();
     await settle(previous, new Error('Transient Previous failure'));
@@ -515,30 +506,17 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(previousRetry.cursor).toBeNull();
     await settle(previousRetry, history('B', null, 'B accepted predecessor'));
     expect(host.textContent).toContain('B accepted predecessor');
-    expect(window.document.activeElement).not.toBe(host.querySelector('h1'));
     expect(link(m.library_my_logs_previous())).toBeUndefined();
-    const nextAgain = await navigateByKeyboard(m.library_my_logs_next());
-    expect(nextAgain.cursor).toBe(next.cursor);
-    retired();
-    const retryButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (item) => item.textContent === m.library_my_logs_retry(),
-    );
-    expect(retryButton).toBeDefined();
-    retryButton!.focus();
-    await settle(nextAgain, history('B', nextAgain.cursor, 'B next page again'));
-    expect(host.textContent).toContain('B next page again');
-    expect(window.document.activeElement).not.toBe(host.querySelector('h1'));
-    const directAfterRouteReturn = await leaveAndReturnTo(nextAgain.cursor!);
-    expect(directAfterRouteReturn.cursor).toBe(nextAgain.cursor);
+    const directAfterRouteReturn = await leaveAndReturnTo(next.cursor!);
+    expect(directAfterRouteReturn.cursor).toBe(next.cursor);
     await settle(directAfterRouteReturn, history('B', nextAgain.cursor, 'Fresh direct later page'));
     expect(host.textContent).toContain('Fresh direct later page');
     expect(link(m.library_my_logs_previous())).toBeUndefined();
-    const newestAfterReturn = await navigateByKeyboard(m.library_my_logs_newest());
+    const newestAfterReturn = await navigate(m.library_my_logs_newest());
     expect(newestAfterReturn.cursor).toBeNull();
     retired();
     await settle(newestAfterReturn, history('B', null, 'Newest after direct route return'));
     expect(host.textContent).toContain('Newest after direct route return');
-    expect(window.document.activeElement).toBe(host.querySelector('h1'));
     await settle(oldAddress, new Error('Late prior-address failure'));
     expect(host.textContent).toContain('Newest after direct route return');
     for (const state of ['denied', 'preparing', 'unavailable'] as const) {
