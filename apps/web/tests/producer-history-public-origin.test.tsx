@@ -306,6 +306,7 @@ test('Organization origin completes three producer windows, exact Retry and corr
     ).toBe(false);
     await click(m.producer_history_correct(), host.querySelectorAll('li[data-slot="list-row"]')[1]!);
     await click(m.relation_open());
+    await click(m.candidate_review());
     await click(m.candidate_adopt());
     const decision = host.querySelector(
       `[aria-label="${m.candidate_confirm_title({ action: m.candidate_adopt() })}"]`,
