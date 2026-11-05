@@ -795,7 +795,9 @@ export function startPostgresContainer(
     `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
-    ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket'] : []),
+    // Keep /var/run/postgresql so the image entrypoint can finish init; the bind
+    // mount is the extra host-visible socket for private-network callers.
+    ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket,/var/run/postgresql'] : []),
   ]);
 }
 

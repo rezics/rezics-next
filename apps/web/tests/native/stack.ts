@@ -3,7 +3,7 @@ import type { Access, AccessConfig } from '../../../../services/kernel/src/reque
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
-import { chmod, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -149,10 +149,43 @@ async function postgresConnectionWorks(url: string): Promise<Error | undefined> 
   }
 }
 
+async function postgresReadinessError(
+  container: string,
+  socketDirectory: string,
+  cause: Error | undefined,
+): Promise<Error> {
+  const inspect = Bun.spawnSync([
+    'docker',
+    'inspect',
+    '-f',
+    '{{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}',
+    container,
+  ]);
+  const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
+  const ready = Bun.spawnSync(['docker', 'exec', container, 'pg_isready', '-U', 'rezics']);
+  const sockets = await readdir(socketDirectory).catch(() => [] as string[]);
+  const logText = `${logs.stdout.toString()}${logs.stderr.toString()}`;
+  const { formatPostgresErrors } = await import('../../../../services/kernel/scripts/check.ts');
+  return new Error(
+    [
+      'Disposable PostgreSQL did not become ready.',
+      inspect.stdout.toString().trim(),
+      `pg_isready=${ready.stdout.toString().trim() || ready.stderr.toString().trim()}`,
+      `sockets=${sockets.join(',')}`,
+      formatPostgresErrors(logText),
+      logText.slice(-1500),
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    { cause },
+  );
+}
+
 /** Prefer published TCP; use the bind-mounted Unix socket when the private net namespace cannot reach it. */
 async function waitForOwnedPostgres(container: string, port: number, socketDirectory: string): Promise<string> {
   const tcpUrl = ownedPostgresUrl(port, 'rezics');
-  const socketUrl = ownedPostgresUrl(port, 'rezics', socketDirectory);
+  // libpq names the socket .s.PGSQL.<port>; the server listens on 5432, not the published TCP port.
+  const socketUrl = ownedPostgresUrl(5432, 'rezics', socketDirectory);
   const deadline = Date.now() + 60_000;
   let lastError: Error | undefined;
   while (true) {
@@ -162,32 +195,20 @@ async function waitForOwnedPostgres(container: string, port: number, socketDirec
     const socketError = await postgresConnectionWorks(socketUrl);
     if (!socketError) return socketUrl;
     lastError = socketError;
-    if (Date.now() >= deadline) {
-      const inspect = Bun.spawnSync([
-        'docker',
-        'inspect',
-        '-f',
-        '{{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}',
-        container,
-      ]);
-      const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
-      const ready = Bun.spawnSync(['docker', 'exec', container, 'pg_isready', '-U', 'rezics']);
-      const logText = `${logs.stdout.toString()}${logs.stderr.toString()}`;
-      const { formatPostgresErrors } = await import('../../../../services/kernel/scripts/check.ts');
-      throw new Error(
-        [
-          'Disposable PostgreSQL did not become ready.',
-          inspect.stdout.toString().trim(),
-          `pg_isready=${ready.stdout.toString().trim() || ready.stderr.toString().trim()}`,
-          formatPostgresErrors(logText),
-          logText.slice(-1500),
-        ]
-          .filter(Boolean)
-          .join('\n'),
-        { cause: lastError },
-      );
-    }
-    await Bun.sleep(500);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw await postgresReadinessError(container, socketDirectory, lastError);
+    const status = Bun.spawnSync([
+      'docker',
+      'inspect',
+      '-f',
+      '{{.State.Status}}',
+      container,
+    ])
+      .stdout.toString()
+      .trim();
+    if (status !== '' && status !== 'running' && status !== 'created')
+      throw await postgresReadinessError(container, socketDirectory, lastError);
+    await Bun.sleep(Math.min(500, remaining));
   }
 }
 
