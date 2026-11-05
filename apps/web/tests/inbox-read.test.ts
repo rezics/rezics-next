@@ -21,14 +21,8 @@ mock.module('@tanstack/react-start/server', () => ({
 }));
 mock.module('../src/kernel/client', () => ({ kernelClient: () => configuredKernel }));
 import type { InboxNotice } from '../src/inbox/inbox-read';
-const {
-  decodeInboxPage,
-  inboxPageActions,
-  loadUnreadCount,
-  nativeInboxEnvelope,
-  readUnreadCount,
-  readyInboxPage,
-} = await import('../src/inbox/inbox-read');
+const { decodeInboxPage, inboxPageActions, loadUnreadCount, nativeInboxEnvelope, readUnreadCount, readyInboxPage } =
+  await import('../src/inbox/inbox-read');
 import type { SessionEnv } from '../src/session/client';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
@@ -232,20 +226,38 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
   });
   for (const count of [0, 17]) {
     const lowerBound = { ...capped, count };
-    expect(await loadUnreadCount(countClient(() => Response.json(lowerBound)), owner.request(), owner.env)).toEqual({
+    expect(
+      await loadUnreadCount(
+        countClient(() => Response.json(lowerBound)),
+        owner.request(),
+        owner.env,
+      ),
+    ).toEqual({
       signedIn: true,
       state: 'ready',
       ...lowerBound,
     });
   }
   const exactCapped = { ...capped, basis: 'current-visible-unread' as const };
-  expect(await loadUnreadCount(countClient(() => Response.json(exactCapped)), owner.request(), owner.env)).toEqual({
+  expect(
+    await loadUnreadCount(
+      countClient(() => Response.json(exactCapped)),
+      owner.request(),
+      owner.env,
+    ),
+  ).toEqual({
     signedIn: true,
     state: 'ready',
     ...exactCapped,
   });
   const mismatchedBasis = { ...exactCapped, count: 17 };
-  expect(await loadUnreadCount(countClient(() => Response.json(mismatchedBasis)), owner.request(), owner.env)).toEqual({
+  expect(
+    await loadUnreadCount(
+      countClient(() => Response.json(mismatchedBasis)),
+      owner.request(),
+      owner.env,
+    ),
+  ).toEqual({
     signedIn: true,
     state: 'unavailable',
     failure: { status: 200 },
