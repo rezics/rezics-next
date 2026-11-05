@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { MyRealmsPageView } from '../src/community/my-realms-page';
@@ -45,6 +46,8 @@ async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr'
   });
   const router = createRouter({
     routeTree: root,
+    isServer: true,
+    context: { queryClient: new QueryClient() },
     history: createMemoryHistory({ initialEntries: [`/${locale}/realms`] }),
     rewrite: {
       input: ({ url }) => deLocalizeUrl(url).href,

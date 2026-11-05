@@ -131,9 +131,9 @@ async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: stri
   }>()({ component: Outlet });
   const actualRoute = (
     MyRealmsRoute as unknown as {
-      update(options: { getParentRoute: () => typeof rootRoute }): unknown;
+      update(options: { id: string; path: string; getParentRoute: () => typeof rootRoute }): unknown;
     }
-  ).update({ getParentRoute: () => rootRoute });
+  ).update({ id: '/realms/', path: '/realms/', getParentRoute: () => rootRoute });
   const routeTree = rootRoute.addChildren([actualRoute as never]);
   const cursorSearch = options.cursor ? `?cursor=${encodeURIComponent(options.cursor)}` : '';
   const router = createRouter({

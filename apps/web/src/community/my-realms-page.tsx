@@ -14,7 +14,7 @@ export function MyRealmsPageView({
   focusContinuation,
 }: {
   page: MyRealmsPage;
-  navigation?: MyRealmsNavigation;
+  navigation?: MyRealmsNavigation | undefined;
   onMove?: (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) => boolean;
   focusContinuation?: (() => boolean) | undefined;
 }) {
