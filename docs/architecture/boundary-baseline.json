@@ -635,11 +635,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/account-canonical-targets.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/account-canonical-targets.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
         },
         {
@@ -6495,11 +6490,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/commerce/subject-offer-work.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/commerce/subject-offers.ts",
           "edge": "type import \"../tokens/seal.ts\" #1 => services/kernel/src/tokens/seal.ts"
         },
@@ -6557,11 +6547,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/subject-offers.ts",
           "edge": "value import \"../semantic/current-subject-summaries.ts\" #1 => services/kernel/src/semantic/current-subject-summaries.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/subject-offers.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -13483,11 +13468,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/content/realm-subject-census.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/content/realm-subject-disclosure-work.ts",
           "edge": "type import \"../access/work.ts\" #1 => services/kernel/src/access/work.ts"
         },
@@ -16079,11 +16059,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/builtin-runtime.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/bulk-contract.ts",
           "edge": "type import \"../access/durable-initiator.ts\" #1 => services/kernel/src/access/durable-initiator.ts"
         },
@@ -17046,11 +17021,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-list-facts.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/collection-list-facts.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -18365,11 +18335,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/continue-query.ts",
           "edge": "value import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
         },
         {
@@ -18731,11 +18696,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/copy-list-context.ts",
           "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/copy-list-context.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -21485,11 +21445,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/loan-commands.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/loan-commands.ts",
           "edge": "value import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts"
         },
         {
@@ -23761,11 +23716,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/viewer-facts.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/viewer-facts.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -31174,11 +31124,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/account-context-native.ts",
           "edge": "value import \"../semantic/agents.ts\" #1 => services/kernel/src/semantic/agents.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/account-context-native.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",

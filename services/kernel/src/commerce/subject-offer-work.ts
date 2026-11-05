@@ -7,7 +7,7 @@ import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { identityEpochStore, identityJobPartition } from '../semantic/identity-adapters/index.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';

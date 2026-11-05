@@ -5,7 +5,7 @@ import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline 
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accountAgentId, accountAgentsForSubjects, type AccountAgentLink } from '../semantic/agents.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 

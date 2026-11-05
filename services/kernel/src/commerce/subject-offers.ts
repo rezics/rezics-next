@@ -10,7 +10,7 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readCurrentSubjectSummaries } from '../semantic/current-subject-summaries.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { captureCurrentContentEdition, contentEditionTermsView, sameCapturedContentEdition } from './benefit.ts';
