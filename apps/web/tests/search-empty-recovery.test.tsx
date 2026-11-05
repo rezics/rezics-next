@@ -19,8 +19,12 @@ const { Window } = await import(
 );
 const window = new Window({ url: 'https://search.test/en/search?q=prejudise' });
 const globals = {
-  window, document: window.document, HTMLElement: window.HTMLElement, Node: window.Node,
-  requestAnimationFrame: window.requestAnimationFrame.bind(window), cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  window,
+  document: window.document,
+  HTMLElement: window.HTMLElement,
+  Node: window.Node,
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -28,11 +32,13 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-const edit = (input: HTMLInputElement, value: string) => act(async () => {
-  inputSetter.call(input, value);
-  input.dispatchEvent(new window.Event('input', { bubbles: true }));
-});
-const submit = (input: HTMLInputElement) => act(async () => input.form!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+const edit = (input: HTMLInputElement, value: string) =>
+  act(async () => {
+    inputSetter.call(input, value);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+const submit = (input: HTMLInputElement) =>
+  act(async () => input.form!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
 
 afterAll(() => {
   window.happyDOM.abort();
@@ -146,11 +152,20 @@ test('the mounted empty recovery panel renders its editable query and current ac
         onRetry() {},
       }),
     );
-    expect(html).toContain(status === 'preparing' ? m.search_empty_alternatives_preparing() : m.search_empty_alternatives_unavailable());
+    expect(html).toContain(
+      status === 'preparing' ? m.search_empty_alternatives_preparing() : m.search_empty_alternatives_unavailable(),
+    );
     expect(html).toContain(m.search_facet_retry());
   }
 
-  const panel = (key: string) => createElement(EmptySearchRecovery, { key, recovery: { status: 'ready', alternatives: [], actions }, state, locale: 'en', labels });
+  const panel = (key: string) =>
+    createElement(EmptySearchRecovery, {
+      key,
+      recovery: { status: 'ready', alternatives: [], actions },
+      state,
+      locale: 'en',
+      labels,
+    });
   const pair = renderToStaticMarkup(createElement('div', null, panel('a'), panel('b')));
   const ids = [...pair.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
   expect(new Set(ids).size).toBe(ids.length);
@@ -166,13 +181,27 @@ function emptyRegionProps(
 ): SearchResultsRegionProps {
   const page = { ...discoveryExample, hits: [], next: null, emptyRecovery };
   return {
-    query: executed.query, locale, selectedFacets: executed.facets, retryState: executed,
-    recoveryOwnerKey: ownerKey, onNavigate, onRetry,
+    query: executed.query,
+    locale,
+    selectedFacets: executed.facets,
+    retryState: executed,
+    recoveryOwnerKey: ownerKey,
+    onNavigate,
+    onRetry,
     data: {
-      queryState: executed, discovery: { status: 'ready', page }, recovery: { status: 'ready' },
-      typeLabels: labels.typeLabels, typeChoices: labels.typeChoices, selectedFacetLabels: labels.selectedFacetLabels,
-      groups: labels.groups.map((group) => ({ ...group, values: [] })), hitTypes: {}, yearProperties: [],
-      sort: executed.sort ?? 'relevance', facetRetry: false, facetIndexNotReady: false, staleCursorRestarted: false,
+      queryState: executed,
+      discovery: { status: 'ready', page },
+      recovery: { status: 'ready' },
+      typeLabels: labels.typeLabels,
+      typeChoices: labels.typeChoices,
+      selectedFacetLabels: labels.selectedFacetLabels,
+      groups: labels.groups.map((group) => ({ ...group, values: [] })),
+      hitTypes: {},
+      yearProperties: [],
+      sort: executed.sort ?? 'relevance',
+      facetRetry: false,
+      facetIndexNotReady: false,
+      staleCursorRestarted: false,
     },
   };
 }
@@ -192,7 +221,8 @@ test('the mounted result region replaces its owner draft, admits correction, and
   const firstKey = JSON.stringify(['first', 'en', 'reader-one']);
   const second = { ...first, query: 'wrongg', cursor: undefined };
   const secondKey = JSON.stringify(['second', 'en', 'reader-one']);
-  const render = (props: SearchResultsRegionProps) => act(async () => root.render(createElement(SearchResultsRegion, props)));
+  const render = (props: SearchResultsRegionProps) =>
+    act(async () => root.render(createElement(SearchResultsRegion, props)));
   const input = () => host.querySelector<HTMLInputElement>('input[type="search"]')!;
   try {
     await render(emptyRegionProps(first, recovery, firstKey, navigate));
@@ -207,7 +237,10 @@ test('the mounted result region replaces its owner draft, admits correction, and
     expect(removedFacet).toMatchObject({ ...first, cursor: undefined, facets: { 'schema:genre': ['mystery'] } });
 
     const secondProps = emptyRegionProps(second, recovery, secondKey, navigate);
-    secondProps.data = { ...secondProps.data!, queryState: { ...second, type: 'schema:Movie', filter: '{"owner":{"id":"unfinished"}}' } };
+    secondProps.data = {
+      ...secondProps.data!,
+      queryState: { ...second, type: 'schema:Movie', filter: '{"owner":{"id":"unfinished"}}' },
+    };
     await render(secondProps);
     expect(input().value).toBe(second.query);
     await edit(input(), 'x'.repeat(513));
@@ -224,10 +257,16 @@ test('the mounted result region replaces its owner draft, admits correction, and
     await edit(input(), 'Pride and Prejudice');
     await submit(input());
     expect(navigations).toHaveLength(1);
-    expect(stateFromHref(navigations[0]!)).toMatchObject({ ...second, query: 'Pride and Prejudice', cursor: undefined });
+    expect(stateFromHref(navigations[0]!)).toMatchObject({
+      ...second,
+      query: 'Pride and Prejudice',
+      cursor: undefined,
+    });
 
     await edit(input(), 'old locale draft');
-    await render(emptyRegionProps(second, recovery, JSON.stringify(['second', 'fr', 'reader-one']), navigate, undefined, 'fr'));
+    await render(
+      emptyRegionProps(second, recovery, JSON.stringify(['second', 'fr', 'reader-one']), navigate, undefined, 'fr'),
+    );
     expect(input().value).toBe(second.query);
 
     let finishRetry!: () => void;
@@ -237,8 +276,13 @@ test('the mounted result region replaces its owner draft, admits correction, and
     const thirdKey = JSON.stringify(['third', 'en', 'reader-one']);
     let retries = 0;
     await render(emptyRegionProps(third, unavailable, thirdKey, navigate, () => (retries++, pendingRetry)));
-    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === m.search_facet_retry())!;
-    await act(async () => { retry.click(); retry.click(); });
+    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.search_facet_retry(),
+    )!;
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
     expect(retries).toBe(1);
     expect(retry.disabled).toBe(true);
 
@@ -270,10 +314,18 @@ test('sparse, cursor, incomplete and unavailable result windows never claim a te
   const ownerKey = JSON.stringify(['guard', 'en', null]);
   try {
     const cases = [
-      (props: SearchResultsRegionProps) => { props.data!.discovery!.page.next = 'more-results'; },
-      (props: SearchResultsRegionProps) => { props.retryState = { ...executed, cursor: 'page-two' }; },
-      (props: SearchResultsRegionProps) => { delete props.data!.discovery!.page.emptyRecovery; },
-      (props: SearchResultsRegionProps) => { props.data!.recovery = { status: 'unavailable' }; },
+      (props: SearchResultsRegionProps) => {
+        props.data!.discovery!.page.next = 'more-results';
+      },
+      (props: SearchResultsRegionProps) => {
+        props.retryState = { ...executed, cursor: 'page-two' };
+      },
+      (props: SearchResultsRegionProps) => {
+        delete props.data!.discovery!.page.emptyRecovery;
+      },
+      (props: SearchResultsRegionProps) => {
+        props.data!.recovery = { status: 'unavailable' };
+      },
     ];
     for (const alter of cases) {
       const props = emptyRegionProps(executed, recovery, ownerKey, () => {});

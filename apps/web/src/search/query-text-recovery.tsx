@@ -152,7 +152,10 @@ export function QueryTextRecovery({
             {m.search_text_position({ position: issue.codePointStart + 1 }, options)}
           </p>
         )}
-        <p id={`${id}-help`} className={compact ? 'w-full text-sm text-muted-foreground' : 'text-sm text-muted-foreground'}>
+        <p
+          id={`${id}-help`}
+          className={compact ? 'w-full text-sm text-muted-foreground' : 'text-sm text-muted-foreground'}
+        >
           {m.search_text_grammar({}, options)}
         </p>
         <button

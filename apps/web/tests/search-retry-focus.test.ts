@@ -71,10 +71,21 @@ async function show(
   root ??= createRoot(host);
   const query = extra?.query ?? data.queryState?.query ?? 'Mira';
   await act(async () =>
-    root.render(withQueryClient(createElement('div', null,
-      createElement('button', { type: 'button', 'data-move-focus': true }, 'Other control'),
-      createElement(SearchPage, { query, data, onRetry: extra?.onRetry ?? (() => {}), session: extra?.session ?? null }),
-    ))),
+    root.render(
+      withQueryClient(
+        createElement(
+          'div',
+          null,
+          createElement('button', { type: 'button', 'data-move-focus': true }, 'Other control'),
+          createElement(SearchPage, {
+            query,
+            data,
+            onRetry: extra?.onRetry ?? (() => {}),
+            session: extra?.session ?? null,
+          }),
+        ),
+      ),
+    ),
   );
 }
 
