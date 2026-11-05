@@ -148,13 +148,24 @@ export function ReleaseFidelitySlot({
   subjectType,
   label,
   locale,
+  context,
+  returnHref,
 }: {
   subjectId: string;
   subjectType: string;
   label: string;
   locale: string;
+  context?: string | undefined;
+  returnHref?: string | undefined;
 }) {
-  const entry = catalogueEntries.releaseFidelity({ id: subjectId, type: subjectType, label, locale });
+  const entry = catalogueEntries.releaseFidelity({
+    id: subjectId,
+    type: subjectType,
+    label,
+    locale,
+    ...(context !== undefined ? { context } : {}),
+    ...(returnHref !== undefined ? { returnHref } : {}),
+  });
   if (!entry) return null;
   return (
     <section data-slot="release-fidelity-entry" className="min-w-0 space-y-2">
