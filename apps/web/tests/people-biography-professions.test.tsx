@@ -116,13 +116,7 @@ test('Person biography groups bind admitted multilingual documents, occupations 
     field: 'schema:abstract',
     window: 'biography',
   });
-  const relation = peopleRelationHref(
-    peoplePersonId,
-    'Mira Sato',
-    'en',
-    fixture.person.subject.context,
-    source,
-  );
+  const relation = peopleRelationHref(peoplePersonId, 'Mira Sato', 'en', fixture.person.subject.context, source);
   expect(relation).toContain('/relation-edit?context=');
   expect(relation).toContain('via=');
 

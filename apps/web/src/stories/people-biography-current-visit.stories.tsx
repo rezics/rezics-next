@@ -68,8 +68,14 @@ function CurrentVisit({ concealed = false, long = false }: { concealed?: boolean
         },
       ];
     person.related = {
-      '00000000-0000-4000-8000-00000000d201': { type: 'skos:Concept', labels: { en: 'Director', ja: '監督', 'zh-Hant': '導演' } },
-      '00000000-0000-4000-8000-00000000d202': { type: 'schema:Language', labels: { en: 'Japanese', ja: '日本語', 'zh-Hant': '日語' } },
+      '00000000-0000-4000-8000-00000000d201': {
+        type: 'skos:Concept',
+        labels: { en: 'Director', ja: '監督', 'zh-Hant': '導演' },
+      },
+      '00000000-0000-4000-8000-00000000d202': {
+        type: 'schema:Language',
+        labels: { en: 'Japanese', ja: '日本語', 'zh-Hant': '日語' },
+      },
       ...(concealed ? {} : { [organization]: { type: 'schema:Organization', labels: { en: 'Paper Lantern Studio' } } }),
     };
     return fixture;

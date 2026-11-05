@@ -1,5 +1,9 @@
 import { subjectHref } from '../../../subject/subject-href';
-import { subjectVisitReturn, withSubjectVisitReturn, personBiographyReturnFragment } from '../../pages/subject-visit-navigation';
+import {
+  subjectVisitReturn,
+  withSubjectVisitReturn,
+  personBiographyReturnFragment,
+} from '../../pages/subject-visit-navigation';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PeopleBiographyWindow = 'biography' | 'occupations' | 'languages' | 'affiliations';

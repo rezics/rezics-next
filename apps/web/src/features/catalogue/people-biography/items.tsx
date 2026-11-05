@@ -194,13 +194,7 @@ export function PeopleSelectedItems({
           <a
             className={actionClass + ' inline-flex items-center underline'}
             lang={fact.target.lang ?? undefined}
-            href={peopleBiographyTargetHref(
-              fact.target.id,
-              fact.target.label,
-              locale,
-              subject.context,
-              factReturn,
-            )}
+            href={peopleBiographyTargetHref(fact.target.id, fact.target.label, locale, subject.context, factReturn)}
           >
             {fact.target.label || m.subject_value_unlabelled({}, o)}
           </a>

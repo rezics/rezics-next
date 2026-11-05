@@ -28,14 +28,7 @@ export function PeopleBiographyDocuments({
   const o = { locale: locale as never };
   const subject = read.public.subject;
   const title = peopleSubjectLabel(subject, locale).text;
-  const fallbackReturn = biographyAddress(
-    subject.id,
-    title,
-    locale,
-    subject.context,
-    field.kind,
-    field.id,
-  );
+  const fallbackReturn = biographyAddress(subject.id, title, locale, subject.context, field.kind, field.id);
   const href = peopleBiographyHref(
     subject.id,
     title,
@@ -45,10 +38,7 @@ export function PeopleBiographyDocuments({
     field.editor === 'authored' ? field.id : undefined,
   );
   const authoredAction = (
-    <a
-      className={buttonVariants({ variant: 'outline', className: actionClass + ' self-start' })}
-      href={href}
-    >
+    <a className={buttonVariants({ variant: 'outline', className: actionClass + ' self-start' })} href={href}>
       {m.people_biography_edit({}, o)}
     </a>
   );
@@ -96,7 +86,11 @@ export function PeopleBiographyDocuments({
         return (
           <section key={fact.id} className="min-w-0">
             {spoilerLevel(fact.statement) > defaultReader.spoilerLevel ? (
-              <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)} unmountOnHide>
+              <SpoilerGate
+                label={m.subject_spoiler_show({}, o)}
+                hideLabel={m.subject_spoiler_hide({}, o)}
+                unmountOnHide
+              >
                 {content}
               </SpoilerGate>
             ) : (

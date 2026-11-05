@@ -4,7 +4,11 @@ import { ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader } from '../../../subject/reader';
-import { personBiographyReturn, withSubjectVisitReturn, type PersonBiographyReturn } from '../../pages/subject-visit-navigation';
+import {
+  personBiographyReturn,
+  withSubjectVisitReturn,
+  type PersonBiographyReturn,
+} from '../../pages/subject-visit-navigation';
 import { spoilerLevel } from '../../pages/shared';
 import type { CandidateTransport } from '../../../subject/candidate-review';
 import type { FactsCurrent, FactsTransport } from '../subject-facts';
@@ -84,11 +88,10 @@ function BiographyGroup({
             locale={locale}
             restoredAssertion={restoredAssertion}
           />
-        ) :
-        field.editor === 'relation' ||
-        field.status === 'unsupported' ||
-        field.facts.length > 0 ||
-        (search && field.editor === 'item') ? (
+        ) : field.editor === 'relation' ||
+          field.status === 'unsupported' ||
+          field.facts.length > 0 ||
+          (search && field.editor === 'item') ? (
           <PeopleSelectedItems
             key={field.id}
             field={field}
@@ -161,8 +164,7 @@ export function PeopleBiographyGroups({
           ?.fields.find((field) => field.id === visit.locator.field)
           ?.facts.find((fact) => fact.id === visit.locator.assertion)
       : undefined;
-    const assertionDisclosed =
-      !!currentFact && spoilerLevel(currentFact.statement) <= defaultReader.spoilerLevel;
+    const assertionDisclosed = !!currentFact && spoilerLevel(currentFact.statement) <= defaultReader.spoilerLevel;
     const focusId =
       visit.current && visit.locator.assertion && assertionDisclosed
         ? peopleBiographyAssertionAnchor(visit.locator.assertion)
@@ -213,7 +215,10 @@ export function PeopleBiographyGroups({
             className={actionClass}
             href={withSubjectVisitReturn(
               (() => {
-                const url = new URL(`${subjectHref({ id: subject.id, label: title }, locale).href}/producer`, 'https://rezics.invalid');
+                const url = new URL(
+                  `${subjectHref({ id: subject.id, label: title }, locale).href}/producer`,
+                  'https://rezics.invalid',
+                );
                 url.searchParams.set('context', subject.context);
                 return `${url.pathname}${url.search}`;
               })(),

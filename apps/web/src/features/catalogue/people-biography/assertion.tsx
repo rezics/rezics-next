@@ -60,13 +60,7 @@ function EvidenceValue({
       <a
         className={control}
         lang={target.label.lang ?? undefined}
-        href={peopleBiographyTargetHref(
-          target.id,
-          target.label.text,
-          locale,
-          read.public.subject.context,
-          returnHref,
-        )}
+        href={peopleBiographyTargetHref(target.id, target.label.text, locale, read.public.subject.context, returnHref)}
       >
         {target.label.text || m.subject_value_unlabelled({}, { locale: locale as never })}
       </a>
@@ -165,7 +159,14 @@ export function PeopleBiographyAssertion({
                         {label.text || m.candidate_value_unavailable({}, o)}
                       </dt>
                       <dd>
-                        <EvidenceValue part={part} fact={fact} field={field} read={read} locale={locale} title={title} />
+                        <EvidenceValue
+                          part={part}
+                          fact={fact}
+                          field={field}
+                          read={read}
+                          locale={locale}
+                          title={title}
+                        />
                       </dd>
                     </div>
                   );

@@ -3,7 +3,11 @@ import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { peoplePersonId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
-import { personBiographyReturn, personBiographyReturnFragment, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import {
+  personBiographyReturn,
+  personBiographyReturnFragment,
+  subjectVisitReturn,
+} from '../src/features/pages/subject-visit-navigation';
 import { peopleBiographyAddress } from '../src/features/catalogue/people-biography/current-visit';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));

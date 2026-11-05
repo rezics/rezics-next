@@ -7,8 +7,7 @@ const policies = [definitions, browser, native];
 
 test('the public and native compatibility entries share the bounded language policy', () => {
   const ranges = 'en;q=0.5, ja;q=1, fr;q=0.9, de;q=0.9';
-  for (const policy of policies)
-    expect(policy.languageRanges(ranges)).toEqual(['ja', 'fr', 'de', 'en']);
+  for (const policy of policies) expect(policy.languageRanges(ranges)).toEqual(['ja', 'fr', 'de', 'en']);
 
   const many = Array.from({ length: 20 }, (_, index) => `x-${index + 1}`).join(', ');
   for (const policy of policies) {
@@ -20,20 +19,14 @@ test('the public and native compatibility entries share the bounded language pol
 
 test('label selection maximizes scripts, truncates extensions, and returns the stored tag', () => {
   const labels = { en: 'English', 'zh-Hans': '简体', 'zh-Hant': '繁體', 'JA-jp': '日本語' };
-  const choices: [
-    Record<string, string>,
-    string[],
-    string | undefined,
-    { value: string; language: string },
-  ][] = [
+  const choices: [Record<string, string>, string[], string | undefined, { value: string; language: string }][] = [
     [labels, ['zh-TW'], undefined, { value: '繁體', language: 'zh-Hant' }],
     [labels, ['zh-CN'], undefined, { value: '简体', language: 'zh-Hans' }],
     [labels, ['ja-JP-x-private'], undefined, { value: '日本語', language: 'JA-jp' }],
     [{ de: 'Deutsch', ja: '日本語' }, ['ko'], 'fr', { value: 'Deutsch', language: 'de' }],
   ];
   for (const [candidateLabels, preferred, original, expected] of choices)
-    for (const policy of policies)
-      expect(policy.chooseLabel(candidateLabels, preferred, original)).toEqual(expected);
+    for (const policy of policies) expect(policy.chooseLabel(candidateLabels, preferred, original)).toEqual(expected);
   for (const policy of policies) {
     expect(policy.chooseLabel({ 'i-klingon': 'Klingon' }, ['i-klingon'])).toEqual({
       value: 'Klingon',

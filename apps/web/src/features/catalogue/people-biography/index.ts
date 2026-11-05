@@ -235,7 +235,12 @@ export function peopleRelationHref(
   context: string,
   returnHref: string,
 ): string {
-  return peopleBiographyEditorHref(`${subjectHref({ id, label }, locale).href}/relation-edit`, context, returnHref, locale);
+  return peopleBiographyEditorHref(
+    `${subjectHref({ id, label }, locale).href}/relation-edit`,
+    context,
+    returnHref,
+    locale,
+  );
 }
 
 export { peopleBiographyAddress };
