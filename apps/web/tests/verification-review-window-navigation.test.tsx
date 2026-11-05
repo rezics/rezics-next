@@ -136,7 +136,14 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const hasButton = (label: string) =>
     [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === label);
   const startRead = async (index: number) => {
-    await waitFor(() => expect(reads).toHaveLength(index + 1));
+    await waitFor(() => {
+      if (reads.length !== index + 1) {
+        const queries = queryClient.getQueryCache().findAll({ queryKey: ['account-verification', 'review'] });
+        throw new Error(
+          `Expected ${index + 1} reads, got ${reads.length}; queries=${JSON.stringify(queries.map((query) => [query.queryKey, query.state.status, query.state.fetchStatus]))}`,
+        );
+      }
+    });
     return reads[index]!;
   };
   const nextRead = async () => {
