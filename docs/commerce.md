@@ -92,6 +92,12 @@ Captured revision, declared licence, delivery, acquisition and quantity remain s
 and sale eligibility. Revision/hash/reference disclosure performs no content read or independent verification.
 Existing public money adapters retain recorded units and before-tax meaning.
 
+Decision: after a definitive seller refusal, keep the typed draft and require explicit review of current native
+Edition/offer and price facts before a separate correction. Adopt the revision and schema from the same review
+response. While a command may have dispatched, retain its amount, currency, Edition, credential and original key;
+retry those operands unchanged. Recorded history continues to use its captured units, including signed adjustments
+and explicit unknown meaning, without combining incompatible records.
+
 Decision: replacement keeps the opened observation until deliberate review of the received row; inspection review
 never changes an existing command’s original observation, draft, key or recovery, and selection retires with the
 existing current origin or visit. Missing rows offer restart without scanning pages. Management keeps its retained

@@ -64,6 +64,14 @@ describe('Creators can inspect private royalty statements, source lines and exte
     }
     expect(formatMinorAmount('en', 'usd', Number.MAX_SAFE_INTEGER)).toContain('9007199254740991 USD');
     expect(formatMinorAmount('en', 'usd', -Number.MAX_SAFE_INTEGER)).toContain('-9007199254740991 USD');
+    const unit = { system: 'stripe-api', exponent: 0, factsVersion: 'stripe-money-v1' };
+    expect(formatMinorAmount('en', 'jpy', -675, unit)).toBe(
+      '-¥675 · recorded amount -675 JPY minor units (exponent 0)',
+    );
+    expect(formatMinorAmount('en', 'usd', 675, unit)).toContain('$675 · recorded amount 675 USD');
+    expect(formatMinorAmount('en', 'usd', -675, { ...unit, factsVersion: 'future' })).toBe(
+      'Recorded amount -675 USD; unit meaning is unknown.',
+    );
     const open = renderToString(createElement(StatementPayment, { statement, locale: 'en' }));
     expect(open).toContain('No external payment recorded');
     expect(open).not.toContain('External payment recorded');

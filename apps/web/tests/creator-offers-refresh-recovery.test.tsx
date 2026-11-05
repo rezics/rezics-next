@@ -7,10 +7,11 @@ import type {
   CreatorOffersCurrentRead,
   CreatorOfferMutation,
   CreatorOfferResult,
+  CreatorOfferAddress,
 } from '../src/checkout/creator-offers';
 import { configuredPriceExample, creatorOfferFixture } from '../src/kernel/fake/creator-offers';
 
-// UNRUN: mounted outcome cases for controller integration, using the real session/exposure observers.
+// Mounted outcome cases use the real session/exposure observers.
 // These fixtures do not establish native authorization, browser, screenshot or whole-journey acceptance.
 mock.module('@tanstack/react-start', () => ({
   ...start,
@@ -435,7 +436,54 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.writes[3]!.data).toEqual(p.writes[2]!.data);
     }));
 
-  test('a definitive refusal keeps the correction draft until current terms are explicitly reviewed', async () =>
+  test('create refuses out-of-range input, retries original operands and reviews current price facts before correction', async () =>
+    workspace(async (p) => {
+      await p.show('editor');
+      await p.draft();
+      await p.fill('price', '1000000.00');
+      await p.submit();
+      expect(p.writes).toHaveLength(0);
+      await p.fill('price', '12.99');
+      await p.submit();
+      await p.settle(p.writes[0]!.work, { kind: 'retry' });
+      const latest = editor();
+      if (latest.data.editor.kind !== 'ready') throw new Error('Expected editor');
+      latest.data.editor.edition.sha256 = 'b'.repeat(64);
+      latest.data.editor.schema = {
+        ...configuredPriceExample,
+        configuredSaleCurrencies: configuredPriceExample.configuredSaleCurrencies.map((rule) => ({
+          ...rule,
+          maxAmountMinor: 1000,
+        })),
+      };
+      await p.refresh();
+      await p.settle(p.editorReads.at(-1)!, latest);
+      expect(p.input('price').disabled).toBe(true);
+      expect(p.host.querySelector<HTMLSelectElement>('select')!.disabled).toBe(true);
+      await p.submit();
+      expect(p.writes[1]!.data).toEqual(p.writes[0]!.data);
+      await p.settle(p.writes[1]!.work, { kind: 'rejected' });
+      expect(p.input('price').value).toBe('12.99');
+      expect(p.host.textContent).toContain('a'.repeat(64));
+      await p.fill('price', '8.00');
+      await p.submit();
+      expect(p.writes).toHaveLength(2);
+      await p.click(m.offer_review_terms());
+      await p.settle(p.editorReads.at(-1)!, new Error('Review unavailable'));
+      expect(p.input('price').value).toBe('8.00');
+      expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+      await p.click(m.offer_review_terms());
+      await p.settle(p.editorReads.at(-1)!, latest);
+      expect(p.host.textContent).toContain('b'.repeat(64));
+      expect(p.input('price').value).toBe('8.00');
+      expect(p.writes).toHaveLength(2);
+      await p.submit();
+      expect(p.writes[2]!.data).toMatchObject({ contentEditionId: editionId, currency: 'usd', unitAmountMinor: 800 });
+      expect(p.writes[2]!.data.idempotencyKey).not.toBe(p.writes[0]!.data.idempotencyKey);
+      await p.settle(p.writes[2]!.work, { kind: 'saved', id: id(88) });
+    }));
+
+  test('a definitive refusal keeps the correction draft until current terms and price facts are explicitly reviewed', async () =>
     workspace(async (p) => {
       await p.show();
       await p.fill('price', '12.99');
@@ -461,16 +509,26 @@ describe('Creator offer editing recovery retains real drafts without extending p
       await p.refresh();
       await p.settle(p.listReads.at(-1)!, latest);
       await p.click(m.offer_review_terms());
-      await p.settle(p.listReads.at(-1)!, latest);
+      // Review can return newer configuration than the background page read.
+      const reviewed = structuredClone(latest);
+      reviewed.data.schema = {
+        ...reviewed.data.schema!,
+        configuredSaleCurrencies: reviewed.data.schema!.configuredSaleCurrencies.map((rule) => ({
+          ...rule,
+          maxAmountMinor: 1250,
+        })),
+      };
+      await p.settle(p.listReads.at(-1)!, reviewed);
       expect(p.input('price').value).toBe('13.00');
       expect(p.writes).toHaveLength(1);
-
+      expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+      await p.fill('price', '12.50');
       await p.submit();
       expect(p.writes).toHaveLength(2);
       expect(p.writes[1]!.data).toMatchObject({
         operation: 'reprice',
         expectedRevision: creatorOfferFixture.revision + 1,
-        unitAmountMinor: 1300,
+        unitAmountMinor: 1250,
       });
       expect(p.writes[1]!.data.idempotencyKey).not.toBe(p.writes[0]!.data.idempotencyKey);
     }));
