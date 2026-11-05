@@ -18,7 +18,7 @@ import { m } from '../src/paraglide/messages.js';
 
 // Focused presentation and deferred-result cases; native/browser acceptance belongs to integration.
 const writes: { data: LabelInput; headers: HeadersInit }[] = [];
-let send: (input: LabelInput) => Promise<LabelResult> = async () => {
+let send: (input: LabelInput, headers: HeadersInit) => Promise<LabelResult> = async () => {
   throw new Error('Unexpected Labels write');
 };
 const read = mock(() => {
@@ -30,8 +30,7 @@ const readCurrent = mock(() => {
 const labelsReadRouteModule = Bun.resolveSync('../src/library/labels-read-route', import.meta.dir);
 mock.module('../src/library/labels-actions', () => ({
   manageLabel: (input: { data: LabelInput; headers: HeadersInit }) => {
-    writes.push(structuredClone(input));
-    return send(input.data);
+    return send(input.data, input.headers);
   },
   labelsFormPost: () => {
     throw new Error('Unexpected Labels form POST');
@@ -421,7 +420,8 @@ test('Recovery presentation retains the original uncertain create through refres
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(name, 'Original draft');
         name.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
-      send = async () => {
+      send = async (data, headers) => {
+        writes.push({ data: structuredClone(data), headers: structuredClone(headers) });
         throw new Error('Reply lost');
       };
       await submit();
@@ -436,10 +436,12 @@ test('Recovery presentation retains the original uncertain create through refres
       expect((form().querySelector('input[name="name"]') as HTMLInputElement).value).toBe('Original draft');
       expect(link(host, m.library_collections_first_page()).getAttribute('href')).toBe(firstPage);
       let complete!: (result: LabelResult) => void;
-      send = () =>
-        new Promise((resolve) => {
+      send = (data, headers) => {
+        writes.push({ data: structuredClone(data), headers: structuredClone(headers) });
+        return new Promise((resolve) => {
           complete = resolve;
         });
+      };
       await submit();
       expect(writes[before + 1]).toEqual(original);
       current = false;

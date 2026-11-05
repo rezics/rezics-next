@@ -419,7 +419,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
           revision: 7,
           idempotencyKey: initial.page.labels[0]!.renameKey,
         },
-        csrf: 'prepared-A',
+        csrf: 'session-A',
       });
       await show(session('B'));
       expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
