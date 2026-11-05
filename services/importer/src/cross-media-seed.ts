@@ -3929,6 +3929,7 @@ export async function runCrossMediaSeedCli(
       });
     }
     ensure(vndbBindings, 'Selected VNDB character vocabulary bindings are missing');
+    const finalCharacterVocabularyBindings = vndbBindings;
     const mergeSeparator = String.fromCharCode(0);
     const readings = new Map<string, (typeof result.readings)[number]>();
     for (const reading of [
@@ -3977,12 +3978,14 @@ export async function runCrossMediaSeedCli(
       vndbCreditVocabularyDelivery: vndbCreditVocabularyIssues,
       characterVocabulary: {
         requirements: characterVocabulary.requirements,
-        currentProfile: profileFromCharacterVocabularyBindings(vndbBindings),
-        admittedConceptCodes: vndbBindings.concepts.map((concept) => concept.taxonomy + ':' + concept.code).sort(),
+        currentProfile: profileFromCharacterVocabularyBindings(finalCharacterVocabularyBindings),
+        admittedConceptCodes: finalCharacterVocabularyBindings.concepts
+          .map((concept) => concept.taxonomy + ':' + concept.code)
+          .sort(),
         withheldConceptCodes: characterVocabulary.requirements.terms
           .filter(
             (term) =>
-              !vndbBindings.concepts.some(
+              !finalCharacterVocabularyBindings.concepts.some(
                 (concept) => concept.taxonomy === term.taxonomy && concept.code === term.code,
               ),
           )

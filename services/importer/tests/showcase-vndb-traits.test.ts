@@ -15,7 +15,7 @@ import {
 } from '../src/showcase-character-vocabulary.ts';
 
 const scheme = '00000000-0000-4000-8000-000000000010';
-const concepts = ['00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000012'];
+const concepts = ['00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000012'] as const;
 const subjects = Object.fromEntries([
   ['vndb-character-traits-scheme', scheme],
   ...['i23', 'i30'].map((code, index) => [`vndb-character-traits-${code}`, concepts[index]!]),
