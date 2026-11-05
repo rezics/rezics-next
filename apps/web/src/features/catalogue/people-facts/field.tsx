@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { ProfileFact, type ProfileReading } from '../person-reader/reader';
-import type { profileFields } from '../person-reader/model';
+import type { PersonField } from '../person-reader/model';
 import { factFieldAnchor, factVisitBounds } from './model';
 import { factControl, useFactVisit } from './visit';
 
@@ -16,13 +16,7 @@ function displayedText(node: Node): string {
   return Array.from(node.childNodes, displayedText).join(' ');
 }
 
-export function PeopleFactField({
-  field,
-  reading,
-}: {
-  field: ReturnType<typeof profileFields>[number];
-  reading: ProfileReading;
-}) {
+export function PeopleFactField({ field, reading }: { field: PersonField; reading: ProfileReading }) {
   const visit = useFactVisit();
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState('');
@@ -51,7 +45,9 @@ export function PeopleFactField({
       >
         {field.label.text || m.subject_value_unlabelled({}, o)}
       </h4>
-      {!field.presentable ? (
+      {!field.admitted ? (
+        <p role="status">{m.people_biography_unsupported({}, o)}</p>
+      ) : !field.presentable ? (
         <p role="status">{m.people_facts_unsupported({}, o)}</p>
       ) : (
         <>
