@@ -103,6 +103,7 @@ test('served named Collections route replaces sparse/empty windows, survives cur
   const router = createRouter({
     routeTree: rootRoute.addChildren([route]),
     context: { queryClient: client },
+    rewrite: { input: ({ url }) => url.href, output: ({ url }) => url.href },
     history: createMemoryHistory({ initialEntries: ['/@mira/collections?keep=a%2fb&keep=2#anchor'] }),
   });
   const host = window.document.createElement('div');
@@ -160,7 +161,7 @@ test('served named Collections route replaces sparse/empty windows, survives cur
     await click('previous');
     expect(requests.at(-1)!.searchParams.get('cursor')).toBe('second+/=');
     await click('first');
-    expect(router.state.location.searchStr).toBe('?keep=a%2fb&keep=2');
+    expect(router.history.location.search).toBe('?keep=a%2fb&keep=2');
     expect(router.state.location.hash).toBe('anchor');
     expect(link('previous')).toBeNull();
     await act(async () => {
@@ -239,5 +240,6 @@ test('admitted coordinates are bounded, direct later entry invents none, failed 
   visit.receive('old', true);
   expect(visit.coordinates).toEqual([]);
   expect(Route.options.validateSearch!({ cursor: 'x'.repeat(4097) } as never)).toEqual({});
+  expect(collectionWindowHref('?&keep=x&cursor=y', '', null)).toBe('?&keep=x');
   expect(collectionWindowHref('?keep=a%2fb&%63ursor=x&cursor=y', 'hash', null)).toBe('?keep=a%2fb#hash');
 });

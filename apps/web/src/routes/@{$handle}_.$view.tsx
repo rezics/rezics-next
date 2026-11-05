@@ -1,7 +1,7 @@
 import { PublicAccountState, PublicRealmsPage } from '../accounts/public-profile/view';
 import { useEffect } from 'react';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from '../features/pages/agent-page';
@@ -67,7 +67,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
         headers: { 'Cache-Control': 'private, no-store' },
       });
     }
-    if (page.kind === 'state') return page;
+    if (page.kind === 'state') return { ...page, querySearch: location.searchStr, address: location.publicHref };
     if (view !== 'realms' && !agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
       throw redirect(canonicalRedirect(agentPath(locale, page.handle), location.searchStr, location.hash, 302));
     const canonicalHandle = page.page.account?.handle;
@@ -79,6 +79,8 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     }
     return {
       ...page,
+      querySearch: location.searchStr,
+      address: location.publicHref,
       shareCard: page.overview.subject
         ? projectShareCardPage({ kind: 'page', page: page.overview }, { id: page.overview.subject, locale })
         : undefined,
@@ -107,7 +109,9 @@ function AgentViewRoute() {
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
-  const { searchStr, hash, pathname } = useLocation();
+  const loaded = Route.useLoaderData();
+  const address = new URL(loaded.address, 'https://rezics.invalid');
+  const searchStr = loaded.querySearch;
   const queryClient = useQueryClient();
   const query = agentViewQuery(handle, locale, view, cursor, searchStr);
   const { data, dataUpdatedAt } = useSuspenseQuery({
@@ -139,10 +143,10 @@ function AgentViewRoute() {
     view,
     locale,
     cursor: cursor ?? null,
-    search: searchStr,
-    hash,
+    search: address.search,
+    hash: address.hash,
     navigate: (href) => {
-      router.history.push(`${pathname}${href}`);
+      router.history.push(`${address.pathname}${href}`);
     },
     retry: () => {
       void router.invalidate();

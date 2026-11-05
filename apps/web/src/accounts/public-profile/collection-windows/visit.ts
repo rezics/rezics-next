@@ -82,11 +82,9 @@ export class CollectionVisit {
 
 /** Remove only cursor fields, preserving unrelated query bytes, duplicates and fragment. */
 export function collectionWindowHref(search: string, hash: string, cursor: Coordinate): string {
-  const retained = search
-    .replace(/^\?/, '')
-    .split('&')
-    .filter((part) => !new URLSearchParams(part).has('cursor'));
+  const raw = search.replace(/^\?/, '');
+  const retained = raw ? raw.split('&').filter((part) => !new URLSearchParams(part).has('cursor')) : [];
   if (cursor !== null) retained.push(`cursor=${encodeURIComponent(cursor)}`);
-  const query = retained.filter((part, index) => part || index > 0).join('&');
+  const query = retained.join('&');
   return `${query ? `?${query}` : '?'}${hash ? `#${hash.replace(/^#/, '')}` : ''}`;
 }
