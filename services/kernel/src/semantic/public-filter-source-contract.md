@@ -722,7 +722,7 @@ and no pending, unresolved or unacknowledged homes. Decision: changed-since-star
 original verified repair plus current native ACK and independent settlement can complete maintenance.
 Changed information stays intact and never authorizes disclosure of an old execution. Search
 composes the callable through its existing writer fence and owns activation and reader-safe retirement.
-Native receiving, restart and growth still need acceptance.
+Native receiving, restart and growth need acceptance.
 
 ### Native Source metadata ownership
 
