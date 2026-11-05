@@ -28,7 +28,7 @@ import { agentAdapter, cleanAgentEnvironment, type McpServer } from './agents.ts
 import { type LaunchContext } from './launch-context.ts';
 import { storybookServers } from './storybook.ts';
 import { branchHead } from './attempt-progress.ts';
-import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
+import { prepareOwnerDecisionPrompt, writeOwnerDecisionFile } from './owner-decisions.ts';
 import {
   applyRenderedPrompt,
   minimalVerification as promptMinimalVerification,
@@ -295,6 +295,7 @@ export async function launch(
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
   const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt, policy);
+  if (ownerDecisionPrompt.file) writeOwnerDecisionFile(task.worktree, ownerDecisionPrompt.file);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');

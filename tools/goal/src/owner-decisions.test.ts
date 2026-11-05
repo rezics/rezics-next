@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultPolicy } from './policy.ts';
-import { MAX_WORKER_PROMPT_CHARACTERS, prepareOwnerDecisionPrompt } from './owner-decisions.ts';
+import {
+  MAX_WORKER_PROMPT_CHARACTERS,
+  prepareOwnerDecisionPrompt,
+  writeOwnerDecisionFile,
+} from './owner-decisions.ts';
 import { temporaryDirectory } from './test-support.ts';
 import type { WorkerEvent } from './store.ts';
 import type { Task } from './types.ts';
@@ -169,7 +173,38 @@ test('the decision shares the total prompt budget and omitted references remain 
   expect(prepared.prompt.length).toBeLessThanOrEqual(MAX_WORKER_PROMPT_CHARACTERS);
   expect(prepared.prompt).toContain('1 document reference(s) remain pending');
   expect(prepared.delivery?.documentRefs).toEqual([]);
-  expect(() => prepare('x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10))).toThrow('total prompt input limit');
+});
+
+test('a decision that does not fit the prompt is delivered as a pointer to its file, and the attempt starts', () => {
+  const directory = temporaryDirectory();
+  try {
+    const worktree = join(directory.path, 'worker');
+    mkdirSync(worktree);
+    const body = decision('bounded', 'Use the current rule.', '2026-11-03T09:00:00.000Z');
+    const prepare = (events: WorkerEvent[]) =>
+      prepareOwnerDecisionPrompt(
+        { ownerDecisionEvents: () => events },
+        task(worktree),
+        { taskId: 'task-a', attempt: 2 },
+        'x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10),
+      );
+    const accepted = event(1, body, body.createdAt);
+    const prepared = prepare([accepted]);
+    expect(prepared.prompt).toContain('does not fit this prompt: read .temp/owner-decisions/1.md before continuing.');
+    expect(prepared.prompt).not.toContain('Use the current rule.');
+    expect(prepared.delivery?.summaryDelivered).toBe(true);
+    writeOwnerDecisionFile(worktree, prepared.file!);
+    expect(readFileSync(join(worktree, '.temp/owner-decisions/1.md'), 'utf8')).toContain('Use the current rule.');
+    const delivery = event(
+      2,
+      { decisionId: 'accounts:bounded', decisionSequence: 1, summaryDelivered: true, documentRefs: [] },
+      body.createdAt,
+      'owner-contract-decision-delivery',
+    );
+    expect(prepare([accepted, delivery]).prompt).toBe('x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10));
+  } finally {
+    directory.close();
+  }
 });
 
 test('a reference escaping through a parent symlink stays named and pending', () => {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { accessSync, constants, lstatSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { accessSync, constants, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { AttemptRef } from './contracts.ts';
 import { authenticatedManager } from './priority-authority.ts';
@@ -29,10 +29,16 @@ export type OwnerDecisionDelivery = {
   documentRefs: { path: string; status: 'delivered' | 'pending' }[];
 };
 
+/** A worktree-relative file that the prompt points to when the decision does not fit the prompt. */
+export type OwnerDecisionFile = { path: string; content: string };
+
 export type PreparedOwnerDecisionPrompt = {
   prompt: string;
   delivery?: OwnerDecisionDelivery;
+  file?: OwnerDecisionFile;
 };
+
+const DECISION_FILE_DIRECTORY = '.temp/owner-decisions';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -271,14 +277,25 @@ export function prepareOwnerDecisionPrompt(
   );
   if (delivered.summaryDelivered && pendingDocuments.length === 0) return { prompt };
 
-  const lines = [
-    `Owner decision ${decision.id} from authenticated manager ${decision.managerId}: this prompt carries the decision.`,
-    ...(delivered.summaryDelivered ? [] : [`Decision: ${decision.summary}`]),
-  ];
-  const documentRefs: OwnerDecisionDelivery['documentRefs'] = [];
   const fits = (block: string) =>
     `${prompt}\n\n${block}`.length <= policy.workerPrompt.characters &&
     Buffer.byteLength(`${prompt}\n\n${block}`) <= policy.brief.bytes;
+  const header = `Owner decision ${decision.id} from authenticated manager ${decision.managerId}: this prompt carries the decision.`;
+  const summary = `Decision: ${decision.summary}`;
+  // A summary that does not fit is replaced by a pointer to a file holding the whole decision, so no decision refuses launch.
+  const pointer = `${DECISION_FILE_DIRECTORY}/${decision.sequence}.md`;
+  let lines: string[];
+  let file: OwnerDecisionFile | undefined;
+  if (delivered.summaryDelivered) lines = [header];
+  else if (fits([header, summary].join('\n'))) lines = [header, summary];
+  else {
+    lines = [
+      `Owner decision from authenticated manager ${decision.managerId} does not fit this prompt: read ${pointer} before continuing.`,
+    ];
+    file = { path: pointer, content: decisionFileContent(decision) };
+  }
+  const fixed = lines.length;
+  const documentRefs: OwnerDecisionDelivery['documentRefs'] = [];
   let omitted = 0;
   for (const reference of pendingDocuments) {
     const available = availabilityByPath.get(reference.path) === true;
@@ -295,22 +312,41 @@ export function prepareOwnerDecisionPrompt(
     documentRefs.push({ path: reference.path, status });
   }
   if (omitted) {
+    // The notice is one bounded line; it may pass the limit where the fixed decision lines already filled it.
     const notice = () =>
       `- ${omitted} document reference(s) remain pending because this prompt reached its total input limit.`;
-    while (lines.length > (delivered.summaryDelivered ? 1 : 2) && !fits([...lines, notice()].join('\n'))) {
+    while (lines.length > fixed && !fits([...lines, notice()].join('\n'))) {
       lines.pop();
       documentRefs.pop();
       omitted++;
     }
     lines.push(notice());
   }
-  if (!fits(lines.join('\n')))
-    throw new Error('owner decision and worker prompt exceed the existing total prompt input limit');
   const receipt: OwnerDecisionDelivery = {
     decisionId: decision.id,
     decisionSequence: decision.sequence,
     summaryDelivered: !delivered.summaryDelivered,
     documentRefs,
   };
-  return { prompt: `${prompt}\n\n${lines.join('\n')}`, delivery: receipt };
+  return { prompt: `${prompt}\n\n${lines.join('\n')}`, delivery: receipt, ...(file ? { file } : {}) };
+}
+
+function decisionFileContent(decision: OwnerDecision): string {
+  const references = decision.documentRefs.map(
+    (reference) => `- ${reference.path}${reference.change ? ` — ${reference.change}` : ''}`,
+  );
+  return [
+    `Owner decision ${decision.id} from authenticated manager ${decision.managerId}.`,
+    '',
+    decision.summary,
+    ...(references.length ? ['', 'Document references:', ...references] : []),
+    '',
+  ].join('\n');
+}
+
+/** Places the pointer's target in the worker worktree before the worker starts, so the prompt's path resolves. */
+export function writeOwnerDecisionFile(worktree: string, file: OwnerDecisionFile): void {
+  const path = join(worktree, file.path);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, file.content);
 }
