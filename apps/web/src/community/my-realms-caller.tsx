@@ -1071,6 +1071,7 @@ function MyRealmsAdmittedPage({
   onMove: (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) => boolean;
   focusContinuation: (() => boolean) | undefined;
 }) {
+  caller.assertCurrent();
   const query = useQuery({ ...myRealmsQuery(cursor, caller), enabled: false });
   if (query.isError) throw query.error;
   const page = caller.acceptsQueryData(query.data)
