@@ -53,7 +53,16 @@ export async function readCopyInventoryValues(
     account_id: accountId,
     limit: COPY_FILTER_OPTION_QUERY_LIMIT,
   });
-  return plan.run(queryClient(client));
+  const rows = await plan.run(queryClient(client));
+  // The generated UNION type marks these outputs nullable; both seeds exclude
+  // null IDs and copy_id is a required native column.
+  return rows.map((row) => ({
+    dimension: row.dimension as CopyInventoryValue['dimension'],
+    id: row.id as string,
+    copyId: row.copyId as string,
+    copyKind: row.copyKind,
+    profilePin: row.profilePin,
+  }));
 }
 
 function unavailableFacet(): CopyInventoryFacet {
