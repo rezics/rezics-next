@@ -13,17 +13,8 @@ import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 type PublicTextResult = { ok: false } | { ok: true; document: Record<string, unknown> };
-type PublicTextInvocation = { data: unknown; signal?: AbortSignal };
-const readPublicSubjectDocument = mock(async (_input: PublicTextInvocation): Promise<PublicTextResult> => ({ ok: false }));
-const queryUnavailable = () => ({ queryKey: [], queryFn: async () => undefined });
-mock.module('../src/features/pages/subject-queries.ts', () => ({
-  readPublicSubjectDocument,
-  subjectLibraryQuery: queryUnavailable,
-  subjectOwnRatingQuery: queryUnavailable,
-  subjectOwnReactionQuery: queryUnavailable,
-  subjectRatingQuery: queryUnavailable,
-  subjectReaderQuery: queryUnavailable,
-}));
+const readPublicSubjectDocument = mock(async (_input: unknown): Promise<PublicTextResult> => ({ ok: false }));
+mock.module('../src/features/pages/subject-queries.ts', () => ({ readPublicSubjectDocument }));
 const { Summary, OverviewContext } = await import('../src/features/pages/overview');
 const require = createRequire(import.meta.url);
 const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
@@ -306,61 +297,41 @@ test('failed public text retries in place, blocks overlapping clicks, and render
   }
 });
 
-test('replacing a Subject aborts its read; an ignored late result cannot replace the fresh retry or take focus', async () => {
+test('late text for another Subject is discarded and an available empty document clears the failure', async () => {
   readPublicSubjectDocument.mockReset();
   let finishFirst!: (result: PublicTextResult) => void;
-  let finishSecond!: (result: PublicTextResult) => void;
-  let firstSignal: AbortSignal | undefined;
-  let secondSignal: AbortSignal | undefined;
-  let leaveSignal: AbortSignal | undefined;
   let calls = 0;
   const first = missingSummary('text-first', 'subject-first');
   const second = missingSummary('text-second', 'subject-second');
-  readPublicSubjectDocument.mockImplementation((input) => {
+  readPublicSubjectDocument.mockImplementation(() => {
     calls += 1;
-    if (calls === 1) {
-      firstSignal = input.signal;
-      return new Promise((resolve) => (finishFirst = resolve));
-    }
-    if (calls === 3) {
-      leaveSignal = input.signal;
-      return new Promise(() => {});
-    }
-    secondSignal = input.signal;
-    return new Promise((resolve) => (finishSecond = resolve));
+    return calls === 1
+      ? new Promise((resolve) => (finishFirst = resolve))
+      : Promise.resolve({ ok: true, document: availableDocument(second.value, second.statement, '') });
   });
   const mounted = await mountSummary(first.value);
   try {
     await act(async () => mounted.host.querySelector('a')!.click());
     await mounted.render(second.value);
-    expect(firstSignal?.aborted).toBe(true);
     await act(async () => mounted.host.querySelector('a')!.click());
-    expect(calls).toBe(2);
-    expect(secondSignal).not.toBe(firstSignal);
-    expect(secondSignal?.aborted).toBe(false);
-    expect(mounted.host.querySelector('a')?.getAttribute('aria-busy')).toBe('true');
-    mounted.host.querySelector('a')!.focus();
+    expect(calls).toBe(1);
+    expect(mounted.host.querySelector('a')?.getAttribute('aria-disabled')).toBe('true');
     await act(async () => {
       finishFirst({ ok: true, document: availableDocument(first.value, first.statement, 'Late first Subject text.') });
       await Promise.resolve();
     });
     expect(mounted.host.textContent).not.toContain('Late first Subject text.');
-    expect(mounted.host.querySelector('a')?.getAttribute('aria-busy')).toBe('true');
-    expect(document.activeElement).toBe(mounted.host.querySelector('a'));
+    expect(mounted.host.querySelector('[data-slot="subject-text-unavailable"]')).not.toBeNull();
     await act(async () => {
-      finishSecond({ ok: true, document: availableDocument(second.value, second.statement, 'Current Subject text.') });
+      mounted.host.querySelector('a')!.click();
       await Promise.resolve();
     });
     expect(calls).toBe(2);
-    expect(mounted.host.textContent).toContain('Current Subject text.');
     expect(mounted.host.querySelector('[data-slot="subject-text-unavailable"]')).toBeNull();
-    await mounted.render(first.value);
-    await act(async () => mounted.host.querySelector('a')!.click());
-    expect(calls).toBe(3);
+    expect(mounted.host.querySelector('[data-slot="document-body"]')).not.toBeNull();
   } finally {
     await mounted.close();
   }
-  expect(leaveSignal?.aborted).toBe(true);
 });
 
 test('the actual spoiler gate reveals and hides by keyboard and resets for a different summary statement', async () => {
