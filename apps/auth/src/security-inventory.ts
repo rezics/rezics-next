@@ -124,7 +124,6 @@ export const issuerSecurityJsonRequest = createServerOnlyFn(
     return { response, body };
   },
 );
-});
 
 // Browser GET cannot set Origin. Use the existing Start BFF and carry the
 // originating POST's real Origin/cookie to the same issuer's declared GET API.
