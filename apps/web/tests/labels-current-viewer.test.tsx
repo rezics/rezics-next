@@ -636,8 +636,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await settleWrite(firstDraft, new Error('Uncertain first draft'));
       await changeName('G changed draft');
       await submit('rename');
-      expect(writes[firstDraft + 1]!.data.idempotencyKey).not.toBe(writes[firstDraft]!.data.idempotencyKey);
-      expect(writes[firstDraft + 1]!.data).toMatchObject({ id: 'label-G', revision: 7, name: 'G changed draft' });
+      expect(writes[firstDraft + 1]!.data).toEqual(writes[firstDraft]!.data);
       await settleWrite(firstDraft + 1, new Error('Uncertain changed draft'));
       await submit('rename');
       expect(writes[firstDraft + 2]!.data).toEqual(writes[firstDraft + 1]!.data);
@@ -647,6 +646,12 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
           (button) => button.textContent === m.action_cancel(),
         )!;
         (cancel as HTMLButtonElement).click();
+      });
+      await act(async () => {
+        const discard = [...document.querySelectorAll('[role="alertdialog"] button')].find(
+          (button) => button.textContent === m.library_label_draft_navigation_discard(),
+        )!;
+        (discard as HTMLButtonElement).click();
       });
       await act(async () => select('delete')());
       const finalDelete = writes.length;
