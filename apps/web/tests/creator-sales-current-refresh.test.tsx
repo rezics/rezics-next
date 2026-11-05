@@ -52,13 +52,21 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
-  await import('@tanstack/react-router');
+const {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterContextProvider,
+  RouterProvider,
+  useRouter,
+} = await import('@tanstack/react-router');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { sessionQuery } = await import('../src/session/query');
 
 const reads = await import('../src/checkout/creator-sales');
-const { CreatorSalesCurrent } = await import('../src/checkout/creator-sales-current');
+const { CreatorSalesCurrent, navigateCreatorSales } = await import('../src/checkout/creator-sales-current');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 const A = '019a2100-0000-7000-8000-000000000020';
@@ -259,6 +267,8 @@ test('three windows return through exact Previous and failed Restart retry witho
     history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }),
   });
   let cursor: string | undefined;
+  let locationKey = 'initial-location';
+  let loadId = 'initial-load';
   const native = (target?: string): CreatorSalesCurrentRead => {
     const value = page(A, target ?? null);
     value.page = {
@@ -287,12 +297,18 @@ test('three windows return through exact Previous and failed Restart retry witho
         <RouterContextProvider router={router}>
           <CreatorSalesCurrent
             initial={initial}
+            loadId={loadId}
+            locationKey={locationKey}
             cursor={cursor}
             locale="en"
-            navigate={async (href) => {
+            navigate={async (href, started) => {
               cursor = new URL(href, 'https://site.test').searchParams.get('cursor') ?? undefined;
+              locationKey = `movement-${requested.length + 1}`;
+              started(locationKey);
               initial = await reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
+              loadId = `loaded-${requested.length}`;
               show();
+              return { locationKey, loadId };
             }}
           />
         </RouterContextProvider>
@@ -402,6 +418,141 @@ test('three windows return through exact Previous and failed Restart retry witho
     });
     held = undefined;
     await tick();
+    expect(host.textContent).not.toContain('Previous sales');
+  } finally {
+    host.removeEventListener('click', stay);
+    await act(async () => root.unmount());
+    keep();
+    client.clear();
+    read.mockRestore();
+    host.remove();
+  }
+});
+
+test('a delayed move superseded at the same cursor retires its path before a fresh movement and exact retry', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const lifetime = viewerExposureLifetime(client);
+  const keep = lifetime.subscribe(() => {});
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: A, csrfToken: 'route-visit' });
+  const snapshot = lifetime.getSnapshot();
+  if (snapshot.state !== 'signed-in') throw new Error('Expected viewer');
+  client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+    subject: A,
+    admitted: ['selling', 'commerce_sale.list'],
+  });
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  let fail = false;
+  let routeLoad = 0;
+  const requested: (string | undefined)[] = [];
+  const firstDelayed = deferred();
+  const replacementDelayed = deferred();
+  const delayed = [firstDelayed, replacementDelayed];
+  const native = (cursor?: string): CreatorSalesCurrentRead => {
+    const value = page(A, cursor ?? null);
+    value.page = {
+      kind: 'ready',
+      sales: cursor === 'third+/=' ? [] : [creatorSaleFixture],
+      next: cursor === 'third+/=' ? null : cursor ? 'third+/=' : 'second+/=',
+      projectionState: 'ready',
+    };
+    return value;
+  };
+  const read = spyOn(reads, 'readCreatorSalesCurrent').mockImplementation(async ({ data }) => {
+    requested.push(data.cursor);
+    if (data.cursor === 'second+/=' && delayed.length) return delayed.shift()!.promise;
+    const value = native(data.cursor);
+    if (fail) value.page = { kind: 'unavailable' };
+    return value;
+  });
+  const rootRoute = createRootRoute({ component: Outlet });
+  let salesRouteId = '';
+  const salesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/creator/sales',
+    validateSearch: (search) => ({ cursor: typeof search.cursor === 'string' ? search.cursor : undefined }),
+    loaderDeps: ({ search }) => search,
+    staleTime: 0,
+    gcTime: 0,
+    loader: async ({ deps }) => ({
+      loadId: `sales-load-${++routeLoad}`,
+      initial: await reads.readCreatorSalesCurrent({ data: deps.cursor ? { cursor: deps.cursor } : {} }),
+    }),
+    component: function SalesRoute() {
+      const router = useRouter();
+      const data = router.state.matches.at(-1)!.loaderData as {
+        initial: CreatorSalesCurrentRead;
+        loadId: string;
+      };
+      const cursor = (router.state.location.search as { cursor?: string }).cursor;
+      return (
+        <CreatorSalesCurrent
+          initial={data.initial}
+          loadId={data.loadId}
+          locationKey={router.state.location.key}
+          cursor={cursor}
+          locale="en"
+          navigate={(href, started) => navigateCreatorSales(router, salesRouteId, href, started)}
+        />
+      );
+    },
+  });
+  salesRouteId = salesRoute.id;
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([salesRoute]),
+    history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }),
+  });
+  const tick = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  const click = async (label: string) => {
+    const element = [...host.querySelectorAll<HTMLElement>('a,button')].find((item) => item.textContent === label)!;
+    expect(element).toBeDefined();
+    await act(async () =>
+      element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
+    );
+    await tick();
+  };
+  const stay = (event: Event) => event.preventDefault();
+  host.addEventListener('click', stay);
+  try {
+    await act(async () => {
+      await router.load();
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+    });
+    await click('Older sales');
+    expect(requested.at(-1)).toBe('second+/=');
+    let replacement!: Promise<void>;
+    await act(async () => {
+      replacement = router.navigate({ href: '/en/creator/sales?cursor=second%2B%2F%3D' });
+      await Promise.resolve();
+    });
+    expect(requested.filter((cursor) => cursor === 'second+/=')).toHaveLength(2);
+    await act(async () => {
+      replacementDelayed.resolve(native('second+/='));
+      await replacement;
+    });
+    await act(async () => {
+      firstDelayed.resolve(native('second+/='));
+    });
+    await tick();
+    expect(router.state.location.search).toEqual({ cursor: 'second+/=' });
+    expect(host.textContent).not.toContain('Previous sales');
+    await click('Older sales');
+    expect(host.textContent).toContain('Previous sales');
+    fail = true;
+    await click('Previous sales');
+    expect(host.textContent).toContain('Retry this window');
+    fail = false;
+    await click('Retry this window');
+    expect(requested.at(-1)).toBe('second+/=');
+    expect(router.state.location.search).toEqual({ cursor: 'second+/=' });
     expect(host.textContent).not.toContain('Previous sales');
   } finally {
     host.removeEventListener('click', stay);

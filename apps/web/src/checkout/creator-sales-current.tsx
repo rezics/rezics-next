@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { AnyRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import { useCreatorCurrentOrigin } from './creator-current-origin';
@@ -14,18 +15,69 @@ import { CreatorSalesWindows, type SalesCoordinate, type SalesMovement } from '.
 type Origin = ReturnType<typeof useCreatorCurrentOrigin>['origin'];
 type Props = {
   initial: CreatorSalesCurrentRead;
+  loadId?: string | undefined;
+  locationKey?: string | undefined;
   locale: string;
   cursor?: string | undefined;
-  navigate?: ((href: string) => Promise<void>) | undefined;
+  navigate?: CreatorSalesNavigate | undefined;
 };
+export type CreatorSalesRouteLoad = { loadId: string; initial?: CreatorSalesCurrentRead };
+export type CreatorSalesRouteAdmission = { locationKey: string; loadId: string };
+export type CreatorSalesNavigate = (
+  href: string,
+  started: (locationKey: string) => void,
+) => Promise<CreatorSalesRouteAdmission | undefined>;
 type Windows = {
   coordinates: CreatorSalesWindows;
   source: object | undefined;
   focus: HTMLElement | undefined;
   admitting: boolean;
-  completed: object | undefined;
+  completed: { attempt: object; locationKey: string; loadId: string } | undefined;
+  targetLocationKey: string | undefined;
+  activeCursor: SalesCoordinate;
+  navigationPending: boolean;
+  navigationFailed: boolean;
   retrying: boolean;
 };
+
+export async function navigateCreatorSales(
+  router: AnyRouter,
+  routeId: string,
+  href: string,
+  started: (locationKey: string) => void,
+): Promise<CreatorSalesRouteAdmission | undefined> {
+  const expectedUrl = new URL(href, 'https://creator-sales.invalid');
+  const expectedHref = `${expectedUrl.pathname}${expectedUrl.search}${expectedUrl.hash}`;
+  let locationKey: string | undefined;
+  let loaded: CreatorSalesRouteAdmission | undefined;
+  const stopStart = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+    const target = new URL(toLocation.href, 'https://creator-sales.invalid');
+    if (
+      locationKey === undefined &&
+      `${target.pathname}${target.search}${target.hash}` === expectedHref
+    ) {
+      locationKey = toLocation.key;
+      started(locationKey);
+    }
+  });
+  const stopResolve = router.subscribe('onResolved', ({ toLocation }) => {
+    if (loaded || toLocation.key !== locationKey) return;
+    const data = router.state.matches.find((match) => match.routeId === routeId)?.loaderData as
+      | CreatorSalesRouteLoad
+      | undefined;
+    if (data) loaded = { locationKey, loadId: data.loadId };
+  });
+  try {
+    await router.navigate({ href });
+  } catch (error) {
+    if (!(error instanceof Error) || (error.name !== 'CancelledError' && error.name !== 'AbortError')) throw error;
+    return undefined;
+  } finally {
+    stopStart();
+    stopResolve();
+  }
+  return router.state.location.key === locationKey ? loaded : undefined;
+}
 
 function matches(value: unknown, subject: string, cursor: string | null): value is CreatorSalesCurrentRead {
   if (
@@ -52,7 +104,7 @@ function matches(value: unknown, subject: string, cursor: string | null): value 
 }
 
 export function CreatorSalesCurrent(props: Props) {
-  const { initial, locale, cursor } = props;
+  const { initial, loadId, locationKey, locale, cursor } = props;
   const current = useCreatorCurrentOrigin('commerce_sale.list', JSON.stringify([locale, cursor ?? null]));
   const authority = JSON.stringify([
     locale,
@@ -67,6 +119,8 @@ export function CreatorSalesCurrent(props: Props) {
     authority,
     client: current.client,
     initial,
+    loadId,
+    locationKey,
     origin: current.origin,
     cursor,
     transfer: false,
@@ -76,6 +130,10 @@ export function CreatorSalesCurrent(props: Props) {
       focus: undefined,
       admitting: false,
       completed: undefined,
+      targetLocationKey: undefined,
+      activeCursor: cursor,
+      navigationPending: false,
+      navigationFailed: false,
       retrying: false,
     } as Windows,
   }));
@@ -84,6 +142,8 @@ export function CreatorSalesCurrent(props: Props) {
     visit.authority !== authority ||
     visit.client !== current.client ||
     visit.initial !== initial ||
+    visit.loadId !== loadId ||
+    visit.locationKey !== locationKey ||
     visit.origin !== current.origin ||
     visit.cursor !== cursor
   ) {
@@ -92,11 +152,16 @@ export function CreatorSalesCurrent(props: Props) {
       visit.client === current.client &&
       visit.initial !== initial &&
       visit.windows.coordinates.staged !== undefined &&
+      visit.windows.targetLocationKey !== undefined &&
+      visit.windows.targetLocationKey === locationKey &&
+      (!visit.windows.completed || visit.windows.completed.loadId === loadId) &&
       visit.windows.coordinates.staged.cursor === cursor;
     active = {
       authority,
       client: current.client,
       initial,
+      loadId,
+      locationKey,
       origin: current.origin,
       cursor,
       transfer,
@@ -108,11 +173,16 @@ export function CreatorSalesCurrent(props: Props) {
             focus: undefined,
             admitting: false,
             completed: undefined,
+            targetLocationKey: undefined,
+            activeCursor: cursor,
+            navigationPending: false,
+            navigationFailed: false,
             retrying: false,
           },
     };
     active.windows.source = undefined;
-    active.windows.admitting = transfer;
+    active.windows.admitting = false;
+    active.windows.activeCursor = cursor;
     setVisit(active);
   }
   const [, wake] = useState(0);
@@ -157,6 +227,8 @@ export function CreatorSalesCurrent(props: Props) {
     <CurrentSalesRead
       key={`${current.origin.id}:${admittedLoader.version}`}
       {...props}
+      loadId={loadId}
+      locationKey={locationKey}
       subject={subject}
       origin={current.origin}
       hydrated={current.hydrated}
@@ -174,6 +246,8 @@ export function CreatorSalesCurrent(props: Props) {
 
 function CurrentSalesRead({
   initial,
+  loadId,
+  locationKey,
   locale,
   cursor,
   subject,
@@ -185,6 +259,8 @@ function CurrentSalesRead({
   navigate,
   settled,
 }: Props & {
+  loadId: string | undefined;
+  locationKey: string | undefined;
   subject: string;
   origin: Origin;
   hydrated: boolean;
@@ -250,24 +326,49 @@ function CurrentSalesRead({
   ) {
     windows.coordinates = new CreatorSalesWindows(cursor);
     windows.focus = undefined;
+    windows.completed = undefined;
+    windows.targetLocationKey = undefined;
+    windows.admitting = false;
+    windows.navigationPending = false;
+    windows.navigationFailed = false;
+  }
+  const staged = windows.coordinates.staged;
+  if (
+    staged &&
+    windows.completed?.attempt === staged &&
+    (windows.completed.locationKey !== locationKey || windows.completed.loadId !== loadId)
+  ) {
+    windows.coordinates = new CreatorSalesWindows(cursor);
+    windows.focus = undefined;
+    windows.completed = undefined;
+    windows.targetLocationKey = undefined;
+    windows.admitting = false;
+    windows.navigationPending = false;
+    windows.navigationFailed = false;
   }
   if (windows.source !== source) windows.retrying = false;
   windows.source = source;
-  const staged = windows.coordinates.staged;
+  const activeStage = windows.coordinates.staged;
   useLayoutEffect(() => {
     if (value?.page.kind !== 'ready' && value?.page.kind !== 'loading') windows.focus = undefined;
     if (
-      windows.completed !== staged ||
+      windows.completed?.attempt !== activeStage ||
       !windows.admitting ||
-      !staged ||
-      staged.cursor !== cursor ||
+      !activeStage ||
+      windows.completed.locationKey !== locationKey ||
+      windows.completed.loadId !== loadId ||
+      activeStage.cursor !== cursor ||
       value?.page.kind !== 'ready' ||
       !sourceIsCurrent()
     )
       return;
     windows.coordinates.accept();
     windows.completed = undefined;
+    windows.targetLocationKey = undefined;
     windows.admitting = false;
+    windows.navigationPending = false;
+    windows.navigationFailed = false;
+    windows.retrying = false;
     const focus = windows.focus;
     windows.focus = undefined;
     redraw((n) => n + 1);
@@ -277,32 +378,75 @@ function CurrentSalesRead({
       heading?.focus();
     }
   });
-  const move = (movement: SalesMovement, target: SalesCoordinate, keyboard: boolean, element: HTMLElement) => {
-    if (!navigate || !sourceIsCurrent() || (staged && !windows.admitting)) return;
+  const move = (
+    movement: SalesMovement,
+    target: SalesCoordinate,
+    keyboard: boolean,
+    element?: HTMLElement,
+    retry = false,
+  ) => {
+    if (
+      !navigate ||
+      !sourceIsCurrent() ||
+      (windows.coordinates.staged && !windows.admitting && !retry) ||
+      (retry && !windows.navigationFailed)
+    )
+      return;
     windows.coordinates.stage(movement, target);
     windows.admitting = false;
     windows.completed = undefined;
+    windows.targetLocationKey = undefined;
+    windows.navigationPending = true;
+    windows.navigationFailed = false;
     const attempt = windows.coordinates.staged;
     windows.focus = keyboard ? element : undefined;
     redraw((n) => n + 1);
-    // Re-admit the initiating source immediately before the existing route navigation.
-    if (sourceIsCurrent())
-      void navigate(creatorSalesHref(locale, target)).then(() => {
+    if (sourceIsCurrent()) {
+      void navigate(creatorSalesHref(locale, target), (targetLocationKey) => {
         if (windows.coordinates.staged !== attempt) return;
-        windows.completed = attempt;
+        windows.targetLocationKey = targetLocationKey;
+      }).then((result) => {
+        if (windows.coordinates.staged !== attempt) return;
+        windows.navigationPending = false;
+        if (!result || result.locationKey !== windows.targetLocationKey) {
+          windows.focus = undefined;
+          if (windows.activeCursor === attempt.cursor) {
+            windows.coordinates = new CreatorSalesWindows(windows.activeCursor);
+            windows.completed = undefined;
+            windows.targetLocationKey = undefined;
+            windows.admitting = false;
+            windows.navigationFailed = false;
+          } else {
+            windows.navigationFailed = true;
+          }
+          settled();
+          return;
+        }
+        windows.completed = { attempt, ...result };
+        windows.admitting = true;
         settled();
       });
+    } else {
+      windows.navigationPending = false;
+      windows.navigationFailed = true;
+      windows.focus = undefined;
+      settled();
+    }
   };
   if (hydrated && !origin.isCurrent())
     return (
       <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
     );
   if (origin.isCurrent()) origin.workspace.read = value;
-  const page: CreatorSalesData = value?.page ?? { kind: 'loading' };
+  const page: CreatorSalesData = windows.navigationPending
+    ? { kind: 'loading' }
+    : windows.navigationFailed
+      ? { kind: 'unavailable' }
+      : (value?.page ?? { kind: 'loading' });
   return (
     <CreatorSalesPage
       page={page}
-      source={staged ? windows.coordinates.staged : source}
+      source={activeStage ? windows.coordinates.staged : source}
       isCurrent={() => !windows.coordinates.staged && sourceIsCurrent()}
       windows={
         navigate
@@ -311,8 +455,12 @@ function CurrentSalesRead({
               staged: windows.coordinates.staged,
               move,
               retry: () => {
-                if (sourceIsCurrent()) {
+                const target = windows.coordinates.staged;
+                if (!target || !sourceIsCurrent()) return;
+                if (windows.navigationFailed) move(target.movement, target.cursor, false, undefined, true);
+                else if (target.cursor === cursor) {
                   windows.retrying = true;
+                  windows.navigationFailed = false;
                   void query.refetch();
                 }
               },

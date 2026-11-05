@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { CreatorSalesAddress } from '../../../checkout/creator-sales-address';
 import { CreatorSalesPage } from '../../../checkout/creator-sales-page';
-import { CreatorSalesCurrent } from '../../../checkout/creator-sales-current';
+import { CreatorSalesCurrent, navigateCreatorSales } from '../../../checkout/creator-sales-current';
 import { creatorSalesAddressLoad, creatorSalesSearch, readCreatorSalesCurrent } from '../../../checkout/creator-sales';
 import { requirePrivatePageAccess } from '../../../session/guard';
 import { loadPrivatePage } from '../../../session/private-page';
@@ -14,10 +14,12 @@ export const Route = createFileRoute('/creator/sales/')({
   beforeLoad: async (context) => ({ sessionAccess: await requirePrivatePageAccess(context) }),
   validateSearch: creatorSalesSearch,
   loaderDeps: ({ search }) => search,
-  loader: ({ context, deps }) =>
-    loadPrivatePage(context.sessionAccess, () =>
+  loader: async ({ context, deps }) => ({
+    loadId: crypto.randomUUID(),
+    initial: await loadPrivatePage(context.sessionAccess, () =>
       creatorSalesAddressLoad(deps, (data) => readCreatorSalesCurrent({ data })),
     ),
+  }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -26,7 +28,7 @@ export const Route = createFileRoute('/creator/sales/')({
   component: function CreatorSalesRoute() {
     const router = useRouter();
     const search = Route.useSearch();
-    const initial = Route.useLoaderData();
+    const { initial, loadId } = Route.useLoaderData();
     const locale = getLocale();
     if ('kind' in search)
       return (
@@ -36,11 +38,11 @@ export const Route = createFileRoute('/creator/sales/')({
     return (
       <CreatorSalesCurrent
         initial={initial}
+        loadId={loadId}
+        locationKey={router.state.location.key}
         locale={locale}
         {...search}
-        navigate={async (href) => {
-          await router.navigate({ href });
-        }}
+        navigate={(href, started) => navigateCreatorSales(router, Route.id, href, started)}
       />
     );
   },
