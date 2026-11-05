@@ -47,7 +47,9 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
     'wdt:P106',
     assertion,
   );
-  expect(subjectVisitReturn(returnAddress, 'zh-Hant')).toBe(returnAddress);
+  const acceptedReturn = subjectVisitReturn(returnAddress, 'zh-Hant')!;
+  const normalizedReturn = new URL(returnAddress, 'https://site.invalid');
+  expect(acceptedReturn).toBe(`${normalizedReturn.pathname}${normalizedReturn.search}${normalizedReturn.hash}`);
   const window = new Window({
     url: `https://site.invalid/zh-Hant/subjects/${peoplePersonId}/mira/people?context=${context}${locator}`,
   });
