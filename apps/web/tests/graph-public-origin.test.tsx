@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
+import { useSyncExternalStore } from 'react';
 
 const subject = '00000000-0000-4000-8000-00000000d101';
 const otherSubject = '00000000-0000-4000-8000-00000000d102';
@@ -88,6 +89,29 @@ test('the production graph route gates unsupported origins and a fresh Global ch
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
+  const originalSession = await import('../src/session/query');
+  type SessionObservation =
+    | { state: 'signed-out'; subject: null; csrfToken: null }
+    | { state: 'signed-in'; subject: string; csrfToken: string };
+  let observedSession: SessionObservation = { state: 'signed-out', subject: null, csrfToken: null };
+  const sessionListeners = new Set<() => void>();
+  const setObservedSession = (next: SessionObservation) => {
+    observedSession = next;
+    for (const listener of sessionListeners) listener();
+  };
+  mock.module('../src/session/query', () => ({
+    sessionQuery: { queryKey: ['session'] },
+    sessionCsrfToken: () => (observedSession.state === 'signed-in' ? observedSession.csrfToken : null),
+    useSession: () =>
+      useSyncExternalStore(
+        (listener) => {
+          sessionListeners.add(listener);
+          return () => sessionListeners.delete(listener);
+        },
+        () => observedSession,
+        () => observedSession,
+      ),
+  }));
 
   const calls: { data: Record<string, unknown>; signal: AbortSignal }[] = [];
   const staleResults: ((result: { ok: false; reason: 'denied' }) => void)[] = [];
@@ -123,12 +147,10 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     '@tanstack/react-router'
   );
   const { setLocale } = await import('../src/paraglide/runtime');
-  const { sessionQuery } = await import('../src/session/query');
   const { Route } = await import('../src/routes/subjects/$id_.$slug.graph');
   setLocale('en', { reload: false });
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
   const content = createContext(null as import('react').ReactNode);
   const rootRoute = createRootRoute({ component: () => useContext(content) ?? h(Outlet) });
   const graphRoute = Route.update({
@@ -225,7 +247,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === publicReturn)).toBe(true);
 
     await act(async () => {
-      queryClient.setQueryData(sessionQuery.queryKey, {
+      setObservedSession({
         state: 'signed-in',
         subject: otherSubject,
         csrfToken: 'reader',
@@ -239,6 +261,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     });
     queryClient.clear();
     mock.module('../src/features/pages/graph-browser/actions', () => originalActions);
+    mock.module('../src/session/query', () => originalSession);
     for (const [name, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
       else Reflect.deleteProperty(globalThis, name);
