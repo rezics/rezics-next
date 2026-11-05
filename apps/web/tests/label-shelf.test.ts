@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 import type { LabelsPage } from '../src/library/labels-read';
-const { loadLabelShelfPage } = await import('../src/library/label-shelf-read');
+const { loadCurrentLabelShelfPage, loadLabelShelfPage } = await import('../src/library/label-shelf-read');
 const { LabelShelfPage } = await import('../src/library/entries-page');
 const { LabelsPageView } = await import('../src/library/labels-page');
 const { shelfDisplay, shelfHref, validateShelfSearch } = await import('../src/library/shelf-params');
@@ -183,29 +183,57 @@ test('one FULL label-assignment read supplies the whole tile page, name and curs
 
 test('rejected native Label cursors offer a deliberate same-Label first page without changing other outcomes', async () => {
   const rejected = [
-    { status: 400, code: 'invalid_cursor', recover: true },
-    { status: 409, code: 'stale_cursor', recover: true },
-    { status: 409, code: 'invalid_cursor', recover: false },
-    { status: 400, code: 'stale_cursor', recover: false },
+    { status: 400, code: 'invalid_cursor', recover: true, cursor: true },
+    { status: 409, code: 'stale_cursor', recover: true, cursor: true },
+    { status: 409, code: 'invalid_cursor', recover: false, cursor: true },
+    { status: 400, code: 'stale_cursor', recover: false, cursor: true },
+    { status: 400, code: 'invalid_cursor', recover: false, cursor: false },
   ];
   try {
     for (const outcome of rejected) {
       requests.length = 0;
-      assignmentOverride = { status: outcome.status, body: { code: outcome.code }, cursorOnly: true };
+      assignmentOverride = {
+        status: outcome.status,
+        body: { code: outcome.code },
+        cursorOnly: outcome.cursor,
+      };
       const page = await loadLabelShelfPage(client() as never, request(), env, {
         labelId,
-        cursor: 'opaque-page-token',
+        ...(outcome.cursor ? { cursor: 'opaque-page-token' } : {}),
         limit: 100,
       });
       expect(page.state).toBe(outcome.recover ? 'cursor-rejected' : 'unavailable');
       expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toEqual([
         expect.objectContaining({
-          query: { labelId, view: 'FULL', limit: '100', cursor: 'opaque-page-token' },
+          query: {
+            labelId,
+            view: 'FULL',
+            limit: '100',
+            ...(outcome.cursor ? { cursor: 'opaque-page-token' } : {}),
+          },
           authorization: 'Bearer native-web-token',
         }),
       ]);
       if (!outcome.recover) continue;
       expect(page).toEqual({ state: 'cursor-rejected', labelId });
+      const currentPage = await loadCurrentLabelShelfPage(client() as never, request(), env, {
+        labelId,
+        cursor: 'opaque-page-token',
+        limit: 100,
+      });
+      expect(currentPage).toMatchObject({
+        state: 'cursor-rejected',
+        labelId,
+        provenance: {
+          subject: '0192f3a0-6c1e-7b2a-9d4e-000000000111',
+          locale: 'en',
+          source: { labelId, cursor: 'opaque-page-token' },
+        },
+      });
+      expect(currentPage).not.toHaveProperty('label');
+      expect(currentPage).not.toHaveProperty('entries');
+      expect(currentPage).not.toHaveProperty('undo');
+      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(2);
       const html = renderToStaticMarkup(
         createElement(LabelShelfPage, {
           page,
