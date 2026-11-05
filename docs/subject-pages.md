@@ -2368,6 +2368,12 @@ A returned fresh page may restore the view, but a mounted retired source object 
 including A-to-B-to-A, locale replacement and session refresh. Late copy and advice callbacks cannot update it.
 Ordinary browser history owns the value; there is no return registry, retained catalogue or former reading list.
 
+Decision: work-name Sources activation uses the existing validated same-locale `via` address with the actual selected
+Realm and stores its closed view descriptor only in ordinary browser history. Browser Back restores after a fresh
+current work reading; the existing `SubjectSourcesPage` `returnTo` anchor carries no history state, so an explicit
+state-less return focuses the newly admitted names section and restarts its local window. That anchor is the exact
+state-transfer seam for coordination; the Sources owner remains unchanged here.
+
 ### Supplied names Cost
 
 The native input producers are `checkSubjectStructure` (`packages/definitions/src/validate.ts`: at most 512 total
@@ -2396,10 +2402,13 @@ released artifact) under existing Terms recovery; charge their
 actual complete response bytes, not T alone. No grouping, opening, paging, filtering or copying adds requests.
 The exact Terms commands and drafts remain private editor-owned state and are not charged as names-return payloads.
 
-Names retain one admitted O(T + E) projection (T <= 262,144), a filter of at most 250 UTF-16 units, eight mounted groups
-and at most 24 rows each (192 rows). Copy state is per mounted control. Return decoding accepts at most 8,192 UTF-8
-bytes with eight group/window records and one fixed focus anchor; browser back and explicit return can each retain
-one such value in their navigation entries, with no traversal of obsolete entries. Three-scale composition cases
+Names retain one admitted O(T + E) projection (T <= 262,144), a filter of at most 250 UTF-16 units, at most
+`PEOPLE_NAME_GROUP_WINDOW` (8) mounted language groups and `PEOPLE_NAME_ROW_WINDOW` (24) rows per group (192 rows).
+Copy state is per mounted control. Return decoding accepts at most 8,192 UTF-8 bytes with at most eight bounded group
+descriptors, the current query/window, and one finite focus intent; browser Back retains one such value in its
+history entry, with no traversal of obsolete entries. Sources uses its existing validated `via` address and current
+bounded request; returning uses the ordinary current work read. The Sources `returnTo` anchor does not transmit local
+history metadata, so that path starts a clean local window. Three-scale composition cases
 at 64/512/4096 unrelated Subjects and obsolete history charge the same local projection, action refresh and handoff
 work. They establish no native examined-row bound or executed browser/visual result; native and browser acceptance
 remain integration-owned.
