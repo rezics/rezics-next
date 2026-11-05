@@ -9,7 +9,7 @@ import { CreateSubjectEntry } from './create-subject-entry';
 import { GameProfileEntry, gameProfileEntry } from './game-profile-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { MangaProfileEntry } from './manga-profile-entry';
-import { PeopleProfileEntry } from './people-profile-entry';
+import { PeopleProfileEntry, peopleProfileEntry } from './people-profile-entry';
 import { ProducerHistoryEntry } from './producer-history/entry';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
@@ -69,7 +69,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       return;
     }
     const entry =
-      match(node, PeopleProfileEntry, catalogueEntries.people) ??
+      match(node, PeopleProfileEntry, peopleProfileEntry) ??
       match(node, ProducerHistoryEntry, catalogueEntries.producerHistory) ??
       match(node, CreateSubjectEntry, catalogueEntries.create) ??
       match(node, AuthoredFieldEntry, catalogueEntries.authored) ??
