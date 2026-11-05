@@ -17,12 +17,47 @@ import { m } from '../paraglide/messages.js';
 function SourcesStory({
   scenario = 'selected-facts',
   loading = false,
+  exact,
 }: {
   scenario?: SourcesScenario;
   loading?: boolean;
+  exact?: 'distinct' | 'empty' | 'changed';
 }) {
   const locale = getLocale();
-  const fixture = useMemo(() => catalogueSourcesFixture(scenario), [scenario, locale]);
+  const fixture = useMemo(() => {
+    const fixture = catalogueSourcesFixture(scenario);
+    if (exact) {
+      const { rezics: _revision, ...recorded } = fixture.read.subject.statements['schema:isbn']![0]!;
+      fixture.read.selectedSynopsis =
+        exact === 'changed'
+          ? { kind: 'changed' }
+          : {
+              kind: 'matched',
+              context: fixture.read.subject.context,
+              release: fixture.read.subject.release,
+              fact: {
+                ...recorded,
+                property: { id: 'schema:abstract', data_type: 'document' },
+                value: { type: 'somevalue' },
+                references:
+                  exact === 'empty'
+                    ? []
+                    : [
+                        {
+                          hash: 'selected-reference',
+                          parts: [
+                            {
+                              property: { id: 'schema:url', data_type: 'url' },
+                              value: { type: 'value', content: 'https://catalogue.example.test/second-synopsis' },
+                            },
+                          ],
+                        },
+                      ],
+              },
+            };
+    }
+    return fixture;
+  }, [scenario, locale, exact]);
   const initial: SourcesResult = ['denied', 'invalid', 'conflict', 'unavailable'].includes(scenario)
     ? { kind: scenario as 'denied' | 'invalid' | 'conflict' | 'unavailable' }
     : { kind: 'ready', page: explainSubjectSources(fixture.read, locale, sourceDefinitions) };
@@ -51,7 +86,7 @@ const meta = {
   id: 'pages-subject-selected-sources',
   component: SourcesStory,
   parameters: { layout: 'fullscreen' },
-  render: (args) => <SourcesStory key={`${getLocale()}:${args.scenario}:${args.loading}`} {...args} />,
+  render: (args) => <SourcesStory key={`${getLocale()}:${args.scenario}:${args.loading}:${args.exact}`} {...args} />,
 } satisfies Meta<typeof SourcesStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -72,6 +107,23 @@ function fixtureId() {
   return catalogueSourcesFixture().id;
 }
 export const NoCitations: Story = { args: { scenario: 'no-citations' } };
+export const ExactSynopsisCitations: Story = {
+  args: { exact: 'distinct' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByRole('link', { name: 'https://catalogue.example.test/second-synopsis' })).toBeTruthy();
+    expect(canvas.queryByRole('link', { name: citationUrl })).toBeNull();
+  },
+};
+export const ExactSynopsisEmptyCitations: Story = {
+  args: { exact: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByText(m.sources_no_citations())).toBeTruthy();
+    expect(canvas.queryByRole('link', { name: citationUrl })).toBeNull();
+  },
+};
+export const ExactSynopsisChanged: Story = { args: { exact: 'changed' } };
 export const PartialMetadata: Story = { args: { scenario: 'partial-metadata' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const Loading: Story = { args: { loading: true } };

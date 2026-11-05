@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -96,6 +97,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
   }
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
   const kernel = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     access(config) {
       const catalogue = new Map(config.actions);

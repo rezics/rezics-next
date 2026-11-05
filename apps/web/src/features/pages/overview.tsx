@@ -1264,7 +1264,11 @@ function synopsisLanguageName(language: string, locale: string): string {
 
 function subjectRevision(subject: Subject): string | undefined {
   const revision: unknown = (subject as { revision?: unknown }).revision;
-  return typeof revision === 'string' && revision.length <= 128 ? revision : undefined;
+  return typeof revision === 'number'
+    ? String(revision)
+    : typeof revision === 'string' && revision.length <= 128
+      ? revision
+      : undefined;
 }
 
 function SummaryContent({
@@ -1300,20 +1304,25 @@ function SummaryContent({
         : [];
   const defaultId = choiceSet.kind === 'ready' ? choiceSet.selectedId : legacyCandidate?.statement.id;
   const revision = subjectRevision(read.subject);
-  const sourceKey = JSON.stringify([
-    read.subject.id,
-    read.subject.context,
-    value.locale,
-    value.context?.id ?? read.subject.context,
-    value.realm ?? null,
-    value.releaseDigest ?? null,
-    revision ?? null,
-    value.reader,
-    value.cacheReader,
-    session.state,
-    session.subject,
-    session.csrfToken,
-  ]);
+  const sourceKey = useMemo(
+    () => crypto.randomUUID(),
+    [
+      section,
+      read.subject.id,
+      read.subject.context,
+      read.subject.release,
+      value.locale,
+      value.context?.id ?? read.subject.context,
+      value.realm ?? null,
+      value.releaseDigest ?? null,
+      revision ?? null,
+      value.reader,
+      value.cacheReader,
+      session.state,
+      session.subject,
+      session.csrfToken,
+    ],
+  );
   const [selectionState, setSelectionState] = useState<{
     sourceKey: string;
     candidateId: string;
@@ -1343,6 +1352,7 @@ function SummaryContent({
         descriptor.locale !== value.locale ||
         descriptor.context !== expectedContext ||
         descriptor.realm !== value.realm ||
+        (descriptor.subjectRelease !== undefined && descriptor.subjectRelease !== read.subject.release) ||
         descriptor.release !== value.releaseDigest ||
         descriptor.source !== revision
       ) {
@@ -1522,6 +1532,7 @@ function SummaryContent({
       language: target.language,
       locale: value.locale,
       context: expectedContext,
+      subjectRelease: read.subject.release,
       ...(value.realm ? { realm: value.realm } : {}),
       ...(value.releaseDigest ? { release: value.releaseDigest } : {}),
       ...(revision ? { source: revision } : {}),
@@ -1557,23 +1568,33 @@ function SummaryContent({
     choiceSet.kind === 'ready' && selectedChoice && value.renderCandidateValue ? (
       <div id="subject-summary-evidence" tabIndex={-1} className="scroll-mt-32 space-y-2 focus-visible:outline-2">
         <h3 className="font-medium">{m.subject_synopsis_evidence({}, options)}</h3>
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.subject_synopsis_sources_unsupported({}, options)}
+        {sourceReturn &&
+          synopsisVisitHref(
+            `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
+            sourceReturn,
+            value.locale,
+          ) && (
+            <p className="text-sm">
+              <a
+                className={`${linkClass} ${linkColor}`}
+                href={synopsisVisitHref(
+                  `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
+                  sourceReturn,
+                  value.locale,
+                )}
+              >
+                {m.subject_synopsis_evidence({}, options)}
+              </a>
+            </p>
+          )}
+        <p className="text-sm">
+          <a
+            className={`${linkClass} ${linkColor}`}
+            href={`${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`}
+          >
+            {m.subject_synopsis_general_sources({}, options)}
+          </a>
         </p>
-        {sourceReturn && (
-          <p className="text-sm">
-            <a
-              className={`${linkClass} ${linkColor}`}
-              href={withSubjectVisitReturn(
-                `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
-                sourceReturn,
-                value.locale,
-              )}
-            >
-              {m.subject_synopsis_general_sources({}, options)}
-            </a>
-          </p>
-        )}
         {selectedChoice.statement.qualifiers.filter((part) => part.property.id !== 'rezics:spoilerLevel').length >
           0 && (
           <dl className="min-w-0 space-y-2 text-sm text-muted-foreground">

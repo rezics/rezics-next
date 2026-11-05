@@ -1,6 +1,7 @@
+import { synopsisVisit } from '../pages/subject-summary-reading/visit';
 import { actionState, type ConceptViewerActions } from './source-concept-explorer';
 import type { KernelClient, SubjectRead } from '@rezics/client';
-import { pickLanguage } from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, pickLanguage } from '@rezics/composition';
 import {
   bestRank,
   fieldLabel,
@@ -37,6 +38,7 @@ export type SourceField = {
   compareHref?: string;
 };
 export type SourcesPageData = {
+  selectedSynopsis?: 'matched' | 'changed' | 'missing' | 'unsupported' | 'unavailable';
   realm?: string | undefined;
   context?: import('@rezics/composition').SelectedContext | undefined;
   viewer?: { state: 'public' | 'signed-in' | 'signed-out'; actions: ConceptViewerActions };
@@ -49,11 +51,73 @@ export type SourcesPageData = {
   related: Related;
   sources: Sources;
 };
-export type SourcesFailure = { kind: 'denied' | 'missing' | 'invalid' | 'conflict' | 'unavailable' };
+export type SourcesFailure = { kind: 'denied' | 'missing' | 'invalid' | 'conflict' | 'unsupported' | 'unavailable' };
 export type SourcesResult = SourcesFailure | { kind: 'ready'; page: SourcesPageData };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literalTypes = new Set(['string', 'external-id', 'url', 'monolingualtext', 'time', 'quantity', 'wikibase-item']);
+const closed = (row: Record<string, unknown>, keys: string[]) => Object.keys(row).every((key) => keys.includes(key));
+
+/** Native HTTP transport is external input, including its optional selected component. */
+function selectedResponse(value: unknown): value is NonNullable<SubjectRead['selectedSynopsis']> {
+  if (!isRecord(value)) return false;
+  if (value.kind !== 'matched')
+    return ['changed', 'missing', 'unsupported', 'unavailable'].includes(String(value.kind)) && closed(value, ['kind']);
+  if (
+    !closed(value, ['kind', 'fact', 'context', 'release']) ||
+    typeof value.context !== 'string' ||
+    typeof value.release !== 'string' ||
+    !isRecord(value.fact)
+  )
+    return false;
+  const fact = value.fact;
+  const snak = (part: unknown): boolean => {
+    if (
+      !isRecord(part) ||
+      !isRecord(part.property) ||
+      !isRecord(part.value) ||
+      !closed(part.property, ['id', 'data_type']) ||
+      typeof part.property.id !== 'string' ||
+      typeof part.property.data_type !== 'string'
+    )
+      return false;
+    if (part.value.type === 'value')
+      return (
+        closed(part.value, ['type', 'content']) &&
+        Object.hasOwn(part.value, 'content') &&
+        part.property.data_type !== 'document' &&
+        part.property.data_type !== 'media'
+      );
+    return ['somevalue', 'novalue'].includes(String(part.value.type)) && closed(part.value, ['type']);
+  };
+  const part = (value: unknown) => isRecord(value) && closed(value, ['property', 'value']) && snak(value);
+  return (
+    closed(fact, ['id', 'rank', 'property', 'value', 'qualifiers', 'references']) &&
+    typeof fact.id === 'string' &&
+    uuid.test(fact.id) &&
+    ['normal', 'preferred'].includes(String(fact.rank)) &&
+    snak(fact) &&
+    isRecord(fact.property) &&
+    fact.property.id === 'schema:abstract' &&
+    fact.property.data_type === 'document' &&
+    isRecord(fact.value) &&
+    fact.value.type === 'somevalue' &&
+    Array.isArray(fact.qualifiers) &&
+    fact.qualifiers.length <= 16 &&
+    fact.qualifiers.every(part) &&
+    Array.isArray(fact.references) &&
+    fact.references.length <= 16 &&
+    fact.references.every(
+      (reference) =>
+        isRecord(reference) &&
+        closed(reference, ['hash', 'parts']) &&
+        typeof reference.hash === 'string' &&
+        Array.isArray(reference.parts) &&
+        reference.parts.length <= 16 &&
+        reference.parts.every(part),
+    )
+  );
+}
 
 /** Never turn a document/media locator or an undisclosed target into a human value or a browser image. */
 function presentable(snak: Snak, related: Related): boolean {
@@ -75,16 +139,47 @@ export function explainSubjectSources(
   read: Pick<SubjectRead, 'subject' | 'related'> & {
     summary?: SubjectRead['summary'] | undefined;
     account?: SubjectRead['account'];
+    selectedSynopsis?: SubjectRead['selectedSynopsis'];
   },
   locale: string,
   definitions?: SourceDefinitions,
 ): SourcesPageData {
-  const { subject } = read;
+  const exact = read.selectedSynopsis;
+  const admittedExact = exact?.kind === 'matched' && spoilerLevel(exact.fact) <= defaultReader.spoilerLevel;
+  const subject = exact
+    ? {
+        ...read.subject,
+        statements: exact.kind === 'matched' ? { 'schema:abstract': [exact.fact] } : {},
+        sourceRecords: [],
+      }
+    : read.subject;
   const actions = actionState({ ...read, account: read.account ?? null });
-  const original = originalLanguage(subject);
+  const original = originalLanguage(read.subject);
   const title = pageText(subject.labels, locale, original);
   const identity = { id: subject.id, label: title.text };
-  const related = read.related as Related;
+  const exactIds = admittedExact
+    ? new Set(
+        [
+          exact.fact,
+          ...exact.fact.qualifiers,
+          ...exact.fact.references.flatMap((reference) => reference.parts),
+        ].flatMap((snak) => [
+          snak.property.id,
+          ...(snak.property.data_type === 'wikibase-item' &&
+          snak.value.type === 'value' &&
+          typeof snak.value.content === 'string'
+            ? [snak.value.content]
+            : []),
+        ]),
+      )
+    : new Set<string>();
+  const related: Related = exact
+    ? Object.fromEntries(
+        Object.entries(read.related)
+          .filter(([id]) => exactIds.has(id))
+          .map(([id, entry]) => [id, { labels: entry.labels }]),
+      )
+    : (read.related as Related);
   const labelFor = (id: string) =>
     fieldLabel(
       pageText(
@@ -112,10 +207,13 @@ export function explainSubjectSources(
         ? [value.content.language]
         : [],
     );
-    const language = pickLanguage(languages, locale, original);
+    const language = exact?.kind === 'matched' ? undefined : pickLanguage(languages, locale, original);
     selected = selected.filter(
       ({ property, value }) =>
-        property.data_type !== 'document' || !isRecord(value.content) || value.content.language === language,
+        exact?.kind === 'matched' ||
+        property.data_type !== 'document' ||
+        !isRecord(value.content) ||
+        value.content.language === language,
     );
     const facts = selected.flatMap((statement): SourceFact[] => {
       const locator = statement.property.data_type === 'document' || statement.property.data_type === 'media';
@@ -128,7 +226,7 @@ export function explainSubjectSources(
             property: statement.property,
             value: locator && statement.value.type === 'value' ? { type: 'somevalue' } : statement.value,
           },
-          ...(locator && statement.value.type === 'value'
+          ...(locator
             ? { display: statement.property.data_type === 'document' ? ('document' as const) : ('media' as const) }
             : {}),
           qualifiers: parts(statement.qualifiers.filter((snak) => snak.property.id !== 'rezics:spoilerLevel')),
@@ -176,6 +274,7 @@ export function explainSubjectSources(
     });
   }
   return {
+    ...(exact && (exact.kind !== 'matched' || admittedExact) ? { selectedSynopsis: exact.kind } : {}),
     viewer: { state: 'public', actions },
     id: subject.id,
     title,
@@ -185,7 +284,7 @@ export function explainSubjectSources(
     fields,
     related,
     sources: {
-      credit: read.summary?.cover?.credit ?? null,
+      credit: exact ? null : (read.summary?.cover?.credit ?? null),
       // Native selected support owns this list. Citations above remain per field;
       // a record in this list grants neither field support nor prose/cover rights.
       records: subject.sourceRecords
@@ -229,12 +328,30 @@ export async function readSubjectSources(
   locale: string,
   definitions?: SourceDefinitions | Promise<SourceDefinitions | undefined>,
   includeViewerActions = false,
+  returnTo?: string,
 ): Promise<SourcesResult> {
   if (!uuid.test(id)) return { kind: 'missing' };
+  const visit = synopsisVisit(returnTo, id, locale);
+  if (visit.kind === 'invalid') return { kind: 'invalid' };
+  const selection = visit.kind === 'selected' ? visit.selection : undefined;
+  if (selection && (!selection.subjectRelease || selection.realm || selection.context !== PAGE_GLOBAL_CONTEXT))
+    return { kind: 'unsupported' };
+  const selectedSynopsis = selection
+    ? JSON.stringify({
+        statement: selection.candidateId,
+        document: selection.documentId,
+        digest: selection.digest,
+        language: selection.language,
+        context: selection.context,
+        release: selection.subjectRelease,
+        ...(selection.release ? { pageRelease: selection.release } : {}),
+      })
+    : undefined;
   try {
-    const query = { language: locale, includeViewerActions };
+    const query = { language: locale, includeViewerActions, ...(selectedSynopsis ? { selectedSynopsis } : {}) };
     let current = await client.subjects({ id }).get({ query, fetch: { redirect: 'manual', cache: 'no-store' } });
     let expected = id;
+    if (current.status === 308 && selection) return { kind: 'conflict' };
     if (current.status === 308) {
       const body = current.data ?? current.error?.value;
       const moved = body && 'redirect' in body ? body.redirect : undefined;
@@ -246,7 +363,20 @@ export async function readSubjectSources(
     }
     if (current.status !== 200 || !current.data) return failure(current.status);
     if (current.data.subject.id !== expected) return { kind: 'unavailable' };
+    if (selection) {
+      const exact: unknown = current.data.selectedSynopsis;
+      if (!selectedResponse(exact)) return { kind: 'unavailable' };
+      if (
+        exact.kind === 'matched' &&
+        (exact.fact.id !== selection.candidateId ||
+          exact.context !== selection.context ||
+          exact.release !== selection.subjectRelease)
+      )
+        return { kind: 'unavailable' };
+    }
     const page = explainSubjectSources(current.data, locale, await definitions);
+    if (selection && new TextEncoder().encode(JSON.stringify({ returnTo, page })).byteLength > 262144)
+      return { kind: 'unavailable' };
     if (includeViewerActions && page.viewer) page.viewer.state = 'signed-in';
     return { kind: 'ready', page };
   } catch {
