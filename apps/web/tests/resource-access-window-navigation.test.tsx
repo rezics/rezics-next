@@ -59,6 +59,7 @@ test('Previous and First keep their exact staged target through preparing, denia
   const reads: (string | undefined)[] = [];
   const preparing = Promise.withResolvers<AccessState>();
   let deferPrevious = false;
+  let retryingPrevious = false;
   let previousRetries = 0;
   let firstRetry = false;
   const recovery = controller(page('cursor-a'), async (cursor) => {
@@ -67,8 +68,8 @@ test('Previous and First keep their exact staged target through preparing, denia
       deferPrevious = false;
       return preparing.promise;
     }
-    if (cursor === 'cursor-a' && previousRetries++ === 0) return { status: 'denied' };
-    if (cursor === 'cursor-a' && previousRetries === 2) throw new Error('Read failed');
+    if (cursor === 'cursor-a' && retryingPrevious && previousRetries++ === 0) return { status: 'denied' };
+    if (cursor === 'cursor-a' && retryingPrevious && previousRetries === 2) throw new Error('Read failed');
     if (cursor === undefined && !firstRetry) {
       firstRetry = true;
       return { status: 'unavailable' };
@@ -86,6 +87,7 @@ test('Previous and First keep their exact staged target through preparing, denia
   expect(await movingBack).toBe(false);
   expect(recovery.snapshot()).toMatchObject({ canPrevious: true, canFirst: true, page: { status: 'preparing' } });
 
+  retryingPrevious = true;
   await recovery.retryPage();
   expect(recovery.snapshot().page.status).toBe('denied');
   await recovery.retryPage();
