@@ -8,4 +8,4 @@ same-request credentials, expected-reader checks and native response admission. 
 native start. Callers retain their currentness fences for transports that ignore cancellation. Advice retirement
 also follows locale/source replacement; drafts and publication settlement do not belong to these read lifetimes.
 Fresh same-reader admission preserves the retained draft; the incoming native profile and immutable original
-publication remain separate. Recovery checks assert the edited field rather than absence of text from the original intent.
+publication remain separate. Original publication details may contain the same edited text without replacing the draft.

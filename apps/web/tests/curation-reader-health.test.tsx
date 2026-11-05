@@ -468,10 +468,14 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(host.textContent).toContain('/private-b');
     expect(host.textContent).not.toContain('A later raw-language draft');
     expect(host.textContent).not.toContain(m.curation_unknown());
+    await openDetailsHeading();
+    await edit('text.en', 'B local draft');
     await click(m.curation_publish());
     await settle(() => publishes.length === 5, 'healthy B publication');
     expect(publishes[4]!.reader).toBe(readerB);
-    await act(async () => publishes[4]!.work.resolve({ digest: profileDigest(profileB), head: 32, ok: true }));
+    await act(async () =>
+      publishes[4]!.work.resolve({ digest: profileDigest(publishes[4]!.input.profile), head: 32, ok: true }),
+    );
     await settle(() => host.textContent?.includes(m.presentation_editor_published()) ?? false, 'B publication receipt');
     expect(host.textContent).not.toContain(m.curation_unknown());
 
