@@ -1,7 +1,10 @@
+import { mountedSuite } from './owned-application-review-fixture';
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { OwnedApplicationReview } from '../src/owned-application-review-view';
 import { click, expand, inventory, m, ready, render } from './owned-application-review-fixture';
+
+mountedSuite();
 
 test('one installed inventory call per deliberate page read; local inspection has zero reads', async () => {
   const data = inventory(

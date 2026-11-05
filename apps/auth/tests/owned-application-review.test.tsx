@@ -1,3 +1,4 @@
+import { mountedSuite } from './owned-application-review-fixture';
 import { expect, test } from 'bun:test';
 import { OwnedApplicationReview } from '../src/owned-application-review-view';
 import { permissionDescription } from '../src/permission-description';
@@ -15,6 +16,8 @@ import {
   tick,
   type Page,
 } from './owned-application-review-fixture';
+
+mountedSuite();
 
 test('public identity, ordered capabilities, duplicate names and local disclosure/copy', async () => {
   const longId = `client-読書-${'長い識別子'.repeat(40)}`;

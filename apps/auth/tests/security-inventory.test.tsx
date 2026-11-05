@@ -1,7 +1,10 @@
+import { mountedSuite } from './owned-application-review-fixture';
 import { expect, test } from 'bun:test';
 import { SecurityInventory, type InventorySource } from '../src/security-inventory-view';
 import type { InventoryPage } from '../src/security-inventory';
 import { click, expand, host, m, render, row, text, tick } from './owned-application-review-fixture';
+
+mountedSuite();
 
 test('Security composes independent ownership/consent data and retires both at the parent boundary', async () => {
   const life = new AbortController();

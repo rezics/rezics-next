@@ -125,7 +125,12 @@ export function useOwnedApplicationReview({
     }
     // Parent retirement already commits synchronously. Preserve that boundary
     // when independently mounted with the installed lifetime as well.
-    const retire = () => flushSync(clear);
+    const retire = () => {
+      // Initial parent admission can retire during its own effect. There is no
+      // private observation or accepted cursor to flush in that case.
+      if (current.current.accepted) flushSync(clear);
+      else clear();
+    };
     lifetime?.addEventListener('abort', retire, { once: true });
     if (heading.current?.parentElement?.contains(document.activeElement)) heading.current.focus();
     publish(emptyState());

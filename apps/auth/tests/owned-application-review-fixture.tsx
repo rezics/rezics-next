@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach } from 'bun:test';
+import { afterEach, beforeEach } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
@@ -8,8 +8,8 @@ import type { InventorySource } from '../src/security-inventory-view';
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
 );
-const dom = new Window({ url: 'https://auth.test/security' });
-const globals = {
+let dom = new Window({ url: 'https://auth.test/security' });
+const globals = () => ({
   window: dom,
   document: dom.document,
   navigator: dom.navigator,
@@ -19,10 +19,10 @@ const globals = {
   Event: dom.Event,
   getComputedStyle: dom.getComputedStyle.bind(dom),
   IS_REACT_ACT_ENVIRONMENT: true,
-};
-const original = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+});
+const original = new Map(Object.keys(globals()).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 function install() {
-  for (const [key, value] of Object.entries(globals))
+  for (const [key, value] of Object.entries(globals()))
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
 install();
@@ -32,20 +32,23 @@ const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 export let host: HTMLDivElement;
 let root: Root | null = null;
 export const tick = (fn: () => void = () => {}) => act(async () => fn());
-beforeEach(() => {
-  install();
-  overwriteGetLocale(() => 'en');
-});
-afterEach(async () => {
-  if (root) await tick(() => root!.unmount());
-  root = null;
-  host?.remove();
-  for (const [key, descriptor] of original) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-});
-afterAll(() => dom.happyDOM.close());
+export function mountedSuite() {
+  beforeEach(() => {
+    dom = new Window({ url: 'https://auth.test/security' });
+    install();
+    overwriteGetLocale(() => 'en');
+  });
+  afterEach(async () => {
+    if (root) await tick(() => root!.unmount());
+    root = null;
+    host?.remove();
+    await dom.happyDOM.close();
+    for (const [key, descriptor] of original) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  });
+}
 export async function render(node: ReactNode) {
   if (!root) {
     host = document.createElement('div');
