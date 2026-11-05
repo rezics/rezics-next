@@ -493,12 +493,14 @@ test('a curator lists every active Collection and everyone else lists only publi
       next: null,
     });
     const hiddenOwnerFace = await reads.listAccountCollections(curator, { curatorAccountId: curatorId, limit: 100 });
-    expect(hiddenOwnerFace.collections.map((collection) => collection.id)).toEqual(listed.map((collection) => collection.id));
+    expect(hiddenOwnerFace.collections.map((collection) => collection.id)).toEqual(
+      listed.map((collection) => collection.id),
+    );
     expect(hiddenOwnerFace.collections.map((collection) => collection.id)).not.toContain(hidden.id);
     const hiddenOwnerFullView = await reads.listCollections(curator, { curatorAccountId: curatorId, limit: 100 });
-    expect(hiddenOwnerFullView.collections.filter((collection) => !('builtinKind' in collection)).map(({ id }) => id)).toEqual(
-      active.map(({ id }) => id),
-    );
+    expect(
+      hiddenOwnerFullView.collections.filter((collection) => !('builtinKind' in collection)).map(({ id }) => id),
+    ).toEqual(active.map(({ id }) => id));
   } finally {
     await pool.query(
       `UPDATE access.account SET public_views = jsonb_set(public_views, '{collections}', 'true'::jsonb)

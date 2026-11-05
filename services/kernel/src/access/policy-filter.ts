@@ -40,11 +40,7 @@ export function lowerCollectionListResidual(residual: PolicyResidual): Collectio
         ? Object.freeze({ status: 'ready', source: 'curator', parameters: Object.freeze({}) })
         : { status: 'unavailable' };
     }
-    if (
-      operation === 'operand' &&
-      Reflect.ownKeys(root).length === 2 &&
-      ownValue(root, 'name') === 'public.floor'
-    )
+    if (operation === 'operand' && Reflect.ownKeys(root).length === 2 && ownValue(root, 'name') === 'public.floor')
       return Object.freeze({
         status: 'ready',
         source: 'public',

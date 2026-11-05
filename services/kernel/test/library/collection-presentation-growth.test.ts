@@ -355,11 +355,7 @@ test('native fixed selection branches and first/deep keyset reads stay bounded o
         expect(page.status).toBe(200);
         expect(((await page.json()) as { collections: unknown[] }).collections).toHaveLength(1);
       }
-      const accountFace = await f.send(
-        f.owner.bearer,
-        'GET',
-        `/v1/accounts/${f.owner.accountId}/collections?limit=1`,
-      );
+      const accountFace = await f.send(f.owner.bearer, 'GET', `/v1/accounts/${f.owner.accountId}/collections?limit=1`);
       expect(accountFace.status).toBe(200);
       const firstFace = (await accountFace.json()) as { collections: CollectionView[]; next: string | null };
       expect(firstFace.collections).toHaveLength(1);

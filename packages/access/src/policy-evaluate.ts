@@ -95,13 +95,9 @@ const constant = (value: boolean): PolicyFormulaNode => Object.freeze({ op: 'con
 const operand = (name: PolicyOperandName): PolicyFormulaNode => Object.freeze({ op: 'operand', name });
 const negate = (value: PolicyFormulaNode): PolicyFormulaNode => Object.freeze({ op: 'not', value });
 const conjunction = (values: readonly PolicyFormulaNode[]): PolicyFormulaNode =>
-  values.length === 1
-    ? values[0]!
-    : Object.freeze({ op: 'and', values: Object.freeze([...values]) });
+  values.length === 1 ? values[0]! : Object.freeze({ op: 'and', values: Object.freeze([...values]) });
 const disjunction = (values: readonly PolicyFormulaNode[]): PolicyFormulaNode =>
-  values.length === 1
-    ? values[0]!
-    : Object.freeze({ op: 'or', values: Object.freeze([...values]) });
+  values.length === 1 ? values[0]! : Object.freeze({ op: 'or', values: Object.freeze([...values]) });
 
 type GrantSide = 'actor' | 'principal' | 'global-actor' | 'global-principal';
 
@@ -166,15 +162,8 @@ export function policyFormulaProfile(catalogue: PolicyCatalogue, request: Policy
   let granting: PolicyFormulaNode = local;
   if (action.globalReach) {
     globalActorGrant = grantFormula('global-actor', request, action);
-    globalPrincipalGrant = request.hasPrincipal
-      ? grantFormula('global-principal', request, action)
-      : constant(true);
-    global = conjunction([
-      negate(operand('global.denial')),
-      operand('scope'),
-      globalActorGrant,
-      globalPrincipalGrant,
-    ]);
+    globalPrincipalGrant = request.hasPrincipal ? grantFormula('global-principal', request, action) : constant(true);
+    global = conjunction([negate(operand('global.denial')), operand('scope'), globalActorGrant, globalPrincipalGrant]);
     granting = disjunction([local, global]);
   }
   return Object.freeze({
@@ -386,7 +375,8 @@ export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest,
     operands,
     'actor.action-grant',
     factTruth('actor.action-grant'),
-    (localGrantActive && factTruth('actor.action-grant') === 'true') || (decision === 'false' && actorGrant === 'false'),
+    (localGrantActive && factTruth('actor.action-grant') === 'true') ||
+      (decision === 'false' && actorGrant === 'false'),
   );
   addOperand(
     operands,
@@ -398,16 +388,16 @@ export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest,
     addOperand(
       operands,
       'actor.own-account',
-        factTruth('actor.own-account'),
-        (localGrantActive && factTruth('actor.own-account') === 'true') ||
-          (decision === 'false' && actorGrant === 'false'),
+      factTruth('actor.own-account'),
+      (localGrantActive && factTruth('actor.own-account') === 'true') ||
+        (decision === 'false' && actorGrant === 'false'),
     );
   if (useBenefit)
     addOperand(
       operands,
       'actor.authenticated-benefit',
-        isExplicit ? 'not-required' : factTruth('actor.authenticated-benefit'),
-        localGrantActive && factTruth('actor.authenticated-benefit') === 'true',
+      isExplicit ? 'not-required' : factTruth('actor.authenticated-benefit'),
+      localGrantActive && factTruth('actor.authenticated-benefit') === 'true',
     );
   if (request.hasPrincipal) {
     addOperand(

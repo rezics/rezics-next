@@ -18,7 +18,12 @@ for (const vector of vectors.cases) {
   test(`scalar and residual agree: ${vector.id}`, () => {
     const request = vector.request as PolicyRequest;
     const facts = vector.facts as PolicyFacts;
-    const scalarFacts = { ...facts, ...(vector.resourceFacts['public.floor'] === undefined ? {} : { publicFloor: vector.resourceFacts['public.floor'] }) };
+    const scalarFacts = {
+      ...facts,
+      ...(vector.resourceFacts['public.floor'] === undefined
+        ? {}
+        : { publicFloor: vector.resourceFacts['public.floor'] }),
+    };
     const scalar = decidePolicy(result.catalogue, request, scalarFacts as PolicyFacts);
     const residual = specializePolicy(
       result.catalogue,
@@ -67,13 +72,18 @@ test('a missing or malformed row value remains unavailable', () => {
   const residual = specializePolicy(result.catalogue, request, facts, ['public.floor']);
   expect(residual.status).toBe('ready');
   if (residual.status !== 'ready') return;
-  expect(evaluatePolicyResidual(residual.residual, {})).toMatchObject({ decision: 'unavailable', reason: 'missing-evidence' });
-  expect(
-    evaluatePolicyResidual(residual.residual, { 'public.floor': null }),
-  ).toMatchObject({ decision: 'unavailable', reason: 'unknown-evidence' });
-  expect(
-    evaluatePolicyResidual(residual.residual, { 'public.floor': 1 } as never),
-  ).toMatchObject({ decision: 'unavailable', reason: 'malformed-evidence' });
+  expect(evaluatePolicyResidual(residual.residual, {})).toMatchObject({
+    decision: 'unavailable',
+    reason: 'missing-evidence',
+  });
+  expect(evaluatePolicyResidual(residual.residual, { 'public.floor': null })).toMatchObject({
+    decision: 'unavailable',
+    reason: 'unknown-evidence',
+  });
+  expect(evaluatePolicyResidual(residual.residual, { 'public.floor': 1 } as never)).toMatchObject({
+    decision: 'unavailable',
+    reason: 'malformed-evidence',
+  });
 });
 
 test('half-open temporal boundaries agree after qualification', () => {

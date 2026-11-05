@@ -42,7 +42,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
 }
 
-function ownData(value: Record<string, unknown>, key: string): { present: false } | { present: true; value: unknown } | null {
+function ownData(
+  value: Record<string, unknown>,
+  key: string,
+): { present: false } | { present: true; value: unknown } | null {
   try {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor) return { present: false };
@@ -68,9 +71,9 @@ function simplify(node: SpecialNode): SpecialNode {
     return Object.freeze({ op: 'not', value: value as PolicyResidualNode });
   }
 
-  const terms = node.values.map((item) => simplify(item as SpecialNode)).flatMap((item) =>
-    item.op === node.op ? (item.values as readonly SpecialNode[]) : [item],
-  );
+  const terms = node.values
+    .map((item) => simplify(item as SpecialNode))
+    .flatMap((item) => (item.op === node.op ? (item.values as readonly SpecialNode[]) : [item]));
   const decisive = node.op === 'and' ? false : true;
   if (terms.some((item) => item.op === 'constant' && item.value === decisive)) return constant(decisive);
   const neutral = !decisive;
@@ -87,13 +90,15 @@ function factNode(
 ): SpecialNode {
   const evidence = policyFactEvidence(facts, node.name);
   if (evidence.status === 'present') {
-    if (evidence.value === null)
-      return Object.freeze({ op: 'unknown', name: node.name, reason: 'unknown-evidence' });
+    if (evidence.value === null) return Object.freeze({ op: 'unknown', name: node.name, reason: 'unknown-evidence' });
     return constant(evidence.value);
   }
   if (evidence.status === 'malformed')
     return Object.freeze({ op: 'unknown', name: node.name, reason: 'malformed-evidence' });
-  if (requested.has(node.name as PolicyResourceOperandName) && resourceOperands.has(node.name as PolicyResourceOperandName))
+  if (
+    requested.has(node.name as PolicyResourceOperandName) &&
+    resourceOperands.has(node.name as PolicyResourceOperandName)
+  )
     return Object.freeze({ op: 'operand', name: node.name as PolicyResourceOperandName });
   return Object.freeze({ op: 'unknown', name: node.name, reason: 'missing-evidence' });
 }
@@ -114,7 +119,9 @@ function specializeNode(
     case 'or':
       return Object.freeze({
         op: node.op,
-        values: Object.freeze(node.values.map((value) => specializeNode(value, facts, requested) as PolicyResidualNode)),
+        values: Object.freeze(
+          node.values.map((value) => specializeNode(value, facts, requested) as PolicyResidualNode),
+        ),
       });
   }
 }
@@ -263,13 +270,7 @@ function normalizeNode(value: unknown, budget: ValidationBudget, depth: number):
   const keys = Reflect.ownKeys(value);
   if (op.value === 'constant') {
     const flag = ownData(value, 'value');
-    if (
-      keys.length !== 2 ||
-      !keys.includes('value') ||
-      !flag?.present ||
-      typeof flag.value !== 'boolean'
-    )
-      return null;
+    if (keys.length !== 2 || !keys.includes('value') || !flag?.present || typeof flag.value !== 'boolean') return null;
     return constant(flag.value);
   }
   if (op.value === 'operand') {
@@ -341,7 +342,10 @@ function explanationWithinBound(values: readonly PolicyOperand[]): readonly Poli
   return JSON.stringify(explanation).length <= MAX_POLICY_EXPLANATION_BYTES ? explanation : Object.freeze([]);
 }
 
-function residualOperandNames(node: PolicyResidualNode, names = new Set<PolicyResourceOperandName>()): readonly PolicyResourceOperandName[] {
+function residualOperandNames(
+  node: PolicyResidualNode,
+  names = new Set<PolicyResourceOperandName>(),
+): readonly PolicyResourceOperandName[] {
   if (node.op === 'operand') names.add(node.name);
   else if (node.op === 'not') residualOperandNames(node.value, names);
   else if (node.op === 'and' || node.op === 'or') for (const item of node.values) residualOperandNames(item, names);
@@ -373,10 +377,6 @@ export function evaluatePolicyResidual(
   });
   const fact = unknownName && isPlainObject(resourceFacts) ? ownData(resourceFacts, unknownName) : null;
   const reason =
-    !fact || !fact.present
-      ? 'missing-evidence'
-      : fact.value === null
-        ? 'unknown-evidence'
-        : 'malformed-evidence';
+    !fact || !fact.present ? 'missing-evidence' : fact.value === null ? 'unknown-evidence' : 'malformed-evidence';
   return Object.freeze({ decision: 'unavailable', reason, explanation });
 }

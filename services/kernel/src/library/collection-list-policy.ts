@@ -1,8 +1,4 @@
-import {
-  specializePolicy,
-  type PolicyCatalogue,
-  type PolicyFacts,
-} from '@rezics/access';
+import { specializePolicy, type PolicyCatalogue, type PolicyFacts } from '@rezics/access';
 import { lowerCollectionListResidual, type CollectionListFilter } from '../access/policy-filter.ts';
 
 const COLLECTION_READ_REQUEST = Object.freeze({
