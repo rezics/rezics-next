@@ -293,6 +293,7 @@ lifetimeTest(
     const offer = await Bun.file(join(app, 'src/routes/offers/$id.tsx')).text();
     expect(offer).toMatch(/pageHead\(/);
     expect(offer).toContain("robots: 'noindex, nofollow'");
+    expect(offer).toMatch(/staleTime:\s*0/);
     expect(offer).not.toContain('requireSignedIn');
     for (const file of components) {
       const source = await Bun.file(join(app, 'src', file)).text();

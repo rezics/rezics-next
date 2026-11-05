@@ -74,7 +74,7 @@ export type NativeHttpCommand = Readonly<{
   kind: 'http';
   method: 'GET' | 'POST' | 'PATCH';
   path: string;
-  persona: 'alice' | 'bob' | 'anonymous';
+  persona: 'alice' | 'bob' | 'anonymous' | 'outsider';
   body?: unknown;
   idempotencyKey?: string;
 }>;
@@ -198,6 +198,26 @@ function fieldNumber(value: unknown, key: string, label: string): number {
   return field;
 }
 
+function capturedEdition(
+  body: unknown,
+  envelope: 'order' | 'entitlement',
+  label: string,
+): { id: string; revisionId: string; sha256: string } {
+  const record = nestedRecord(body, envelope, label);
+  const terms = nestedRecord(record, 'contentEdition', `${label}.${envelope}.contentEdition`);
+  const benefit = nestedRecord(terms, 'benefit', `${label}.contentEdition.benefit`);
+  const resource = nestedRecord(benefit, 'resource', `${label}.contentEdition.benefit.resource`);
+  const version = nestedRecord(benefit, 'version', `${label}.contentEdition.benefit.version`);
+  const id = fieldString(resource, 'id', `${label}.contentEdition.benefit.resource.id`);
+  const revisionId = fieldString(version, 'revisionId', `${label}.contentEdition.benefit.version.revisionId`);
+  const sha256 = fieldString(version, 'sha256', `${label}.contentEdition.benefit.version.sha256`);
+  if (benefit.kind !== 'content-edition' || benefit.action !== 'edition:read')
+    throw new Error(`${label} did not capture a content-edition read benefit`);
+  if (fieldString(benefit, 'resourceType', `${label}.contentEdition.benefit.resourceType`) !== 'content.edition')
+    throw new Error(`${label} captured a non-edition resource type`);
+  return { id, revisionId, sha256 };
+}
+
 function parseBody(text: string): unknown {
   try {
     return JSON.parse(text) as unknown;
@@ -308,6 +328,32 @@ type NativeOutcome = NativeOrderOutcome & { pollAttempts?: number };
 
 function unavailable(binding: string, observed?: NativeUnavailableOutcome['observed']): NativeUnavailableOutcome {
   return { availability: 'unavailable', binding, ...(observed === undefined ? {} : { observed }) };
+}
+
+async function boundedContentRead(
+  purchases: NativePurchasesFixture,
+  path: string,
+  persona: Persona,
+  expectedStatus: number,
+  binding: string,
+): Promise<NativeOutcome> {
+  const command: NativeHttpCommand = { kind: 'http', method: 'GET', path, persona };
+  let latest: NativeResponseFact | undefined;
+  const deadline = Date.now() + 30_000;
+  let attempts = 0;
+  do {
+    attempts++;
+    const response = await purchases.stack.kernel(command.path, {}, persona === 'anonymous' ? undefined : persona);
+    latest = await responseFact(response, command);
+    if (latest.status === expectedStatus) {
+      return { availability: 'produced', command, response: latest, pollAttempts: attempts };
+    }
+    await Bun.sleep(50);
+  } while (Date.now() < deadline);
+  return unavailable(
+    `${binding} (last status ${latest?.status ?? 'none'}: ${latest?.bodyText ?? ''})`,
+    latest ? { command, response: latest } : undefined,
+  );
 }
 
 async function boundedOrderRead(
@@ -639,6 +685,55 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
     setOutcome(outcomes, sequence, 'paidBuyerEntitlements', paidEntitlements);
     requireStatus(paidEntitlements, 200, 'Paid buyer entitlement list');
 
+    const edition = capturedEdition(paidOrder.response.body, 'order', 'Paid order response');
+    const entitlementEdition = capturedEdition(
+      paidEntitlement.response.body,
+      'entitlement',
+      'Paid entitlement response',
+    );
+    if (
+      entitlementEdition.id !== edition.id ||
+      entitlementEdition.revisionId !== edition.revisionId ||
+      entitlementEdition.sha256 !== edition.sha256
+    )
+      throw new Error('Paid entitlement captured a different edition than the paid order');
+    const editionPath = `/v1/contentEditions/${edition.id}`;
+    const revisionPath = `${editionPath}/revision`;
+    const contentBenefit = await boundedContentRead(
+      changedTerms,
+      editionPath,
+      'bob',
+      200,
+      'The installed paid entitlement did not produce a current Content edition metadata response',
+    );
+    setOutcome(outcomes, sequence, 'contentBenefitCurrentBuyer', contentBenefit);
+    if (contentBenefit.availability !== 'produced') throw new Error(contentBenefit.binding);
+    const contentUse = await boundedContentRead(
+      changedTerms,
+      revisionPath,
+      'bob',
+      200,
+      'The installed paid entitlement did not produce a current Content edition revision response',
+    );
+    setOutcome(outcomes, sequence, 'contentUseCurrentBuyer', contentUse);
+    if (contentUse.availability !== 'produced') throw new Error(contentUse.binding);
+    const ownerUse = await boundedContentRead(
+      changedTerms,
+      revisionPath,
+      'alice',
+      200,
+      'The installed creator edition did not remain readable independently of the buyer entitlement',
+    );
+    if (ownerUse.availability !== 'produced') throw new Error(ownerUse.binding);
+    const contentUseOther = await httpOutcome(changedTerms, {
+      method: 'GET',
+      path: revisionPath,
+      persona: 'outsider',
+    });
+    setOutcome(outcomes, sequence, 'contentUseCurrentOtherBuyer', contentUseOther);
+    if (contentUseOther.response.status === 200)
+      throw new Error('Unrelated Content revision read returned protected bytes');
+
     const refund = changedTerms.stripe.refundRemaining(revisedSessionId, 'remaining');
     sequence.push({ kind: 'provider-command', name: 'refund-remaining', sessionId: revisedSessionId });
     const refundEvent = await changedTerms.stripe.event('refund.created', refund.id);
@@ -710,6 +805,32 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
       persona: 'anonymous',
     });
     setOutcome(outcomes, sequence, 'currentAnonymousEntitlement', currentAnonymousEntitlement);
+
+    const contentUseAnonymous = await httpOutcome(changedTerms, {
+      method: 'GET',
+      path: revisionPath,
+      persona: 'anonymous',
+    });
+    setOutcome(outcomes, sequence, 'contentUseCurrentAnonymous', contentUseAnonymous);
+    if (contentUseAnonymous.response.status === 200)
+      throw new Error('Anonymous Content revision read returned protected bytes');
+    const deniedUse = await boundedContentRead(
+      changedTerms,
+      revisionPath,
+      'bob',
+      404,
+      'The installed refunded entitlement still authorized Content revision bytes',
+    );
+    setOutcome(outcomes, sequence, 'accessDeniedCurrentUse', deniedUse);
+    if (deniedUse.availability !== 'produced') throw new Error(deniedUse.binding);
+    const ownerUseAfterRefund = await boundedContentRead(
+      changedTerms,
+      revisionPath,
+      'alice',
+      200,
+      'The installed creator edition did not remain readable after the buyer refund',
+    );
+    if (ownerUseAfterRefund.availability !== 'produced') throw new Error(ownerUseAfterRefund.binding);
 
     const failedWorld = await startNativePurchasesFixture();
     sequence.push({ kind: 'fixture', name: 'startNativePurchasesFixture' });
@@ -878,14 +999,6 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
       requireStatus(reconciliationAfter, 200, 'Reconciliation order detail after repair request');
 
       const unsupported: Partial<Record<NativeOrderOutcomeName, string>> = {
-        contentBenefitCurrentBuyer:
-          'The mounted native fixture publishes Content editions, but no Commerce-to-Content current-benefit response interface is exposed by NativeWebStack.',
-        contentUseCurrentBuyer:
-          'No installed native Content current-use response is exposed for a Commerce entitlement; an entitlement read is not a use decision.',
-        contentUseCurrentOtherBuyer:
-          'No installed native Content current-use response is exposed for an other-buyer persona.',
-        contentUseCurrentAnonymous:
-          'No installed native Content current-use response is exposed for an anonymous persona.',
         unknownHistoricalMoney:
           'No installed native producer creates an order with unknown historical money; the fixture creates only current known-price orders.',
         unknownSettlement:
@@ -893,8 +1006,6 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
         accessUnavailable:
           'No installed native Commerce-to-Content current-access producer exposes an unavailable access response.',
         accessRefresh: 'No installed native Commerce-to-Content current-access producer exposes a refresh response.',
-        accessDeniedCurrentUse:
-          'No installed native Content current-use response exposes denied use; Commerce disclosure denials are captured separately.',
         repairUncertain:
           'No installed native producer exposes an uncertain repair result; the mounted order.reconcile command returns a concrete queued, denied or unavailable response.',
       };

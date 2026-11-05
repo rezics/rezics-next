@@ -580,7 +580,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         },
         detail: detail('offer.get', 'offer:read', 'gate:purchases', true),
       },
-      async ({ params, query, actor, admission, job }) => {
+      async ({ params, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const route = routeOf(params.offerId);
         if (route === null) throw new ProblemError('not_found');
         const languages = languagePreferences(query.languages);
@@ -816,6 +817,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         );
         set.status = 201;
         set.headers.location = `/v1/orders/${order.id}`;
+        set.headers['cache-control'] = 'private, no-store';
         return { order: await orderView(pool, order) };
       },
     )
@@ -839,7 +841,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         },
         detail: detail('order.list', 'order:read', 'gate:purchases'),
       },
-      async ({ query, actor, admission, job }) => {
+      async ({ query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const account = requireAccount(actor);
         if (!scoped(actor, 'order:read')) throw new ProblemError('forbidden');
         const route = routeOf(account.accountId)!;
@@ -908,7 +911,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         },
         detail: detail('order.get', 'order:read', 'gate:purchases'),
       },
-      async ({ params, query, actor, admission, job }) => {
+      async ({ params, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const route = routeOf(params.orderId);
         if (
           actor.kind !== 'account' ||
@@ -991,6 +995,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 202;
+        set.headers['cache-control'] = 'private, no-store';
         return result.value;
       },
     )
@@ -1014,7 +1019,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         },
         detail: detail('entitlement.list', 'entitlement:list', 'gate:purchases'),
       },
-      async ({ query, actor, admission, job }) => {
+      async ({ query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const account = requireAccount(actor);
         if (!scoped(actor, 'entitlement:list')) throw new ProblemError('forbidden');
         const route = routeOf(account.accountId)!;
@@ -1090,7 +1096,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         response: { 200: entitlementResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
         detail: detail('entitlement.get', 'entitlement:read', 'gate:purchases'),
       },
-      async ({ params, actor, admission, job }) => {
+      async ({ params, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         const route = routeOf(params.entitlementId);
         if (
           actor.kind !== 'account' ||

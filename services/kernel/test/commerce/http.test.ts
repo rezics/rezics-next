@@ -239,6 +239,7 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
     'unitAmountMinor',
   ]);
   const publicRead = await request(`/v1/offers/${selling.id}`, null);
+  expect(publicRead.headers.get('cache-control')).toBe('private, no-store');
   const { summary, ...offerFields } = selling as Offer & { summary: unknown };
   expect([publicRead.status, await publicRead.json()]).toEqual([
     200,
@@ -247,6 +248,7 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
   const requestKey = key();
   const response = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 }, requestKey);
   expect(response.status).toBe(201);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
   const created = (await response.json()).order;
   expect(response.headers.get('location')).toBe(`/v1/orders/${created.id}`);
   expect(Object.keys(created).sort()).toEqual([

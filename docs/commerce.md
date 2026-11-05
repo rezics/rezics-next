@@ -115,3 +115,13 @@ The offer page keeps its received observation until deliberate review. Inspectio
 observation, draft, key or recovery. Selection retires with the current origin or visit; a missing row offers an
 explicit restart without scanning pages. Management may inspect its retained row, while public destinations require
 an active row on the received page.
+
+## Paid fixed-edition use
+
+A current own entitlement is the only purchase path into the captured Content edition. The buyer reads
+`GET /v1/contentEditions/{id}` and `GET /v1/contentEditions/{id}/revision` with the live session; revision ID and
+SHA-256 must match the captured terms. The creator's ordinary edition authority stays independent of that purchase.
+Anonymous and unrelated accounts receive the same concealment as an unknown edition. A refund or dispute removes
+current use without rewriting the receipt. Offer review and checkout follow the current origin after sign-in,
+refresh and return. Queued `order.reconcile` replies `202` with `cache-control: private, no-store`; that receipt
+schedules repair and does not grant bytes.

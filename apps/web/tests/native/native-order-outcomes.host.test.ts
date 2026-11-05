@@ -184,6 +184,39 @@ test('verified payment and full refund preserve settlement truth separately from
   expect(refundedBenefit.revokedAt).toBeTruthy();
 });
 
+test('paid current use binds the captured edition and conceals other viewers', () => {
+  const paidOrder = nested(produced('paidOrderDetail').response.body, 'order');
+  const terms = object(paidOrder.contentEdition);
+  const benefit = object(terms.benefit);
+  const resource = object(benefit.resource);
+  const version = object(benefit.version);
+  expect(benefit).toMatchObject({ kind: 'content-edition', resourceType: 'content.edition', action: 'edition:read' });
+
+  const metadata = object(produced('contentBenefitCurrentBuyer').response.body);
+  expect(produced('contentBenefitCurrentBuyer').response.status).toBe(200);
+  expect(produced('contentBenefitCurrentBuyer').response.headers['cache-control']).toBe('private, no-store');
+  expect(metadata).toMatchObject({
+    editionId: resource.id,
+    revisionId: version.revisionId,
+    sha256: version.sha256,
+    state: 'published',
+  });
+  const used = object(produced('contentUseCurrentBuyer').response.body);
+  expect(produced('contentUseCurrentBuyer').response.status).toBe(200);
+  expect(used).toMatchObject({
+    editionId: resource.id,
+    revisionId: version.revisionId,
+    sha256: version.sha256,
+  });
+  expect(used.body).toEqual(expect.any(Object));
+  expect(produced('contentUseCurrentOtherBuyer').response.status).toBeGreaterThanOrEqual(400);
+  expect(object(produced('contentUseCurrentOtherBuyer').response.body)).not.toHaveProperty('body');
+  expect(produced('contentUseCurrentAnonymous').response.status).toBeGreaterThanOrEqual(400);
+  expect(object(produced('contentUseCurrentAnonymous').response.body)).not.toHaveProperty('body');
+  expect(produced('accessDeniedCurrentUse').response.status).toBe(404);
+  expect(object(produced('accessDeniedCurrentUse').response.body)).not.toHaveProperty('body');
+});
+
 test('failed delivery and current own-versus-other disclosure stay tied to native reads', () => {
   const manifest = fixture.manifest;
   const failedPending = nested(produced('failedPendingOrderDetail').response.body, 'order');
@@ -244,6 +277,7 @@ test('repair and unavailable mappings preserve the installed boundary without in
   expect(request.command.idempotencyKey).toMatch(/^"[0-9a-f-]{36}"$/i);
   const replay = manifest.outcomes.reconciliationReplay;
   if (request.response.status === 202) {
+    expect(request.response.headers['cache-control']).toBe('private, no-store');
     expect(request.response.body).toEqual({ orderId: manifest.ids.reconciliationOrderId, reconciliation: 'queued' });
     expect(replay.availability).toBe('produced');
     if (replay.availability !== 'produced') throw new Error(replay.binding);
@@ -273,15 +307,10 @@ test('repair and unavailable mappings preserve the installed boundary without in
   });
 
   for (const name of [
-    'contentBenefitCurrentBuyer',
-    'contentUseCurrentBuyer',
-    'contentUseCurrentOtherBuyer',
-    'contentUseCurrentAnonymous',
     'unknownHistoricalMoney',
     'unknownSettlement',
     'accessUnavailable',
     'accessRefresh',
-    'accessDeniedCurrentUse',
     'repairUncertain',
   ] as const) {
     const outcome = manifest.outcomes[name];
