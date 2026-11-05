@@ -83,6 +83,7 @@ export async function loadRealmDiscovery(
       query: { sort, ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) },
       fetch: { cache: 'no-store', ...(signal === undefined ? {} : { signal }) },
     });
+    signal?.throwIfAborted();
     if (result.error)
       return { kind: isPlatformClosedProblem(result.status, result.error.value) ? 'closed' : 'unavailable' };
     const parsed = v.safeParse(page, result.data);

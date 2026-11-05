@@ -66,7 +66,7 @@ test('More replaces the visible page, preserves it while pending or failed, and 
 
   await page.start();
   expect(calls).toHaveLength(1);
-  expect(snapshots.at(-1)?.state).toMatchObject({ kind: 'ready', realms: expect.any(Array) });
+  expect(snapshots.at(-1)?.state.kind).toBe('ready');
   if (snapshots.at(-1)?.state.kind !== 'ready') throw new Error('Expected the first page');
   expect(snapshots.at(-1)?.state.realms).toHaveLength(20);
 

@@ -80,6 +80,7 @@ test('replacing an injected Realm reader at the same locale/sort hides its windo
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
     Node: window.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
