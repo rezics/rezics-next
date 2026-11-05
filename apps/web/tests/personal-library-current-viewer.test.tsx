@@ -354,6 +354,8 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     return 'test-undo';
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { browserObservation } = await import('../src/session/observation');
+  const stopObservation = browserObservation(client).subscribe(() => {});
   client.setQueryData(['library-navigation', 'en', 8, 'session'], {
     pins: response('STALE').navigation.pins,
     collections: [],
@@ -383,6 +385,16 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   const show = async (viewer: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     await act(async () => {
       client.setQueryData(['session'], viewer);
+      const observation = browserObservation(client).getSnapshot();
+      expect(observation).toMatchObject({ state: 'signed-in', observation: { subject: viewer.subject } });
+      if (observation.state === 'signed-in')
+        client.setQueryData(['exposure', 'viewer', observation.subject, observation.id], {
+          subject: observation.subject,
+          admitted
+            ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
+            : [],
+          state: admitted ? 'ready' : 'denied',
+        });
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
         const html = renderToString(tree());
@@ -391,23 +403,6 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
         host.innerHTML = html;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
-    });
-    await act(async () => {
-      const { browserObservation } = await import('../src/session/observation');
-      const observation = browserObservation(client).getSnapshot();
-      expect(observation).toMatchObject({ state: 'signed-in', observation: { subject: viewer.subject } });
-      if (observation.state === 'signed-in') {
-        const exposure = {
-          subject: observation.subject,
-          admitted: admitted
-            ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
-            : [],
-          state: admitted ? 'ready' : 'denied',
-        } as const;
-        const key = ['exposure', 'viewer', observation.subject, observation.id] as const;
-        client.setQueryData(key, exposure);
-        expect(client.getQueryData(key)).toEqual(exposure);
-      }
     });
   };
   const tick = async () => {
@@ -632,6 +627,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     for (const spy of [observeRows, transport, continueTransport, write, remove, restore, assign, picker, toast])
       spy.mockRestore();
     await window.happyDOM.close();
+    stopObservation();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
