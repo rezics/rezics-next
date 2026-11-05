@@ -37,7 +37,9 @@ test('slow-mode native policy is complete, closed and independent of UI presets'
 });
 
 test('mounted visits retire on equal session replacement, invalidation and fetching', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/compose' });
   const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
@@ -46,12 +48,16 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
-  const { useSlowModeVisit, type SlowModeVisit } = await import('../src/threads/slow-mode/caller');
+  const { useSlowModeVisit } = await import('../src/threads/slow-mode/caller');
+  type SlowModeVisit = import('../src/threads/slow-mode/caller').SlowModeVisit;
   const client = new QueryClient();
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'original' };
   client.setQueryData(sessionQuery.queryKey, owner);
   let visit: SlowModeVisit | null = null;
-  function Probe() { visit = useSlowModeVisit(recorded.thread.boardId); return null; }
+  function Probe() {
+    visit = useSlowModeVisit(recorded.thread.boardId);
+    return null;
+  }
   const root = createRoot(window.document.createElement('div'));
   try {
     await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
@@ -65,7 +71,9 @@ test('mounted visits retire on equal session replacement, invalidation and fetch
     ]) {
       const original = visit!;
       expect(original.current()).toBe(true);
-      await act(async () => { await replace(); });
+      await act(async () => {
+        await replace();
+      });
       expect(original.current()).toBe(false);
       expect(original.controller.signal.aborted).toBe(true);
       expect(visit!.id).not.toBe(original.id);
