@@ -349,6 +349,16 @@ cached-document restoration perform at most one exact consent GET each (zero if 
 is invalid). `privateAuthRead` owns one five-second deadline through headers, response body and private BFF transport,
 and races retirement cancellation even when a transport ignores abort. The existing native currentness boundary
 revalidates the session, client and request under issuance/consent locks; the consumer adds no authority mechanism.
+Decision: consent review receiving uses the fixed public `@rezics/auth-contract` consent response bounds,
+shared with the native closed projection, independently of Security catalogue C and kind-consent's ceiling.
+`readConsent` admits bytes through `readJsonBounded` before fatal UTF-8 decoding and JSON parsing. The allowance
+counts every closed key and punctuation, all three 1000-entry/128-character OAuth scope arrays, client/account
+IDs (1024 UTF-16 units each), nullable display name (100) and email (254), pending state and decisions.
+Six bytes per text unit conservatively covers JSON escaping and UTF-8; the requested query's 8192-byte cap can
+only reduce the projection. The error allowance comes only from native `authentication_denied` plus optional
+`stale_review`. Headers never raise either allowance. Overflow, invalid UTF-8, malformed JSON and stalled bodies
+are unavailable; a failed nonempty reduction preflight sends no mutation. The client ID is checked before URL
+construction. One current native read and the existing whole-call deadline retain their authority and costs.
 Each deliberate Allow performs one existing five-second bounded POST with exact reviewed account/grant/request
 bindings; native currentness and stale-review refusal remain authoritative. There is no implicit resend, inventory
 read, marker scan, polling, prefetch or per-permission call. Repeated activation shares the active read or decision;

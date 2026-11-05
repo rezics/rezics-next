@@ -1,3 +1,4 @@
+import { CONSENT_PAGE_MAX_RESPONSE_BYTES, CONSENT_PAGE_MAX_ERROR_BYTES } from '@rezics/auth-contract';
 import { expect, test } from 'bun:test';
 import { parseConsentRequestedScopes, projectConsentPage } from '../src/consent-page.ts';
 
@@ -45,4 +46,22 @@ test('bounded malformed or unavailable consent projections cannot look like empt
       consent: { scopes: ['retired:permission'], pending_scopes: null },
     }),
   ).toBeNull();
+});
+
+test('the closed projection fits the shared finite allowance with every compatible maximal field', () => {
+  const scopes = Array.from({ length: 1000 }, (_, i) => String(i).padStart(128, 'x'));
+  const page = projectConsentPage({
+    client: { client_id: '\0'.repeat(1024), display_name: '\0'.repeat(100), first_party: false, scopes },
+    identity: { account_id: '\0'.repeat(1024), email: '\0'.repeat(250) + '@x.y' },
+    requested: scopes,
+    consent: { scopes, pending_scopes: scopes },
+  });
+  expect(page).not.toBeNull();
+  expect(page?.scopes.length).toBe(1000);
+  expect(page?.requested.length).toBe(1000);
+  expect(page?.granted.length).toBe(1000);
+  expect(new TextEncoder().encode(JSON.stringify(page)).length).toBeLessThanOrEqual(CONSENT_PAGE_MAX_RESPONSE_BYTES);
+  expect(CONSENT_PAGE_MAX_ERROR_BYTES).toBe(
+    JSON.stringify({ error: 'authentication_denied', code: 'stale_review' }).length,
+  );
 });

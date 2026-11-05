@@ -1,18 +1,21 @@
+import {
+  CONSENT_PAGE_MAX_SCOPES as maxScopes,
+  CONSENT_PAGE_MAX_SCOPE_QUERY_BYTES as maxScopeQueryBytes,
+  CONSENT_PAGE_MAX_SCOPE_LENGTH,
+  CONSENT_PAGE_MAX_ID_LENGTH,
+  CONSENT_PAGE_MAX_DISPLAY_NAME_LENGTH,
+  CONSENT_PAGE_MAX_EMAIL_LENGTH,
+  CONSENT_PAGE_MAX_RESPONSE_BYTES,
+  CONSENT_PAGE_MAX_ERROR_BYTES,
+  type ConsentPageResponse,
+} from '@rezics/auth-contract';
+import { readJsonBounded } from './private-auth-json';
 import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import type { ConsentOutcome } from './consent-request-return';
 
-export type Consent = {
-  client_id: string;
-  display_name: string | null;
-  scopes: string[];
-  requested: string[];
-  granted: string[];
-  pending_reduction: boolean;
-  acting_account: { account_id: string; email: string | null };
-  decisions: { allow: boolean; decline: boolean; switch_account: boolean };
-};
+export type Consent = ConsentPageResponse;
 
 export type ConsentReview =
   | { state: 'loading' | 'signed-out' | 'not-found'; consent?: never; message?: never }
@@ -31,8 +34,6 @@ export type ConsentDecision = {
 };
 
 const markerPrefix = 'auth.consent.pending:';
-const maxScopes = 1000;
-const maxScopeQueryBytes = 8192;
 const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
 const encoder = new TextEncoder();
 
@@ -242,7 +243,11 @@ function stringArray(value: unknown): value is string[] {
     Array.isArray(value) &&
     value.length <= maxScopes &&
     value.every(
-      (item) => typeof item === 'string' && item.length > 0 && item.length <= 128 && scopePattern.test(item),
+      (item) =>
+        typeof item === 'string' &&
+        item.length > 0 &&
+        item.length <= CONSENT_PAGE_MAX_SCOPE_LENGTH &&
+        scopePattern.test(item),
     ) &&
     new Set(value).size === value.length
   );
@@ -261,7 +266,11 @@ function requestedScopeSet(scope: string): string[] | null {
   const trimmed = scope.replace(/^ +| +$/gu, '');
   if (!trimmed) return [];
   const values = trimmed.split(/ +/u);
-  if (values.length > maxScopes || values.some((value) => value.length > 128 || !scopePattern.test(value))) return null;
+  if (
+    values.length > maxScopes ||
+    values.some((value) => value.length > CONSENT_PAGE_MAX_SCOPE_LENGTH || !scopePattern.test(value))
+  )
+    return null;
   return [...new Set(values)];
 }
 
@@ -272,7 +281,8 @@ export async function readConsent(
   requestedScope = '',
 ): Promise<AuthPostResult<Consent>> {
   const requested = requestedScopeSet(requestedScope);
-  if (!requested) return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+  if (!clientId || clientId.length > CONSENT_PAGE_MAX_ID_LENGTH || !requested)
+    return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
   try {
     return await privateAuthRead(async (readSignal) => {
       const query = new URLSearchParams({ scope: requestedScope });
@@ -285,13 +295,19 @@ export async function readConsent(
           cache: 'no-store',
         },
       );
-      const body: unknown = await response.json().catch(() => null);
+      const body = await readJsonBounded(
+        response,
+        response.status === 200 ? CONSENT_PAGE_MAX_RESPONSE_BYTES : CONSENT_PAGE_MAX_ERROR_BYTES,
+        readSignal,
+      );
       if (response.status === 200) {
         if (
           !record(body) ||
           keys(body) !== 'acting_account,client_id,decisions,display_name,granted,pending_reduction,requested,scopes' ||
           body.client_id !== clientId ||
-          (body.display_name !== null && (typeof body.display_name !== 'string' || body.display_name.length > 100)) ||
+          (body.display_name !== null &&
+            (typeof body.display_name !== 'string' ||
+              body.display_name.length > CONSENT_PAGE_MAX_DISPLAY_NAME_LENGTH)) ||
           !stringArray(body.scopes) ||
           !stringArray(body.requested) ||
           !sameScopes(body.requested, requested) ||
@@ -302,10 +318,10 @@ export async function readConsent(
           keys(body.acting_account) !== 'account_id,email' ||
           typeof body.acting_account.account_id !== 'string' ||
           !body.acting_account.account_id ||
-          body.acting_account.account_id.length > 1024 ||
+          body.acting_account.account_id.length > CONSENT_PAGE_MAX_ID_LENGTH ||
           (body.acting_account.email !== null &&
             (typeof body.acting_account.email !== 'string' ||
-              body.acting_account.email.length > 254 ||
+              body.acting_account.email.length > CONSENT_PAGE_MAX_EMAIL_LENGTH ||
               !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(body.acting_account.email))) ||
           !record(body.decisions) ||
           keys(body.decisions) !== 'allow,decline,switch_account' ||

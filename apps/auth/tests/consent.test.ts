@@ -55,7 +55,10 @@ const fake = Bun.serve({
           { headers },
         );
       headers.set('retry-after', '37');
-      return Response.json({ code: responseCode, message: 'HOSTILE AUTH BODY' }, { status: readStatus, headers });
+      return Response.json(
+        { error: 'authentication_denied', ...(readStatus === 409 ? { code: 'stale_review' } : {}) },
+        { status: readStatus, headers },
+      );
     }
     if (url.pathname === '/consent' && request.method === 'POST') {
       if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
