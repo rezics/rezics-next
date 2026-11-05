@@ -40,7 +40,7 @@ On dev, committed work blocked only by shared check infrastructure is success; n
 
 Large surveys are `spec-conflict` blockers starting "Research needed:". Research owner documents, primary sources and the main checkout's .reference/INDEX.md; list contract-named sources read before design.
 
-Unfinished work is not a blocker: if the outcome does not fit this attempt, commit a coherent part and return success with the remainder listed as follow-up.
+Build the whole outcome in this attempt. Only a part that needs undelivered work from elsewhere may remain: commit a coherent part and return success with that part listed as follow-up.
 
 ## Current controller launch context
 No controller launch context was supplied. Dependency status is unknown: build against each dependency contract.

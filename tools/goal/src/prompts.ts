@@ -337,9 +337,10 @@ function promptView(input: WorkerPromptInput): PromptView {
     frozenFilesLine: frozen.length
       ? `Frozen acceptance files hold the contract's tests: ${frozen.join(', ')}. If one contradicts the contract, an owner document or the delivered code it depends on, change the smallest assertion that makes them agree, list the file and the reason in your summary, and continue.`
       : '',
+    // The continuation condition states the rule for tasks that continue themselves; one statement, not two.
     unfinished: continuesItself(task)
-      ? `If unfinished, commit a coherent type-checking part. Put the rest in .temp/continuation/<short-name>.md (goal ${brief.goal ?? ''}, manager ${manager}); return success and name it. Unfinished work is not a blocker.`
-      : 'Unfinished work is not a blocker: if the outcome does not fit this attempt, commit a coherent part and return success with the remainder listed as follow-up.',
+      ? ''
+      : 'Build the whole outcome in this attempt. Only a part that needs undelivered work from elsewhere may remain: commit a coherent part and return success with that part listed as follow-up.',
     continuationBriefPath: `${CONTINUATION_DIRECTORY}/<short-name>.md`,
     waitSeconds: String(policy.guidance.longCommandWaitMs / 1000),
     waitMs: String(policy.guidance.longCommandWaitMs),

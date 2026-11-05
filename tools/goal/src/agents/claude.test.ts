@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import { claudeAdapter, parseClaudeUsage, readClaudeUsage } from './claude.ts';
+import { claudeAdapter, parseClaudeUsage, readClaudeUsage, recordClaudeRateLimit } from './claude.ts';
 import type { Pool } from '../types.ts';
 
 let poolNumber = 0;
@@ -87,6 +87,32 @@ test('afterExit keeps a usable in-memory reading when reset data and cache persi
     expect(Date.parse(reading.observedAt!)).toBeGreaterThanOrEqual(startedAt);
   } finally {
     rmSync(cache, { recursive: true, force: true });
+    rmSync(`${cache}.${process.pid}`, { force: true });
+  }
+});
+
+test('the last valid streamed rate-limit event survives malformed and non-event lines', () => {
+  const pool = makePool();
+  const cache = cachePath(pool);
+  const now = Date.parse('2026-11-03T00:00:00Z');
+  const reset = now + 4 * 60 * 60 * 1000;
+  const event = (utilization: number, resetsAt: number) =>
+    JSON.stringify({
+      type: 'rate_limit_event',
+      rate_limit_info: { unifiedWindows: { five_hour: { utilization, resetsAt: resetsAt / 1000 } } },
+    });
+  const log = [
+    event(0.1, now + 2 * 60 * 60 * 1000),
+    event(0.37, reset),
+    '{"type":"rate_limit_event",',
+    JSON.stringify({ type: 'assistant', message: 'rate_limit_event' }),
+  ].join('\n');
+
+  try {
+    recordClaudeRateLimit(pool, log, now);
+    expect(readClaudeUsage(pool, now).windows).toEqual([{ usedPercent: 37, resetsAt: reset, minutes: 300 }]);
+  } finally {
+    rmSync(cache, { force: true });
     rmSync(`${cache}.${process.pid}`, { force: true });
   }
 });

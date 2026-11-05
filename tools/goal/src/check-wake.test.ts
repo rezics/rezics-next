@@ -136,7 +136,7 @@ test('same-session wake forwards the newly persisted minimal source-result and c
     expect(prompt).toContain(`check ${id}: exit status 0; passed;`);
     expect(prompt).toContain('return success (blocker null, `"checks":[]`)');
     expect(prompt).toContain('the deferred acceptance, which is neither a blocker nor a reason to wait');
-    expect(prompt).toContain('Unfinished work is not a blocker');
+    expect(prompt).toContain('Build the whole outcome in this attempt');
     expect(prompt).toContain('services/kernel and services/auth may use the compiler database or a check host');
     expect(prompt).toContain('Wait for a long command, even one queued for a test slot, in its open session');
     expect(prompt).not.toContain('run your acceptance command once');
