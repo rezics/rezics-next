@@ -812,7 +812,6 @@ test('a Kernel-source TDZ on a dev landing returns to the original session and p
       "import { a } from './cycle-a.ts';\nexport const server = a;\n",
       "export const worker = true;\n",
     );
-    h.advanceDev('services/kernel/src/cycle-a.ts', 'export const a = 1;\n');
     h.advanceDev('services/kernel/src/cycle-b.ts', "import { a } from './cycle-a.ts';\nexport const b = a + 1;\n");
     h.ensureDev();
     const runs = join(h.root, '.temp', 'kernel-import-runs.log');
