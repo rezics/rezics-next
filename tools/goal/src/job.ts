@@ -539,7 +539,11 @@ export class WorkerJob implements GateOutcomeSink {
     const ref = { taskId: task.id, attempt: task.currentAttempt };
     const previous = this.tasks.store.attempt(ref);
     const session = attemptSession(previous, this.tasks.settings.policy?.records);
-    if (!session || !agentAdapter(previous.profile.cli).canResume || ['pending', 'running', 'waiting'].includes(previous.state))
+    if (
+      !session ||
+      !agentAdapter(previous.profile.cli).canResume ||
+      ['pending', 'running', 'waiting'].includes(previous.state)
+    )
       return false;
     const evidencePath = join(this.tasks.settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.md`);
     const evidence = [
@@ -554,7 +558,8 @@ export class WorkerJob implements GateOutcomeSink {
     ].join('\n');
     mkdirSync(join(this.tasks.settings.stateDirectory, 'page-data-repairs'), { recursive: true });
     if (existsSync(evidencePath)) {
-      if (readFileSync(evidencePath, 'utf8') !== evidence) throw new Error('page-data repair evidence changed for an existing cause');
+      if (readFileSync(evidencePath, 'utf8') !== evidence)
+        throw new Error('page-data repair evidence changed for an existing cause');
     } else writeFileSync(evidencePath, evidence, { flag: 'wx', mode: 0o600 });
     let worker: RunningWorker;
     try {

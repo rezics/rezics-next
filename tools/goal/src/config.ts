@@ -192,7 +192,9 @@ export async function routePageDataRepair(
   repair: PageDataRepair,
 ): Promise<'resumed' | 'dispatched'> {
   if (await job.resumePageDataRepair(repair)) return 'resumed';
-  const existing = store.tasks().find((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
+  const existing = store
+    .tasks()
+    .find((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
   const goal = repair.owner?.brief.goal ?? repair.section.goal;
   const manager = repair.owner?.brief.manager ?? goal;
   if (existing) {
@@ -208,7 +210,8 @@ export async function routePageDataRepair(
   const briefPath = join(settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.brief.md`);
   mkdirSync(dirname(briefPath), { recursive: true });
   if (existsSync(briefPath)) {
-    if (readFileSync(briefPath, 'utf8') !== markdown) throw new Error('page-data repair brief changed for an existing cause');
+    if (readFileSync(briefPath, 'utf8') !== markdown)
+      throw new Error('page-data repair brief changed for an existing cause');
   } else writeFileSync(briefPath, markdown, { flag: 'wx', mode: 0o600 });
   const task = tasks.dispatch(briefPath, null, true, 'verifier');
   inbox.deliver({

@@ -65,7 +65,9 @@ export type PageDataOptions = {
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
-  runStack?: (head: string) => Promise<{ output: string; exitCode: number; registry?: ReadonlyMap<string, SectionConfig> }>;
+  runStack?: (
+    head: string,
+  ) => Promise<{ output: string; exitCode: number; registry?: ReadonlyMap<string, SectionConfig> }>;
 };
 
 export type SectionConfig = Pick<PageDataSection, 'page' | 'persona' | 'section' | 'name' | 'goal' | 'files'>;
@@ -96,16 +98,21 @@ export class PageDataStackError extends Error {
 const sectionKey = (section: Pick<PageDataSection, 'page' | 'persona' | 'section'>) =>
   `${section.page}\t${section.persona}\t${section.section}`;
 
-export function duePageDataRun(lastRunAt: string | undefined, now: number, intervalMs = defaultPolicy.pageData.intervalMs): boolean {
+export function duePageDataRun(
+  lastRunAt: string | undefined,
+  now: number,
+  intervalMs = defaultPolicy.pageData.intervalMs,
+): boolean {
   if (!lastRunAt) return true;
   return now - Date.parse(lastRunAt) >= intervalMs;
 }
 
-export function pageDataClassCounts(sections: readonly Pick<PageDataSection, 'class'>[]): Record<PageDataClass, number> {
-  return Object.fromEntries(PAGE_DATA_CLASSES.map((value) => [value, sections.filter((section) => section.class === value).length])) as Record<
-    PageDataClass,
-    number
-  >;
+export function pageDataClassCounts(
+  sections: readonly Pick<PageDataSection, 'class'>[],
+): Record<PageDataClass, number> {
+  return Object.fromEntries(
+    PAGE_DATA_CLASSES.map((value) => [value, sections.filter((section) => section.class === value).length]),
+  ) as Record<PageDataClass, number>;
 }
 
 export function newlyDefectiveSections(previous: readonly PageDataSection[], current: readonly PageDataSection[]) {
@@ -125,7 +132,13 @@ export function latestSectionOwner(
   const byCommit = new Map(changes.map((change) => [change.commit, change]));
   const owners = tasks.flatMap((task) => {
     if (!['integrated', 'merged'].includes(task.state)) return [];
-    const commits = [...new Set([...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit].filter((value): value is string => !!value))];
+    const commits = [
+      ...new Set(
+        [...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit].filter(
+          (value): value is string => !!value,
+        ),
+      ),
+    ];
     const positions = commits.flatMap((commit) => {
       const change = byCommit.get(commit);
       return change && change.files.some((file) => matchesPath(file, files)) ? [change.position] : [];
@@ -139,9 +152,11 @@ export function latestSectionOwner(
 function readManifest(cwd: string): PageManifest {
   const path = join(cwd, 'scripts/page-data-sections.json');
   const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('page-data manifest must be an object');
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('page-data manifest must be an object');
   const manifest = value as PageManifest;
-  if (manifest.version !== 1 || !Array.isArray(manifest.pages)) throw new Error('page-data manifest has an unsupported shape');
+  if (manifest.version !== 1 || !Array.isArray(manifest.pages))
+    throw new Error('page-data manifest has an unsupported shape');
   for (const page of manifest.pages) {
     if (typeof page.id !== 'string' || typeof page.path !== 'string' || !Array.isArray(page.sections))
       throw new Error('page-data manifest contains an invalid page');
@@ -150,7 +165,8 @@ function readManifest(cwd: string): PageManifest {
         typeof section.id !== 'string' ||
         typeof section.name !== 'string' ||
         typeof section.native?.path !== 'string' ||
-        (section.personas !== undefined && (!Array.isArray(section.personas) || section.personas.some((persona) => typeof persona !== 'string')))
+        (section.personas !== undefined &&
+          (!Array.isArray(section.personas) || section.personas.some((persona) => typeof persona !== 'string')))
       )
         throw new Error(`page-data manifest contains an invalid section on ${page.id}`);
   }
@@ -159,7 +175,12 @@ function readManifest(cwd: string): PageManifest {
 
 function fallbackGoal(page: string, nativePath: string): string {
   if (nativePath.includes('search') || page === 'search') return 'search';
-  if (nativePath.includes('library') || nativePath.includes('collection') || page === 'collections' || page === 'library')
+  if (
+    nativePath.includes('library') ||
+    nativePath.includes('collection') ||
+    page === 'collections' ||
+    page === 'library'
+  )
     return 'commerce';
   if (nativePath.includes('board') || nativePath.includes('thread') || nativePath.includes('rating')) return 'content';
   return 'web';
@@ -239,7 +260,8 @@ function sectionRegistry(cwd: string): Map<string, SectionConfig> {
           files: sectionFiles(page.id, section.id, section.native.path, section.sql?.text ?? ''),
         };
         const key = sectionKey(item);
-        if (registry.has(key)) throw new Error(`page-data manifest repeats ${item.page}/${item.persona}/${item.section}`);
+        if (registry.has(key))
+          throw new Error(`page-data manifest repeats ${item.page}/${item.persona}/${item.section}`);
         registry.set(key, item);
       }
     }
@@ -247,9 +269,15 @@ function sectionRegistry(cwd: string): Map<string, SectionConfig> {
   return registry;
 }
 
-const secretPattern = /(?:bearer\s+[a-z0-9._~+/-]+=*|eyj[a-z0-9_-]{20,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}|password[=:]\s*[^\s&]+|authorization:\s*[^\r\n]+)/gi;
+const secretPattern =
+  /(?:bearer\s+[a-z0-9._~+/-]+=*|eyj[a-z0-9_-]{20,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}|password[=:]\s*[^\s&]+|authorization:\s*[^\r\n]+)/gi;
 function safeLine(value: string): string {
-  return value.replace(secretPattern, '[redacted]').split(/\r?\n/, 1)[0]!.replace(/[\t\0]+/g, ' ').trim().slice(0, 500);
+  return value
+    .replace(secretPattern, '[redacted]')
+    .split(/\r?\n/, 1)[0]!
+    .replace(/[\t\0]+/g, ' ')
+    .trim()
+    .slice(0, 500);
 }
 
 export function parsePageDataOutput(output: string, registry: ReadonlyMap<string, SectionConfig>): PageDataSection[] {
@@ -257,11 +285,13 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
   const seen = new Set<string>();
   for (const line of output.split(/\r?\n/).filter(Boolean)) {
     const [page, persona, section, className, ...extra] = line.trim().split(/\s+/);
-    if (!page || !persona || !section || !className || extra.length) throw new Error(`invalid page-data output: ${safeLine(line)}`);
+    if (!page || !persona || !section || !className || extra.length)
+      throw new Error(`invalid page-data output: ${safeLine(line)}`);
     const key = `${page}\t${persona}\t${section}`;
     const source = registry.get(key);
     if (!source) throw new Error(`page-data output named an unknown section: ${safeLine(line)}`);
-    if (!PAGE_DATA_CLASSES.includes(className as PageDataClass)) throw new Error(`page-data output has an unknown class: ${safeLine(line)}`);
+    if (!PAGE_DATA_CLASSES.includes(className as PageDataClass))
+      throw new Error(`page-data output has an unknown class: ${safeLine(line)}`);
     if (seen.has(key)) throw new Error(`page-data output repeated ${page}/${persona}/${section}`);
     seen.add(key);
     const classValue = className as PageDataClass;
@@ -271,7 +301,8 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
       ...(PAGE_DATA_DEFECTS.has(classValue) ? { firstErrorLine: safeLine(line) } : {}),
     });
   }
-  if (seen.size !== registry.size) throw new Error(`page-data output covered ${seen.size} of ${registry.size} sections`);
+  if (seen.size !== registry.size)
+    throw new Error(`page-data output covered ${seen.size} of ${registry.size} sections`);
   return results;
 }
 
@@ -348,13 +379,7 @@ function repairKey(section: PageDataSection, owner: Task | undefined): string {
 }
 
 function repairWasRouted(db: Database, key: string): boolean {
-  return Boolean(
-    db
-      .query(
-        'SELECT 1 FROM page_data_repairs WHERE repair_key=? AND status=\'routed\' LIMIT 1',
-      )
-      .get(key),
-  );
+  return Boolean(db.query("SELECT 1 FROM page_data_repairs WHERE repair_key=? AND status='routed' LIMIT 1").get(key));
 }
 
 function claimRepair(db: Database, key: string, at: string, detail: string): void {
@@ -367,7 +392,7 @@ function claimRepair(db: Database, key: string, at: string, detail: string): voi
 }
 
 function finishRepair(db: Database, key: string): void {
-  db.query('UPDATE page_data_repairs SET status=\'routed\' WHERE repair_key=?').run(key);
+  db.query("UPDATE page_data_repairs SET status='routed' WHERE repair_key=?").run(key);
 }
 
 function saveRun(db: Database, run: PageDataRun): void {
@@ -392,7 +417,13 @@ function saveRun(db: Database, run: PageDataRun): void {
   db.transaction(() => events.forEach((event) => recordFlow(db, event))).immediate();
 }
 
-function supermanagerNotice(options: PageDataOptions, action: 'boot' | 'check', head: string, line: string, at: string): void {
+function supermanagerNotice(
+  options: PageDataOptions,
+  action: 'boot' | 'check',
+  head: string,
+  line: string,
+  at: string,
+): void {
   const detail = safeLine(line) || `Page-data ${action} failed without an error line`;
   recordFlow(options.db, {
     taskId: pageDataTaskId,
@@ -419,7 +450,10 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
   ensureFlow(options.db);
   let lock: ReturnType<typeof acquireDirectoryLease>;
   try {
-    lock = acquireDirectoryLease(join(options.settings.stateDirectory, 'page-data.lease'), options.settings.policy?.leases);
+    lock = acquireDirectoryLease(
+      join(options.settings.stateDirectory, 'page-data.lease'),
+      options.settings.policy?.leases,
+    );
   } catch (error) {
     if (error instanceof LeaseHeldError) return 'skipped';
     throw error;
@@ -434,9 +468,14 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     let output: string;
     let registryForRun: ReadonlyMap<string, SectionConfig> | undefined;
     try {
-      const result = await (options.runStack ?? ((sourceHead) => runDedicatedPageDataStack(options.settings, sourceHead)))(head);
+      const result = await (
+        options.runStack ?? ((sourceHead) => runDedicatedPageDataStack(options.settings, sourceHead))
+      )(head);
       if (result.exitCode !== 0 && result.exitCode !== 1)
-        throw new PageDataStackError('check', result.output.split(/\r?\n/).find(Boolean) ?? `page-data-check exited ${result.exitCode}`);
+        throw new PageDataStackError(
+          'check',
+          result.output.split(/\r?\n/).find(Boolean) ?? `page-data-check exited ${result.exitCode}`,
+        );
       output = result.output;
       registryForRun = result.registry;
     } catch (error) {
@@ -461,7 +500,12 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       const owner = latestSectionOwner(tasks, changes, defect.section.files);
       const key = repairKey(defect.section, owner);
       if (repairWasRouted(options.db, key)) continue;
-      const detail = JSON.stringify({ repairKey: key, section: sectionKey(defect.section), class: defect.section.class, owner: owner?.id });
+      const detail = JSON.stringify({
+        repairKey: key,
+        section: sectionKey(defect.section),
+        class: defect.section.class,
+        owner: owner?.id,
+      });
       claimRepair(options.db, key, at, detail);
       const resumed = owner
         ? Boolean(
@@ -470,7 +514,9 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
               .get(owner.id, `%${key}%`),
           )
         : false;
-      const dispatched = options.tasks.tasks().some((task) => task.brief.markdown.includes(`page-data-repair-key: ${key}`));
+      const dispatched = options.tasks
+        .tasks()
+        .some((task) => task.brief.markdown.includes(`page-data-repair-key: ${key}`));
       if (resumed || dispatched) {
         finishRepair(options.db, key);
         continue;
@@ -503,7 +549,9 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
 function dbMaxPageDataAttempt(db: Database): number {
   return (
     db
-      .query("SELECT coalesce(max(attempt),0) AS attempt FROM flow_events WHERE task_id=? AND stage='verification' AND action LIKE 'page-data-%'")
+      .query(
+        "SELECT coalesce(max(attempt),0) AS attempt FROM flow_events WHERE task_id=? AND stage='verification' AND action LIKE 'page-data-%'",
+      )
       .get(pageDataTaskId) as { attempt: number }
   ).attempt;
 }
@@ -537,7 +585,9 @@ function validPort(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0 && Number(value) < 65536;
 }
 
-async function stackConfiguration(settings: Settings): Promise<{ file: string; worktree: string; stack: StackConfig; names: { database: string; search: string } }> {
+async function stackConfiguration(
+  settings: Settings,
+): Promise<{ file: string; worktree: string; stack: StackConfig; names: { database: string; search: string } }> {
   mkdirSync(settings.stateDirectory, { recursive: true });
   mkdirSync(settings.worktreeRoot, { recursive: true });
   const identity = createHash('sha256').update(settings.stateDirectory).digest('hex').slice(0, 10);
@@ -552,7 +602,9 @@ async function stackConfiguration(settings: Settings): Promise<{ file: string; w
       typeof parsed !== 'object' ||
       Array.isArray(parsed) ||
       (parsed as StackConfig).version !== 1 ||
-      !['databasePort', 'searchPort', 'webPort', 'issuerPort', 'nativePort', 'kernelPort'].every((key) => validPort((parsed as StackConfig)[key as keyof StackConfig]))
+      !['databasePort', 'searchPort', 'webPort', 'issuerPort', 'nativePort', 'kernelPort'].every((key) =>
+        validPort((parsed as StackConfig)[key as keyof StackConfig]),
+      )
     )
       throw new Error('Page-data stack configuration is invalid');
     stack = parsed as StackConfig;
@@ -595,7 +647,8 @@ function refreshWorktree(settings: Settings, worktree: string, head: string): vo
     runGit(settings.mainCheckout, ['worktree', 'add', '--detach', worktree, head]);
     return;
   }
-  if (!existsSync(join(worktree, '.git'))) throw new Error(`Page-data worktree path is not a Git worktree: ${worktree}`);
+  if (!existsSync(join(worktree, '.git')))
+    throw new Error(`Page-data worktree path is not a Git worktree: ${worktree}`);
   runGit(worktree, ['reset', '--hard', head]);
 }
 
@@ -692,9 +745,17 @@ async function runCommand(
   }
   const diagnostic = externalErrorLine(stderr || stdout);
   if (timedOut)
-    throw new PageDataStackError(phase, `${command} ${args.join(' ')} timed out after ${timeoutMs} ms: ${diagnostic}`, diagnostic);
+    throw new PageDataStackError(
+      phase,
+      `${command} ${args.join(' ')} timed out after ${timeoutMs} ms: ${diagnostic}`,
+      diagnostic,
+    );
   if (!allowedExitCodes.includes(code ?? -1))
-    throw new PageDataStackError(phase, `${command} ${args.join(' ')} exited ${String(code)}: ${diagnostic}`, diagnostic);
+    throw new PageDataStackError(
+      phase,
+      `${command} ${args.join(' ')} exited ${String(code)}: ${diagnostic}`,
+      diagnostic,
+    );
   return { exitCode: code ?? -1, stdout, stderr, output: stdout };
 }
 
@@ -748,7 +809,8 @@ async function waitForStack(
   if (child.exitCode === null && child.signalCode === null) signalGroup(child, 'SIGTERM');
   await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, stopTimeoutMs))]);
   if (child.exitCode === null && child.signalCode === null) signalGroup(child, 'SIGKILL');
-  const line = externalErrorLine(stderr) || lastFailure || externalErrorLine(output) || 'Local stack did not become ready';
+  const line =
+    externalErrorLine(stderr) || lastFailure || externalErrorLine(output) || 'Local stack did not become ready';
   throw new PageDataStackError('boot', line, line);
 }
 
@@ -756,7 +818,10 @@ async function stopStack(child: ChildProcess, timeoutMs: number): Promise<void> 
   if (child.exitCode !== null || child.signalCode !== null) return;
   const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
   signalGroup(child, 'SIGTERM');
-  const stopped = await Promise.race([closed.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs))]);
+  const stopped = await Promise.race([
+    closed.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
   if (!stopped) {
     signalGroup(child, 'SIGKILL');
     await closed;
@@ -766,12 +831,16 @@ async function stopStack(child: ChildProcess, timeoutMs: number): Promise<void> 
 function dependencyFilesChanged(cwd: string, oldHead: string | undefined, head: string): boolean {
   if (!oldHead) return true;
   if (oldHead === head) return false;
-  const result = spawnSync('git', ['diff', '--name-only', `${oldHead}..${head}`, '--', 'bun.lock', 'package.json', '**/package.json'], {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: defaultPolicy.merge.gitBufferBytes,
-    timeout: defaultPolicy.merge.commandTimeoutMs,
-  });
+  const result = spawnSync(
+    'git',
+    ['diff', '--name-only', `${oldHead}..${head}`, '--', 'bun.lock', 'package.json', '**/package.json'],
+    {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: defaultPolicy.merge.gitBufferBytes,
+      timeout: defaultPolicy.merge.commandTimeoutMs,
+    },
+  );
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || 'Could not compare page-data dependency inputs');
   return Boolean(result.stdout.trim());
@@ -806,10 +875,40 @@ async function runDedicatedPageDataStack(
   const seeded = join(settings.stateDirectory, 'page-data-seeded');
   let child: ChildProcess | undefined;
   try {
-    await runCommand(bun, ['run', '--cwd', 'services/kernel', 'db', 'up'], worktree, env, policy.commandTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
+    await runCommand(
+      bun,
+      ['run', '--cwd', 'services/kernel', 'db', 'up'],
+      worktree,
+      env,
+      policy.commandTimeoutMs,
+      policy.outputBytes,
+      'boot',
+      [0],
+      policy.stopTimeoutMs,
+    );
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
-    await runCommand(bun, ['run', '--cwd', 'services/kernel', 'search', 'up'], worktree, env, policy.commandTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
-    await runCommand(bun, ['services/auth/scripts/dev-stack.ts', 'setup'], worktree, env, policy.commandTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
+    await runCommand(
+      bun,
+      ['run', '--cwd', 'services/kernel', 'search', 'up'],
+      worktree,
+      env,
+      policy.commandTimeoutMs,
+      policy.outputBytes,
+      'boot',
+      [0],
+      policy.stopTimeoutMs,
+    );
+    await runCommand(
+      bun,
+      ['services/auth/scripts/dev-stack.ts', 'setup'],
+      worktree,
+      env,
+      policy.commandTimeoutMs,
+      policy.outputBytes,
+      'boot',
+      [0],
+      policy.stopTimeoutMs,
+    );
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
 
     try {
@@ -833,9 +932,29 @@ async function runDedicatedPageDataStack(
       );
 
       if (!existsSync(seeded)) {
-        await runCommand(bun, ['services/auth/scripts/dev-stack.ts', 'persona'], worktree, env, policy.seedTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
+        await runCommand(
+          bun,
+          ['services/auth/scripts/dev-stack.ts', 'persona'],
+          worktree,
+          env,
+          policy.seedTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0],
+          policy.stopTimeoutMs,
+        );
         env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
-        await runCommand(bun, ['scripts/datasets/cross-media-seed.ts', '--dev'], worktree, env, policy.seedTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
+        await runCommand(
+          bun,
+          ['scripts/datasets/cross-media-seed.ts', '--dev'],
+          worktree,
+          env,
+          policy.seedTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0],
+          policy.stopTimeoutMs,
+        );
         mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
         writeFileSync(seeded, `${head}\n`, { flag: 'w' });
       }

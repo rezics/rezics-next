@@ -86,13 +86,18 @@ test('the policy interval, defect transition, section output and per-run report 
     expect(duePageDataRun(start.toISOString(), start.getTime() + 1, 2)).toBe(false);
     expect(duePageDataRun(start.toISOString(), start.getTime() + 2, 2)).toBe(true);
     expect(readControlPolicy().pageData.intervalMs).toBe(7_200_000);
-    expect(readControlPolicy({ containers: { keep: ['rezics-pagecheck-'] } }).containers.keep).toContain('rezics-pagecheck-');
+    expect(readControlPolicy({ containers: { keep: ['rezics-pagecheck-'] } }).containers.keep).toContain(
+      'rezics-pagecheck-',
+    );
     expect(pageDataClassCounts([section('DATA'), section('API')])).toMatchObject({ DATA: 1, API: 1, WEB: 0 });
     expect(newlyDefectiveSections([section('EMPTY')], [section('API')])).toEqual([
       { section: section('API'), previousClass: 'EMPTY' },
     ]);
     expect(
-      parsePageDataOutput('home anonymous feed API\n', h.registry).map(({ class: value, firstErrorLine }) => [value, firstErrorLine]),
+      parsePageDataOutput('home anonymous feed API\n', h.registry).map(({ class: value, firstErrorLine }) => [
+        value,
+        firstErrorLine,
+      ]),
     ).toEqual([['API', 'home anonymous feed API']]);
 
     const routed: string[] = [];
@@ -104,7 +109,13 @@ test('the policy interval, defect transition, section output and per-run report 
       inbox: { deliver() {} },
       now: () => start,
       runStack: async () => ({ output: result, exitCode: 0, registry: h.registry }),
-      routeDefect: async ({ section: defective, previousClass }: { section: PageDataSection; previousClass: string }) => {
+      routeDefect: async ({
+        section: defective,
+        previousClass,
+      }: {
+        section: PageDataSection;
+        previousClass: string;
+      }) => {
         routed.push(`${defective.class}:${previousClass}`);
         return 'dispatched' as const;
       },
@@ -146,7 +157,11 @@ test('a dedicated stack boot failure reaches the supermanager with its first err
     });
     expect(result).toBe('failed');
     expect(notices).toEqual([
-      { managerId: 'supermanager', kind: 'environment', summary: expect.stringContaining('docker: daemon unavailable') },
+      {
+        managerId: 'supermanager',
+        kind: 'environment',
+        summary: expect.stringContaining('docker: daemon unavailable'),
+      },
     ]);
     expect(flowReport(readFlow(h.db), []).pageDataRuns[0]?.failure).toEqual({
       phase: 'boot',
@@ -223,7 +238,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     ).toBe(true);
     await job.drain();
     const launch = JSON.parse(readFileSync(join(task.worktree, '.temp/page-data-launch.json'), 'utf8')) as string[];
-    expect(launch.slice(launch.indexOf('resume'), launch.indexOf('resume') + 2)).toEqual(['resume', 'page-data-session']);
+    expect(launch.slice(launch.indexOf('resume'), launch.indexOf('resume') + 2)).toEqual([
+      'resume',
+      'page-data-session',
+    ]);
     const evidence = readFileSync(join(h.settings.stateDirectory, 'page-data-repairs', `${repairKey}.md`), 'utf8');
     expect(evidence).toContain('Class: API (previously DATA)');
     expect(evidence).toContain('First error line: home anonymous feed API');
@@ -262,7 +280,9 @@ test('a non-resumable author task gets one Goal repair task for the cause', asyn
     };
     expect(await routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair)).toBe('dispatched');
     expect(await routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair)).toBe('dispatched');
-    const repairs = h.store.tasks().filter((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
+    const repairs = h.store
+      .tasks()
+      .filter((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
     expect(repairs).toHaveLength(1);
     expect(repairs[0]?.brief.goal).toBe(owner.brief.goal);
     expect(repairs[0]?.brief.markdown).toContain('in class `API` (previously `UNAVAILABLE`)');

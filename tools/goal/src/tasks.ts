@@ -1593,7 +1593,9 @@ export class WorkerTasks {
           ? oldSession
           : undefined;
       if (pageDataRepair && (!resumeSession || !old || old.pool !== pool.name))
-        throw new PageDataSessionUnavailableError('page-data repair cannot resume the retained session on its original provider pool');
+        throw new PageDataSessionUnavailableError(
+          'page-data repair cannot resume the retained session on its original provider pool',
+        );
       const make = (n: number): Attempt => ({
         taskId,
         attempt: n,
@@ -1635,7 +1637,8 @@ export class WorkerTasks {
               nextBrief.kind === 'verification',
               pageDataRepair,
             );
-      if (options.pageDataRepairKey) this.store.event(next, 'page-data-repair', { repairKey: options.pageDataRepairKey });
+      if (options.pageDataRepairKey)
+        this.store.event(next, 'page-data-repair', { repairKey: options.pageDataRepairKey });
       this.writeTaskPriority(this.store.task(taskId));
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store

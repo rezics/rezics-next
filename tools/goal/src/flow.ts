@@ -101,7 +101,14 @@ const summarize = (values: number[]) => {
 
 const PAGE_DATA_CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 type PageDataClass = (typeof PAGE_DATA_CLASSES)[number];
-type PageDataReportSection = { page: string; persona: string; section: string; name: string; class: PageDataClass; firstErrorLine?: string };
+type PageDataReportSection = {
+  page: string;
+  persona: string;
+  section: string;
+  name: string;
+  class: PageDataClass;
+  firstErrorLine?: string;
+};
 export type PageDataFlowRun = {
   runId: number;
   at: string;
@@ -111,13 +118,21 @@ export type PageDataFlowRun = {
   failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
 };
 
-export function pageDataFlowRuns(events: readonly FlowEvent[], limit = defaultPolicy.pageData.reportRuns): PageDataFlowRun[] {
+export function pageDataFlowRuns(
+  events: readonly FlowEvent[],
+  limit = defaultPolicy.pageData.reportRuns,
+): PageDataFlowRun[] {
   const pageEvents = events.filter((event) => event.taskId === 'page-data' && event.stage === 'verification');
   const runs = pageEvents.filter((event) => event.action === 'page-data-run');
   const report: PageDataFlowRun[] = runs.map((event) => {
-    const metadata = JSON.parse(event.detail ?? '{}') as { head?: string; classes?: Partial<Record<PageDataClass, number>> };
+    const metadata = JSON.parse(event.detail ?? '{}') as {
+      head?: string;
+      classes?: Partial<Record<PageDataClass, number>>;
+    };
     const sections: Partial<Record<PageDataClass, PageDataReportSection[]>> = {};
-    for (const row of pageEvents.filter((candidate) => candidate.attempt === event.attempt && candidate.action === 'page-data-section')) {
+    for (const row of pageEvents.filter(
+      (candidate) => candidate.attempt === event.attempt && candidate.action === 'page-data-section',
+    )) {
       const section = JSON.parse(row.detail ?? '{}') as PageDataReportSection;
       (sections[section.class] ??= []).push(section);
     }
@@ -129,7 +144,9 @@ export function pageDataFlowRuns(events: readonly FlowEvent[], limit = defaultPo
       sections,
     };
   });
-  for (const event of pageEvents.filter((candidate) => candidate.action === 'page-data-boot-failure' || candidate.action === 'page-data-check-failure')) {
+  for (const event of pageEvents.filter(
+    (candidate) => candidate.action === 'page-data-boot-failure' || candidate.action === 'page-data-check-failure',
+  )) {
     const metadata = JSON.parse(event.detail ?? '{}') as { head?: string; firstErrorLine?: string };
     report.push({
       runId: event.attempt,
@@ -149,12 +166,14 @@ export function pageDataFlowRuns(events: readonly FlowEvent[], limit = defaultPo
 export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string[] {
   if (!runs.length) return ['Page-data runs: none recorded.'];
   return runs.flatMap((run) => {
-    if (run.failure) return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
+    if (run.failure)
+      return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
     const counts = PAGE_DATA_CLASSES.map((className) => `${className}=${run.classes[className] ?? 0}`).join(' ');
     return [
       `Page-data run at ${run.at} (${run.head}): ${counts}.`,
       ...PAGE_DATA_CLASSES.map((className) => {
-        const sections = run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];
+        const sections =
+          run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];
         return `  ${className} (${sections.length}): ${sections.join(', ') || 'none'}`;
       }),
     ];
