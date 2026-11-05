@@ -2403,8 +2403,7 @@ freeze assignments or public identity state.
   `invalid_request` and the whole patch writes nothing. Clearing the reference does not erase Content's media object.
 - `publicViews: { posts?: boolean, reviews?: boolean, collections?: boolean, realms?: boolean }` merges only the
   supplied flags. Posts, reviews and collections default to true for actors and organizations; `realms` defaults to
-  false. The handle read always returns all four keys; missing or malformed stored flags are false. The three activity
-  flags hide only the lists on the agent's
+  false. The handle read always returns all four keys. The three activity flags hide only the lists on the agent's
   subject page; individual items retain their own visibility. The Realm flag controls the public account Realms page.
 - An organization's patch also accepts `speakersListed: boolean`, default false. Only organization handle profiles
   return this field. Principal assignments still determine who speaks for the organization; this flag controls listing.
