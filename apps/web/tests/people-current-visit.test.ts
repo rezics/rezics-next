@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { peopleBiographyAddress } from '../src/features/catalogue/people-biography/current-visit';
 import { candidateContext } from '../src/subject/candidates';
 import {
   peopleCurrentVisitGlobalHref,
@@ -119,4 +120,37 @@ test('Person current visit rejects wrong Person, locale, nested return, contradi
   expect(invalid({ ...origin, definition: '' })).toEqual({ kind: 'invalid' });
   expect(validatePeopleCurrentVisitSearch({ visit: 'x'.repeat(2049) }, personId, 'en')).toEqual({ kind: 'invalid' });
   expect(validatePeopleCurrentVisitSearch({ correction: 'global' }, personId, 'en')).toEqual({ kind: 'invalid' });
+});
+
+test('biography returns admit the inner Global window and restore the separate same-Person outer heading', () => {
+  const outer = `/en/subjects/${personId}/mira-sato?context=${contextId}&realm=${realmId}#person-biography`;
+  const href = peopleBiographyAddress(
+    personId,
+    'Mira Sato',
+    'en',
+    candidateContext,
+    'occupations',
+    'wdt:P106',
+    undefined,
+    outer,
+  );
+  const url = new URL(href, 'https://rezics.invalid');
+  expect(validatePeopleCurrentVisitSearch(searchOf(href), personId, 'en', url.hash)).toEqual({
+    kind: 'biography',
+    returnHref: outer,
+  });
+  expect(validatePeopleCurrentVisitSearch({ context: candidateContext }, personId, 'en', url.hash)).toEqual({
+    kind: 'biography',
+  });
+  for (const search of [
+    { ...searchOf(href), context: contextId },
+    { ...searchOf(href), via: `/fr/subjects/${personId}/mira-sato` },
+    { ...searchOf(href), via: `/en/subjects/${realmId}/other` },
+    { ...searchOf(href), via: [outer, outer] },
+    { ...searchOf(href), visit: '{}' },
+  ])
+    expect(validatePeopleCurrentVisitSearch(search, personId, 'en', url.hash)).toEqual({ kind: 'invalid' });
+  expect(
+    validatePeopleCurrentVisitSearch({ context: candidateContext }, personId, 'en', '#person-biography?field=bad'),
+  ).toEqual({ kind: 'invalid' });
 });

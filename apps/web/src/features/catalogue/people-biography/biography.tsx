@@ -1,3 +1,4 @@
+import { useContext } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../../../paraglide/messages.js';
@@ -7,7 +8,7 @@ import { SpoilerGate } from '../../pages/values';
 import { PartValue } from '../statement-editor-view';
 import type { FactsCurrent } from '../subject-facts';
 import { peopleBiographyFieldAnchor, peopleBiographyAssertionAnchor, PeopleBiographyAssertion } from './assertion';
-import { peopleBiographyAddress as biographyAddress } from './current-visit';
+import { PeopleBiographyOuterReturn, peopleBiographyAddress as biographyAddress } from './current-visit';
 import { peopleBiographyHref, peopleSubjectLabel, type PeopleBiographyField } from './index';
 
 const actionClass =
@@ -25,10 +26,20 @@ export function PeopleBiographyDocuments({
   locale: string;
   restoredAssertion?: string | undefined;
 }) {
+  const outerReturn = useContext(PeopleBiographyOuterReturn);
   const o = { locale: locale as never };
   const subject = read.public.subject;
   const title = peopleSubjectLabel(subject, locale).text;
-  const fallbackReturn = biographyAddress(subject.id, title, locale, subject.context, field.kind, field.id);
+  const fallbackReturn = biographyAddress(
+    subject.id,
+    title,
+    locale,
+    subject.context,
+    field.kind,
+    field.id,
+    undefined,
+    outerReturn,
+  );
   const href = peopleBiographyHref(
     subject.id,
     title,

@@ -3,11 +3,9 @@ import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { peoplePersonId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
-import {
-  personBiographyReturn,
-  personBiographyReturnFragment,
-  subjectVisitReturn,
-} from '../src/features/pages/subject-visit-navigation';
+import { personBiographyReturn, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { PeopleCurrentVisitView } from '../src/features/catalogue/people-current-visit-view';
+import { validatePeopleCurrentVisitSearch } from '../src/features/catalogue/people-current-visit';
 import { peopleBiographyAddress } from '../src/features/catalogue/people-biography/current-visit';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -36,12 +34,7 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
   fixture.person.related = {
     [targetId]: { type: 'skos:Concept', labels: { ja: '監督', en: 'Director', 'zh-Hant': '導演' } },
   };
-  const locator = personBiographyReturnFragment({
-    context,
-    field: 'wdt:P106',
-    assertion,
-    window: 'occupations',
-  });
+  const outerReturn = `/zh-Hant/subjects/${peoplePersonId}/original-person?context=${context}#person-biography`;
   const returnAddress = peopleBiographyAddress(
     peoplePersonId,
     '佐藤米拉',
@@ -50,12 +43,13 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
     'occupations',
     'wdt:P106',
     assertion,
+    outerReturn,
   );
   const acceptedReturn = subjectVisitReturn(returnAddress, 'zh-Hant')!;
   const normalizedReturn = new URL(returnAddress, 'https://site.invalid');
   expect(acceptedReturn).toBe(`${normalizedReturn.pathname}${normalizedReturn.search}${normalizedReturn.hash}`);
   const window = new Window({
-    url: `https://site.invalid/zh-Hant/subjects/${peoplePersonId}/mira/people?context=${context}${locator}`,
+    url: `https://site.invalid${returnAddress}`,
   });
   const keys = [
     'window',
@@ -85,6 +79,14 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
+  const route = new URL(window.location.href);
+  const visit = validatePeopleCurrentVisitSearch(
+    Object.fromEntries(route.searchParams),
+    peoplePersonId,
+    'zh-Hant',
+    route.hash,
+  );
+  expect(visit).toEqual({ kind: 'biography', returnHref: outerReturn });
   const render = (publicRead: SubjectRead, revision: string) =>
     h(
       CandidateReaderBoundary,
@@ -95,15 +97,22 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
       h(
         CatalogueCurrentReading,
         { visible: true, ready: true, revision },
-        h(Visit, {
-          read: { ok: true, public: publicRead, release: fixture.release, source: null },
+        h(PeopleCurrentVisitView, {
           locale: 'zh-Hant',
-          search: async () => [],
-          transport: {
-            propose: fixture.propose,
-            read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
-          },
-          review: fixture.review,
+          pathname: route.pathname,
+          visit,
+          renderEditor: (_origin, returnHref) =>
+            h(Visit, {
+              ...(returnHref ? { returnHref } : {}),
+              read: { ok: true, public: publicRead, release: fixture.release, source: null },
+              locale: 'zh-Hant',
+              search: async () => [],
+              transport: {
+                propose: fixture.propose,
+                read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+              },
+              review: fixture.review,
+            }),
         }) as ReactNode,
       ) as ReactNode,
     );
@@ -115,6 +124,15 @@ test('the mounted Person visit returns to the exact current assertion and keeps 
     expect(targetAddress.searchParams.get('context')).toBe(context);
     const via = targetAddress.searchParams.get('via')!;
     expect(subjectVisitReturn(via, 'zh-Hant')).toBe(via);
+    const returned = new URL(via, 'https://site.invalid');
+    expect(
+      validatePeopleCurrentVisitSearch(
+        Object.fromEntries(returned.searchParams),
+        peoplePersonId,
+        'zh-Hant',
+        returned.hash,
+      ),
+    ).toEqual({ kind: 'biography', returnHref: outerReturn });
     expect(new URL(via, 'https://site.invalid').hash).toContain(encodeURIComponent(assertion));
     expect(personBiographyReturn(new URL(via, 'https://site.invalid').hash)).toMatchObject({
       context,

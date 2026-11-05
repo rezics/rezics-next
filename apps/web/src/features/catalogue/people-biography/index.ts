@@ -90,12 +90,29 @@ function factStatus(
   return statements?.length ? 'current' : 'absent';
 }
 
-function itemFacts(property: string, subject: SubjectRead | null, locale: string): PeopleBiographyFact[] {
+/** Profession links describe the released Concept relation, never a label or a credit role. */
+export function peopleOccupationConcept(definition: PropertyDefinition | undefined, type: string): boolean {
+  return (
+    definition?.datatype === 'wikibase-item' &&
+    !!definition.targets?.includes('skos:Concept') &&
+    type === 'skos:Concept'
+  );
+}
+
+function itemFacts(
+  property: string,
+  definition: PropertyDefinition,
+  subject: SubjectRead | null,
+  locale: string,
+): PeopleBiographyFact[] {
   if (!subject) return [];
   return (subject.subject.statements[property] ?? []).map((statement) => {
     const content = statement.value.type === 'value' ? statement.value.content : undefined;
     const target =
-      statement.property.data_type === 'wikibase-item' && typeof content === 'string'
+      definition.datatype === 'wikibase-item' &&
+      statement.property.data_type === 'wikibase-item' &&
+      typeof content === 'string' &&
+      (property !== 'wdt:P106' || peopleOccupationConcept(definition, subject.related[content]?.type ?? ''))
         ? disclosedTarget(subject.related, content, locale)
         : undefined;
     return { id: statement.id, property, statement, ...(target ? { target } : {}) };
@@ -119,7 +136,7 @@ function requestedField(
   readable: boolean,
 ): PeopleBiographyField {
   const definition = admittedProperty(release, type, id);
-  const facts = definition ? itemFacts(id, subject, locale) : [];
+  const facts = definition ? itemFacts(id, definition, subject, locale) : [];
   const unreadable = definition
     ? facts.some((fact) => fact.statement.value.type === 'value' && !disclosedOrScalar(fact))
     : false;

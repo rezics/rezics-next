@@ -18,7 +18,7 @@ export function PeopleCurrentVisitView({
   locale: string;
   pathname: string;
   visit: PeopleCurrentVisitSearch;
-  renderEditor: (origin?: PeopleCurrentVisitOrigin) => ReactNode;
+  renderEditor: (origin?: PeopleCurrentVisitOrigin, returnHref?: string) => ReactNode;
 }) {
   const o = { locale: locale as never };
   if (visit.kind === 'invalid')
@@ -54,7 +54,7 @@ export function PeopleCurrentVisitView({
           {m.people_current_visit_global_selected({}, o)}
         </p>
       ) : null}
-      {renderEditor(origin)}
+      {renderEditor(origin, visit.kind === 'biography' ? visit.returnHref : undefined)}
     </>
   );
 }

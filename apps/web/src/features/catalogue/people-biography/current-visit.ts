@@ -1,4 +1,5 @@
 import { subjectHref } from '../../../subject/subject-href';
+import { createContext } from 'react';
 import {
   subjectVisitReturn,
   withSubjectVisitReturn,
@@ -7,6 +8,7 @@ import {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type PeopleBiographyWindow = 'biography' | 'occupations' | 'languages' | 'affiliations';
+export const PeopleBiographyOuterReturn = createContext<string | undefined>(undefined);
 
 /** One bounded source address for returning to the current Person field and assertion. */
 export function peopleBiographyAddress(
@@ -17,9 +19,17 @@ export function peopleBiographyAddress(
   window: PeopleBiographyWindow,
   field: string,
   assertion?: string,
+  outerReturn?: string,
 ): string {
   const base = subjectHref({ id, label }, locale).href;
   const params = new URLSearchParams({ context });
+  if (outerReturn) {
+    // The existing nested visit grammar admits the overview's connections anchor.
+    // The People route restores the separate public profile heading after rereading.
+    const outer = new URL(outerReturn, 'https://rezics.invalid');
+    outer.hash = 'connections';
+    params.set('via', `${outer.pathname}${outer.search}${outer.hash}`);
+  }
   const fragment = personBiographyReturnFragment({ context, window, field, ...(assertion ? { assertion } : {}) });
   return `${base}/people?${params}${fragment}`;
 }

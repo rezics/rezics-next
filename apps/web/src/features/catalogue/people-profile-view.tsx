@@ -561,6 +561,7 @@ function PeopleProfileEditorLive({
           <PeopleBiographyGroups
             read={{ ok: true, public: privateRead.public!, release: privateRead.release, source: null }}
             locale={locale}
+            {...(returnHref ? { returnHref } : {})}
             {...(search ? { search } : {})}
             transport={{
               propose,

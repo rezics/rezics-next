@@ -224,3 +224,31 @@ test('old definition responses, expanded evidence and focused controls retire on
     window.happyDOM.abort();
   }
 });
+
+test('P106 retains descriptive values and links only exact released occupation Concepts', () => {
+  const fixture = personReaderExample();
+  const draw = () =>
+    renderToStaticMarkup(
+      h(PersonReader, {
+        public: fixture.read,
+        release: fixture.release,
+        locale: 'fr',
+        documents: fixture.documents,
+      }),
+    );
+  const target = fixture.read.related[fixture.occupation]!;
+  target.labels = { ja: '監督' };
+  expect(draw()).toContain('lang="ja">監督');
+  target.type = 'schema:Person';
+  expect(draw()).toContain('監督');
+  expect(draw()).not.toContain(`/subjects/${fixture.occupation}/`);
+  const definition = fixture.release.properties['wdt:P106']!;
+  definition.datatype = 'string';
+  delete definition.relation;
+  delete definition.targets;
+  const fact = fixture.read.subject.statements['wdt:P106']![0]!;
+  fact.property.data_type = 'string';
+  fact.value = { type: 'value', content: 'Independent animation director' };
+  expect(draw()).toContain('Independent animation director');
+  expect(draw()).not.toContain(`/subjects/${fixture.occupation}/`);
+});

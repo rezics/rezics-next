@@ -22,6 +22,7 @@ import {
 import { PeopleFactField } from '../people-facts/field';
 import { FactInspectionEntry, PeopleFacts, useFactVisit } from '../people-facts/visit';
 import { SuppliedNames } from '../../pages/showcase-people/names';
+import { peopleOccupationConcept } from '../people-biography';
 
 export const personReaderAnchor = 'person-biography';
 const control =
@@ -63,6 +64,10 @@ function Value({ part, reading }: { part: PersonStatement | PersonStatement['qua
     const summary = read.related[id];
     if (!summary || !('labels' in summary)) return unavailable;
     const label = pickText(summary.labels ?? {}, locale);
+    if (part.property.id === 'wdt:P106' && !peopleOccupationConcept(definition, summary.type))
+      return (
+        <span lang={label.lang ?? undefined}>{label.text || m.subject_value_unlabelled({}, options(locale))}</span>
+      );
     return (
       <Link className={control} href={subjectHref({ id, label: label.text }, locale).href}>
         <span lang={label.lang ?? undefined}>{label.text || m.subject_value_unlabelled({}, options(locale))}</span>
