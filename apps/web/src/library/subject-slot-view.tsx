@@ -1323,8 +1323,7 @@ function SubjectLibrarySlotView({
       setLabelNotice('label-restore-stale');
       return;
     }
-    if (reason === 'conflict')
-      setLabelNotice(intent === 'unassign' ? 'label-unassign-conflict' : 'label-conflict');
+    if (reason === 'conflict') setLabelNotice(intent === 'unassign' ? 'label-unassign-conflict' : 'label-conflict');
     else if (reason === 'capacity') setLabelNotice('label-capacity');
     else if (reason === 'restore-expired') setLabelNotice('label-restore-expired');
     else if (reason === 'restore-occupied') setLabelNotice('label-restore-occupied');
@@ -1621,9 +1620,7 @@ function SubjectLibrarySlotView({
     if (labelActionBlocked || !labelLifetime.current('library_label.assignment_list', 'library_label.unassign')) return;
     const received = labels.find(
       (assignment) =>
-        assignment.id === label.id &&
-        assignment.labelId === label.labelId &&
-        assignment.revision === label.revision,
+        assignment.id === label.id && assignment.labelId === label.labelId && assignment.revision === label.revision,
     );
     if (!received) return;
     const review = captureSubjectLabelReview(subject, locale, received, labelCommandOrigin, labelLifetime);

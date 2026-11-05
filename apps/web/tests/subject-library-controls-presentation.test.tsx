@@ -722,9 +722,7 @@ test('A/B/A retirement keeps an uncertain Label write out of the returned visit 
   expect(host.querySelector('[data-subject-label-pending-origin]')?.textContent).toBe(
     m.library_subject_label_pending_origin(),
   );
-  await act(async () =>
-    labels[0]!.resolve({ ok: true, assignment: { id: id(20), revision: 9 }, restoreRevision: 41 }),
-  );
+  await act(async () => labels[0]!.resolve({ ok: true, assignment: { id: id(20), revision: 9 }, restoreRevision: 41 }));
   await settle();
   expect(labels).toHaveLength(1);
   expect(labels[0]!.data).toEqual(original);
