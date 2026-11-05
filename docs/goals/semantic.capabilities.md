@@ -68,6 +68,9 @@ Personas: Anonymous, editor, acceptor, steward, Alice, suspended, unscoped and o
 
 Released fixture: Actual bundled release plus a separately compiled board-game extension; authored Recipe and no-profile Person. The extension cannot replace launch Book/Recipe assertions.
 
+Decision: compile the authored board-game fixture through ordinary catalogue imports, eight-locale presentation,
+Context settings and saved filters; preserve launch Book/Recipe data and keep it separate from the bundled release.
+
 | Surface                  | Required outcome or explicit boundary                                                  |
 | ------------------------ | -------------------------------------------------------------------------------------- |
 | Catalogue                | Admit released type/property/facet/value constraints and return real created subjects. |
