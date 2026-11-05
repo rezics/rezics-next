@@ -55,10 +55,7 @@ const fake = Bun.serve({
           { headers },
         );
       headers.set('retry-after', '37');
-      return Response.json(
-        { error: 'authentication_denied', ...(readStatus === 409 ? { code: 'stale_review' } : {}) },
-        { status: readStatus, headers },
-      );
+      return Response.json({ code: responseCode }, { status: readStatus, headers });
     }
     if (url.pathname === '/consent' && request.method === 'POST') {
       if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
@@ -292,7 +289,11 @@ test(
     try {
       await ready(page);
       await page.getByRole('button', { name: 'Decline', exact: true }).click();
-      await page.getByRole('status').filter({ hasText: 'Review declined. This choice sends no approval.' }).waitFor();
+      await page
+        .getByRole('region', { name: 'Latest review outcome' })
+        .getByRole('status')
+        .filter({ hasText: 'Review declined. This choice sends no approval.' })
+        .waitFor();
       expect(writes()).toHaveLength(0);
       expect(reads()).toHaveLength(1);
       expect(new URL(page.url()).origin).toBe(origin);
