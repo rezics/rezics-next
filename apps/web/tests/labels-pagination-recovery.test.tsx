@@ -24,13 +24,16 @@ let send: (input: LabelInput) => Promise<LabelResult> = async () => {
 const read = mock(() => {
   throw new Error('Recovery links must not fetch during rendering');
 });
+const readCurrent = mock(() => {
+  throw new Error('Unexpected current Labels read');
+});
 mock.module('../src/library/labels-actions', () => ({
   manageLabel: (input: { data: LabelInput; headers: HeadersInit }) => {
     writes.push(structuredClone(input));
     return send(input.data);
   },
 }));
-mock.module('../src/library/labels-read-route', () => ({ readLabelsPage: read }));
+mock.module('../src/library/labels-read-route', () => ({ readLabelsPage: read, readLabelsCurrent: readCurrent }));
 afterAll(() => mock.restore());
 
 const query = '  読書 %_ + & ?  ';
@@ -203,7 +206,7 @@ test('A dirty later-cursor Previous waits for Leave; Stay preserves the exact ra
     const previous = () =>
       [...host.querySelectorAll('button')].find((button) => button.textContent === m.library_labels_previous())!;
     const dialogButton = (name: string) =>
-      [...host.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent === name)!;
+      [...document.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent === name)!;
     const draftValue = '  unsent e\u0301 + %_  ';
     try {
       await act(async () =>
@@ -223,7 +226,7 @@ test('A dirty later-cursor Previous waits for Leave; Stay preserves the exact ra
         input.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
       await act(async () => previous().click());
-      expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
       expect(moves).toEqual([]);
       await act(async () => dialogButton(m.library_label_draft_navigation_stay()).click());
       expect((host.querySelector('#new-label') as HTMLInputElement).value).toBe(draftValue);
