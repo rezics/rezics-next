@@ -99,7 +99,7 @@ test('producer history binds admitted direction and inverse, keeps similar names
   expect(
     windows.calls.filter((call) => call.path.endsWith('/relations')).map((call) => [call.query.limit, call.session]),
   ).toEqual([
-    ['20', null],
+    ['20', 'producer-session'],
     ['20', 'window-session-1'],
     ['20', 'window-session-2'],
   ]);

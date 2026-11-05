@@ -17,15 +17,11 @@ type Movement = 'replace' | 'more' | 'previous' | 'first' | 'restart' | 'reload'
 type HistoryPath = { previous: HistoryCoordinate[]; current?: HistoryCoordinate };
 
 /** Navigation intent is private, bounded and never serialized into a URL or storage. */
-export type HistoryIntent = Readonly<{
-  producer: string;
-  locale: string;
-  stream: string | undefined;
-  cursor: string | undefined;
-  session: string | undefined;
-  movement: Movement;
-  selection?: Readonly<{ index: number; holder: string; statement: string; slot?: RelationSlot }>;
-}>;
+export type HistoryIntent = HistoryCoordinate &
+  Readonly<{
+    movement: Movement;
+    selection?: Readonly<{ index: number; holder: string; statement: string; slot?: RelationSlot }>;
+  }>;
 export type HistorySlice =
   | { phase: 'loading'; revision: number; intent: HistoryIntent; streams: ProducerHistoryStream[] }
   | { phase: 'ready'; revision: number; intent: HistoryIntent; read: Admitted }
@@ -45,8 +41,6 @@ export function useProducerHistorySlice({
 }) {
   const lifetime = useEditorLifetime();
   const first: HistoryIntent = {
-    producer: id,
-    locale,
     stream: undefined,
     cursor: undefined,
     session: undefined,
@@ -74,7 +68,7 @@ export function useProducerHistorySlice({
     return mounted.current && lifetime.active() && sequence.current === revision;
   }
   async function request(intent: HistoryIntent) {
-    if (!lifetime.active() || intent.producer !== id || intent.locale !== locale) return;
+    if (!lifetime.active()) return;
     if (intent.movement === 'replace') path.current = { previous: [] };
     const revision = ++sequence.current;
     const before = current.current;
@@ -134,8 +128,6 @@ export function useProducerHistorySlice({
     movement: Movement,
     selection?: HistoryIntent['selection'],
   ): HistoryIntent => ({
-    producer: id,
-    locale,
     ...coordinate,
     movement,
     ...(selection ? { selection } : {}),
