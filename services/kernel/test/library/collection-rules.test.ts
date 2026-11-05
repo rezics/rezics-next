@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
+import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
+import { discoveryKey, discoveryStatement } from '../support/released-discovery.ts';
 
 let f: CollectionRulesFixture;
 beforeAll(async () => {
@@ -79,6 +81,138 @@ test('a catalogue source is retained and executes through current Search members
   expect(secondPage.members).toContainEqual({ kind: 'dynamic', subjectId: libraryMovie });
   expect(secondPage.members).not.toContainEqual({ kind: 'dynamic', subjectId: catalogueBook });
 }, 120_000);
+
+test('catalogue selected publication uses pinned Search membership and activates only the explicitly selected current result', async () => {
+  const population = await createReleasedLibraryPopulation({ version: 1, search: 'native' });
+  try {
+    const { base, request } = population;
+    const books = await base.books();
+    const catalogueMatch = books.subjects['B-long'];
+    const libraryOnlyBeforeMatch = await base.createSubject('schema:Book', 'Library Subject before catalogue property');
+    await base.catchUp([libraryOnlyBeforeMatch]);
+    const active = population
+      .profile('schema:Book')
+      .profile.entryStateSet?.states.find((state) => state.role === 'active');
+    if (!active) throw new Error('Released Book active Library state is required');
+    const entry = await request(
+      'alice',
+      'PUT',
+      `/v1/libraryEntries/${libraryOnlyBeforeMatch.id}`,
+      { state: active.id },
+      discoveryKey(),
+    );
+    expect(entry.status).toBe(201);
+
+    const filter = {
+      and: [
+        { type: { in: ['schema:Book'] } },
+        { statement: { property: 'schema:wordCount', range: { gte: 1000001, unit: '1' } } },
+      ],
+    };
+    const create = await request(
+      'alice',
+      'POST',
+      '/v1/collections',
+      {
+        membershipKind: 'dynamic',
+        visibility: 'private',
+        title: 'Pinned catalogue selection',
+        rule: { filter, sort: 'id', source: { kind: 'catalogue' } },
+      },
+      discoveryKey(),
+    );
+    expect(create.status).toBe(201);
+    const collection = (create.body as { collection: { id: string; revision: number } }).collection;
+    const reopened = await request('alice', 'GET', `/v1/collections/${collection.id}/rule`);
+    expect(reopened.status).toBe(200);
+    expect(reopened.body).toMatchObject({
+      rule: { filter, sort: 'id', source: { kind: 'catalogue' }, revision: 1 },
+    });
+
+    const privateBefore = await request('alice', 'GET', `/v1/collections/${collection.id}/members`);
+    expect(privateBefore.status).toBe(200);
+    expect((privateBefore.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual(
+      [catalogueMatch.id],
+    );
+
+    const originalInput = { revision: collection.revision, subjectIds: [catalogueMatch.id] };
+    const originalKey = discoveryKey();
+    const first = await request(
+      'alice',
+      'POST',
+      `/v1/collections/${collection.id}:publishSelected`,
+      originalInput,
+      originalKey,
+    );
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ publication: { state: 'complete', itemCount: 1 } });
+    const exactReplay = await request(
+      'alice',
+      'POST',
+      `/v1/collections/${collection.id}:publishSelected`,
+      originalInput,
+      originalKey,
+    );
+    expect(exactReplay.status).toBe(200);
+    expect(exactReplay.body).toEqual(first.body);
+    expect(
+      (
+        await request(
+          'bob',
+          'POST',
+          `/v1/collections/${collection.id}:publishSelected`,
+          originalInput,
+          originalKey,
+        )
+      ).status,
+    ).toBe(404);
+
+    const publicBeforeChange = await request('anonymous', 'GET', `/v1/collections/${collection.id}/members`);
+    expect(publicBeforeChange.status).toBe(200);
+    expect((publicBeforeChange.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual(
+      [catalogueMatch.id],
+    );
+
+    await base.adopt(
+      libraryOnlyBeforeMatch,
+      discoveryStatement('schema:wordCount', { amount: '+1200001', unit: '1' }),
+    );
+    await base.catchUp([libraryOnlyBeforeMatch]);
+    const currentViewQuery = new URLSearchParams({ filter: JSON.stringify(filter), sort: 'id', limit: '100' });
+    const privateAfter = await request(
+      'alice',
+      'GET',
+      `/v1/collections/${collection.id}/members?${currentViewQuery}`,
+    );
+    expect(privateAfter.status).toBe(200);
+    expect((privateAfter.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual(
+      [catalogueMatch.id, libraryOnlyBeforeMatch.id].sort(),
+    );
+    const publicUntilActivation = await request('anonymous', 'GET', `/v1/collections/${collection.id}/members`);
+    expect(publicUntilActivation.status).toBe(200);
+    expect(
+      (publicUntilActivation.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
+    ).toEqual([catalogueMatch.id]);
+
+    const firstCollection = (first.body as { collection: { revision: number } }).collection;
+    const activated = await request(
+      'alice',
+      'POST',
+      `/v1/collections/${collection.id}:publishSelected`,
+      { revision: firstCollection.revision, subjectIds: [libraryOnlyBeforeMatch.id] },
+      discoveryKey(),
+    );
+    expect(activated.status).toBe(200);
+    expect(activated.body).toMatchObject({ publication: { state: 'complete', itemCount: 1 } });
+    const publicAfterActivation = await request('anonymous', 'GET', `/v1/collections/${collection.id}/members`);
+    expect(publicAfterActivation.status).toBe(200);
+    expect(
+      (publicAfterActivation.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
+    ).toEqual([libraryOnlyBeforeMatch.id]);
+  } finally {
+    await population.close();
+  }
+}, 180_000);
 
 test('Saved dynamic definitions use actual shared admission while current dynamic readers distinguish private execution from explicit public output', async () => {
   const selected = await f.subject('Selected output');
