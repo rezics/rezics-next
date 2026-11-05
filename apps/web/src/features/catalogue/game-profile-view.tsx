@@ -666,7 +666,6 @@ function GameCorrection({
                                   aria-label={m.game_visit_inspect_assertion({ property: label.text || property }, o)}
                                   data-game-inspect-assertion={statement.id}
                                   onClick={() =>
-                                    lifetime.active() &&
                                     setInspection({
                                       owner: read.public,
                                       selection: { holder: subject.id, property, statement: statement.id },
@@ -705,7 +704,6 @@ function GameCorrection({
               type="button"
               variant="outline"
               onClick={() => {
-                if (!lifetime.active()) return;
                 setInspection({ owner: read.public, selection: null, closed: true });
                 onCloseInspection();
               }}
