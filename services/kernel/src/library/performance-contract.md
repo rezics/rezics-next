@@ -619,3 +619,5 @@ catalogue root also owns partition/cursor decoding and continuation-name rereads
 preparation/fence branches remain with their import callers. Semantic FULL disclosure and its repeated source/profile
 probes remain with the Semantic owner. Add those reached terms at those existing boundaries before calling the
 operation family complete; keep the current request deadline, attempts, receipt semantics and capacity unchanged.
+
+The native ordinal SQL bound lives in `collection-source-ordinal-bounds.ts` and retains its original Source export. Search imports this pure declaration directly so its enclosing declaration does not evaluate a partially initialized native Source runtime during member-retention bootstrap. SQL, capacities and allowances are unchanged.
