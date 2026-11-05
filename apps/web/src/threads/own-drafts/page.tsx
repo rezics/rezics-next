@@ -245,12 +245,7 @@ function BoundOwnDraftsPage({
     if (!handoff || handoff.operationId !== operationId) return;
     document.removeEventListener('focusin', handoff.listener, true);
     focusHandoff.current = null;
-    if (
-      focus &&
-      !handoff.cancelled &&
-      operationRef.current?.id === operationId &&
-      commandCurrent()
-    )
+    if (focus && !handoff.cancelled && operationRef.current?.id === operationId && commandCurrent())
       inventoryHeading.current?.focus();
   };
 

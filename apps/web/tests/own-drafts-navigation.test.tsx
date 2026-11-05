@@ -127,15 +127,7 @@ test('Previous and cursor-free First retain exact failed targets for Retry', asy
     expect(f.host.textContent).toContain('This draft page could not be read.');
     await f.click('Retry this page');
     expect(f.host.textContent).toContain('First window');
-    expect(requests).toEqual([
-      undefined,
-      'cursor-one',
-      'cursor-two',
-      'cursor-one',
-      'cursor-one',
-      undefined,
-      undefined,
-    ]);
+    expect(requests).toEqual([undefined, 'cursor-one', 'cursor-two', 'cursor-one', 'cursor-one', undefined, undefined]);
     expect([...f.host.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Previous page')).toBe(
       false,
     );
@@ -165,9 +157,9 @@ test('keeps eight predecessors and follows a refetched page when branching after
     await f.render({ identity, active: true, reader });
     for (let index = 0; index < 10; index++) await f.click('Continue to older drafts');
     expect(f.host.textContent).toContain('Window 10');
-    expect([...f.host.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Restart inventory')).toBe(
-      true,
-    );
+    expect(
+      [...f.host.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Restart inventory'),
+    ).toBe(true);
     for (let index = 0; index < 8; index++) await f.click('Previous page');
     expect(f.host.textContent).toContain('Window 2 refreshed');
     expect([...f.host.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Previous page')).toBe(
@@ -328,9 +320,9 @@ test('rejects malformed next coordinates and requires explicit First', async () 
     await f.render({ identity, active: true, reader });
     expect(f.host.textContent).toContain('This private inventory is no longer current.');
     expect(f.host.querySelectorAll('li')).toHaveLength(0);
-    expect([...f.host.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Continue to older drafts')).toBe(
-      false,
-    );
+    expect(
+      [...f.host.querySelectorAll('button')].some((candidate) => candidate.textContent === 'Continue to older drafts'),
+    ).toBe(false);
     await f.click('Restart inventory');
     expect(f.host.textContent).toContain('First window');
     expect(requests).toEqual([undefined, undefined]);

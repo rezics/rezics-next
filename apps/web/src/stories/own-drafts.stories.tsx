@@ -196,10 +196,16 @@ export const EmptyTerminalReturn: Story = {
   args: { scenario: 'empty-terminal' },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await userEvent.click(await view.findByRole('button', { name: m.own_drafts_continue({}, { locale: args.locale }) }));
+    await userEvent.click(
+      await view.findByRole('button', { name: m.own_drafts_continue({}, { locale: args.locale }) }),
+    );
     await expect(view.findByText(m.own_drafts_empty({}, { locale: args.locale }))).resolves.toBeVisible();
-    await expect(view.findByRole('button', { name: m.own_drafts_previous({}, { locale: args.locale }) })).resolves.toBeVisible();
-    await expect(view.findByRole('button', { name: m.own_drafts_restart({}, { locale: args.locale }) })).resolves.toBeVisible();
+    await expect(
+      view.findByRole('button', { name: m.own_drafts_previous({}, { locale: args.locale }) }),
+    ).resolves.toBeVisible();
+    await expect(
+      view.findByRole('button', { name: m.own_drafts_restart({}, { locale: args.locale }) }),
+    ).resolves.toBeVisible();
   },
 };
 export const PreparingWithRows: Story = { args: { scenario: 'preparing' } };
