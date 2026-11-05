@@ -247,16 +247,26 @@ test('three windows return through exact Previous and failed Restart retry witho
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: A, csrfToken: 'window-visit' });
   const snapshot = lifetime.getSnapshot();
   if (snapshot.state !== 'signed-in') throw new Error('Expected viewer');
-  client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, { subject: A, admitted: ['selling', 'commerce_sale.list'] });
+  client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+    subject: A,
+    admitted: ['selling', 'commerce_sale.list'],
+  });
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
-  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }) });
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }),
+  });
   let cursor: string | undefined;
   const native = (target?: string): CreatorSalesCurrentRead => {
     const value = page(A, target ?? null);
-    value.page = { kind: 'ready', sales: target === 'third+/=' ? [] : [creatorSaleFixture],
-      next: target === 'third+/=' ? null : target ? 'third+/=' : 'second+/=', projectionState: 'ready' };
+    value.page = {
+      kind: 'ready',
+      sales: target === 'third+/=' ? [] : [creatorSaleFixture],
+      next: target === 'third+/=' ? null : target ? 'third+/=' : 'second+/=',
+      projectionState: 'ready',
+    };
     return value;
   };
   let initial = native();
@@ -271,19 +281,36 @@ test('three windows return through exact Previous and failed Restart retry witho
     if (fail) value.page = { kind: 'unavailable' };
     return value;
   });
-  const show = () => root.render(<QueryClientProvider client={client}><RouterContextProvider router={router}>
-    <CreatorSalesCurrent initial={initial} cursor={cursor} locale="en" navigate={async (href) => {
-      cursor = new URL(href, 'https://site.test').searchParams.get('cursor') ?? undefined;
-      initial = await reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
-      show();
-    }} />
-  </RouterContextProvider></QueryClientProvider>);
-  const tick = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const show = () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <RouterContextProvider router={router}>
+          <CreatorSalesCurrent
+            initial={initial}
+            cursor={cursor}
+            locale="en"
+            navigate={async (href) => {
+              cursor = new URL(href, 'https://site.test').searchParams.get('cursor') ?? undefined;
+              initial = await reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
+              show();
+            }}
+          />
+        </RouterContextProvider>
+      </QueryClientProvider>,
+    );
+  const tick = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   const click = async (label: string, keyboard = false) => {
     const element = [...host.querySelectorAll<HTMLElement>('a,button')].find((item) => item.textContent === label)!;
     expect(element).toBeDefined();
     if (keyboard) element.focus();
-    await act(async () => element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: keyboard ? 0 : 1 })));
+    await act(async () =>
+      element.dispatchEvent(
+        new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: keyboard ? 0 : 1 }),
+      ),
+    );
     await tick();
   };
   const stay = (event: Event) => event.preventDefault();
@@ -293,16 +320,22 @@ test('three windows return through exact Previous and failed Restart retry witho
     await tick();
     const next = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent === 'Older sales')!;
     expect(next.getAttribute('href')).toBe('/en/creator/sales?cursor=second%2B%2F%3D');
-    await act(async () => next.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true })));
+    await act(async () =>
+      next.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true })),
+    );
     expect(requested).toHaveLength(0);
     await click('Older sales', true);
     expect(document.activeElement?.id).toBe('creator-sales-heading');
     await click('Inspect sale');
     expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
     await click('Open offer');
-    await act(async () => { window.dispatchEvent(new window.Event('pagehide')); });
+    await act(async () => {
+      window.dispatchEvent(new window.Event('pagehide'));
+    });
     window.history.replaceState(null, '', 'https://site.test/en/creator/sales?cursor=second%2B%2F%3D');
-    await act(async () => { window.dispatchEvent(new window.Event('pageshow')); });
+    await act(async () => {
+      window.dispatchEvent(new window.Event('pageshow'));
+    });
     expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
     await click('Older sales');
     expect(host.querySelector('#creator-sale-inspection')).toBeNull();
@@ -324,33 +357,58 @@ test('three windows return through exact Previous and failed Restart retry witho
     fail = false;
     await click('Retry this window');
     expect(host.textContent).not.toContain('Previous sales');
-    expect(requested).toEqual(['second+/=', 'third+/=', 'second+/=', 'second+/=', undefined, 'second+/=', undefined, undefined]);
+    expect(requested).toEqual([
+      'second+/=',
+      'third+/=',
+      'second+/=',
+      'second+/=',
+      undefined,
+      'second+/=',
+      undefined,
+      undefined,
+    ]);
     await click('Inspect sale');
     await click('Refresh');
     expect(host.querySelector('#creator-sale-inspection')).toBeNull();
-    held = new Promise<void>((resolve) => { release = resolve; });
+    held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await click('Older sales');
     await act(async () => {
       const current = client.getQueriesData<CreatorSalesCurrentRead>({ queryKey: ['creator-sales-current'] })[0]!;
       client.setQueryData(current[0], current[1]);
     });
     await tick();
-    await act(async () => { release!(); });
+    await act(async () => {
+      release!();
+    });
     held = undefined;
     await tick();
     expect(host.textContent).not.toContain('Previous sales');
-    held = new Promise<void>((resolve) => { release = resolve; });
+    held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await click('Older sales');
-    await act(async () => client.setQueryData(sessionQuery.queryKey,
-      { state: 'signed-in', subject: A, csrfToken: 'replacement-during-movement' }));
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: A,
+        csrfToken: 'replacement-during-movement',
+      }),
+    );
     await tick();
-    await act(async () => { release!(); });
+    await act(async () => {
+      release!();
+    });
     held = undefined;
     await tick();
     expect(host.textContent).not.toContain('Previous sales');
   } finally {
     host.removeEventListener('click', stay);
     await act(async () => root.unmount());
-    keep(); client.clear(); read.mockRestore(); host.remove();
+    keep();
+    client.clear();
+    read.mockRestore();
+    host.remove();
   }
 });

@@ -33,7 +33,15 @@ export const Route = createFileRoute('/creator/sales/')({
         <CreatorSalesAddress locale={locale} {...(search.cursor === undefined ? {} : { cursor: search.cursor })} />
       );
     if (!initial) return <CreatorSalesPage page={{ kind: 'unavailable' }} locale={locale} {...search} />;
-    return <CreatorSalesCurrent initial={initial} locale={locale} {...search}
-      navigate={async (href) => { await router.navigate({ href }); }} />;
+    return (
+      <CreatorSalesCurrent
+        initial={initial}
+        locale={locale}
+        {...search}
+        navigate={async (href) => {
+          await router.navigate({ href });
+        }}
+      />
+    );
   },
 });
