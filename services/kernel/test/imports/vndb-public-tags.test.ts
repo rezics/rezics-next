@@ -599,9 +599,9 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
     expect(refreshed.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
     expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
     expect(journal.vndbTagRatingSource('v2002')!.snapshot!.bytes).toEqual(new TextEncoder().encode(changed));
-    expect(journal.acknowledgedCommands().filter((row) => sealed.some((old) => old.key === row.command.key))).toHaveLength(
-      sealed.length,
-    );
+    expect(
+      journal.acknowledgedCommands().filter((row) => sealed.some((old) => old.key === row.command.key)),
+    ).toHaveLength(sealed.length);
     prepared = await prepare(async () => new Response(null, { status: 503 }));
     expect(prepared.tagWeightObservations.find((row) => row.workId === 'v2002')).toMatchObject({
       state: 'unavailable',
