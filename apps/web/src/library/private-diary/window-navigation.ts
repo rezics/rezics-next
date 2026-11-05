@@ -92,10 +92,7 @@ export class PrivateDiaryWindowNavigation {
   }
 
   canStartFirst(address: DiaryAddress) {
-    return (
-      this.canUse(address) &&
-      (address.cursor !== undefined || this.predecessors.length > 0)
-    );
+    return this.canUse(address) && (address.cursor !== undefined || this.predecessors.length > 0);
   }
 
   stage(movement: Movement, target: DiaryAddress, focus: boolean): boolean {
@@ -114,7 +111,14 @@ export class PrivateDiaryWindowNavigation {
     return true;
   }
 
-  observe({ source, address, admitted, continuation, load, retire = false }: DiaryWindowObservation): DiaryWindowChange {
+  observe({
+    source,
+    address,
+    admitted,
+    continuation,
+    load,
+    retire = false,
+  }: DiaryWindowObservation): DiaryWindowChange {
     if (source !== this.source) this.resetSource(source);
     if (retire) {
       const changed = this.current !== null || this.staged !== null || this.predecessors.length > 0;
@@ -176,12 +180,7 @@ export class PrivateDiaryWindowNavigation {
     return this.commit(normalized, key, continuation ?? null, load);
   }
 
-  private commit(
-    address: DiaryAddress,
-    key: string,
-    continuation: string | null,
-    load: object,
-  ): DiaryWindowChange {
+  private commit(address: DiaryAddress, key: string, continuation: string | null, load: object): DiaryWindowChange {
     const pending = this.staged!;
     const previousIndex = pending.previousIndex;
     const oldContinuation = this.continuation;

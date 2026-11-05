@@ -206,16 +206,15 @@ function diaryLoad(
   address: ReturnType<typeof diarySearch>,
   next: string | null,
   continuation: string | null,
-  revision = address.snapshot ?? (address.year === undefined ? allTimeSummary.currentness.revision : summary.currentness.revision),
+  revision = address.snapshot ??
+    (address.year === undefined ? allTimeSummary.currentness.revision : summary.currentness.revision),
 ): PrivateDiaryLoad {
   const currentness = { state: 'snapshot' as const, revision };
   return {
     ...loaded,
     address,
     reportedYear:
-      address.year === undefined
-        ? null
-        : { kind: 'ready', value: { ...summary, year: address.year, currentness } },
+      address.year === undefined ? null : { kind: 'ready', value: { ...summary, year: address.year, currentness } },
     summary:
       address.year === undefined
         ? { kind: 'ready', value: { ...allTimeSummary, currentness } }
@@ -818,9 +817,9 @@ test('direct later entry has no invented predecessor; First and period Back/Forw
   try {
     await h.show(diaryLoad(direct, null, 'direct-slot'));
     expect(h.host.querySelectorAll('button').length).toBeGreaterThan(0);
-    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window())).toBe(
-      false,
-    );
+    expect(
+      [...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window()),
+    ).toBe(false);
     await clickPageButton(h.host, m.library_continue_first_window());
     const first = h.currentAddress();
     expect(first).toMatchObject({ year: 2020, month: 2, snapshot: 'opaque', returnTo: '/library' });
@@ -828,9 +827,9 @@ test('direct later entry has no invented predecessor; First and period Back/Forw
     await h.show(diaryLoad(first, null, 'first-slot'));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(cancelled).toEqual(['direct-slot']);
-    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_first_window())).toBe(
-      false,
-    );
+    expect(
+      [...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_first_window()),
+    ).toBe(false);
 
     const nextPeriod = { year: 2021, month: 3, returnTo: '/library' };
     await h.navigate(nextPeriod);
@@ -840,16 +839,16 @@ test('direct later entry has no invented predecessor; First and period Back/Forw
     expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(
       m.library_diary_period_month({ month: 'March', year: 2021 }),
     );
-    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window())).toBe(
-      false,
-    );
+    expect(
+      [...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window()),
+    ).toBe(false);
 
     await h.back();
     expect(h.currentAddress()).toMatchObject(first);
     await h.show(diaryLoad(first, null, 'back-slot'));
-    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window())).toBe(
-      false,
-    );
+    expect(
+      [...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window()),
+    ).toBe(false);
     await h.forward();
     expect(h.currentAddress()).toMatchObject(nextPeriod);
     await h.show(diaryLoad(nextPeriod, null, 'forward-slot', 'period-2021'));
@@ -929,9 +928,9 @@ test('late replacement cancellation cannot show stale retry state after the peri
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(cancelled).toEqual(['old-slot', 'new-slot']);
     expect(h.host.textContent).not.toContain(m.library_diary_cancel_unavailable());
-    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_selection_retry())).toBe(
-      false,
-    );
+    expect(
+      [...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_selection_retry()),
+    ).toBe(false);
   } finally {
     await h.close();
   }

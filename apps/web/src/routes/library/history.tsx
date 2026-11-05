@@ -16,7 +16,12 @@ export const Route = createFileRoute('/library/history')({
     await prepareExposure(args.context.queryClient);
   },
   validateSearch: diarySearch,
-  loaderDeps: ({ search }) => ({ cursor: search.cursor, year: search.year, month: search.month, snapshot: search.snapshot }),
+  loaderDeps: ({ search }) => ({
+    cursor: search.cursor,
+    year: search.year,
+    month: search.month,
+    snapshot: search.snapshot,
+  }),
   loader: ({ deps }) => readPrivateDiary({ data: deps }),
   staleTime: 0,
   gcTime: 0,

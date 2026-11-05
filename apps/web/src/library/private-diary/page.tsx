@@ -47,12 +47,18 @@ export function PrivateDiaryPage({
     };
   }, []);
   const [closing, setClosing] = useState(false);
-  const [closeRetry, setCloseRetry] = useState<
-    { source: string; viewer: string; csrfToken: string; continuation: string } | null
-  >(null);
-  const [replacementRetry, setReplacementRetry] = useState<
-    { source: string; viewer: string; csrfToken: string; continuation: string } | null
-  >(null);
+  const [closeRetry, setCloseRetry] = useState<{
+    source: string;
+    viewer: string;
+    csrfToken: string;
+    continuation: string;
+  } | null>(null);
+  const [replacementRetry, setReplacementRetry] = useState<{
+    source: string;
+    viewer: string;
+    csrfToken: string;
+    continuation: string;
+  } | null>(null);
   const [windowVersion, setWindowVersion] = useState(0);
   const occurrencesHeading = useRef<HTMLHeadingElement>(null);
   const currentReturn = safeReturnTo(returnTo ?? address.returnTo);
@@ -106,8 +112,7 @@ export function PrivateDiaryPage({
       : page && !currentPage && (yearSummary?.kind === 'denied' || yearSummary?.kind === 'closed')
         ? yearSummary.kind
         : null;
-  const admitted =
-    authenticated && !retired && authorizedLoad?.diary.kind === 'ready' && page !== null && currentPage;
+  const admitted = authenticated && !retired && authorizedLoad?.diary.kind === 'ready' && page !== null && currentPage;
   const activeCloseRetry = closeRetry?.source === sourceKey ? closeRetry : null;
   const activeReplacementRetry = replacementRetry?.source === sourceKey ? replacementRetry : null;
   const navigationReady =
@@ -183,7 +188,12 @@ export function PrivateDiaryPage({
           )
             return;
           if (result === 'unavailable')
-            setReplacementRetry({ source: sourceKey, viewer: identity.viewer, csrfToken: identity.csrfToken, continuation });
+            setReplacementRetry({
+              source: sourceKey,
+              viewer: identity.viewer,
+              csrfToken: identity.csrfToken,
+              continuation,
+            });
         });
     }
   }, [
@@ -415,12 +425,7 @@ export function PrivateDiaryPage({
       ) : visiblePage ? (
         <section aria-labelledby="library-diary-occurrences" className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <h2
-              id="library-diary-occurrences"
-              ref={occurrencesHeading}
-              tabIndex={-1}
-              className="text-lg font-semibold"
-            >
+            <h2 id="library-diary-occurrences" ref={occurrencesHeading} tabIndex={-1} className="text-lg font-semibold">
               {m.library_diary_occurrences()}
             </h2>
             <p className="text-sm text-muted-foreground">
