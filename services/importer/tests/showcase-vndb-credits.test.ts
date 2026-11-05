@@ -96,9 +96,14 @@ function publicSubjects(schemeId: string, concepts: { code: string; id: string }
   ]);
 }
 
+function currentIdentityStatements(externalId: string, nativeType: string) {
+  if (nativeType !== 'schema:Person' || !/^s[1-9][0-9]*$/u.test(externalId)) return {};
+  return { 'wdt:P3180': [{ value: { type: 'value' as const, content: externalId } }] };
+}
+
 function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
-  const created = new Map<string, { id: string; type: string }>();
+  const created = new Map<string, { id: string; type: string; externalId: string }>();
   return {
     async batch(request) {
       commands.push(...request.commands);
@@ -106,7 +111,11 @@ function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMedia
         results: request.commands.map((command) => {
           if (command.op === 'create') {
             const id = randomUUID();
-            created.set(command.source.external_id, { id, type: command.subject.type });
+            created.set(command.source.external_id, {
+              id,
+              type: command.subject.type,
+              externalId: command.source.external_id,
+            });
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
           return {
@@ -128,7 +137,12 @@ function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMedia
       if (subject) return subject as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
       const entry = [...created.values()].find((candidate) => candidate.id === id);
       return {
-        subject: { id, type: entry?.type, labels: { en: entry?.type ?? 'Imported subject' }, statements: {} },
+        subject: {
+          id,
+          type: entry?.type,
+          labels: { en: entry?.type ?? 'Imported subject' },
+          statements: entry ? currentIdentityStatements(entry.externalId, entry.type) : {},
+        },
       } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
   };
@@ -153,7 +167,12 @@ function journalPort(commands: BatchCommand[]) {
           if (command.op === 'create') {
             const id = randomUUID();
             subjects.set(id, {
-              subject: { id, type: command.subject.type, labels: command.subject.labels, statements: {} },
+              subject: {
+                id,
+                type: command.subject.type,
+                labels: command.subject.labels,
+                statements: currentIdentityStatements(command.source.external_id, command.subject.type),
+              },
             });
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
