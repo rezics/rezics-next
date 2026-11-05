@@ -29,6 +29,7 @@ propagate. Editorial selection and adoption remain owned by the common publisher
 The complete VNDB/Bangumi journey additionally requires a currently reviewed
 identity handoff between v2002 and 3154; a Bangumi infobox link to VNDB alone
 does not supply that review. Selection and publication do not create this join.
+
 - Touches: selected source rows, existing graph delivery evidence, common journal
   acknowledgements, current endpoint identities, facts fences and public reads.
 - Bound: four additional exact work keys, without transitive work selection.

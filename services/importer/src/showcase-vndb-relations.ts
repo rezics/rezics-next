@@ -116,9 +116,7 @@ export function coalesceVndbWorkRelations(edges: readonly GraphEdgeDraft[]): Gra
           all.findIndex((candidate) => candidate.path === row.path && candidate.digest === row.digest) === index,
       )
       .sort((left, right) => left.path.localeCompare(right.path) || left.digest.localeCompare(right.digest));
-    const mappingRevision = [
-      ...new Set([prior.vndbRelation.mappingRevision, edge.vndbRelation.mappingRevision]),
-    ]
+    const mappingRevision = [...new Set([prior.vndbRelation.mappingRevision, edge.vndbRelation.mappingRevision])]
       .sort()
       .join('+');
     const recordRevision = prior.recordRevision ?? edge.recordRevision;

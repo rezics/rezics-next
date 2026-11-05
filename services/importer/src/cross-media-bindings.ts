@@ -215,9 +215,7 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
     ...(draft.producerParent
       ? [draft.producerParent.mappingRevision, sourceDigest(draft.producerParent.evidence)]
       : []),
-    ...(draft.vndbRelation
-      ? [draft.vndbRelation.mappingRevision, sourceDigest(draft.vndbRelation.evidence)]
-      : []),
+    ...(draft.vndbRelation ? [draft.vndbRelation.mappingRevision, sourceDigest(draft.vndbRelation.evidence)] : []),
   ]);
 }
 
@@ -635,11 +633,7 @@ export class CrossMediaGraph {
           const endpoint = endpoints[staleEndpointIndex]!;
           unresolved.push({
             ...draft,
-            reason:
-              'current_relation_endpoint_' +
-              endpointReads[staleEndpointIndex] +
-              ':' +
-              endpoint.externalId,
+            reason: 'current_relation_endpoint_' + endpointReads[staleEndpointIndex] + ':' + endpoint.externalId,
           });
           mark.run('unresolved', null, graphEdgeKey(draft));
           continue;
@@ -665,11 +659,8 @@ export class CrossMediaGraph {
         if (checkBatchWrite({ commands: [command] }, bundledRelease).length)
           throw new TypeError('VNDB work-relation proposal failed portable validation');
         const prepared = input.journal?.prepare(command);
-        const exact = prepared
-          ? (JSON.parse(prepared.bytes) as { commands?: BatchCommand[] }).commands?.[0]
-          : command;
-        if (!exact || exact.op !== 'propose')
-          throw new TypeError('VNDB work-relation journal is invalid');
+        const exact = prepared ? (JSON.parse(prepared.bytes) as { commands?: BatchCommand[] }).commands?.[0] : command;
+        if (!exact || exact.op !== 'propose') throw new TypeError('VNDB work-relation journal is invalid');
         const exactValue = exact.statement.value;
         if (
           exact.source.external_id !== relation.sourceSubject ||

@@ -4,12 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
-import {
-  CrossMediaGraph,
-  graphEdgeCommandKey,
-  graphEdgeKey,
-  graphEdgeSource,
-} from '../src/cross-media-bindings.ts';
+import { CrossMediaGraph, graphEdgeCommandKey, graphEdgeKey, graphEdgeSource } from '../src/cross-media-bindings.ts';
 import {
   planCrossMediaSeed,
   crossMediaAliases,
@@ -81,12 +76,12 @@ test('finite observed members use existing mapper semantics and ignore unrelated
   expect(showcaseFranchiseSelection({ bangumi: [51], vndb: ['v4'] })).toEqual({ bangumi: [51], vndb: ['v4'] });
   expect(large.edges.map(graphEdgeKey)).toEqual(small.edges.map(graphEdgeKey));
   expect(small.edges.filter((edge) => edge.table === 'subject-relations')).toHaveLength(4);
-  expect(small.edges.filter((edge) => edge.table === 'subject-relations').map((edge) => edge.property).sort()).toEqual([
-    'rezics:crossMediaCounterpart',
-    'rezics:crossMediaCounterpart',
-    'rezics:sideStoryOf',
-    'wdt:P155',
-  ]);
+  expect(
+    small.edges
+      .filter((edge) => edge.table === 'subject-relations')
+      .map((edge) => edge.property)
+      .sort(),
+  ).toEqual(['rezics:crossMediaCounterpart', 'rezics:crossMediaCounterpart', 'rezics:sideStoryOf', 'wdt:P155']);
   expect(
     small.gaps.filter((row) => row.source === 'vndb' && ['side', 'par'].includes(String(row.record.relation))),
   ).toHaveLength(0);
@@ -127,10 +122,12 @@ test('finite observed members use existing mapper semantics and ignore unrelated
       })),
     },
   };
-  const sideReadings: CrossMediaReading[] = ([
-    ['v2002', sideHolder],
-    ['v17102', sideTarget],
-  ] as const).map(([externalId, subjectId]) => ({
+  const sideReadings: CrossMediaReading[] = (
+    [
+      ['v2002', sideHolder],
+      ['v17102', sideTarget],
+    ] as const
+  ).map(([externalId, subjectId]) => ({
     source: 'vndb' as const,
     externalId,
     route: `/subjects/${subjectId}/work`,
@@ -142,7 +139,9 @@ test('finite observed members use existing mapper semantics and ignore unrelated
   const sideManifest = buildShowcaseManifest({
     plan: small,
     readings: sideReadings,
-    acknowledgements: [{ command: sideCommand, candidateId: sideCandidate, commandDigest: showcaseDigest(sideCommand) }],
+    acknowledgements: [
+      { command: sideCommand, candidateId: sideCandidate, commandDigest: showcaseDigest(sideCommand) },
+    ],
     aliases: crossMediaAliases,
   });
   const sideAssertion = sideManifest.records

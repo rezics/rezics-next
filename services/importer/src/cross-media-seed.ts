@@ -58,11 +58,7 @@ import {
   type ShowcaseWorkLink,
   type ShowcaseWorkLinkHandoff,
 } from './showcase-work-links.ts';
-import {
-  coalesceVndbWorkRelations,
-  isTypedVndbWorkRelation,
-  mapVndbWorkRelation,
-} from './showcase-vndb-relations.ts';
+import { coalesceVndbWorkRelations, isTypedVndbWorkRelation, mapVndbWorkRelation } from './showcase-vndb-relations.ts';
 import {
   deliverBangumiCreatorCredits,
   bangumiStaffDraft,
@@ -1244,9 +1240,7 @@ export async function planCrossMediaSeed(
   }
   const selectedVndbRelationCounts = new Map<string, number>();
   const typedVndbRelationEdges: GraphEdgeDraft[] = [];
-  const vndbRelationRevisions = new Map(
-    [...revisions].map(([key, value]) => [key, String(value.revision)] as const),
-  );
+  const vndbRelationRevisions = new Map([...revisions].map(([key, value]) => [key, String(value.revision)] as const));
   for await (const row of input.rows('vndb', 'vn_relations')) {
     const id = text(row, 'id');
     const vid = text(row, 'vid');
@@ -2241,8 +2235,7 @@ export function buildVndbWorkRelationOutcomes(input: {
         targetSubjectId: readings.get(edge.target) ?? null,
         fields: sourceRow.fields,
         citation:
-          vndbRelationCitation(evidence?.command, sourceRow.sourceUrl) ??
-          (acknowledged ? null : sourceRow.sourceUrl),
+          vndbRelationCitation(evidence?.command, sourceRow.sourceUrl) ?? (acknowledged ? null : sourceRow.sourceUrl),
         delivery: acknowledged ? ('acknowledged' as const) : ('unavailable' as const),
         publication: 'pending' as const,
         ...(acknowledged ? { candidateId: evidence.candidate } : {}),
