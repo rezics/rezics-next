@@ -145,12 +145,14 @@ test('Accepted cursor windows support Previous and First, preserve failed target
   const fresh = labelsWindowVisit(client, 'direct-later-entry', otherPrefix)!;
   expect(fresh.path).toEqual(['supplied-cursor']);
   expect(labelsWindowHasPrevious(fresh, 'supplied-cursor')).toBe(false);
-  expect(acceptLabelsWindow(client, {
-    visitId: 'direct-later-entry',
-    owner: otherPrefix,
-    current: 'supplied-next',
-    loaded: true,
-  }).committed).toBe(true);
+  expect(
+    acceptLabelsWindow(client, {
+      visitId: 'direct-later-entry',
+      owner: otherPrefix,
+      current: 'supplied-next',
+      loaded: true,
+    }).committed,
+  ).toBe(true);
   expect(labelsWindowHasPrevious(labelsWindowVisit(client, 'direct-later-entry', otherPrefix), 'supplied-next')).toBe(
     true,
   );

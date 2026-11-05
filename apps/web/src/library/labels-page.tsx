@@ -1029,7 +1029,8 @@ export function LabelsPageView({
             ? movementControl(
                 'next',
                 m.library_label_more(),
-                () => `${path}?${new URLSearchParams({ ...(page.query !== undefined ? { q: page.query } : {}), cursor: page.next! })}`,
+                () =>
+                  `${path}?${new URLSearchParams({ ...(page.query !== undefined ? { q: page.query } : {}), cursor: page.next! })}`,
               )
             : null}
         </nav>

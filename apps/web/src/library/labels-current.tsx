@@ -336,7 +336,7 @@ function LabelsRead({
     if (direction === 'first') {
       if (
         currentCursor === null ||
-        ((!page.state || page.state === 'loaded') ? !guard?.isCurrent('library_label.list') : !cursorRestart)
+        (!page.state || page.state === 'loaded' ? !guard?.isCurrent('library_label.list') : !cursorRestart)
       )
         return;
     } else if (!page.state || page.state === 'loaded') {

@@ -53,12 +53,7 @@ export function parseLabelsAddress(value: unknown): LabelsAddressResult {
 }
 
 /** Change only the raw cursor pair; preserve all other search bytes and the hash. */
-export function labelsCursorHref(
-  pathname: string,
-  search: string,
-  hash: string,
-  cursor: string | null,
-): string {
+export function labelsCursorHref(pathname: string, search: string, hash: string, cursor: string | null): string {
   const rawSearch = search.replace(/^\?/, '');
   const pairs = rawSearch === '' ? [] : rawSearch.split('&');
   const isCursor = (pair: string) => new URLSearchParams(pair).keys().next().value === 'cursor';
