@@ -266,8 +266,9 @@ test('The default My Collections route immediately retires private collections a
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const Page = Route.options.component!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const { exposureQuery } = await import('../src/session/query');
+  const { sessionQuery, exposureQuery } = await import('../src/session/query');
   const exposure = await import('../src/kernel/viewer-exposure');
+  const exposureLifetime = exposure.viewerExposureLifetime(client);
   spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
     subject: data,
     admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
@@ -298,7 +299,7 @@ test('The default My Collections route immediately retires private collections a
     else if (search.cursor !== undefined) query.set('cursor', search.cursor);
     await act(async () => {
       await router.navigate({ href: `/library/collections?${query}` });
-      client.setQueryData(['session'], viewer);
+      client.setQueryData(sessionQuery.queryKey, viewer);
       client.setQueryData(['exposure', 'viewer'], admitted ? ['collections', 'personal_library'] : []);
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
@@ -309,6 +310,13 @@ test('The default My Collections route immediately retires private collections a
         useServerIsomorphicFunctions = false;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const current = exposureLifetime.getSnapshot();
+      if (current.state === 'signed-in')
+        client.setQueryData(exposure.viewerExposureQuery(current.observation).queryKey, {
+          subject: current.observation.subject,
+          admitted: admitted ? ['collections', 'personal_library'] : [],
+        });
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
   };
