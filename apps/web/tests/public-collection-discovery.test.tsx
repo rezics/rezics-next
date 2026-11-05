@@ -67,6 +67,10 @@ mock.module('../src/kernel/client', () => ({
 
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
 const window = new Window({ url: 'https://site.test/en/collections' });
+const canonical = window.document.createElement('link');
+canonical.rel = 'canonical';
+canonical.href = 'https://site.test/en/collections';
+window.document.head.append(canonical);
 const globals = {
   window,
   document: window.document,
@@ -313,6 +317,7 @@ test('the localized route pages backward, retries its exact cursor, and retires 
       `/en/collections?keep=%2f&duplicate=a&duplicate=b&cursor=${encodeURIComponent(opaque)}#directory`,
     );
     await activate(view.host, 'continuation', true);
+    expect(readCalls.slice(0, 2)).toEqual([null, opaque]);
     expect(view.host.textContent).toContain('Public Collections could not be loaded.');
     expect(view.router.history.location.href).toContain(`cursor=${encodeURIComponent(opaque)}`);
     await activate(view.host, 'retry', true);
