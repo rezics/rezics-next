@@ -407,10 +407,13 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
   let journal = new ShowcaseJournal(journalPath);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
-      const url = new URL(String(input));
-      return runtime.request(`${url.pathname}${url.search}`);
-    },
+    fetch: Object.assign(
+      async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        return runtime.request(`${url.pathname}${url.search}`);
+      },
+      { preconnect: fetch.preconnect },
+    ),
   });
   try {
     const schemeId = world.known.schemes[0]!.id;
