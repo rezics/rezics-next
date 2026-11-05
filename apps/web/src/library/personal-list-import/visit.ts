@@ -1,5 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
+import { getLocale } from '../../paraglide/runtime.js';
 import { sessionQuery } from '../../session/query';
 import { browserObservation } from '../../session/observation';
 
@@ -7,10 +8,12 @@ type SessionValue = { state?: string; subject?: string | null; csrfToken?: strin
 export type VndbVisit = {
   subject: string;
   csrfToken: string;
+  identity?: number;
   controller: AbortController;
   current: (signal?: AbortSignal) => boolean;
   retire: () => void;
 };
+export type PersonalImportVisit = VndbVisit & { identity: number; locale: string };
 
 function identity(session: SessionValue | undefined): string {
   return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
@@ -18,9 +21,10 @@ function identity(session: SessionValue | undefined): string {
 
 const noSubscription = () => () => {};
 const noObservation = () => undefined;
+let nextIdentity = 0;
 
-/** Private in-memory import visit, retired when either viewer or CSRF custody changes. */
-export function useVndbVisit(): VndbVisit | null {
+/** Source evidence and callbacks belong to one browser observation, credential and locale. */
+export function usePersonalImportVisit(): PersonalImportVisit | null {
   const client = useContext(QueryClientContext);
   const observation = client ? browserObservation(client) : null;
   const observed = useSyncExternalStore(
@@ -29,36 +33,38 @@ export function useVndbVisit(): VndbVisit | null {
     observation?.getServerSnapshot ?? noObservation,
   );
   const session = client?.getQueryData<SessionValue>(sessionQuery.queryKey);
+  const sessionKey = identity(session);
   const incarnation = observed?.state === 'signed-in' ? observed.observation.id : null;
-  const owner = `${identity(session)}:${incarnation}`;
+  const locale = getLocale();
   const ready =
     observed?.state === 'signed-in' && session?.state === 'signed-in' && !!session.subject && !!session.csrfToken;
   const subject = ready ? session.subject! : null;
   const csrfToken = ready ? session.csrfToken! : null;
   return useMemo(() => {
     if (!subject || !csrfToken) return null;
-    const state: VndbVisit & { retired: boolean; owner: string } = {
+    const controller = new AbortController();
+    const retire = () => controller.abort();
+    return {
+      identity: ++nextIdentity,
       subject,
       csrfToken,
-      controller: new AbortController(),
-      retired: false,
-      owner,
-      retire() {
-        state.retired = true;
-        state.controller.abort();
-      },
+      locale,
+      controller,
+      retire,
       current(signal) {
         const latest = observation?.getSnapshot();
         if (
           latest?.state !== 'signed-in' ||
           latest.observation.id !== incarnation ||
           latest.observation.subject !== subject ||
-          identity(client?.getQueryData<SessionValue>(sessionQuery.queryKey)) !== identity(session)
+          identity(client?.getQueryData<SessionValue>(sessionQuery.queryKey)) !== sessionKey ||
+          getLocale() !== locale
         )
-          state.retire();
-        return !state.retired && !state.controller.signal.aborted && signal?.aborted !== true;
+          retire();
+        return !controller.signal.aborted && signal?.aborted !== true;
       },
     };
-    return state;
-  }, [client, csrfToken, owner, subject, observation, incarnation]);
+  }, [client, csrfToken, subject, observation, incarnation, locale, sessionKey]);
 }
+
+export const useVndbVisit = usePersonalImportVisit;

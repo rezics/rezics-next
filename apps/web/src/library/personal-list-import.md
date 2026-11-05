@@ -9,12 +9,11 @@ Web owns a signed-in visit for a person's own VNDB XML export. Commerce owns pri
 row review, and application. The Kernel routes are mounted at `/v1/libraryImports/vndb`, and the native contract is
 documented in [Personal VNDB list import](../../../../docs/library-import-vndb.md). The installed `@rezics/client`
 surface exposes typed `libraryImports.vndb` methods for preview, bounded page reads, source evidence, state review,
-apply, cancel, and deletion. Its current page and review types publish score context, but Content
-has not admitted the conditional score effect. Web keeps score actions unavailable until both boundaries are available; state
-import and source inspection remain usable.
+score review, apply, cancel, and deletion. Current native page evidence determines whether a particular score action
+is admitted. An unavailable conditional native writer remains an unavailable result, never a successful vote.
 
 Decision: display native `fields.score` with its exact raw spelling, retaining `fields.vote` compatibility; keep the
-installed generated request types as the boundary and defer score commands until those types are published.
+installed generated request types as the boundary for independent state and score commands.
 
 Review inputs and selected apply commands are copied and frozen before sending, so a lost acknowledgement retries
 the original operands and key even if the form changes. A new review returns to review before confirmation, and an
@@ -23,15 +22,20 @@ authoritative page without a decision removes the previous local selection.
 Decision: derive page, review and apply-result types from the installed generated methods, freeze apply operands
 when confirmation opens, and withdraw the previous selection as soon as replacement review begins, including refusal.
 The generated declarations include score review and context fields; state commands select the generated state
-branch and require state review IDs. This visit keeps score actions unavailable while Content's conditional writer
-is unavailable.
+branch and require state review IDs. Score commands retain their separate score review IDs and exact target,
+question revision, selection and consent. Neither review authorizes the other effect.
 
 Decision: derive score-only aliases from generated fields; source replacement
 immediately retires private review authority even if deletion fails, and a credential change permanently retires its visit.
 Replacement retains only the upload identifier and exact cleanup/new-preview retry commands until native cleanup
 succeeds. It cannot reread the retired source, recover its selection or confirm an older review. A lost cleanup
-acknowledgement retries the same deletion before submitting the replacement XML. Score commands, consent and vote
-effects remain unavailable in this state-only visit; completing them requires Content's conditional admission.
+acknowledgement retries the same deletion before submitting the replacement XML.
+
+Decision: all four import visits share browser-observation retirement, including a same-credential A→B→A round trip,
+and remount private state for each observation and locale. Bind AniList through the callable generated client surface;
+copy retained-label selections before review, withdraw old confirmation before replacement review, and retry only the
+captured command. MAL retains only its bounded uncertain command custody for the returning owner. AniList custom
+lists become private labels under their separate owner contract; creating Collections remains a separate action.
 
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into
@@ -41,8 +45,8 @@ admitted state replacement. Web calls the generated client methods directly and 
 synchronizer, or native implementation.
 
 Native preview maps only an explicitly selected released Library state. VNDB status labels suggest roles but do not
-choose state IDs. Source scores retain their original 1–10 scale and do not become local ratings. This visit shows
-that source scale but keeps native score actions unavailable. The review explains that 7.3 has no exact match on a
+choose state IDs. Source scores retain their original 1–10 scale and do not automatically become local ratings.
+The review explains that 7.3 has no exact match on a
 native half-step scale, source 0 is invalid, native vote 0 is valid, and clearing is separate. Uploading a score or
 choosing a Library state does not grant consent for a public or aggregate vote; existing votes remain unchanged.
 Progress and units, date precision, notes, privacy, labels, reviews, release records, unknown XML, and unmapped
@@ -61,7 +65,7 @@ Score context cost follows the native owner: at most one question and one curren
 target on a page of eight rows. Each score review repeats that pair plus the bounded owner/upload read, tuple match,
 target observation, review receipt and locked decision update. The native owner reserves 32 KiB per possible page row
 within the existing 16 MiB evidence cap and keeps baselines and command operands within the 8 MiB decision bound.
-An apply admits at most eight total actions and currently executes zero Content vote or aggregate writes. Journey
+An apply admits at most eight total actions; native score admission and current counted readback determine vote effects. Journey
 calls remain one upload plus bounded pages, explicit reviews, selected actions, lifecycle cleanup and exact retries.
 
 MAL remains a separate uploaded format with its existing native prerequisite and journey owner. VNDB has a separate

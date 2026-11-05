@@ -320,3 +320,34 @@ test('departure before an unknown acknowledgement retains original label custody
   await f.journey.retryUnknown();
   expect(f.journey.live()).toBe(false);
 });
+
+test('a refused replacement label review withdraws its old confirmation and a lost review retries the captured selections', async () => {
+  const f = fixture();
+  await f.journey.loadPage(id, -1);
+  const selections = [{ key: 'group:name', target: { name: 'Private' } }];
+  f.journey.chooseLabels(0, subject, selections);
+  selections[0]!.target.name = 'Edited outside the visit';
+  await f.journey.reviewLabels(0);
+  expect(f.commands[0]).toMatchObject({ body: { selections: [{ target: { name: 'Private' } }] } });
+  f.port.reviewLabels = async () => ({ kind: 'conflict' });
+  const refused = await f.journey.reviewLabels(0);
+  expect(refused.meta[0]!.labels!.review).toBeNull();
+  expect(refused.meta[0]!.labels!.invalidated).toBe(true);
+  const before = f.commands.length;
+  await f.journey.confirmLabels(0);
+  expect(f.commands).toHaveLength(before);
+
+  let original: Parameters<AniListImportPort['reviewLabels']>[0] | undefined;
+  f.port.reviewLabels = async (command) => {
+    original = structuredClone(command);
+    return { kind: 'unknown', command };
+  };
+  await f.journey.reviewLabels(0);
+  // The displayed draft can no longer mutate a dispatched review's retry operands.
+  f.journey.snapshot().meta[0]!.labels!.selections[0]!.target = { name: 'A later draft' };
+  f.port.reviewLabels = async (command) => {
+    expect(command).toEqual(original!);
+    return { kind: 'conflict' };
+  };
+  await f.journey.retryUnknown();
+});
