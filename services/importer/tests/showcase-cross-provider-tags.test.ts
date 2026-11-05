@@ -127,7 +127,9 @@ test('a parent proposal cites the exact source path and both bound endpoints wit
     bindings: bindings(),
   }).tagParentEvidence;
   expect(binding).toBeDefined();
-  const command = showcaseTagParentCommand(binding!);
+  const command = JSON.parse(JSON.stringify(showcaseTagParentCommand(binding!))) as ReturnType<
+    typeof showcaseTagParentCommand
+  >;
   expect(command.subject).toBe(binding!.childId);
   expect(command.source.external_id).toBe('/tags_parents/g1/g2');
   expect(command.source.converter_revision).toBe('vndb-public-tag-vocabulary@1');
