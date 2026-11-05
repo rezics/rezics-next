@@ -21,6 +21,7 @@ test('the real Bun command compiles supported unbundled entry points and safely 
     git(root, 'init', '-b', 'main');
     git(root, 'config', 'user.name', 'Fixture');
     git(root, 'config', 'user.email', 'fixture@example.invalid');
+    writeFileSync(join(root, '.gitignore'), '.temp/\n');
     const files = [
       ['src/value $; quoted.ts', "import { dependency } from './not-installed';\nexport const value = dependency;\n"],
       ['src/view.tsx', 'export const View = () => <div />;\n'],
@@ -59,7 +60,7 @@ test('the real Bun command compiles supported unbundled entry points and safely 
     expect(readdirSync(join(root, '.temp'))).toEqual(['diagnostics.log']);
     for (const [path, content] of trackedContents) expect(readFileSync(join(root, path), 'utf8')).toBe(content);
     expect(git(root, 'diff', '--cached', '--binary')).toBe(staged);
-    expect(git(root, 'status', '--porcelain')).toContain(' D src/deleted.ts');
+    expect(git(root, 'status', '--porcelain')).toContain('D src/deleted.ts');
     expect(resolve(result.logPath)).toBe(result.logPath);
   } finally {
     fixture.close();
