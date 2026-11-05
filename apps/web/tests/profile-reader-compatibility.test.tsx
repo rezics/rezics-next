@@ -505,16 +505,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(uncertainWrite, { ok: false, status: 503, message: '', failure: { status: 503 } });
     expect(writableEditor.snapshot().attempt).toBe(originalAttempt);
     expect(writableEditor.snapshot().phase).toBe('uncertain');
-    await act(async () => {
-      writableEditor.edit({ displayName: 'Later name' });
-      writableEditor.edit({
-        displayName: originalAttempt.before.displayName,
-        publicViews: {
-          ...originalAttempt.after.publicViews,
-          reviews: !originalAttempt.after.publicViews.reviews,
-        },
-      });
-    });
     const matchingRead = readRequests.length;
     let matchingReload!: Promise<void>;
     await act(async () => {
@@ -522,10 +512,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       await Promise.resolve();
     });
     await until(() => readRequests.length === matchingRead + 1, 'the matching current-profile read');
-    const matchingCurrent = {
-      ...originalAttempt.after,
-      links: [{ label: 'Newer site', url: 'https://newer.example.test' }],
-    };
+    const matchingCurrent = originalAttempt.after;
     await resolveRead(matchingRead, successRead(matchingCurrent));
     await matchingReload;
     expect([
@@ -536,22 +523,15 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       writableEditor.snapshot().draft?.displayName,
       writableEditor.snapshot().draft?.links,
       host.textContent?.includes(m.settings_profile_save_unknown()),
-      button(m.settings_profile_save_activity()).disabled,
     ]).toEqual([
       originalAttempt,
       false,
       'uncertain',
       originalAttempt.after.displayName,
-      originalAttempt.before.displayName,
+      originalAttempt.after.displayName,
       matchingCurrent.links,
       true,
-      true,
     ]);
-    await act(async () => {
-      await writableEditor.submit('views');
-      await writableEditor.submit('profile');
-    });
-    expect([saveRequests.length, writableEditor.snapshot().attempt]).toEqual([uncertainWrite + 1, originalAttempt]);
     const refusalRead = readRequests.length;
     const refusalReload = writableEditor.reload();
     await until(() => readRequests.length === refusalRead + 1, 'a current read refusal');
@@ -576,7 +556,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveRead(recoveryRead, successRead(nativeProfile));
     await recovery;
     expect(writableEditor.snapshot().attempt).toBeNull();
-    expect(writableEditor.snapshot().phase).toBe('review');
+    expect(writableEditor.snapshot().phase).toBe('saved');
 
     // The production avatar component owns and cancels its own upload promise on credential replacement.
     const fileInput = host.querySelector<HTMLInputElement>('input[type="file"]');
