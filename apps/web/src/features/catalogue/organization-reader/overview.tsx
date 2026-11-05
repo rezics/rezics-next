@@ -119,10 +119,7 @@ export function OrganizationOverview({
         />
       ) : (
         <>
-          <h2
-            tabIndex={-1}
-            className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
-          >
+          <h2 tabIndex={-1} className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">
             {m.organization_reader_title({}, o)}
           </h2>
           <p role="status" aria-live="polite">

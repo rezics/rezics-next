@@ -85,7 +85,10 @@ test('a selected Context and exact dated Organization assertion survive target, 
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const { release, organization, second } = reading();
-  const page = new URL(subjectHref({ id: peopleOrganizationId, label: 'Paper Lantern Studio' }, 'en').href, 'https://site.test');
+  const page = new URL(
+    subjectHref({ id: peopleOrganizationId, label: 'Paper Lantern Studio' }, 'en').href,
+    'https://site.test',
+  );
   page.searchParams.set('realm', realm);
   window.history.replaceState(window.history.state, '', `${page.pathname}${page.search}`);
   const render = async (key: string, current = organization, source: object = {}, navigate = false) =>
@@ -135,7 +138,9 @@ test('a selected Context and exact dated Organization assertion survive target, 
     expect(correctionAddress.searchParams.get('statement')).toBe(second.id);
     expect(correctionAddress.searchParams.get('context')).toBe(context);
     expect(correctionAddress.searchParams.get('realm')).toBe(realm);
-    expect(organizationHistoryVisitReturn(new URL(correctionAddress.searchParams.get('via')!, 'https://site.test').hash)).toMatchObject({
+    expect(
+      organizationHistoryVisitReturn(new URL(correctionAddress.searchParams.get('via')!, 'https://site.test').hash),
+    ).toMatchObject({
       candidate: second.id,
       context,
     });
@@ -159,13 +164,9 @@ test('a selected Context and exact dated Organization assertion survive target, 
     )!;
     expect(concealedRow.querySelectorAll('a')).toHaveLength(0);
     expect(
-      [...host.querySelectorAll('li')].some(
-        (row) => row !== concealedRow && row.querySelector(`a[href*="${parent}"]`),
-      ),
+      [...host.querySelectorAll('li')].some((row) => row !== concealedRow && row.querySelector(`a[href*="${parent}"]`)),
     ).toBe(true);
-    expect(
-      window.document.activeElement === host.querySelector('h3[data-organization-field="wdt:P749"]'),
-    ).toBe(true);
+    expect(window.document.activeElement === host.querySelector('h3[data-organization-field="wdt:P749"]')).toBe(true);
 
     const replaced = structuredClone(organization);
     replaced.subject.statements['wdt:P749']![1] = { ...second, id: '00000000-0000-4000-8000-00000000d816' };
@@ -173,9 +174,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
     await render('initial', replaced, {}, true);
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());
-    expect(
-      window.document.activeElement === host.querySelector('h3[data-organization-field="wdt:P749"]'),
-    ).toBe(true);
+    expect(window.document.activeElement === host.querySelector('h3[data-organization-field="wdt:P749"]')).toBe(true);
   } finally {
     await act(async () => root.unmount());
     client.clear();

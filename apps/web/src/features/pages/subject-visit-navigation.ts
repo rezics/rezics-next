@@ -83,7 +83,12 @@ export function organizationHistoryVisitReturn(fragment: string): OrganizationHi
   if (
     (keys.length !== 8 && keys.length !== 9) ||
     new Set(keys).size !== keys.length ||
-    keys.some((key) => !['holder', 'context', 'locale', 'realm', 'property', 'candidate', 'revision', 'release', 'focus'].includes(key))
+    keys.some(
+      (key) =>
+        !['holder', 'context', 'locale', 'realm', 'property', 'candidate', 'revision', 'release', 'focus'].includes(
+          key,
+        ),
+    )
   )
     return;
   const holder = params.get('holder');
@@ -96,18 +101,36 @@ export function organizationHistoryVisitReturn(fragment: string): OrganizationHi
   const release = params.get('release');
   const focus = params.get('focus');
   if (
-    !holder || !new RegExp(`^${uuid}$`, 'i').test(holder) ||
-    !context || !new RegExp(`^${uuid}$`, 'i').test(context) ||
-    !locale || !/^(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)$/u.test(locale) ||
+    !holder ||
+    !new RegExp(`^${uuid}$`, 'i').test(holder) ||
+    !context ||
+    !new RegExp(`^${uuid}$`, 'i').test(context) ||
+    !locale ||
+    !/^(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)$/u.test(locale) ||
     (realm !== null && !new RegExp(`^${uuid}$`, 'i').test(realm)) ||
-    !property || !/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/u.test(property) ||
-    !candidate || !new RegExp(`^${uuid}$`, 'i').test(candidate) ||
-    !revision || !/^[1-9][0-9]{0,8}$/u.test(revision) || !Number.isSafeInteger(Number(revision)) ||
-    !release || !/^[A-Za-z0-9:_./-]{1,128}$/u.test(release) ||
+    !property ||
+    !/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/u.test(property) ||
+    !candidate ||
+    !new RegExp(`^${uuid}$`, 'i').test(candidate) ||
+    !revision ||
+    !/^[1-9][0-9]{0,8}$/u.test(revision) ||
+    !Number.isSafeInteger(Number(revision)) ||
+    !release ||
+    !/^[A-Za-z0-9:_./-]{1,128}$/u.test(release) ||
     (focus !== 'keyboard' && focus !== 'pointer')
   )
     return;
-  return { holder, context, locale, ...(realm ? { realm } : {}), property, candidate, revision: Number(revision), release, focus };
+  return {
+    holder,
+    context,
+    locale,
+    ...(realm ? { realm } : {}),
+    property,
+    candidate,
+    revision: Number(revision),
+    release,
+    focus,
+  };
 }
 
 export function organizationHistoryVisitReturnFragment(value: OrganizationHistoryVisitReturn): string {

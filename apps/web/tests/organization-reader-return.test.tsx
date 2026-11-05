@@ -97,7 +97,9 @@ test('composition documents stay together; exact inspection closes to its opener
   await mounted(async ({ host, window, client, render, click }) => {
     const { read, documents, fact } = reading();
     const realm = '00000000-0000-4000-8000-00000000d401';
-    const currentHref = connectionReturnHref(read.public.subject.id, 'Studio', 'en', realm, { stream: 'out:wdt:P1365' });
+    const currentHref = connectionReturnHref(read.public.subject.id, 'Studio', 'en', realm, {
+      stream: 'out:wdt:P1365',
+    });
     let requests = 0;
     const fallback = async () => {
       requests++;

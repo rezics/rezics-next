@@ -201,12 +201,28 @@ export function OrganizationReader({
     }
     if (episodeChanged && !navigated && organizationHistoryVisitReturn(window.location.hash)) {
       if (navigationHash.current === window.location.hash) return;
-      const address = organizationHistoryAddress(href, fallbackHref, locale, read.public.subject.id, read.public.subject.context, realm);
+      const address = organizationHistoryAddress(
+        href,
+        fallbackHref,
+        locale,
+        read.public.subject.id,
+        read.public.subject.context,
+        realm,
+      );
       const hash = replaceOrganizationHistoryAddress(address);
       if (hash) setReturnHash(hash);
       navigationHash.current = undefined;
     }
-  }, [episode.key, href, navigationRevision, fallbackHref, locale, read.public.subject.id, read.public.subject.context, realm]);
+  }, [
+    episode.key,
+    href,
+    navigationRevision,
+    fallbackHref,
+    locale,
+    read.public.subject.id,
+    read.public.subject.context,
+    realm,
+  ]);
   const persistVisit = (fact?: OrganizationFact, keyboard = false) => {
     if (!episode.current()) return;
     const address = organizationHistoryAddress(
@@ -476,7 +492,9 @@ function OrganizationFacts({
       return;
     }
     const opener = [...document.querySelectorAll<HTMLButtonElement>('button[data-organization-property]')].find(
-      (button) => button.dataset.organizationProperty === intent.property && button.dataset.organizationCandidate === intent.candidate,
+      (button) =>
+        button.dataset.organizationProperty === intent.property &&
+        button.dataset.organizationCandidate === intent.candidate,
     );
     if (!opener) {
       reportChanged();
@@ -492,7 +510,19 @@ function OrganizationFacts({
       opener,
       keyboard: intent.focus === 'keyboard',
     });
-  }, [returnHash, selected, episode, model, subject.id, subject.context, preferences.spoilerLevel, select, reportChanged, focusHeader, finishNavigation]);
+  }, [
+    returnHash,
+    selected,
+    episode,
+    model,
+    subject.id,
+    subject.context,
+    preferences.spoilerLevel,
+    select,
+    reportChanged,
+    focusHeader,
+    finishNavigation,
+  ]);
   if (!model) return <p role="status">{m.organization_reader_unavailable({}, o)}</p>;
   const open = (fact: OrganizationFact, event: MouseEvent<HTMLButtonElement>) => {
     if (episode.current()) {
