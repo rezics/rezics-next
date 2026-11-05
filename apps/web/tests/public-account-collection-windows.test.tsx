@@ -23,6 +23,7 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 window.document.head.innerHTML = '<link rel="canonical" href="https://site.test/@mira/collections">';
@@ -156,6 +157,7 @@ test('served named Collections route replaces sparse/empty windows, survives cur
       await settle();
     });
     expect(requests.slice(-2).map((url) => url.searchParams.get('cursor'))).toEqual(['final', 'final']);
+    expect(requests).toHaveLength(3);
     expect(link('continuation')).toBeNull();
     expect(link('previous')).not.toBeNull();
     await click('previous');
