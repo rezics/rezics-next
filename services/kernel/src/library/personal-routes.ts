@@ -742,10 +742,10 @@ function loanView(
   boundary: LoanDueBoundary,
   people: ReadonlyMap<string, string | null>,
   copyAvailable = true,
-) {
+): Static<typeof loanResponse> {
   const state = loanState(loan, boundary);
   const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
-  const action = { allowed: reason === null, reason };
+  const action = { allowed: reason === null, reason } satisfies Static<typeof loanActionResponse>;
   const counterparty =
     loan.counterparty.kind === 'name'
       ? { kind: 'name' as const, name: loan.counterparty.name }
