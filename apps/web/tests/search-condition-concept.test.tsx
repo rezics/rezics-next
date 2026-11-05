@@ -138,8 +138,10 @@ describe('Search Concept conditions', () => {
   });
 
   it('explains exact and descendant execution in the result predicate', () => {
-    const describe = (includeChildren: boolean) =>
-      renderToStaticMarkup(
+    const describe = (includeChildren: boolean) => {
+      const label = (id: string) =>
+        ({ 'schema:genre': 'Genre', 'concept-a': 'Drama', 'scheme-a': 'Film genres' })[id] ?? id;
+      return renderToStaticMarkup(
         <PredicateDescription
           value={{
             statement: {
@@ -149,9 +151,16 @@ describe('Search Concept conditions', () => {
             },
           }}
           locale="en"
-          label={(id) => ({ 'schema:genre': 'Genre', 'concept-a': 'Drama', 'scheme-a': 'Film genres' })[id] ?? id}
+          presentation={{
+            property: label,
+            catalogueType: label,
+            discoveryType: label,
+            value: (_property, value) => label(value),
+            conceptScheme: label,
+          }}
         />,
-      );
+      ).replace(/<[^>]*>/g, '');
+    };
     expect(describe(false)).toContain('Scheme Film genres: Exact Concept');
     expect(describe(true)).toContain('Scheme Film genres: This Concept and its admitted descendants');
   });

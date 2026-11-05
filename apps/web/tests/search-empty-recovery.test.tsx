@@ -28,7 +28,7 @@ const state = searchLoaderDeps({
 const labels = {
   typeLabels: { en: 'Book' },
   typeChoices: [{ id: 'schema:Person', labels: { en: 'Person' } }],
-  selectedFacetLabels: { 'schema:genre': { fiction: 'Fiction' } },
+  selectedFacetLabels: { 'schema:genre': { fiction: { text: 'Fiction' } } },
   groups: [{ property: 'schema:genre', labels: { en: 'Genre' } }],
 };
 const actions = [

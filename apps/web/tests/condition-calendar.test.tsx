@@ -212,7 +212,13 @@ test('applied coverage preserves inclusive open endpoints and independently loca
       createElement(PredicateDescription, {
         value: { statement: { property: 'schema:datePublished', range } },
         locale,
-        label: () => 'Publication date',
+        presentation: {
+          property: () => 'Publication date',
+          catalogueType: (id) => id,
+          discoveryType: (id) => id,
+          value: (_property, id) => id,
+          conceptScheme: (id) => id,
+        },
       }),
     );
     expect(markup).toContain('Publication date');

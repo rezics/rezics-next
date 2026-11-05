@@ -192,7 +192,13 @@ test('duplicate names, missing labels, finite windows and invalid current defini
       value: bounded.value,
       previewNodes: bounded.nodes,
       locale: 'en',
-      label: (id) => id,
+      presentation: {
+        property: (id) => id,
+        catalogueType: (id) => id,
+        discoveryType: (id) => id,
+        value: (_property, id) => id,
+        conceptScheme: (id) => id,
+      },
     }),
   );
   expect(preview).toContain(m.condition_preset_shortened());
