@@ -41,7 +41,13 @@ import {
 } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { completeRebaseConflictContext } from './conflict-progress.ts';
-import { hasLiveProcessUnder, inspectProcessIdentity, sameProcess, terminateProcessGroup } from './process.ts';
+import {
+  hasLiveProcessUnder,
+  inspectProcessIdentity,
+  runPidFilePresence,
+  sameProcess,
+  terminateProcessGroup,
+} from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
@@ -112,6 +118,16 @@ function recordedRunPidsGone(stateDirectory: string, taskId: string, attempt: nu
       return false;
     }
   });
+}
+
+function neverLaunchedAttempt(store: WorkerStore, ref: { taskId: string; attempt: number }): boolean {
+  const attempt = store.attempt(ref);
+  return (
+    attempt.process === null &&
+    !(attempt.auxiliaryProcesses ?? []).length &&
+    !store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started') &&
+    runPidFilePresence(attempt.logPath) === 'absent'
+  );
 }
 
 function applyRetryPriorityTransition(
@@ -540,15 +556,37 @@ export class WorkerTasks {
         `Cannot start the local acceptance retry while prior check custody is unresolved (check ${unresolved.join(', ')}): no supported worker-check teardown-intent/receipt API is available; no check was cancelled.`,
       );
   }
+  private worktreeClearOfLiveProcesses(task: Task): boolean {
+    return hasLiveProcessUnder(task.worktree) === false;
+  }
+  private neverLaunchedAbsent(task: Task, ref: { taskId: string; attempt: number }): boolean {
+    const intent = this.store.attempt(ref).terminationIntent;
+    return (
+      Boolean(intent) &&
+      intent.process === null &&
+      !(intent.auxiliaryProcesses ?? []).length &&
+      neverLaunchedAttempt(this.store, ref) &&
+      this.worktreeClearOfLiveProcesses(task)
+    );
+  }
   private unknownTerminationAbsent(task: Task, ref: { taskId: string; attempt: number }): boolean {
+    if (this.neverLaunchedAbsent(task, ref)) return true;
     const intent = this.store.attempt(ref).terminationIntent;
     return (
       intent?.state === 'unknown' &&
       intent.processIdentity === 'unknown' &&
       intent.process === null &&
       recordedRunPidsGone(this.settings.stateDirectory, task.id, ref.attempt) &&
-      hasLiveProcessUnder(task.worktree) === false
+      this.worktreeClearOfLiveProcesses(task)
     );
+  }
+  private closeCurrentTermination(taskId: string, ref: { taskId: string; attempt: number }): void {
+    const attempt = this.store.attempt(ref);
+    const pool = this.settings.pools.find((candidate) => candidate.name === attempt.pool);
+    this.store.closeTerminated(ref, pool ? this.reader(pool) : null, pool?.configDirectory, () => {
+      const rechecked = this.store.task(taskId);
+      return rechecked.currentAttempt === ref.attempt && this.unknownTerminationAbsent(rechecked, ref);
+    });
   }
   private async settleUnknownTermination(taskId: string): Promise<void> {
     const lease = acquireDirectoryLeaseWaiting(
@@ -562,7 +600,10 @@ export class WorkerTasks {
       if (!task.currentAttempt) return;
       const ref = { taskId, attempt: task.currentAttempt };
       const attempt = this.store.attempt(ref);
-      if (attempt.terminationIntent?.state !== 'unknown') return;
+      const intent = attempt.terminationIntent;
+      if (!intent || intent.settledAt) return;
+      const neverLaunched = intent.processIdentity === 'not-started' && intent.state !== 'complete';
+      if (!neverLaunched && intent.state !== 'unknown') return;
       settlementLease = acquireDirectoryLeaseWaiting(
         `${attempt.logPath}.settle`,
         undefined,
@@ -571,11 +612,8 @@ export class WorkerTasks {
       const current = this.store.task(taskId);
       if (current.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(current.state)) return;
       if (!this.unknownTerminationAbsent(current, ref)) return;
-      const pool = this.settings.pools.find((candidate) => candidate.name === attempt.pool);
-      this.store.closeTerminated(ref, pool ? this.reader(pool) : null, pool?.configDirectory, () => {
-        const rechecked = this.store.task(taskId);
-        return rechecked.currentAttempt === ref.attempt && this.unknownTerminationAbsent(rechecked, ref);
-      });
+      if (neverLaunched) this.store.finishTermination(ref);
+      this.closeCurrentTermination(taskId, ref);
     } finally {
       settlementLease?.release();
       lease.release();
@@ -2188,29 +2226,34 @@ export class WorkerTasks {
       task = this.store.task(taskId);
       if (task.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(task.state))
         throw new StaleAttemptError(ref, task.currentAttempt);
-      const attempt = this.store.attempt(ref);
       const intent = this.store.beginTermination(ref, cancelled ? 'cancel' : 'stop');
       if (intent.state !== 'complete') {
         if (intent.processIdentity === 'unknown')
           throw new Error(
             `${intent.operation} request retained with unknown process identity for task ${taskId} attempt ${ref.attempt}`,
           );
-        try {
-          const owned = new Map(
-            [intent.process, ...intent.auxiliaryProcesses]
-              .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
-              .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
-          );
-          for (const process of owned.values())
-            await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
-          this.store.finishTermination(ref);
-        } catch (error) {
-          this.store.finishTermination(ref, String(error));
-          throw error;
+        if (intent.processIdentity === 'not-started') {
+          if (!this.neverLaunchedAbsent(task, ref))
+            throw new Error(
+              `${intent.operation} request retained with never-launched identity for task ${taskId} attempt ${ref.attempt} until current PID absence and worktree clearance are confirmed`,
+            );
+        } else {
+          try {
+            const owned = new Map(
+              [intent.process, ...intent.auxiliaryProcesses]
+                .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
+                .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
+            );
+            for (const process of owned.values())
+              await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
+          } catch (error) {
+            this.store.finishTermination(ref, String(error));
+            throw error;
+          }
         }
+        this.store.finishTermination(ref);
       }
-      const pool = this.settings.pools.find((p) => p.name === attempt.pool);
-      this.store.closeTerminated(ref, pool ? this.reader(pool) : null, pool?.configDirectory);
+      this.closeCurrentTermination(taskId, ref);
     } finally {
       settlementLease?.release();
       lease.release();
@@ -2223,7 +2266,10 @@ export class WorkerTasks {
     const ref = { taskId, attempt: task.currentAttempt };
     const intent = this.store.attempt(ref).terminationIntent;
     if (!intent) return;
-    if (intent.processIdentity === 'unknown') {
+    if (
+      intent.processIdentity === 'unknown' ||
+      (intent.processIdentity === 'not-started' && intent.state !== 'complete')
+    ) {
       await this.settleUnknownTermination(taskId);
       return;
     }

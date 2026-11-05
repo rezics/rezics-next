@@ -313,6 +313,7 @@ export async function runWorkerCommand(
         );
       } else {
         try {
+          await tasks.resumeTermination(taskId);
           tasks.queueRetry(
             taskId,
             {
