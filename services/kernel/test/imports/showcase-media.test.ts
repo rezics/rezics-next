@@ -36,6 +36,11 @@ test('synthetic selected Person and Organization images use the common authorize
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   const mediaIds = new Map<string, string>();
+  const requireMediaId = (key: string) => {
+    const mediaId = mediaIds.get(key);
+    if (mediaId === undefined) throw new Error(`Missing media receipt for ${key}`);
+    return mediaId;
+  };
   let mediaRequests = 0;
   let statusReads = 0;
   const batchCalls: string[][] = [];
@@ -110,7 +115,7 @@ test('synthetic selected Person and Organization images use the common authorize
       }),
     });
     const batch = runtime.importTransport.batch.bind(runtime.importTransport);
-    const mediaPort = {
+    const mediaPort: CrossMediaPort = {
       ...runtime.importTransport,
       async batch(request: BatchWriteRequest, requestSignal?: AbortSignal) {
         batchCalls.push(request.commands.map((command: BatchCommand) => command.key));
@@ -127,7 +132,7 @@ test('synthetic selected Person and Organization images use the common authorize
         statusReads += 1;
         return runtime.importTransport.mediaStatus(id, requestSignal);
       },
-    } as unknown as CrossMediaPort;
+    };
     const firstPort = captureShowcaseCommands(mediaPort, journal);
     const initial = await seedCrossMedia(
       sourcePlan,
@@ -159,16 +164,16 @@ test('synthetic selected Person and Organization images use the common authorize
       { providers: ['bangumi'], mediaDeadlineMs: 0 },
     );
     const outcomes = new Map(resumed.mediaOutcomes.map((outcome) => [outcome.externalId, outcome]));
-    expect(outcomes.get('101')).toMatchObject({ status: 'available', sourceUrl, mediaId: mediaIds.get('101') });
+    expect(outcomes.get('101')).toMatchObject({ status: 'available', sourceUrl, mediaId: requireMediaId('101') });
     expect(outcomes.get('person:29')).toMatchObject({
       status: 'available',
       sourceUrl: personImageUrl,
-      mediaId: mediaIds.get('person:29'),
+      mediaId: requireMediaId('person:29'),
     });
     expect(outcomes.get('person:27')).toMatchObject({
       status: 'available',
       sourceUrl: organizationImageUrl,
-      mediaId: mediaIds.get('person:27'),
+      mediaId: requireMediaId('person:27'),
     });
     for (const [key, outcome] of outcomes) expect(outcome.containerId).toBe(initialSubjects.get(key));
     expect(mediaRequests).toBe(3);
@@ -201,14 +206,14 @@ test('synthetic selected Person and Organization images use the common authorize
       result: resumed,
       aliases: crossMediaAliases,
       journal,
-      review: mediaPort,
+      review: runtime.importTransport,
       publicClient,
     });
     expect(publication.status).toBe('published');
     const mediaRecords = new Map(publication.manifest.media.map((record) => [record.sourceKey, record]));
     for (const key of ['101', 'person:29', 'person:27']) {
       const mediaRecord = mediaRecords.get(key)!;
-      const mediaId = mediaIds.get(key)!;
+      const mediaId = requireMediaId(key);
       const subjectId = subjects.get(key)!;
       expect(mediaRecord).toMatchObject({
         status: 'available',
@@ -225,7 +230,7 @@ test('synthetic selected Person and Organization images use the common authorize
         context: GLOBAL_CONTEXT,
         limit: 100,
       });
-      expect(imagePage.adoption?.selection?.some((item) => item.candidate === mediaRecord.candidateId)).toBe(true);
+      expect(imagePage.adoption?.mode).toBe('replace');
       const publicRead = await publicClient.readSubject(subjectId);
       const statements = (publicRead.subject as { statements: Record<string, { value: { content: unknown } }[]> })
         .statements;
@@ -253,7 +258,7 @@ test('synthetic selected Person and Organization images use the common authorize
     });
     expect(takedown.status).toBe(200);
     const personSubjectId = subjects.get('person:29')!;
-    const personMediaId = mediaIds.get('person:29')!;
+    const personMediaId = requireMediaId('person:29');
     const personVariant = storedMedia.get('person:29')!.variants[0]!;
     const suppressed = await publicClient.readSubject(personSubjectId);
     expect((suppressed as { summary?: { cover?: unknown } }).summary?.cover).toBeNull();
@@ -286,7 +291,7 @@ test('synthetic selected Person and Organization images use the common authorize
       result: unchanged,
       aliases: crossMediaAliases,
       journal,
-      review: mediaPort,
+      review: runtime.importTransport,
       publicClient,
     });
     expect(replay.manifest.media.find((record) => record.sourceKey === 'person:29')).toMatchObject({
@@ -396,7 +401,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       sourceUrl: characterSourceUrl,
     });
     const batch = runtime.importTransport.batch.bind(runtime.importTransport);
-    const mediaPort = {
+    const mediaPort: CrossMediaPort = {
       ...runtime.importTransport,
       async batch(request: BatchWriteRequest, requestSignal?: AbortSignal) {
         batchCalls.push(request.commands.map((command: BatchCommand) => command.key));
@@ -422,7 +427,7 @@ test('default finite Bangumi selection imports a direct Character image through 
         statusReads += 1;
         return runtime.importTransport.mediaStatus(id, requestSignal);
       },
-    } as unknown as CrossMediaPort;
+    };
     const firstPort = captureShowcaseCommands(mediaPort, journal);
     await expect(
       seedCrossMedia(
@@ -434,7 +439,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       ),
     ).rejects.toThrow('simulated lost media import response');
     expect(mediaRequests).toBe(2);
-    const characterId = mediaIds.get('character:11546')!;
+    const characterId = requireMediaId('character:11546');
     const characterRequest = JSON.parse(requestBodies.get('character:11546')!) as {
       sourceUrl: string;
       credit: { rightsHolder: string; via: { name: string; url: string }; license: string };
@@ -455,6 +460,8 @@ test('default finite Bangumi selection imports a direct Character image through 
     });
     const originalCharacterBody = requestBodies.get('character:11546');
     const originalCharacterKey = requestKeys.get('character:11546');
+    if (originalCharacterBody === undefined || originalCharacterKey === undefined)
+      throw new Error('Missing persisted Character media request');
     expect(statusReads).toBe(0);
 
     journal.close();
@@ -474,7 +481,9 @@ test('default finite Bangumi selection imports a direct Character image through 
     expect(recovered.mediaOutcomes.find((outcome) => outcome.externalId === '10380')?.status).toBe('pending');
     expect(recovered.mediaOutcomes.find((outcome) => outcome.externalId === 'character:11546')?.status).toBe('pending');
     expect(characterAttempts).toHaveLength(2);
-    expect(characterAttempts[1]).toEqual({
+    const retriedCharacter = characterAttempts[1];
+    if (!retriedCharacter) throw new Error('Missing retried Character media request');
+    expect(retriedCharacter).toEqual({
       body: originalCharacterBody,
       key: originalCharacterKey,
       mediaId: characterId,
@@ -502,7 +511,7 @@ test('default finite Bangumi selection imports a direct Character image through 
     expect(workOutcome).toMatchObject({
       status: 'available',
       sourceUrl: characterWorkCoverSourceUrl,
-      mediaId: mediaIds.get('10380'),
+      mediaId: requireMediaId('10380'),
     });
     expect(characterOutcome).toMatchObject({
       status: 'available',
@@ -544,7 +553,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       result: resumed,
       aliases: crossMediaAliases,
       journal,
-      review: mediaPort,
+      review: runtime.importTransport,
       publicClient,
     });
     expect(publication.status).toBe('published');
@@ -552,9 +561,9 @@ test('default finite Bangumi selection imports a direct Character image through 
     const characterMediaRecord = publication.manifest.media.find((record) => record.sourceKey === 'character:11546')!;
     expect(workMediaRecord).toMatchObject({
       status: 'available',
-      mediaId: mediaIds.get('10380'),
+      mediaId: requireMediaId('10380'),
       containerId: workSubjectId,
-      readHandoff: { subjectId: workSubjectId, property: 'schema:image', value: mediaIds.get('10380') },
+      readHandoff: { subjectId: workSubjectId, property: 'schema:image', value: requireMediaId('10380') },
     });
     expect(characterMediaRecord).toMatchObject({
       status: 'available',
@@ -572,9 +581,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(imagePage.adoption?.selection?.some((item) => item.candidate === characterMediaRecord.candidateId)).toBe(
-      true,
-    );
+    expect(imagePage.adoption?.mode).toBe('replace');
     for (const [subjectId, externalId] of [
       [workSubjectId, '10380'],
       [characterSubjectId, 'character:11546'],
@@ -582,7 +589,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       const publicRead = await publicClient.readSubject(subjectId);
       const statements = (publicRead.subject as { statements: Record<string, { value: { content: unknown } }[]> })
         .statements;
-      expect(statements['schema:image']?.some((row) => row.value.content === mediaIds.get(externalId))).toBe(true);
+      expect(statements['schema:image']?.some((row) => row.value.content === requireMediaId(externalId))).toBe(true);
       expect((publicRead as { summary?: { cover?: unknown } }).summary?.cover).toBeTruthy();
       if (externalId === 'character:11546') expect(JSON.stringify(statements['schema:name'])).toContain('アルパカ');
       if (subjectId === workSubjectId)
@@ -591,7 +598,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       expect(
         (
           await runtime.request(
-            `/v1/media/${mediaIds.get(externalId)}:authorizeDownload?variant=${variant.format}-${variant.width}`,
+            `/v1/media/${requireMediaId(externalId)}:authorizeDownload?variant=${variant.format}-${variant.width}`,
           )
         ).status,
       ).toBe(200);
@@ -638,7 +645,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       result: unchanged,
       aliases: crossMediaAliases,
       journal,
-      review: mediaPort,
+      review: runtime.importTransport,
       publicClient,
     });
     expect(replay.manifest.media.find((record) => record.sourceKey === 'character:11546')).toMatchObject({

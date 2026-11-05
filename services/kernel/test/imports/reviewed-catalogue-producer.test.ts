@@ -7,7 +7,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import pinned from '../../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json';
 import { convertBangumi } from '../../../../packages/conversion/src/bangumi.ts';
-import { Importer } from '../../../importer/src/importer.ts';
+import { Importer, type ImportIdentifierResolution } from '../../../importer/src/importer.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
@@ -33,6 +33,14 @@ let db: GrowthDatabase;
 let directory: string;
 let path: string;
 let port: ReturnType<typeof createImportTransport>;
+
+function resolvedReferences(resolution: ImportIdentifierResolution): Readonly<Record<string, string>> {
+  if ('preserveProperties' in resolution && typeof resolution.preserveProperties !== 'string') {
+    if (!resolution.resolvedReferences) throw new Error('Missing resolved references for reviewed catalogue seed');
+    return resolution.resolvedReferences;
+  }
+  return resolution;
+}
 beforeAll(async () => {
   const temporary = fileURLToPath(new URL('../../../../.temp/', import.meta.url));
   await mkdir(temporary, { recursive: true });
@@ -312,10 +320,11 @@ test('normalization and current native binding validation stay bounded through r
             conversion,
             signal: new AbortController().signal,
           });
-          expect(Object.values(references)).toEqual([binding!.sourceConcept]);
+          const resolved = resolvedReferences(references);
+          expect(Object.values(resolved)).toEqual([binding!.sourceConcept]);
           const output = convertBangumi(
             { external_id: '498', record_revision: null, record: pinned },
-            { subjectId: binding!.sourceConcept, resolvedReferences: references },
+            { subjectId: binding!.sourceConcept, resolvedReferences: resolved },
           );
           expect(keyword(output.proposals)).toHaveLength(1);
           return output;

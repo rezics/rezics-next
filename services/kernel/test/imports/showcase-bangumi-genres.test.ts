@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { emptyCrossMediaPlan, crossMediaAliases, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
-import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../../../importer/src/reviewed-catalogue.ts';
+import { createImportTransport } from '../../../importer/src/import-client.ts';
+import { seedReviewedCatalogue } from '../../../importer/src/reviewed-catalogue.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
@@ -13,7 +14,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createReleasedDiscoveryFixture, type ReleasedDiscoveryFixture } from '../support/released-discovery.ts';
-import { valueContent } from './type-helpers.ts';
+import { fixtureFetch, valueContent } from './type-helpers.ts';
 
 const payload = {
   id: 884,
@@ -27,7 +28,7 @@ let fixture: ReleasedDiscoveryFixture;
 let database: GrowthDatabase;
 let directory: string;
 let statePath: string;
-let cataloguePort: ReviewedCataloguePort;
+let cataloguePort: ReturnType<typeof createImportTransport>;
 let journal: ShowcaseJournal;
 
 beforeAll(async () => {
@@ -67,11 +68,11 @@ function planFor(record: typeof payload) {
 function publicReader() {
   return createPublicBulkClient({
     origin: 'https://reviewed.discovery.test',
-    fetch: (async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       const response = await fixture.request('anonymous', 'GET', url.pathname + url.search);
       return Response.json(response.body, { status: response.status });
-    }) as typeof fetch,
+    }),
   });
 }
 

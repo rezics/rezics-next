@@ -142,7 +142,7 @@ test('ordinary Bangumi import reviews and adopts cited TVAnime work evidence wit
     ]);
     for (const property of evidenceProperties) {
       expect(adopted.subject?.statements[property]?.[0]?.references?.[0]?.parts).toContainEqual({
-        property: { id: 'schema:url' },
+        property: { id: 'schema:url', data_type: 'url' },
         value: { type: 'value', content: `https://bgm.tv/subject/${externalId}` },
       });
     }

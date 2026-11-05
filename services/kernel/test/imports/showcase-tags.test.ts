@@ -22,7 +22,6 @@ import {
   planShowcaseTags,
   prepareShowcaseVndbPublicTagVocabulary,
   readShowcaseVndbPublicTagVocabulary,
-  showcaseTagWeightProperty,
 } from '../../../importer/src/showcase-tags.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
@@ -306,7 +305,7 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
       destination: { origin: 'https://kernel.import.test' },
     });
     expect(first.bindings.releaseDigest).toBe(bundledDigest);
-    expect(first.weightGap?.property).toBe(showcaseTagWeightProperty);
+    expect(first.tagWeightObservations).toEqual([]);
     const work = first.readings.find((row) => row.externalId === 'v410');
     expect(work).toBeTruthy();
     const workId = (work!.subject as { subject?: { id: string } }).subject?.id ?? (work!.subject as { id?: string }).id;
@@ -333,7 +332,6 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
         ?.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel')?.value.content;
     expect(spoilerOf(contId)).toEqual({ amount: '+0', unit: '1' });
     expect(spoilerOf(eroId)).toEqual({ amount: '+2', unit: '1' });
-    expect(JSON.stringify(current.subject.statements)).not.toContain(showcaseTagWeightProperty);
     expect(JSON.stringify(current.subject.statements)).not.toContain('u9001');
     const original = await candidates(workId!, 'schema:genre');
     const changed = [...baseAssociations];
