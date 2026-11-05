@@ -104,6 +104,7 @@ inverseProperties:
   wdt:P1365: 继任者
   wdt:P1366: 前身
   rezics:releaseGroup: '此发布组的文件'
+  schema:containedInPlace: '包含地点'
 typeDescriptions:
   wd:Q2095: '可食用的食物或物质，如面粉；食谱则描述如何制作食物。'
   wd:Q2620972: '作品中有名称且按顺序排列的一段集数或章节范围，以首尾编号界定。'

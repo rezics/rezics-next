@@ -104,6 +104,7 @@ inverseProperties:
   wdt:P1365: ersetzt durch
   wdt:P1366: ersetzt
   rezics:releaseGroup: 'Dateien dieser Release-Gruppe'
+  schema:containedInPlace: 'Enthält Orte'
 typeDescriptions:
   wd:Q2095: 'Ein Lebensmittel oder essbarer Stoff, etwa Mehl; ein Rezept beschreibt dessen Zubereitung.'
   wd:Q2620972: 'Ein benannter, geordneter Abschnitt aus Folgen oder Kapiteln eines Werks mit erster und letzter Teilnummer.'

@@ -105,6 +105,7 @@ inverseProperties:
   wdt:P1366: 前身
 
   rezics:releaseGroup: '此發佈組的檔案'
+  schema:containedInPlace: '包含地點'
 propertyDescriptions:
   rezics:penNameOf: '使用此筆名或共同名義的個人或組織。'
   wdt:P186: '作為材料或組成部分的食物或已完成的食譜，可用限定詞補充用量和清單順序。'

@@ -104,6 +104,7 @@ inverseProperties:
   wdt:P1365: remplacé par
   wdt:P1366: remplace
   rezics:releaseGroup: 'fichiers de ce groupe de diffusion'
+  schema:containedInPlace: 'Contient des lieux'
 typeDescriptions:
   wd:Q2095: 'Un aliment ou une substance comestible, comme la farine ; une recette décrit sa préparation.'
   wd:Q2620972: 'Une suite nommée et ordonnée d’épisodes ou de chapitres d’une œuvre, délimitée par ses premiers et derniers numéros.'

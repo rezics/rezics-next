@@ -105,6 +105,7 @@ inverseProperties:
   wdt:P1366: 前身
 
   rezics:releaseGroup: 'このリリースグループのファイル'
+  schema:containedInPlace: '含まれる場所'
 propertyDescriptions:
   rezics:penNameOf: 'この筆名または共同名義を使用する人物または組織。'
   wdt:P186: '材料や構成要素として使う食品または調理済みのレシピ。数量やリスト内の順序を修飾できます。'
