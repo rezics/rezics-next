@@ -220,6 +220,10 @@ actor. The platform importer is an ordinary operated actor and follows the same 
 paths: [Auth session issuance][auth-service] and the [importer credential client][importer-credentials] provide
 no service bypass.
 
+Decision: compose the bounded native transfer acknowledgement with retained exact-attempt recovery. Approval
+expiry uses the native canonical timestamp; execution acknowledges the exact subject UUID. Protocol fixtures
+retain immutable snapshots through the persistence callback, separately from native and browser acceptance.
+
 Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source
 relation nor its approval or execution; those require the original native source and exact-intent commands.
 

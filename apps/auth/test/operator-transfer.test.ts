@@ -19,7 +19,7 @@ const request: TransferRequest = {
   version: 1,
   previous: {
     operatorAccountId: 'source-operator',
-    subjectAccountId: 'operated-account',
+    subjectAccountId: '00000000-0000-7000-8000-000000000001',
     reservationId: 'source-reservation',
   },
   expectedVersion: '12',
@@ -39,6 +39,13 @@ const source = (): TransferAttempt => ({
   acceptance: 'opaque-native-acceptance',
   phase: 'approve',
 });
+
+function retain(attempt: TransferAttempt) {
+  return (next: TransferAttempt) => {
+    Object.assign(attempt, next);
+    return true;
+  };
+}
 
 // Page protocol evidence only. Native authority/DBOS and mounted production
 // transport remain the original acceptance debt; these fixtures do not prove it.
@@ -86,7 +93,7 @@ test('Complete native destination acceptance and operator transfer journey prese
     if (path === '/account-operations/approve')
       return Response.json({
         reference: person === 'destination-human' ? 'opaque-native-acceptance' : 'source-approval',
-        expiresAt: '2030-01-01T00:00:00Z',
+        expiresAt: '2030-01-01T00:00:00.000Z',
       });
     if (path === '/account-operations/execute') {
       changed = true;
@@ -95,7 +102,7 @@ test('Complete native destination acceptance and operator transfer journey prese
     throw new Error(`Unexpected path ${path}`);
   }) as typeof fetch;
   const accept = destination();
-  expect(await submitTransferAttempt(accept, () => true)).toEqual({
+  expect(await submitTransferAttempt(accept, retain(accept))).toEqual({
     kind: 'accepted',
     reference: 'opaque-native-acceptance',
   });
@@ -112,7 +119,7 @@ test('Complete native destination acceptance and operator transfer journey prese
   });
   person = 'source-human';
   const transfer = source();
-  expect(await submitTransferAttempt(transfer, () => true)).toMatchObject({
+  expect(await submitTransferAttempt(transfer, retain(transfer))).toMatchObject({
     kind: 'acknowledged',
     readback: {
       kind: 'current',
@@ -139,7 +146,7 @@ test('Complete native destination acceptance and operator transfer journey prese
   });
   expect(transfer.phase).toBe('readback');
   const count = calls.length;
-  expect(await submitTransferAttempt(accept, () => true)).toEqual({ kind: 'failure', reason: 'account-changed' });
+  expect(await submitTransferAttempt(accept, retain(accept))).toEqual({ kind: 'failure', reason: 'account-changed' });
   expect(calls).toHaveLength(count);
 });
 
@@ -176,16 +183,16 @@ test('lost execution response retains the exact key operation and approval; retr
       });
     if (path.endsWith('/approve')) {
       approves++;
-      return Response.json({ reference: 'saved-reference', expiresAt: '2030-01-01T00:00:00Z' });
+      return Response.json({ reference: 'saved-reference', expiresAt: '2030-01-01T00:00:00.000Z' });
     }
     executions.push(JSON.parse(String(init?.body)));
     if (executions.length === 1) throw new TypeError('lost response');
     transferred = true;
     return Response.json({ accountId: request.previous.subjectAccountId });
   }) as typeof fetch;
-  expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({ kind: 'failure', reason: 'uncertain' });
+  expect(await submitTransferAttempt(attempt, retain(attempt))).toMatchObject({ kind: 'failure', reason: 'uncertain' });
   expect(attempt).toMatchObject({ reference: 'saved-reference', phase: 'execute' });
-  expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({
+  expect(await submitTransferAttempt(attempt, retain(attempt))).toMatchObject({
     kind: 'acknowledged',
     reference: 'saved-reference',
     readback: { kind: 'current' },
@@ -232,11 +239,11 @@ test('stale step-up retains the account tuple key and opaque reference and requi
     }
     approvals++;
     return fresh
-      ? Response.json({ reference: 'ref', expiresAt: '2030-01-01T00:00:00Z' })
-      : Response.json({ error: 'step_up_required' }, { status: 401 });
+      ? Response.json({ reference: 'ref', expiresAt: '2030-01-01T00:00:00.000Z' })
+      : Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 });
   }) as typeof fetch;
   const original = structuredClone(attempt);
-  expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({ reason: 'step-up' });
+  expect(await submitTransferAttempt(attempt, retain(attempt))).toMatchObject({ reason: 'step-up' });
   expect(attempt).toEqual(original);
   expect(await reauthenticateTransfer(attempt.accountId, 'human@example.test', 'secret')).toBeNull();
   expect(approvals).toBe(1);
@@ -259,25 +266,25 @@ test('missing version unavailable reader and stale native conflict never create 
       });
     if (String(input) === OPERATOR_TRANSFER_PAGE_PATH) return response.clone();
     mutations++;
-    return Response.json({ error: 'account_operation_denied' }, { status: 409 });
+    return Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 409 });
   }) as typeof fetch;
   expect(
     await prepareTransfer(request.previous.subjectAccountId, request.operatorAccountId, attempt.accountId),
   ).toEqual({ kind: 'failure', reason: 'unavailable' });
   response = new Response(null, { status: 404 });
-  expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({ reason: 'unavailable' });
+  expect(await submitTransferAttempt(attempt, retain(attempt))).toMatchObject({ reason: 'unavailable' });
   expect(mutations).toBe(0);
   response = Response.json({
     viewer: { kind: 'ready' },
     review: { kind: 'changed' },
   });
-  expect(await submitTransferAttempt(attempt, () => true)).toEqual({ kind: 'failure', reason: 'conflict' });
+  expect(await submitTransferAttempt(attempt, retain(attempt))).toEqual({ kind: 'failure', reason: 'conflict' });
   expect(mutations).toBe(0);
   response = Response.json({
     viewer: { kind: 'ready' },
     review: { kind: 'source', relation: { previous: request.previous, expectedVersion: '12' }, action: 'allowed' },
   });
-  expect(await submitTransferAttempt(attempt, () => true)).toEqual({
+  expect(await submitTransferAttempt(attempt, retain(attempt))).toEqual({
     kind: 'failure',
     reason: 'conflict',
     status: 409,
