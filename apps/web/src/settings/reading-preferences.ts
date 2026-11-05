@@ -6,6 +6,7 @@ import type {
   ReadingPreferences,
   SettingsPage,
 } from './preferences';
+import { withManagedReadDeadline } from './managed-read-deadline';
 
 export type ReadingValues = Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>;
 export type ReadingIO = {
@@ -143,7 +144,7 @@ export async function readReading(
   minimumVersion: number | (() => number),
 ): Promise<ReadingReadback> {
   try {
-    const page = await io.read();
+    const page = await withManagedReadDeadline(() => io.read());
     if (!page.signedIn) return { ok: false, reason: 'forbidden' };
     if (!('preferences' in page)) {
       const { failure } = page;
@@ -181,7 +182,7 @@ export async function sendReading(
 ): Promise<ReadingAttemptResult> {
   let result: PreferenceWriteResult;
   try {
-    result = await io.save(input);
+    result = await withManagedReadDeadline(() => io.save(input));
   } catch {
     return { kind: 'uncertain', reason: 'unavailable' };
   }
