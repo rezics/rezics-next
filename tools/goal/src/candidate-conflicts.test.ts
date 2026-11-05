@@ -1,9 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  classifyCandidateDelta,
-  planCandidateConflicts,
-  resolveCandidateTextConflict,
-} from './candidate.ts';
+import { classifyCandidateDelta, planCandidateConflicts, resolveCandidateTextConflict } from './candidate.ts';
 
 test('candidate conflict planning deduplicates generators while retaining ordinary paths', () => {
   expect(
@@ -23,16 +19,8 @@ test('candidate conflict planning deduplicates generators while retaining ordina
 
 test('candidate text resolution preserves flat message additions and reports incompatible values', () => {
   const merge = (ours: string, theirs: string) =>
-    resolveCandidateTextConflict(
-      'apps/web/messages/en.json',
-      '',
-      ['{"shared":"base"}', ours, theirs],
-      true,
-    );
-  const resolved = merge(
-    '{"shared":"base","worker":"value"}',
-    '{"shared":"base","dev":"value"}',
-  );
+    resolveCandidateTextConflict('apps/web/messages/en.json', '', ['{"shared":"base"}', ours, theirs], true);
+  const resolved = merge('{"shared":"base","worker":"value"}', '{"shared":"base","dev":"value"}');
   expect(resolved).toMatchObject({ ok: true, taskChangeDropped: false });
   if (resolved?.ok) expect(JSON.parse(resolved.text)).toEqual({ shared: 'base', worker: 'value', dev: 'value' });
   expect(merge('{"shared":"worker"}', '{"shared":"dev"}')).toEqual({

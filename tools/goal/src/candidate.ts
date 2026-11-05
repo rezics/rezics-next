@@ -129,11 +129,11 @@ export function resolveCandidateTextConflict(
     const base = parseFlatJsonObject(stages[0]);
     const taskChangeDropped = Boolean(
       ours &&
-        theirs &&
-        base &&
-        comparableJson(merged.value) === comparableJson(ours) &&
-        comparableJson(theirs) !== comparableJson(ours) &&
-        comparableJson(theirs) !== comparableJson(base),
+      theirs &&
+      base &&
+      comparableJson(merged.value) === comparableJson(ours) &&
+      comparableJson(theirs) !== comparableJson(ours) &&
+      comparableJson(theirs) !== comparableJson(base),
     );
     return {
       ok: true,

@@ -1242,8 +1242,7 @@ function resolveMechanicalConflictsDetailed(
     } else if (matchesPath(file, defaultJsonMessageConflicts, policy)) {
       const stages = readConflictStages(cwd, file, '{}', mergePolicy);
       const result = resolveCandidateTextConflict(file, '', stages, true);
-      if (!result || !result.ok)
-        return { ok: false, ...(result?.reason ? { error: new Error(result.reason) } : {}) };
+      if (!result || !result.ok) return { ok: false, ...(result?.reason ? { error: new Error(result.reason) } : {}) };
       text = result.text;
       assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text, mergePolicy);
       if (result.taskChangeDropped) throw new WorkerConflictError(file);
@@ -1328,7 +1327,9 @@ function resolveCandidateConflictSet(
       if (result.status !== 0)
         return {
           ok: false,
-          error: new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`),
+          error: new Error(
+            `Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`,
+          ),
         };
     }
   }
