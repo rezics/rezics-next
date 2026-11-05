@@ -156,6 +156,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     icon: Import,
   },
   {
+    id: 'library.recover-progress',
+    kind: 'navigation',
+    group: 'personal',
+    order: 23,
+    href: '/library/recover-progress',
+    match: 'exact',
+    signedIn: true,
+    operation: 'progress_session.list',
+    label: ({ locale }) => m.library_archive_progress_nav({}, { locale }),
+    icon: Import,
+  },
+  {
     id: 'library.create-collection',
     kind: 'creation',
     group: 'create',

@@ -61,6 +61,10 @@ export type RecoveryPort = {
   apply(command: Extract<RecoveryEffectCommand, { kind: 'apply' }>): Promise<RecoveryResult<RecoveryStatus>>;
   outcomes(uploadId: string, query: RecoveryPageQuery): Promise<RecoveryResult<RecoveryOutcomesPage>>;
   cancel(command: Extract<RecoveryEffectCommand, { kind: 'cancel' }>): Promise<RecoveryResult<RecoveryStatus>>;
+  receivingCollection(
+    collectionId: string,
+    cursor?: string,
+  ): Promise<RecoveryResult<import('./readback').ReceivingCollectionReadback>>;
 };
 
 export function newRecoveryCommandKey(): string {

@@ -693,3 +693,27 @@ test('Retained source observation evidence explains that privacy and timestamps 
     f.journey.retire();
   }
 });
+
+test('cancel then restart reuses the original archive text under a new upload key', async () => {
+  const f = fixture();
+  try {
+    const raw = ' {"manifest":{},"records":[]}\n';
+    await f.journey.upload(new File([raw], 'completed.json'));
+    await f.journey.cancel();
+    expect(f.journey.snapshot().state!.phase).toBe('cancelled');
+    f.journey.restart();
+    expect(f.journey.snapshot()).toMatchObject({
+      hasOriginalArchive: true,
+      state: { upload: null, phase: 'idle' },
+    });
+    await f.journey.adoptOriginal();
+    const uploads = f.calls.filter((call) => call.path === '/v1/libraryArchiveMerges');
+    expect(uploads).toHaveLength(2);
+    expect(uploads[0]!.body).toBe(raw);
+    expect(uploads[1]!.body).toBe(raw);
+    expect(uploads[1]!.key).not.toBe(uploads[0]!.key);
+    expect(f.journey.snapshot().state!.upload?.id).toBe(id);
+  } finally {
+    f.journey.retire();
+  }
+});

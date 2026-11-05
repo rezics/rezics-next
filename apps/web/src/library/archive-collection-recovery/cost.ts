@@ -8,7 +8,8 @@ export type RecoveryCallKind =
   | 'review'
   | 'apply'
   | 'outcomes'
-  | 'cancel';
+  | 'cancel'
+  | 'readback';
 export type RecoveryCost = {
   calls: Record<RecoveryCallKind, number>;
   retries: number;
@@ -20,7 +21,17 @@ export type RecoveryCost = {
 
 export function emptyRecoveryCost(): RecoveryCost {
   return {
-    calls: { upload: 0, status: 0, collections: 0, occurrences: 0, review: 0, apply: 0, outcomes: 0, cancel: 0 },
+    calls: {
+      upload: 0,
+      status: 0,
+      collections: 0,
+      occurrences: 0,
+      review: 0,
+      apply: 0,
+      outcomes: 0,
+      cancel: 0,
+      readback: 0,
+    },
     retries: 0,
     pages: 0,
     rows: 0,

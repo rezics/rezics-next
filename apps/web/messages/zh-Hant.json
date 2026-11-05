@@ -11263,5 +11263,13 @@
   "moderation_manual_open": "開啟看板佇列",
   "moderation_manual_catalogue": "開啟目錄檢舉",
   "subject_rating_control_uncertain": "結果尚未確定。你可以重試同一筆請求，或捨棄請求並重新載入目前的評分。",
-  "subject_rating_control_discard": "捨棄請求並重新載入評分"
+  "subject_rating_control_discard": "捨棄請求並重新載入評分",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }

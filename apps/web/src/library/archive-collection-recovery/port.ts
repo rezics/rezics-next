@@ -49,6 +49,10 @@ const productionPort: RecoveryPort = {
       headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
     });
   },
+  async receivingCollection(collectionId, cursor) {
+    const { readReceivingCollection } = await import('./server');
+    return readReceivingCollection({ data: { collectionId, ...(cursor ? { cursor } : {}) } });
+  },
 };
 
 export function useArchiveCollectionRecoveryPort(): RecoveryPort {

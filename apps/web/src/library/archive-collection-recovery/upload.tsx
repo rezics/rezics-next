@@ -25,12 +25,20 @@ export function ArchiveCollectionRecoveryUpload({
   busy,
   locked,
   isCurrent,
+  canUseOriginal,
+  canUseCompleted,
   onUpload,
+  onUseOriginal,
+  onUseCompleted,
 }: {
   busy: boolean;
   locked: boolean;
   isCurrent: () => boolean;
+  canUseOriginal: boolean;
+  canUseCompleted: boolean;
   onUpload: (archiveBase64: string) => Promise<void>;
+  onUseOriginal: () => Promise<void>;
+  onUseCompleted: () => Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const file = useRef<File | null>(null);
@@ -203,7 +211,28 @@ export function ArchiveCollectionRecoveryUpload({
               ? m.library_archive_recovery_uploading()
               : m.library_archive_recovery_upload_action()}
         </button>
+        {canUseOriginal ? (
+          <button
+            className={actionClass}
+            type="button"
+            disabled={busy || locked || preparing}
+            onClick={() => void onUseOriginal()}
+          >
+            {m.library_archive_recovery_restart_original()}
+          </button>
+        ) : null}
+        {canUseCompleted && !canUseOriginal ? (
+          <button
+            className={actionClass}
+            type="button"
+            disabled={busy || locked || preparing}
+            onClick={() => void onUseCompleted()}
+          >
+            {m.library_archive_use_completed_export()}
+          </button>
+        ) : null}
       </form>
+      {canUseCompleted || canUseOriginal ? <p>{m.library_archive_completed_export_help()}</p> : null}
       <p className="text-sm text-muted-foreground">{m.library_archive_recovery_private_evidence({ hours: 24 })}</p>
     </section>
   );

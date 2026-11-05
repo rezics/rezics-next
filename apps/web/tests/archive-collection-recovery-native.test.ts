@@ -67,3 +67,16 @@ test('the generated native route receives the exact private upload command and a
   const uncertain = await port.upload(command);
   expect(uncertain).toEqual({ kind: 'unknown', command });
 });
+
+test('the current Collection reader refuses another account at the native boundary', async () => {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async () => Response.json({ code: 'forbidden' }, { status: 403 })) as typeof fetch,
+  });
+  const port = kernelArchiveCollectionRecoveryPort(
+    client,
+    new Request('https://site.test/library/recovery', { headers: { cookie: 'private-session' } }),
+    {},
+    true,
+  );
+  expect(await port.receivingCollection(uploadId)).toEqual({ kind: 'denied' });
+});

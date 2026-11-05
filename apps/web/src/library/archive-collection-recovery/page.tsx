@@ -17,6 +17,12 @@ import { toggleOccurrence, togglePage } from './selection';
 import { ArchiveCollectionRecoveryUpload } from './upload';
 import { useRecoveryVisit, type RecoveryVisit } from './visit';
 import type { RecoveryReader } from './window';
+import {
+  archiveBase64FromCustody,
+  bindArchiveCustodyOwner,
+  completedArchiveFor,
+} from '../private-export/custody';
+import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 
 const visitIds = new WeakMap<RecoveryVisit, number>();
 let nextVisitId = 0;
@@ -143,11 +149,14 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
     });
   }
 
+  bindArchiveCustodyOwner(visit.subject);
+  const completed = completedArchiveFor(visit.subject);
   const heading = (
     <div className="grid gap-3">
       <PageHeading>{m.library_archive_recovery_title()}</PageHeading>
       <p>{m.library_archive_recovery_intro()}</p>
       <p className="rounded-lg border-l-4 border-primary p-3 text-sm">{m.library_archive_recovery_scope_notice()}</p>
+      <ArchiveRecoveryDestinations current="collections" />
     </div>
   );
 
@@ -218,7 +227,11 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           busy={snapshot.busy}
           locked={locked}
           isCurrent={() => visit.current()}
+          canUseOriginal={snapshot.hasOriginalArchive}
+          canUseCompleted={completed !== null}
           onUpload={(archiveBase64) => journey.upload(archiveBase64)}
+          onUseOriginal={() => journey.adoptOriginalArchive()}
+          onUseCompleted={() => journey.upload(archiveBase64FromCustody(completed!))}
         />
       ) : null}
 
@@ -340,8 +353,10 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           <ArchiveRecoveryResults
             status={snapshot.status}
             page={snapshot.outcomesPage}
+            receiving={snapshot.receiving}
             busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
             canPrevious={snapshot.outcomesWindow.canPrevious}
+            onReadCollection={(cursor) => touch(journey.readReceivingCollection(cursor))}
             onRead={() => touch(journey.loadOutcomes())}
             onFirst={(event) =>
               moveReader(
@@ -379,6 +394,16 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           >
             {m.library_archive_recovery_read_status()}
           </button>
+          {['complete', 'partial', 'cancelled'].includes(snapshot.status.state) ? (
+            <button
+              type="button"
+              className="min-h-11 justify-self-start rounded-md border px-4"
+              disabled={snapshot.busy || locked}
+              onClick={() => journey.restart()}
+            >
+              {m.library_archive_recovery_restart()}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

@@ -3,6 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import type { MouseEvent } from 'react';
 import { actionClass } from '../private-export/controls';
 import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
+import type { ReceivingCollectionReadback } from './readback';
 
 function stateText(state: string): string {
   switch (state) {
@@ -110,21 +111,25 @@ export function ArchiveRecoveryConflict({ onRefresh, busy }: { onRefresh: () => 
 export function ArchiveRecoveryResults({
   status,
   page,
+  receiving,
   busy,
   canPrevious,
   onRead,
   onFirst,
   onPrevious,
   onNext,
+  onReadCollection,
 }: {
   status: RecoveryStatus;
   page: RecoveryOutcomesPage | null;
+  receiving: ReceivingCollectionReadback | null;
   busy: boolean;
   canPrevious: boolean;
   onRead: () => void;
   onFirst: (event: MouseEvent<HTMLButtonElement>) => void;
   onPrevious: (event: MouseEvent<HTMLButtonElement>) => void;
   onNext: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onReadCollection: (cursor?: string) => void;
 }) {
   const collectionId = page?.collection?.id ?? status.collectionId;
   const state = status.state;
@@ -158,12 +163,45 @@ export function ArchiveRecoveryResults({
                     : m.library_archive_recovery_result_help()}
         </p>
         {collectionId ? (
-          <a
-            className={`${actionClass} inline-flex w-fit items-center underline`}
-            href={localizeHref(`/collections/${collectionId}`)}
-          >
-            {m.library_archive_recovery_open_collection()}
-          </a>
+          <>
+            <a
+              className={`${actionClass} inline-flex w-fit items-center underline`}
+              href={localizeHref(`/collections/${collectionId}`)}
+            >
+              {m.library_archive_recovery_open_collection()}
+            </a>
+            <button className={actionClass} type="button" disabled={busy} onClick={() => onReadCollection()}>
+              {m.library_archive_recovery_read_collection()}
+            </button>
+          </>
+        ) : null}
+        {receiving ? (
+          <section className="grid gap-3 rounded-lg border p-4" data-receiving-collection={receiving.id}>
+            <h3 className="font-semibold">{receiving.title}</h3>
+            <p>
+              {receiving.visibility ?? m.library_archive_recovery_effect_not_applicable()} · {receiving.memberCount}
+            </p>
+            <ol className="grid gap-2">
+              {receiving.members.map((member, index) => (
+                <li key={member.id} className="rounded-md border p-3 text-sm">
+                  <p>
+                    {index + 1}. {member.subjectId ?? member.id}
+                  </p>
+                  {member.note ? <p>{member.note}</p> : null}
+                </li>
+              ))}
+            </ol>
+            {receiving.next ? (
+              <button
+                className={actionClass}
+                type="button"
+                disabled={busy}
+                onClick={() => onReadCollection(receiving.next ?? undefined)}
+              >
+                {m.library_archive_recovery_next_results()}
+              </button>
+            ) : null}
+          </section>
         ) : null}
         <p className="text-sm text-muted-foreground">{m.library_archive_recovery_evidence_independence()}</p>
         {status.pin.state === 'unsupported' ? (

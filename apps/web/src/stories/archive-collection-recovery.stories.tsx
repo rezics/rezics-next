@@ -170,7 +170,16 @@ const outcomes: RecoveryOutcomesPage = {
 const meta = {
   title: 'Pages/Library/Archive Collection recovery',
   component: ArchiveCollectionRecoveryUpload,
-  args: { busy: false, locked: false, isCurrent: () => true, onUpload: async () => undefined },
+  args: {
+    busy: false,
+    locked: false,
+    isCurrent: () => true,
+    canUseOriginal: false,
+    canUseCompleted: false,
+    onUpload: async () => undefined,
+    onUseOriginal: async () => undefined,
+    onUseCompleted: async () => undefined,
+  },
 } satisfies Meta<typeof ArchiveCollectionRecoveryUpload>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -236,10 +245,14 @@ export const PartialResult: Story = {
       <ArchiveRecoveryResults
         status={status}
         page={outcomes}
+        receiving={null}
         busy={false}
+        canPrevious={false}
         onRead={() => undefined}
         onFirst={() => undefined}
+        onPrevious={() => undefined}
         onNext={() => undefined}
+        onReadCollection={() => undefined}
       />
     </div>
   ),
