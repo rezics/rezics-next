@@ -66,12 +66,12 @@ test('an admitted ticket holds the slot until the attempt leaves pending, withou
       'held',
       1,
       1,
-      '{}',
+      JSON.stringify({ id: 'held', currentAttempt: 1, state: 'ready' }),
     );
     db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
       'held',
       1,
-      JSON.stringify({ state: 'pending' }),
+      JSON.stringify({ taskId: 'held', attempt: 1, state: 'pending' }),
     );
     const policy = { ...defaultPolicy.capacity, maxWorkers: 1, minAvailableMiB: 0, reservationPollMs: 5 };
     release = await awaitHostCapacity(store, directory.path, false, 'held', 1, { policy, pollIntervalMs: 5 });
