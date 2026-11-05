@@ -1,15 +1,16 @@
-import 'reylo/register';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { createKernel } from '../../kernel/src/http/kernel.ts';
-import { actionCatalogue } from '../../kernel/src/http/request.ts';
-import { accessActionCatalogue } from '../../kernel/src/access/index.ts';
 import { mountedWebsiteConfiguration, registerWebsiteDeployment } from '../scripts/website-composition.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
+import {
+  createOperationCatalogue,
+  LIBRARY_OPERATION_DECLARATIONS,
+  FEED_OPERATION_DECLARATIONS,
+} from '@rezics/operations';
 import { createHash, randomBytes } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import * as authModule from '../src/index.ts';
@@ -122,20 +123,23 @@ async function token(fields: Record<string, string>) {
 }
 
 test('website first authorization materializes standing consent before code issuance and refresh preserves uploader proof', async () => {
-  const kernel = createKernel({ pool, routeKey: randomBytes(32) });
-  const extra = (path: string, action = 'composition:read') => ({
-    method: 'GET',
-    path,
-    hooks: {
-      detail: {
-        operationId: 'composition.probe',
-        'x-action': action,
-        security: [{}, { bearerAuth: [] }],
-      },
-    },
-  });
-  const mounted = { routes: [...kernel.routes, extra('/composition'), extra('/composition-alias')] };
-  options.siteActions = accessActionCatalogue(actionCatalogue(mounted));
+  const operations = createOperationCatalogue([...LIBRARY_OPERATION_DECLARATIONS, ...FEED_OPERATION_DECLARATIONS]);
+  const mounted = new Map([
+    ...scopes.map((action) => [action, { anonymous: false }] as const),
+    ...operations.all().map(
+      (operation) =>
+        [
+          operation.action,
+          {
+            anonymous: operation.security.some((security) => security.scheme === 'anonymous'),
+          },
+        ] as const,
+    ),
+    ...['organization:create', 'account:manage', 'account:delete', 'composition:read'].map(
+      (action) => [action, { anonymous: true }] as const,
+    ),
+  ]);
+  options.siteActions = mounted;
   const full = mountedWebsiteConfiguration(mounted);
   expect(full.scopes.filter((scope) => scope === 'composition:read')).toHaveLength(1);
   expect(full.scopes).not.toContain('composition.probe');
@@ -240,7 +244,7 @@ test('website first authorization materializes standing consent before code issu
         await expect(
           registerWebsiteDeployment(
             service,
-            { routes: [...mounted.routes, extra('/unmounted', 'unmounted:action')] },
+            new Map([...mounted, ['unmounted:action', { anonymous: false }]]),
             registration,
             file,
           ),

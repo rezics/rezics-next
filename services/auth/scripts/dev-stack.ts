@@ -27,20 +27,23 @@ export const origins = {
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   await import('reylo/register');
-  const [{ createKernel }, { readConfig }] = await Promise.all([
+  const [{ createKernel }, { readConfig }, { actionCatalogue }] = await Promise.all([
     import('../../kernel/src/http/kernel.ts'),
     import('../../kernel/src/server.ts'),
+    import('../../kernel/src/http/request.ts'),
   ]);
   const config = readConfig(env ?? (await kernelEnvironment()));
   const pool = new Pool({ connectionString: config.databaseUrl });
   try {
     return mountedWebsiteConfiguration(
-      createKernel({
-        pool,
-        tokens: config.tokens,
-        routeKey: config.routeKey,
-        ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
-      }),
+      actionCatalogue(
+        createKernel({
+          pool,
+          tokens: config.tokens,
+          routeKey: config.routeKey,
+          ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+        }),
+      ),
     );
   } finally {
     await pool.end();
@@ -332,7 +335,7 @@ export async function assemble(options?: {
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
   });
   const actions = accessActionCatalogue(actionCatalogue(kernel));
-  const website = mountedWebsiteConfiguration(kernel);
+  const website = mountedWebsiteConfiguration(actionCatalogue(kernel));
   let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,

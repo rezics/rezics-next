@@ -483,6 +483,7 @@ Browser modules import only `session/website-scopes.ts`; they never discover or 
 
 ```ts
 import { registerWebsiteDeployment } from '../../services/auth/scripts/website-composition.ts';
+import { actionCatalogue } from '../../services/kernel/src/http/request.ts';
 
 await registerWebsiteDeployment(
   auth,

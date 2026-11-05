@@ -2015,6 +2015,7 @@ or HTTP client registration:
 
 ```ts
 import { registerWebsiteDeployment } from './scripts/website-composition.ts';
+import { actionCatalogue } from '../kernel/src/http/request.ts';
 
 await registerWebsiteDeployment(
   auth,
@@ -2031,7 +2032,7 @@ await registerWebsiteDeployment(
 Decision: derive website registration and configuration from all actual mounted operation/action declarations,
 including private branches of anonymous-capable actions, plus the existing Auth `organization:create`,
 `account:manage` and `account:delete` operations; never filter by `anonymous` or maintain a scope hand list.
-`mountedWebsiteConfiguration(kernel)` resolves actual route actions through `actionCatalogue`, deduplicates and
+`mountedWebsiteConfiguration(actionCatalogue(kernel))` uses resolved mounted route actions, deduplicates and
 sorts them with OpenID scopes. Use the same trusted mounted catalogue in Auth's `siteActions`; Auth refuses
 unmounted names. Operation IDs and exposure groups are not action names. Registration grants no resource,
 platform opening, ownership or lifecycle permission.
