@@ -102,7 +102,7 @@ Selected showcase inputs are bounded by their selected work/person graph. The se
 
 ### Bangumi Person career acquisition
 
-Archive career data has precedence, including an empty or malformed field. The fallback fetches only selected actual type-1 Persons whose archive career is absent; the same selected PersonDetail request may also supply a missing birth date. There is at most one request for each of at most 64 selected Persons. Requests are sequential with 250 ms spacing, share the existing import deadline, and each response is capped at 64 KiB. A response must identify the requested person and contain no more than seven bounded career strings. No archive revision is invented.
+Archive career data has precedence, including an empty or malformed field. PersonDetail is fetched only for a selected actual Person missing career or a birth-date field; the same request can supply either. There is at most one request for each of at most 64 selected Persons. Requests are sequential with 250 ms spacing, share the existing import deadline, and each response is capped at 64 KiB. A response must identify the requested person and contain no more than seven bounded career strings. No archive revision is invented.
 
 The immutable journal receipt binds the exact GET https://api.bgm.tv/v0/persons/{id}, the archive digest, response SHA-256 and optional ETag. Restart reuses the sealed response without fetching it again. Missing, malformed or unavailable response data withholds only dependent P106 or birth-date facts; identity, biography and credits remain independent. The public-source admission is exact to the Person, Scheme, Concept and P106 mapping described above.
 

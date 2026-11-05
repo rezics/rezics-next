@@ -109,4 +109,4 @@ One bounded Book profile and infobox dispatch; Book versus BookSeries grain foll
 
 At most 64 infobox fields, 16 platform occurrences, 8 engine occurrences and 16 omissions; proposals use current released bindings and the existing batch envelope.
 
-Pure converter behavior is described by the existing [conversion tests](tests/). The provider-specific tests assert mapping, rights references, diagnostics, identity and limits; native API acceptance and growth evidence remain separate importer and Kernel obligations.
+Pure converter behavior is described by the existing [Bangumi outcome tests](tests/bangumi-outcomes.test.ts) and [career mapping tests](tests/bangumi-person-careers.test.ts). Provider tests assert mapping, rights references, diagnostics, identity and limits; native API acceptance and growth evidence remain separate importer and Kernel obligations.
