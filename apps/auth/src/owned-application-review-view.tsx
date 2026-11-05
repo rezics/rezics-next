@@ -122,7 +122,7 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
                           className="justify-self-start"
                           disabled={review.copy === 'pending'}
                           aria-describedby={`${id}-status`}
-                          onClick={() => void review.copy()}
+                          onClick={() => void review.copyNow()}
                         >
                           {m.auth_owned_copy()}
                         </Button>

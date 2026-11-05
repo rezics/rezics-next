@@ -176,7 +176,7 @@ export function useOwnedApplicationReview({
     ...state,
     heading,
     toggle,
-    copy,
+    copyNow: copy,
     next: () => {
       const value = current.current.observation;
       if (value.kind === 'ready' && value.page.next) void read({ cursor: value.page.next, direction: 'next' });
