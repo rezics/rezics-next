@@ -119,6 +119,8 @@ their current admission; public reading does not require a correction companion.
 
 Decision: A released Book with a directed series membership remains that exact Book; neither a numbered title nor a stated count grants a new volume Type, member identity or integer position.
 
+Decision: Literary facts include the released work form and word count. An absent work word count is explicitly unknown; an edition's page count never supplies work length.
+
 Every membership and Edition window supplied by the current Subject composition is discoverable in native order,
 labelled by its released property and direction. The explicitly selected node wins only in its own family; the
 reader retains at most one membership page and one Edition page at a time. Rows retain statement identity, repeated
