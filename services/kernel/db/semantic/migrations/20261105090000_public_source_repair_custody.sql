@@ -20,11 +20,11 @@ BEGIN
       RAISE EXCEPTION 'Original Source publication requires native retirement' USING ERRCODE='23514';
     END IF;
     IF (NEW.publication_job,NEW.publication_observation,NEW.publication_execution,
-        NEW.bootstrap,NEW.read_definition,NEW.consumer,NEW.snapshot_kind,NEW.native_snapshot,
+        NEW.bootstrap,NEW.read_definition,NEW.consumer,NEW.snapshot_kind,NEW.native_snapshot::text,
         NEW.owner_epoch,NEW.source_position,NEW.coverage_generation,NEW.coverage_root,NEW.coverage_sealed)
       IS DISTINCT FROM
        (OLD.publication_job,OLD.publication_observation,OLD.publication_execution,
-        OLD.bootstrap,OLD.read_definition,OLD.consumer,OLD.snapshot_kind,OLD.native_snapshot,
+        OLD.bootstrap,OLD.read_definition,OLD.consumer,OLD.snapshot_kind,OLD.native_snapshot::text,
         OLD.owner_epoch,OLD.source_position,OLD.coverage_generation,OLD.coverage_root,OLD.coverage_sealed) THEN
       RAISE EXCEPTION 'Original Source publication operands are immutable' USING ERRCODE='23514';
     END IF;

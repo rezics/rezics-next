@@ -1,3 +1,5 @@
+import { newId } from '../../src/route/route.ts';
+import { checkGrowth, seed } from '../support/growth.ts';
 import { publicationJob } from './support/public-filter-binding.ts';
 import { expect, test } from 'bun:test';
 import {
@@ -488,15 +490,60 @@ test('Native public Source repair step and complete original cut are durably rev
       });
       expect(result.settlement.id).toBe(dispatch.settlement.id);
     }
+    const growth = await checkGrowth(f.db, {
+      name: 'original Source generation completion fixed window',
+      scales: [64, 512, 4096],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+      includeBackends: true,
+      async grow(database, scale, previous) {
+        await seed(
+          database,
+          {
+            name: `publication-unrelated-${job}`,
+            hotPartition: 0,
+            rows: ({ route }) => ({
+              'semantic.subject': [
+                {
+                  route,
+                  subject_id: newId(route),
+                  type: 'schema:Person',
+                  recorded_transaction_id: crypto.randomUUID(),
+                  current_release: f.meaning.digest,
+                },
+              ],
+            }),
+          },
+          { from: previous, to: scale },
+        );
+      },
+      async operation() {
+        const result = await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext());
+        expect(result.status).toBe('complete');
+        if (result.status !== 'complete') throw new Error(`Original completion ${result.reason}`);
+        expect(result.publication).toEqual(publication);
+        expect(result.cost.inputKeys).toBeLessThanOrEqual(1000);
+        for (const field of ['rows', 'statements', 'bytes', 'engineRequests'])
+          expect(Reflect.get(result.cost, field)).toBeGreaterThan(0);
+      },
+    });
+    expect(growth.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+    const equivalent = await consumer.operations.query(query.queried, readContext());
+    expect(equivalent.status).toBe('queried');
+    if (equivalent.status !== 'queried') throw new Error('Missing equivalent native execution');
+    expect(equivalent.execution).not.toBe(query.execution);
     expect(
       (
         await readNativePublicFilterPublicationCompletion(
           restarted(),
-          { ...publication, execution: crypto.randomUUID() },
+          { ...publication, execution: equivalent.execution },
           readContext(),
         )
       ).status,
     ).not.toBe('complete');
+    expect((await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext())).status).toBe(
+      'complete',
+    );
   } finally {
     try {
       await consumer?.close();

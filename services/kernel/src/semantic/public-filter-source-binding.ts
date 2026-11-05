@@ -673,12 +673,14 @@ type BindingCost = { -readonly [K in keyof PublicFilterCost]: number } & {
   statements: number;
   rows: number;
   bytes: number;
+  engineRequests: number;
 };
 function publicFilterBindingCost(): BindingCost {
   return {
     statements: 0,
     rows: 0,
     bytes: 0,
+    engineRequests: 0,
     inputKeys: 0,
     candidates: 0,
     accessPoints: 0,
