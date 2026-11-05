@@ -7042,6 +7042,8 @@
   "producer_history_sources": "Sources",
   "producer_history_correct": "Propose a history correction",
   "producer_history_return": "Return to the original history",
+  "producer_history_previous": "Previous",
+  "producer_history_first": "First page",
   "producer_history_more": "Next page",
   "producer_history_follow": "Choose an organization",
   "producer_history_draft": "Open a relation draft",

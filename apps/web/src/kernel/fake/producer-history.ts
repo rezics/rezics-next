@@ -14,7 +14,14 @@ import definitions from '../recorded/definitions-release.json';
 export const producerStudioId = '00000000-0000-4000-8000-00000000e101';
 export const producerParentId = '00000000-0000-4000-8000-00000000e102';
 export const producerSimilarId = '00000000-0000-4000-8000-00000000e103';
-export type ProducerHistoryScenario = 'current' | 'partial' | 'empty' | 'denied' | 'unavailable' | 'concealed';
+export type ProducerHistoryScenario =
+  | 'windows'
+  | 'current'
+  | 'partial'
+  | 'empty'
+  | 'denied'
+  | 'unavailable'
+  | 'concealed';
 
 export function admitProducerHistory(release: Release) {
   return release;
@@ -52,6 +59,7 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
   const studio = subject(producerStudioId, { en: 'Lantern Studio', ja: '灯籠スタジオ' });
   const parent = subject(producerParentId, { en: 'Lantern Studio', ja: '灯籠' });
   const similar = subject(producerSimilarId, { en: 'Lantern Studio Inc', ja: '灯籠スタジオ株式会社' });
+  if (scenario === 'windows') similar.subject.labels = { ...parent.subject.labels };
   const statement = (id: string, target: string) => ({
     id,
     rank: 'normal' as const,
@@ -110,10 +118,10 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
       },
     ];
   }
-  const json = (body: unknown, status = 200) =>
+  const json = (body: unknown, status = 200, session = 'producer-session') =>
     new Response(JSON.stringify(body), {
       status,
-      headers: { 'content-type': 'application/json', 'rezics-session-token': 'producer-session' },
+      headers: { 'content-type': 'application/json', 'rezics-session-token': session },
     });
   const client = createKernelClient('https://producer.test', {
     fetch: (async (input, init) => {
@@ -131,21 +139,45 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
       if (request.method === 'GET' && url.pathname === `/v1/subjects/${producerStudioId}`) return json(studio);
       const freshness = { consistency: 'eventual', target_seconds: 10, caught_up: scenario !== 'partial' };
       if (url.pathname.endsWith('/relations')) {
-        const second = url.searchParams.get('cursor') === 'native-next';
-        const page = second ? [rows()[1]!] : scenario === 'partial' ? [rows()[0]!] : rows();
-        return json({
-          relations: page.map((row) => ({
-            statement: row.statement ?? parentStatement,
-            summary: row.summary,
-            related: {
-              [producerParentId]: { ...summary(parent), type: parent.subject.type, types: [parent.subject.type] },
-              [producerSimilarId]: { ...summary(similar), type: similar.subject.type, types: [similar.subject.type] },
-            },
-          })),
-          next: scenario === 'partial' && !second ? 'native-next' : null,
-          count: { value: 2, exact: scenario !== 'partial' },
-          freshness,
-        });
+        const cursor = url.searchParams.get('cursor');
+        const window = cursor === 'window-3' ? 3 : cursor === 'window-2' ? 2 : 1;
+        const second = cursor === 'native-next';
+        const page =
+          scenario === 'windows'
+            ? window === 3
+              ? []
+              : window === 2
+                ? [rows()[1]!]
+                : rows()
+            : second
+              ? [rows()[1]!]
+              : scenario === 'partial'
+                ? [rows()[0]!]
+                : rows();
+        return json(
+          {
+            relations: page.map((row) => ({
+              statement: row.statement ?? parentStatement,
+              summary: row.summary,
+              related: {
+                [producerParentId]: { ...summary(parent), type: parent.subject.type, types: [parent.subject.type] },
+                [producerSimilarId]: { ...summary(similar), type: similar.subject.type, types: [similar.subject.type] },
+              },
+            })),
+            next:
+              scenario === 'windows'
+                ? window < 3
+                  ? `window-${window + 1}`
+                  : null
+                : scenario === 'partial' && !second
+                  ? 'native-next'
+                  : null,
+            count: { value: 2, exact: scenario !== 'partial' },
+            freshness,
+          },
+          200,
+          scenario === 'windows' ? `window-session-${window}` : 'producer-session',
+        );
       }
       if (url.pathname.endsWith('/links')) {
         return json({
