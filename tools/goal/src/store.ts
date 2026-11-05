@@ -573,12 +573,7 @@ export class WorkerStore implements AttemptFence {
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
     return this.currentAttemptsCount(urgent, urgent, taskId, attempt);
   }
-  private currentAttemptsCount(
-    urgent?: boolean,
-    includeWaiting = false,
-    taskId?: string,
-    attempt?: number,
-  ): number {
+  private currentAttemptsCount(urgent?: boolean, includeWaiting = false, taskId?: string, attempt?: number): number {
     const liveStates = "attempt_state IN ('running', 'waiting')";
     const states = includeWaiting ? liveStates : `${liveStates} AND attempt_state='running'`;
     const lane = urgent === undefined ? '' : ` AND urgent=${urgent ? 1 : 0}`;

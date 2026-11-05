@@ -12,7 +12,10 @@ mkdirSync(temporaryRoot, { recursive: true });
 test('the shared current-attempt projection backfills admission and width counts', () => {
   const db = openDb(':memory:');
   try {
-    migrate(db, workerMigrations.filter((migration) => migration.module === 'worker' && migration.version < 11));
+    migrate(
+      db,
+      workerMigrations.filter((migration) => migration.module === 'worker' && migration.version < 11),
+    );
     db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
       'task',
       1,
