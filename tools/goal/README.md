@@ -105,6 +105,9 @@ import or page-story checks before dev advances. Promotion runs the full gate on
 Decision: The main/dev queue drain, lane leases, outcome replay and post-release recheck have one owner in
 `src/train-queue.ts`; `MergeTrain` supplies typed candidate, check, resolver and publication callbacks.
 
+Decision: `src/train-checks.ts` owns check execution, sibling settlement and failing-file decoding; `MergeTrain` keeps
+plans and policy and re-exports runner helpers for compatibility.
+
 Decision: A missing local `.sql` declaration followed by at least two TS18046/TS7006 cascades that outnumber
 cascades in changed files is an infrastructure result; landing proceeds and the independent verifier checks the root
 after integration.
