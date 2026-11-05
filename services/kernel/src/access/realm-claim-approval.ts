@@ -1,5 +1,5 @@
-import { REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
-import { resourceRoleHeld } from '../access/resource-role-held.ts';
+import { REALM_OWNER_ROLE } from './realm-ownership.ts';
+import { resourceRoleHeld } from './resource-role-held.ts';
 import {
   authoritativeTimeValue,
   currentCommand,

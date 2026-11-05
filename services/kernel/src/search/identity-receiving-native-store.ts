@@ -23,8 +23,8 @@ import type {
   SearchIdentityReceivingLocator,
   SearchIdentityReceivingSelection,
   SearchIdentityReceivingRecord,
-} from './identity-receiving-native-contract.ts';
-import { snapshotSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
+} from '../semantic/identity-receiving-native-contract.ts';
+import { snapshotSearchIdentityReceivingFrontier } from '../semantic/identity-receiving-native-contract.ts';
 import type {
   CopyRow,
   HoldRow,
@@ -714,7 +714,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       tx: CommandTransaction,
       locator: SearchIdentityReceivingLocator,
       context: SearchIdentityReceivingContext,
-      binding?: import('./identity-receiving-native-contract.ts').SearchIdentityReceivingBinding,
+      binding?: import('../semantic/identity-receiving-native-contract.ts').SearchIdentityReceivingBinding,
     ) {
       return perform<SearchIdentityReceivingHold>(context, tx, true, async (work: SearchNativeReceivingWork) => {
         const own = await owner(tx, work, locator);

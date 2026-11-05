@@ -45,7 +45,7 @@ import {
   type AgentSelfSource as CandidateAgentSelfSource,
   type CandidateSource,
 } from './fences.ts';
-import { checkMediaObject } from '../content/cover-reference.ts';
+import { checkMediaObject } from './cover-reference.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';

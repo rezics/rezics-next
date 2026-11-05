@@ -40,7 +40,7 @@ import nextSql from './identity-epoch-participant-next.sql';
 import stepSql from './identity-epoch-participant-step.sql';
 import advanceSql from './identity-epoch-participant-advance.sql';
 import replaySql from './identity-epoch-participant-replay.sql';
-import { validSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
+import { validSearchIdentityReceivingFrontier } from '../semantic/identity-receiving-native-contract.ts';
 
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 

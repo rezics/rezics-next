@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { principalCommandIdentity, runCommand } from '../command/command.ts';
-import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../community/realm-claim-approval.ts';
+import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from './realm-claim-approval.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';

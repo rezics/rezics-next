@@ -451,7 +451,7 @@ test('Search snapshots the outer reservation so caller mutation cannot extend a 
 import {
   validSearchIdentityReceivingFrontier,
   SEARCH_IDENTITY_RECEIVING_FRONTIER_MAX_BYTES,
-} from '../../src/search/identity-receiving-native-contract.ts';
+} from '../../src/semantic/identity-receiving-native-contract.ts';
 
 test('Search frontiers enforce the inclusive native UTF-8 boundary and reject JSON coercions', () => {
   const overhead = Buffer.byteLength(JSON.stringify({ after: [''], segment: 0 }));
@@ -805,7 +805,7 @@ test('a local SQL subtotal cannot admit the unresolved deferred Source capture g
   });
 });
 
-import { snapshotSearchIdentityReceivingFrontier } from '../../src/search/identity-receiving-native-contract.ts';
+import { snapshotSearchIdentityReceivingFrontier } from '../../src/semantic/identity-receiving-native-contract.ts';
 
 test('the Search frontier snapshot rejects JSON coercion and survives caller mutation before callbacks', () => {
   const original = { after: ['original', 2, null], segment: 0 };

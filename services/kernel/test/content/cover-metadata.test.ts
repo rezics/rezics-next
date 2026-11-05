@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
-import { checkMediaObject, checkMediaObjects } from '../../src/content/cover-reference.ts';
+import { checkMediaObject, checkMediaObjects } from '../../src/semantic/cover-reference.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 

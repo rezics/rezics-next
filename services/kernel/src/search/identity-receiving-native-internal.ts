@@ -5,7 +5,7 @@ import type {
   SearchIdentityReceivingLocator,
   SearchIdentityReceivingSelection,
   SearchIdentityReceivingSource,
-} from './identity-receiving-native-contract.ts';
+} from '../semantic/identity-receiving-native-contract.ts';
 
 /** Operational references, never a mirrored support body or an assertion of complete eligibility. */
 export type SearchNativeReceivingReferences = Readonly<{

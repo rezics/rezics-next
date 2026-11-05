@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import type { KernelClock } from '../clock.ts';
-import { checkMediaObject } from '../content/cover-reference.ts';
+import { checkMediaObject } from '../semantic/cover-reference.ts';
 import { decideDownload } from '../content/media.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
-import { claimCoverMedia, checkMediaObject } from '../../src/content/cover-reference.ts';
+import { claimCoverMedia, checkMediaObject } from '../../src/semantic/cover-reference.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { claimMedia, type ClaimMediaInput } from '../../src/content/media.ts';
 import { currentCommand, type CommandAuthorization } from '../../src/command/command.ts';

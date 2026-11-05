@@ -79,7 +79,7 @@ import type {
   SearchIdentityReceivingSelection,
   SearchIdentityReceivingSource,
   SearchIdentityReceivingHold,
-} from '../search/identity-receiving-native-contract.ts';
+} from './identity-receiving-native-contract.ts';
 export type {
   SearchIdentityReceivingSelection,
   SearchIdentityReceivingSource,
@@ -87,7 +87,7 @@ export type {
   SearchIdentityReceivingNative,
   SearchIdentityReceivingContext,
   SearchIdentityReceivingResult,
-} from '../search/identity-receiving-native-contract.ts';
+} from './identity-receiving-native-contract.ts';
 
 /** Semantic's Search branch retains the entire original owner binding, never a Library identity. */
 export type SearchIdentityReceivingBinding = Readonly<{

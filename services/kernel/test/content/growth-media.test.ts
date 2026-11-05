@@ -33,7 +33,7 @@ import {
   readReservation,
   reserveMedia,
 } from '../../src/content/media.ts';
-import { checkMediaObject, claimCoverMedia } from '../../src/content/cover-reference.ts';
+import { checkMediaObject, claimCoverMedia } from '../../src/semantic/cover-reference.ts';
 import { processImportedMedia } from '../../src/content/media-import-job.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import { transformImage, type ImageVariant } from '../../src/content/image-transform.ts';

@@ -20,7 +20,7 @@ import { createPartyLocatorEffect } from '../../src/community/party-locator.ts';
 import { eraseAccountCommunityRecordsPage } from '../../src/community/account-erasure-records.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { approveRealmClaim } from '../../src/access/realm-claim.ts';
-import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../src/community/realm-claim-approval.ts';
+import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../src/access/realm-claim-approval.ts';
 import { lockRealmOwnershipSource } from '../../src/community/realm-continuity.ts';
 import {
   eraseAccountMembershipsPage,

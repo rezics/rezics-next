@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkGrowth } from '../support/growth.ts';
 import { approveRealmClaim } from '../../src/access/realm-claim.ts';
-import ownRealm from '../../src/community/realm-claim-approval-own.sql';
+import ownRealm from '../../src/access/realm-claim-approval-own.sql';
 import { requestRealmClaim } from '../../src/community/realm-continuity.ts';
 import { newId } from '../../src/route/route.ts';
 import {

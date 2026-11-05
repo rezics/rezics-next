@@ -1,5 +1,5 @@
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
-import type { SearchIdentityReceivingContext } from './identity-receiving-native-contract.ts';
+import type { SearchIdentityReceivingContext } from '../semantic/identity-receiving-native-contract.ts';
 
 const axes = ['rows', 'points', 'statements', 'bytes', 'engineRequests'] as const;
 export const searchNativeReceivingZero: NativeStepWork = Object.freeze({
