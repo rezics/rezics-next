@@ -77,6 +77,7 @@ type SubjectBody = {
   };
 };
 
+const sessions = new Map<Exclude<Actor, null>, string>();
 async function call(
   persona: Actor,
   method: string,
@@ -93,6 +94,7 @@ async function call(
       method,
       headers: {
         ...(persona ? { authorization: `Bearer ${real.bearer(persona)}` } : {}),
+        ...(persona && sessions.has(persona) ? { 'rezics-session-token': sessions.get(persona)! } : {}),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         'idempotency-key': idempotency,
         ...extra,
@@ -100,6 +102,8 @@ async function call(
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
+  const session = response.headers.get('rezics-session-token');
+  if (persona && session) sessions.set(persona, session);
   return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
 }
 
@@ -206,6 +210,7 @@ beforeAll(async () => {
     await real.grant(global, 'editor', action);
   for (const action of ['subject:read', 'context:accept', 'context:adopt', 'subject:merge'] as const)
     await real.grant(global, 'acceptor', action);
+  await real.grant(global, 'delegated', 'subject:read');
   await real.grant(global, 'delegated', 'statement:propose');
   for (const action of ['subject:create', 'statement:propose', 'context:create'] as const)
     await real.grant(global, 'suspended', action);
