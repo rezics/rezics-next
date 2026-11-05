@@ -87,6 +87,10 @@ adapters. The catalogue is independent of HTTP routing. Cedar is the formal refe
 ever needs general recursion, host functions or a solver, adoption is reopened. Evidence:
 [access model (Opus 5.5)](research/access-model-opus-5-5.md) and [(GPT-6 Astra)](research/access-model-gpt-6-astra.md).
 
+The Collection directory binds its qualified owner full-view result or the existing public floor; per-Collection
+management grants do not widen another account's directory. The account's public face keeps public-floor semantics
+even when its owner is viewing it.
+
 ## Data access
 
 Writes are single-partition commands. A read may not join rows across partitions.
