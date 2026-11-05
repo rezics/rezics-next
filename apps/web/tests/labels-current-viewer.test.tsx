@@ -50,12 +50,16 @@ const request = () =>
   });
 let currentRequest = request();
 mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => ({
-  ...start,
-  getRequest: () => currentRequest,
-  setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
-}));
-mock.module('cloudflare:workers', () => ({ env }));
+function installRouteMocks() {
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => ({
+    ...start,
+    getRequest: () => currentRequest,
+    setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
+  }));
+  mock.module('cloudflare:workers', () => ({ env }));
+}
+installRouteMocks();
 afterAll(() => mock.restore());
 
 function deferred<T>() {
@@ -95,6 +99,10 @@ function response(subject: string, search: Search = {}, revision = 7): LabelsCur
 }
 
 test('The actual private Labels route retires replaced-viewer names, dialogs, pending work and Undo while preserving exact current management intents', async () => {
+  // Another focused file mocks the page-only read seam. Restore its module mock before loading
+  // the actual route, then reinstall this test's server environment.
+  mock.restore();
+  installRouteMocks();
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
