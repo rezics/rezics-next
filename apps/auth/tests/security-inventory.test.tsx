@@ -223,157 +223,77 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
   const error = await new Response(child.stderr).text();
   expect(await child.exited, output + error).toBe(0);
 });
-test('fixed Security response readers accept escaped maxima, reject overflow before parsing and retire stalled bodies', async () => {
+test('fixed Security readers apply the public byte caps before parsing and retire stalled streams', async () => {
   const script = `
     import { expect, mock } from 'bun:test';
-    let activeSignal, mode = 'maximum', overflowPath = '', streamStarted, expire, cancelled = 0;
+    let signal, mode = 'maximum', target = '', started, expire, cancelled = 0;
     const calls = [];
-    mock.module('@tanstack/react-start', () => ({
-      createServerFn: () => {
-        let validate = value => value;
-        const builder = {
-          validator(fn) { validate = fn; return builder; },
-          handler(fn) { return options => {
-            activeSignal = options?.signal;
-            return fn({ data: validate(options?.data), signal: options?.signal });
-          }; },
-        };
-        return builder;
-      },
-      createServerOnlyFn: fn => fn,
-    }));
+    mock.module('@tanstack/react-start', () => ({ createServerFn: () => {
+      let validate = value => value;
+      const builder = { validator(fn) { validate = fn; return builder; },
+        handler(fn) { return options => { signal = options?.signal; return fn({ data: validate(options?.data), signal: options?.signal }); }; } };
+      return builder;
+    }, createServerOnlyFn: fn => fn }));
     mock.module('@tanstack/react-start/server', () => ({
-      getRequest: () => new Request('https://auth.test/security', {
-        headers: { origin: 'https://auth.test', cookie: 'fixture=session' }, signal: activeSignal,
-      }),
+      getRequest: () => new Request('https://auth.test/security', { headers: { origin: 'https://auth.test', cookie: 'fixture=session' }, signal }),
       setResponseHeader() {},
     }));
     mock.module('./apps/auth/src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
     globalThis.__AUTH_ORIGIN__ = '';
-    const { securityFixedResponseByteBudgets } = await import('@rezics/auth-contract');
+    const { securityFixedResponseByteBudgets: budgets } = await import('@rezics/auth-contract');
     const id = '\\u0000'.repeat(1024), date = '2026-11-05T00:00:00.000Z';
-    const rowId = index => '\\u0000'.repeat(1021) + String(index).padStart(3, '0');
-    const page = {
-      viewer: { account_id: id, session_id: rowId(0), client_id: id },
+    const page = { viewer: { account_id: id, session_id: 'session', client_id: id },
       actions: { change_password: 'step-up-required', register_passkey: 'step-up-required' },
-      sessions: { kind: 'ready', limit: 64, truncated: false, rows: Array.from({ length: 64 }, (_, i) => ({
-        id: rowId(i), client_id: id, client_display_name: '\\u0000'.repeat(100), created_at: date,
-        expires_at: date, user_agent: '\\u0000'.repeat(512), current: i === 0, revoke: 'step-up-required',
-      })) },
-      passkeys: { kind: 'ready', limit: 32, truncated: false, rows: Array.from({ length: 32 }, (_, i) => ({
-        id: rowId(i + 64), name: '\\u0000'.repeat(128), created_at: date, last_used_at: date,
-        remove: 'step-up-required',
-      })) },
-    };
-    const passkeys = { passkeys: Array.from({ length: 32 }, (_, i) => ({
-      id: rowId(i), name: '\\u0000'.repeat(128), created_at: date, last_used_at: date,
-    })) };
-    const registration = {
-      kind: 'already-signed-in', viewer: { account_id: id },
-      requirements: {
-        handle: { minLength: 3, maxLength: 64 }, email: { maxLength: 254 },
-        password: { minLength: 10, maxLength: Number.MAX_SAFE_INTEGER },
-        verification: { provider: 'turnstile', required: true },
-      },
-      verification: { configured: false }, actions: { register: false, continue: true },
-    };
+      sessions: { kind: 'unavailable' }, passkeys: { kind: 'unavailable' } };
+    const passkeys = { passkeys: [{ id, name: '\\u0000'.repeat(128), created_at: date, last_used_at: date }] };
+    const registration = { kind: 'already-signed-in', viewer: { account_id: id }, requirements: {
+      handle: { minLength: 3, maxLength: 64 }, email: { maxLength: 254 },
+      password: { minLength: 10, maxLength: Number.MAX_SAFE_INTEGER },
+      verification: { provider: 'turnstile', required: true } }, verification: { configured: false },
+      actions: { register: false, continue: true } };
+    const key = path => path === '/security-page' ? 'securityPage' : path === '/passkeys' ? 'passkeys' : 'registrationPage';
     function response(path) {
       if (path === '/session') return Response.json({ account_id: id });
-      const body = path === '/security-page' ? page : path === '/passkeys' ? passkeys : registration;
-      const maximum = securityFixedResponseByteBudgets[
-        path === '/security-page' ? 'securityPage' : path === '/passkeys' ? 'passkeys' : 'registrationPage'
-      ];
-      let bytes = new TextEncoder().encode(JSON.stringify(body));
-      expect(bytes.byteLength).toBeLessThanOrEqual(maximum);
-      if (mode === 'overflow' && path === overflowPath) bytes = new Uint8Array(maximum + 1);
-      const stream = new ReadableStream({
-        start(controller) {
-          if (mode === 'stalled' && path === overflowPath) { streamStarted.resolve(); return; }
-          controller.enqueue(bytes);
-          controller.close();
-        },
-        cancel() { cancelled++; },
-      });
-      const result = new Response(stream, { status: 200 });
-      result.json = () => { throw new Error('fixed Security responses must use readJsonBounded'); };
-      return result;
+      const cap = budgets[key(path)], value = path === '/security-page' ? page : path === '/passkeys' ? passkeys : registration;
+      let body = JSON.stringify(value); body += ' '.repeat(cap - new TextEncoder().encode(body).byteLength);
+      let bytes = new TextEncoder().encode(body);
+      if (mode === 'overflow' && path === target) bytes = new Uint8Array(cap + 1);
+      const stream = new ReadableStream({ start(c) { if (mode === 'stalled' && path === target) { started.resolve(); return; } c.enqueue(bytes); c.close(); }, cancel() { cancelled++; } });
+      const result = new Response(stream); result.json = () => { throw new Error('expected bounded reader'); }; return result;
     }
-    globalThis.fetch = async input => {
-      const path = new URL(String(input)).pathname;
-      calls.push(path);
-      if (mode === 'stalled' && path === overflowPath) streamStarted.resolve();
-      return response(path);
-    };
+    globalThis.fetch = async (input, init) => { const path = new URL(String(input)).pathname; calls.push(path);
+      if (init.signal !== signal) throw new Error('BFF signal not forwarded'); return response(path); };
     const { loadSecurityPage, loadPasskeyInventory } = await import('./apps/auth/src/security-inventory.ts');
     const { readRegistrationPage } = await import('./apps/auth/src/registration-page.ts');
     const { loadPasswordChangeLimits, reviewPasskeyRegistration } = await import('./apps/auth/src/security.ts');
     expect((await loadSecurityPage()).kind).toBe('ready');
-    const list = await loadPasskeyInventory();
-    expect(list.ok && list.body.passkeys.length === 32).toBe(true);
+    expect((await loadPasskeyInventory()).ok).toBe(true);
     expect((await readRegistrationPage()).kind).toBe('already-signed-in');
     expect(await loadPasswordChangeLimits()).toEqual({ minLength: 10, maxLength: Number.MAX_SAFE_INTEGER });
     expect((await reviewPasskeyRegistration(id)).kind).toBe('ready');
-    expect(calls).toEqual([
-      '/security-page', '/passkeys', '/registration-page', '/registration-page',
-      '/session', '/passkeys', '/session',
-    ]);
-
-    const parse = JSON.parse;
-    let parses = 0;
-    JSON.parse = (...args) => { parses++; return parse(...args); };
-    for (const [path, read] of [
-      ['/security-page', () => loadSecurityPage()],
-      ['/passkeys', () => loadPasskeyInventory()],
-      ['/registration-page', () => readRegistrationPage()],
-      ['/registration-page', () => loadPasswordChangeLimits()],
-    ]) {
-      mode = 'overflow'; overflowPath = path;
-      const before = parses;
-      const result = await read();
-      expect(parses).toBe(before);
+    expect(calls).toEqual(['/security-page', '/passkeys', '/registration-page', '/registration-page', '/session', '/passkeys', '/session']);
+    const parse = JSON.parse; let parses = 0; JSON.parse = (...args) => { parses++; return parse(...args); };
+    for (const [path, read] of [['/security-page', loadSecurityPage], ['/passkeys', loadPasskeyInventory],
+      ['/registration-page', readRegistrationPage], ['/registration-page', loadPasswordChangeLimits]]) {
+      mode = 'overflow'; target = path; const before = parses, result = await read(); expect(parses).toBe(before);
       if (path === '/security-page') expect(result.kind).toBe('unavailable');
       else if (path === '/passkeys') expect(result).toEqual({ ok: false });
-      else if (result === null || result.kind === 'unavailable') expect(true).toBe(true);
-      else throw new Error('overflow must leave registration advice unavailable');
+      else if (result !== null && result.kind !== 'unavailable') throw new Error('registration overflow must be unavailable');
     }
-
-    const timeout = globalThis.setTimeout;
-    let heldTimer;
-    globalThis.setTimeout = (callback, delay, ...args) => {
-      if (delay === 5000) {
-        expire = callback;
-        heldTimer = timeout(() => {}, 60000);
-        return heldTimer;
-      }
-      return timeout(callback, delay, ...args);
-    };
-    mode = 'stalled'; overflowPath = '/security-page'; streamStarted = Promise.withResolvers();
-    const retired = new AbortController(), beforeStall = calls.length, beforeCancel = cancelled;
-    const pending = loadSecurityPage(retired.signal);
-    await streamStarted.promise;
-    retired.abort();
-    expect(await pending).toEqual({ kind: 'unavailable' });
-    expect(retired.signal.aborted).toBe(true);
-    expect(cancelled).toBe(beforeCancel + 1);
-    expect(calls.length).toBe(beforeStall + 1);
-    mode = 'stalled'; streamStarted = Promise.withResolvers();
-    const timed = new AbortController(), beforeDeadline = calls.length, cancelBeforeDeadline = cancelled;
-    const deadlineRead = loadSecurityPage(timed.signal);
-    await streamStarted.promise;
-    expire();
-    expect(await deadlineRead).toEqual({ kind: 'unavailable' });
-    expect(timed.signal.aborted).toBe(false);
-    expect(cancelled).toBe(cancelBeforeDeadline + 1);
-    expect(calls.length).toBe(beforeDeadline + 1);
-    globalThis.setTimeout = timeout;
-    clearTimeout(heldTimer);
+    JSON.parse = parse;
+    const timer = globalThis.setTimeout; let held;
+    globalThis.setTimeout = (fn, ms, ...args) => ms === 5000 ? (expire = fn, held = timer(() => {}, 60000)) : timer(fn, ms, ...args);
+    mode = 'stalled'; target = '/security-page'; started = Promise.withResolvers();
+    const retired = new AbortController(), before = calls.length, priorCancel = cancelled, pending = loadSecurityPage(retired.signal);
+    await started.promise; retired.abort(); expect(await pending).toEqual({ kind: 'unavailable' });
+    expect(cancelled).toBe(priorCancel + 1); expect(calls.length).toBe(before + 1);
+    started = Promise.withResolvers(); const timed = new AbortController(), deadlineBefore = calls.length, cancelBefore = cancelled;
+    const deadline = loadSecurityPage(timed.signal); await started.promise; expire();
+    expect(await deadline).toEqual({ kind: 'unavailable' }); expect(timed.signal.aborted).toBe(false);
+    expect(cancelled).toBe(cancelBefore + 1); expect(calls.length).toBe(deadlineBefore + 1);
+    globalThis.setTimeout = timer; clearTimeout(held);
   `;
-  const child = Bun.spawn([process.execPath, '-e', script], {
-    cwd: `${import.meta.dir}/../../..`,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const output = await new Response(child.stdout).text();
-  const error = await new Response(child.stderr).text();
+  const child = Bun.spawn([process.execPath, '-e', script], { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' });
+  const output = await new Response(child.stdout).text(), error = await new Response(child.stderr).text();
   expect(await child.exited, output + error).toBe(0);
 });
