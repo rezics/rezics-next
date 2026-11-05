@@ -312,8 +312,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     });
   const refetch = (cursor: string | null) => refetchFor('B', cursor);
   const remove = async () => {
+    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
+    expect(trigger.disabled).toBe(false);
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      trigger.click();
       await tick();
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
@@ -653,8 +655,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       await tick();
     });
   const remove = async () => {
+    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
+    expect(trigger.disabled).toBe(false);
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      trigger.click();
       await tick();
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
