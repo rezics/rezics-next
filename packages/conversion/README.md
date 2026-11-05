@@ -47,7 +47,7 @@ Game names retain locale; cited publication dates preserve admitted precision an
 
 Decision: for TVAnime, top-level `name_cn` and infobox `中文名` are independent source observations. Keep differing values as separate cited `schema:name` facts; only exact duplicate property, language and text tuples deduplicate.
 
-Decision: `bangumi@16` also admits the archive's closed `{` / `[value]` / `}` alias lists for the existing TVAnime, Book and Game templates. Preserve their source text and `und` language, existing property selection, 24-name/500-character limits and exact citations. Unclosed, nested or mixed lists omit that field; they never publish bracket syntax as a name. Ordinary and selected-family registration revisions trigger the existing finite per-record refresh.
+Decision: `bangumi@16` also admits the archive's closed `{` / `[value]` / `}` alias lists for TVAnime, Book, Manga and Game templates. Manga retains its existing Book identity and Book name properties. Preserve source text and `und` language, 24-name/500-character limits and exact citations. Unclosed, nested or mixed lists omit that field; they never publish bracket syntax as a name. Ordinary and selected-family registration revisions trigger the existing finite per-record refresh.
 
 ### VNDB
 
