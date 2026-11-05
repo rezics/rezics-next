@@ -58,6 +58,20 @@ function validateIntent(input: unknown): ReconciliationIntent {
   return { orderId: input.orderId, idempotencyKey: input.idempotencyKey };
 }
 
+function isProblemResponse(value: unknown, status: number): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    'status' in value &&
+    value.status === status &&
+    'code' in value &&
+    typeof value.code === 'string' &&
+    'request_id' in value &&
+    typeof value.request_id === 'string'
+  );
+}
+
 /** Exact pending generated-client binding. No raw HTTP fallback or cast Treaty route. */
 export const nativeOrderReconcile: (
   client: KernelClient,
@@ -77,6 +91,8 @@ export const nativeOrderReconcile: (
   if (response.status === 0) return { kind: 'retry' };
   if (response.status === 401 || response.status === 403 || response.status === 404) return { kind: 'denied' };
   if (response.status === 422) return { kind: 'conflict' };
+  if (response.status === 503)
+    return isProblemResponse(response.error?.value, 503) ? { kind: 'unavailable' } : { kind: 'retry' };
   return { kind: 'unavailable' };
 };
 
