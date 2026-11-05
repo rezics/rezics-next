@@ -165,6 +165,12 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
   try {
     await show();
     populated();
+    currentHref += '?context=changed';
+    await show();
+    retired();
+    source++;
+    await show();
+    populated();
     for (const replace of [
       () => client.setQueryData(['session'], { ...session, csrfToken: 'csrf-two' }),
       () => client.setQueryData(['session'], { ...session, subject: 'other' }),
@@ -193,9 +199,6 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
       expect(late.isCurrent()).toBe(false);
     }
     for (const replace of [
-      () => {
-        currentHref += '?context=changed';
-      },
       () => {
         locale = 'fr';
       },
