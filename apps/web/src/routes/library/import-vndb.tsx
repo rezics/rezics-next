@@ -10,6 +10,7 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { importLibraryAnchor } from '../../library/showcase-import-return/navigation';
+import { vndbReviewSearch } from '../../library/personal-list-import/address';
 
 const loadAvailability = createServerFn({ method: 'GET' }).handler(() => {
   preparePrivatePage();
@@ -17,6 +18,7 @@ const loadAvailability = createServerFn({ method: 'GET' }).handler(() => {
 });
 
 export const Route = createFileRoute('/library/import-vndb')({
+  validateSearch: vndbReviewSearch,
   beforeLoad: async (context) => {
     await requireSignedIn(context);
     await prepareExposure(context.context.queryClient);
@@ -31,7 +33,16 @@ export const Route = createFileRoute('/library/import-vndb')({
 
 function VndbImportRoute() {
   const { available } = Route.useLoaderData();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const libraryReturn = useLocation({ select: (location) => location.hash.replace(/^#/, '') === importLibraryAnchor });
   if (!available) return <VndbUnavailable />;
-  return <PersonalVndbImportPage libraryReturn={libraryReturn} />;
+  return <PersonalVndbImportPage
+    libraryReturn={libraryReturn}
+    address={search.uploadId ? { uploadId: search.uploadId, offset: search.offset ?? 0 } : undefined}
+    onAddressChange={(address) => {
+      if (search.uploadId !== address.uploadId || search.offset !== address.offset)
+        void navigate({ search: address, replace: true, ignoreBlocker: true, resetScroll: false });
+    }}
+  />;
 }

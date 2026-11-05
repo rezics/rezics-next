@@ -16,6 +16,7 @@ import {
   type VndbUnknown,
 } from './contract';
 import type { VndbVisit } from './visit';
+import type { VndbReviewAddress } from './address';
 
 export type VndbStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'removed';
 export type VndbNotice = VndbFailure | VndbUnknown | { kind: 'file-read' } | null;
@@ -86,7 +87,7 @@ function isVndbUnknown(value: unknown): value is VndbUnknown {
 function rowEffects(row: VndbRow): VndbEffect[] {
   const effects: VndbEffect[] = [];
   const score = scoreDecision(row);
-  if (row.decision && ['reviewed', 'skipped', 'unsupported'].includes(row.decision.status)) {
+  if (row.decision && ['reviewed', 'applying', 'skipped', 'unsupported'].includes(row.decision.status)) {
     effects.push({
       ordinal: row.ordinal,
       kind: 'entry-state',
@@ -301,6 +302,29 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
       effectReferences.set(effectKey(effect.ordinal, effect.reviewId, effect.kind), effect);
   }
 
+  function restoreRowOutcome(row: VndbRow): void {
+    const decision = row.decision;
+    if (
+      decision &&
+      (decision.status === 'applied' || decision.status === 'stale' || decision.status === 'failed' ||
+        (decision.action === 'state' && (decision.status === 'skipped' || decision.status === 'unsupported')))
+    ) {
+      const outcome = {
+        ordinal: row.ordinal,
+        reviewId: decision.reviewId,
+        status: decision.status,
+      };
+      outcomes.set(outcomeKey(outcome), outcome);
+      effectReferences.set(outcomeKey(outcome), {
+        ordinal: row.ordinal,
+        kind: 'entry-state',
+        reviewId: decision.reviewId,
+        targetId: decision.targetId,
+        status: decision.status,
+      });
+    }
+  }
+
   function snapshot(): VndbJourneySnapshot {
     if (!live()) clearForReplacement();
     const receipts = [...outcomes.values()].sort((a, b) => a.ordinal - b.ordinal);
@@ -460,6 +484,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     pageOffset = offset;
     total = response.value.total;
     for (const row of response.value.rows) {
+      restoreRowOutcome(row);
       const decision = scoreDecision(row);
       if (decision?.status === 'reviewed' && !scoreReviewMatchesPreview(row)) {
         scoreNotices.set(row.ordinal, {
@@ -483,6 +508,15 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
       retirePrivateReview();
     } else stage = 'review';
     return snapshot();
+  }
+
+  async function reopen(address: VndbReviewAddress): Promise<VndbJourneySnapshot> {
+    if (!live() || pending > 0 || unknown) return snapshot();
+    generation += 1;
+    clearForReplacement();
+    uploadId = address.uploadId;
+    stage = 'review';
+    return loadPage(address.offset);
   }
 
   async function sendPreview(
@@ -837,6 +871,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   return {
     snapshot,
     preview,
+    reopen,
     loadPage,
     source: retryVisibleSource,
     hideSource,

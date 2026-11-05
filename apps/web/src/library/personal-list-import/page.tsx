@@ -15,6 +15,7 @@ import { VndbUploadForm } from './upload';
 import { useVndbVisit, type VndbVisit } from './visit';
 import type { VndbNotice } from './controller';
 import { CurrentImportLibrary } from '../showcase-import-return/current';
+import { vndbReviewHref, type VndbReviewAddress } from './address';
 
 function noticeText(notice: VndbNotice): string | null {
   if (!notice) return null;
@@ -42,20 +43,31 @@ function download(xml: string) {
 export function PersonalVndbImportPage({
   visit,
   libraryReturn = false,
+  address,
+  onAddressChange,
 }: {
   visit?: VndbVisit | null;
   libraryReturn?: boolean;
+  address?: VndbReviewAddress;
+  onAddressChange?: (address: VndbReviewAddress) => void;
 }) {
   const observed = useVndbVisit();
   const current = visit === undefined ? observed : visit;
   useEffect(() => () => current?.retire(), [current]);
   if (!current) return <VndbSignedOut />;
-  return <VndbImportAccess visit={current} libraryReturn={libraryReturn} />;
+  return <VndbImportAccess visit={current} libraryReturn={libraryReturn} address={address} onAddressChange={onAddressChange} />;
 }
 
 const importOperations = ['library_entry.put'] as const;
 
-function VndbImportAccess({ visit, libraryReturn }: { visit: VndbVisit; libraryReturn: boolean }) {
+type VndbSessionProps = {
+  visit: VndbVisit;
+  libraryReturn: boolean;
+  address?: VndbReviewAddress;
+  onAddressChange?: (address: VndbReviewAddress) => void;
+};
+
+function VndbImportAccess({ visit, libraryReturn, address, onAddressChange }: VndbSessionProps) {
   const { store, value } = useLibraryWorkspaceAdmission(importOperations);
   const version = value.dispatch[0];
   const scoped = useMemo<VndbVisit>(() => {
@@ -78,16 +90,26 @@ function VndbImportAccess({ visit, libraryReturn }: { visit: VndbVisit; libraryR
   }, [visit, store, version]);
   const identity = [visit.subject, visit.csrfToken, getLocale(), version].join(':');
   if (!value.allowed[0]) return <VndbUnavailable />;
-  return <VndbImportSession key={identity} visit={scoped} libraryReturn={libraryReturn} />;
+  return <VndbImportSession key={identity} visit={scoped} libraryReturn={libraryReturn} address={address} onAddressChange={onAddressChange} />;
 }
 
-function VndbImportSession({ visit, libraryReturn }: { visit: VndbVisit; libraryReturn: boolean }) {
+function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: VndbSessionProps) {
   const port = useVndbImportPort(visit);
   const journey = useRef<VndbJourney | null>(null);
   const main = useRef<HTMLElement>(null);
   if (!journey.current) journey.current = createVndbJourney({ port, visit });
   const [snap, setSnap] = useState<VndbJourneySnapshot>(() => journey.current!.snapshot());
   useEffect(() => () => journey.current?.retire(), [visit]);
+  useEffect(() => {
+    const current = journey.current!;
+    const snapshot = current.snapshot();
+    if (address) {
+      if (snapshot.page?.uploadId !== address.uploadId || snapshot.offset !== address.offset)
+        void act((value) => value.reopen(address));
+    } else if (snapshot.uploadId) {
+      setSnap(current.replaceSource());
+    }
+  }, [address?.uploadId, address?.offset]);
   useEffect(() => {
     main.current?.querySelector<HTMLElement>(`[data-vndb-stage="${snap.stage}"]`)?.focus({ preventScroll: true });
   }, [snap.stage, snap.page?.rows[0]?.ordinal]);
@@ -96,7 +118,10 @@ function VndbImportSession({ visit, libraryReturn }: { visit: VndbVisit; library
     if (!journey.current) return;
     const result = run(journey.current);
     setSnap(journey.current.snapshot());
-    setSnap(await result);
+    const next = await result;
+    setSnap(next);
+    if (next.page && next.reviewCurrent && !next.busy)
+      onAddressChange?.({ uploadId: next.page.uploadId, offset: next.offset });
   }
 
   const locked = snap.busy || !!snap.retryCommand;
@@ -104,6 +129,14 @@ function VndbImportSession({ visit, libraryReturn }: { visit: VndbVisit; library
   return (
     <main ref={main} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_vndb_title()}</PageHeading>
+      {snap.page && snap.reviewCurrent ? (
+        <p className="text-sm">
+          <a className="underline underline-offset-2" href={vndbReviewHref({ uploadId: snap.page.uploadId, offset: snap.offset })} target="_blank" rel="noreferrer">
+            {m.library_vndb_reopen_review()}
+          </a>
+          {' '}{m.library_vndb_reopen_help()}
+        </p>
+      ) : null}
       {libraryReturn && snap.stage === 'upload' ? <CurrentImportLibrary visit={visit} returned /> : null}
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">

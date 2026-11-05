@@ -3,6 +3,7 @@ import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
 import { VndbRowReview } from './row';
 import type { VndbReviewInput } from './contract';
+import { VndbPendingReview } from './pending';
 
 export function VndbReviewPage({
   snap,
@@ -32,6 +33,7 @@ export function VndbReviewPage({
       <p role="status">
         {m.library_vndb_page_progress({ shown: current.length, loaded: snap.rows.length, total: snap.total, reviewed })}
       </p>
+      <VndbPendingReview snap={snap} />
       {snap.page?.state === 'cancelled' ? <p role="status">{m.library_bangumi_canceled()}</p> : null}
       <div className="flex flex-wrap gap-3">
         <VndbAction type="button" variant="outline" disabled={busy || snap.sourceVisible} onClick={onSource}>

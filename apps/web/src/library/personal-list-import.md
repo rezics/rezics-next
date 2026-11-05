@@ -72,3 +72,15 @@ AniList, Bangumi and MAL confirmation pages admit source observations through th
 client contract and does not add a second parser or provider synchronizer.
 
 Decision: after apply, an explicit fresh read shows up to eight current Library entries in activity order; normal Library navigation owns continuation, and returning to source review repeats its native page read.
+
+Decision: the mounted review address carries only the native upload UUID and bounded page offset. Reopening reads
+that owner's retained upload through the existing native page endpoint, restores acknowledged state outcomes, and
+keeps unresolved rows reviewable without uploading again. Previously reviewed targets appear only when the current
+native page independently discloses them; source titles never bind identities. Counts distinguish loaded entries
+needing review from source rows not yet loaded. Progress and vote adoption retain their native admission policy.
+
+- Touches: the existing upload, one addressed page and its current target/decision observations; no browser storage.
+- Bound: one native page request per reopen or page navigation, at most eight rows; URL input admits a native UUID
+  and an integer offset below 5,000. Reopening never calls preview, creates an entry or changes a review.
+- Growth check: focused journey tests cover reopen, current refusal, native outcome restoration and exact retry;
+  native owner/privacy, seeded browser and physical growth acceptance remain separate checks.
