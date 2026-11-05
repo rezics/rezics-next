@@ -1057,33 +1057,23 @@ cancellation. Awaiting, substituted or malformed continuations cannot execute.
 Stale sessions require another step-up; approval expiry and current native checks
 still apply. An unknown execution result is not final workflow/readback evidence.
 
-`POST /account-management/operators/transfer-review` is the bounded same-origin
-page read for Transfer. It accepts exactly `{ kind: "readiness" }`,
-`{ kind: "source", subjectAccountId }`, or
-`{ kind: "destination", request }`. A normal human session may learn only that
-the exact transfer management profile is needed; it receives no source relation.
-An admitted source review uses the existing `readOperatorTransferState` source
-authority and returns its exact tuple/version with source action entry advice.
-A destination review treats the source tuple as supplied file data, checks the
-proposed destination with the same `account:manage` action/resource as
-transfer-acceptance, and returns only its action advice. It never reads the
-source-private relation. Every response is closed, `private, no-store`, and
-revalidates the same Auth human/profile after native I/O. The read performs no
-approval, execution, receipt lookup or command lock.
+`POST /account-management/operators/transfer-review` accepts exactly `{ kind: "readiness" }`,
+`{ kind: "source", subjectAccountId }` or `{ kind: "destination", request }`. Ordinary sessions get only transfer-profile advice. Source uses `readOperatorTransferState` for exact tuple/version and action advice.
+Decision: destination checks transfer-acceptance's `account:manage` action/resource, treating the source tuple as file
+data without reading its private relation. Zero approvals, execution, receipt lookups or command locks.
 
-Whole-call cost is finite: readiness performs one bounded Auth session/profile
-proof. A selected review checks that proof and creates the server-only native
-Access token before the source call, then rechecks the same proof afterward.
-Access authenticates the token once. Source review runs the existing relation
-reader's two bounded snapshots (subject and current-operator homes/accounts,
-slot/version, actor floor and assignment), with one released `account:manage`
-preparation and one final action check. Destination review runs two bounded
-actor/destination snapshots (their homes/accounts and current actor floor, plus
-at most one principal and assignment), with one released preparation and one
-final check. It does not read a source account or relation. No lists, profile
-fanout, writes, pool preflight or generated client publication are involved.
+Readiness checks one session/profile proof. Selected review obtains a server-only Access token, authenticates once
+and rechecks that human/profile after I/O within ten seconds. Source uses two bounded snapshots
+(subject/operator homes/accounts, slot/version, actor floor/assignment), one released preparation and final action
+check. Destination uses two actor/destination snapshots (homes/accounts, actor floor, at most one principal/assignment),
+one released preparation and final check. No lists, fanout, writes, pool preflight or publication.
 
-Decision: destination review displays the source tuple only as handoff-file data and does not make an optional source-native read; acceptance needs only destination admission.
+Decision: `private, no-store` replies publish `@rezics/auth-contract` operator-page bounds: routed lowercase UUID36
+and canonical bigint decimal `0..9223372036854775807`, kept as strings.
+Provenance: Kernel `operator-transfer-page-source.ts`, `management-source.ts`, `management-source-operator.sql`
+(`operator_relation_version::text`), and `access.account.operator_relation_version bigint`. Source's empty-field JSON adds `3 × 36 + 19`; destination adds 36. Fixed viewers/continuation, stages, action flags and syntax are counted;
+variable alphabets need no escaping. Errors: max(refused/refused, ready/unavailable).
+Port validates before serialization; invalid IDs/versions, extra fields or wrong selections become unavailable. Opening shares fields. Browser limits bytes before decoding/parsing in five seconds; zero added native calls. Native/browser/integration checks are pending.
 
 `POST /account-management/operators/relation` is the private native source for the
 existing transfer page. Its exact JSON body is `{ subjectAccountId: string }`;

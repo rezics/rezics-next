@@ -1,4 +1,9 @@
-import { managementOperationProfile, type SessionProof } from '@rezics/auth-contract';
+import {
+  isOperatorPageId,
+  isOperatorPageVersion,
+  managementOperationProfile,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 
@@ -39,7 +44,6 @@ export type OperatorTransferPageResponse = {
 };
 
 export const OPERATOR_TRANSFER_PAGE_PATH = '/account-management/operators/transfer-review';
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const response = (body: OperatorTransferPageResponse, status = 200) =>
   Response.json(body, {
     status,
@@ -63,18 +67,13 @@ function handoff(value: unknown): value is OperatorTransferHandoff {
     fields(item, ['version', 'previous', 'expectedVersion', 'operatorAccountId', 'sourceOperationKey']) &&
     item.version === 1 &&
     fields(relation, ['operatorAccountId', 'subjectAccountId', 'reservationId']) &&
-    typeof relation.operatorAccountId === 'string' &&
-    uuid.test(relation.operatorAccountId) &&
-    typeof relation.subjectAccountId === 'string' &&
-    uuid.test(relation.subjectAccountId) &&
-    typeof relation.reservationId === 'string' &&
-    uuid.test(relation.reservationId) &&
-    typeof item.operatorAccountId === 'string' &&
-    uuid.test(item.operatorAccountId) &&
+    isOperatorPageId(relation.operatorAccountId) &&
+    isOperatorPageId(relation.subjectAccountId) &&
+    isOperatorPageId(relation.reservationId) &&
+    isOperatorPageId(item.operatorAccountId) &&
     item.operatorAccountId !== relation.operatorAccountId &&
     item.operatorAccountId !== relation.subjectAccountId &&
-    typeof item.expectedVersion === 'string' &&
-    /^(0|[1-9][0-9]*)$/.test(item.expectedVersion) &&
+    isOperatorPageVersion(item.expectedVersion) &&
     text(item.sourceOperationKey, 128)
   );
 }
@@ -89,16 +88,15 @@ function sourceRelation(value: unknown, subjectAccountId: string): OperatorTrans
   const row = previous as Record<string, unknown>;
   if (
     result.kind !== 'source' ||
+    !fields(result, ['kind', 'relation', 'action']) ||
     result.action !== 'allowed' ||
     !fields(state, ['previous', 'expectedVersion']) ||
     !fields(row, ['operatorAccountId', 'subjectAccountId', 'reservationId']) ||
     row.subjectAccountId !== subjectAccountId ||
-    typeof row.operatorAccountId !== 'string' ||
-    !uuid.test(row.operatorAccountId) ||
-    typeof row.reservationId !== 'string' ||
-    !uuid.test(row.reservationId) ||
-    typeof state.expectedVersion !== 'string' ||
-    !/^(0|[1-9][0-9]*)$/.test(state.expectedVersion)
+    !isOperatorPageId(row.operatorAccountId) ||
+    row.operatorAccountId === subjectAccountId ||
+    !isOperatorPageId(row.reservationId) ||
+    !isOperatorPageVersion(state.expectedVersion)
   )
     return null;
   return {
@@ -121,6 +119,7 @@ function projectRead(input: NativeInput, value: unknown): OperatorTransferPageRe
     return sourceRelation(value, input.subjectAccountId) ?? { kind: 'unavailable' };
   if (
     result.kind === 'destination' &&
+    fields(result, ['kind', 'destinationAccountId', 'action']) &&
     input.kind === 'destination' &&
     result.destinationAccountId === input.request.operatorAccountId &&
     (result.action === 'allowed' || result.action === 'denied')
@@ -180,8 +179,7 @@ export function operatorTransferPageTransport(
       else if (
         body.kind === 'source' &&
         fields(body, ['kind', 'subjectAccountId']) &&
-        typeof body.subjectAccountId === 'string' &&
-        uuid.test(body.subjectAccountId)
+        isOperatorPageId(body.subjectAccountId)
       )
         input = { kind: 'source', subjectAccountId: body.subjectAccountId };
       else if (body.kind === 'destination' && fields(body, ['kind', 'request']) && handoff(body.request))

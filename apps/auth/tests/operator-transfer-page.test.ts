@@ -64,3 +64,41 @@ test('unknown response fields fail closed and authentication continuation stays 
     viewer: { kind: 'authentication-required', continuation: 'operator-transfer' },
   });
 });
+
+test('wrong side, non-ready private advice and invalid native versions never advance approval', async () => {
+  const { submitTransferAttempt } = await import('../src/operator-transfer');
+  for (const side of ['source', 'destination'] as const)
+    for (const review of [
+      {
+        kind: 'source',
+        relation: { previous: request.previous, expectedVersion: '9223372036854775808' },
+        action: 'allowed',
+      },
+      side === 'source'
+        ? { kind: 'destination', destinationAccountId: request.operatorAccountId, action: 'allowed' }
+        : { kind: 'source', relation: { previous: request.previous, expectedVersion: '12' }, action: 'allowed' },
+    ]) {
+      const calls: string[] = [];
+      globalThis.fetch = (async (input) => {
+        calls.push(String(input));
+        if (String(input) === '/session') return Response.json({ account_id: actor });
+        return Response.json({ viewer: { kind: 'ready' }, review });
+      }) as typeof fetch;
+      const selected = { ...attempt, side, ...(side === 'source' ? { acceptance: 'original-acceptance' } : {}) };
+      expect(await submitTransferAttempt(selected, () => true)).toMatchObject({
+        kind: 'failure',
+        reason: 'unavailable',
+      });
+      expect(selected.phase).toBe('approve');
+      expect(calls.filter((path) => path !== '/session')).toEqual([OPERATOR_TRANSFER_PAGE_PATH]);
+    }
+  globalThis.fetch = (async () =>
+    Response.json({
+      viewer: { kind: 'signed-out' },
+      review: { kind: 'destination', destinationAccountId: request.operatorAccountId, action: 'allowed' },
+    })) as typeof fetch;
+  expect(await readOperatorTransferPage({ kind: 'destination', request })).toEqual({
+    kind: 'failure',
+    reason: 'unavailable',
+  });
+});

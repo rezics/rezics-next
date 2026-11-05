@@ -147,3 +147,36 @@ test('closed transport rejects forged selection and reports absent bindings with
   });
   expect(await (await missing.handler(new Request(`${issuer}/unrelated`))).text()).toBe('fallback');
 });
+
+test('native projection preserves bigint maxima and refuses invalid port advice before serialization', async () => {
+  const { OPERATOR_PAGE_MAX_VERSION, OPERATOR_TRANSFER_PAGE_MAX_RESPONSE_BYTES } =
+    await import('@rezics/auth-contract');
+  for (const expectedVersion of ['0', '9007199254740993', OPERATOR_PAGE_MAX_VERSION]) {
+    const native = { kind: 'source' as const, relation: { ...relation, expectedVersion }, action: 'allowed' as const };
+    const response = await fixture(profile(), native).handler(request({ kind: 'source', subjectAccountId: subject }));
+    const bytes = await response.arrayBuffer();
+    expect(bytes.byteLength).toBeLessThanOrEqual(OPERATOR_TRANSFER_PAGE_MAX_RESPONSE_BYTES);
+    if (expectedVersion === OPERATOR_PAGE_MAX_VERSION)
+      expect(bytes.byteLength).toBe(OPERATOR_TRANSFER_PAGE_MAX_RESPONSE_BYTES);
+    expect(JSON.parse(new TextDecoder().decode(bytes)).review).toEqual(native);
+  }
+  for (const native of [
+    ...['9223372036854775808', '1'.repeat(1000), '01', '-1', '1\n', 1].map((expectedVersion) => ({
+      kind: 'source',
+      relation: { ...relation, expectedVersion },
+      action: 'allowed',
+    })),
+    {
+      kind: 'source',
+      relation: { ...relation, previous: { ...relation.previous, reservationId: `${reservation}\n` } },
+      action: 'allowed',
+    },
+    { kind: 'source', relation, action: 'allowed', secret: 'private' },
+    { kind: 'destination', destinationAccountId: destination, action: 'allowed' },
+  ]) {
+    const response = await fixture(profile(), native as OperatorTransferPageRead).handler(
+      request({ kind: 'source', subjectAccountId: subject }),
+    );
+    expect(await response.json()).toEqual({ viewer: { kind: 'ready' }, review: { kind: 'unavailable' } });
+  }
+});
