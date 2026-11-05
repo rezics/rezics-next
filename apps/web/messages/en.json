@@ -11125,5 +11125,6 @@
   "library_anilist_score_outcome_unsupported": "Native vote is unsupported",
   "library_anilist_score_outcome_failed": "Native vote failed",
   "library_anilist_score_outcome_unavailable": "Native vote is unavailable",
-  "library_anilist_replace_vote_and_state": "Replace existing native vote and state"
+  "library_anilist_replace_vote_and_state": "Replace existing native vote and state",
+  "library_progress_history_restarted": "This history changed. Showing its current first page."
 }

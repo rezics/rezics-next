@@ -10998,5 +10998,6 @@
   "library_anilist_score_outcome_unsupported": "ネイティブ投票はサポートされていません",
   "library_anilist_score_outcome_failed": "ネイティブ投票に失敗しました",
   "library_anilist_score_outcome_unavailable": "ネイティブ投票を利用できません",
-  "library_anilist_replace_vote_and_state": "既存のネイティブ投票と状態を置き換える"
+  "library_anilist_replace_vote_and_state": "既存のネイティブ投票と状態を置き換える",
+  "library_progress_history_restarted": "履歴が変更されました。現在の最初のページを表示しています。"
 }

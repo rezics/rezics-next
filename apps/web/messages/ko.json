@@ -10904,5 +10904,6 @@
   "library_anilist_score_outcome_unsupported": "네이티브 투표를 지원하지 않습니다",
   "library_anilist_score_outcome_failed": "네이티브 투표 실패",
   "library_anilist_score_outcome_unavailable": "네이티브 투표를 사용할 수 없습니다",
-  "library_anilist_replace_vote_and_state": "기존 네이티브 투표 및 상태 바꾸기"
+  "library_anilist_replace_vote_and_state": "기존 네이티브 투표 및 상태 바꾸기",
+  "library_progress_history_restarted": "기록이 변경되었습니다. 현재 첫 페이지를 표시합니다."
 }

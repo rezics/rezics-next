@@ -10904,5 +10904,6 @@
   "library_anilist_score_outcome_unsupported": "Le vote natif n’est pas pris en charge",
   "library_anilist_score_outcome_failed": "Échec du vote natif",
   "library_anilist_score_outcome_unavailable": "Vote natif indisponible",
-  "library_anilist_replace_vote_and_state": "Remplacer le vote natif et l’état existants"
+  "library_anilist_replace_vote_and_state": "Remplacer le vote natif et l’état existants",
+  "library_progress_history_restarted": "Cet historique a changé. Sa première page actuelle est affichée."
 }
