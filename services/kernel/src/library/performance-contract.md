@@ -520,6 +520,10 @@ Decision: private label operations use closed service-owned nine-axis plans buil
 bound at existing native command/read callers; import guards add only their reached preparation and source-fence
 branches, with current limits and authority unchanged.
 
+Choice: compose the enclosing command through its existing execution binding and command-work association, while
+import preparation/fences and FULL Semantic source/disclosure work contribute static bounds from their current owners.
+Keep importer origin resolution, request identity, deadline, retry, receipt and native authority at those owners.
+
 `label-operation-bounds.ts` keeps SQL and Library meaning with the existing owners. Each SQL leaf captures its exact
 compiled SQL, detached original binds, native row shape and finite page/identity inputs. `bytes` includes SQL UTF-8,
 JSON-serialized binds, maximum escaped projected rows and array framing. The public page default/max stay 20/100; the
