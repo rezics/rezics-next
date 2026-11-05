@@ -724,7 +724,8 @@ test('two three-page feeds reread admitted predecessors and terminal First; fail
   const inventory = new ManagedAccountsInventory(viewer, (cursors) =>
     loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
   );
-  const answer = (number: number, index = 0, failed = false) => {
+  const answer = async (number: number, index = 0, failed = false) => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const value = page();
     value.organizations = {
       state: 'ready',
@@ -740,7 +741,7 @@ test('two three-page feeds reread admitted predecessors and terminal First; fail
     );
   };
   const initial = inventory.load();
-  answer(1);
+  await answer(1);
   await initial;
   await inventory.previous('organizations'); // Direct visits invent no predecessor.
   expect(requests).toHaveLength(1);
@@ -748,10 +749,10 @@ test('two three-page feeds reread admitted predecessors and terminal First; fail
     const org = inventory.more('organizations');
     const resp = inventory.more('responsibilities');
     await inventory.more('organizations'); // Rapid repeat is coalesced.
-    answer(number, 1);
+    await answer(number, 1);
     await resp;
     const retained = inventory.snapshot().responsibilities;
-    answer(number);
+    await answer(number);
     await org;
     expect(inventory.snapshot().responsibilities).toBe(retained);
   }
@@ -762,21 +763,21 @@ test('two three-page feeds reread admitted predecessors and terminal First; fail
     const retained = inventory.snapshot()[sibling];
     const terminal = inventory.snapshot()[feed];
     const back = inventory.previous(feed);
-    answer(2, 0, true);
+    await answer(2, 0, true);
     await back;
     expect(inventory.snapshot()[feed].items).toBe(terminal.items);
     const retry = inventory.more(feed);
-    answer(2);
+    await answer(2);
     await retry;
     const next = inventory.more(feed);
-    answer(3);
+    await answer(3);
     await next;
     const first = inventory.firstPage(feed);
-    answer(1, 0, true);
+    await answer(1, 0, true);
     await first;
     expect(inventory.snapshot()[feed].next).toBeNull();
     const retryFirst = inventory.more(feed);
-    answer(1);
+    await answer(1);
     await retryFirst;
     await inventory.previous(feed);
     expect(inventory.snapshot()[sibling]).toBe(retained);

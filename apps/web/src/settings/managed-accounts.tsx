@@ -380,7 +380,7 @@ export function ManagedAccountsView({
             className="min-w-0 max-w-full"
             role="region"
             aria-labelledby={organizationsHeadingId}
-            aria-busy={organizations.busy}
+            aria-busy={organizations.busy || snapshot.loading}
           >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
@@ -411,7 +411,7 @@ export function ManagedAccountsView({
                 </p>
               )}
               <FeedActions
-                feed={organizations}
+                feed={{ ...organizations, busy: organizations.busy || snapshot.loading }}
                 scope="organizations"
                 preparing={organizations.state === 'preparing'}
                 retry={activate('organizations', more)}
@@ -426,7 +426,7 @@ export function ManagedAccountsView({
             className="min-w-0 max-w-full"
             role="region"
             aria-labelledby={responsibilitiesHeadingId}
-            aria-busy={responsibilities.busy}
+            aria-busy={responsibilities.busy || snapshot.loading}
           >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
@@ -471,7 +471,7 @@ export function ManagedAccountsView({
                 </p>
               )}
               <FeedActions
-                feed={responsibilities}
+                feed={{ ...responsibilities, busy: responsibilities.busy || snapshot.loading }}
                 scope="responsibilities"
                 retry={activate('responsibilities', more)}
                 previous={activate('responsibilities', previousPage)}
