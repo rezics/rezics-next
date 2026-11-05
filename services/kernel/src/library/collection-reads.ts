@@ -157,7 +157,13 @@ export type PublicCollectionPage = {
 };
 
 type CollectionDirectoryPage = {
-  collections: CollectionResourceView[];
+  collections: (
+    | CuratedCollectionView
+    | SavedDynamicCollectionView
+    | (BuiltinCollectionView & {
+        allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
+      })
+  )[];
   next: string | null;
   ownerManagement?: 'owner';
   ownerAccountId?: string;
@@ -856,7 +862,7 @@ export function createCollectionReads(
               : null,
       };
     });
-    const collections: CollectionResourceView[] = shownLogical.map((collection) =>
+    const collections: CollectionDirectoryPage['collections'] = shownLogical.map((collection) =>
       ownerManagement ? { ...collection, allowedVisibilityActions: [] } : collection,
     );
     for (const row of result.collections) collections.push(await present(viewer, row, deadline, ownerManagement));
