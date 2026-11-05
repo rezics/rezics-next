@@ -213,7 +213,7 @@
       "owner": "content",
       "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
       "excludes": ["services/kernel/src/content/community-projection/**"],
-      "publicEntries": ["services/kernel/src/content/realm-board-home.ts", "services/kernel/src/content/index.ts", "services/kernel/src/content/discovery-source.ts"],
+      "publicEntries": ["services/kernel/src/content/realm-board-home.ts", "services/kernel/src/content/index.ts", "services/kernel/src/content/review-discovery.ts"],
       "allowedDependencies": [
         "definitions",
         "document",
@@ -284,7 +284,11 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
-      "publicEntries": ["services/kernel/src/library/index.ts", "services/kernel/src/library/discovery.ts"],
+      "publicEntries": [
+        "services/kernel/src/library/index.ts",
+        "services/kernel/src/library/collection-discovery-source.ts",
+        "services/kernel/src/library/collection-discovery-summaries.ts"
+      ],
       "allowedDependencies": [
         "auth-contract",
         "definitions",
@@ -313,6 +317,9 @@
       ],
       "publicEntries": [
         "services/kernel/src/search/index.ts",
+        "services/kernel/src/search/composition.ts",
+        "services/kernel/src/search/rated-source.ts",
+        "services/kernel/src/search/space-discovery.ts",
         "services/kernel/src/search/work.ts",
         "services/kernel/src/search/discovery-filter.ts"
       ],

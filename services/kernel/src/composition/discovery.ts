@@ -1,12 +1,12 @@
 import { accountDiscoverySource } from '../access/index.ts';
-import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/discovery-source.ts';
-import { publicCollectionDiscoverySource } from '../library/discovery.ts';
+import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
+import { publicCollectionDiscoverySource } from '../library/collection-discovery-source.ts';
 import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/index.ts';
 import type { DiscoveryProducerEntry } from '../search/index.ts';
-import { createDiscoveryOwnerAdapters } from '../search/default-discovery.ts';
+import { createDiscoveryOwnerAdapters } from '../search/composition.ts';
 import { createRatedSubjectSource } from '../search/rated-source.ts';
 import { createSpaceDiscoveryAdapter } from '../search/space-discovery.ts';
-import type { SubjectSource } from '../search/source.ts';
+import type { SubjectSource } from '../search/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Access } from '../request/access.ts';
 import type { Pool } from 'pg';
