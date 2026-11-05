@@ -55,7 +55,16 @@ type Page = {
   document: CompositionDocument;
   views: View[];
   reads: Record<string, ReadValue>;
-  catalogue?: { state: string; type: string; digest?: string };
+  catalogue?: {
+    state: string;
+    type: string;
+    digest?: string;
+    definitions?: {
+      types: Record<string, { bases: string[]; facets: string[]; properties: string[] }>;
+      properties: Record<string, { qualifiers?: string[] }>;
+    };
+    directions?: { property: string; direction: string; release: string | null }[];
+  };
   meanings?: Record<string, { text: string; lang: string | null }>;
   unavailable?: { id: string; admitted: false }[];
   viewer?: {
@@ -248,6 +257,13 @@ for (const [vertical, types] of Object.entries(launch)) {
           const anonymous = await factualPage(driver, 'anonymous', type, id, factual, view);
           const editor = await factualPage(driver, 'editor', type, id, factual, view);
           expect(publicPage(editor)).toEqual(publicPage(anonymous));
+          if (view === 'overview' && ['wd:Q689445', 'schema:VideoGame', 'schema:Movie', 'schema:TVSeries'].includes(type)) {
+            expect(anonymous.catalogue).toMatchObject({ state: 'released', type, digest: bundledDigest });
+            expect(anonymous.catalogue?.definitions?.types[type]).toBeDefined();
+            expect(anonymous.catalogue?.definitions?.types['schema:CreativeWork']).toBeDefined();
+            expect(anonymous.catalogue?.definitions?.properties).toHaveProperty('schema:genre');
+            expect(anonymous.catalogue?.directions?.every((entry) => entry.release === bundledDigest)).toBe(true);
+          }
           const anonymousStatus = (anonymous as { actions?: { status: string } }).actions?.status ?? 'missing';
           const editorStatus = (editor as { actions?: { status: string } }).actions?.status ?? 'missing';
           expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(anonymousStatus);

@@ -340,6 +340,15 @@
       "postgresPaths": ["services/kernel/src/library/**"]
     },
     {
+      "id": "catalogue-page-metadata",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["services/kernel/src/presentation/catalogue-page-metadata/**"],
+      "publicEntries": ["services/kernel/src/presentation/catalogue-page-metadata/index.ts"],
+      "allowedDependencies": ["definitions", "filter"],
+      "capabilities": []
+    },
+    {
       "id": "kernel-search",
       "kind": "adapter",
       "owner": "search",
@@ -349,6 +358,7 @@
         "services/kernel/db/search/**",
         "services/kernel/db/presentation/**"
       ],
+      "excludes": ["services/kernel/src/presentation/catalogue-page-metadata/**"],
       "publicEntries": [
         "services/kernel/src/search/index.ts",
         "services/kernel/src/search/composition.ts",
@@ -368,6 +378,7 @@
         "kernel-community",
         "kernel-content",
         "kernel-library",
+        "catalogue-page-metadata",
         "kernel-platform",
         "kernel-rating",
         "kernel-semantic",
@@ -585,6 +596,15 @@
       "capabilities": ["subject-canonical-read-lifetime"]
     },
     {
+      "id": "subject-catalogue-metadata",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/subject-catalogue-metadata/**"],
+      "publicEntries": ["apps/web/src/features/pages/subject-catalogue-metadata/index.ts"],
+      "allowedDependencies": ["definitions"],
+      "capabilities": []
+    },
+    {
       "id": "web-search",
       "kind": "UI/transport library",
       "owner": "search",
@@ -593,7 +613,8 @@
         "apps/web/src/search/personal-recovery/**",
         "apps/web/src/features/pages/curation-opening-read/**",
         "apps/web/src/features/pages/subject-page-read-lifetime/**",
-        "apps/web/src/features/pages/subject-canonical-lifetime/**"
+        "apps/web/src/features/pages/subject-canonical-lifetime/**",
+        "apps/web/src/features/pages/subject-catalogue-metadata/**"
       ],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
@@ -619,7 +640,8 @@
         "search-text",
         "search-personal-recovery",
         "curation-opening-read",
-        "subject-page-read-lifetime"
+        "subject-page-read-lifetime",
+        "subject-catalogue-metadata"
       ],
       "capabilities": ["search-pages"]
     },
