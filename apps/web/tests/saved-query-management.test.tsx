@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Window } from 'happy-dom';
 import type { CollectionWriteResult } from '../src/library/collection-edit';
 import {
   captureCollectionCommand,
@@ -72,7 +72,10 @@ function dynamicPage(changes: Partial<ManagedSavedQuery> = {}): DynamicCollectio
   };
 }
 
-function installBrowser() {
+async function installBrowser() {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const browser = new Window({ url: 'https://site.test/en/collections/saved-query-1' });
   const keys = [
     'window',
@@ -277,7 +280,7 @@ test('mounted manager callbacks keep their originating controller state and port
   admissionOperations = [];
   csrfOperations = [];
   csrfReply = () => null;
-  const harness = installBrowser();
+  const harness = await installBrowser();
   const host = harness.browser.document.createElement('div');
   harness.browser.document.body.append(host);
   const root: Root = createRoot(host);
