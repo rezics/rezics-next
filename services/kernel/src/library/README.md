@@ -2987,7 +2987,8 @@ materialization, owner fact sequence or Everything source version is written.
 revision. GET never initializes it and resolves only the returned IDs after releasing the owner snapshot.
 The cursor uses the shared codec, owner/limit binding and revision/ordinal position. Work is one bounded owner
 record plus O(returned limit) native Collection and Access points and their output bytes; off-page targets and
-personal histories are never read. This is a bounded point-read implementation, not a three-scale growth proof.
+personal histories are never read. The native growth receiver grows unrelated owners and the target home while
+keeping the selected preference and returned neighbourhood fixed.
 
 Retention inventory/handoff: erase the entire `library.collection_pins` row by its exact `(route, account_id)`
 primary key during terminal Library account erasure, including an empty retained revision. Unpin has no archive

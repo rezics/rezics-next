@@ -10,6 +10,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { collectionResourceSchema, strict } from './collection-routes.ts';
 import { collectionReadView } from './collection-reads.ts';
 import { createPins } from './pins.ts';
+import { pinMountedAdmissionBound, pinWireResponseBound, runPinBoundedStep } from './pin-operation-bounds.ts';
 
 const closed = { additionalProperties: false } as const;
 const revision = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
@@ -88,13 +89,22 @@ export function pinRoutes(
       },
       async ({ actor, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, async () => {
-          const page = await pins().list(actor, query);
-          return {
-            ...page,
-            pins: page.pins.map((pin) => ({ ...pin, target: pin.target && collectionReadView(pin.target) })),
-          };
-        });
+        return runPinBoundedStep(
+          'library.pin.route-admission',
+          pinMountedAdmissionBound('library_pin:list'),
+          () =>
+            admission.run('normal', job, async () => {
+              const page = await pins().list(actor, query);
+              return runPinBoundedStep(
+                'library.pin.wire-response',
+                pinWireResponseBound({ pins: page.pins.length, revision: page.revision, next: page.next }),
+                async () => ({
+                  ...page,
+                  pins: page.pins.map((pin) => ({ ...pin, target: pin.target && collectionReadView(pin.target) })),
+                }),
+              );
+            }),
+          );
       },
     )
     .put(
@@ -110,7 +120,11 @@ export function pinRoutes(
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const command = await admission.run('normal', job, () => pins().mutate(actor, params.collectionId, body, key));
+        const command = await runPinBoundedStep(
+          'library.pin.route-admission',
+          pinMountedAdmissionBound('library_pin:update'),
+          () => admission.run('normal', job, () => pins().mutate(actor, params.collectionId, body, key)),
+        );
         session.record({ partition: command.partition, epoch: command.epoch, position: command.position });
         return command.value;
       },
@@ -131,8 +145,10 @@ export function pinRoutes(
       async ({ actor, params, query, headers, admission, job, session, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const command = await admission.run('normal', job, () =>
-          pins().mutate(actor, params.collectionId, query, key, true),
+        const command = await runPinBoundedStep(
+          'library.pin.route-admission',
+          pinMountedAdmissionBound('library_pin:update'),
+          () => admission.run('normal', job, () => pins().mutate(actor, params.collectionId, query, key, true)),
         );
         session.record({ partition: command.partition, epoch: command.epoch, position: command.position });
         return command.value;
