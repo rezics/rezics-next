@@ -13,9 +13,11 @@ import {
 import { m } from '../../paraglide/messages.js';
 
 export type OwnVotesDepartureControl = {
-  current: (() => Promise<boolean>) | null;
-  allowNavigation: (() => void) | null;
-  clearNavigation: (() => void) | null;
+  current: {
+    confirm: () => Promise<boolean>;
+    allowNavigation: () => void;
+    clearNavigation: () => void;
+  } | null;
 };
 
 /** One editor owns one draft and command; a pending or uncertain command cannot leave without review. */
@@ -82,15 +84,16 @@ export function OwnVotesDeparture({
       return admittedLeave;
     });
   };
-  if (confirmMovement) {
-    confirmMovement.current = decide;
-    confirmMovement.allowNavigation = () => {
+  if (confirmMovement)
+    confirmMovement.current = {
+      confirm: decide,
+      allowNavigation: () => {
       approvedMovement.current = true;
-    };
-    confirmMovement.clearNavigation = () => {
+      },
+      clearNavigation: () => {
       approvedMovement.current = false;
+      },
     };
-  }
 
   useBlocker({
     shouldBlockFn: () => {
