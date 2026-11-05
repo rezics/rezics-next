@@ -1262,7 +1262,7 @@ bind this source field.
 
 ## Bangumi Game web destinations
 
-Decision: `bangumi@15` adds Game destinations to the retained `bangumi@14` source-genre mapping while preserving all integrated mappings.
+Decision: earlier sections retain their mapping revisions; current Game destinations use `cross-media-entities@13+bangumi@15`, preserving every integrated mapping including `bangumi@14` source genres.
 
 Decision: preserve admitted URL bytes and withhold labelled destinations until a
 released source contract can preserve their platform, region or edition meaning.
