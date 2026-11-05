@@ -107,7 +107,7 @@ beforeAll(async () => {
       subjectId,
       mode: 'scalar_amount',
       unit: 'chapter',
-      total: '9.125000',
+      ...(i === 3 ? {} : { total: '9.125000' }),
       additionalMeasures: [{ unit: 'page', total: '12.500001' }, { unit: 'old.page' }],
     });
     sessions.push(started.progressSession.id);
@@ -140,11 +140,13 @@ beforeAll(async () => {
     detached = await episode('Detached');
   memberId = member.id;
   detachedId = detached.id;
+  const memberIds = [memberId];
+  for (let n = 0; n < 10; n++) memberIds.push((await episode(`Member ${n + 2}`)).id);
   unitSource = (await response('POST', '/v1/progressSessions', { subjectId, mode: 'completed_units', unit: 'episode' }))
     .progressSession.id;
   await response('POST', `/v1/progressSessions/${unitSource}:recordEpisodes`, {
     revision: 1,
-    add: [memberId, detachedId],
+    add: [...memberIds, detachedId],
   });
   expect(
     (
@@ -261,6 +263,16 @@ async function journey() {
   await value.upload(new File([artifact], 'completed-v2.json'));
   return value;
 }
+async function select(journey: ProgressRecoveryJourney, sessionId: string) {
+  await journey.page('occurrences');
+  while (true) {
+    const page = journey.snapshot().occurrences!;
+    const selected = page.occurrences.find(({ evidence }) => evidence.session_id === sessionId);
+    if (selected) return journey.select(selected.evidence);
+    expect(page.next).not.toBeNull();
+    await journey.page('occurrences', page.next!);
+  }
+}
 
 test('mounted generated journey pages a completed export and creates distinct equal-valued repeats with exact native readback', async () => {
   const before = await independent(),
@@ -270,6 +282,7 @@ test('mounted generated journey pages a completed export and creates distinct eq
   expect(j.snapshot().occurrences!.occurrences.length).toBeGreaterThan(0);
   const ids: string[] = [];
   for (const source of [sessions[0]!, sessions[1]!, sessions[2]!, sessions[3]!, sessions[4]!]) {
+    await select(j, source);
     await j.review(body(source));
     const reviewed = j.snapshot().review!;
     expect(reviewed.applicable).toBe(true);
@@ -278,7 +291,7 @@ test('mounted generated journey pages a completed export and creates distinct eq
     const current = j.snapshot().result!.progressSession!;
     ids.push(current.id);
     expect(current.id).not.toBe(source);
-    expect(current.total).toBe('9.125000');
+    expect(current.total).toBe(source === sessions[3] ? null : '9.125000');
     expect(current.amount).toBe(source === sessions[2] ? null : source === sessions[3] ? '0' : '1.125000');
     expect(current.state).toBe(
       source === sessions[0] || source === sessions[1] ? 'completed' : source === sessions[4] ? 'abandoned' : 'active',
@@ -290,20 +303,28 @@ test('mounted generated journey pages a completed export and creates distinct eq
     });
   }
   expect(new Set(ids).size).toBe(5);
-  await j.review({
+  await select(j, unitSource);
+  expect(j.snapshot().units!.units).toHaveLength(10);
+  const unitMapping: ReviewInput = {
     ...body(unitSource),
     mode: 'completed_units',
     unit: 'episode',
     additionalMeasures: [],
-    unitIds: [memberId, detachedId],
-  });
+    unitIds: [],
+  };
+  await j.review({ ...unitMapping, unitIds: j.snapshot().units!.units.map(({ evidence }) => evidence.unit_id) }, true);
+  expect(j.snapshot().unitSupport).toHaveLength(10);
+  expect(j.snapshot().review).toBeNull();
+  await j.page('units', j.snapshot().units!.next!);
+  expect(j.snapshot().units!.units).toHaveLength(2);
+  await j.review({ ...unitMapping, unitIds: j.snapshot().units!.units.map(({ evidence }) => evidence.unit_id) }, true);
+  expect(j.snapshot().unitSupport).toHaveLength(2);
+  await j.review({ ...unitMapping, unitIds: [memberId] });
   expect(j.snapshot().review).toMatchObject({
     recovery: 'partial',
-    completedUnits: [
-      { unitId: memberId, admission: 'member' },
-      { unitId: detachedId, admission: 'detached' },
-    ],
+    completedUnits: [{ unitId: memberId, admission: 'member' }],
   });
+  expect(j.snapshot().review!.unsupported.length).toBeGreaterThan(0);
   await j.confirm(j.snapshot().review!.reviewId);
   const unitResult = j.snapshot().result!;
   expect(unitResult.progressSession!.completedUnitCount).toBe(1);
@@ -323,7 +344,8 @@ test('mounted generated journey pages a completed export and creates distinct eq
 }, 120000);
 
 test('effect-before-checkpoint and response loss replay original routes/keys; cancellation preserves accepted partial Session and deletion stays bounded', async () => {
-  const j = await journey();
+  const before = await independent(),
+    j = await journey();
   await j.review(body(sessions[0]!));
   interrupt = true;
   await j.confirm(j.snapshot().review!.reviewId);
@@ -358,4 +380,5 @@ test('effect-before-checkpoint and response loss replay original routes/keys; ca
   expect(removed.complete).toBe(false);
   await second.remove();
   expect(second.snapshot().notice).toBe('removed');
+  expect(await independent()).toEqual(before);
 }, 120000);
