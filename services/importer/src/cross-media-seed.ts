@@ -3286,7 +3286,13 @@ export async function runCrossMediaSeedCli(
           })),
         });
       }
-      preparedPublicTags = await prepareShowcaseTags({ tables: input, selectedVids, port, known: knownTagBindings });
+      preparedPublicTags = await prepareShowcaseTags({
+        tables: input,
+        selectedVids,
+        port,
+        known: knownTagBindings,
+        ...(journal ? { journal } : {}),
+      });
 
       const { vndbCharacterVocabularyAdmission, appearanceRoleTaxonomy } = await import('./vndb-character-traits.ts');
       const roleRequirements = {
@@ -3523,6 +3529,7 @@ export async function runCrossMediaSeedCli(
         path: statePath,
         port,
         known: knownTagBindings,
+        ...(journal ? { journal } : {}),
         destination: { origin: api },
       });
     }

@@ -41,7 +41,11 @@ import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
 import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
-import type { VndbTagRatingBinding } from './showcase-vndb-tag-ratings.ts';
+import type {
+  VndbTagRatingBinding,
+  VndbTagRatingObservation,
+  VndbTagRatingSnapshot,
+} from './showcase-vndb-tag-ratings.ts';
 
 type ImportTransport = ReturnType<typeof createImportTransport>;
 export type ShowcaseReviewPort = Pick<
@@ -117,6 +121,18 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         source_json TEXT NOT NULL,
         UNIQUE(source_alias,external_id,archive_digest,response_digest)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_vndb_tag_rating_source (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_id TEXT NOT NULL,
+        response_digest TEXT,
+        observation_json TEXT NOT NULL,
+        request_body TEXT,
+        response_bytes BLOB,
+        tag_ids_json TEXT,
+        state TEXT NOT NULL CHECK (state IN ('pending','terminal'))
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS showcase_vndb_tag_rating_work
+        ON showcase_vndb_tag_rating_source(work_id,id DESC);
       CREATE TABLE IF NOT EXISTS showcase_action (
         action_key TEXT PRIMARY KEY,
         body_digest TEXT NOT NULL,
@@ -472,6 +488,68 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       )
       .run(source.sourceAlias, source.externalId, source.archiveDigest, source.responseDigest!, body);
     return source;
+  }
+
+  vndbTagRatingSource(workId: string): {
+    pending: boolean;
+    observation: VndbTagRatingObservation;
+    snapshot?: VndbTagRatingSnapshot;
+  } | null {
+    const row = this.#db
+      .query<
+        {
+          response_digest: string | null;
+          observation_json: string;
+          request_body: string | null;
+          response_bytes: Uint8Array | null;
+          tag_ids_json: string | null;
+          state: 'pending' | 'terminal';
+        },
+        [string]
+      >(
+        'SELECT response_digest,observation_json,request_body,response_bytes,tag_ids_json,state FROM showcase_vndb_tag_rating_source WHERE work_id=? ORDER BY id DESC LIMIT 1',
+      )
+      .get(workId);
+    if (!row) return null;
+    return {
+      pending: row.state === 'pending',
+      observation: JSON.parse(row.observation_json) as VndbTagRatingObservation,
+      ...(row.response_bytes === null
+        ? {}
+        : {
+            snapshot: {
+              workId,
+              requestBody: row.request_body!,
+              bytes: row.response_bytes,
+              digest: row.response_digest!,
+              tagIds: JSON.parse(row.tag_ids_json!) as string[],
+            },
+          }),
+    };
+  }
+
+  sealVndbTagRatingSource(observation: VndbTagRatingObservation, snapshot?: VndbTagRatingSnapshot): void {
+    this.#db
+      .query(
+        'INSERT INTO showcase_vndb_tag_rating_source(work_id,response_digest,observation_json,request_body,response_bytes,tag_ids_json,state) VALUES(?,?,?,?,?,?,?)',
+      )
+      .run(
+        observation.workId,
+        observation.responseDigest ?? null,
+        json(observation),
+        snapshot?.requestBody ?? null,
+        snapshot?.bytes ?? null,
+        snapshot ? json(snapshot.tagIds) : null,
+        snapshot ? 'pending' : 'terminal',
+      );
+  }
+
+  completeVndbTagRatingSource(workId: string, responseDigest: string): void {
+    this.#db
+      .query(
+        "UPDATE showcase_vndb_tag_rating_source SET state='terminal' WHERE id=(SELECT id FROM showcase_vndb_tag_rating_source WHERE work_id=? ORDER BY id DESC LIMIT 1) AND response_digest=?",
+      )
+      .run(workId, responseDigest);
   }
 
   close(): void {
@@ -1427,12 +1505,30 @@ export async function publishShowcase(input: {
     if (!record.subjectId || !recordHasSourceIdentity(record))
       if (record.subjectId) blockedSubjects.add(record.subjectId);
 
+  const blockedTagSubjects = new Set<string>();
+  for (const workId of manifest.tagWeightRefreshes) {
+    const record = manifest.records.find((item) => item.provider === 'vndb' && item.sourceKey === workId);
+    if (!record?.subjectId) continue;
+    let code: string | undefined;
+    try {
+      const fence = await input.review.fence!({ source: input.aliases.vndb, externalId: workId, fieldGroup: 'facts' });
+      if (fence.fenced) code = 'tag-weight-fenced';
+      else if (fence.securityRevision !== null) code = 'tag-weight-fence-unavailable';
+    } catch {
+      code = 'tag-weight-fence-unavailable';
+    }
+    if (code) {
+      blockedTagSubjects.add(record.subjectId);
+      omissions.push({ provider: 'vndb', sourceKey: workId, code });
+    }
+  }
   const stoppedSubjects = new Set<string>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
       !id ||
       !validated.has(assertion.candidateId) ||
+      (assertion.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
       stoppedSubjects.has(id) ||
       blockedCoverCandidates.has(assertion.candidateId)
     )
@@ -1481,6 +1577,7 @@ export async function publishShowcase(input: {
     if (
       !id ||
       !validated.has(assertion.candidateId) ||
+      (assertion.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
       stoppedSubjects.has(id) ||
       blockedCoverCandidates.has(assertion.candidateId)
     )
@@ -1515,7 +1612,12 @@ export async function publishShowcase(input: {
     const [id] = key.split('\0');
     const refreshWeights =
       group.record.provider === 'vndb' && manifest.tagWeightRefreshes.includes(group.record.sourceKey);
-    if (!id || (stoppedSubjects.has(id) && !(refreshWeights && group.ids.size === 0))) continue;
+    if (
+      !id ||
+      (group.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
+      (stoppedSubjects.has(id) && !(refreshWeights && group.ids.size === 0))
+    )
+      continue;
     if (group.property === 'schema:image') {
       const assertion = assertions.find(
         (entry) =>
@@ -1927,6 +2029,14 @@ export async function publishShowcase(input: {
         },
       ];
     });
+  for (const observation of manifest.tagWeightObservations) {
+    if (
+      observation.responseDigest &&
+      published.some((record) => record.provider === 'vndb' && record.sourceKey === observation.workId) &&
+      !uniqueOmissions.some((item) => item.provider === 'vndb' && item.sourceKey === observation.workId)
+    )
+      input.journal.completeVndbTagRatingSource(observation.workId, observation.responseDigest);
+  }
   return {
     status:
       uniqueOmissions.length || published.length !== manifest.records.length + manifest.vocabulary.length

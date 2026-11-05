@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { ShowcaseJournal } from './showcase-publication.ts';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import type { AdmittedPublicTag, VndbPublicTagCategory } from './vndb-public-tags.ts';
 import { vndbTagsRatingEndpoint } from '@rezics/conversion/vndb-vocabulary';
@@ -145,6 +146,7 @@ export async function acquireShowcaseVndbTagRatings(input: {
   bindings: SourceVocabularyBindings;
   identity: VndbTagRatingIdentity;
   fetch?: VndbTagRatingFetch;
+  journal?: ShowcaseJournal;
 }): Promise<VndbTagRatingAcquisition> {
   const fetcher: VndbTagRatingFetch = input.fetch ?? ((url, init) => fetch(url, init));
   const selected = [...new Set(input.selectedVids.filter((id) => /^v[1-9][0-9]{0,9}$/u.test(id)))].sort();
@@ -160,6 +162,7 @@ export async function acquireShowcaseVndbTagRatings(input: {
 
   const observations: VndbTagRatingObservation[] = [];
   const snapshots = new Map<string, VndbTagRatingSnapshot>();
+  const reused = new Set<string>();
   const batchSignal = AbortSignal.timeout(showcaseVndbTagRatingLimits.totalTimeoutMs);
   let totalBytes = 0;
   let selectedTagCount = 0;
@@ -179,6 +182,23 @@ export async function acquireShowcaseVndbTagRatings(input: {
       : bindings;
     selectedTagCount += boundedBindings.length;
     if (localOverflow || globalOverflow) partial = true;
+    const prior = input.journal?.vndbTagRatingSource(workId);
+    if (prior?.pending) {
+      // Keep the sealed response, but admit only the same currently reviewed bindings.
+      const current = prior.observation.bindings.filter((binding) =>
+        boundedBindings.some(
+          (item) =>
+            item.tagId === binding.tagId && item.conceptId === binding.conceptId && item.schemeId === binding.schemeId,
+        ),
+      );
+      observations.push({ ...prior.observation, bindings: current });
+      if (prior.snapshot) {
+        snapshots.set(workId, { ...prior.snapshot, tagIds: current.map((binding) => binding.tagId) });
+        totalBytes += prior.snapshot.bytes.byteLength;
+      }
+      reused.add(workId);
+      continue;
+    }
     if (!boundedBindings.length) {
       observations.push({
         workId,
@@ -262,6 +282,9 @@ export async function acquireShowcaseVndbTagRatings(input: {
       });
     }
   }
+  for (const observation of observations)
+    if (!reused.has(observation.workId))
+      input.journal?.sealVndbTagRatingSource(observation, snapshots.get(observation.workId));
   if (selected.length > observations.length) partial = true;
   return { observations, snapshots, partial };
 }
