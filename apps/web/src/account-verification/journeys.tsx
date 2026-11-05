@@ -149,6 +149,17 @@ function ReviewerJourney({
 
   useEffect(() => {
     const requested = request.current;
+    console.log('review read admission', {
+      requested: requested?.id,
+      readId,
+      pending: query.isPending,
+      fetching: query.isFetching,
+      active: active.current,
+      owner: isCurrentOwner(),
+      success: query.isSuccess,
+      viewer: query.data?.viewerId,
+      page: query.data?.page.state,
+    });
     if (
       !requested ||
       requested.id !== readId ||
