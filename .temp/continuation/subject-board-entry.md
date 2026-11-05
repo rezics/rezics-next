@@ -1,41 +1,9 @@
----
-{
-  'goal': 'content',
-  'manager': 'content',
-  'kind': 'claim',
-  'paths':
-    [
-      'apps/web/src/features/pages/subject-community*.ts',
-      'apps/web/src/features/pages/subject-community*.tsx',
-      'apps/web/src/features/pages/subject-community-entry/**',
-      'apps/web/src/features/pages/overview.tsx',
-      'apps/web/src/features/pages/subject-visit-navigation.ts',
-      'apps/web/tests/subject-community*.test.*',
-      'apps/web/src/stories/subject-community*.tsx',
-      'apps/web/messages/*.json',
-      'apps/web/src/routes/boards/$id.tsx',
-      'apps/web/src/routes/boards/$id_.new.tsx',
-      'apps/web/src/threads/board-community-actions.tsx',
-      'apps/web/src/threads/thread-creation-lifetime.ts',
-    ],
-  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
-  'waiting': [],
-  'after': [],
-  'estimate': { 'lines': 2200, 'files': 16 },
-  'criticalPath': false,
-  'acceptance':
-    {
-      'tests':
-        [
-          'Subject community exact selected Board entry/creation states for work, character and person: not_selected, concealed, unavailable, current denied, sign-in and allowed; no inferred Board.',
-          'Mounted entry/return journey retains original Subject/place, cursor/context/source/Realm revision, duplicate occurrences and current regional return through Board/composer/sign-in; existing Subject community baseline remains.',
-        ],
-    },
-}
----
+# Goal content
 
-Finish the typed receiver after the sole serial publisher installs the official `KernelClient` output for the existing closed `SubjectThreadsQuerySchema` and `SubjectThreadsResponseSchema`. The publisher request for optional query `board` and response `entry` has already been sent to Goal `3ed6bf23`. Do not edit generated output, add a second producer, introduce local DTOs or casts, or infer permission from Board visibility.
+Finish the seeded Subject work-to-discussion journey after the official generated client publication installs the optional `board` query and closed `entry` response on the root-derived Subject threads callable. Consume the showcase's exact native Board/work association; retain the producer's `not_selected`, `concealed`, `unavailable`, `denied`, sign-in and allowed distinctions. From the original showcase work, open the supplied Board, use its current creation advice, sign in when needed, compose through the existing thread command, read the acknowledged thread, and return to the exact original overview/full-view region, cursor and Realm/node context. Do not infer a Board or add local DTOs, casts, reflection transport or declaration overlays.
 
-Complete the browser journey using the existing Context → CommunityList → SubjectCommunityRegion placement and the current regional Board/composer/sign-in return seam. Receive the original native request and supplied Board identity plus closed creation advice. Show entry only from current advice; preserve `not_selected`; render allowed, current denied, concealed, unavailable, sign-in, and source-change retry states without disclosing hidden Board facts. Keep native commands authoritative and reauthorizing. Preserve the original request/context/source epoch and position, Realm head revision, duplicate row identity, and return visit through refresh, empty/sparse/failed continuation, signed-out, and changed-advice states.
+Preserve the current Web `currentHref`, independent list mounts, source/session currentness and return behavior. Add only the focused tests needed for the installed visitor journey and its advice states. The existing native producer and command writers remain authoritative.
 
-Keep existing discussion cards and route ownership. Add only focused tests for the stated visible states and mounted journey; keep all existing Subject community behavior. The current web-to-Board/composer/sign-in return seam is already implemented in this worktree; adapt it only if the actual installed publisher contract requires it.
+# Manager content
+
+Continue in this worktree when the official complete-input publication has landed. Confirm the installed `@rezics/client` root callable exposes both query and response fields before editing the receiver; the tracked declaration at this attempt's base does not. Do not substitute an unavailable-only UI or hand-edit generated declarations. Serialize shared edits with the active publisher owner, then run the Web focused test command for changed tests and `bun run --cwd apps/web typecheck`. Browser, native, root and growth acceptance remains with the controller/verifier after integration. The entry consumption decision is recorded in `apps/web/src/features/pages/subject-community-entry/README.md` and sent to Content through the Goal inbox.
