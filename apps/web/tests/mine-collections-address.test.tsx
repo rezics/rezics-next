@@ -22,8 +22,26 @@ const request = () =>
   new Request('https://site.test/fr/library/collections', {
     headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
   });
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => ({ getRequest: request, setResponseHeader() {} }));
+const startWithServerFunctions = {
+  ...start,
+  createIsomorphicFn: () => {
+    let server: (...args: never[]) => unknown = () => undefined;
+    let client: (...args: never[]) => unknown = () => undefined;
+    const chain = {
+      server(handler: typeof server) {
+        server = handler;
+        return chain;
+      },
+      client(handler: typeof client) {
+        client = handler;
+        return (...args: never[]) => (typeof window === 'undefined' ? server : client)(...args);
+      },
+    };
+    return chain;
+  },
+};
+mock.module('@tanstack/react-start', () => startWithServerFunctions);
+mock.module('@tanstack/react-start/server', () => ({ ...startWithServerFunctions, getRequest: request, setResponseHeader() {} }));
 mock.module('cloudflare:workers', () => ({ env }));
 afterAll(() => mock.restore());
 

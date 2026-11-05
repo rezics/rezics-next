@@ -41,8 +41,27 @@ function request(method = 'GET') {
 }
 let currentRequest = request();
 mock.module('cloudflare:workers', () => ({ env }));
-mock.module('@tanstack/react-start', () => start);
+const startWithServerFunctions = {
+  ...start,
+  createIsomorphicFn: () => {
+    let server: (...args: never[]) => unknown = () => undefined;
+    let client: (...args: never[]) => unknown = () => undefined;
+    const chain = {
+      server(handler: typeof server) {
+        server = handler;
+        return chain;
+      },
+      client(handler: typeof client) {
+        client = handler;
+        return (...args: never[]) => (typeof window === 'undefined' ? server : client)(...args);
+      },
+    };
+    return chain;
+  },
+};
+mock.module('@tanstack/react-start', () => startWithServerFunctions);
 mock.module('@tanstack/react-start/server', () => ({
+  ...startWithServerFunctions,
   getRequest: () => currentRequest,
   setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
 }));
@@ -50,7 +69,20 @@ const { loadLibraryNavigation, readLibraryNavigationPage, readLibraryPins, readL
   await import('../src/library/pins-read');
 const { readMineCollectionsPage } = await import('../src/library/mine-collections-route');
 const signedOut = { signedIn: false, collections: [], next: null };
-const closedNavigation = { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' };
+const closedOrigin8 = { sessionSubject: null, credentialAgrees: false, requestedLimit: 8 };
+const closedOrigin100 = { ...closedOrigin8, requestedLimit: 100 as const };
+const closedNavigation = {
+  origin: closedOrigin8,
+  pins: { state: 'closed', origin: closedOrigin8 },
+  collections: [],
+  collectionsState: 'loaded',
+};
+const closedNavigation100 = {
+  origin: closedOrigin100,
+  pins: { state: 'closed', origin: closedOrigin100 },
+  collections: [],
+  collectionsState: 'loaded',
+};
 
 // Authored for controller integration; native authority and browser acceptance remain separate obligations.
 test('real absent-session refusal closes Collection and personal navigation entrypoints before any cached private read', async () => {
@@ -75,7 +107,13 @@ test('real absent-session refusal closes Collection and personal navigation entr
     expect(await prepareSession(currentRequest, sessionEnv)).toBe(true);
     for (const [index, read] of reads.entries())
       expect(await read()).toEqual(
-        [signedOut, closedNavigation, signedOut, closedNavigation, { state: 'closed' }][index],
+        [
+          signedOut,
+          closedNavigation,
+          signedOut,
+          closedNavigation100,
+          { state: 'closed', origin: closedOrigin100 },
+        ][index],
       );
     expect(viewerCredential(currentRequest)).toBe('Bearer current-viewer');
     expect(sessionSubject(currentRequest)).toBe('owner');
