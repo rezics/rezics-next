@@ -484,8 +484,8 @@ test('VNDB score review after an applied state keeps the same Entry and records 
     replace: false,
   });
   expect(
-    (await c.send('POST', `${base}/${uploadId}:apply`, { rows: [{ ordinal: 0, reviewId: state.reviewId }] })).outcomes[0]
-      .status,
+    (await c.send('POST', `${base}/${uploadId}:apply`, { rows: [{ ordinal: 0, reviewId: state.reviewId }] }))
+      .outcomes[0].status,
   ).toBe('applied');
   const incarnation = (await f.commands.readEntry(c.actor, c.target)).incarnationId;
   const chosen = await c.scoreReview(uploadId, 15);
