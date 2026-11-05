@@ -225,7 +225,19 @@ test(
       expect(login.searchParams.get('sig')).toBeTruthy();
       const before = signIns().length;
       await submit(page);
-      await page.waitForURL(`${origin}/authorize?${authorizationQuery}`);
+      const resumed = `${origin}/authorize?${authorizationQuery}`;
+      try {
+        await page.waitForURL(resumed);
+      } catch {
+        throw new Error(
+          JSON.stringify({
+            url: page.url(),
+            alerts: await page.getByRole('alert').allTextContents(),
+            status: await page.getByRole('status').allTextContents(),
+            requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          }),
+        );
+      }
       await page.waitForLoadState('networkidle');
       expect(signIns().length).toBe(before + 1);
       submitted(signIns().at(-1));
