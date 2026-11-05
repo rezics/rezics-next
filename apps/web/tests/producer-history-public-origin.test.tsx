@@ -54,6 +54,7 @@ test('public Organization entry preserves Context and current return, refuses un
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -107,8 +108,8 @@ test('public Organization entry preserves Context and current return, refuses un
   }
 
   ProducerRoute.update({
-    id: '/subjects/$id_/$slug/producer',
-    path: '/subjects/$id_/$slug/producer',
+    id: '/subjects/$id/$slug/producer',
+    path: '/subjects/$id/$slug/producer',
     getParentRoute: () => localeRoute,
     head: () => ({}),
   } as never);
