@@ -1,10 +1,19 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { authManagementPageHref } from '../src/session/auth-page-routes';
-import { accountRenameNavigation } from '../src/settings/account-rename-actions';
-import { readAccountRenameContext, readAccountRenameContextResult } from '../src/settings/account-rename-data';
+import {
+  accountRenameNavigation,
+  accountRenameSetupFailure,
+  readAccountRename,
+  serializeAccountRenameResult,
+} from '../src/settings/account-rename-actions';
+import {
+  accountRenamePresentedFailure,
+  readAccountRenameContext,
+  readAccountRenameContextResult,
+} from '../src/settings/account-rename-data';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountRenameHref, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { m } from '../src/paraglide/messages.js';
@@ -262,4 +271,52 @@ test('explicit native denial differs from unavailable capability and absent depl
   expect(
     accountRenameNavigation({ AUTH_ISSUER: deployment.AUTH_ISSUER }, { accountId, handle: 'alice', available: true }),
   ).toEqual({ accountId, handle: 'alice', available: true, href: null });
+});
+
+test('mixed native failures present unavailable before denied and never enable navigation', () => {
+  const failures = [
+    { kind: 'denied' as const, status: 403, code: 'forbidden' },
+    { kind: 'unavailable' as const, status: 404, code: 'not_found' },
+    { kind: 'failed' as const, status: 503, retryAfter: '7' },
+  ];
+  expect(accountRenamePresentedFailure(failures)).toEqual(failures[1]);
+  const html = renderToStaticMarkup(
+    createElement(AccountSafetyCard, {
+      state: 'signed-in',
+      securityHref,
+      csrfToken: 'current-csrf',
+      onReload() {},
+      renameAccount: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
+      renameRead: { loading: false, reload() {}, failures },
+    }),
+  );
+  expect(html).toContain(m.settings_account_rename_unavailable());
+  expect(html).not.toContain(m.settings_account_rename_denied());
+  expect(html).not.toContain('/account/rename');
+  expect(html).toContain(m.settings_retry_wait());
+});
+
+test('thrown setup yields a serializable unavailable result rather than an escaped transport failure', async () => {
+  const leaked = 'private-setup-token';
+  const headers: string[] = [];
+  mock.module('@tanstack/react-start/server', () => ({
+    getRequest() {
+      throw new Error(leaked);
+    },
+    setResponseHeader(name: string, value: string) {
+      headers.push(`${name}: ${value}`);
+    },
+  }));
+  mock.module('cloudflare:workers', () => ({
+    get env() {
+      throw new Error(leaked);
+    },
+  }));
+  const setup = serializeAccountRenameResult(accountRenameSetupFailure(new Error(leaked)));
+  expect(setup).toEqual({ context: null, failures: [{ kind: 'unavailable', status: null }] });
+  expect(JSON.stringify(setup)).not.toContain(leaked);
+  const result = JSON.parse(JSON.stringify(await readAccountRename()));
+  expect(result).toEqual(setup);
+  expect(JSON.stringify(result)).not.toContain(leaked);
+  expect(headers).toEqual(['cache-control: private, no-store']);
 });
