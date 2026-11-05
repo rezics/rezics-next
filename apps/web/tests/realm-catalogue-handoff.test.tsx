@@ -135,4 +135,3 @@ test('Realm catalogue return rejects global, cross-locale, private, and oversize
   expect(realmCatalogueReturnHref(`${scopedVisit}&reader=private`, 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&layout=${'x'.repeat(2048)}`, 'en')).toBeUndefined();
 });
-

@@ -1055,11 +1055,7 @@ export function createSearchService({
         if (realmScopedRequest) {
           if (containsUnsupportedDiscoveryLeaf(admitted)) unsupported('/filter');
           const preparedRealm = await sourceRequest(() =>
-            scope!.realm.prepare(
-              admitted as DiscoveryFilterDocument,
-              scopeWork!.remaining(),
-              kindDigest(current!),
-            ),
+            scope!.realm.prepare(admitted as DiscoveryFilterDocument, scopeWork!.remaining(), kindDigest(current!)),
           );
           scopeWork.native(preparedRealm.work);
           const generation = await indexRequest(aliasGeneration);
@@ -1717,9 +1713,7 @@ export function createSearchService({
             invalid('/conditions', 'invalid_format');
           const submitted = scopedRequest.conditions ?? scopedRequest.filter;
           const catalogueCondition = scopedCatalogueCondition(submitted, scopedRequest.scope);
-          const kindCondition = scopedRequest.kinds?.length
-            ? { type: { in: [...scopedRequest.kinds] } }
-            : undefined;
+          const kindCondition = scopedRequest.kinds?.length ? { type: { in: [...scopedRequest.kinds] } } : undefined;
           const effectiveFilter = kindCondition
             ? catalogueCondition === undefined
               ? kindCondition

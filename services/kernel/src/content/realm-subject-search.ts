@@ -17,7 +17,11 @@ import {
   sameCurrentRealmSubjectParent,
 } from './realm-subject-disclosure.ts';
 import { createRealmSubjectLifecycle } from './realm-subject-lifecycle.ts';
-import { createRealmSubjectSource, type RealmSubjectDisclosure, type RealmSubjectSource } from './realm-subject-source.ts';
+import {
+  createRealmSubjectSource,
+  type RealmSubjectDisclosure,
+  type RealmSubjectSource,
+} from './realm-subject-source.ts';
 import { ContentNotFoundError } from './reads.ts';
 
 function accessDimensions(value: AccessWork): WorkDimensions {
@@ -119,9 +123,30 @@ const pointBound = (values: Partial<WorkDimensions>): WorkDimensions => ({
 });
 
 const bounds = Object.freeze({
-  resolve: pointBound({ candidateKeys: 16, nativeRows: 512, emptySeeks: 16, nativePoints: 256, statements: 256, bytes: 512 * 1024 }),
-  current: pointBound({ candidateKeys: 16, nativeRows: 512, emptySeeks: 16, nativePoints: 256, statements: 256, bytes: 512 * 1024 }),
-  subject: pointBound({ candidateKeys: 8, nativeRows: 128, emptySeeks: 8, nativePoints: 64, statements: 64, bytes: 256 * 1024 }),
+  resolve: pointBound({
+    candidateKeys: 16,
+    nativeRows: 512,
+    emptySeeks: 16,
+    nativePoints: 256,
+    statements: 256,
+    bytes: 512 * 1024,
+  }),
+  current: pointBound({
+    candidateKeys: 16,
+    nativeRows: 512,
+    emptySeeks: 16,
+    nativePoints: 256,
+    statements: 256,
+    bytes: 512 * 1024,
+  }),
+  subject: pointBound({
+    candidateKeys: 8,
+    nativeRows: 128,
+    emptySeeks: 8,
+    nativePoints: 64,
+    statements: 64,
+    bytes: 256 * 1024,
+  }),
   candidate: pointBound({
     candidateKeys: 128,
     nativeRows: 4096,
@@ -191,22 +216,22 @@ export function createRealmSubjectSearchSource(input: {
       const realm = parents.get(dependency);
       if (!realm || candidates.length < 1 || candidates.length > 8) return candidates.map(() => 'unknown');
       const prepared = await withDisclosureWork(reader, context.work, bounds.candidate, async (native) => {
-        const exact = await prepareRealmSubjectDisclosure(dependencies, {
-          realmId: realm.realm,
-          candidates: candidates.map((candidate) => ({
-            threadId: candidate.thread,
-            openingPostId: candidate.opening,
-            subjectId: candidate.terminal!,
-          })),
-        }, native);
+        const exact = await prepareRealmSubjectDisclosure(
+          dependencies,
+          {
+            realmId: realm.realm,
+            candidates: candidates.map((candidate) => ({
+              threadId: candidate.thread,
+              openingPostId: candidate.opening,
+              subjectId: candidate.terminal!,
+            })),
+          },
+          native,
+        );
         return exact.finish();
       });
       return prepared.map((result) =>
-        result.state === 'positive'
-          ? 'discussed'
-          : result.state === 'absent'
-            ? 'not_published'
-            : result.state,
+        result.state === 'positive' ? 'discussed' : result.state === 'absent' ? 'not_published' : result.state,
       );
     },
     async subject(subject, dependency, context) {

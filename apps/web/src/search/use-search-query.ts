@@ -11,9 +11,7 @@ const operations = [] as const;
 type SearchQueryRouteOwner = Readonly<{ pathname: string; cursorParam?: string }>;
 
 function locationSearchDeps(search: Record<string, unknown>, routeOwner?: SearchQueryRouteOwner): SearchLoaderDeps {
-  return searchLoaderDeps(
-    routeOwner?.cursorParam ? { ...search, cursor: search[routeOwner.cursorParam] } : search,
-  );
+  return searchLoaderDeps(routeOwner?.cursorParam ? { ...search, cursor: search[routeOwner.cursorParam] } : search);
 }
 
 function searchLocationHref(locale: string, search: Record<string, unknown>, routeOwner?: SearchQueryRouteOwner) {
@@ -48,8 +46,7 @@ export function useSearchQuery(
     !actual ||
     (routeOwner
       ? actual.pathname.replace(/\/$/, '') === routeOwner.pathname.replace(/\/$/, '') &&
-        searchLocationHref(locale, actual.search, routeOwner) ===
-          discoverySearchHref(locale, params, routeOwner)
+        searchLocationHref(locale, actual.search, routeOwner) === discoverySearchHref(locale, params, routeOwner)
       : actual.pathname.replace(/\/$/, '').endsWith('/search') &&
         discoverySearchHref(locale, searchLoaderDeps(actual.search)) === discoverySearchHref(locale, params));
   const key = JSON.stringify(options.queryKey);
@@ -75,9 +72,7 @@ export function useSearchQuery(
           ? searchLoaderDeps(toLocation.search)
           : undefined;
       const target =
-        next && !next.invalidInput
-          ? JSON.stringify(searchQueryOptions(locale, next, reader).queryKey)
-          : null;
+        next && !next.invalidInput ? JSON.stringify(searchQueryOptions(locale, next, reader).queryKey) : null;
       // The previous match can still be mounted while its successor loads. Retire even a loader read
       // that has not gained a component observer; a late native reply cannot enroll that abandoned window.
       void client.cancelQueries({

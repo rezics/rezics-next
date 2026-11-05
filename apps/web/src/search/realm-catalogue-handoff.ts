@@ -52,7 +52,13 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
     for (const key of new Set(url.searchParams.keys())) {
       const shelfKey = realm && (key === 'node' || key === 'cursor');
       const realmSearchCursor = realm && key === 'searchCursor';
-      if (!shelfKey && !realmSearchCursor && !searchIntentKeys.has(key) && !key.startsWith('f.') && !key.startsWith('r.'))
+      if (
+        !shelfKey &&
+        !realmSearchCursor &&
+        !searchIntentKeys.has(key) &&
+        !key.startsWith('f.') &&
+        !key.startsWith('r.')
+      )
         return;
       const values = url.searchParams.getAll(key);
       params[key] = values.length === 1 ? values[0] : values;

@@ -71,9 +71,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sameStrings(value: unknown, expected: readonly string[]): boolean {
   return (
-    Array.isArray(value) &&
-    value.length === expected.length &&
-    value.every((entry, index) => entry === expected[index])
+    Array.isArray(value) && value.length === expected.length && value.every((entry, index) => entry === expected[index])
   );
 }
 

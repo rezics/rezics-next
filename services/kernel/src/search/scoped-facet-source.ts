@@ -556,8 +556,7 @@ export function createServiceRealmScopeFacetPorts(): ScopedFacetPorts {
         let steps = 0;
         while (anchor < request.realms.length && steps < 16) {
           const remaining = request.work.remaining();
-          if (remaining.remaining.candidateKeys < 1)
-            return { status: 'unready', cost: realmScopeWorkCost(request) };
+          if (remaining.remaining.candidateKeys < 1) return { status: 'unready', cost: realmScopeWorkCost(request) };
           const prefix = await request.scope.realm.sourcePrefix(
             request.prepared,
             request.realms[anchor]!,
@@ -566,8 +565,7 @@ export function createServiceRealmScopeFacetPorts(): ScopedFacetPorts {
             remaining,
           );
           request.work.native(prefix.work);
-          if (prefix.basis !== request.prepared.basis)
-            return { status: 'changed', cost: realmScopeWorkCost(request) };
+          if (prefix.basis !== request.prepared.basis) return { status: 'changed', cost: realmScopeWorkCost(request) };
           steps++;
           const next: RealmFacetFrontier = prefix.exhausted
             ? { basis: request.prepared.basis, anchor: anchor + 1, after: null }

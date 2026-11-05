@@ -48,23 +48,14 @@ import { PageHeading } from '../shell/page-heading';
 import { localizedLabel } from './results.tsx';
 
 import { discoveryRequest, realmSearchRequest } from './search-request.ts';
-import {
-  applicableRefinementProperties,
-  refinementProperties,
-  type RefinementApplicability,
-} from './refinement/model';
+import { applicableRefinementProperties, refinementProperties, type RefinementApplicability } from './refinement/model';
 import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { scopedRefinementRequests } from './refinement/scoped-refinement';
 import { Refinement, type RefinementData } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
 import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import {
-  readDiscoveryKinds,
-  type DiscoveryKindsState,
-  type LegacySearchPage,
-  type DiscoveryState,
-} from './discovery';
+import { readDiscoveryKinds, type DiscoveryKindsState, type LegacySearchPage, type DiscoveryState } from './discovery';
 import {
   facetSearchInvalidation,
   readSearchOutcome,
@@ -562,7 +553,11 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             };
             return readSearchOutcome(request, sendSearch, signal, 'subjects');
           }
-          const request = { ...body, ...(!hasSearch || !properties.length ? {} : { properties }), ...(!hasSearch ? { limit: 1 } : {}) };
+          const request = {
+            ...body,
+            ...(!hasSearch || !properties.length ? {} : { properties }),
+            ...(!hasSearch ? { limit: 1 } : {}),
+          };
           if (data.representation !== 'subjects-v1') {
             return readSearchOutcome(request, sendSearch, signal);
           }
@@ -1325,7 +1320,8 @@ export function SearchPage({
       )
     : undefined;
   const filterApplicability =
-    data?.refinementApplicability ?? (data?.discovery?.status === 'ready' ? data.discovery.page.applicability : undefined);
+    data?.refinementApplicability ??
+    (data?.discovery?.status === 'ready' ? data.discovery.page.applicability : undefined);
   const kindDirectory =
     data?.discovery?.status === 'ready'
       ? { initial: data.discovery.page.kinds, checkpoint: data.discovery.page.as_of }
@@ -1424,10 +1420,7 @@ export function SearchPage({
         <div role="status" className="space-y-2 text-sm text-muted-foreground">
           <p>{m.search_refinement_not_applicable({}, options)}</p>
           {data?.queryState && (
-            <a
-              className={linkClass}
-              href={hrefFor({ ...data.queryState, kinds: undefined, cursor: undefined })}
-            >
+            <a className={linkClass} href={hrefFor({ ...data.queryState, kinds: undefined, cursor: undefined })}>
               {m.search_kind_navigation_all({}, options)}
             </a>
           )}
@@ -1802,9 +1795,7 @@ export function RealmCatalogueSearch({
   const queryState: SearchLoaderDeps = {
     ...authored,
     resourceScope,
-    filter: authored.invalidInput
-      ? authored.filter
-      : searchFilterWithScope(authored.filter, resourceScope),
+    filter: authored.invalidInput ? authored.filter : searchFilterWithScope(authored.filter, resourceScope),
   };
   const pathname = `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(realmId)}`;
   const pageSearch = new URLSearchParams();
@@ -1880,10 +1871,16 @@ function LoadedRealmCatalogueSearch({
   useEffect(() => {
     setActive(isCurrent());
   }, [isCurrent]);
-  const { data, readerOwner, retry } = useSearchQuery(locale, queryState, reader, {
-    pathname,
-    cursorParam: 'searchCursor',
-  }, active);
+  const { data, readerOwner, retry } = useSearchQuery(
+    locale,
+    queryState,
+    reader,
+    {
+      pathname,
+      cursorParam: 'searchCursor',
+    },
+    active,
+  );
   return (
     <SearchPage
       query={queryState.query}
