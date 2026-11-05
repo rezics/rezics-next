@@ -111,7 +111,8 @@ async function harness(url: string) {
   const stopObservation = browserObservation(client).subscribe(() => {});
   setLocale('en', { reload: false });
   const mount = async (context: string, transport: QuotationTransport, initial?: QuotationRead, reader?: string) =>
-    act(async () =>
+    act(async () => {
+      const quote = new URL(window.location.href).searchParams.get('quote') ?? undefined;
       root.render(
         h(
           QueryClientProvider,
@@ -124,11 +125,11 @@ async function harness(url: string) {
                 : { state: 'signed-out', csrfToken: 'reader' },
               address: `${work}:${context}`,
             },
-            h(QuotationView, { id: work, locale: 'en', context, transport, initial }),
+            h(QuotationView, { id: work, locale: 'en', context, quote, transport, initial }),
           ),
         ),
-      ),
-    );
+      );
+    });
   return {
     window,
     host,
