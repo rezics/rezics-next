@@ -347,7 +347,9 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     else await reload(request);
   }
   function refreshCurrent() {
-    void browse('retry');
+    if (lock.current) return;
+    renewActivity();
+    void reload(roster.current.request('retry'));
   }
   function acceptRead(result: MembershipPage, request: RosterRequest) {
     if (result.kind === 'ready') {
@@ -854,7 +856,10 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
                 busy={busy}
                 failed
                 onNavigate={(direction) => {
-                  if (rosterActivity()) void browse(direction);
+                  if (rosterActivity()) {
+                    if (revoked && direction === 'retry') refreshCurrent();
+                    else void browse(direction);
+                  }
                 }}
               />
             ) : null}

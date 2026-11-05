@@ -29,6 +29,7 @@ test('whole ordinary call includes route proof and both installed bounded source
       getRequest: () => new Request('https://auth.test/organizations/members', { headers: { Origin: 'https://auth.test' } }),
       setResponseHeader() {},
     }));
+    globalThis.__AUTH_ORIGIN__ = '';
     const { loadMembershipPage, membershipProfile } = await import('./apps/auth/src/organization-membership');
     const { loadAccountSession } = await import('./apps/auth/src/account-operations');
     const [org, account] = [1, 2].map(n => '00000000-0000-4000-8000-' + String(n).padStart(12, '0'));
@@ -52,7 +53,7 @@ test('whole ordinary call includes route proof and both installed bounded source
   const error = await new Response(child.stderr).text();
   expect(await child.exited, error).toBe(0);
   const result = JSON.parse(output);
-  expect(result.kind).toBe('ready');
+  expect(result.kind, output).toBe('ready');
   expect(result.calls.map((call: { path: string }) => call.path)).toEqual([
     '/session',
     '/session',
