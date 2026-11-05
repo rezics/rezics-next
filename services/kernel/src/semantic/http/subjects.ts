@@ -1084,17 +1084,20 @@ function subjectRoutes(
         if (!active) throw new ProblemError('semantic_not_ready');
         const [, redirected] = [...body.subjects].sort();
         const commandRoute = routeOf(redirected!);
-        const authorization = await authorizeSemanticWrite({
-          access: access(),
-          actor,
-          action: 'subject:merge',
-          anchor: globalContextAnchor,
-          pool,
-          deadline: job.deadline,
-          targetPartition: commandRoute === null ? 0 : partitionOf(commandRoute),
-          authorizeCommand,
-          denied: () => new SubjectAccessDeniedError(),
-        });
+        // The admission and the redirect run on different native partitions; each needs its own authorization.
+        const authorizationAt = (targetPartition: number) =>
+          authorizeSemanticWrite({
+            access: access(),
+            actor,
+            action: 'subject:merge',
+            anchor: globalContextAnchor,
+            pool,
+            deadline: job.deadline,
+            targetPartition,
+            authorizeCommand,
+            denied: () => new SubjectAccessDeniedError(),
+          });
+        const authorization = await authorizationAt(commandRoute === null ? 0 : partitionOf(commandRoute));
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
             admitMergeSubjects(pool, {
@@ -1107,6 +1110,7 @@ function subjectRoutes(
               digest: requestDigest('subject.merge', actor, body),
               release: active,
               authorization,
+              authorizationFor: authorizationAt,
               deadline: job.deadline,
               clock,
             }),
