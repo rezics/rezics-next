@@ -1,10 +1,11 @@
-/** Browser projections of the native rename approval and workflow result.
+/** Browser projections of native account-operation approval and deletion/rename results.
  * Access seals an ASCII base64url body and SHA-256 MAC; both native unseal and
  * execute's text input cap the reference at 4096 units. No UUID assumption.
  */
 export const ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH = 4096;
 export const RENAME_EXECUTION_MAX_ID_LENGTH = 4096;
-export type RenameApprovalResponse = Readonly<{ reference: string; expiresAt: string }>;
+export type AccountOperationApprovalResponse = Readonly<{ reference: string; expiresAt: string }>;
+export type RenameApprovalResponse = AccountOperationApprovalResponse;
 export type RenameExecutionResponse = Readonly<{ accountId: string }>;
 export type RenameOperationRefusal = Readonly<{
   error: 'account_operation_denied' | 'step_up_required';
@@ -26,7 +27,7 @@ export const ACCOUNT_OPERATION_MAX_ERROR_BYTES = Math.max(
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-export function parseRenameApprovalResponse(value: unknown): RenameApprovalResponse | null {
+export function parseAccountOperationApprovalResponse(value: unknown): AccountOperationApprovalResponse | null {
   if (
     !object(value) ||
     Object.keys(value).sort().join(',') !== 'expiresAt,reference' ||
@@ -64,3 +65,11 @@ export function parseRenameOperationRefusal(value: unknown, status: number): Ren
     return { error: value.error, effect_status: 'not_applied' };
   return null;
 }
+
+// Deletion accepts legal JSON escaping of the sealed ASCII reference as well.
+export const DELETION_APPROVAL_MAX_RESPONSE_BYTES =
+  JSON.stringify({ reference: '', expiresAt: '' }).length + 6 * ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH + 27;
+export const DELETION_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPONSE_BYTES;
+export const parseRenameApprovalResponse = parseAccountOperationApprovalResponse;
+export const parseDeletionExecutionResponse = parseRenameExecutionResponse;
+export const parseDeletionOperationRefusal = parseRenameOperationRefusal;

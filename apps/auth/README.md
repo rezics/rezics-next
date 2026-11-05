@@ -773,19 +773,36 @@ without a marker are conservatively submitted hints. Step-up returns to fresh na
 and compares exact human/target/key before another explicit choice. Confirmation uses the localized phrase,
 case-insensitive after surrounding-whitespace trimming and Unicode NFC normalization.
 
-Lost or malformed mutation replies remain unknown across later refusal, authentication change, unavailable advice,
-dismissal and account replacement. A submitted hint cannot reconstruct which phase ran. Keep the original descriptor
-and fence; another deliberate exact retry requires fresh review and typed confirmation. Only a validated native
-completion acknowledges deletion acceptance, with cleanup and downstream custody still pending. Browser timeout
-ends waiting without cancelling work. No mount, observation or recovery action executes deletion automatically.
+Decision: self-deletion reuses the shared sealed-reference approval contract and admits only exact original
+`{accountId}` completion. Each POST has its own five-second headers-and-body lifetime, including abort-ignoring
+transport; retries get independent lifetimes. `readJsonBounded` rejects raw excess before fatal UTF-8 decoding
+and JSON parsing. Approval is exactly `{reference,expiresAt}` with a nonempty sealed ASCII reference up to 4,096
+units and a canonical ISO expiry (at most 27 ASCII bytes), usable only before expiry. Its allowance is the empty
+JSON skeleton plus `6 × 4096 + 27` bytes, admitting legal escaping of every reference unit. Execution is exactly
+`{accountId}` with a nonempty native id up to 4,096 units: empty skeleton plus `6 × 4096` bytes. Identity must equal
+the immutable original target. Extra fields, expired/incomplete results, wrong identity and unreadable output cannot
+acknowledge deletion. The error allowance is the maximum serialized closed native refusal envelope; supported
+pairs are `step_up_required`/401 and `account_operation_denied`/400,401,403,409,413,415,503, each with
+`effect_status:not_applied`, plus exact `{error:unavailable}`/503. Bare statuses and malformed envelopes prove nothing.
 
-From an admitted current review, ordinary successful submission sends one approval POST and one execution POST.
-Each phase permits at most one same-body retry for `503 unavailable` while that review still owns the attempt.
-The advice POST and its two admitted inventory reads are separate: a normally admitted entry plus submission is
-five Auth requests. Ordinary authentication-required advice reads no inventory. Each admitted return or read Retry
-adds one advice POST and two bounded inventory reads, with zero commands. These finite counts are independent of
-session, organization and operated-account populations. Native preparations, proofs and whole-call ceilings remain
-owned by [Auth](../../services/auth/README.md#personal-account-deletion-review).
+Lost, timed-out or malformed execution replies remain unknown across later refusal, authentication change,
+unavailable advice, dismissal and account replacement. A submitted hint cannot reconstruct which phase ran.
+Keep the original descriptor and fence; another deliberate exact retry requires fresh review and typed confirmation.
+Only admitted original command evidence acknowledges acceptance, with cleanup and downstream custody still pending.
+Original acknowledgement survives private retirement as generic history; late results cannot complete replacement
+views, remove another continuation/key or disclose former identity. Native absence and current advice are no evidence.
+
+From an admitted current review, ordinary submission sends one approval POST and one execution POST. Approval
+has one retry only for exact `503 unavailable`; the explicit deletion retry path has one same-body execution retry
+for that same envelope while current. Timeout, transport loss, malformed output and proven refusals do not retry.
+The execution retry preserves the original key, descriptor and reference. A later refusal cannot resolve earlier
+unknown execution. Submission costs two POSTs normally, at most four with both unavailable retries (10 seconds
+normally, at most 20 seconds across independent phase budgets). Admitted entry adds one advice POST and two
+inventory reads: five requests normally, at most seven with command retries. Each admitted return/read Retry adds
+one advice POST and two inventory reads, zero commands; authentication-required advice reads no inventory.
+Counts are independent of population. Native preparations/proofs remain owned by
+[Auth](../../services/auth/README.md#personal-account-deletion-review). Fixture tests establish mechanical custody,
+not native/browser qualification; integrated native output, replay and browser acceptance remain required.
 
 Protect meaningful confirmation and unresolved sends with Stay/Leave and unload warnings. Stay preserves review
 and focus; Leave retires callbacks without cancelling native work. Authority loss clears private controls and

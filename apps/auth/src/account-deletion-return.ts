@@ -57,6 +57,7 @@ export class AccountDeletionReturnController {
     currentReview = false,
   ): AccountDeletionReturnHistory | null {
     const kind = classify(attempt, acknowledged, currentReview);
+    if (this.historyValue?.kind === 'acknowledged') return this.historyValue;
     if (kind && kind !== this.historyValue?.kind) this.historyValue = { kind, dismissed: false };
     return this.historyValue;
   }
