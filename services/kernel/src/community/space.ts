@@ -30,7 +30,7 @@ import insert from './space-insert.sql';
 import append from './space-revision.sql';
 import moveHead from './space-head.sql';
 import eligibilityRead from './space-eligibility-read.sql';
-import { spaceEligibilityAccessWork } from './eligibility-access-work.ts';
+import { viewerActionEligibilityWork, spaceEligibilityAccessWork } from './eligibility-access-work.ts';
 
 export type SpaceDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
 export type SpaceContext = Readonly<{ idempotencyKey: string; deadline: number }>;
@@ -328,9 +328,10 @@ export async function updateSpace(deps: SpaceDependencies, actor: Actor, input: 
 /** The read route's exact identity/head eligibility, batched by supplied full keys. */
 export const spaceViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
   readAction: 'space:read',
-  async read(client, ids, at) {
-    const result = await client.query<{ id: string; public: boolean }>(
-      `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
+  async read(client, ids, at, _time, work) {
+    const dispatch = async () => {
+      const result = await client.query<{ id: string; public: boolean }>(
+        `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
        CROSS JOIN LATERAL (
          WITH identity AS MATERIALIZED (
            SELECT h.* FROM community.space h
@@ -346,8 +347,12 @@ export const spaceViewerActionResource: import('../access/viewer-actions.ts').Vi
          ) r
          WHERE h.state = 'active' AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
        ) row`,
-      [ids.map((id) => routeOf(id)!), ids, at],
-    );
-    return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+        [ids.map((id) => routeOf(id)!), ids, at],
+      );
+      return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+    };
+    return work
+      ? work.run('community.space.viewer-resource', viewerActionEligibilityWork('space', ids, at), dispatch)
+      : dispatch();
   },
 };

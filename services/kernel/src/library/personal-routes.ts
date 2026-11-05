@@ -7,6 +7,7 @@ import type { Static, TSchema } from 'typebox';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
@@ -86,6 +87,7 @@ import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.t
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
 
+import { followResponse as serializeFollowResponse, withFollowWork } from './follow-operation-bounds.ts';
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
 type Dependencies = {
@@ -1907,11 +1909,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         set.headers['Cache-Control'] = 'private, no-store';
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run('normal', job, () =>
-          command(() => follows().follow(actor, params.targetId, key)),
-        );
-        if (result.command) session.record(result.command);
-        return { follow: followView(result.follow) };
+        return withFollowWork(job.deadline, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => follows().follow(actor, params.targetId, key, job.deadline)),
+          );
+          if (result.command) session.record(result.command);
+          return serializeFollowResponse({ follow: followView(result.follow) });
+        });
       },
     )
     .delete(
@@ -1926,11 +1930,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         set.headers['Cache-Control'] = 'private, no-store';
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run('normal', job, () =>
-          command(() => follows().unfollow(actor, params.targetId, key)),
-        );
-        if (result.command) session.record(result.command);
-        return { follow: followView(result.follow) };
+        return withFollowWork(job.deadline, async () => {
+          const result = await admission.run('normal', job, () =>
+            command(() => follows().unfollow(actor, params.targetId, key, job.deadline)),
+          );
+          if (result.command) session.record(result.command);
+          return serializeFollowResponse({ follow: followView(result.follow) });
+        });
       },
     )
     .get(
@@ -1944,19 +1950,26 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       async ({ actor, params, query, admission, job, set }) => {
         set.headers['Cache-Control'] = 'private, no-store';
         point(actor, params.targetId, 'follow:read');
-        const follow = await admission.run('normal', job, () =>
-          command(() => follows().readFollow(actor, params.targetId), 'not_found'),
-        );
-        if (!follow) throw new ProblemError('not_found');
-        return fullView(
-          config(),
-          actor,
-          query.view,
-          { follow: followView(follow) },
-          {
-            deadline: job.deadline,
-            ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
-          },
+        return withFollowWork(job.deadline, () =>
+          admission.run('normal', job, async () => {
+            const follow = await command(() => follows().readFollow(actor, params.targetId, job.deadline), 'not_found');
+            if (!follow) throw new ProblemError('not_found');
+            return serializeFollowResponse(
+              await fullView(
+                config(),
+                actor,
+                query.view,
+                { follow: followView(follow) },
+                {
+                  deadline: job.deadline,
+                  ...(dependencies.followingSpaceTargets
+                    ? { followingSpaces: dependencies.followingSpaceTargets }
+                    : {}),
+                  follow: true,
+                },
+              ),
+            );
+          }),
         );
       },
     )
@@ -1966,7 +1979,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object(
           {
             ...pageQuery,
-            targetType: t.Optional(t.Enum({ subject: 'subject', collection: 'collection', space: 'space' })),
+            targetType: t.Optional(t.Enum({ subject: 'subject', collection: 'collection', space: 'space' } as const)),
           },
           closed,
         ),
@@ -1980,72 +1993,88 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         set.headers['Cache-Control'] = 'private, no-store';
         const owner = account(actor);
         if (!owner.scopes.includes('follow:list')) throw new ProblemError('forbidden');
-        return admission.run('normal', job, () =>
-          command(async () => {
-            const route = routeOf(owner.accountId)!;
-            const binding = {
-              operation: 'follow.list',
-              parameters: { accountId: owner.accountId, targetType: query.targetType ?? 'all', state: 'following' },
-            };
-            let after: FollowPageCursor | null = null;
-            let cursorEpoch: string | null = null;
-            if (query.cursor !== undefined) {
-              const cursor = decodeCursor(dependencies.tokens, binding, query.cursor);
-              if (
-                !cursor.ok ||
-                cursor.after.length !== 2 ||
-                typeof cursor.after[0] !== 'string' ||
-                !Number.isFinite(Date.parse(cursor.after[0])) ||
-                typeof cursor.after[1] !== 'string' ||
-                routeOf(cursor.after[1]) === null
-              )
-                throw new ProblemError('invalid_cursor');
-              cursorEpoch = cursor.epoch;
-              after = { updatedAt: cursor.after[0], targetId: cursor.after[1] };
-            }
-            const partition = await withConnection(dependencies.pool, (client) =>
-              readPartition(client, partitionOf(route)),
-            );
-            if (query.cursor !== undefined && cursorEpoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-            const size = query.limit ?? 20;
-            const targetType = query.targetType;
-            const rows = await follows().listFollows(actor, {
-              cursor: after,
-              limit: Math.min(100, size + 1),
-              ...(targetType === undefined ? {} : { targetType }),
-            });
-            const shown = rows.slice(0, size),
-              last = shown.at(-1);
-            let more = rows.length > size;
-            if (!more && size === 100 && last)
-              more =
-                (
-                  await follows().listFollows(actor, {
-                    cursor: last,
-                    limit: 1,
-                    ...(targetType === undefined ? {} : { targetType }),
-                  })
-                ).length > 0;
-            return fullView(
-              config(),
-              actor,
-              query.view,
-              {
-                follows: shown.map(followView),
-                next:
-                  more && last && partition
-                    ? encodeCursor(dependencies.tokens, binding, {
-                        epoch: partition.epoch,
-                        after: [last.updatedAt, last.targetId],
-                      })
-                    : null,
-              },
-              {
-                deadline: job.deadline,
-                ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
-              },
-            );
-          }),
+        return withFollowWork(job.deadline, () =>
+          admission.run('normal', job, () =>
+            command(async () => {
+              const route = routeOf(owner.accountId)!;
+              const binding = {
+                operation: 'follow.list',
+                parameters: { accountId: owner.accountId, targetType: query.targetType ?? 'all', state: 'following' },
+              };
+              let after: FollowPageCursor | null = null;
+              let cursorEpoch: number | null = null;
+              if (query.cursor !== undefined) {
+                const cursor = decodeCursor(dependencies.tokens, binding, query.cursor);
+                if (
+                  !cursor.ok ||
+                  cursor.after.length !== 2 ||
+                  typeof cursor.after[0] !== 'string' ||
+                  !Number.isFinite(Date.parse(cursor.after[0])) ||
+                  typeof cursor.after[1] !== 'string' ||
+                  routeOf(cursor.after[1]) === null
+                )
+                  throw new ProblemError('invalid_cursor');
+                cursorEpoch = cursor.epoch;
+                after = { updatedAt: cursor.after[0], targetId: cursor.after[1] };
+              }
+              const partition = await withConnection(dependencies.pool, (client) =>
+                readPartition(deadlineClient(client, job.deadline), partitionOf(route)),
+              );
+              if (query.cursor !== undefined && cursorEpoch !== partition?.epoch)
+                throw new ProblemError('stale_cursor');
+              const size = query.limit ?? 20;
+              const targetType = query.targetType;
+              const rows = await follows().listFollows(
+                actor,
+                {
+                  cursor: after,
+                  limit: Math.min(100, size + 1),
+                  ...(targetType === undefined ? {} : { targetType }),
+                },
+                job.deadline,
+              );
+              const shown = rows.slice(0, size),
+                last = shown.at(-1);
+              let more = rows.length > size;
+              if (!more && size === 100 && last)
+                more =
+                  (
+                    await follows().listFollows(
+                      actor,
+                      {
+                        cursor: last,
+                        limit: 1,
+                        ...(targetType === undefined ? {} : { targetType }),
+                      },
+                      job.deadline,
+                    )
+                  ).length > 0;
+              return serializeFollowResponse(
+                await fullView(
+                  config(),
+                  actor,
+                  query.view,
+                  {
+                    follows: shown.map(followView),
+                    next:
+                      more && last && partition
+                        ? encodeCursor(dependencies.tokens, binding, {
+                            epoch: partition.epoch,
+                            after: [last.updatedAt, last.targetId],
+                          })
+                        : null,
+                  },
+                  {
+                    deadline: job.deadline,
+                    follow: true,
+                    ...(dependencies.followingSpaceTargets
+                      ? { followingSpaces: dependencies.followingSpaceTargets }
+                      : {}),
+                  },
+                ),
+              );
+            }),
+          ),
         );
       },
     );

@@ -40,8 +40,12 @@ export async function readAccountCommandState(
   client: Queryable,
   route: number,
   accountId: string,
+  work?: AccessWorkAccounting,
 ): Promise<AccountCommandState | null> {
-  const row = await commandStateRead.run(client, { route, account_id: accountId });
+  const input = { route, account_id: accountId };
+  const row = await accessNativeWork(work, 'account-state', input, { targets: 1 }, () =>
+    commandStateRead.run(client, input),
+  );
   return row ? { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) } : null;
 }
 

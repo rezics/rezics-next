@@ -67,6 +67,13 @@ export function addAccessWork(...values: readonly AccessWork[]): AccessWork {
 
 type AccountingFrame = { bound: AccessWork; used: AccessWork; open: boolean; active: number; deadline: number };
 
+// Native transport composition may add SQL statement/text accounting, but must
+// retain the dimensions already held by this actual owner invocation.
+const nativeDispatch = new AsyncLocalStorage<boolean>();
+export function isAccessWorkDispatch(): boolean {
+  return nativeDispatch.getStore() === true;
+}
+
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.
  * Dispatch charges the bound immediately, so timeout/parallel/failed work cannot
  * disappear from a caller's receipt while an operation is still unwinding.
@@ -196,7 +203,7 @@ export class AccessWorkAccounting {
     this.pending.add(pending);
     let charged = bound;
     try {
-      const result = await (frame ? this.frames.run(frame, dispatch) : dispatch());
+      const result = await nativeDispatch.run(true, () => (frame ? this.frames.run(frame, dispatch) : dispatch()));
       if (this.failure) throw this.failure;
       if (frame?.active) this.unavailable(`${operation}: unfinished native children`);
       if (actual) {

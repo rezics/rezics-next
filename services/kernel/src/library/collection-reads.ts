@@ -1,3 +1,4 @@
+import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
@@ -9,7 +10,7 @@ import {
   type AuthoritativeTime,
   type CommandAttempt,
 } from '../command/command.ts';
-import { readAccount, type Account } from '../access/account-data.ts';
+import { readAccount, readAccountCommandState, type Account } from '../access/account-data.ts';
 import { readPublicViews } from '../access/index.ts';
 import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -270,10 +271,23 @@ export function grantCapable(
   );
 }
 
+type ReadAccount = Pick<Account, 'route' | 'accountId' | 'kind' | 'state' | 'fenced' | 'minimumAuthnEpoch'>;
+
+async function collectionReadAccount(
+  client: QueryClient,
+  route: number,
+  accountId: string,
+  work?: AccessWorkAccounting,
+): Promise<ReadAccount | null> {
+  if (!work) return readAccount(client, route, accountId);
+  const current = await readAccountCommandState(client, route, accountId, work);
+  return current && { ...current, route, accountId };
+}
+
 function disclose(
   row: StoredCollection | null,
   allowed: boolean,
-  account: Account | null,
+  account: ReadAccount | null,
   viewer: Actor,
 ): StoredCollection | null {
   if (!row || row.state !== 'active') return null;
@@ -317,7 +331,21 @@ async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>)
 
 function readEligibility(route: number, id: string, sink: Sink) {
   const resource = Object.freeze({ route, id });
+  const declared = collectionDirectoryRowPlan(resource).total;
+  const native = Object.freeze({
+    keys: declared.candidateKeys,
+    points: declared.nativePoints,
+    rows: declared.nativeRows,
+    witnesses: declared.witnessKeys,
+    emptySeeks: declared.emptySeeks,
+    // Access holds binds/projection; transport adds the literal SQL surface.
+    bytes: declared.bytes - Buffer.byteLength(collectionRead.sql),
+  });
   return createResourcePublicEligibility({
+    work: {
+      prepare: { bound: () => EMPTY_ACCESS_WORK, actual: () => EMPTY_ACCESS_WORK },
+      verify: { bound: () => native, actual: () => native },
+    },
     resource,
     action: 'collection:read',
     async prepare() {
@@ -355,6 +383,7 @@ export function createCollectionReads(
 
   return {
     readCollection,
+    readCollectionSummary,
     readCollectionMetadataHistory,
     readCollectionMetadataHistoryChange,
     readRule,
@@ -454,23 +483,25 @@ export function createCollectionReads(
     id: string,
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
+    work?: AccessWorkAccounting,
   ): Promise<StoredCollection | null> {
     if (typeof id !== 'string') return null;
     const route = routeOf(id);
     if (route === null) return null;
+    const context = { pool, deadline, ...(work ? { work } : {}) };
     const sink: Sink = { seen: false, row: null };
     const check = await accessCheck(
       access,
       viewer,
       'collection:read',
       { route, id, eligibility: readEligibility(route, id, sink) },
-      observation?.attempt ? commandAccessContext({ pool, deadline }, observation.attempt) : { pool, deadline },
+      observation?.attempt ? commandAccessContext(context, observation.attempt) : context,
     );
     return readOnly(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       const account =
         actor(viewer) && routeOf(viewer.accountId) !== null
-          ? await readAccount(client, routeOf(viewer.accountId)!, viewer.accountId)
+          ? await collectionReadAccount(client, routeOf(viewer.accountId)!, viewer.accountId, work)
           : null;
       const allowed = await check(client, observation?.time);
       if (sink.failure) throw sink.failure.error;
@@ -479,7 +510,8 @@ export function createCollectionReads(
       if (sink.row?.curatorAccountId) {
         const curatorId = sink.row.curatorAccountId;
         const curatorRoute = routeOf(curatorId);
-        const curator = curatorRoute === null ? null : await readAccount(client, curatorRoute, curatorId);
+        const curator =
+          curatorRoute === null ? null : await collectionReadAccount(client, curatorRoute, curatorId, work);
         if (!curator || curator.state === 'deleted') {
           if (sink.row.visibility !== 'public') return null;
           if (sink.row.membershipKind === 'dynamic') {
@@ -491,6 +523,14 @@ export function createCollectionReads(
       }
       return disclose(sink.row, allowed, account, viewer);
     });
+  }
+
+  /** Following needs the authorized title, without unrelated cover/editor presentation. */
+  async function readCollectionSummary(viewer: Actor, id: string, deadline: number, work?: AccessWorkAccounting) {
+    const logical = await builtins.read(viewer, id, 'collection:read', deadline);
+    const row = logical ?? (await loadCollection(viewer, id, deadline, undefined, work));
+    if (!row) throw notFound();
+    return { id: row.id, title: row.title };
   }
 
   async function readCollection(

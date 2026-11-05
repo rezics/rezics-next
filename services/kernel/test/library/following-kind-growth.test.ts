@@ -123,13 +123,14 @@ test('FULL kind pages keep a fixed whole-request cost as matching and nonmatchin
               ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
               'subject', 'following', 'explicit', '2099-01-01T00:00:00Z', '2099-01-01T00:00:00Z',
               ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid
-       FROM generate_series(1, 21) AS n`,
+       FROM generate_series(1, 101) AS n`,
     [route, accountId, '40000000'],
   );
 
   const runSeries = async (kind: 'subject' | 'collection', prefix: string) => {
     let previous = 0;
     const samples: GrowthSample[] = [];
+    const maximumSamples: GrowthSample[] = [];
     for (const scale of [64, 512, 4096]) {
       await database!.admin.query(
         `INSERT INTO library.follow
@@ -153,9 +154,31 @@ test('FULL kind pages keep a fixed whole-request cost as matching and nonmatchin
         return body;
       });
       samples.push({ scale, cost: measured.cost });
+      const maximum = await measure(database!, async () => {
+        const response = await request('GET', '/v1/follows?targetType=subject&limit=100');
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.follows).toHaveLength(100);
+        expect(body.next).toEqual(expect.any(String));
+        return body;
+      });
+      maximumSamples.push({ scale, cost: maximum.cost });
+      const deep = await request(
+        'GET',
+        `/v1/follows?targetType=subject&limit=100&cursor=${encodeURIComponent(maximum.value.next)}`,
+      );
+      expect(deep.status).toBe(200);
+      const deepBody = await deep.json();
+      expect(deepBody.follows[0].targetId).toBe(fixtureId('40000000', route, 101));
+      expect(
+        deepBody.follows.some((row: { targetId: string }) =>
+          maximum.value.follows.some((first: { targetId: string }) => first.targetId === row.targetId),
+        ),
+      ).toBe(false);
       previous = scale;
     }
     assertGrowth(samples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
+    assertGrowth(maximumSamples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
     await database!.admin.query(
       'DELETE FROM library.follow WHERE route = $1 AND account_id = $2 AND target_id::text LIKE $3',
       [route, accountId, `${prefix}-%`],

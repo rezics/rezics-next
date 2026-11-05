@@ -10,6 +10,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import fullSubjectRead from '../../src/semantic/read-subject.sql';
 import { capture, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
@@ -76,7 +77,7 @@ async function json(response: Response, status = 200) {
   return response.json();
 }
 const viewPath = (path: string, view: string) => `${path}${path.includes('?') ? '&' : '?'}view=${view}`;
-async function subject(label = 'Embedded book') {
+async function subject(label = 'Embedded book', language = 'en') {
   const key = randomUUID();
   return (
     await createSubject(db.pool, {
@@ -84,7 +85,7 @@ async function subject(label = 'Embedded book') {
       target: subjectTarget(routeKey, actor.accountId, key),
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
-      item: { type: 'schema:Book', labels: { en: label } },
+      item: { type: 'schema:Book', labels: { [language]: label } },
       release: { digest: bundledDigest, release: bundledRelease },
       authorize: async () => true,
     })
@@ -589,4 +590,19 @@ test('FULL members preserve private Collection access and interoperate with BASI
   for (const as of ['other', 'anonymous'] as const)
     await json(await request('GET', viewPath(path, 'FULL'), undefined, as), 404);
   await json(await request('GET', `${path}&view=FULL&cursor=invalid`), 400);
+});
+
+test('FULL follows read only the bounded display projection and keep the raw private edge', async () => {
+  const subjectId = await subject('Following summary');
+  await json(await request('PUT', `/v1/follows/${subjectId}`));
+  const basic = await json(await request('GET', `/v1/follows/${subjectId}`));
+  const full = await capture(db, () => request('GET', `/v1/follows/${subjectId}?view=FULL`));
+  const body = await json(full.value);
+  expect(body.follow).toEqual({ ...basic.follow, target: summary(subjectId, 'Following summary') });
+  expect(full.capture.statements.filter((sql) => sql.includes('COALESCE(labels.body'))).toHaveLength(1);
+  expect(full.capture.statements).not.toContain(fullSubjectRead.sql);
+  const french = await subject('Résumé', 'fr');
+  await json(await request('PUT', `/v1/follows/${french}`));
+  const fallback = await json(await request('GET', `/v1/follows/${french}?view=FULL`));
+  expect(fallback.follow.target.label).toEqual({ value: 'Résumé', language: 'fr' });
 });
