@@ -79,12 +79,12 @@ export class BuyerHistoryVisit {
       if (fromLocation?.href === toLocation.href) return;
       const from = fromLocation && buyerRoute(fromLocation.publicHref);
       const to = buyerRoute(toLocation.publicHref);
-      let eligible = !!from && !!to && from.locale === to.locale;
+      let eligible = !!from && !!to && (from.locale ?? this.locale) === (to.locale ?? this.locale);
       if (eligible && to?.list === 'editions') {
-        const origin = purchaseReaderOriginFromState(toLocation.state, to.id!, to.locale!);
+        const origin = purchaseReaderOriginFromState(toLocation.state, to.id!, (to.locale ?? this.locale)!);
         eligible = !!origin && from?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && from.id === origin.recordId;
       } else if (eligible && from?.list === 'editions') {
-        const origin = purchaseReaderOriginFromState(fromLocation!.state, from.id!, from.locale!);
+        const origin = purchaseReaderOriginFromState(fromLocation!.state, from.id!, (from.locale ?? this.locale)!);
         eligible = !!origin && to?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && to.id === origin.recordId;
       }
       if (!eligible) this.clear();
