@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, type ReactNode, type ComponentProps } from 'react';
+import { act, StrictMode, useLayoutEffect, type ReactNode, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CopiesCurrentRead, CopyDetailCurrentRead, CopySubjectCurrentRead } from '../src/library/copies-actions';
 import type { CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
@@ -118,6 +118,43 @@ mock.module('@rezics/ui/shadcn/dialog', () => ({
 }));
 mock.module('@rezics/ui/bottom-sheet', () => ({
   BottomSheet: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
+}));
+mock.module('@rezics/ui/responsive-dialog', () => ({
+  ResponsiveDialog: ({
+    open,
+    children,
+    onOpenChangeComplete,
+    finalFocus,
+  }: {
+    open: boolean;
+    children: ReactNode;
+    onOpenChangeComplete?: (open: boolean) => void;
+    finalFocus?: () => HTMLElement | false;
+  }) => {
+    useLayoutEffect(() => {
+      if (!open) {
+        const target = finalFocus?.();
+        if (target && target.isConnected) target.focus();
+        onOpenChangeComplete?.(false);
+      }
+    }, [open]);
+    return open ? <div role="dialog">{children}</div> : null;
+  },
+}));
+mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
+  AlertDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? <div role="alertdialog">{children}</div> : null,
+  AlertDialogAction: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+    <button onClick={onClick}>{children}</button>
+  ),
+  AlertDialogCancel: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+    <button onClick={onClick}>{children}</button>
+  ),
+  AlertDialogContent: Part,
+  AlertDialogDescription: Part,
+  AlertDialogFooter: Part,
+  AlertDialogHeader: Part,
+  AlertDialogTitle: Part,
 }));
 mock.module('@rezics/ui/menu', () => ({
   Menu: ({ entries }: { entries: { label: string; onSelect: () => void }[] }) => (
@@ -554,7 +591,9 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
       Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(note, 'Unsaved change');
       note!.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
+    expect(note!.value).toBe('Unsaved change');
     await clickLink(m.library_copy_more());
+    expect(router.state.location.search).toMatchObject({ subjectId: id(10), cursor: 'c1' });
     const departure = host.querySelector('[role="alertdialog"]')!;
     expect(host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     expect(departure.textContent).toContain(m.library_copy_draft_navigation_description());
