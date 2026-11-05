@@ -678,6 +678,10 @@ store. The research's Wikibase statement model, Open Library work/edition/author
 annotation and Omeka resource templates support these choices; they do not supply a REZICS API or permission.
 Research observations describe their inspected revision, so delivered native fixes take precedence.
 
+Decision: keep one Subject composition owner and place its identity hero before specialist evidence; settle optional
+readings independently, render Character bodies only from exact admitted document selections, and mount public offers
+only from current API-positive responses.
+
 ### Original authored catalogue text
 
 `/{locale}/subjects/{id}/{slug}/authored` opens from the existing subject header actions. It retains the exact
