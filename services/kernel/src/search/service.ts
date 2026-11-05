@@ -34,6 +34,7 @@ import {
 } from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause, type Hit as CheckedHit } from './disclosure/check.ts';
+import { createCurrentTextDisclosure } from './disclosure/current-text.ts';
 import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
@@ -1260,6 +1261,9 @@ export function createSearchService({
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const matchEvidencePlan = compiledText ? compileMatchEvidence(compiledText) : undefined;
+      const currentTextDisclosure = text
+        ? createCurrentTextDisclosure(client, subjectIndexName(prefix, generation!))
+        : undefined;
       const compiledFilter =
         admitted && !preparedScope
           ? compileFilter(admitted as FilterDocument, {
@@ -1348,8 +1352,9 @@ export function createSearchService({
             disclosureSource,
             hits,
             clauses,
-            admitted && !preparedScope
-              ? {
+            {
+              ...(admitted && !preparedScope
+                ? {
                   filter: catalogueFilter(admitted),
                   relationProperties,
                   ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
@@ -1360,7 +1365,13 @@ export function createSearchService({
                       : null;
                   },
                 }
-              : undefined,
+                : {}),
+              ...(currentTextDisclosure && text
+                ? {
+                    currentText: (subject: IndexedSubject) => currentTextDisclosure.matchesText(subject, text),
+                  }
+                : {}),
+            },
           ),
         );
         inexact ||= relationRejected === true;
@@ -1859,12 +1870,16 @@ export function createSearchService({
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
       const contextDeadline = read?.deadline ?? Date.now() + 10_000;
+      let currentTextDisclosure: ReturnType<typeof createCurrentTextDisclosure> | undefined;
       const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
         const { passed: current } = await sourceRequest(() =>
           checkHits(
             source,
             hits.map((hit) => ({ ...hit, matched: [] })),
             new Map(),
+            {
+              currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+            },
           ),
         );
         const projected = new Map(
@@ -1897,6 +1912,7 @@ export function createSearchService({
             : {}),
         });
       const generation = await discoveryGeneration();
+      currentTextDisclosure = createCurrentTextDisclosure(client, subjectIndexName(prefix, generation));
       const parsed = read?.filter === undefined ? undefined : validate({ filter: read.filter }).filter;
       const current = parsed ? await activeRelease(pool) : undefined;
       const admitted = parsed ? await admitQuery(undefined, parsed, current?.release, false) : undefined;
@@ -1954,6 +1970,7 @@ export function createSearchService({
             filter: catalogue!,
             release: current.release,
             source,
+            currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
             ...(scope ? { scope } : {}),
             ...(preparedScope ? { preparedScope } : {}),
             ...(scopeWork ? { scopeWork } : {}),
@@ -2007,6 +2024,9 @@ export function createSearchService({
               source,
               queried.result.map((hit) => ({ ...hit, matched: [] })),
               new Map(),
+              {
+                currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+              },
             ),
           );
           const visible = passed.slice(0, limit);
@@ -2041,6 +2061,9 @@ export function createSearchService({
           source,
           hits.map((hit) => ({ ...hit, matched: [] })),
           new Map(),
+          {
+            currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+          },
         ),
       );
       const visible = passed.slice(0, limit);

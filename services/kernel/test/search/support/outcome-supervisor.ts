@@ -610,7 +610,7 @@ function supervise(parent: OutcomeRpc) {
         typeof params.persona !== 'string' ||
         !personas.includes(params.persona) ||
         typeof params.method !== 'string' ||
-        !['GET', 'POST', 'PUT'].includes(params.method) ||
+        !['GET', 'POST', 'PUT', 'PATCH'].includes(params.method) ||
         typeof params.path !== 'string' ||
         !params.path.startsWith('/')
       )
@@ -622,7 +622,7 @@ function supervise(parent: OutcomeRpc) {
         throw new Error('Invalid HTTP headers');
       const response = await semantic!.request(
         params.persona as Persona,
-        params.method as 'GET' | 'POST' | 'PUT',
+        params.method as 'GET' | 'POST' | 'PUT' | 'PATCH',
         params.path,
         params.body,
         params.headers as Record<string, string> | undefined,

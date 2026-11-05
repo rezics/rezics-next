@@ -313,6 +313,12 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       });
       const checked = await checkHits(cached, hits, new Map(), {
         ...(currentFilter === true ? {} : { filter: currentFilter }),
+        ...(context.textQuery === undefined
+          ? {}
+          : {
+              currentText: (subject: IndexedSubject) =>
+                context.currentTextMatches!(subject, context.textQuery!),
+            }),
         relationProperties: Object.keys(release.properties).filter((property) =>
           relationFacetProperty(release, property),
         ),

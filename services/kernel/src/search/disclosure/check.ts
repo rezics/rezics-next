@@ -47,6 +47,8 @@ export async function checkHits(
     spoilerThreshold?: SpoilerThreshold;
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
     conceptFilter?: ConceptFilterExecution;
+    /** Re-evaluate a stale indexed text hint against the current native Subject projection. */
+    currentText?: (subject: IndexedSubject) => Promise<boolean>;
   },
 ): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
   const requestedConcurrency = options?.concurrency ?? 8;
@@ -262,7 +264,7 @@ export async function checkHits(
           })
         )
           continue;
-        checked[index] = { hit, subject };
+        if (!options?.currentText || (await options.currentText(subject))) checked[index] = { hit, subject };
       }
       const pending = [...points.values()];
       pagePoints.push(...pending);
@@ -347,7 +349,8 @@ export async function checkHits(
             relationRejected = true;
             continue;
           }
-          if (result.passed) checked[index] = { hit, subject };
+          if (result.passed && (!options?.currentText || (await options.currentText(subject))))
+            checked[index] = { hit, subject };
           relationRejected ||= result.relationRejected;
         }
       });

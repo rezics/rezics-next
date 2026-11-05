@@ -450,6 +450,11 @@ Current disclosure covers membership, exclusion, order, fields, source metadata 
 Check current source/Collection authority, original AND terminal eligibility, Access, consent, foreign targets and
 tuple fences. An index revision, prepared result or completed identity epoch is never permission.
 
+Decision: ordinary Search and mixed Discovery re-evaluate stale text candidates against current native labels,
+aliases and descriptions; suggestions re-evaluate prefixes against current native labels and aliases, using the
+queried generation's analyzers. This supplements retained whole-query checks; facet aggregates retain their own
+complete native proof.
+
 Query-level privacy-reduction invalidation and acknowledgement is required **in addition to candidate checks**.
 Local reductions invalidate public use in their authoritative transaction. Foreign source-fence, target, consent
 and Collection reductions invalidate affected public use immediately. Acknowledgement covers actual refresh-visible

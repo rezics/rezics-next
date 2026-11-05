@@ -121,7 +121,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
     grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
     send(
       account: Account | null,
-      method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+      method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
       path: string,
       body?: unknown,
       headers?: Record<string, string>,
@@ -475,7 +475,7 @@ async function startDriver(
     const sessions = new Map<Exclude<Persona, 'anonymous'>, string>();
     async function send(
       account: Account | null,
-      method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+      method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
       path: string,
       body?: unknown,
       headers?: Record<string, string>,

@@ -92,7 +92,7 @@ export interface SemanticDriver {
   /** Suite supplies structured-field Idempotency-Key headers for all writes. */
   request(
     persona: Persona,
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     path: string,
     body?: unknown,
     headers?: Record<string, string>,

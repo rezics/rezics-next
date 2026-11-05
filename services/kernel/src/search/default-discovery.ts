@@ -47,9 +47,12 @@ import {
   discoveryGenerations,
 } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
+import { createCurrentTextDisclosure } from './disclosure/current-text.ts';
 import { createFreshness } from './freshness.ts';
 import { searchObservation } from './search-context.ts';
 import type { PublicDiscoveryConsumerOperations } from './public-filter-consumer-contract.ts';
+import type { IndexedSubject } from './source.ts';
+import type { TextNode } from './text.ts';
 import {
   installPublicFilterCoveragePage,
   openPublicFilterCoveragePage,
@@ -253,6 +256,15 @@ export function createDefaultDiscoverySearch(
   const runtime = createDefaultPublicFilterRuntime(config);
   const source = publicFilterSource(config);
   const { subjects, accounts } = producers;
+  const textDisclosures = new Map<string, ReturnType<typeof createCurrentTextDisclosure>>();
+  const currentTextMatches = (physicalTarget: string, subject: IndexedSubject, query: TextNode) => {
+    let disclosure = textDisclosures.get(physicalTarget);
+    if (!disclosure) disclosure = createCurrentTextDisclosure(config.search, physicalTarget);
+    textDisclosures.delete(physicalTarget);
+    textDisclosures.set(physicalTarget, disclosure);
+    if (textDisclosures.size > 4) textDisclosures.delete(textDisclosures.keys().next().value!);
+    return disclosure.matchesText(subject, query);
+  };
   let work: ReturnType<typeof createWorkClient> | undefined;
   const pending = new Set<Promise<unknown>>();
   const retained = new Set<RetainedDiscoveryRead>();
@@ -350,6 +362,7 @@ export function createDefaultDiscoverySearch(
           }),
         now: () => config.clock().getTime(),
         resolve: async () => ({ ...current, registry }),
+        currentTextMatches,
         async prepare(job) {
           // Enqueue on the existing durable default-worker path. No executor is launched by a request.
           work ??= createWorkClient(config.pool.options.connectionString ?? '', config.pool);

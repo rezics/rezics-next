@@ -2,7 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
-import { compileText } from './text.ts';
+import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
@@ -30,6 +30,7 @@ import type {
   DiscoveryKey,
 } from './discovery.ts';
 import type { DiscoverySearch } from './discovery-api.ts';
+import type { IndexedSubject } from './source.ts';
 import type {
   PublicFilterConsumerJob,
   PublicDiscoveryConsumerOperations,
@@ -125,6 +126,7 @@ type DiscoveryConfiguration = {
       countCandidateLimit: number;
     }>,
   ): Promise<ConceptFilterExecution | undefined>;
+  currentTextMatches?: (physicalTarget: string, subject: IndexedSubject, query: TextNode) => Promise<boolean>;
   prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 
@@ -308,6 +310,7 @@ function executeDiscoverySearch(
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
+    context = { ...context, ...(admitted.text === undefined ? {} : { textQuery: admitted.text }) };
     // The visible Collection directory is accepted only when its native owner has registered the
     // current listing predicates and ordering. Missing Commerce operands mean preparation, never an
     // unfiltered or index-hint-only response.
@@ -423,6 +426,14 @@ function executeDiscoverySearch(
       }
       if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
         throw new ProblemError('search_restart_required');
+      if (admitted.text !== undefined) {
+        if (!config.currentTextMatches) throw ready();
+        const physicalTarget = queried.consumer.physicalTarget;
+        context = {
+          ...context,
+          currentTextMatches: (subject, query) => config.currentTextMatches!(physicalTarget, subject, query),
+        };
+      }
       const hits: DiscoveryUnionHit[] = [];
       const seen = new Set<string>();
       const witnesses = new Map<string, number>();
