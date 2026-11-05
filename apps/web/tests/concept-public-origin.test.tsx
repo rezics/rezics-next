@@ -34,6 +34,13 @@ mock.module('../src/features/catalogue/source-concept-explorer/actions', () => (
     return new Promise<never>(() => {});
   }),
 }));
+mock.module('../src/features/pages/subject-queries', () => ({
+  subjectReaderQuery: (_id: string, _locale: string, scope: { reader: string; admission: number }) => ({
+    queryKey: ['concept-public-origin-reader', scope.reader, scope.admission],
+    queryFn: async () => ({ reader: scope.reader, preferences: undefined }),
+    retry: false,
+  }),
+}));
 
 test('public entry and route admission retain only a bounded same-Subject observation and heading return', () => {
   const base = routePath;
@@ -169,7 +176,7 @@ test('production route admits public scope before the original session transport
       />,
     );
     await waitFor(() => expect(reads.length).toBeGreaterThan(0));
-    const firstReadCount = reads.length;
+    const signedOutReadCount = reads.length;
     expect((reads[0] as { data: { id: string; expectedReader: string | null } }).data).toMatchObject({
       id,
       expectedReader: null,
@@ -177,6 +184,24 @@ test('production route admits public scope before the original session transport
     expect(within(host).getByRole('link', { name: m.concept_public_origin_return() }).getAttribute('href')).toBe(
       returnHref,
     );
+    const signedInReader = '00000000-0000-4000-8000-00000000c103';
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: signedInReader, csrfToken: 'first' }),
+    );
+    await waitFor(() =>
+      expect(
+        reads.some(
+          (request) =>
+            (request as { data: { expectedReader: string | null } }).data.expectedReader === signedInReader,
+        ),
+      ).toBe(true),
+    );
+    const signedInReadCount = reads.length;
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: signedInReader, csrfToken: 'second' }),
+    );
+    await waitFor(() => expect(reads.length).toBeGreaterThan(signedInReadCount));
+    const publicReadCount = reads.length;
 
     const nonGlobalReturn = conceptPublicReturnHref(
       subjectHref({ id, label: 'Protagonist' }, 'en').href,
@@ -197,7 +222,7 @@ test('production route admits public scope before the original session transport
       />,
     );
     expect(host.textContent).toContain(m.concept_public_origin_context_unsupported());
-    expect(reads).toHaveLength(firstReadCount);
+    expect(reads).toHaveLength(publicReadCount);
     const freshHref = within(host).getByRole('link', { name: m.concept_public_origin_global() }).getAttribute('href')!;
     const freshUrl = new URL(freshHref, window.location.origin);
     expect([...freshUrl.searchParams.keys()]).toEqual(['publicReturn']);
@@ -206,7 +231,7 @@ test('production route admits public scope before the original session transport
     await render(
       <SourceConceptPublicSession id={id} locale="en" pathname={routePath} publicVisit={fresh.publicVisit} />,
     );
-    await waitFor(() => expect(reads.length).toBeGreaterThan(firstReadCount));
+    await waitFor(() => expect(reads.length).toBeGreaterThan(publicReadCount));
     const freshReadCount = reads.length;
 
     await render(
