@@ -22,10 +22,16 @@ test('published reading log retracts immediately and Undo restores its original 
   expect(started.status).toBe(201);
   const session = (await started.json()).progressSession;
   const publishKey = entryKey();
-  const made = await f.send(owner.bearer, 'POST', '/v1/publishedLogs', {
-    sessionId: session.id,
-    note: 'chosen public note',
-  }, publishKey);
+  const made = await f.send(
+    owner.bearer,
+    'POST',
+    '/v1/publishedLogs',
+    {
+      sessionId: session.id,
+      note: 'chosen public note',
+    },
+    publishKey,
+  );
   expect(made.status).toBe(201);
   const original = (await made.json()).publishedLog;
   const revision = Number(made.headers.get('Library-Published-Log-Revision'));
@@ -62,7 +68,9 @@ test('published reading log retracts immediately and Undo restores its original 
   expect(replayedPublish.status).toBe(201);
   expect((await replayedPublish.json()).publishedLog).toEqual(original);
   const replayedList = await f.send('anonymous', 'GET', `/v1/publishedLogs?accountId=${owner.actor.accountId}`);
-  expect((await replayedList.json()).publishedLogs.filter((log: { id: string }) => log.id === original.id)).toHaveLength(1);
+  expect(
+    (await replayedList.json()).publishedLogs.filter((log: { id: string }) => log.id === original.id),
+  ).toHaveLength(1);
   const restored = await f.send(owner.bearer, 'POST', path + ':restore', { deletionId, revision: deletedRevision });
   expect(restored.status).toBe(200);
   const value = (await restored.json()).publishedLog;

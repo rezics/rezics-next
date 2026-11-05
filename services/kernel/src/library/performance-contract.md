@@ -203,6 +203,7 @@ This is a leaf, not the complete reverse-discovery operation or a native grant. 
 count, partition/currentness, repeated curator checks, connection controls and FULL disclosure still belong to the
 enclosing immutable operation. Count and pair observations remain independent; no atomic snapshot, refill or
 count recomputation is introduced. Directory/preview composition retains its existing callers and limits.
+
 ## Private physical-copy loans
 
 Decision: retain the existing loan journey and owner, consume immutable local SQL plans through the existing
