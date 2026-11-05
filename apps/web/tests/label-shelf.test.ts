@@ -220,7 +220,7 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
           },
         }),
       );
-      expect(html).toContain('このラベルの続きのページを読み込めませんでした。');
+      expect(html).toContain('This Label continuation could not be loaded.');
       expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`);
       expect(html).not.toContain('opaque-page-token');
       expect(html).not.toContain('Reading list');
