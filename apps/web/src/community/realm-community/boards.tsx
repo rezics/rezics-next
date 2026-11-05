@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { Link } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
+import { boardRequestHref } from '../../threads/board-navigation';
 import type { RealmBoard } from '../space';
 import type { useShelfContinuationFocus } from '../publication-controls-view';
 
@@ -26,6 +27,10 @@ export function RealmCommunityBoards({
   complete: boolean;
   focus: ReturnType<typeof useShelfContinuationFocus>;
 }) {
+  const boardHref = (board: RealmBoard) => {
+    const returnTo = returnFor(board.id);
+    return boardRequestHref(getLocale(), board.id, returnTo ? { returnTo } : {});
+  };
   return (
     <section data-slot="realm-community-boards" className="space-y-4" aria-labelledby="realm-boards-heading">
       <h2 ref={focus.boundaryRef} tabIndex={-1} id="realm-boards-heading" className="text-xl font-semibold">
@@ -44,10 +49,8 @@ export function RealmCommunityBoards({
             >
               <div className="min-w-0 flex-1 space-y-1">
                 <h3 className="font-semibold">
-                  <Link
-                    to="/boards/$id"
-                    params={{ id: board.id }}
-                    search={returnFor(board.id) ? { returnTo: returnFor(board.id)! } : {}}
+                  <a
+                    href={boardHref(board)}
                     onClick={(event) => {
                       if (!current()) event.preventDefault();
                     }}
@@ -61,7 +64,7 @@ export function RealmCommunityBoards({
                     data-slot="realm-board-link"
                   >
                     {board.title ?? m.threads_untitled()}
-                  </Link>
+                  </a>
                 </h3>
                 {board.description ? (
                   <p className="text-sm leading-relaxed text-muted-foreground">{board.description}</p>
