@@ -325,6 +325,14 @@ export async function stageCollectionPublicationStep(
     )
       throw unavailable();
     if (source.metadata.factFence === null) throw unavailable();
+    const plan = compileCurrentOwnerFilter(native.definition.filter);
+    // The delivered adapter has no current public Source/index proof. Refuse this foreign branch before
+    // scope preparation can issue a public Search request or use it as part of private whole-query meaning.
+    if (
+      plan.leaves.some((leaf) => leaf.kind === 'catalogue') ||
+      !plan.leaves.some((leaf) => leaf.kind === 'owner')
+    )
+      throw unavailable();
     const scope = createSearchScopeSource(options);
     const prepared = await work.compose(async (allowance) => {
       const prepared = await scope.prepare(native.definition.filter, {
@@ -335,16 +343,13 @@ export async function stageCollectionPublicationStep(
       });
       return { prepared, work: scope.work(prepared) };
     });
-    const plan = compileCurrentOwnerFilter(native.definition.filter);
-    const publicInputs = plan.leaves.some((leaf) => leaf.kind === 'catalogue');
     if (
       prepared.prepared.basis.release !== native.releaseDigest ||
-      (!publicInputs &&
-        (!prepared.prepared.basis.nativeOwner ||
-          !isDeepStrictEqual(prepared.prepared.basis.nativeOwner, {
-            source: native.sourceIdentity,
-            observation: native.observation,
-          })))
+      !prepared.prepared.basis.nativeOwner ||
+      !isDeepStrictEqual(prepared.prepared.basis.nativeOwner, {
+        source: native.sourceIdentity,
+        observation: native.observation,
+      })
     )
       throw unavailable();
     // Reserve the post-evaluation metadata rereads, CAS and possible seal BEFORE foreign page/evaluation.
@@ -366,10 +371,10 @@ export async function stageCollectionPublicationStep(
         `INSERT INTO library.collection_publication_staging
          (route,collection_id,generation,publication_id,account_id,definition_digest,binding,scope_basis,
           canonical_generation,canonical_basis_digest,public_inputs,frontier,fact_fence)
-         SELECT g.route,g.collection_id,g.generation,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12::jsonb,$14
+         SELECT g.route,g.collection_id,g.generation,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,false,$11::jsonb,$13
          FROM library.collection_source_output g
          WHERE g.route=$1 AND g.collection_id=$2 AND g.generation=$3 AND g.account_id=$5
-           AND g.source_generation=$13 AND g.output_mode='whole_query' AND g.expected_members IS NULL
+           AND g.source_generation=$12 AND g.output_mode='whole_query' AND g.expected_members IS NULL
            AND g.state='building' AND g.written_members=0 AND g.member_count=0
            AND NOT EXISTS(SELECT 1 FROM library.collection_source_output_head h
              WHERE h.route=g.route AND h.collection_id=g.collection_id AND h.generation=g.generation)
@@ -385,7 +390,6 @@ export async function stageCollectionPublicationStep(
           json(prepared.prepared.basis),
           source.generation,
           source.basis.digest,
-          publicInputs,
           json(initialCollectionPublicationFrontier()),
           native.rule.sourceGeneration,
           source.metadata.factFence,
@@ -402,7 +406,7 @@ export async function stageCollectionPublicationStep(
       row.canonical_generation !== source.generation ||
       row.canonical_basis_digest !== source.basis.digest ||
       row.fact_fence !== source.metadata.factFence ||
-      row.public_inputs !== publicInputs
+      row.public_inputs
     )
       throw unavailable();
     if (row.frontier.exhausted) {

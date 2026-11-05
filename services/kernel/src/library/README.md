@@ -458,6 +458,10 @@ final activation or public Source proof.
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.
 
+Decision: retain the 100-key and 262,144-row staging ceilings; do not raise either cap or reduce a useful producer limit while the complete first-subject plan exceeds them. The derivation and remaining plan work are recorded in [Whole-query Collection publication cost](#whole-query-collection-publication).
+
+The current public-catalogue input branch is refused before Search scope preparation because its current public Source/index proof is unavailable. Accepted staging plans therefore have `engineRequests = 0`; the service-local eight-axis Work receipt adapter states this zero explicitly. A private owner plan cannot use a public catalogue hit, selected output A, a returned phase or a copied checkpoint to complete B.
+
 ### Explicit selected-set publication
 
 The distinct whole-query seam in `collection-publication-work-admission.ts` rejects clients without
@@ -1831,6 +1835,14 @@ Library primary keys are B-trees beginning with `route`.
 `M` is the finite original raw occurrence population of one Collection, designed for at least one million members. Mounted pages use `s` at most 100. One progress record names at most 100 unit ids. A session's completed-unit count is at most 20000. History length is not capped by that number.
 `listing-counts.sql` is the search reader. One statement probes `subject_listing` by primary key, `LIMIT 1`, once per supplied id in one partition. No library growth test measures that reader, so this Cost section does not cite it.
 Where a named test does not call the operation, or does not grow the rows that operation can touch, the subsection says so. A bound the indexes do not support is stated as not derivable.
+
+### Whole-query Collection publication
+
+- Operation/touches: one locator-only staging attempt, its current native definition and Source, prepared private owner filter, at most one canonical subject (including an excluded subject) or one sparse prefix, checkpoint recovery/CAS, evidence and member writes, optional exhaustion seal, and the ordinary final command's two fresh seal reads, output inventory, local rule/header checks, activation hook, callbacks and cleanup. Staging never selects B. Final activation preserves A until COMPLETE.
+- Branch maxima: a staging call admits at most 16 canonical prefix candidates and settles at most one pending subject. A pending checkpoint needs no prefix; a sparse exhausted prefix has no subject evaluation and may seal; an already exhausted checkpoint only rereads its seal. The owner closure admits at most 100 raw canonical/fact keys. Its `originalIds + raw canonical keys <= 100` fence allows at most 50 originals. Each original disclosure reserves at most 8,192 native rows. The native step allows at most three attempts; each final activation attempt receives a fresh native work frame.
+- Necessary first-subject lower bound: with 49 raw canonical references, 50 originals and 49 fact keys, `prefix(16 candidateKeys) + owner closure(98 candidateKeys) = 114 candidateKeys`. The same branch reserves `50 × 8,192` rows for original disclosure plus `Σ(32 × remaining + 32)` for fact reads as `remaining` falls from 50 to 1, totaling 452,000 native rows. It satisfies `originalIds + raw canonical keys <= 100` and the native fact reader's `100 - originalIds` cap; the final fact query is empty, so its full-window refusal does not apply. This already exceeds the existing per-attempt `100 candidateKeys` and `262,144 nativeRows` ceilings by 14 keys and 189,856 rows, before admission, Source getter/currentness, preparation, negative fact probes, checkpoint SQL, settlement or seal costs. The disclosure maximum follows from `originalIds <= rawKeys + 1`, `originalIds + raw canonical keys <= 100`, and the fixed 8,192-row `resolveSubject` envelope.
+- Nine axes: the lower-bound declaration includes every `@rezics/bounds` axis. `engineRequests = 0` is inapplicable only for the admitted private-owner branch after the public-catalogue branch is refused; the other zero entries in that lower bound omit costs and do not stand for the complete plan. The native Work receipt still exposes eight axes, so the service bridge names its zero `engineRequests` assumption instead of dropping it implicitly.
+- Growth/availability: the source and output suites retain A and keep missing seals unavailable. Native end-to-end acceptance, completion after checkpoint recovery, and identity/currentness changes across real staging settlement remain deferred to receiving acceptance. The complete immutable plans for preparation, checkpoint recovery, exhaustion sealing and one final activation attempt, and replacement of staging's held settlement envelope, remain unimplemented until the owning ceiling decision permits a full bound. No 64 MiB staging byte allowance is treated as evidence for the unrelated 32 MiB whole-capture measurement.
 
 ### Private saved-query member evaluation
 

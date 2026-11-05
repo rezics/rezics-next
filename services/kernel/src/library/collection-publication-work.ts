@@ -13,11 +13,14 @@ import { advanceCollectionSourceWork } from './collection-source-work.ts';
 import { stageCollectionPublicationStep } from './collection-publication-staging.ts';
 import { createCollectionPublicationFinalActivation } from './collection-publication-final.ts';
 import {
+  COLLECTION_PUBLICATION_STEP_CEILING,
+  collectionPublicationWorkDimensions,
+} from './collection-publication-bounds.ts';
+import {
   admitCollectionPublicationSourcePreparation,
   type CollectionPublicationLocator,
 } from './collection-publication-work-admission.ts';
 import { workStepDeadline } from './command-support.ts';
-import { scopeAllowance } from '../search/scope-execution.ts';
 import { collectionPublicationScopeRuntime } from '../search/work.ts';
 import type { WorkContext } from '../work/registry.ts';
 
@@ -29,10 +32,9 @@ function unavailable(): ProblemError {
 
 /** One fixed root covers repeated native admissions, evaluation and the exhaustive seal. */
 export function collectionPublicationStepAllowance(reservationId: string) {
-  const allowance = scopeAllowance(100, reservationId);
   return {
-    ...allowance,
-    remaining: { ...allowance.remaining, nativeRows: 262144, emptySeeks: 4096, bytes: 64 * 1024 * 1024 },
+    reservationId,
+    remaining: collectionPublicationWorkDimensions(COLLECTION_PUBLICATION_STEP_CEILING),
   };
 }
 
