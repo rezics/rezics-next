@@ -15,7 +15,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { AuthenticationError, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
@@ -47,7 +47,7 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
   const { pool, access, tokens, clock } = deps;
   const runner = createLibraryCommandRunner({ pool, clock });
   const collections = createCollectionReads({ pool, access, tokens });
-  async function targetGate(actor: Actor, deadline: number, time: AuthoritativeTime) {
+  async function targetGate(actor: AccountActor, deadline: number, time: AuthoritativeTime) {
     const route = routeOf(actor.accountId)!;
     await runPinBoundedStep('library.pin.target-gate', pinTargetGateBound({ accountId: actor.accountId, route }), () =>
       admitGroup({
@@ -74,7 +74,11 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
       // Commit and release owner metadata before any target/Access home visit.
       const page = await runPinBoundedStep(
         'library.pin.owner-currentness',
-        pinOwnerObservationBound({ route, accountId: account.accountId, cursor: options.cursor }),
+        pinOwnerObservationBound({
+          route,
+          accountId: account.accountId,
+          ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+        }),
         () =>
           withConnection(pool, async (connection) => {
             const client = deadlineClient(connection, deadline);

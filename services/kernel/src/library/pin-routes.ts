@@ -12,6 +12,8 @@ import { collectionReadView } from './collection-reads.ts';
 import { createPins } from './pins.ts';
 import { pinMountedAdmissionBound, pinWireResponseBound, runPinBoundedStep } from './pin-operation-bounds.ts';
 
+type PinListResult = Awaited<ReturnType<ReturnType<typeof createPins>['list']>>;
+
 const closed = { additionalProperties: false } as const;
 const revision = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
 const result = t.Object({ revision }, closed);
@@ -89,13 +91,13 @@ export function pinRoutes(
       },
       async ({ actor, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return runPinBoundedStep(
+        return runPinBoundedStep<PinListResult>(
           'library.pin.route-admission',
           pinMountedAdmissionBound('library_pin:list'),
           () =>
-            admission.run('normal', job, async () => {
+            admission.run<PinListResult>('normal', job, async () => {
               const page = await pins().list(actor, query);
-              return runPinBoundedStep(
+              return runPinBoundedStep<PinListResult>(
                 'library.pin.wire-response',
                 pinWireResponseBound({ pins: page.pins.length, revision: page.revision, next: page.next }),
                 async () => ({
