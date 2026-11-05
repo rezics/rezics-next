@@ -154,7 +154,7 @@ are coordination evidence. Optional preparation failure preserves independently 
 navigation. Detail `authActions` retains authority. Content's serial publisher derives the generated envelope
 and installed callable/root from mounted Kernel; no handwritten mirrors or overrides. Until installation, directory
 identities stay unlinked. Then finish independent replacement, cursor-free restart and admitted detail/back navigation;
-Transport/rendering/growth acceptance remains deferred. First duplicate wins; Next replaces its selected feed;
+transport/rendering/growth acceptance remains deferred. First duplicate wins; Next replaces its selected feed;
 failed cursor-free restart retries exactly.
 
 Settings show supplied name/handle and initials avatar, unnamed if neither exists, Identity unavailable if absent.

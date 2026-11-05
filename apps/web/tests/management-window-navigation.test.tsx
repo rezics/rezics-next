@@ -248,6 +248,9 @@ test('mounted router windows reread exact native targets, retain failed movement
     });
     await act(async () => {
       session('B');
+      const staleClick = new window.MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
+      link.dispatchEvent(staleClick as unknown as MouseEvent);
+      expect(staleClick.defaultPrevented).toBe(true);
       session('A', 'new-credential');
     });
     expect(host.querySelector('[data-management-feed]')).toBeNull();
