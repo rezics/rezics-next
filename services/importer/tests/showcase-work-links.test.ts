@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { vndbLimits } from '@rezics/conversion/vndb';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { CrossMediaDumpFiles, crossMediaAliases, planCrossMediaSeed } from '../src/cross-media-seed.ts';
 import { vndbWorkLinkConverterRevision } from '../src/showcase-work-links.ts';
@@ -90,9 +91,9 @@ async function copiedDumps(root: string) {
       'v410\tja\tt\tSTEINS;GATE\t\\N\nv411\tja\tt\tSTEINS;GATE 0\t\\N\nv412\tja\tt\tCLANNAD\t\\N\nv413\tja\tt\tFate/stay night\t\\N\nv999\tja\tt\tUnselected work\t\\N',
     entry_meta:
       'v410\t7\t2026-10-25 00:00:00+00\nv411\t8\t2026-10-25 00:00:00+00\nv412\t9\t2026-10-25 00:00:00+00\nv413\t10\t2026-10-25 00:00:00+00\nv999\t11\t2026-10-25 00:00:00+00',
-    vn_extlinks: 'v410\t99\nv411\t4\nv411\t2\nv411\t1\nv999\t3',
+    vn_extlinks: 'v410\t99\nv411\t4\nv411\t2\nv411\t1\nv411\t5\nv411\t6\nv999\t3',
     extlinks:
-      '1\twebsite\thttps://bgm.tv/subject/100\n2\twebsite\thttps://example.org/v411\n3\twebsite\thttps://bgm.tv/subject/100\n4\twikidata\thttps://bgm.tv/subject/101',
+      '1\twebsite\thttps://bgm.tv/subject/100\n2\twebsite\thttps://example.org/v411\n3\twebsite\thttps://bgm.tv/subject/100\n4\twikidata\thttps://bgm.tv/subject/101\n5\twebsite\thttps://bgm.tv/character/9\n6\twebsite\thttps://bgm.tv/person/8',
   };
   for (const table of VNDB_DUMP_TABLES) {
     const header = headers[table] ?? VNDB_DUMP_HEADERS[table] ?? ['id'];
@@ -117,11 +118,15 @@ test('default selected-family COPY planning joins only selected VN links and kee
         { id: 'v411', link: 1 },
         { id: 'v411', link: 2 },
         { id: 'v411', link: 4 },
+        { id: 'v411', link: 5 },
+        { id: 'v411', link: 6 },
       ],
       extlinks: [
         { id: 1, site: 'website', value: 'https://bgm.tv/subject/100' },
         { id: 2, site: 'website', value: 'https://example.org/v411' },
         { id: 4, site: 'wikidata', value: 'https://bgm.tv/subject/101' },
+        { id: 5, site: 'website', value: 'https://bgm.tv/character/9' },
+        { id: 6, site: 'website', value: 'https://bgm.tv/person/8' },
       ],
     });
     expect(missing.payload).not.toHaveProperty('vn_extlinks');
@@ -139,8 +144,11 @@ test('default selected-family COPY planning joins only selected VN links and kee
       { owner: 'v411', linkId: 1, bangumiExternalId: '100' },
       { owner: 'v411', linkId: 2, bangumiExternalId: undefined },
       { owner: 'v411', linkId: 4, bangumiExternalId: undefined },
+      { owner: 'v411', linkId: 5, bangumiExternalId: undefined },
+      { owner: 'v411', linkId: 6, bangumiExternalId: undefined },
     ]);
     expect(plan.workLinks[2]?.bridgeReason).toContain('site does not admit');
+    expect(plan.workLinks.slice(3).every((link) => link.bridgeReason !== undefined)).toBe(true);
     expect(plan.edges.filter((item) => item.property === 'wdt:P5732')).toHaveLength(1);
     const linked = plan.workLinks[0]!;
     const edge = plan.edges.find((item) => item.property === 'wdt:P5732')!;
@@ -202,6 +210,53 @@ test('required VNDB work-link tables reject corrupt headers and missing bodies',
     await expect(planCrossMediaSeed(new CrossMediaDumpFiles(paths.bangumi, paths.vndb))).rejects.toThrow(
       'Required VNDB external-link table is missing: vn_extlinks',
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('malformed and oversized selected work links stay atomic bounded gaps', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'showcase-work-links-bounds-'));
+  try {
+    const paths = await copiedDumps(root);
+    const extlinksPath = join(paths.vndb, 'db', 'extlinks');
+    await writeFile(extlinksPath, '1\twebsite\tjavascript:alert(1)\n2\twebsite\thttps://example.org/v411\n');
+    const malformed = await planCrossMediaSeed(new CrossMediaDumpFiles(paths.bangumi, paths.vndb));
+    expect(malformed.gaps).toContainEqual(
+      expect.objectContaining({
+        source: 'vndb',
+        fields: ['extlinks.id', 'extlinks.site'],
+        record: { id: 1, site: 'website' },
+        reason: 'Invalid external website URL; omitted from native facts',
+      }),
+    );
+    expect(malformed.workLinks.some((link) => link.owner === 'v411' && link.linkId === 1)).toBe(false);
+    expect(malformed.edges.some((edge) => edge.holder === 'v411' && edge.property === 'wdt:P5732')).toBe(false);
+
+    const oversizedJoins = Array.from(
+      { length: vndbLimits.maxLinks + 1 },
+      (_, index) => `v411\t${index + 1}`,
+    ).join('\n');
+    await writeFile(join(paths.vndb, 'db', 'vn_extlinks'), `${oversizedJoins}\n`);
+    await writeFile(
+      extlinksPath,
+      Array.from(
+        { length: vndbLimits.maxLinks + 1 },
+        (_, index) => `${index + 1}\twebsite\thttps://example.org/${index + 1}`,
+      ).join('\n') + '\n',
+    );
+    const oversized = await planCrossMediaSeed(new CrossMediaDumpFiles(paths.bangumi, paths.vndb));
+    expect(oversized.gaps).toContainEqual(
+      expect.objectContaining({
+        source: 'vndb',
+        fields: ['vn_extlinks.id', 'vn_extlinks.link'],
+        record: { id: 'v411', link: vndbLimits.maxLinks + 1 },
+        reason: 'Selected VNDB work external links exceed the converter limit',
+      }),
+    );
+    expect(oversized.records.vndb.find((record) => record.key === 'v411')?.payload).not.toHaveProperty('vn_extlinks');
+    expect(oversized.workLinks.some((link) => link.owner === 'v411')).toBe(false);
+    expect(oversized.edges.some((edge) => edge.holder === 'v411' && edge.property === 'wdt:P5732')).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
