@@ -32,11 +32,19 @@ test('Auth page scope configuration follows the real mounted Access union and re
   expect(authSecurityScopeConfiguration(undefined)).toBe('native-no-catalogue');
 
   const key = Buffer.alloc(32, 17).toString('base64url');
-  const website = await developmentWebsiteConfiguration({
-    DATABASE_URL: 'postgres://127.0.0.1:1/rezics',
-    KERNEL_ROUTE_KEY: key,
-    KERNEL_SESSION_KEYS: `1:${key}`,
-  });
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = 'postgres://127.0.0.1:1/rezics';
+  let website: Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+  try {
+    website = await developmentWebsiteConfiguration({
+      DATABASE_URL: process.env.DATABASE_URL,
+      KERNEL_ROUTE_KEY: key,
+      KERNEL_SESSION_KEYS: `1:${key}`,
+    });
+  } finally {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
+  }
   expect(website.AUTH_SECURITY_SCOPE_CONFIGURATION).toMatch(/^catalogue:[1-9]\d*$/);
   expect(developmentAuthPageBindings(website)).toEqual({
     AUTH_SECURITY_SCOPE_CONFIGURATION: website.AUTH_SECURITY_SCOPE_CONFIGURATION,
