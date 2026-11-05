@@ -95,8 +95,7 @@ test('Ordinary identifier evidence editor uses current admitted native fields an
   const competition = await review.read('schema:isbn');
   expect(competition.ok && competition.page?.candidates[0]?.id).toBe(identifiersCandidate);
   expect(
-    competition.ok &&
-      competition.page?.candidates.some((candidate) => candidate.id === identifiersCompetingCandidate),
+    competition.ok && competition.page?.candidates.some((candidate) => candidate.id === identifiersCompetingCandidate),
   ).toBe(true);
   expect(fixture.calls.at(-1)?.query).toContain(`context=${candidateContext}`);
   expect(fixture.calls.at(-1)?.session).toBe('identifier-session');
@@ -127,8 +126,11 @@ test('Ordinary identifier evidence editor uses current admitted native fields an
   });
   expect(selected.ok && selected.public?.subject.statements['schema:isbn']?.length).toBe(1);
   expect(fixture.calls.find((call) => call.path.endsWith(':adopt'))?.body).toEqual({
-    context: candidateContext, property: 'schema:isbn', mode: 'replace',
-    selection: [{ candidate: identifiersCandidate, rank: 'preferred' }], expected_head: 1,
+    context: candidateContext,
+    property: 'schema:isbn',
+    mode: 'replace',
+    selection: [{ candidate: identifiersCandidate, rank: 'preferred' }],
+    expected_head: 1,
   });
   expect(fixture.calls.at(-1)?.path).toBe(`/v1/subjects/${identifiersSubject}`);
 });
