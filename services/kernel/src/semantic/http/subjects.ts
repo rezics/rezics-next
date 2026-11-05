@@ -1176,33 +1176,38 @@ function subjectRoutes(
           throw new ProblemError('not_found');
         };
         try {
+          // accessCheck prepares through the pool, so every preparation runs outside the read transaction that consumes it.
           const observed = await admission.run('normal', job, () =>
             withReadTransaction(
               pool,
-              async (tx) => {
-                if (!(await mergeGrant(tx))) return null;
-                const saved = await observeSubjectIdentityOperation(tx, params.id);
-                if (!saved) return null;
-                for (const subject of [saved.original, saved.terminal]) {
-                  const route = routeOf(subject);
-                  if (route === null) return null;
-                  const readable = await accessCheck(
-                    access(),
-                    actor,
-                    'subject:read',
-                    { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
-                    { pool, deadline: job.deadline },
-                  );
-                  if (!(await readable(tx))) return null;
-                  const visible = await readVisibility.run(tx, { route, subject_id: subject });
-                  if (!visible || visible.visibility !== 'visible') return null;
-                }
-                return saved;
-              },
+              async (tx) => ((await mergeGrant(tx)) ? observeSubjectIdentityOperation(tx, params.id) : null),
               job.deadline,
             ),
           );
           if (!observed) return conceal();
+          for (const subject of [observed.original, observed.terminal]) {
+            const route = routeOf(subject);
+            if (route === null) return conceal();
+            const readable = await accessCheck(
+              access(),
+              actor,
+              'subject:read',
+              { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
+              { pool, deadline: job.deadline },
+            );
+            const disclosed = await admission.run('normal', job, () =>
+              withReadTransaction(
+                pool,
+                async (tx) => {
+                  if (!(await readable(tx))) return false;
+                  const visible = await readVisibility.run(tx, { route, subject_id: subject });
+                  return visible?.visibility === 'visible';
+                },
+                job.deadline,
+              ),
+            );
+            if (!disclosed) return conceal();
+          }
           return { operation: observed.operation };
         } catch (error) {
           if (error instanceof GrantDeniedError) return conceal();
