@@ -66,6 +66,10 @@ function response(subject: string, ids: string[] = [], revision = 7, limit: 8 | 
 }
 
 test('Prepared navigation origin, independent admissions, retired callbacks and exact uncertain pin intent compose in the actual current workflow', async () => {
+  // A sibling file's global mock.restore() may run before this deferred-import harness.
+  mock.module('cloudflare:workers', () => ({ env }));
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => start);
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
