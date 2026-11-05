@@ -122,7 +122,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
   await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
-const { CollectionRuleCurrent } = await import('../src/library/collection-rule-current');
+const { CollectionRuleCurrent, useCollectionOwnerCurrent } = await import('../src/library/collection-rule-current');
 const { CollectionPublicationPage } = await import('../src/library/collection-publication-page');
 const { unavailableRuleChoices } = await import('../src/library/collection-rule-read');
 const { collectionPublicationQuery } = await import('../src/library/collection-publication');
@@ -131,6 +131,10 @@ const { m } = await import('../src/paraglide/messages.js');
 const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
 const oldLocale = getLocale();
 setLocale('en', { reload: false });
+function OwnerAdmissionProbe() {
+  const owner = useCollectionOwnerCurrent('rule-admission-probe');
+  return <output data-owner-admission={owner.admissionState}>{owner.subject}</output>;
+}
 afterAll(async () => {
   setLocale(oldLocale, { reload: false });
   await window.happyDOM.close();
@@ -288,11 +292,17 @@ describe('Complete saved rule and selected Publication owner authority preserves
     const navigation: string[] = [];
     const a = rule();
     try {
-      await h.render(<CollectionRuleCurrent page={a} collectionId="alpha" navigate={(id) => navigation.push(id)} />);
+      await h.render(
+        <>
+          <CollectionRuleCurrent page={a} collectionId="alpha" navigate={(id) => navigation.push(id)} />
+          <OwnerAdmissionProbe />
+        </>,
+      );
       expect(h.host.querySelector('form')).toBeNull(); // The legacy global cache grants nothing.
       await settle(exposures.at(-1)!, { subject: 'foreign-viewer', admitted: ['collections', 'library_label.list'] });
       expect(h.host.querySelector('form')).toBeNull();
       await h.expose();
+      expect(h.host.querySelector('output[data-owner-admission="available"]')).not.toBeNull();
       const oldSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
       const oldReload = handler(h.button(m.library_collection_reload()), 'onClick');
       const oldLabels = handler(h.button(m.search_apply()), 'onClick');
