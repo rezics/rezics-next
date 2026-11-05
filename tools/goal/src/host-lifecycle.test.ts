@@ -1,15 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { AppServer } from './app-server.ts';
@@ -581,22 +572,19 @@ test('extracted host answers while recovery continues and finishes one in-flight
     ).rejects.toThrow('Unknown manager');
     const starting = f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
     await waitForFlag(requestStarted, child, 'in-flight start');
-    const hidden = `${f.path}.stopped`;
-    renameSync(f.path, hidden);
     const started = await starting;
     expect(started.stderr).toBe('');
     expect(started.code).toBe(0);
     expect(JSON.parse(started.stdout).threadId).toBe('thread-1');
+    rmSync(f.path, { recursive: true, force: true });
     await hostExited;
-    expect(existsSync(join(hidden, 'manager.sock'))).toBe(false);
-    expect(existsSync(join(hidden, 'manager-app-servers.json'))).toBe(false);
-    renameSync(hidden, f.path);
+    expect(existsSync(join(f.path, 'manager.sock'))).toBe(false);
+    expect(existsSync(join(f.path, 'manager-app-servers.json'))).toBe(false);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) {
       child.kill('SIGKILL');
       await hostExited;
     }
-    if (existsSync(`${f.path}.stopped`)) renameSync(`${f.path}.stopped`, f.path);
     await cleanHosted(f.path);
     f.close();
   }
