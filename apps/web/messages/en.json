@@ -8673,7 +8673,7 @@
   "library_vndb_value_unknown": "Unknown or empty in source",
   "library_vndb_wire_error": "Native admission returned {code}. The escaped JSON request exceeds 12 MiB + 64 bytes (HTTP 413). Browser file size does not predict wire size.",
   "library_vndb_leave_title": "Leave this VNDB import?",
-  "library_vndb_leave_help": "Leaving discards this private preview. Library entries already applied remain. A command in progress must finish first.",
+  "library_vndb_leave_help": "Your private upload stays available at this review address until it expires. Library entries already applied remain. A command in progress must finish first.",
   "library_vndb_leave_pending": "A command is pending or its outcome is unknown. Stay here and retry the original command.",
   "release_search_heading": "Find releases",
   "release_search_intro": "Browse current matching editions using the released catalogue.",
