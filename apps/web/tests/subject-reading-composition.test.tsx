@@ -174,12 +174,16 @@ test('The default Subject reader does not describe admitted incoming editions as
       recordedPage.subject,
     );
     if (loaded.kind !== 'page') throw new Error('Expected a loaded subject page.');
-    console.log('loaded composition diagnostic', JSON.stringify({
+    const loadedPlan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
+    const html = renderPage(loaded.page);
+    console.log('loaded render diagnostic', JSON.stringify({
       views: loaded.page.views,
-      content: (loaded.page.document as CompositionDocument).content.map((node) => ({ type: node.type, id: node.props.id })),
-      readKeys: Object.keys(loaded.page.reads),
+      node: loadedPlan.nodes.editions,
+      planned: loadedPlan.reads[loadedPlan.nodes.editions!],
+      result: loaded.page.reads[loadedPlan.nodes.editions!],
+      sections: [...html.matchAll(/<section\\b[^>]*>/g)].map(([section]) => section),
     }));
-    return renderPage(loaded.page);
+    return html;
   };
   const incoming = await renderLoaded(ownEmpty);
   expect(incoming).toContain('The Little Prince (Reynal &amp; Hitchcock, 1943)');
