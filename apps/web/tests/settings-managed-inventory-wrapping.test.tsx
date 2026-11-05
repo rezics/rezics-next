@@ -62,6 +62,7 @@ const settingsHref = '/de/settings?panel=compact&managedAccount=old#profile';
 function page(size = 1): ManagedAccountsPage {
   return {
     account: { id: viewer, kind: 'actor', displayName: longName, handle: longName.toLowerCase() },
+    viewer: { state: 'current', account: { id: viewer, kind: 'actor', displayName: longName, handle: longName.toLowerCase() } },
     organizations: {
       state: 'ready',
       items: Array.from({ length: size }, (_, index) => ({
@@ -72,6 +73,7 @@ function page(size = 1): ManagedAccountsPage {
           handle: longName,
         },
         role: index % 2 ? 'member' : 'owner',
+        navigation: { state: 'admitted' },
       })),
       next: 'organization opaque +/= &?%',
     },
@@ -82,8 +84,9 @@ function page(size = 1): ManagedAccountsPage {
           accountId: operator,
           account: { id: operator, kind: 'actor', displayName: `Operator ${longName}`, handle: null },
           state: 'current',
+          navigation: { state: 'admitted' },
         },
-        { reservationId: operator, accountId: withheld, account: null, state: 'reconciling' },
+        { reservationId: operator, accountId: withheld, account: null, state: 'reconciling', navigation: { state: 'concealed' } },
       ],
       next: 'responsibility opaque +/= &?%',
     },

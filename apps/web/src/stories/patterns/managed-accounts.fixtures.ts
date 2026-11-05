@@ -4,6 +4,7 @@ export const managedViewer = '019a0000-0000-7000-8000-000000000001';
 export function managedAccountsExample(): ManagedAccountsPage {
   return {
     account: { id: managedViewer, kind: 'actor', handle: 'avery', displayName: 'Avery Reader' },
+    viewer: { state: 'current', account: { id: managedViewer, kind: 'actor', handle: 'avery', displayName: 'Avery Reader' } },
     organizations: {
       state: 'ready',
       items: [
@@ -15,6 +16,7 @@ export function managedAccountsExample(): ManagedAccountsPage {
             displayName: 'Atlas Editors',
           },
           role: 'owner',
+          navigation: { state: 'admitted' },
         },
         {
           account: {
@@ -24,6 +26,7 @@ export function managedAccountsExample(): ManagedAccountsPage {
             displayName: 'Independent Reading Group',
           },
           role: 'member',
+          navigation: { state: 'admitted' },
         },
       ],
       next: 'illustrative organization +/=',
@@ -40,12 +43,14 @@ export function managedAccountsExample(): ManagedAccountsPage {
             displayName: 'Atlas Indexer',
           },
           state: 'current',
+          navigation: { state: 'admitted' },
         },
         {
           reservationId: '019a0000-0000-7000-8000-000000000006',
           accountId: '019a0000-0000-7000-8000-000000000007',
           account: null,
           state: 'reconciling',
+          navigation: { state: 'concealed' },
         },
       ],
       next: 'illustrative operator +/=',
@@ -53,7 +58,7 @@ export function managedAccountsExample(): ManagedAccountsPage {
   };
 }
 
-/** Illustrative retained IO only; official current-viewer/navigation publication and native evidence remain pending. */
+/** Illustrative native response shape for retained IO; seeded acceptance remains with integration. */
 export function managedAccountsIO(
   scenario: 'independent' | 'preparing' | 'reconciling' = 'independent',
 ): ManagedAccountsIO {

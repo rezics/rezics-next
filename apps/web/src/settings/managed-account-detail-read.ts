@@ -1,3 +1,4 @@
+import { managedNavigationSchema } from './managed-accounts-read';
 import { withManagedReadDeadline } from './managed-read-deadline';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import type { ManagedReaderCurrent } from './managed-session-reader';
@@ -23,6 +24,7 @@ const responsibilityPage = v.strictObject({
         accountId: id,
         account: v.nullable(identity),
         state: v.picklist(['current', 'reconciling']),
+        navigation: v.optional(managedNavigationSchema),
       }),
     ),
     v.maxLength(20),

@@ -10,16 +10,19 @@ const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
 const cursor = v.nullable(v.pipe(v.string(), v.maxLength(4096)));
 const identity = v.strictObject({ id, kind: v.picklist(['actor', 'organization']), handle: text, displayName: text });
-const organization = v.strictObject({ account: identity, role: v.picklist(['owner', 'member']) });
+export const managedNavigationSchema = v.strictObject({ state: v.picklist(['admitted', 'unavailable', 'concealed']) });
+const organization = v.strictObject({ account: identity, role: v.picklist(['owner', 'member']), navigation: managedNavigationSchema });
 const responsibility = v.strictObject({
   reservationId: id,
   accountId: id,
   account: v.nullable(identity),
   state: v.picklist(['current', 'reconciling']),
+  navigation: managedNavigationSchema,
 });
 // Native authority: access/account-management.ts managedAccountsSchema, 20 scanned entries per feed.
 const schema = v.strictObject({
   account: identity,
+  viewer: v.strictObject({ state: v.literal('current'), account: identity }),
   organizations: v.strictObject({
     state: v.picklist(['ready', 'preparing']),
     items: v.pipe(v.array(organization), v.maxLength(20)),
@@ -103,7 +106,7 @@ export async function loadManagedAccounts(
     const result = await withManagedReadDeadline(
       (signal) =>
         client.me.managedAccounts.get({
-          query: parseManagedAccountsCursors(cursors),
+          query: cursors,
           headers: { authorization, 'cache-control': 'no-store' },
           fetch: { cache: 'no-store', signal },
         }),
@@ -113,7 +116,7 @@ export async function loadManagedAccounts(
     const parsed = v.safeParse(schema, result.data);
     if (!parsed.success) return managedAccountsFailure(result.status, undefined, result.headers);
     const page = parsed.output;
-    if (page.account.id !== viewerId || page.account.kind !== 'actor')
+    if (page.account.id !== viewerId || page.account.kind !== 'actor' || page.viewer.account.id !== viewerId || page.viewer.account.kind !== 'actor')
       return { ...managedAccountsFailure(result.status, undefined, result.headers), kind: 'denied' };
     if (
       page.organizations.items.some((item) => item.account.kind !== 'organization') ||
@@ -134,6 +137,15 @@ export function managedAccountHref(settingsHref: string, accountId: string): str
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+type Navigation = { self: string; organizations: string[]; responsibilities: string[] };
+function navigation(page: ManagedAccountsPage): Navigation {
+  return {
+    self: page.viewer.account.id,
+    organizations: page.organizations.items.filter((item) => item.navigation.state === 'admitted').map((item) => item.account.id),
+    responsibilities: page.responsibilities.items.filter((item) => item.account && item.navigation.state === 'admitted').map((item) => item.reservationId),
+  };
+}
+
 type Feed<T> = {
   items: T[];
   next: string | null;
@@ -146,6 +158,7 @@ type Feed<T> = {
 };
 export type ManagedAccountsSnapshot = {
   account: ManagedIdentity | null;
+  navigation?: Navigation | undefined;
   loading: boolean;
   failure: ManagedAccountsFailure | null;
   /** Longest response-time deadline for the directory endpoint, shared by both feeds and refresh. */
@@ -179,6 +192,7 @@ const firstCoordinate = (): Coordinate => ({ cursor: null, prior: [] });
 export class ManagedAccountsInventory {
   private value = empty();
   private epoch = 0;
+  private observation = 0;
   private coordinates = { organizations: firstCoordinate(), responsibilities: firstCoordinate() };
   private failed: Partial<Record<ManagedFeed, Coordinate>> = {};
   private resetCoordinates() {
@@ -250,6 +264,7 @@ export class ManagedAccountsInventory {
     this.publish({
       ...this.value,
       loading: true,
+      navigation: undefined,
       failure: null,
       organizations: { ...this.value.organizations, busy: false },
       responsibilities: { ...this.value.responsibilities, busy: false },
@@ -265,6 +280,7 @@ export class ManagedAccountsInventory {
     this.resetCoordinates();
     this.publish({
       account: page.account,
+      navigation: navigation(page),
       loading: false,
       failure: null,
       retryAt: this.value.retryAt ?? 0,
@@ -326,7 +342,8 @@ export class ManagedAccountsInventory {
           ? { organizationsCursor: target.cursor }
           : { operatorsCursor: target.cursor };
     const epoch = this.epoch;
-    this.publish({ ...before, [feed]: { ...before[feed], busy: true } });
+    const observation = ++this.observation;
+    this.publish({ ...before, navigation: undefined, [feed]: { ...before[feed], busy: true } });
     const result = await this.request(cursors);
     if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
@@ -353,32 +370,30 @@ export class ManagedAccountsInventory {
     }
     this.coordinates[feed] = target;
     delete this.failed[feed];
-    const current = this.value;
-    const navigation = { previous: target.prior.length > 0, restartable: target.cursor !== null };
+    const current = { ...this.value, ...(observation === this.observation ? { account: result.page.account, navigation: navigation(result.page) } : {}) };
+    const movementState = { previous: target.prior.length > 0, restartable: target.cursor !== null };
     if (feed === 'organizations') {
       const next = result.page.organizations;
       this.publish({
         ...current,
-        account: target.cursor === null ? current.account : result.page.account,
         organizations: {
           ...next,
           items: next.state === 'preparing' ? [] : pageItems(next.items, (item) => item.account.id),
           busy: false,
           failure: null,
-          ...navigation,
+          ...movementState,
         },
       });
     } else {
       const next = result.page.responsibilities;
       this.publish({
         ...current,
-        account: target.cursor === null ? current.account : result.page.account,
         responsibilities: {
           ...next,
           items: pageItems(next.items, (item) => item.reservationId),
           busy: false,
           failure: null,
-          ...navigation,
+          ...movementState,
         },
       });
     }

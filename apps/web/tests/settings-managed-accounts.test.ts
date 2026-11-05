@@ -20,18 +20,20 @@ const operated = '019a0000-0000-7000-8000-000000000003';
 function page(): ManagedAccountsPage {
   return {
     account: { id: viewer, kind: 'actor', handle: 'avery', displayName: 'Avery' },
+    viewer: { state: 'current', account: { id: viewer, kind: 'actor', handle: 'avery', displayName: 'Avery' } },
     organizations: {
       state: 'ready',
       items: [
         {
           account: { id: organization, kind: 'organization', handle: null, displayName: 'Reading group' },
           role: 'member',
+          navigation: { state: 'admitted' },
         },
       ],
       next: 'signed organization +/=',
     },
     responsibilities: {
-      items: [{ reservationId: organization, accountId: operated, account: null, state: 'reconciling' }],
+      items: [{ reservationId: organization, accountId: operated, account: null, state: 'reconciling', navigation: { state: 'concealed' } }],
       next: 'signed operator +/=',
     },
   };
@@ -843,4 +845,38 @@ test('only an admitted full refresh resets coordinates, and earlier feed results
   await inventory.previous('organizations');
   expect(inventory.snapshot()).toBe(replacement);
   expect(calls).toHaveLength(7);
+});
+
+test('latest cross-feed navigation retires older admission while older rows still settle', async () => {
+  const replies: ((result: ManagedAccountsResult) => void)[] = [];
+  const inventory = new ManagedAccountsInventory(viewer, async () =>
+    replies.length === 0 && !inventory.snapshot().account
+      ? ready(page())
+      : new Promise((resolve) => replies.push(resolve)),
+  );
+  await inventory.load();
+  expect(inventory.snapshot().navigation?.organizations).toEqual([organization]);
+  const older = inventory.more('organizations');
+  expect(inventory.snapshot().navigation).toBeUndefined();
+  const latest = inventory.more('responsibilities');
+  const changed = page();
+  changed.organizations.items[0]!.navigation = { state: 'unavailable' };
+  replies[1]!(ready(changed));
+  await latest;
+  expect(inventory.snapshot().navigation?.organizations).toEqual([]);
+  replies[0]!(ready(page()));
+  await older;
+  expect(inventory.snapshot().organizations.items).toHaveLength(1);
+  expect(inventory.snapshot().navigation?.organizations).toEqual([]);
+});
+
+test('native current-viewer mismatch is denied and never installs directory navigation', async () => {
+  const wrong = page();
+  wrong.viewer.account.id = operated;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async () => Response.json(wrong)) as typeof fetch,
+  });
+  const result = await loadManagedAccounts(client, 'Bearer viewer', viewer, {});
+  expect(result.ok).toBe(false);
+  expect(!result.ok && result.kind).toBe('denied');
 });

@@ -181,8 +181,8 @@ test('two mounted inventories name their independent feeds and retain exact spar
     const resp = region(a, m.managed_operated_title());
     const otherOrg = region(b, m.managed_organizations_title());
     const identity = within(org).getByRole('heading', { name: longName, level: 4 });
-    expect(within(a).queryByRole('link')).toBeNull();
-    expect(a.textContent).toContain(m.settings_managed_navigation_unavailable());
+    expect(within(a).getAllByRole('link')).toHaveLength(4);
+    expect(within(org).getByRole('link', { name: longName }).getAttribute('href')).toContain('managedAccount=');
     const unavailable = within(resp)
       .getByRole('heading', { level: 4, name: m.settings_managed_identity_unavailable() })
       .closest('li')!;
@@ -292,13 +292,14 @@ test('organization retry and first-page controls preserve retained responsibilit
     const inventory = view.inventory();
     const org = region(inventory, m.managed_organizations_title());
     const resp = region(inventory, m.managed_operated_title());
-    const retained = resp.innerHTML;
+    const retained = [...resp.querySelectorAll('h4')];
     await view.click(button(org, m.managed_next()));
     await feed.answer(managedAccountsFailure(400, { code: 'invalid_cursor' }));
     associations(inventory);
     await view.click(button(org, m.settings_retry()));
     await feed.answer(managedAccountsFailure(409, { code: 'stale_cursor' }));
-    expect(resp.innerHTML).toBe(retained);
+    expect([...resp.querySelectorAll('h4')]).toEqual(retained);
+    expect(within(resp).queryByRole('link')).toBeNull();
     await view.click(button(org, m.settings_managed_restart_list()));
     await feed.answer(
       ready({
@@ -308,7 +309,8 @@ test('organization retry and first-page controls preserve retained responsibilit
       }),
     );
     expect(org.textContent).toContain(m.managed_no_organizations());
-    expect(resp.innerHTML).toBe(retained);
+    expect([...resp.querySelectorAll('h4')]).toEqual(retained);
+    expect(within(resp).queryByRole('link')).toBeNull();
     expect(feed.calls).toEqual([
       {},
       { organizationsCursor: initial.organizations.next! },
@@ -377,7 +379,7 @@ test('supplied handle and unnamed fallbacks stay human while unavailable respons
     const resp = region(inventory, m.managed_operated_title());
     expect(within(viewer).getByRole('heading', { level: 4 }).textContent).toBe(`@${initial.account.handle}`);
     expect(within(org).getByRole('heading', { name: m.managed_unnamed(), level: 4 })).toBeDefined();
-    expect(within(inventory).queryByRole('link')).toBeNull();
+    expect(within(inventory).getAllByRole('link')).toHaveLength(4);
     const unavailable = within(resp)
       .getByRole('heading', { name: m.settings_managed_identity_unavailable() })
       .closest('li')!;
@@ -583,5 +585,30 @@ afterAll(async () => {
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+test('admitted row selection retains the directory and keyboard return focuses its source', async () => {
+  const feed = source();
+  const view = await mounted([feed]);
+  try {
+    const initial = managedAccountsExample();
+    await feed.answer(ready(initial));
+    const inventory = view.inventory();
+    const org = region(inventory, m.managed_organizations_title());
+    const link = within(org).getByRole('link', { name: 'Atlas Editors' }) as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(`/en/settings?panel=compact&managedAccount=${initial.organizations.items[0]!.account.id}#account`);
+    link.focus();
+    await view.click(link);
+    expect(link.closest('[hidden]')).not.toBeNull();
+    link.blur();
+    await view.navigate('/en/settings?panel=compact#account');
+    expect(document.activeElement).toBe(link);
+    expect(feed.calls).toEqual([{}]);
+    const concealed = within(region(inventory, m.managed_operated_title()))
+      .getByRole('heading', { name: m.settings_managed_identity_unavailable() }).closest('li')!;
+    expect(concealed.querySelector('a')).toBeNull();
+  } finally {
+    await view.close();
   }
 });

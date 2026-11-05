@@ -9,7 +9,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import { useLocation } from '@tanstack/react-router';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -22,13 +22,13 @@ import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
 import {
-  managedNavigationGuard,
   useManagedReaderLifetime,
   useManagedSessionReader,
   type ManagedSessionReader,
 } from './managed-session-reader';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
+  managedAccountHref,
   ManagedAccountsInventory,
   type ManagedAccountsFailure,
   type ManagedAccountsIO,
@@ -46,11 +46,17 @@ const stateClassName = 'h-auto min-h-5 max-w-full shrink whitespace-normal wrap-
 const identityRowClassName =
   'min-h-14 max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-slot=list-row-link]]:min-h-11';
 
-function IdentityRow({ account, children }: { account: ManagedIdentity; children?: ReactNode }) {
+type RowFeed = 'self' | ManagedFeed;
+function IdentityRow({ account, children, href, feed, rowKey }: {
+  account: ManagedIdentity; children?: ReactNode; href?: string | undefined; feed: RowFeed; rowKey: string;
+}) {
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
     <ContentItem
       className={identityRowClassName}
+      href={href}
+      data-managed-feed={feed}
+      data-managed-key={rowKey}
       title={name}
       headingLevel={4}
       visual={
@@ -63,7 +69,10 @@ function IdentityRow({ account, children }: { account: ManagedIdentity; children
           <p className="min-w-0 max-w-full wrap-anywhere text-sm text-muted-foreground">@{account.handle}</p>
         ) : null
       }
-      state={children}
+      state={<>
+        {children}
+        {href === undefined ? <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p> : null}
+      </>}
     />
   );
 }
@@ -258,6 +267,10 @@ function FeedActions({
 
 export function ManagedAccountsView({
   snapshot,
+  settingsHref,
+  active = true,
+  onVisit,
+  navigation = () => snapshot.navigation,
   more,
   previousPage,
   firstPage,
@@ -265,6 +278,9 @@ export function ManagedAccountsView({
   current = () => true,
 }: {
   current?: () => boolean;
+  active?: boolean | undefined;
+  onVisit?: ((href: string) => void) | undefined;
+  navigation?: (() => ManagedAccountsSnapshot['navigation']) | undefined;
   snapshot: ManagedAccountsSnapshot;
   settingsHref: string;
   more: (feed: ManagedFeed) => void;
@@ -280,6 +296,39 @@ export function ManagedAccountsView({
   // One presentation timer only re-enables deliberate directory controls; it never dispatches a read.
   const waiting = usePreferenceRetry(undefined, snapshot.retryAt ?? 0);
   const inventoryWaitId = `${id}-inventory-wait`;
+  const container = useRef<HTMLDivElement>(null);
+  const source = useRef<{ feed: RowFeed; key: string; keyboard: boolean } | null>(null);
+  const wasActive = useRef(active);
+  const admitted = (feed: RowFeed, key: string) => {
+    const latest = navigation();
+    return current() && (feed === 'self' ? latest?.self === key : latest?.[feed].includes(key) === true);
+  };
+  const destination = (feed: RowFeed, key: string, account: ManagedIdentity) =>
+    admitted(feed, key) ? managedAccountHref(settingsHref, account.id) : undefined;
+  const visit = (event: MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as Element).closest('a');
+    if (!anchor) return;
+    const row = anchor.closest<HTMLElement>('[data-managed-key]')!;
+    const feed = row.dataset.managedFeed as RowFeed;
+    const key = row.dataset.managedKey!;
+    if (!admitted(feed, key)) { event.preventDefault(); return; }
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    source.current = { feed, key, keyboard: event.detail === 0 && document.activeElement === anchor };
+    if (onVisit) { event.preventDefault(); onVisit(anchor.getAttribute('href')!); }
+  };
+  useLayoutEffect(() => {
+    const returning = active && !wasActive.current;
+    wasActive.current = active;
+    if (!returning) return;
+    const origin = source.current;
+    source.current = null;
+    if (!origin?.keyboard || !current() || (document.activeElement !== document.body && !container.current?.contains(document.activeElement))) return;
+    const row = [...(container.current?.querySelectorAll<HTMLElement>('[data-managed-key]') ?? [])]
+      .find((node) => node.dataset.managedFeed === origin.feed && node.dataset.managedKey === origin.key);
+    const link = admitted(origin.feed, origin.key) ? row?.querySelector<HTMLAnchorElement>('a') : null;
+    const heading = origin.feed === 'self' ? viewerHeadingId : origin.feed === 'organizations' ? organizationsHeadingId : responsibilitiesHeadingId;
+    (link ?? document.getElementById(heading))?.focus();
+  }, [active, current, navigation, viewerHeadingId, organizationsHeadingId, responsibilitiesHeadingId]);
   const previous = useRef(snapshot);
   const handoff = useRef<{ feed: ManagedFeed; activator: HTMLButtonElement } | null>(null);
   const activate =
@@ -314,20 +363,21 @@ export function ManagedAccountsView({
   return (
     <div
       className="min-w-0 max-w-full space-y-6 wrap-anywhere"
+      ref={container}
       data-slot="managed-accounts"
       onClickCapture={(event) => {
         handoff.current = null;
-        managedNavigationGuard(current)(event);
+        visit(event);
       }}
       onBlurCapture={(event) => {
         if ((event.target as EventTarget) === handoff.current?.activator) handoff.current = null;
       }}
-      onAuxClickCapture={managedNavigationGuard(current)}
+      onAuxClickCapture={visit}
     >
       <Card className="min-w-0 max-w-full" role="region" aria-labelledby={viewerHeadingId} aria-busy={snapshot.loading}>
         <CardHeader className="min-w-0">
           <CardTitle className="min-w-0 wrap-anywhere">
-            <ContentItemHeading level={3} id={viewerHeadingId}>
+            <ContentItemHeading level={3} id={viewerHeadingId} tabIndex={-1}>
               {m.managed_your_account()}
             </ContentItemHeading>
           </CardTitle>
@@ -350,12 +400,12 @@ export function ManagedAccountsView({
           ) : null}
           {account ? (
             <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
-              <IdentityRow account={account} />
+              <IdentityRow account={account} feed="self" rowKey={account.id} href={destination('self', account.id, account)} />
             </ul>
           ) : null}
           {account ? (
             <div className="mt-3 space-y-3">
-              <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+              {!snapshot.navigation ? <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p> : null}
               {waiting ? (
                 <p id={inventoryWaitId} role="status" aria-labelledby={viewerHeadingId}>
                   {m.settings_managed_inventory_retry_wait()}
@@ -399,7 +449,7 @@ export function ManagedAccountsView({
               ) : organizations.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_organizations_title()}>
                   {organizations.items.map(({ account, role }) => (
-                    <IdentityRow key={account.id} account={account}>
+                    <IdentityRow key={account.id} account={account} feed="organizations" rowKey={account.id} href={destination('organizations', account.id, account)}>
                       <Badge variant="secondary" className={stateClassName}>
                         {role === 'owner' ? m.managed_owner() : m.managed_member()}
                       </Badge>
@@ -444,7 +494,7 @@ export function ManagedAccountsView({
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
                     item.account ? (
-                      <IdentityRow key={item.reservationId} account={item.account}>
+                      <IdentityRow key={item.reservationId} account={item.account} feed="responsibilities" rowKey={item.reservationId} href={destination('responsibilities', item.reservationId, item.account)}>
                         <Badge variant="secondary" className={stateClassName}>
                           {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                         </Badge>
@@ -493,9 +543,13 @@ function ViewerInventory({
   settingsHref,
   io = nativeIO,
   owner,
+  active,
+  onVisit,
 }: {
   viewerId: string;
   settingsHref: string;
+  active?: boolean | undefined;
+  onVisit?: ((href: string) => void) | undefined;
   io?: ManagedAccountsIO | undefined;
   owner?: ManagedSessionReader | undefined;
 }) {
@@ -512,6 +566,9 @@ function ViewerInventory({
   return (
     <ManagedAccountsView
       snapshot={snapshot}
+      active={active}
+      onVisit={onVisit}
+      navigation={() => inventory.snapshot().navigation}
       current={() => (!owner || owner.isCurrent()) && inventory.snapshot().account !== null}
       settingsHref={settingsHref}
       more={(feed) => void inventory.more(feed)}
@@ -526,6 +583,8 @@ function ViewerInventory({
 export function ManagedAccounts(props: {
   viewerId: string;
   settingsHref: string;
+  active?: boolean | undefined;
+  onVisit?: ((href: string) => void) | undefined;
   io?: ManagedAccountsIO | undefined;
   owner?: ManagedSessionReader | undefined;
 }) {
@@ -536,6 +595,7 @@ export function ManagedAccounts(props: {
 export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
   const session = useSession();
   const location = useLocation();
+  const router = useRouter();
   const selected = !new URL(location.publicHref, 'https://rezics.local').searchParams.has('managedAccount');
   const owner = useManagedSessionReader(session.subject, session.subject, session.csrfToken);
   const [visited, setVisited] = useState<ManagedSessionReader | null>(() => (selected ? owner : null));
@@ -552,6 +612,8 @@ export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefi
         settingsHref={location.publicHref}
         io={io}
         owner={owner}
+        active={selected}
+        onVisit={(href) => void router.navigate({ href, hashScrollIntoView: false })}
       />
     </div>
   );
