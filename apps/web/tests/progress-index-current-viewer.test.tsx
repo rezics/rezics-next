@@ -76,6 +76,8 @@ let deferLists = false;
 type ListFailure = 'forbidden' | 'closed' | 'not_found' | 'invalid_cursor' | 'stale_cursor' | 'unavailable';
 type ListOutcome = 'ok' | ListFailure;
 let listOutcome: ListOutcome = 'ok';
+let indexPages = new Map<string, { rows?: number[]; next?: string | null }>();
+let failCursorOnce = new Map<string, number>();
 const listFailures: Record<ListFailure, { status: number; code: string }> = {
   forbidden: { status: 403, code: 'forbidden' },
   closed: { status: 403, code: 'platform_closed' },
@@ -90,8 +92,8 @@ let nextRelease: ReturnType<typeof deferred<typeof bundledRelease>> | undefined;
 let envelopeOverride: ((value: CurrentViewerProgressIndex) => CurrentViewerProgressIndex) | undefined;
 let retainedRequest: Request | undefined;
 let actualRequest: Request;
-const native = (viewer: Viewer, subjectId = id(1), revision = 7) => ({
-  id: id(20),
+const native = (viewer: Viewer, subjectId = id(1), revision = 7, sessionId = 20) => ({
+  id: id(sessionId),
   subjectId,
   versionSubjectId: null,
   mode: 'scalar_amount',
@@ -129,16 +131,27 @@ const kernel = createKernelClient('https://kernel.test', {
     calls.push(call);
     if (request.method === 'GET' && !deferLists) {
       const url = new URL(request.url);
-      const failure = listOutcome === 'stale_cursor' && !url.searchParams.has('cursor') ? undefined : listOutcome;
+      const cursor = url.searchParams.get('cursor') ?? '';
+      const failuresRemaining = failCursorOnce.get(cursor) ?? 0;
+      const failure = failuresRemaining
+        ? 'unavailable'
+        : listOutcome === 'stale_cursor' && !url.searchParams.has('cursor')
+          ? undefined
+          : listOutcome;
+      if (failuresRemaining) failCursorOnce.set(cursor, failuresRemaining - 1);
       if (failure && failure !== 'ok') {
         const { status, code } = listFailures[failure];
         work.resolve(Response.json({ code }, { status }));
       } else {
         const subjectId = url.searchParams.get('subjectId')!;
+        const page = indexPages.get(cursor);
         work.resolve(
           Response.json({
-            progressSessions: [{ ...native(viewer, subjectId, listedRevision), state: listedState }],
-            next: `next-${viewer}`,
+            progressSessions: (page?.rows ?? [20]).map((sessionId) => ({
+              ...native(viewer, subjectId, listedRevision, sessionId),
+              state: listedState,
+            })),
+            next: page ? (page.next ?? null) : `next-${viewer}`,
           }),
         );
       }
@@ -291,11 +304,16 @@ const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { userEvent } = await import('storybook/test');
 const { progressFormChoices } = await import('../src/library/progress-profile');
 const { renderToString } = await import('react-dom/server');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider, useLocation } =
   await import('@tanstack/react-router');
 const { CurrentViewerProgressIndexPage } = await import('../src/library/progress-page');
 const { readProgressIndex, readCurrentViewerProgressIndex } = await import('../src/library/progress-server');
 const { progressIndexAdmission, progressIndexSession } = await import('../src/library/progress-index-origin');
+const {
+  progressIndexReturnSelectionFromLocationState,
+  progressIndexSelectionLocationState,
+  progressReturnContextFromLocationState,
+} = await import('../src/library/progress-start-draft-navigation');
 const { prepareSession } = await import('../src/session/request');
 const { sessionQuery } = await import('../src/session/query');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
@@ -317,6 +335,8 @@ function reset() {
   locale = 'en';
   refusal = missingSubject = deferLists = false;
   listOutcome = 'ok';
+  indexPages = new Map();
+  failCursorOnce = new Map();
   credentials = naming = releases = 0;
   envelopeOverride = undefined;
   retainedRequest = undefined;
@@ -439,6 +459,95 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
     },
   };
 }
+
+async function mountRouted() {
+  reset();
+  indexPages.set('', { rows: [20], next: 'cursor-one' });
+  indexPages.set('cursor-one', { rows: [21], next: 'cursor-two' });
+  indexPages.set('cursor-two', { rows: [], next: null });
+  failCursorOnce.set('cursor-one', 1);
+  const requested = { subjectId: id(1) };
+  const loader = await readCurrentViewerProgressIndex({ data: requested });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  client.setQueryData(sessionQuery.queryKey, browser);
+  const lifetime = viewerExposureLifetime(client);
+  const stopObservation = lifetime.subscribeCache(() => {});
+  const observation = lifetime.getSnapshot();
+  if (observation.state === 'signed-in') {
+    const query = viewerExposureQuery(observation.observation);
+    client.setQueryData(query.queryKey, { subject: observation.observation.subject, admitted: [] });
+  }
+  const rootRoute = createRootRoute();
+  const search = (value: Record<string, unknown>) => value as { subjectId?: string; cursor?: string };
+  const indexRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/library/progress',
+    validateSearch: search,
+    component: () => null,
+  });
+  const localizedIndexRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/library/progress',
+    validateSearch: search,
+    component: () => null,
+  });
+  const detailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/library/progress/$id',
+    component: () => null,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([indexRoute, localizedIndexRoute, detailRoute]),
+    history: createMemoryHistory({ initialEntries: [`/library/progress?subjectId=${id(1)}`] }),
+  });
+  await router.load();
+  function RoutedProgress() {
+    const location = useLocation();
+    if (location.pathname.includes('/library/progress/')) return <div data-route="session" />;
+    return (
+      <CurrentViewerProgressIndexPage
+        loader={loader}
+        requested={location.search as { subjectId?: string; cursor?: string }}
+        returnSelection={progressIndexReturnSelectionFromLocationState(location.state, locale)}
+      />
+    );
+  }
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  await tick(() =>
+    root.render(
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <RouterContextProvider router={router}>
+            <RoutedProgress />
+          </RouterContextProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
+  );
+  const view = within(host);
+  const user = userEvent.setup({ document: window.document });
+  const click = (label: string) =>
+    tick(async () => {
+      await user.click(view.getByRole('button', { name: label, exact: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  return {
+    host,
+    client,
+    router,
+    view,
+    click,
+    close: async () => {
+      await tick(() => root.unmount());
+      stopObservation();
+      host.remove();
+      client.clear();
+    },
+  };
+}
+
 async function renderCurrentViewerHtml(loader: CurrentViewerProgressIndex) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const router = createRouter({
@@ -581,13 +690,70 @@ test('closed, concealed, invalid/stale cursor and unavailable list outcomes reta
   expect((await readProgressIndex({ data: { subjectId: id(1), cursor: 'opaque/==' } })).addressIssue).toBe('cursor');
   listOutcome = 'stale_cursor';
   const staleFrom = calls.length;
-  expect((await readProgressIndex({ data: { subjectId: id(1), cursor: 'opaque/==' } })).sessions).toHaveLength(1);
+  const stale = await readProgressIndex({ data: { subjectId: id(1), cursor: 'opaque/==' } });
+  expect(stale.sessions).toHaveLength(1);
+  expect(stale.admittedCursor).toBeNull();
+  expect(stale.cursorRestarted).toBe(true);
   expect(calls.slice(staleFrom).map(({ request }) => new URL(request.url).searchParams.get('cursor'))).toEqual([
     'opaque/==',
     null,
   ]);
   listOutcome = 'unavailable';
   await expect(readProgressIndex({ data: { subjectId: id(1) } })).rejects.toThrow('Kernel library read failed');
+});
+
+test('Routed current viewer traverses, retries, opens an exact session and returns through a fresh matching read', async () => {
+  const h = await mountRouted();
+  try {
+    const listCursors = () =>
+      calls
+        .filter((call) => call.request.method === 'GET')
+        .map((call) => new URL(call.request.url).searchParams.get('cursor'));
+    expect(listCursors()).toEqual([null]);
+
+    await h.click(m.library_progress_more());
+    expect(h.router.state.location.search.cursor).toBe('cursor-one');
+    expect(h.view.getByRole('button', { name: m.library_progress_retry(), exact: true })).toBeDefined();
+    expect(h.host.querySelector(`[data-progress-session-id="${id(20)}"]`)).toBeNull();
+
+    await h.click(m.library_progress_retry());
+    expect(h.host.querySelector(`[data-progress-session-id="${id(21)}"]`)).not.toBeNull();
+    await h.click(m.library_progress_more());
+    expect(h.router.state.location.search.cursor).toBe('cursor-two');
+    expect(h.view.getByText(m.library_progress_page_empty())).toBeDefined();
+    expect(h.view.getByRole('button', { name: m.library_progress_index_previous(), exact: true })).toBeDefined();
+
+    await h.click(m.library_progress_index_previous());
+    expect(h.router.state.location.search.cursor).toBe('cursor-one');
+    const sessionLink = h.host.querySelector<HTMLAnchorElement>(`a[href="/en/library/progress/${id(21)}"]`)!;
+    await tick(async () => {
+      await userEvent.setup({ document: window.document }).click(sessionLink);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(h.router.state.location.pathname).toBe(`/en/library/progress/${id(21)}`);
+    const context = progressReturnContextFromLocationState(h.router.state.location.state, id(21), 'en');
+    expect(context?.windowCoordinates).toEqual({ predecessors: [null], current: 'cursor-one' });
+
+    const beforeReturn = listCursors().filter((cursor) => cursor === 'cursor-one').length;
+    await tick(async () => {
+      await h.router.navigate({
+        to: '/library/progress',
+        search: context!.indexSearch as never,
+        state: progressIndexSelectionLocationState(context!, '2026-01-01T00:00:00Z') as never,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(listCursors().filter((cursor) => cursor === 'cursor-one')).toHaveLength(beforeReturn + 1);
+    expect(h.host.querySelector(`[data-progress-session-id="${id(21)}"]`)).not.toBeNull();
+    expect(window.document.activeElement).toBe(h.host.querySelector(`[data-progress-session-id="${id(21)}"]`));
+    expect(h.view.getByRole('button', { name: m.library_progress_index_previous(), exact: true })).toBeDefined();
+
+    await h.click(m.library_collections_first_page());
+    expect(h.router.state.location.search.cursor).toBeUndefined();
+    expect(listCursors().at(-1)).toBeNull();
+  } finally {
+    await h.close();
+  }
 });
 
 test('loader SSR hydrates without another list; observed B/unknown/sign-out/admission immediately retire all private UI', async () => {

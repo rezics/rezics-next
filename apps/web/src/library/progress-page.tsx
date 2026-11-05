@@ -17,10 +17,11 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
-import { Link, useRouter } from '@tanstack/react-router';
+import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -57,6 +58,18 @@ import {
 } from './progress-reads';
 import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
+import {
+  admitProgressIndexWindow,
+  progressIndexWindowAddress,
+  progressIndexWindowQueryKey,
+  progressIndexWindowRouteState,
+  progressIndexWindowSnapshot,
+  stageProgressIndexWindow,
+  startProgressIndexWindows,
+  type ProgressIndexCoordinate,
+  type ProgressIndexWindowMove,
+  type ProgressIndexWindowState,
+} from './progress-index-windows';
 import {
   progressReturnContextForPage,
   progressReturnLocationState,
@@ -136,6 +149,23 @@ function ProgressReturnRecovery({
 
 const subscribe = () => () => {};
 type ProgressRowReview = (id: string) => Promise<ProgressIndex['sessions'][number] | null>;
+function onlyDisplayLayoutChanged(previous: Record<string, unknown>, current: Record<string, unknown>): boolean {
+  if (previous.layout === current.layout) return false;
+  const entries = (value: Record<string, unknown>) =>
+    Object.entries(value)
+      .filter(([key]) => key !== 'layout')
+      .sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(entries(previous)) === JSON.stringify(entries(current));
+}
+type ProgressWindowActions = {
+  previous?: (keyboard: boolean) => void;
+  first?: (keyboard: boolean) => void;
+  more?: (keyboard: boolean) => void;
+  retry?: () => void;
+  refresh?: (keyboard: boolean) => void;
+  focusToken?: string;
+  consumeFocus?: (token: string) => void;
+};
 
 type ProgressCommand<Input, Sender> = {
   data: Input;
@@ -164,6 +194,8 @@ export function CurrentViewerProgressIndexPage({
 }) {
   const renderedSession = useSession();
   const client = useQueryClient();
+  const router = useRouter();
+  const location = useLocation();
   const instance = useId();
   const { store, value: scoped } = useLibraryWorkspaceAdmission(progressOperations);
   const admitted = useOperation('progress_session.list');
@@ -227,6 +259,7 @@ export function CurrentViewerProgressIndexPage({
     instance,
   ] as const;
   const listVersion = store.dispatchVersion('progress_session.list');
+  const readCursorOverride = useRef<ProgressIndexCoordinate | undefined>(undefined);
   const query = useQuery({
     ...personalRead,
     queryKey,
@@ -234,13 +267,16 @@ export function CurrentViewerProgressIndexPage({
       const currentRead = () => origin.isCurrent() && store.dispatchVersion('progress_session.list') === listVersion;
       if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
       try {
+        const readCursor = readCursorOverride.current === undefined ? cursor : readCursorOverride.current;
+        readCursorOverride.current = undefined;
+        const readAddress = { ...requested };
+        if (readCursor === null) delete readAddress.cursor;
+        else readAddress.cursor = readCursor;
         const result = await readCurrentViewerProgressIndex({
-          data: {
-            ...requested,
-          },
+          data: readAddress,
         });
         if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
-        return result;
+        return readCursor === cursor ? result : { ...result, requested: { ...result.requested, cursor } };
       } catch (error) {
         if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
         throw error;
@@ -281,6 +317,264 @@ export function CurrentViewerProgressIndexPage({
     const state = client.getQueryState<CurrentViewerProgressIndex>(queryKey);
     return !origin.retired && origin.validate() && state?.status !== 'error' && matches(currentResult());
   });
+  const windowIdentity = JSON.stringify([viewer, scoped.viewer, listVersion, subjectId, state, mode, profileId, locale]);
+  const routeWindow = progressIndexWindowRouteState(location.state);
+  const routeWindowBook = routeWindow
+    ? client.getQueryData<ProgressIndexWindowState>(progressIndexWindowQueryKey(routeWindow.visit))
+    : undefined;
+  const sourceReadIsCurrent = (read: string | undefined) =>
+    !!read &&
+    client
+      .getQueryCache()
+      .getAll()
+      .some((entry) => JSON.stringify(entry.queryKey) === read && entry.state.status === 'success');
+  const routeWindowMatches = (book: ProgressIndexWindowState | undefined) =>
+    !!routeWindow &&
+    routeWindow.to === cursor &&
+    book?.identity === windowIdentity &&
+    ((book.staged?.id === routeWindow.move &&
+      book.staged.from === routeWindow.from &&
+      book.staged.to === routeWindow.to &&
+      sourceReadIsCurrent(book.staged.sourceRead)) ||
+      (book.lastMovement === routeWindow.move && book.current === routeWindow.to));
+  const visitRef = useRef<{
+    identity: string;
+    visit: string;
+    addressKey: string;
+    locationKey: string;
+    search: Record<string, unknown>;
+  } | null>(null);
+  const oldVisit = visitRef.current?.visit;
+  const sameRouteMove = routeWindowMatches(routeWindowBook);
+  const previousVisit = visitRef.current;
+  const resetVisit =
+    !previousVisit ||
+    previousVisit.identity !== windowIdentity ||
+    (previousVisit.addressKey !== address.key && !sameRouteMove) ||
+    (previousVisit.locationKey !== location.key &&
+      !sameRouteMove &&
+      !onlyDisplayLayoutChanged(previousVisit.search, location.search as Record<string, unknown>));
+  if (resetVisit) {
+    visitRef.current = {
+      identity: windowIdentity,
+      visit: sameRouteMove && routeWindow ? routeWindow.visit : crypto.randomUUID(),
+      addressKey: address.key,
+      locationKey: location.key,
+      search: location.search as Record<string, unknown>,
+    };
+  } else if (visitRef.current) {
+    visitRef.current = {
+      ...visitRef.current,
+      addressKey: address.key,
+      locationKey: location.key,
+      search: location.search as Record<string, unknown>,
+    };
+  }
+  const visit = visitRef.current!;
+  const windowKey = progressIndexWindowQueryKey(visit.visit);
+  const cachedWindows = client.getQueryData<ProgressIndexWindowState>(windowKey);
+  const windows = cachedWindows?.identity === windowIdentity ? cachedWindows : undefined;
+  const [windowRevision, renderWindows] = useState(0);
+  const focusedMove = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (oldVisit && oldVisit !== visit.visit) client.removeQueries({ queryKey: progressIndexWindowQueryKey(oldVisit), exact: true });
+  }, [client, oldVisit, visit.visit]);
+  useLayoutEffect(() => {
+    const unsubscribe = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
+      if (!fromLocation.pathname.replace(/\/$/, '').endsWith('/library/progress')) return;
+      const targetWindow = progressIndexWindowRouteState(toLocation.state);
+      const stagedWindow = targetWindow
+        ? client.getQueryData<ProgressIndexWindowState>(progressIndexWindowQueryKey(targetWindow.visit))
+        : undefined;
+      const validWindowMove =
+        targetWindow?.visit === visit.visit &&
+        stagedWindow?.identity === windowIdentity &&
+        stagedWindow.staged?.id === targetWindow.move &&
+        stagedWindow.staged.from === targetWindow.from &&
+        stagedWindow.staged.to === targetWindow.to &&
+        stagedWindow.staged.sourceLocation === fromLocation.key &&
+        sourceReadIsCurrent(stagedWindow.staged.sourceRead);
+      const sameAddress =
+        progressIndexWindowAddress(fromLocation.search as never) ===
+          progressIndexWindowAddress(toLocation.search as never) &&
+        (fromLocation.search.cursor ?? null) === (toLocation.search.cursor ?? null);
+      const layoutOnly = onlyDisplayLayoutChanged(
+        fromLocation.search as Record<string, unknown>,
+        toLocation.search as Record<string, unknown>,
+      );
+      if (validWindowMove || (sameAddress && layoutOnly)) return;
+      client.removeQueries({ queryKey: windowKey, exact: true });
+      client.removeQueries({
+        predicate: (entry) =>
+          entry.queryKey[0] === 'library' &&
+          entry.queryKey[1] === 'progress' &&
+          entry.queryKey[2] === 'current-viewer' &&
+          entry.queryKey.at(-1) === instance,
+      });
+    });
+    return unsubscribe;
+  }, [client, instance, router, visit.visit, windowIdentity, windowKey]);
+  const admittedCursor =
+    result?.page.admittedCursor === undefined ? cursor : result.page.admittedCursor;
+  const pageCanAdmitWindow =
+    hydrated &&
+    allowed &&
+    query.isSuccess &&
+    matches(result) &&
+    (result?.page.viewerState === undefined || result.page.viewerState === 'signed_in') &&
+    !result?.page.addressIssue &&
+    !addressIssue &&
+    origin.isCurrent() &&
+    source.isCurrent() &&
+    store.dispatchVersion('progress_session.list') === listVersion &&
+    progressIndexAdmission(client, 'progress_session.list', admitted);
+  useLayoutEffect(() => {
+    if (!pageCanAdmitWindow || admittedCursor === undefined) return;
+    const existing = client.getQueryData<ProgressIndexWindowState>(windowKey);
+    let next: ProgressIndexWindowState;
+    if (existing?.identity !== windowIdentity) {
+      const saved = returnSelection?.windowCoordinates;
+      const savedSearch = returnSelection?.indexSearch;
+      const exactReturnAddress =
+        !!savedSearch &&
+        JSON.stringify([
+          savedSearch.subjectId ?? '',
+          savedSearch.state ?? null,
+          savedSearch.mode ?? null,
+          savedSearch.profileId ?? null,
+          savedSearch.cursor ?? null,
+        ]) ===
+          JSON.stringify([subjectId, state, mode, profileId, cursor]);
+      const useReturnedPath =
+        !result?.page.cursorRestarted && exactReturnAddress && saved?.current === admittedCursor;
+      next = {
+        identity: windowIdentity,
+        predecessors: useReturnedPath ? [...saved.predecessors] : [],
+        current: admittedCursor,
+      };
+    } else {
+      next = admitProgressIndexWindow(existing, {
+        identity: windowIdentity,
+        ...(routeWindow ? { move: routeWindow.move } : {}),
+        requested: cursor,
+        admitted: admittedCursor,
+        restarted: result?.page.cursorRestarted,
+        eligible: true,
+      });
+    }
+    if (next !== existing) {
+      client.setQueryData(windowKey, next);
+      renderWindows((value) => value + 1);
+      for (const queryEntry of client.getQueryCache().findAll({ queryKey: ['library', 'progress', 'current-viewer'] })) {
+        if (queryEntry.queryKey.at(-1) === instance && JSON.stringify(queryEntry.queryKey) !== JSON.stringify(queryKey))
+          client.removeQueries({ queryKey: queryEntry.queryKey, exact: true });
+      }
+    }
+  }, [
+    admittedCursor,
+    client,
+    cursor,
+    instance,
+    pageCanAdmitWindow,
+    queryKey,
+    renderWindows,
+    result,
+    returnSelection,
+    routeWindow,
+    state,
+    subjectId,
+    mode,
+    profileId,
+    windowIdentity,
+    windowKey,
+    windowRevision,
+  ]);
+  const currentReadAllowed = () =>
+    hydrated &&
+    !!viewer &&
+    allowed &&
+    origin.isCurrent() &&
+    address.isCurrent() &&
+    store.dispatchVersion('progress_session.list') === listVersion &&
+    progressIndexAdmission(client, 'progress_session.list', admitted);
+  const exactWindow = windows?.identity === windowIdentity && windows.current === admittedCursor ? windows : undefined;
+  const moveWindow = (kind: ProgressIndexWindowMove, target: ProgressIndexCoordinate, keyboard: boolean) => {
+    if (!pageCanAdmitWindow || admittedCursor === undefined || !currentReadAllowed()) return;
+    const base = exactWindow ?? startProgressIndexWindows(windowIdentity, admittedCursor);
+    if (base.current === undefined) return;
+    const move = crypto.randomUUID();
+    const staged = stageProgressIndexWindow(base, {
+      id: move,
+      kind,
+      from: base.current,
+      to: target,
+      sourceLocation: location.key,
+      sourceRead: JSON.stringify(queryKey),
+      keyboard,
+    });
+    client.setQueryData(windowKey, staged);
+    renderWindows((value) => value + 1);
+    const search = {
+      ...(subjectId ? { subjectId } : {}),
+      ...(state ? { state } : {}),
+      ...(mode ? { mode } : {}),
+      ...(profileId ? { profileId } : {}),
+      ...(target === null ? {} : { cursor: target }),
+    };
+    const navigation = router.navigate({
+      to: '/library/progress',
+      search: search as never,
+      state: { progressIndexWindow: { visit: visit.visit, move, from: base.current, to: target } } as never,
+    });
+    void navigation.finally(() => {
+      const currentLocation = router.state.location;
+      if (currentLocation.key === location.key) {
+        const current = client.getQueryData<ProgressIndexWindowState>(windowKey);
+        if (current?.staged?.id === move) {
+          const { staged: _staged, ...accepted } = current;
+          client.setQueryData(windowKey, accepted);
+          renderWindows((value) => value + 1);
+        }
+      } else {
+        const currentMove = progressIndexWindowRouteState(currentLocation.state);
+        if (currentMove?.visit !== visit.visit || currentMove.move !== move)
+          client.removeQueries({ queryKey: windowKey, exact: true });
+      }
+    });
+  };
+  const retryWindowTarget = windows?.staged?.to === cursor ? () => {
+    if (!currentReadAllowed()) return;
+    readCursorOverride.current = cursor;
+    void query.refetch();
+  } : undefined;
+  const windowActions: ProgressWindowActions = {
+    ...(pageCanAdmitWindow && exactWindow?.predecessors.length
+      ? { previous: (keyboard: boolean) => moveWindow('previous', exactWindow.predecessors.at(-1)!, keyboard) }
+      : {}),
+    ...(pageCanAdmitWindow && admittedCursor !== null
+      ? { first: (keyboard: boolean) => moveWindow('first', null, keyboard) }
+      : {}),
+    ...(pageCanAdmitWindow && result?.page.next
+      ? { more: (keyboard: boolean) => moveWindow('more', result.page.next!, keyboard) }
+      : {}),
+    ...(retryWindowTarget ? { retry: retryWindowTarget } : {}),
+    ...(pageCanAdmitWindow
+      ? {
+          refresh: () => {
+            if (!currentReadAllowed()) return;
+            readCursorOverride.current = exactWindow?.current ?? admittedCursor;
+            void query.refetch();
+          },
+        }
+      : {}),
+    ...(windows?.lastMovement && focusedMove.current !== windows.lastMovement && !returnSelection
+      ? { focusToken: windows.lastMovement }
+      : {}),
+    consumeFocus: (token) => {
+      if (focusedMove.current !== token) focusedMove.current = token;
+    },
+  };
+  const returnCoordinates = progressIndexWindowSnapshot(exactWindow);
   const rowSource = useRef<{ page?: ProgressIndex; contexts: Set<string> }>({ contexts: new Set() });
   const authority: ProgressAuthority = {
     key: source,
@@ -338,10 +632,14 @@ export function CurrentViewerProgressIndexPage({
               variant="outline"
               disabled={query.isFetching}
               onClick={() => {
-                if (origin.isCurrent()) void query.refetch();
+                if (retryWindowTarget) retryWindowTarget();
+                else if (currentReadAllowed()) {
+                  readCursorOverride.current = admittedCursor;
+                  void query.refetch();
+                }
               }}
             >
-              {m.library_progress_retry()}
+              {retryWindowTarget ? m.library_progress_retry() : m.library_progress_index_refresh()}
             </Button>
           </>
         ) : null}
@@ -352,16 +650,24 @@ export function CurrentViewerProgressIndexPage({
       <ProgressIndexPage
         key={`${scope}:${source.generation}`}
         page={result!.page}
-        cursor={cursor}
+        cursor={admittedCursor}
         loading={query.isFetching}
-        retry={() => {
-          if (origin.isCurrent()) void query.refetch();
-        }}
+        retry={retryWindowTarget ?? (() => {
+          if (!currentReadAllowed()) return;
+          readCursorOverride.current = admittedCursor;
+          void query.refetch();
+        })}
         authority={authority}
         returnSelection={returnSelection}
         sourceReturnTo={sourceReturnTo}
+        windowActions={windowActions}
+        windowCoordinates={returnCoordinates}
         reviewRow={async (id) => {
-          const fresh = await readCurrentViewerProgressIndex({ data: requested });
+          const readAddress = { ...requested };
+          if (admittedCursor === null) delete readAddress.cursor;
+          else if (admittedCursor !== undefined) readAddress.cursor = admittedCursor;
+          const response = await readCurrentViewerProgressIndex({ data: readAddress });
+          const fresh = { ...response, requested: { ...response.requested, cursor } };
           if (!matches(fresh)) throw new Error('Progress review origin mismatch');
           return fresh.page.sessions.find((row) => row.id === id) ?? null;
         }}
@@ -379,6 +685,8 @@ export function ProgressIndexPage(props: {
   reviewRow?: ProgressRowReview;
   returnSelection?: ProgressIndexReturnSelection | undefined;
   sourceReturnTo?: string | undefined;
+  windowActions?: ProgressWindowActions;
+  windowCoordinates?: ReturnType<typeof progressIndexWindowSnapshot>;
 }) {
   return (
     <AuthoringDepartureBoundary
@@ -399,6 +707,8 @@ function ProgressIndexPageContent({
   reviewRow,
   returnSelection,
   sourceReturnTo,
+  windowActions,
+  windowCoordinates,
 }: {
   page: ProgressIndex;
   cursor?: string | null;
@@ -408,6 +718,8 @@ function ProgressIndexPageContent({
   reviewRow?: ProgressRowReview;
   returnSelection?: ProgressIndexReturnSelection | undefined;
   sourceReturnTo?: string | undefined;
+  windowActions?: ProgressWindowActions;
+  windowCoordinates?: ReturnType<typeof progressIndexWindowSnapshot>;
 }) {
   const router = useRouter();
   const identity = authority?.key ?? page;
@@ -424,6 +736,8 @@ function ProgressIndexPageContent({
   const replayingNavigation = useRef<HTMLAnchorElement | null>(null);
   const departureRef = useRef<{ release: () => void } | null>(null);
   const focusedReturn = useRef<string | null>(null);
+  const focusedMovement = useRef<string | null>(null);
+  const sessionsHeading = useRef<HTMLHeadingElement | null>(null);
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject;
@@ -498,6 +812,20 @@ function ProgressIndexPageContent({
     focusedReturn.current = focusKey;
     row.focus();
   }, [authority, returnSelection, selectedReturnRow]);
+
+  useEffect(() => {
+    const token = windowActions?.focusToken;
+    if (
+      !token ||
+      focusedMovement.current === token ||
+      selectedReturnRow ||
+      (authority !== undefined && !authority.isCurrent())
+    )
+      return;
+    sessionsHeading.current?.focus();
+    focusedMovement.current = token;
+    windowActions?.consumeFocus?.(token);
+  }, [authority, selectedReturnRow, windowActions]);
 
   if (seenIdentity !== episode) {
     setSeenIdentity(episode);
@@ -622,6 +950,7 @@ function ProgressIndexPageContent({
               row.subjectId,
               sourceReturnTo,
               row.startedAt,
+              windowCoordinates,
             )
           : undefined;
       if (context && link.pathname.endsWith(`/library/progress/${encodeURIComponent(rowId)}`)) {
@@ -707,7 +1036,7 @@ function ProgressIndexPageContent({
       if (!current()) return;
       const context = progressReturnContextForPage(
         page,
-        cursor,
+        null,
         getLocale(),
         result.id,
         command.data.subjectId,
@@ -917,16 +1246,24 @@ function ProgressIndexPageContent({
                 />
               </div>
             ) : null}
-            <Link to="/library/progress" search={discoveryAddress} className={buttonClass}>
+            <Link to="/library/progress" search={discoveryAddress} state={{} as never} className={buttonClass}>
               {m.library_progress_address_apply()}
             </Link>
             {page.subjectId || page.state || page.mode || page.profileId ? (
-              <Link to="/library/progress" search={{}} className={buttonClass}>
+              <Link to="/library/progress" search={{}} state={{} as never} className={buttonClass}>
                 {m.library_progress_discovery_reset()}
               </Link>
             ) : null}
           </div>
         </section>
+        <h2
+          id="progress-index-sessions-heading"
+          ref={sessionsHeading}
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.library_progress_index_list_heading()}
+        </h2>
         {sessions.length ? (
           <ol className="space-y-3">
             {sessions.map((session) => (
@@ -950,32 +1287,76 @@ function ProgressIndexPageContent({
                 : m.library_progress_discovery_empty_owner()}
           </p>
         )}
-        {cursor || page.next ? (
+        {cursor || page.next || windowActions?.previous || windowActions?.refresh ? (
           <Exposure operation="progress_session.list">
             <nav aria-label={m.library_progress_index_reader_pagination()} className="flex flex-wrap gap-2">
-              {cursor ? (
-                <Link
-                  to="/library/progress"
-                  search={currentFilterAddress}
-                  onClick={(event) => {
-                    if (authority && !authority.isCurrent()) event.preventDefault();
-                  }}
+              {windowActions?.previous ? (
+                <Button
+                  variant="outline"
                   className={buttonClass}
+                  disabled={loading}
+                  onClick={(event) => windowActions.previous?.(event.detail === 0)}
                 >
-                  {m.library_collections_first_page()}
-                </Link>
+                  {m.library_progress_index_previous()}
+                </Button>
+              ) : null}
+              {cursor ? (
+                windowActions?.first ? (
+                  <Button
+                    variant="outline"
+                    className={buttonClass}
+                    disabled={loading}
+                    onClick={(event) => windowActions.first?.(event.detail === 0)}
+                  >
+                    {m.library_collections_first_page()}
+                  </Button>
+                ) : (
+                  <Link
+                    to="/library/progress"
+                    search={currentFilterAddress}
+                    state={{} as never}
+                    onClick={(event) => {
+                      if (authority && !authority.isCurrent()) event.preventDefault();
+                    }}
+                    className={buttonClass}
+                  >
+                    {m.library_collections_first_page()}
+                  </Link>
+                )
               ) : null}
               {page.next ? (
-                <Link
-                  to="/library/progress"
-                  search={{ ...currentFilterAddress, cursor: page.next }}
-                  onClick={(event) => {
-                    if (authority && !authority.isCurrent()) event.preventDefault();
-                  }}
+                windowActions?.more ? (
+                  <Button
+                    variant="outline"
+                    className={buttonClass}
+                    disabled={loading}
+                    onClick={(event) => windowActions.more?.(event.detail === 0)}
+                  >
+                    {m.library_progress_more()}
+                  </Button>
+                ) : (
+                  <Link
+                    to="/library/progress"
+                    search={{ ...currentFilterAddress, cursor: page.next }}
+                    state={{} as never}
+                    onClick={(event) => {
+                      if (authority && !authority.isCurrent()) event.preventDefault();
+                    }}
+                    className={buttonClass}
+                  >
+                    {m.library_progress_more()}
+                  </Link>
+                )
+              ) : null}
+              {windowActions?.refresh ? (
+                <Button
+                  variant="outline"
                   className={buttonClass}
+                  disabled={loading}
+                  onClick={(event) => windowActions.refresh?.(event.detail === 0)}
                 >
-                  {m.library_progress_more()}
-                </Link>
+                  {m.library_progress_index_refresh()}
+                </Button>
               ) : null}
             </nav>
           </Exposure>

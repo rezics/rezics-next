@@ -198,12 +198,27 @@ async function mount(initial = page()) {
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
   });
   await router.load();
-  const tree = (p: ProgressIndex | null) => (
+  const tree = (
+    p: ProgressIndex | null,
+    options: {
+      cursor?: string | null;
+      returnSelection?: { locale: string; sessionId: string; subjectId: string; startedAt?: string };
+      windowActions?: {
+        previous?: (keyboard: boolean) => void;
+        first?: (keyboard: boolean) => void;
+        more?: (keyboard: boolean) => void;
+        refresh?: (keyboard: boolean) => void;
+        focusToken?: string;
+        consumeFocus?: (token: string) => void;
+      };
+    } = {},
+  ) => (
     <StrictMode>
-      <RouterContextProvider router={router}>{p && <ProgressIndexPage page={p} />}</RouterContextProvider>
+      <RouterContextProvider router={router}>{p && <ProgressIndexPage page={p} {...options} />}</RouterContextProvider>
     </StrictMode>
   );
-  const show = (p: ProgressIndex | null) => settle(() => root.render(tree(p)));
+  const show = (p: ProgressIndex | null, options: Parameters<typeof tree>[1] = {}) =>
+    settle(() => root.render(tree(p, options)));
   const body = within(window.document.body as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const form = () => host.querySelector('form')!;
@@ -595,5 +610,58 @@ test('start validates required fixed decimals before capture, omits empty option
     } finally {
       await h.close();
     }
+  }
+});
+
+test('admitted window controls wrap, route keyboard focus to the list, and yield to exact returned-row focus', async () => {
+  const h = await mount(page());
+  const moves: { kind: string; keyboard: boolean }[] = [];
+  const actions = {
+    previous: (keyboard: boolean) => moves.push({ kind: 'previous', keyboard }),
+    first: (keyboard: boolean) => moves.push({ kind: 'first', keyboard }),
+    more: (keyboard: boolean) => moves.push({ kind: 'more', keyboard }),
+    refresh: (keyboard: boolean) => moves.push({ kind: 'refresh', keyboard }),
+    focusToken: 'window-move-one',
+    consumeFocus: () => {},
+  };
+  try {
+    const terminalEmpty = { ...page(), sessions: [], next: null };
+    await h.show(terminalEmpty, {
+      cursor: 'native/terminal',
+      windowActions: { previous: actions.previous, first: actions.first },
+    });
+    expect(h.body.getByText(m.library_progress_page_empty())).toBeDefined();
+    expect(h.body.getByRole('button', { name: m.library_progress_index_previous(), exact: true })).toBeDefined();
+    expect(h.body.queryByRole('button', { name: m.library_progress_more(), exact: true })).toBeNull();
+    await h.show({ ...terminalEmpty, next: 'native/next' }, { cursor: 'native/terminal', windowActions: actions });
+    expect(h.body.getByText(m.library_progress_page_empty())).toBeDefined();
+    expect(h.body.getByRole('button', { name: m.library_progress_more(), exact: true })).toBeDefined();
+
+    await h.show(page(), { cursor: 'native/earlier', windowActions: actions });
+    const heading = h.host.querySelector('#progress-index-sessions-heading')!;
+    expect(window.document.activeElement).toBe(heading);
+    for (const name of [
+      m.library_progress_index_previous(),
+      m.library_collections_first_page(),
+      m.library_progress_more(),
+      m.library_progress_index_refresh(),
+    ]) {
+      expect(h.body.getByRole('button', { name, exact: true }).className).toContain('min-h-[44px]');
+    }
+    const previous = h.body.getByRole('button', { name: m.library_progress_index_previous(), exact: true });
+    previous.focus();
+    await act(async () => h.user.keyboard('{Enter}'));
+    expect(moves).toEqual([{ kind: 'previous', keyboard: true }]);
+    await h.click(m.library_collections_first_page());
+    expect(moves.at(-1)).toEqual({ kind: 'first', keyboard: false });
+
+    await h.show(page(), {
+      cursor: 'native/earlier',
+      returnSelection: { locale: 'en', sessionId: id(20), subjectId: id(1), startedAt: '2026-01-01T00:00:00Z' },
+      windowActions: { ...actions, focusToken: 'window-move-two' },
+    });
+    expect(window.document.activeElement).toBe(h.host.querySelector(`[data-progress-session-id="${id(20)}"]`));
+  } finally {
+    await h.close();
   }
 });

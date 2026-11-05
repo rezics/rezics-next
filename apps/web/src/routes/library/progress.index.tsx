@@ -6,6 +6,7 @@ import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { CurrentViewerProgressIndexPage } from '../../library/progress-page';
 import { readCurrentViewerProgressIndex } from '../../library/progress-server';
 import { progressIndexReturnSelectionFromLocationState } from '../../library/progress-start-draft-navigation';
+import { progressIndexWindowRouteState } from '../../library/progress-index-windows';
 import { subjectProgressEntryReturnFromState, subjectSlotReturnTo } from '../../library/subject-slot-return-context';
 import { displayLibraryTitle } from '../../library/title';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -24,6 +25,18 @@ export const Route = createFileRoute('/library/progress/')({
     cursor: search.cursor,
   }),
   loader: ({ deps }) => readCurrentViewerProgressIndex({ data: deps }),
+  shouldReload: ({ deps, prevDeps, location }) => {
+    const movement = progressIndexWindowRouteState(location.state);
+    return !(
+      movement &&
+      prevDeps &&
+      movement.to === (location.search.cursor ?? null) &&
+      deps.subjectId === prevDeps.subjectId &&
+      deps.state === prevDeps.state &&
+      deps.mode === prevDeps.mode &&
+      deps.profileId === prevDeps.profileId
+    );
+  },
   staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),

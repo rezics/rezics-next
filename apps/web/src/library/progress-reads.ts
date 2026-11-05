@@ -231,6 +231,9 @@ export type ProgressIndex = {
   profileId?: string;
   emptyKind?: 'owner-empty' | 'filtered-empty';
   staleContinuation?: boolean;
+  /** The coordinate that produced this page. It can differ from the requested cursor after stale recovery. */
+  admittedCursor?: string | null;
+  cursorRestarted?: boolean;
   selectedSubject: LibrarySubject | null;
   progressChoices?: ProgressChoices;
   choicesUnavailable?: boolean;
@@ -516,16 +519,27 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readAddressData<{ progressSessions: RawSession[]; next: string | null }>(result, 'cursor');
+  const page = readAddressData<{ progressSessions: RawSession[]; next: string | null }>(result, 'cursor');
+  if (page.next !== null && progressAddressIssue({ cursor: page.next }))
+    throw new Error('Native progress index returned an invalid cursor');
+  return page;
 }
 
 async function readIndexList(client: KernelClient, subjectId: string, authorization: string, cursor?: string) {
   try {
-    return await readList(client, subjectId, authorization, cursor);
+    return {
+      page: await readList(client, subjectId, authorization, cursor),
+      admittedCursor: cursor ?? null,
+      restarted: false,
+    };
   } catch (error) {
     if (!(error instanceof StaleCursorError) || !cursor) throw error;
   }
-  return readList(client, subjectId, authorization);
+  return {
+    page: await readList(client, subjectId, authorization),
+    admittedCursor: null,
+    restarted: true,
+  };
 }
 
 /** Resolve the one subject named by the page when no listed session embeds it. */
@@ -628,9 +642,9 @@ export async function loadProgressIndex(
       idempotencyKey,
     };
   }
-  let page: { progressSessions: RawSession[]; next: string | null };
+  let index: Awaited<ReturnType<typeof readIndexList>>;
   try {
-    page = await readIndexList(client, subjectId, authorization, input.cursor);
+    index = await readIndexList(client, subjectId, authorization, input.cursor);
   } catch (error) {
     if (error instanceof LibraryReadForbiddenError)
       return {
@@ -654,6 +668,7 @@ export async function loadProgressIndex(
       };
     throw error;
   }
+  const { page } = index;
   const sessions = page.progressSessions.map((session) => presentSession(session));
   const selectedSubject =
     sessions.find((session) => session.subjectId === subjectId)?.subject ??
@@ -664,6 +679,8 @@ export async function loadProgressIndex(
     selectedSubject,
     sessions,
     next: page.next,
+    admittedCursor: index.admittedCursor,
+    cursorRestarted: index.restarted,
     idempotencyKey,
   };
 }

@@ -2,6 +2,7 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, type ReactNode } from 'react';
 import type { ProgressIndex } from '../src/library/progress-reads';
+import type { ProgressIndexReturnSelection } from '../src/library/progress-start-draft-navigation';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -122,7 +123,7 @@ function session(n: number, changes: Partial<Session> = {}): Session {
   return row;
 }
 
-async function mount(sessions: Session[]) {
+async function mount(sessions: Session[], returnSelection?: ProgressIndexReturnSelection) {
   setLocale('en', { reload: false });
   const page: ProgressIndex = {
     signedIn: true,
@@ -144,7 +145,7 @@ async function mount(sessions: Session[]) {
     root.render(
       <StrictMode>
         <RouterContextProvider router={router}>
-          <ProgressIndexPage page={page} />
+          <ProgressIndexPage page={page} cursor={returnSelection?.indexSearch?.cursor} returnSelection={returnSelection} />
         </RouterContextProvider>
       </StrictMode>,
     ),
@@ -205,6 +206,31 @@ test('Equal-subject sessions are distinguishable by supplied version and start w
       );
       expect(details.querySelector('code')?.textContent).toBe('scalar_amount / pages');
     }
+  } finally {
+    await h.close();
+  }
+});
+
+test('returned focus selects the exact native session incarnation and retains only its cursor coordinates', async () => {
+  const first = session(20, { startedAt: '2026-01-01T09:00:00Z' });
+  const second = session(21, { startedAt: '2026-03-15T18:30:00Z' });
+  const coordinates = { predecessors: [null], current: 'native/earlier' };
+  const selection: ProgressIndexReturnSelection = {
+    locale: 'en',
+    sessionId: second.id,
+    subjectId: second.subjectId,
+    startedAt: second.startedAt,
+    indexSearch: { subjectId: second.subjectId, cursor: coordinates.current },
+    windowCoordinates: coordinates,
+  };
+  const h = await mount([first, second], selection);
+  try {
+    const rows = [...h.host.querySelectorAll<HTMLElement>('[data-progress-session-id]')];
+    expect(rows.map((row) => row.dataset.progressSessionId)).toEqual([first.id, second.id]);
+    expect(window.document.activeElement).toBe(rows[1]);
+    expect(window.document.activeElement).not.toBe(rows[0]);
+    expect(selection.windowCoordinates).toEqual({ predecessors: [null], current: 'native/earlier' });
+    expect(Object.keys(selection.windowCoordinates)).toEqual(['predecessors', 'current']);
   } finally {
     await h.close();
   }
