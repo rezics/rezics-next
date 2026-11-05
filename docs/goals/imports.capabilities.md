@@ -265,6 +265,11 @@ records all six child cases (91 assertions), the wrapper (five assertions) and t
 passing at `a0589d4aefeec1605047e872db25b8b9dd9e0321`, with a separate base-owned Stripe compiler diagnostic.
 This is scoped native execution, not a clean kernel compiler, table-materialization or composed-growth pass.
 
+Decision: keep `source_statistic:write` in the existing seven-scope VNDB importer credential only. Reviewed-catalogue
+setup uses its separate credential. A statistic write still requires current Commerce-owned Global Context
+authorization before receipt evaluation; diagnose a denial at the caller boundary before changing grants or native
+authorization behavior.
+
 - `pinned COPY reaches seven-scope Auth, real Access, public bulk identity and statistic PUT/current GET`
 - `reimport and reopen are no-ops; changed native average updates once without native votes`
 - `lost committed response retries original bytes and idempotency identity with one effect`
