@@ -44,6 +44,7 @@ import {
 } from './import-consumption.ts';
 import {
   createVoteCommands,
+  prepareVoteTarget,
   RatingQuestionNotFoundError,
   STANDARD_QUESTION_ID,
   type RatingQuestion,
@@ -662,8 +663,13 @@ export function createAniListImport(deps: Dependencies) {
     for (const row of raw) {
       let currentScore = null;
       if (row.payload.review?.score) {
-        const native = await votes.readVoteReview(actor, STANDARD_QUESTION_ID, row.payload.review.score.native.target.subjectId);
-        currentScore = { question: nativeQuestion(native.question), vote: native.currentVote };
+        try {
+          const native = await votes.readVoteReview(actor, STANDARD_QUESTION_ID, row.payload.review.score.native.target.subjectId);
+          currentScore = { status: 'current' as const, question: nativeQuestion(native.question), vote: native.currentVote };
+        } catch (error) {
+          if (!(error instanceof VoteReviewUnavailableError)) throw error;
+          currentScore = { status: 'unavailable' as const, reason: error.reason };
+        }
       }
       const matching = await match(actor, row.payload.source);
       const inspected = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!) : null;
@@ -1124,6 +1130,10 @@ export function createAniListImport(deps: Dependencies) {
         });
         continue;
       }
+      // Current native exposure is required even before replaying an importer result.
+      if (reviewed.score) await prepareVoteTarget(deps, actor, {
+        questionId: reviewed.score.native.question.id, targetId: reviewed.score.native.target.subjectId,
+      }, deadline);
       let scoreCurrent: 'current' | 'stale' | null = null;
       if (reviewed.score && !reviewed.score.native.consented) {
         const question = await readScoreQuestion(actor);
