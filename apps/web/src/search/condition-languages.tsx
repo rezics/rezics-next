@@ -111,12 +111,7 @@ export function ConditionLanguages({
     if (!preferencesUnchanged(languages, next)) {
       occurrenceKeys.current = shiftOccurrenceKeys(occurrenceKeys.current, action, allocateKey);
       if (action.type === 'add') pendingFocus.current = { kind: 'add', index: next.length - 1 };
-      if (action.type === 'move')
-        pendingFocus.current = {
-          kind: 'move',
-          index: action.index,
-          offset: action.offset,
-        };
+      if (action.type === 'move') pendingFocus.current = { kind: 'move', index: action.index, offset: action.offset };
       if (action.type === 'remove') pendingFocus.current = { kind: 'remove', index: action.index };
     }
     onChange(next);

@@ -104,11 +104,7 @@ export type ConditionExtension = {
   render(
     value: FilterDocument,
     onChange: (value: FilterDocument) => void,
-    context?: {
-      pointer: string;
-      locale: string;
-      issues: readonly ConditionIssue[];
-    },
+    context?: { pointer: string; locale: string; issues: readonly ConditionIssue[] },
   ): ReactNode;
 };
 
@@ -213,11 +209,7 @@ export function ConditionEditor({
   if (session.value !== value || draftOwner.current !== focusOwner) {
     draftOwner.current = focusOwner;
     recovery.current.cancel();
-    session = {
-      value,
-      lifetime: {},
-      node: value ? createConditionDraftNode(value, nextKey) : undefined,
-    };
+    session = { value, lifetime: {}, node: value ? createConditionDraftNode(value, nextKey) : undefined };
     setSession(session);
   }
   useEffect(() => {
@@ -234,10 +226,7 @@ export function ConditionEditor({
   };
   const [announcement, setAnnouncement] = useState({ text: '', version: 0 });
   const announce = (message: string, pointer: string) => {
-    setAnnouncement((previous) => ({
-      text: message,
-      version: previous.version + 1,
-    }));
+    setAnnouncement((previous) => ({ text: message, version: previous.version + 1 }));
     recovery.current.recover({
       pointer,
       nodeKey: conditionDraftNodeAt(session.node, pointer)?.key,
@@ -303,21 +292,14 @@ export function ConditionEditor({
       render: (
         node: FilterDocument,
         change: (value: FilterDocument) => void,
-        detail?: {
-          pointer: string;
-          locale: string;
-          issues: readonly ConditionIssue[];
-        },
+        detail?: { pointer: string; locale: string; issues: readonly ConditionIssue[] },
       ) => resourceExtension.render(node, change, detail) ?? extension.render(node, change, detail),
     } satisfies ConditionExtension;
   }, [extension, resourceExtension]);
   const admissionOptions = useMemo(
     () =>
       requestResourceInput
-        ? {
-            requestResources: true,
-            ...(extension ? { owner: true as const } : {}),
-          }
+        ? { requestResources: true, ...(extension ? { owner: true as const } : {}) }
         : extension
           ? { owner: true as const }
           : undefined,
@@ -416,9 +398,7 @@ export function ConditionEditor({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const next: FilterDocument = {
-                    and: [{ type: { in: [''] } }],
-                  };
+                  const next: FilterDocument = { and: [{ type: { in: [''] } }] };
                   publish(next, createConditionDraftNode(next, nextKey));
                   announce(m.condition_added({}, options), `${CONDITION_POINTER}/and/0`);
                 }}
@@ -548,9 +528,7 @@ function NodeEditor({
   const groupOperator = 'and' in value ? 'and' : 'or' in value ? 'or' : undefined;
   const operator = groupOperator ?? ('not' in value ? 'not' : '');
   const group = 'and' in value ? value.and : 'or' in value ? value.or : undefined;
-  const extensionLabel = context.extension?.label?.(value, {
-    locale: context.locale,
-  });
+  const extensionLabel = context.extension?.label?.(value, { locale: context.locale });
   const label =
     extensionLabel ??
     (operator === 'and' ? (
@@ -616,10 +594,9 @@ function NodeEditor({
         })
       : [];
   const relationOperandLabel = selectedOperandLabels.length
-    ? new Intl.ListFormat(messageOptions(context.locale).locale, {
-        style: 'long',
-        type: 'conjunction',
-      }).format(selectedOperandLabels)
+    ? new Intl.ListFormat(messageOptions(context.locale).locale, { style: 'long', type: 'conjunction' }).format(
+        selectedOperandLabels,
+      )
     : m.condition_relation_operand_missing({}, options);
   const relationPropertyLabel = property
     ? name(definition?.labels, property)
@@ -707,23 +684,14 @@ function NodeEditor({
     setPendingPropertyChange(undefined);
     setPendingUnitChange(undefined);
     if (transition.requiresConfirmation)
-      setPendingPropertyChange({
-        kind: 'statement',
-        property: nextProperty,
-        identity: context.identity,
-      });
+      setPendingPropertyChange({ kind: 'statement', property: nextProperty, identity: context.identity });
     else onChange(transition.next);
   };
   const selectQualifierProperty = (index: number, nextProperty: string) => {
     const transition = changeQualifierProperty(value, index, nextProperty, context.metadata.properties);
     setPendingPropertyChange(undefined);
     if (transition.requiresConfirmation)
-      setPendingPropertyChange({
-        kind: 'qualifier',
-        index,
-        property: nextProperty,
-        identity: context.identity,
-      });
+      setPendingPropertyChange({ kind: 'qualifier', index, property: nextProperty, identity: context.identity });
     else onChange(transition.next);
   };
   const resolvePendingPropertyChange = (confirmed: boolean) => {
@@ -784,10 +752,7 @@ function NodeEditor({
                 const next = event.currentTarget.value;
                 const changed =
                   next === 'and' || next === 'or' || next === 'not'
-                    ? context.editTree(path, {
-                        type: 'operator',
-                        operator: next,
-                      })
+                    ? context.editTree(path, { type: 'operator', operator: next })
                     : next === '' && 'not' in value
                       ? context.editTree(path, { type: 'unwrap' })
                       : false;
@@ -799,35 +764,19 @@ function NodeEditor({
               </NativeSelectOption>
               <NativeSelectOption
                 value="and"
-                disabled={
-                  !context.canEditTree(path, {
-                    type: 'operator',
-                    operator: 'and',
-                  })
-                }
+                disabled={!context.canEditTree(path, { type: 'operator', operator: 'and' })}
               >
                 {m.condition_and({}, options)}
               </NativeSelectOption>
               <NativeSelectOption
                 value="or"
-                disabled={
-                  !context.canEditTree(path, {
-                    type: 'operator',
-                    operator: 'or',
-                  })
-                }
+                disabled={!context.canEditTree(path, { type: 'operator', operator: 'or' })}
               >
                 {m.condition_or({}, options)}
               </NativeSelectOption>
               <NativeSelectOption
                 value="not"
-                disabled={
-                  operator === 'not' ||
-                  !context.canEditTree(path, {
-                    type: 'operator',
-                    operator: 'not',
-                  })
-                }
+                disabled={operator === 'not' || !context.canEditTree(path, { type: 'operator', operator: 'not' })}
               >
                 {m.condition_not({}, options)}
               </NativeSelectOption>
@@ -883,19 +832,9 @@ function NodeEditor({
               type="button"
               variant="outline"
               size="sm"
-              disabled={
-                !context.canEditTree(path, {
-                  type: 'append',
-                  value: choice.value,
-                })
-              }
+              disabled={!context.canEditTree(path, { type: 'append', value: choice.value })}
               onClick={() => {
-                if (
-                  context.editTree(path, {
-                    type: 'append',
-                    value: choice.value,
-                  })
-                )
+                if (context.editTree(path, { type: 'append', value: choice.value }))
                   context.announce(m.condition_added({}, options), `${pointer}/${operator}/${group.length}`);
               }}
             >
@@ -986,19 +925,13 @@ function NodeEditor({
                 >
                   <NativeSelectOption value="direct">
                     {m.condition_relation_direct(
-                      {
-                        property: relationPropertyLabel,
-                        values: relationOperandLabel,
-                      },
+                      { property: relationPropertyLabel, values: relationOperandLabel },
                       options,
                     )}
                   </NativeSelectOption>
                   <NativeSelectOption value="inverse">
                     {m.condition_relation_inverse(
-                      {
-                        property: relationPropertyLabel,
-                        values: relationOperandLabel,
-                      },
+                      { property: relationPropertyLabel, values: relationOperandLabel },
                       options,
                     )}
                   </NativeSelectOption>
@@ -1215,12 +1148,7 @@ function NodeEditor({
                 onClick={() => {
                   const qualifiers = value.statement.qualifiers!.filter((_, at) => at !== index);
                   const { qualifiers: _old, ...statement } = value.statement;
-                  onChange({
-                    statement: {
-                      ...statement,
-                      ...(qualifiers.length ? { qualifiers } : {}),
-                    },
-                  });
+                  onChange({ statement: { ...statement, ...(qualifiers.length ? { qualifiers } : {}) } });
                   context.announce(m.condition_removed({}, options), pointer);
                 }}
               >
@@ -1235,9 +1163,7 @@ function NodeEditor({
               size="sm"
               disabled={(value.statement.qualifiers?.length ?? 0) >= FILTER_LIMITS.qualifiers}
               onClick={() => {
-                replaceStatement({
-                  qualifiers: [...(value.statement.qualifiers ?? []), { property: '', in: [''] }],
-                });
+                replaceStatement({ qualifiers: [...(value.statement.qualifiers ?? []), { property: '', in: [''] }] });
                 context.announce(m.condition_added({}, options), pointer);
               }}
             >
@@ -1612,14 +1538,7 @@ function ValueFields({
   pointer: string;
   context: EditorContext;
   closed?: boolean;
-  entity?:
-    | {
-        property: string;
-        targets: readonly string[];
-        occurrence: string;
-        nodeKey: number;
-      }
-    | undefined;
+  entity?: { property: string; targets: readonly string[]; occurrence: string; nodeKey: number } | undefined;
   onResolvedLabels?: ((request: string, labels: Record<string, ResolvedConditionEntity>) => void) | undefined;
 }) {
   if (entity && context.entityLookup)
@@ -1641,10 +1560,7 @@ function ValueFields({
   const choicesId = useId();
   const options = closed
     ? conditionChoiceLabels(
-        (choices ?? []).map(({ value, labels }) => ({
-          value,
-          label: localizedLabel(labels, context.locale).text,
-        })),
+        (choices ?? []).map(({ value, labels }) => ({ value, label: localizedLabel(labels, context.locale).text })),
       )
     : [];
   return (
@@ -1701,9 +1617,7 @@ function ValueFields({
             variant="ghost"
             size="sm"
             aria-label={m.refinement_remove(
-              {
-                value: m.condition_value({ number: index + 1 }, context.options),
-              },
+              { value: m.condition_value({ number: index + 1 }, context.options) },
               context.options,
             )}
             onClick={() => {

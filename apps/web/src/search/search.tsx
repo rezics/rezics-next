@@ -335,10 +335,7 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
     const requestContext = getRequest();
     const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
     if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
-      return {
-        status: 'unavailable' as const,
-        recovery: { status: 'session' as const },
-      };
+      return { status: 'unavailable' as const, recovery: { status: 'session' as const } };
     let recovery: SearchRecoveryState | undefined;
     const state = await readDiscoveryKinds(
       discoveryRequest(requestParams(data), requestLanguages(data.locale)),
@@ -380,10 +377,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const queryState = requestParams(data);
     const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
     if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
-      return {
-        ...searchUnavailablePage(queryState),
-        recovery: { status: 'session' },
-      };
+      return { ...searchUnavailablePage(queryState), recovery: { status: 'session' } };
     let release: Release | undefined;
     try {
       release = await readRelease();
@@ -445,10 +439,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const searchPromise = runSearch
       ? (async () => {
           // No installed Content complete-order adapter exists yet. Never ask Global Search and relabel it.
-          if (realmRatingUnavailable)
-            return {
-              recovery: { status: 'unavailable' } as SearchRecoveryState,
-            };
+          if (realmRatingUnavailable) return { recovery: { status: 'unavailable' } as SearchRecoveryState };
           if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
           const request = {
             ...body,
@@ -499,17 +490,11 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
                 httpStatus: error.status,
                 problem: facetProblem(error.problem),
               };
-            return {
-              status: 'unavailable',
-              code: error instanceof Error ? error.name : 'transport_error',
-            };
+            return { status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' };
           });
       } catch (error) {
         if (signal.aborted) throw error;
-        facetResult = {
-          status: 'invalid',
-          code: error instanceof Error ? error.name : 'invalid_facet_request',
-        };
+        facetResult = { status: 'invalid', code: error instanceof Error ? error.name : 'invalid_facet_request' };
       }
     }
     const recovery = !outcome
@@ -702,10 +687,7 @@ export function SearchPage({
   const sourceData = data;
   const currentData = useRef(data);
   currentData.current = data;
-  const [invalidation, setInvalidation] = useState<{
-    owner: SearchPageData;
-    state: SearchRecoveryState;
-  }>();
+  const [invalidation, setInvalidation] = useState<{ owner: SearchPageData; state: SearchRecoveryState }>();
   if (data) data = searchPageForRecovery(data, invalidation?.owner === data ? invalidation.state : data.recovery);
   const [hydrated, setHydrated] = useState(false);
   const [filterSurface, setFilterSurface] = useState<'desktop' | 'mobile' | undefined>();
@@ -720,13 +702,7 @@ export function SearchPage({
       searchHref ??
       discoverySearchHref(
         locale,
-        data?.queryState ?? {
-          query,
-          facets: {},
-          type: undefined,
-          cursor: undefined,
-          sort: undefined,
-        },
+        data?.queryState ?? { query, facets: {}, type: undefined, cursor: undefined, sort: undefined },
       ),
     enabled:
       !!data?.discovery &&
@@ -774,10 +750,7 @@ export function SearchPage({
   const filterFocus = useFilterSurfaceFocus(stateKey);
   const [rangeDraftState, setRangeDraftState] = useState(() => createRangeDraftState(stateKey));
   if (rangeDraftState.key !== stateKey) setRangeDraftState(createRangeDraftState(stateKey));
-  const baseline = {
-    condition: data?.condition,
-    languages: committedState.languages,
-  };
+  const baseline = { condition: data?.condition, languages: committedState.languages };
   const [draft, setDraft] = useState(() => createFilterDraft(stateKey, baseline));
   const [revertedKey, setRevertedKey] = useState<string>();
   if (draft.key !== stateKey) {
@@ -799,13 +772,7 @@ export function SearchPage({
   };
   // Pending fields can be incomplete. Result navigation consumes only an admitted tree.
   const navigationState = localIssues.length ? committedState : editedState;
-  const editableData = data
-    ? {
-        ...data,
-        queryState: navigationState,
-        condition: navigationState.condition,
-      }
-    : data;
+  const editableData = data ? { ...data, queryState: navigationState, condition: navigationState.condition } : data;
   const editing =
     JSON.stringify([draft.condition, editedState.languages]) !==
     JSON.stringify([committedState.condition, committedState.languages]);
@@ -828,21 +795,9 @@ export function SearchPage({
   const number = new Intl.NumberFormat(locale);
   const label = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, locale).text.trim() || fallback;
-  const constraints: {
-    key: string;
-    text: string;
-    state: SearchLoaderDeps;
-    details?: unknown;
-    lang?: string;
-  }[] = [];
+  const constraints: { key: string; text: string; state: SearchLoaderDeps; details?: unknown; lang?: string }[] = [];
   const add = (key: string, text: string, state: SearchLoaderDeps, details?: unknown, lang?: string) =>
-    constraints.push({
-      key,
-      text,
-      state: { ...state, cursor: undefined },
-      details,
-      ...(lang ? { lang } : {}),
-    });
+    constraints.push({ key, text, state: { ...state, cursor: undefined }, details, ...(lang ? { lang } : {}) });
   if (type)
     add(
       'type',
@@ -862,10 +817,7 @@ export function SearchPage({
           : undefined,
         m.search_constraint_identity_kind_unavailable({}, options),
       )}`,
-      {
-        ...navigationState,
-        kinds: navigationState.kinds?.filter((value) => value !== kind),
-      },
+      { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
       { kind },
     );
   for (const [property, values] of Object.entries(selectedFacets))
@@ -913,10 +865,7 @@ export function SearchPage({
         }`,
         {
           ...navigationState,
-          facets: {
-            ...selectedFacets,
-            [property]: values.filter((entry) => entry !== value),
-          },
+          facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
         },
         { property, value },
         property === RESOURCE_LANGUAGE_PROPERTY ? languageLabel?.lang : undefined,
@@ -950,11 +899,7 @@ export function SearchPage({
       ...navigationState,
       languages: draft.languages?.filter((entry) => entry !== tag),
     });
-  if (draft.condition)
-    add('condition', m.condition_heading({}, options), {
-      ...navigationState,
-      condition: undefined,
-    });
+  if (draft.condition) add('condition', m.condition_heading({}, options), { ...navigationState, condition: undefined });
   const filterWithoutScope = navigationState.resourceScope
     ? removeSearchResourceScope(navigationState.filter)
     : navigationState.filter;
@@ -1236,10 +1181,7 @@ export function SearchPage({
       entry.property === RESOURCE_LANGUAGE_PROPERTY
         ? {
             ...entry,
-            labels: {
-              ...entry.labels,
-              [locale]: m.search_resource_language({}, options),
-            },
+            labels: { ...entry.labels, [locale]: m.search_resource_language({}, options) },
             help: [m.search_resource_language_help({}, options), resourceLanguageCurrentness].filter(Boolean).join(' '),
           }
         : entry,
@@ -1288,11 +1230,7 @@ export function SearchPage({
           {data?.queryState && (
             <a
               className={linkClass}
-              href={discoverySearchHref(locale, {
-                ...data.queryState,
-                kinds: undefined,
-                cursor: undefined,
-              })}
+              href={discoverySearchHref(locale, { ...data.queryState, kinds: undefined, cursor: undefined })}
             >
               {m.search_kind_navigation_all({}, options)}
             </a>
@@ -1401,16 +1339,12 @@ export function SearchPage({
           onNavigate={navigate}
           clearActions={
             resourceLanguage?.actions.clear
-              ? {
-                  [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options),
-                }
+              ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
               : {}
           }
           preserveSelectedWhenUnavailable={[RESOURCE_LANGUAGE_PROPERTY]}
           selectedValueFallbacks={[RESOURCE_LANGUAGE_PROPERTY]}
-          selectionLimits={{
-            [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT,
-          }}
+          selectionLimits={{ [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT }}
           conditions={{
             ...(type ? { type } : {}),
             facetValues: selectedFacets,
@@ -1593,11 +1527,7 @@ export function SearchPage({
         retryAt={data?.recovery && 'retryAt' in data.recovery ? data.recovery.retryAt : undefined}
         onApply={(value) => {
           void router?.navigate({
-            href: discoverySearchHref(locale, {
-              ...committedState,
-              query: value,
-              cursor: undefined,
-            }),
+            href: discoverySearchHref(locale, { ...committedState, query: value, cursor: undefined }),
           });
         }}
       />
@@ -1667,10 +1597,7 @@ function readSearch({
   locale?: string;
   signal?: AbortSignal;
 }): Promise<SearchPageData> {
-  return readSearchWithLocale({
-    data: { ...data, locale },
-    ...(signal ? { signal } : {}),
-  });
+  return readSearchWithLocale({ data: { ...data, locale }, ...(signal ? { signal } : {}) });
 }
 
 export { readSearch };

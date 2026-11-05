@@ -20,10 +20,7 @@ const media = {
   removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) =>
     mediaListeners.delete(listener),
 };
-Object.defineProperty(window, 'matchMedia', {
-  configurable: true,
-  value: () => media,
-});
+Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => media });
 const globals = {
   window,
   document: window.document,
@@ -43,11 +40,7 @@ const globals = {
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, {
-    configurable: true,
-    writable: true,
-    value,
-  });
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -56,27 +49,14 @@ const { HeaderSearchFilterProvider } = await import('../src/search/header-search
 const { setLocale } = await import('../src/paraglide/runtime.js');
 
 test('range drafts survive Filters remounts and reset to the next committed range', async () => {
-  type Committed = {
-    query: string;
-    ranges: Record<string, { gte?: number; lte?: number; unit?: string }>;
-  };
+  type Committed = { query: string; ranges: Record<string, { gte?: number; lte?: number; unit?: string }> };
   let changeCommitted: () => void = () => {};
   const screen = () => {
-    const [committed, setCommitted] = useState<Committed>({
-      query: 'reading',
-      ranges: {},
-    });
+    const [committed, setCommitted] = useState<Committed>({ query: 'reading', ranges: {} });
     changeCommitted = () =>
-      setCommitted({
-        query: 'new search',
-        ranges: { 'fixture:amount': { gte: 20, unit: 'lb' } },
-      });
+      setCommitted({ query: 'new search', ranges: { 'fixture:amount': { gte: 20, unit: 'lb' } } });
     const data = {
-      queryState: {
-        query: committed.query,
-        facets: {},
-        ranges: committed.ranges,
-      },
+      queryState: { query: committed.query, facets: {}, ranges: committed.ranges },
       ranges: committed.ranges,
       selectedFacets: {},
       refinement: {
@@ -90,10 +70,7 @@ test('range drafts survive Filters remounts and reset to the next committed rang
             units: ['kg', 'lb'],
           },
         ],
-        initial: {
-          status: 'ready',
-          page: { as_of: '2026-11-03T00:00:00Z', facets: [] },
-        },
+        initial: { status: 'ready', page: { as_of: '2026-11-03T00:00:00Z', facets: [] } },
       },
     } as unknown as SearchPageData;
     return (
