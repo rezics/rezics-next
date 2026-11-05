@@ -6,7 +6,18 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, leave, open, send, session } from './creation-page-fixture';
+import {
+  creationFixture,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  leave,
+  open,
+  send,
+  session,
+} from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
 import { readOrganizationDeleteStepUp, readOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
@@ -153,10 +164,7 @@ test('acknowledgement of an old command preserves an independently replaced unkn
     operationKey: 'b'.repeat(32),
     returnTo: '/organizations/delete' as const,
   };
-  window.sessionStorage.setItem(
-    `rezics.organization-delete.step-up.unknown.${first}`,
-    JSON.stringify(replacement),
-  );
+  window.sessionStorage.setItem(`rezics.organization-delete.step-up.unknown.${first}`, JSON.stringify(replacement));
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
   expect(readOrganizationDeleteUnknown(first)).toMatchObject({ kind: 'pending', value: replacement });
   expect(page.host.querySelector('form')).toBeNull();

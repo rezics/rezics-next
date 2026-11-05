@@ -247,7 +247,10 @@ test('refused generic key storage preserves the exact deletion continuation with
 });
 
 test('refused unknown-marker persistence retains custody and cannot dispatch or unlock another delete', async () => {
-  const page = await open(content(first, async () => ready(first)), body);
+  const page = await open(
+    content(first, async () => ready(first)),
+    body,
+  );
   const storage = window.sessionStorage;
   const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
   const unknownKey = `rezics.organization-delete.step-up.unknown.${first}`;

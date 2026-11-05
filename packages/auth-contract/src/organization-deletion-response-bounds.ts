@@ -49,10 +49,9 @@ const readyBytes =
   JSON.stringify(readySkeleton).length +
   6 * (ORGANIZATION_DELETION_MAX_SESSION_PROOF_ID_LENGTH + ORGANIZATION_DELETION_MAX_DISPLAY_NAME_LENGTH);
 const authenticationRequiredBytes =
-  JSON.stringify(authenticationRequiredSkeleton).length +
-  6 * ORGANIZATION_DELETION_MAX_SESSION_PROOF_ID_LENGTH;
-const fixedAdviceBytes = ['signed-out', 'hidden', 'denied', 'missing', 'changed', 'unavailable'].map((kind) =>
-  JSON.stringify({ kind }).length,
+  JSON.stringify(authenticationRequiredSkeleton).length + 6 * ORGANIZATION_DELETION_MAX_SESSION_PROOF_ID_LENGTH;
+const fixedAdviceBytes = ['signed-out', 'hidden', 'denied', 'missing', 'changed', 'unavailable'].map(
+  (kind) => JSON.stringify({ kind }).length,
 );
 
 /** UTF-8 bytes for every closed success variant and the fixed 400/413 error body. */

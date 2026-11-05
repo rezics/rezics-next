@@ -94,10 +94,7 @@ function clearStored(key: string, expected: PendingOrganizationDelete): boolean 
   }
 }
 
-export function clearOrganizationDeleteUnknown(
-  organizationId: string,
-  expected: PendingOrganizationDelete,
-): boolean {
+export function clearOrganizationDeleteUnknown(organizationId: string, expected: PendingOrganizationDelete): boolean {
   return clearStored(`${storageKey}.unknown.${organizationId}`, expected);
 }
 
@@ -106,7 +103,10 @@ function storeDescriptor(key: string, value: PendingOrganizationDelete): boolean
   const raw = JSON.stringify(value);
   if (raw.length > ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16) return false;
   const existing = readStored(key);
-  if (existing.kind === 'invalid' || (existing.kind === 'pending' && !sameOrganizationDeleteDescriptor(existing.value, value)))
+  if (
+    existing.kind === 'invalid' ||
+    (existing.kind === 'pending' && !sameOrganizationDeleteDescriptor(existing.value, value))
+  )
     return false;
   try {
     window.sessionStorage.setItem(key, raw);

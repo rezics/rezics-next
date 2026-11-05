@@ -44,11 +44,7 @@ function parseOrganizationDeletionResponse(body: unknown, organizationId: string
         return { kind: body.kind };
     }
   }
-  if (
-    !('humanAccountId' in body) ||
-    !isAccountId(body.humanAccountId) ||
-    body.humanAccountId === organizationId
-  )
+  if (!('humanAccountId' in body) || !isAccountId(body.humanAccountId) || body.humanAccountId === organizationId)
     return { kind: 'unavailable' };
   if (
     keys === 'action,humanAccountId,kind' &&
@@ -248,10 +244,7 @@ export async function executeOrganizationDeletion(
         return false;
       }
       const stored = readOrganizationDeleteUnknown(target.organizationId);
-      if (
-        stored.kind !== 'pending' ||
-        !sameOrganizationDeleteDescriptor(stored.value, identity)
-      ) {
+      if (stored.kind !== 'pending' || !sameOrganizationDeleteDescriptor(stored.value, identity)) {
         fenceUnavailable = true;
         return false;
       }
@@ -278,8 +271,7 @@ export async function executeOrganizationDeletion(
     return { ok: false, reason: 'unknown' };
   }
   if (fenceConflict) return { ok: false, reason: 'unknown' };
-  if (fenceMayHaveBeenSubmitted && !result.ok && result.reason !== 'unknown')
-    return { ok: false, reason: 'unknown' };
+  if (fenceMayHaveBeenSubmitted && !result.ok && result.reason !== 'unknown') return { ok: false, reason: 'unknown' };
   // A response from this exact attempt may settle its own fence after departure.
   // It cannot replace a newer view or settle any earlier unknown attempt.
   if (review && !review.isCurrent()) {
