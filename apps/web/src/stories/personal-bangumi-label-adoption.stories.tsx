@@ -18,6 +18,7 @@ const custody = { viewer: 'alice', csrfToken: 'csrf-story', credential: 'encrypt
 
 function visit(): BangumiVisit {
   return {
+    identity: 1,
     subject: 'alice',
     csrfToken: 'csrf-story',
     locale: 'en',
@@ -34,19 +35,39 @@ const review = {
   evidence: 'known' as const,
   items: [
     { index: 0, source: 'role-playing', status: 'ready' as const, duplicateOf: null, target: { labelId, revision: 4 } },
-    { index: 1, source: 'awaiting-assignment', status: 'ready' as const, duplicateOf: null, target: { name: 'awaiting assignment' } },
+    {
+      index: 1,
+      source: 'awaiting-assignment',
+      status: 'ready' as const,
+      duplicateOf: null,
+      target: { name: 'awaiting assignment' },
+    },
   ],
 };
 
 function port(): BangumiImportPort {
   const fake = {
-    async preview() { return { kind: 'unavailable' as const }; },
-    async page() { return { kind: 'unavailable' as const }; },
-    async review() { return { kind: 'unavailable' as const }; },
-    async apply() { return { kind: 'unavailable' as const }; },
-    async admitSource() { return { kind: 'unavailable' as const }; },
-    async cancel() { return { kind: 'unavailable' as const }; },
-    async delete() { return { kind: 'unavailable' as const }; },
+    async preview() {
+      return { kind: 'unavailable' as const };
+    },
+    async page() {
+      return { kind: 'unavailable' as const };
+    },
+    async review() {
+      return { kind: 'unavailable' as const };
+    },
+    async apply() {
+      return { kind: 'unavailable' as const };
+    },
+    async admitSource() {
+      return { kind: 'unavailable' as const };
+    },
+    async cancel() {
+      return { kind: 'unavailable' as const };
+    },
+    async delete() {
+      return { kind: 'unavailable' as const };
+    },
     async tags(command: Extract<BangumiCommand, { kind: 'tags' }>) {
       return {
         kind: 'tags' as const,
@@ -61,10 +82,22 @@ function port(): BangumiImportPort {
         },
       };
     },
-    async searchLabels() { return { kind: 'label-options' as const, labels: [] }; },
-    async reviewLabels() { return { kind: 'unavailable' as const }; },
-    async applyLabels() { return { kind: 'unavailable' as const }; },
-    async readAssignments() { return { kind: 'assignments' as const, subjectId, assignments: [{ id: assignmentId, labelId, name: 'role-playing', revision: 3 }] }; },
+    async searchLabels() {
+      return { kind: 'label-options' as const, labels: [] };
+    },
+    async reviewLabels() {
+      return { kind: 'unavailable' as const };
+    },
+    async applyLabels() {
+      return { kind: 'unavailable' as const };
+    },
+    async readAssignments() {
+      return {
+        kind: 'assignments' as const,
+        subjectId,
+        assignments: [{ id: assignmentId, labelId, name: 'role-playing', revision: 3 }],
+      };
+    },
   };
   return fake;
 }
@@ -97,14 +130,16 @@ type Story = StoryObj<typeof meta>;
 
 const invalid = emptyBangumiLabelPanel(rowRevision);
 invalid.custody = custody;
-invalid.pages = [{
-  ordinal: 0,
-  rowRevision,
-  evidence: 'invalid',
-  tags: [{ index: 0, value: ['unsafe', 4], status: 'invalid', proposedName: null }],
-  next: null,
-  labels: null,
-}];
+invalid.pages = [
+  {
+    ordinal: 0,
+    rowRevision,
+    evidence: 'invalid',
+    tags: [{ index: 0, value: ['unsafe', 4], status: 'invalid', proposedName: null }],
+    next: null,
+    labels: null,
+  },
+];
 
 const partial = emptyBangumiLabelPanel(rowRevision);
 partial.custody = custody;
@@ -113,7 +148,13 @@ partial.labels = {
   review,
   confirmed: true,
   outcomes: [
-    { index: 0, status: 'assigned', label: { id: labelId, revision: 5 }, assignment: { id: assignmentId, revision: 3 }, created: false },
+    {
+      index: 0,
+      status: 'assigned',
+      label: { id: labelId, revision: 5 },
+      assignment: { id: assignmentId, revision: 3 },
+      created: false,
+    },
     { index: 1, status: 'failed', label: { id: uploadId, revision: 1 }, assignment: null, created: true },
   ],
 };

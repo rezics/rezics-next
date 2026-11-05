@@ -2,7 +2,14 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import type {
   BangumiCommand,
   BangumiImportPort,
@@ -19,7 +26,9 @@ import type { BangumiVisit } from '../src/library/personal-bangumi-import/visit'
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/library/import-bangumi' });
 for (const [key, value] of Object.entries({
   window,
@@ -57,6 +66,7 @@ function visit(): BangumiVisit {
   const controller = new AbortController();
   let retired = false;
   return {
+    identity: 1,
     subject: 'alice',
     csrfToken: 'csrf-a',
     locale: 'en',
@@ -71,15 +81,20 @@ function visit(): BangumiVisit {
   };
 }
 
-function page(ordinal: number, evidence: 'missing' | 'empty' | 'known' | 'invalid' | 'unknown', after = -1): NonNullable<Extract<BangumiTagPageResult, { kind: 'tags' }>['page']> {
+function page(
+  ordinal: number,
+  evidence: 'missing' | 'empty' | 'known' | 'invalid' | 'unknown',
+  after = -1,
+): NonNullable<Extract<BangumiTagPageResult, { kind: 'tags' }>['page']> {
   const all = Array.from({ length: 33 }, (_, index) => ({
     index,
     value: index === 0 ? 'cafe\u0301' : `tag-${index}`,
-    status: evidence === 'known' ? 'supported' as const : 'invalid' as const,
+    status: evidence === 'known' ? ('supported' as const) : ('invalid' as const),
     proposedName: evidence === 'known' ? (index === 0 ? 'café' : `tag-${index}`) : null,
   }));
   const start = after + 1;
-  const tags = ordinal === 0 && evidence === 'known' ? all.slice(start, start + 32) : evidence === 'invalid' ? [all[0]!] : [];
+  const tags =
+    ordinal === 0 && evidence === 'known' ? all.slice(start, start + 32) : evidence === 'invalid' ? [all[0]!] : [];
   return {
     ordinal,
     rowRevision,
@@ -90,7 +105,9 @@ function page(ordinal: number, evidence: 'missing' | 'empty' | 'known' | 'invali
   };
 }
 
-function createPort(options: { evidence?: 'missing' | 'empty' | 'known' | 'invalid' | 'unknown'; uncertainApply?: boolean } = {}) {
+function createPort(
+  options: { evidence?: 'missing' | 'empty' | 'known' | 'invalid' | 'unknown'; uncertainApply?: boolean } = {},
+) {
   const tagCommands: Extract<BangumiCommand, { kind: 'tags' }>[] = [];
   const reviewCommands: Extract<BangumiCommand, { kind: 'review-labels' }>[] = [];
   const applyCommands: Extract<BangumiCommand, { kind: 'apply-labels' }>[] = [];
@@ -98,13 +115,27 @@ function createPort(options: { evidence?: 'missing' | 'empty' | 'known' | 'inval
   let firstApply = options.uncertainApply === true;
   let savedLabels: BangumiLabelState | null = null;
   const port: BangumiImportPort = {
-    async preview() { return { kind: 'unavailable' }; },
-    async page() { return { kind: 'unavailable' }; },
-    async review() { return { kind: 'unavailable' }; },
-    async apply() { return { kind: 'unavailable' }; },
-    async admitSource() { return { kind: 'admitted' }; },
-    async cancel() { return { kind: 'cancelled', uploadId }; },
-    async delete() { return { kind: 'deleted' }; },
+    async preview() {
+      return { kind: 'unavailable' };
+    },
+    async page() {
+      return { kind: 'unavailable' };
+    },
+    async review() {
+      return { kind: 'unavailable' };
+    },
+    async apply() {
+      return { kind: 'unavailable' };
+    },
+    async admitSource() {
+      return { kind: 'admitted' };
+    },
+    async cancel() {
+      return { kind: 'cancelled', uploadId };
+    },
+    async delete() {
+      return { kind: 'deleted' };
+    },
     async tags(command) {
       tagCommands.push(command);
       return {
@@ -137,7 +168,7 @@ function createPort(options: { evidence?: 'missing' | 'empty' | 'known' | 'inval
             return {
               index: mapping.index,
               source: tag.value,
-              status: duplicate ? 'duplicate' as const : 'ready' as const,
+              status: duplicate ? ('duplicate' as const) : ('ready' as const),
               duplicateOf: null,
               target: 'labelId' in mapping.target ? { labelId: mapping.target.labelId, revision: 3 } : mapping.target,
             };
@@ -161,21 +192,41 @@ function createPort(options: { evidence?: 'missing' | 'empty' | 'known' | 'inval
       savedLabels = {
         ...savedLabels!,
         confirmed: true,
-        outcomes: [{ index: 0, status: 'assigned', label: { id: labelId, revision: 4 }, assignment: { id: assignmentId, revision: 2 }, created: false }],
+        outcomes: [
+          {
+            index: 0,
+            status: 'assigned',
+            label: { id: labelId, revision: 4 },
+            assignment: { id: assignmentId, revision: 2 },
+            created: false,
+          },
+        ],
       };
       return {
         kind: 'labels-applied',
         result: {
           uploadId,
           ordinal: command.ordinal,
-          outcomes: [{ index: 0, status: 'assigned', label: { id: labelId, revision: 4 }, assignment: { id: assignmentId, revision: 2 }, created: false }],
+          outcomes: [
+            {
+              index: 0,
+              status: 'assigned',
+              label: { id: labelId, revision: 4 },
+              assignment: { id: assignmentId, revision: 2 },
+              created: false,
+            },
+          ],
           remaining: [],
         },
       };
     },
     async readAssignments(subjectId) {
       assignments.push(subjectId);
-      return { kind: 'assignments', subjectId, assignments: [{ id: assignmentId, labelId, name: 'café', revision: 2 }] };
+      return {
+        kind: 'assignments',
+        subjectId,
+        assignments: [{ id: assignmentId, labelId, name: 'café', revision: 2 }],
+      };
     },
   };
   return { port, tagCommands, reviewCommands, applyCommands, assignments };
@@ -201,7 +252,10 @@ function createProductionJourneyPort() {
       return { kind: 'previewed', uploadId, count: 1 };
     },
     async page(): Promise<{ kind: 'page'; page: BangumiPage }> {
-      return { kind: 'page', page: { uploadId, cancelled: false, rows: [{ ...sourceRow, review: subjectReview }], next: null } };
+      return {
+        kind: 'page',
+        page: { uploadId, cancelled: false, rows: [{ ...sourceRow, review: subjectReview }], next: null },
+      };
     },
     async review(command) {
       subjectReview = {
@@ -392,7 +446,8 @@ test('the mounted importer keeps review, native result, assignments and departur
     expect(fixture.assignments).toEqual([subjectId]);
 
     await act(async () => {
-      await router.navigate({ to: '/en/library' });
+      void router.navigate({ to: '/en/library' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await settle();
     expect(host.textContent).toContain(m.library_bangumi_leave_title());
