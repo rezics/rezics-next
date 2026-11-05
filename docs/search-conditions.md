@@ -34,6 +34,8 @@ not a producer, and a resource point read does not establish search enumeration.
 
 ## Second-scope producer boundaries
 
+Decision: Search owns the public Collection directory request, indexed predicates and ordering, continuation, and mounted consumer. Commerce remains authoritative for Collection disclosure, curator identity, current membership and selected public output, and native recency and follow-count popularity. The directory extends the existing mixed discovery path rather than adding a parallel listing authority.
+
 The [second-scope plan](research/search-second-scope-plan.md) sequences implementation; it adds no native
 readiness or grant. Public Collection metadata initially supports text and kind only, using the existing
 `collection` primary identity. Public review discovery preserves the `thread` primary identity with a review
