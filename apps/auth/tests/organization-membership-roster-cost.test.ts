@@ -38,7 +38,7 @@ test('whole ordinary call includes route proof and both installed bounded source
       const path = new URL(String(input), 'https://auth.test').pathname;
       calls.push({ path, body: init?.body ? JSON.parse(init.body) : null });
       return Response.json(path === '/session' ? { account_id: account, client_id: profile.client_id, scope: profile.scope } :
-        { organizationId: org, viewer: { accountId: account, role: 'owner', leave: 'unavailable' }, members: { state: 'ready', holders: [], next: null } });
+        { organizationId: org, viewer: { accountId: account, role: 'owner', leave: 'unavailable' }, members: { state: 'ready', items: [], next: null } });
     };
     const session = await loadAccountSession();
     const page = await loadMembershipPage(org, session.accountId, 'opaque/+=');

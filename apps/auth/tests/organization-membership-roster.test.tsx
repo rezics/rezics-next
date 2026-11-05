@@ -129,6 +129,7 @@ test('failed Previous retries exactly and commits one pop; failed First preserve
   expect(host.textContent).toContain(m.auth_members_conflict());
   await click(m.auth_members_recovery_retry());
   expect(targets().slice(-2)).toEqual(['first/+opaque=', 'first/+opaque=']);
+  expect(button(m.auth_members_previous_page()).disabled).toBe(false);
   list.mockResolvedValueOnce({ kind: 'unavailable' });
   await click(m.auth_members_first_page());
   expect(host.textContent).not.toContain(m.auth_members_empty_page());
