@@ -23,15 +23,22 @@ test('current Person credit returns from work, Character and Sources with exact 
     ...Object.fromEntries(
       [
         'HTMLElement',
+        'HTMLButtonElement',
         'HTMLInputElement',
         'Element',
         'Node',
         'Text',
         'NodeFilter',
+        'Document',
         'DocumentFragment',
         'MutationObserver',
         'ResizeObserver',
         'DOMRect',
+        'Event',
+        'FocusEvent',
+        'MouseEvent',
+        'PointerEvent',
+        'KeyboardEvent',
       ].map((key) => [key, Reflect.get(window, key)]),
     ),
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -140,9 +147,6 @@ test('current Person credit returns from work, Character and Sources with exact 
   try {
     await render();
     await click(m.credit_inspect());
-    await act(async () => {
-      await import('../src/features/catalogue/credit-inspection/session');
-    });
     const dialog = window.document.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
     expect(dialog!.textContent).toContain(labels['wdt:P1932']);
