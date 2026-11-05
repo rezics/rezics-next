@@ -36,7 +36,10 @@ function credit(property: string, statementId: string, title: string): Connectio
               value: { type: 'value', content: person },
               qualifiers: [
                 { property: { id: 'wdt:P1932', data_type: 'string' }, value: { type: 'value', content: title } },
-                { property: { id: 'wdt:P3831', data_type: 'wikibase-item' }, value: { type: 'value', content: id(30) } },
+                {
+                  property: { id: 'wdt:P3831', data_type: 'wikibase-item' },
+                  value: { type: 'value', content: id(30) },
+                },
               ],
               references: [
                 {
@@ -50,7 +53,9 @@ function credit(property: string, statementId: string, title: string): Connectio
               ],
               rezics: { release, revision: 1 },
             },
-            related: { [id(30)]: { id: id(30), type: 'skos:Concept', label: { value: 'Credit role', language: 'en' } } },
+            related: {
+              [id(30)]: { id: id(30), type: 'skos:Concept', label: { value: 'Credit role', language: 'en' } },
+            },
           },
         ],
       },
@@ -109,5 +114,7 @@ test('Person credit visits retain each admitted VN and anime window and its exac
       content: `https://source.test/${title}`,
     });
   }
-  expect(connectionCreditVisit(value, { ...vn, stream: { ...vn.stream, property: 'schema:contributor' } })).toBeUndefined();
+  expect(
+    connectionCreditVisit(value, { ...vn, stream: { ...vn.stream, property: 'schema:contributor' } }),
+  ).toBeUndefined();
 });
