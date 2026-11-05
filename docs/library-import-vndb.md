@@ -8,6 +8,10 @@ The mounted personal-list caller submits the supplied private export through the
 seals the exact upload body and idempotency key in the existing `ShowcaseJournal`, and returns only the native upload
 UUID and row count. Imports remains the sole mounted personal-list caller and owns review matching. Progress and vote
 effects remain unavailable until their consumers safely compose the owning native producers.
+UUID and row count.
+
+Decision: adopt VNDB Progress only through the shared helper when the live native profile admits the literal declared
+source unit; keep guarded vote application unavailable at Rating's `atomic_guard_unavailable` source-admission seam.
 
 State changes use explicit released entry-state commands alongside private source evidence. Role suggestions never
 grant a mapping or invent state IDs. Every other field remains evidence until its native owner admits it; a profile
@@ -33,6 +37,14 @@ Unmatched rows accept an explicit readable target obtained through ordinary cata
 | Started / finished                                       | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred.                                                                                                                                                        |
 | Progress and measure                                     | Preserve original value, including zero, and supplied unit as private evidence. VNDB progress binding/readback is an open Commerce decision; no session, historical activity or counted use is inferred.                                                                                                                                    |
 | Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                                                                                                                                                                            |
+| Source field                                             | Review and native treatment                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; the person explicitly selects an actual released state ID.                                                                                                                                                                                                        |
+| Other labels and per-label attributes                    | Private evidence; no automatic local label creation.                                                                                                                                                                                                                                                                             |
+| Vote                                                     | Retain exact raw spelling and original 1–10, step 0.1 scale. Zero is invalid. Values such as 7.3 have no exact native half-point value; the person may choose native units explicitly, with no rounding or exact-conversion claim. Native admission currently returns typed unavailable and performs no vote or aggregate write. |
+| Started / finished                                       | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred.                                                                                                                                             |
+| Progress and measure                                     | Retain exact source value and declared unit. Adoption is available only when the current released native profile admits that same unit as a scalar amount; no conversion, session, or counted activity is inferred.                                                                                                                                 |
+| Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                                                                                                                                                                 |
 
 Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
 Notes preserve significant whitespace when proposed for native adoption. Date parsing trims only its interpretation;
@@ -67,6 +79,23 @@ after awaited work. Cancelled, unexpired evidence remains privately downloadable
 new review, even if an old mutation receipt exists. Exact metadata/date acknowledgement reconciliation returns only
 the bounded native outcome; it does not restore private evidence access. Label orchestration still requires its live
 preview lifetime, so expired label acknowledgement reconciliation remains unavailable in this delivery.
+
+Decision: score review requires the owner to choose native units explicitly; native zero is a vote, clear is a
+separate explicit action, and source absence preserves the current vote.
+
+VNDB Progress uses the shared retained-measure adoption helper. It accepts only the source's declared unit
+when the current profile reader admits that exact scalar unit; the existing XML fixture demonstrates `progress` with
+unit `minute`, including zero, against a compiled and activated profile. No unit is guessed from VNDB's title or
+other fields. The VNDB row may attach an explicit Progress selection to its state review or submit a Progress-only
+review. Existing occurrences require an explicit session ID; new occurrences require the explicit `start` choice.
+Only selected measures are written, current measures are preserved without `replace`, and clear remains a separate
+explicit action for one existing measure. The caller receives per-measure outcomes and a current session readback
+from the native Progress reader. Missing, unknown, invalid, or unsupported source operands remain in private source
+evidence and have distinct outcomes without native effects.
+
+Guarded VNDB vote application remains unavailable while Rating returns `atomic_guard_unavailable` and
+does not expose the source/review admission needed by this import. VNDB keeps its existing typed unavailable outcome;
+it does not call an unguarded writer or implement another guard.
 
 ## Native score review
 

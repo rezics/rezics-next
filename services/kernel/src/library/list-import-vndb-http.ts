@@ -24,6 +24,53 @@ const baseline = t.Union([
   t.Null(),
   object({ state: t.String(), revision: t.Integer({ minimum: 1 }), incarnationId: nullableText }),
 ]);
+const progressResult = object({
+  occurrence: nullable(
+    object({
+      sessionId: uuid,
+      startedAt: t.String(),
+      transactionId: t.String(),
+      revision: t.Integer({ minimum: 1 }),
+    }),
+  ),
+  complete: t.Boolean(),
+  measures: t.Array(
+    object({
+      field: t.String(),
+      unit: nullableText,
+      action: strings('adopt', 'clear'),
+      status: strings(
+        'applied',
+        'cleared',
+        'preserved',
+        'missing',
+        'unknown',
+        'invalid',
+        'unsupported',
+        'stale',
+        'failed',
+        'unattempted',
+      ),
+      sourceAmount: nullableText,
+      currentAmount: nullableText,
+      reason: nullableText,
+    }),
+    { maxItems: 8 },
+  ),
+  readback: nullable(
+    object({
+      sessionId: uuid,
+      startedAt: t.String(),
+      transactionId: t.String(),
+      revision: t.Integer({ minimum: 1 }),
+      state: t.String(),
+      mode: t.String(),
+      unit: t.String(),
+      amount: nullableText,
+      measures: t.Array(object({ unit: t.String(), amount: nullableText }), { maxItems: 7 }),
+    }),
+  ),
+});
 export const vndbDecisionSchema = object({
   reviewId: uuid,
   status: reviewStatus,
@@ -31,7 +78,8 @@ export const vndbDecisionSchema = object({
   state: nullableText,
   baseline,
   replace: t.Boolean(),
-  action: nullable(strings('state', 'skip', 'retain')),
+  action: nullable(strings('state', 'skip', 'retain', 'progress')),
+  progress: nullable(progressResult),
 });
 const nativeQuestion = object({
   id: uuid,
@@ -143,7 +191,7 @@ export const vndbApplySchema = object({
   uploadId: uuid,
   outcomes: t.Array(
     t.Union([
-      object({ ordinal: count, reviewId: uuid, status: disposition }),
+      object({ ordinal: count, reviewId: uuid, status: disposition, progress: nullable(progressResult) }),
       object({
         ordinal: count,
         scoreReviewId: uuid,

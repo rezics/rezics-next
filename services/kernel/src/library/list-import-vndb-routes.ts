@@ -48,6 +48,26 @@ const scoreSelection = t.Union([
   t.Object({ kind: t.Literal('vote'), units: t.Integer({ minimum: 0, maximum: 20 }) }, closed),
   t.Object({ kind: t.Literal('clear') }, closed),
 ]);
+const progressSelection = t.Object(
+  {
+    occurrence: t.Union([
+      t.Object({ kind: t.Literal('existing'), sessionId: uuid }, closed),
+      t.Object({ kind: t.Literal('start'), primaryUnit: t.String({ minLength: 1, maxLength: 64 }) }, closed),
+    ]),
+    measures: t.Array(
+      t.Object(
+        {
+          field: t.String({ minLength: 1, maxLength: 64 }),
+          action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+          replace: t.Optional(t.Boolean()),
+        },
+        closed,
+      ),
+      { minItems: 1, maxItems: 8 },
+    ),
+  },
+  closed,
+);
 const reviewChoice = t.Union([
   t.Object({ ordinal, action: t.Union([t.Literal('skip'), t.Literal('retain')]), targetId: t.Optional(uuid) }, closed),
   t.Object(
@@ -57,7 +77,12 @@ const reviewChoice = t.Union([
       targetId: t.Optional(uuid),
       state: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }),
       replace: t.Optional(t.Boolean()),
+      progress: t.Optional(progressSelection),
     },
+    closed,
+  ),
+  t.Object(
+    { ordinal, action: t.Literal('progress'), targetId: t.Optional(uuid), progress: progressSelection },
     closed,
   ),
   t.Object(
