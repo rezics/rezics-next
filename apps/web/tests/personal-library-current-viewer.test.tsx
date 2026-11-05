@@ -395,14 +395,19 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     await act(async () => {
       const { browserObservation } = await import('../src/session/observation');
       const observation = browserObservation(client).getSnapshot();
-      if (observation.state === 'signed-in')
-        client.setQueryData(['exposure', 'viewer', observation.subject, observation.id], {
+      expect(observation).toMatchObject({ state: 'signed-in', observation: { subject: viewer.subject } });
+      if (observation.state === 'signed-in') {
+        const exposure = {
           subject: observation.subject,
           admitted: admitted
             ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
             : [],
           state: admitted ? 'ready' : 'denied',
-        });
+        } as const;
+        const key = ['exposure', 'viewer', observation.subject, observation.id] as const;
+        client.setQueryData(key, exposure);
+        expect(client.getQueryData(key)).toEqual(exposure);
+      }
     });
   };
   const tick = async () => {
