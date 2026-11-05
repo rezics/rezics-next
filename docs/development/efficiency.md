@@ -106,6 +106,16 @@ outcome, tracked per Goal, task class and model profile. It improves in three wa
 - **No rework.** Attempts that end without landing are the largest token cost. Remove their causes, as set out under
   "Output and flow".
 
+Each attempt carries a fixed cost: reading context, orienting and running checks. A brief therefore carries a
+complete outcome, and its estimate is the lines its worker is expected to land, not a label. Fold repairs into the
+journey or broken path they serve, with every fix it needs. Do not dispatch small finish, recover or refuse slivers.
+A brief whose outcome is a new refusal, bound or guard needs its price line ([agent conduct](agent-conduct.md#briefs)).
+
+The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
+`effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
+that follows an existing pattern. Judgment work keeps the routed default: debugging an unknown cause, design,
+cross-module contracts, security and money.
+
 Record attempts and accepted landings by Goal, task class and model profile. Include failed, replaced and abandoned
 attempts. Count resumed cumulative usage by deltas, once.
 
