@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import { dirname } from 'node:path';
 import { act, createElement, Fragment, StrictMode, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
@@ -663,7 +664,7 @@ test('mounted phone, following and Subject readers publish query changes after s
             <AppShell search={<input aria-label="Search" />}>
               <QueryEvent />
               <SubjectPage
-                page={recorded}
+                page={recorded as unknown as SubjectPageData}
                 locale="en"
                 messages={{
                   unknown: 'Unknown',
