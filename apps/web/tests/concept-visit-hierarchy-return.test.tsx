@@ -32,6 +32,7 @@ const route = {
   property: 'schema:genre',
   scheme,
   type: 'schema:Book',
+  sort: 'rating' as const,
   includeChildren: true,
   spoilerThreshold: 1 as const,
   conditionText: JSON.stringify({ statement: { property: 'schema:datePublished', in: ['2009'] } }),

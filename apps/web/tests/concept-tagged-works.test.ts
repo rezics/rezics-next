@@ -163,12 +163,13 @@ test('builds one admitted Concept statement with exact role, scheme, descendants
 
 test('retains at most 24 rows and issues one bounded Search dispatch without detail reads', async () => {
   const request = conceptWorksRequest(
-    { conceptId, property: 'schema:genre', scheme: schemeId, type: 'schema:Book' },
+    { conceptId, property: 'schema:genre', scheme: schemeId, type: 'schema:Book', sort: 'rating' },
     admission,
     schemes,
     'en',
   );
   if (!request) throw new Error('Recorded release must admit Book genre tags');
+  expect(request.sort).toBe('rating');
 
   const retained = boundedConceptWorksState({
     status: 'ready',

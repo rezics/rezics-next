@@ -32,6 +32,7 @@ export type ConceptWorksRouteState = {
   property?: string | undefined;
   scheme?: string | undefined;
   type?: string | undefined;
+  sort?: 'name' | 'rating' | undefined;
   includeChildren?: boolean | undefined;
   spoilerThreshold?: 0 | 1 | 2 | undefined;
   conditionText?: string | undefined;
@@ -41,7 +42,7 @@ export type ConceptWorksRouteState = {
 };
 
 export type ConceptWorksRoutePatch = {
-  [Key in 'property' | 'scheme' | 'type' | 'includeChildren' | 'spoilerThreshold' | 'cursor' | 'tagQualifiersText']?:
+  [Key in 'property' | 'scheme' | 'type' | 'sort' | 'includeChildren' | 'spoilerThreshold' | 'cursor' | 'tagQualifiersText']?:
     | ConceptWorksRouteState[Key]
     | undefined;
 } & { condition?: FilterDocument | undefined };
@@ -86,6 +87,7 @@ function routeHref(id: string, label: string, locale: string, route: ConceptWork
   if (route.property) search.set('property', route.property);
   if (route.scheme) search.set('scheme', route.scheme);
   if (route.type) search.set('type', route.type);
+  if (route.sort) search.set('sort', route.sort);
   if (route.includeChildren) search.set('children', 'true');
   if (route.spoilerThreshold !== undefined && route.spoilerThreshold !== 0)
     search.set('spoiler', String(route.spoilerThreshold));
@@ -274,6 +276,20 @@ function ConceptWorksVisit({
           </NativeSelect>
         </Field>
         <Field>
+          <FieldLabel htmlFor="concept-work-sort">{m.search_sort_label({}, options)}</FieldLabel>
+          <NativeSelect
+            id="concept-work-sort"
+            value={route.sort ?? 'name'}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              if (value === 'name' || value === 'rating') onChange?.({ sort: value, cursor: undefined });
+            }}
+          >
+            <NativeSelectOption value="name">{m.release_search_sort_name({}, options)}</NativeSelectOption>
+            <NativeSelectOption value="rating">{m.release_search_sort_rating({}, options)}</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Field>
           <FieldLabel htmlFor="concept-work-spoiler">{m.concept_tagged_works_spoiler({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-spoiler"
@@ -402,6 +418,7 @@ export function ConceptTaggedWorks(props: Props) {
       ...(roleAvailable && role ? { property: role } : {}),
       ...(scheme ? { scheme } : {}),
       ...(props.route.type ? { type: props.route.type } : {}),
+      sort: props.route.sort ?? 'name',
       ...(props.route.includeChildren ? { includeChildren: true } : {}),
       spoilerThreshold: props.route.spoilerThreshold ?? 0,
       ...(qualifiers ? { qualifiers } : {}),
@@ -414,6 +431,7 @@ export function ConceptTaggedWorks(props: Props) {
       role,
       scheme,
       props.route.type,
+      props.route.sort,
       props.route.includeChildren,
       props.route.spoilerThreshold,
       qualifiers,
@@ -450,6 +468,7 @@ export function ConceptTaggedWorks(props: Props) {
     role,
     scheme,
     props.route.type,
+    props.route.sort,
     props.route.includeChildren,
     props.route.spoilerThreshold,
     props.route.conditionText,

@@ -10,12 +10,14 @@ import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery
 export const conceptWorksLimit = 24;
 export const conceptWorksRequestByteLimit = 65_536;
 export const conceptWorksPageByteLimit = 65_536;
+export type ConceptWorksSort = 'name' | 'rating';
 
 export type ConceptWorksSelection = {
   conceptId: string;
   property?: string | undefined;
   scheme?: string | undefined;
   type?: string | undefined;
+  sort?: ConceptWorksSort | undefined;
   includeChildren?: boolean | undefined;
   spoilerThreshold?: 0 | 1 | 2 | undefined;
   qualifiers?: readonly FilterQualifier[] | undefined;
@@ -79,7 +81,7 @@ export function conceptWorksRequest(
     facets: {},
     condition,
     cursor: selection.cursor,
-    sort: undefined,
+    sort: selection.sort ?? 'name',
     kinds: ['subject'],
     languages: [locale],
   };
@@ -183,7 +185,7 @@ export async function readConceptWorksPage(request: DiscoveryRequest, send: Disc
     request.limit !== conceptWorksLimit ||
     request.text !== undefined ||
     request.properties !== undefined ||
-    request.sort !== undefined ||
+    (request.sort !== undefined && request.sort !== 'name' && request.sort !== 'rating') ||
     !boundedFixedConceptRequest(request) ||
     new TextEncoder().encode(JSON.stringify(request)).byteLength > conceptWorksRequestByteLimit
   )
