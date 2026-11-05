@@ -93,6 +93,12 @@ membership labels, and successful reads do not grant contribution or moderation 
 
 ## Evidence boundary
 
+Decision: accept the Board-to-thread reading journey only after anonymous and ordinary signed-up members traverse
+the supported development seed's real Work or Realm, Board, thread and supplied reply continuation in the running
+pages. Compare rendered documents and attachments with native reads, follow disclosed author/context/Subject links
+and return, and retry the exact supplied cursor once when needed. A focused receiver regression supports repairs
+but does not replace that journey; unavailable browser or stack custody leaves the journey unaccepted.
+
 The source schema and mounted route establish the producer implementation. The generated client and Web reader are
 now bound to that route, but fixtures and type assertions do not establish native authority, revocation, hydration
 witnesses, physical growth, or visual layout. Native persona, source-retirement, revocation, continuation, growth, and
