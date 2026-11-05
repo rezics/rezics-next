@@ -122,7 +122,7 @@ export async function insertCollection(
   const result = asCollection(row as CollectionResult);
   await initializeCollectionMetadataHistory(client, {
     route,
-    collection: result,
+    collection,
     transactionId: context.transactionId,
     time: context.time,
   });

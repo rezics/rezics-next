@@ -4,11 +4,13 @@ WITH input AS NOT MATERIALIZED (
          :transaction_id::uuid AS transaction_id, :recorded_at::timestamptz AS recorded_at,
          :changed_fields::text[] AS changed_fields,
          :before_title::text AS before_title, :after_title::text AS after_title,
-         :before_description::text AS before_description, :after_description::text AS after_description,
+         :before_description::nullable(text) AS before_description,
+         :after_description::nullable(text) AS after_description,
          :before_visibility::text AS before_visibility, :after_visibility::text AS after_visibility,
-         :before_presentation_kind::text AS before_presentation_kind,
-         :after_presentation_kind::text AS after_presentation_kind,
-         :before_cover_media_id::uuid AS before_cover_media_id, :after_cover_media_id::uuid AS after_cover_media_id
+         :before_presentation_kind::nullable(text) AS before_presentation_kind,
+         :after_presentation_kind::nullable(text) AS after_presentation_kind,
+         :before_cover_media_id::nullable(uuid) AS before_cover_media_id,
+         :after_cover_media_id::nullable(uuid) AS after_cover_media_id
 ), state AS (
   INSERT INTO library.collection_metadata_history_state
     (route, collection_id, curator_account_id, coverage, known_from_revision, transaction_id, updated_at)

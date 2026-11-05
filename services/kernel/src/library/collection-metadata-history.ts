@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { Collection, CollectionVisibility } from './collection-model.ts';
+import type { Collection, CollectionDraft, CollectionVisibility } from './collection-model.ts';
 import type { CoverSummary } from '../semantic/summaries.ts';
 import append from './collection-metadata-history-append.sql';
 import init from './collection-metadata-history-init.sql';
@@ -88,7 +88,7 @@ export async function initializeCollectionMetadataHistory(
   client: Client,
   input: {
     route: number;
-    collection: Pick<Collection, 'id' | 'curatorAccountId'>;
+    collection: Pick<CollectionDraft, 'id' | 'curatorAccountId'>;
     transactionId: string;
     time: string;
   },
@@ -170,7 +170,7 @@ export async function readCollectionMetadataHistoryState(
   client: Client,
   input: { route: number; collectionId: string; curatorAccountId: string },
 ): Promise<CollectionMetadataHistoryState> {
-  const [row] = await state.run(client, {
+  const row = await state.run(client, {
     route: input.route,
     collection_id: input.collectionId,
     curator_account_id: input.curatorAccountId,
@@ -221,16 +221,12 @@ export async function readCollectionMetadataHistoryEntry(
   client: Client,
   input: { route: number; collectionId: string; curatorAccountId: string; revision: number },
 ) {
-  return (
-    (
-      await read.run(client, {
-        route: input.route,
-        collection_id: input.collectionId,
-        curator_account_id: input.curatorAccountId,
-        revision: input.revision,
-      })
-    )[0] ?? null
-  );
+  return await read.run(client, {
+    route: input.route,
+    collection_id: input.collectionId,
+    curator_account_id: input.curatorAccountId,
+    revision: input.revision,
+  });
 }
 
 export function collectionMetadataHistoryEntry(row: {

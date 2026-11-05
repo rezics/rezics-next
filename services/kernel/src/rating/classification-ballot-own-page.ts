@@ -57,7 +57,7 @@ type Slot = {
   revision: string;
   eligibilityGeneration: string;
 };
-type Contribution = { subjectId: string; associationId: string; bindingHash: Uint8Array | null; revision: string | null };
+type Contribution = { subjectId: string; associationId: string; bindingHash: Uint8Array; revision: string };
 type PageItem = {
   state: 'available' | 'withheld';
   subjectId: string;
@@ -561,7 +561,6 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         const contribution = contributionByKey.get(key);
         const pending = current
           ? contribution?.revision === slot.revision &&
-            contribution.bindingHash !== null &&
             Buffer.from(contribution.bindingHash).toString('hex') === Buffer.from(slot.bindingHash).toString('hex')
             ? ('current' as const)
             : ('pending' as const)
