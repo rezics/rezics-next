@@ -262,6 +262,8 @@ async function mounted() {
 }
 function handler(node: Element, name: string): (event?: unknown) => void {
   const key = Object.keys(node).find((value) => value.startsWith('__reactProps$'))!;
+  if (!((node as unknown as Record<string, Record<string, unknown>>)[key]?.[name]))
+    console.log('missing React handler', { tag: node.tagName, name, html: node.outerHTML.slice(0, 180), keys: Object.keys(node) });
   return (node as unknown as Record<string, Record<string, (event?: unknown) => void>>)[key]![name]!;
 }
 const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
@@ -293,7 +295,6 @@ describe('Complete saved rule and selected Publication owner authority preserves
       await settle(exposures.at(-1)!, { subject: 'foreign-viewer', admitted: ['collections', 'library_label.list'] });
       expect(h.host.querySelector('form')).toBeNull();
       await h.expose();
-      console.log('owner recovery DOM', h.host.innerHTML);
       const oldSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
       const oldReload = handler(h.button(m.library_collection_reload()), 'onClick');
       const oldLabels = handler(h.button(m.search_apply()), 'onClick');
@@ -407,7 +408,6 @@ describe('Complete saved rule and selected Publication owner authority preserves
         await h.authorize();
         await h.expose('alice', ['collections']);
         expect(h.host.textContent).not.toContain(m.library_rule_label_search());
-        console.log('uncertain recovery DOM', h.host.innerHTML);
         const retry = handler(h.host.querySelector('form')!, 'onSubmit');
         await h.perform(() => {
           const query = h.client.getQueryCache().find({ queryKey: h.exposureKey(), exact: true })!;
