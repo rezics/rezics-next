@@ -34,16 +34,28 @@ export function mangaPublicReturn(value: unknown, id: string, locale: string, re
   const url = new URL(accepted, 'https://rezics.invalid');
   const path = url.pathname.split('/');
   const keys = [...url.searchParams.keys()];
-  if (path[3] !== id || path[2] !== 'subjects' || path.length > 6 ||
-      (path[5] && !['contents', 'editions'].includes(path[5])) ||
-      keys.some(key => !['realm', 'node', 'cursor'].includes(key)) ||
-      new Set(keys).size !== keys.length ||
-      (url.searchParams.get('realm') ?? undefined) !== realm ||
-      (url.hash !== '#connections' && url.hash !== '#manga-reader' && !mangaOccurrenceFromFragment(url.hash))) return;
+  if (
+    path[3] !== id ||
+    path[2] !== 'subjects' ||
+    path.length > 6 ||
+    (path[5] && !['contents', 'editions'].includes(path[5])) ||
+    keys.some((key) => !['realm', 'node', 'cursor'].includes(key)) ||
+    new Set(keys).size !== keys.length ||
+    (url.searchParams.get('realm') ?? undefined) !== realm ||
+    (url.hash !== '#connections' && url.hash !== '#manga-reader' && !mangaOccurrenceFromFragment(url.hash))
+  )
+    return;
   if (url.hash === '#connections') return `${url.pathname}${url.search}`;
-  const fallback = mangaReaderAddress({ id, label: decodeURIComponent(path[4]!), locale,
-    view: path[5] ?? 'overview', realm,
-    ...(url.searchParams.has('node') ? { continuation: { node: url.searchParams.get('node')!, cursor: url.searchParams.get('cursor') ?? '' } } : {}) });
+  const fallback = mangaReaderAddress({
+    id,
+    label: decodeURIComponent(path[4]!),
+    locale,
+    view: path[5] ?? 'overview',
+    realm,
+    ...(url.searchParams.has('node')
+      ? { continuation: { node: url.searchParams.get('node')!, cursor: url.searchParams.get('cursor') ?? '' } }
+      : {}),
+  });
   return mangaCurrentAddress(accepted, fallback);
 }
 
@@ -118,10 +130,7 @@ export function parseMangaPublicVisit(
   if (address.hash || /%(?![0-9a-f]{2})/i.test(search)) return { kind: 'invalid' };
   const params = new URLSearchParams(search);
   const keys = [...params.keys()];
-  if (
-    new Set(keys).size !== keys.length ||
-    keys.some((key) => !['origin', 'publicReturn'].includes(key))
-  )
+  if (new Set(keys).size !== keys.length || keys.some((key) => !['origin', 'publicReturn'].includes(key)))
     return { kind: 'invalid' };
   const raw = params.get('origin');
   const returnHref = params.get('publicReturn');
@@ -151,5 +160,8 @@ export function mangaUnsupportedVisit(visit: MangaPublicVisit | undefined): bool
 /** Public callers already own the observed read. This descriptor performs no producer read. */
 export function mangaObservedOrigin(origin: MangaPublicOrigin): MangaPublicOrigin {
   const { returnHref, ...observed } = origin;
-  return { ...observed, ...(returnHref && (origin.context === candidateContext || origin.realm) ? { returnHref } : {}) };
+  return {
+    ...observed,
+    ...(returnHref && (origin.context === candidateContext || origin.realm) ? { returnHref } : {}),
+  };
 }

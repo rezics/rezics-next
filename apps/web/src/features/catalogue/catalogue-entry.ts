@@ -70,10 +70,23 @@ export const catalogueEntries = {
     label: m.catalogue_terms_title({}, options(address.locale)),
     href: `${subject(address)}/terms`,
   }),
-  manga: ({ id, label, locale, origin }: Locale & { id?: string | undefined; label?: string | undefined; origin?: MangaPublicOrigin | undefined }): CatalogueEntry => ({
+  manga: ({
+    id,
+    label,
+    locale,
+    origin,
+  }: Locale & {
+    id?: string | undefined;
+    label?: string | undefined;
+    origin?: MangaPublicOrigin | undefined;
+  }): CatalogueEntry => ({
     group: id ? 'edit' : 'create',
     label: id ? m.manga_edit({}, options(locale)) : m.manga_title({}, options(locale)),
-    href: id ? (origin ? mangaPublicCorrectionHref(`${subject({ id, label: label ?? '', locale })}/manga`, origin) : `${subject({ id, label: label ?? '', locale })}/manga`) : `/${locale}/catalogue/manga`,
+    href: id
+      ? origin
+        ? mangaPublicCorrectionHref(`${subject({ id, label: label ?? '', locale })}/manga`, origin)
+        : `${subject({ id, label: label ?? '', locale })}/manga`
+      : `/${locale}/catalogue/manga`,
   }),
   recipe: ({
     id,

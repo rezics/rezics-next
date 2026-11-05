@@ -124,8 +124,12 @@ function MangaProfileEditorLive({
   const originalType = useRef<string | undefined>(undefined);
   if (id && subject?.id === id && isMangaType(subject.type)) originalType.current ??= subject.type;
   const observed = visit?.kind === 'origin' ? visit.origin : undefined;
-  const originMatches = !observed || (subject?.id === observed.subject && subject?.type === observed.type &&
-    subject?.context === candidateContext && (!observed.definition || candidate?.releaseDigest === observed.definition));
+  const originMatches =
+    !observed ||
+    (subject?.id === observed.subject &&
+      subject?.type === observed.type &&
+      subject?.context === candidateContext &&
+      (!observed.definition || candidate?.releaseDigest === observed.definition));
   const matches = !id || (subject?.id === id && subject?.type === originalType.current && originMatches);
   const read = !query.isError && (!id || !query.isFetching) && matches ? candidate : undefined;
   const failed = !!(query.isError || (query.data && !query.data.ok) || (candidate && !matches));
@@ -168,7 +172,9 @@ function MangaProfileEditorLive({
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
       <p className="max-w-prose text-muted-foreground">{m.manga_intro({}, o)}</p>
-      {id && visit && <MangaPublicVisitNotice id={id} locale={locale} visit={visit} changed={!!candidate && !originMatches} />}
+      {id && visit && (
+        <MangaPublicVisitNotice id={id} locale={locale} visit={visit} changed={!!candidate && !originMatches} />
+      )}
       {session !== 'signed-in' &&
         (session === 'unavailable' ? (
           <div className="space-y-3">
@@ -1283,22 +1289,44 @@ function AddField({
 }
 
 /** Outer navigation only. Original reader admission and focus run at the destination. */
-export function MangaPublicVisitNotice({ id, locale, visit, changed = false }: {
-  id: string; locale: string; visit?: MangaPublicVisit | undefined; changed?: boolean;
+export function MangaPublicVisitNotice({
+  id,
+  locale,
+  visit,
+  changed = false,
+}: {
+  id: string;
+  locale: string;
+  visit?: MangaPublicVisit | undefined;
+  changed?: boolean;
 }) {
   const o = { locale: locale as never };
   const origin = visit?.kind === 'origin' ? visit.origin : undefined;
   const returnHref = origin?.returnHref ?? (visit?.kind === 'global' ? visit.returnHref : undefined);
   const unsupported = !!origin && (origin.context !== candidateContext || !!origin.realm);
-  return <section className="space-y-3 p-4" aria-label={m.manga_edit({}, o)}>
-    {(visit?.kind === 'invalid' || unsupported || changed) && <p role="alert">{
-      visit?.kind === 'invalid' ? m.manga_origin_invalid({}, o) : changed ? m.manga_origin_changed({}, o) : m.manga_origin_unsupported({}, o)
-    }</p>}
-    <div className="flex flex-wrap gap-4">
-      {returnHref && <a href={returnHref}>{m.manga_origin_return({}, o)}</a>}
-      {origin && !returnHref && <><p>{m.manga_origin_no_exact_return({}, o)}</p>
-        <a href={subjectHref({ id, label: '' }, locale).href}>{m.manga_origin_general({}, o)}</a></>}
-      {(unsupported || changed || visit?.kind === 'invalid') && <a href={mangaGlobalVisitHref(id, locale, returnHref)}>{m.manga_origin_global({}, o)}</a>}
-    </div>
-  </section>;
+  return (
+    <section className="space-y-3 p-4" aria-label={m.manga_edit({}, o)}>
+      {(visit?.kind === 'invalid' || unsupported || changed) && (
+        <p role="alert">
+          {visit?.kind === 'invalid'
+            ? m.manga_origin_invalid({}, o)
+            : changed
+              ? m.manga_origin_changed({}, o)
+              : m.manga_origin_unsupported({}, o)}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-4">
+        {returnHref && <a href={returnHref}>{m.manga_origin_return({}, o)}</a>}
+        {origin && !returnHref && (
+          <>
+            <p>{m.manga_origin_no_exact_return({}, o)}</p>
+            <a href={subjectHref({ id, label: '' }, locale).href}>{m.manga_origin_general({}, o)}</a>
+          </>
+        )}
+        {(unsupported || changed || visit?.kind === 'invalid') && (
+          <a href={mangaGlobalVisitHref(id, locale, returnHref)}>{m.manga_origin_global({}, o)}</a>
+        )}
+      </div>
+    </section>
+  );
 }

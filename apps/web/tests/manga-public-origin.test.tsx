@@ -4,8 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { candidateContext } from '../src/subject/candidates';
 import { MangaProfileEntry } from '../src/features/catalogue/manga-profile-entry';
 import { collectEditorialEntries } from '../src/features/catalogue/editorial-entry';
-import { mangaGlobalVisitHref, mangaObservedOrigin, mangaPublicCorrectionHref, mangaPublicIntentFits,
-  parseMangaPublicVisit, type MangaPublicOrigin } from '../src/features/catalogue/manga-public-visit';
+import {
+  mangaGlobalVisitHref,
+  mangaObservedOrigin,
+  mangaPublicCorrectionHref,
+  mangaPublicIntentFits,
+  parseMangaPublicVisit,
+  type MangaPublicOrigin,
+} from '../src/features/catalogue/manga-public-visit';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -15,7 +21,12 @@ const id = '00000000-0000-4000-8000-00000000d101';
 const other = '00000000-0000-4000-8000-00000000d102';
 const publicHref = `/en/subjects/${id}/comic`;
 const base = `${publicHref}/manga`;
-const origin: MangaPublicOrigin = { subject: id, type: 'schema:ComicSeries', context: candidateContext, returnHref: publicHref };
+const origin: MangaPublicOrigin = {
+  subject: id,
+  type: 'schema:ComicSeries',
+  context: candidateContext,
+  returnHref: publicHref,
+};
 const parse = (href: string) => parseMangaPublicVisit(new URL(href, 'https://site.test').search, id, 'en', base);
 
 test('actual Manga entry and contribution collector retain observed origin without reading producers or changing creation', () => {
@@ -29,18 +40,23 @@ test('actual Manga entry and contribution collector retain observed origin witho
 
 test('HTTP origin admission rejects ambiguous, foreign, chained and encoded overbudget intent', () => {
   for (const value of [
-    { ...origin, subject: other }, { ...origin, type: 'schema:Book' },
-    { ...origin, context: 'invalid' }, { ...origin, assertion: other },
+    { ...origin, subject: other },
+    { ...origin, type: 'schema:Book' },
+    { ...origin, context: 'invalid' },
+    { ...origin, assertion: other },
     { ...origin, returnHref: publicHref.replace('/en/', '/ja/') },
     { ...origin, returnHref: publicHref.replace(id, other) },
     { ...origin, returnHref: `https://site.test${publicHref}` },
     { ...origin, returnHref: `${publicHref}?via=${encodeURIComponent(publicHref)}` },
     { ...origin, returnHref: `${publicHref}?realm=${other}&realm=${other}` },
     { ...origin, returnHref: publicHref + '界'.repeat(700) },
-  ]) expect(parse(`${base}?${new URLSearchParams({ origin: JSON.stringify(value) })}`)).toEqual({ kind: 'invalid' });
+  ])
+    expect(parse(`${base}?${new URLSearchParams({ origin: JSON.stringify(value) })}`)).toEqual({ kind: 'invalid' });
   const href = mangaPublicCorrectionHref(base, origin);
   for (const suffix of ['&origin=!', '&publicReturn=x', '&context=' + other, '#secret'])
-    expect(parseMangaPublicVisit(new URL(href, 'https://site.test').search + suffix, id, 'en', base)).toEqual({ kind: 'invalid' });
+    expect(parseMangaPublicVisit(new URL(href, 'https://site.test').search + suffix, id, 'en', base)).toEqual({
+      kind: 'invalid',
+    });
   expect(parse(base + '?origin=%E0%A4%A')).toEqual({ kind: 'invalid' });
   expect(mangaPublicIntentFits('界'.repeat(700))).toBe(false);
   expect(mangaPublicIntentFits('x'.repeat(2048))).toBe(true);
@@ -62,12 +78,24 @@ test('installed session refuses unsupported and malformed intent before mounting
   const { MangaProfileSession } = await import('../src/features/catalogue/manga-profile-session');
   const { m } = await import('../src/paraglide/messages');
   const client = new QueryClient();
-  for (const visit of [parse(mangaPublicCorrectionHref(base, mangaObservedOrigin({ ...origin, context: other }))), { kind: 'invalid' } as const]) {
-    const html = renderToStaticMarkup(<QueryClientProvider client={client}><MangaProfileSession id={id} locale="en" visit={visit} /></QueryClientProvider>);
+  for (const visit of [
+    parse(mangaPublicCorrectionHref(base, mangaObservedOrigin({ ...origin, context: other }))),
+    { kind: 'invalid' } as const,
+  ]) {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <MangaProfileSession id={id} locale="en" visit={visit} />
+      </QueryClientProvider>,
+    );
     expect(html).toContain('role="alert"');
     expect(html).toContain(m.manga_origin_global({}, { locale: 'en' }));
     expect(html).not.toContain('<input');
-    expect(client.getQueryCache().getAll().filter(q => q.queryKey[0] === 'manga-profile')).toHaveLength(0);
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .filter((q) => q.queryKey[0] === 'manga-profile'),
+    ).toHaveLength(0);
   }
   client.clear();
 });
@@ -78,12 +106,21 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test' + base });
-  const names = 'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame matchMedia IS_REACT_ACT_ENVIRONMENT'.split(' ');
-  const saved = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, writable: true,
-    value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name) });
+  const names =
+    'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
+      ' ',
+    );
+  const saved = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  for (const name of names)
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      writable: true,
+      value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name),
+    });
   const { createRoot } = await import('react-dom/client');
-  const { waitFor } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
+  const { waitFor, within } = await import(
+    createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom')
+  );
   const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
   const { mangaFixture } = await import('../src/kernel/fake/catalogue-manga-profile');
   const fixture = mangaFixture();
@@ -97,25 +134,82 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   const { setLocale } = await import('../src/paraglide/runtime');
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const credentials = (csrfToken: string) => client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: other, csrfToken });
+  const credentials = (csrfToken: string) =>
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: other, csrfToken });
   credentials('first');
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
   const Content = createContext<import('react').ReactNode>(null);
-  const router = createRouter({ routeTree: createRootRoute({ component: () => useContext(Content) }), history: createMemoryHistory({ initialEntries: ['/'] }) });
-  const render = async (visit: ReturnType<typeof parse>) => act(async () => {
-    root.render(<QueryClientProvider client={client}><Content.Provider value={<MangaProfileSession id={id} locale="en" visit={visit} />}><RouterProvider router={router} /></Content.Provider></QueryClientProvider>);
-    await router.load();
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => useContext(Content) }),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
   });
+  const renderNode = async (node: import('react').ReactNode) =>
+    act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <Content.Provider value={node}>
+            <RouterProvider router={router} />
+          </Content.Provider>
+        </QueryClientProvider>,
+      );
+      await router.load();
+    });
+  const render = (visit: ReturnType<typeof parse>) =>
+    renderNode(<MangaProfileSession id={id} locale="en" visit={visit} />);
   const loader = Route.options.loader;
   if (typeof loader !== 'function') throw new Error('Missing canonical Manga loader');
   const href = mangaPublicCorrectionHref(base, origin);
-  const load = (slug: string, search = new URL(href, window.location.origin).search) => loader({ params: { id, slug }, location: { searchStr: search, hash: '' } } as never);
+  const load = (slug: string, search = new URL(href, window.location.origin).search) =>
+    loader({ params: { id, slug }, location: { searchStr: search, hash: '' } } as never);
   try {
-    await expect(load('old-slug')).rejects.toMatchObject({ options: { statusCode: 301, href: expect.stringContaining('/the-paper-observatory/manga?origin=') } });
+    const { SubjectPage, pageContext } = await import('../src/features/pages/subject');
+    const { subjectPageMessages } = await import('../src/features/pages/route-support');
+    const { planReads, platformRegistry } = await import('@rezics/composition');
+    const recorded = await import('../src/kernel/recorded/subject-page.json');
+    for (const subjectId of [id, other]) {
+      const read = fixture.reads.get(subjectId)!;
+      const page = structuredClone(
+        recorded.default,
+      ) as unknown as import('../src/features/pages/subject').SubjectPageData;
+      page.subject = subjectId;
+      page.catalogue = {
+        state: 'released',
+        type: read.subject.type,
+        digest: read.subject.release,
+        definitions: fixture.release,
+      };
+      const plan = planReads(
+        platformRegistry,
+        page.document as import('@rezics/composition').CompositionDocument,
+        pageContext(page),
+      );
+      for (const [key, planned] of Object.entries(plan.reads))
+        if (planned.kind === 'subject' && planned.id === subjectId)
+          page.reads[key] = { status: 200, body: structuredClone(read) };
+      await renderNode(<SubjectPage page={page} locale="en" messages={subjectPageMessages()} renderJsonLd={false} />);
+      await act(async () => within(window.document.body).getByRole('button', { name: m.contribute_title() }).click());
+      // The collector consumes the real action slot; open its edit group to inspect the actual producer.
+      await act(async () => within(window.document.body).getByText(m.contribute_edit(), { exact: true }).click());
+      const actual = window.document.querySelector<HTMLAnchorElement>('a[href*="/manga?origin="]');
+      expect(actual).not.toBeNull();
+      const address = new URL(actual!.getAttribute('href')!, window.location.origin);
+      expect(parseMangaPublicVisit(address.search, subjectId, 'en', address.pathname)).toMatchObject({
+        kind: 'origin',
+        origin: { subject: subjectId, type: read.subject.type, context: read.subject.context },
+      });
+    }
+    await expect(load('old-slug')).rejects.toMatchObject({
+      options: { statusCode: 301, href: expect.stringContaining('/the-paper-observatory/manga?origin=') },
+    });
     expect(await load('the-paper-observatory')).toMatchObject({ id, visit: { kind: 'origin', origin } });
     await expect(load('x'.repeat(129))).rejects.toBeDefined();
+    fixture.reads.get(id)!.subject.id = other;
+    await expect(load('the-paper-observatory')).rejects.toMatchObject({
+      options: { href: expect.stringContaining(`/subjects/${other}/the-paper-observatory/manga?origin=!`) },
+    });
+    fixture.reads.get(id)!.subject.id = id;
     await render(parse(href));
     await waitFor(() => expect(host.textContent).toContain(m.manga_membership()));
     const reads = fixture.calls.length;
@@ -126,10 +220,14 @@ test('mounted installed route and session retain canonical origin, acquire fresh
     await render(parse(href));
     await waitFor(() => expect(fixture.calls.length).toBeGreaterThan(reads));
     const beforeCredentials = fixture.calls.length;
-    await act(async () => { credentials('second'); });
+    await act(async () => {
+      credentials('second');
+    });
     await waitFor(() => expect(fixture.calls.length).toBeGreaterThan(beforeCredentials));
     const beforeReturn = fixture.calls.length;
-    await act(async () => { credentials('first'); });
+    await act(async () => {
+      credentials('first');
+    });
     await waitFor(() => expect(fixture.calls.length).toBeGreaterThan(beforeReturn));
     await render(parse(mangaPublicCorrectionHref(base, { ...origin, definition: 'sha256:' + 'f'.repeat(64) })));
     await waitFor(() => expect(host.textContent).toContain(m.manga_origin_changed()));
@@ -138,7 +236,7 @@ test('mounted installed route and session retain canonical origin, acquire fresh
     expect(fresh).not.toBeNull();
     await render(parse(fresh.getAttribute('href')!));
     await waitFor(() => expect(host.textContent).toContain(m.manga_membership()));
-    expect(fixture.calls.filter(call => call.method === 'POST')).toHaveLength(0);
+    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();
