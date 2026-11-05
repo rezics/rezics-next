@@ -52,6 +52,8 @@ function RecoveryReader({
 }) {
   const { origin, value, hydrated } = usePrivateReportOrigin(pathname, getLocale(), addressPath, false);
   const ownerKey = JSON.stringify([
+    pathname,
+    operationId,
     value.owner,
     value.mount,
     value.observation?.id,
@@ -155,6 +157,7 @@ function RecoveryReader({
     if (kind === 'previous' && !path.predecessors.length) return;
     const target = kind === 'retry' ? path.target : path.stage(kind, cursor);
     if (!target) return;
+    if (kind === 'first') firstReadStarted.current = owner;
     busy.current = true;
     setReadBusy(true);
     setReadFailed(false);
@@ -351,11 +354,10 @@ function RecoveryReader({
 
   useEffect(() => {
     if (authorized && firstReadStarted.current !== ownerKey) {
-      firstReadStarted.current = ownerKey;
       windows.current = new BulkOutcomeWindows();
       void readWindow('first');
     }
-  }, [authorized, operationId, ownerKey]);
+  }, [authorized, operationId, ownerKey, readBusy]);
 
   if (
     requestedId !== operationId ||
