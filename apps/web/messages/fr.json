@@ -1759,6 +1759,8 @@
   "subject_qualifiers": "Qualificatifs",
   "subject_rating_control_clear": "Effacer votre note",
   "subject_rating_control_error": "Votre note n’a pas pu être enregistrée. La valeur précédente a été rétablie.",
+  "subject_rating_control_uncertain": "Le résultat de la note est incertain. Réessayez le même enregistrement pour le confirmer.",
+  "subject_rating_control_stale": "Cette revue de note est périmée. Relisez la question actuelle et enregistrez à nouveau.",
   "subject_rating_control_label": "Votre note",
   "subject_rating_control_save": "Enregistrer la note",
   "subject_rating_control_unrated": "Pas encore noté",

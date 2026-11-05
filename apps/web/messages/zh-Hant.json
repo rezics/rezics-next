@@ -1759,6 +1759,8 @@
   "subject_qualifiers": "限定條件",
   "subject_rating_control_clear": "清除評分",
   "subject_rating_control_error": "評分無法儲存，已還原為先前的評分。",
+  "subject_rating_control_uncertain": "評分結果尚未確認。請用同一儲存請求重試以確認。",
+  "subject_rating_control_stale": "這次評分核對已過期。請查看目前問題後再儲存。",
   "subject_rating_control_label": "你的評分",
   "subject_rating_control_save": "儲存評分",
   "subject_rating_control_unrated": "尚未評分",

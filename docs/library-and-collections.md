@@ -127,6 +127,8 @@ display choices and opaque cursor; restart drops the cursor. Changing the native
 through the existing personal-shelf address owner. Sort forms submit the selected score address and direction; replacing
 the supplied address or its filters/display resets pending edits in place, preserving the focused control. Vote writes
 stay on Content's installed callable; a successful write invalidates Library, Liked and own-vote current reads.
+Decision: uncertain own-vote writes keep the optimistic units and original idempotency key so Save retries the same
+command; a stale review rolls back and requires an explicit fresh save.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;

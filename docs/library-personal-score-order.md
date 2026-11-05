@@ -25,7 +25,9 @@ is the joined question, frame and standing identity. Pending or unavailable resu
 page or a treated-as-success `atomic_guard_unavailable`. Installation status from
 `POST /v1/libraryShelfScorePreparation` describes the access path only. Web requests the native score order, maps 503
 preparation versus currentness separately, and shows own units from `personalScore` plus `scoreQuestion` or the
-independent viewer-facts overlay. Content remains the sole guarded vote writer.
+independent viewer-facts overlay. Content remains the sole guarded vote writer. Web own-vote writes bind the current standard-question observation;
+an uncertain result keeps the optimistic units and original idempotency key so Save retries that same command, while a
+stale review rolls back and requires an explicit fresh save.
 
 ## Stable keysets and currentness
 
