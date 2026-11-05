@@ -74,6 +74,7 @@ export const nativeOrderReconcile: (
     response.data.reconciliation === 'queued'
   )
     return { kind: 'queued', orderId, reconciliation: 'queued' };
+  if (response.status === 0) return { kind: 'retry' };
   if (response.status === 401 || response.status === 403 || response.status === 404) return { kind: 'denied' };
   if (response.status === 422) return { kind: 'conflict' };
   return { kind: 'unavailable' };
