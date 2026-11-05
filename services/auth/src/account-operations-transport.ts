@@ -3,6 +3,10 @@ import {
   parseRenameExecutionResponse,
   parseDeletionExecutionResponse,
   parseMembershipApprovalResponse,
+  ACCOUNT_OPERATION_EXPIRY_MAX_LENGTH,
+  ACCOUNT_OPERATION_REFERENCE_MAX_LENGTH,
+  automatedAccountOperationRequestByteBudgets,
+  type AutomatedAccountExecutionUnresolved,
 } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
@@ -44,7 +48,7 @@ export class TransportDenied extends Error {
 }
 
 /** Bounded JSON object reader shared by the Auth host transports. */
-export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+export async function readJsonObject(request: Request, maxBytes = 16384): Promise<Record<string, unknown>> {
   const reader = request.body?.getReader();
   if (!reader) throw new TransportDenied(400);
   const chunks: Uint8Array[] = [];
@@ -54,7 +58,7 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
       const next = await reader.read();
       if (next.done) break;
       size += next.value.byteLength;
-      if (size > 16384) throw new TransportDenied(413);
+      if (size > maxBytes) throw new TransportDenied(413);
       chunks.push(next.value);
     }
   } finally {
@@ -105,6 +109,18 @@ function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) deny();
   return value as Record<string, unknown>;
 }
+function automatedApprovalOutputAdmitted(approval: { reference: string; expiresAt: string }): boolean {
+  if (
+    typeof approval.reference !== 'string' ||
+    approval.reference.length === 0 ||
+    approval.reference.length > ACCOUNT_OPERATION_REFERENCE_MAX_LENGTH ||
+    typeof approval.expiresAt !== 'string' ||
+    approval.expiresAt.length !== ACCOUNT_OPERATION_EXPIRY_MAX_LENGTH
+  )
+    return false;
+  const expires = Date.parse(approval.expiresAt);
+  return Number.isFinite(expires) && new Date(expires).toISOString() === approval.expiresAt && expires > Date.now();
+}
 /** Closed field list per kind; the kernel's closed descriptor decides authority. */
 function operationOf(value: unknown): Operation {
   const operation = record(value);
@@ -144,8 +160,14 @@ export function accountOperationTransport(
     )
       return denied(400);
     let effectDispatched = false;
+    let automatedExecutionMayHaveCompleted = false;
     try {
-      const body = await readJsonObject(request);
+      const body = await readJsonObject(
+        request,
+        command === 'execute'
+          ? Math.max(16384, automatedAccountOperationRequestByteBudgets.execute)
+          : 16384,
+      );
       const names =
         command === 'approve'
           ? ['operationKey', 'operation', 'accountId']
@@ -192,6 +214,7 @@ export function accountOperationTransport(
           return response({ error: 'unavailable' }, 503);
         if (operation.kind === 'membership' && !parseMembershipApprovalResponse(projected))
           return response({ error: 'unavailable' }, 503);
+        if (automated && !automatedApprovalOutputAdmitted(approval)) return denied(503);
         return response(projected);
       }
       if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return denied(400);
@@ -218,6 +241,10 @@ export function accountOperationTransport(
       const input = { key, authorization } as const;
       switch (operation.kind) {
         case 'automated': {
+          // From this point the native workflow may commit before an exception
+          // or incompatible result reaches the transport. Do not label that
+          // outcome not_applied.
+          automatedExecutionMayHaveCompleted = true;
           const result = automatedNativeResult(
             await workflows.createAutomated({
               ...input,
@@ -225,7 +252,9 @@ export function accountOperationTransport(
               handle: operation.handle as string,
             }),
           );
-          return result ? response(result) : denied(503);
+          return result
+            ? response(result)
+            : response({ error: 'account_operation_unresolved' } satisfies AutomatedAccountExecutionUnresolved, 503);
         }
         case 'organization':
           return response(await workflows.createOrganization({ ...input, handle: operation.handle as string }));
@@ -284,6 +313,8 @@ export function accountOperationTransport(
     } catch (error) {
       // After invoking deletion or membership, an exception can follow a committed effect.
       if (effectDispatched) return response({ error: 'unavailable' }, 503);
+      if (automatedExecutionMayHaveCompleted)
+        return response({ error: 'account_operation_unresolved' } satisfies AutomatedAccountExecutionUnresolved, 503);
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;

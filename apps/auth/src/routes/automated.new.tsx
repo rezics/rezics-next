@@ -124,6 +124,7 @@ function sameCaller(left: Session, right: Session) {
 function possiblySent(attempt: AutomatedAttempt | null | 'invalid' | undefined): boolean {
   return !!attempt && attempt !== 'invalid' && (!!attempt.submitted || !!attempt.reference);
 }
+type RouteWork = { isCurrent: () => boolean; signal?: AbortSignal };
 export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSessionResult } = {}) {
   const router = useRouter({ warn: false });
   const [accountId, setAccountId] = useState('');
@@ -148,6 +149,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   const lock = useRef(false);
   const caller = useRef<Session | null>(null);
   const lifetime = useRef<object | null>(null);
+  const lifetimeController = useRef<AbortController | null>(null);
   const historyRef = useRef(history);
   const acknowledgedSeen = useRef(false);
   const uncertaintySeen = useRef(false);
@@ -198,14 +200,28 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   function retire(cached = false, synchronous = true) {
     const previous = work.current;
     lifetime.current = null;
+    lifetimeController.current?.abort();
+    lifetimeController.current = null;
     caller.current = null;
     lock.current = false;
     const saved = restoreAutomatedAttempt();
+    work.current = {
+      ...work.current,
+      attempt: saved && saved !== 'invalid' ? saved : null,
+    };
     discardAutomatedReview(previous.attempt);
     const clear = () => {
       const previousHistory = historyRef.current;
-      if (possiblySent(previous.attempt) || possiblySent(saved))
-        noteStoredContinuation(possiblySent(saved) ? saved : previous.attempt);
+      const sameSavedAttempt =
+        !!previous.attempt &&
+        saved !== 'invalid' &&
+        !!saved &&
+        saved.accountId === previous.attempt.accountId &&
+        saved.operationKey === previous.attempt.operationKey &&
+        JSON.stringify(saved.operation) === JSON.stringify(previous.attempt.operation) &&
+        JSON.stringify(saved.operator) === JSON.stringify(previous.attempt.operator);
+      if (possiblySent(previous.attempt) || (sameSavedAttempt && possiblySent(saved)))
+        noteStoredContinuation(sameSavedAttempt && possiblySent(saved) ? saved : previous.attempt);
       else if (previous.attempt || previous.draft || previous.operatorId.trim() || previous.handle.trim())
         noteFact('interrupted');
       if (cached && historyRef.current === previousHistory && (historyRef.current.length > 0 || historyDismissed))
@@ -248,10 +264,10 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     retire(false, true);
     setStatus(kind);
   }
-  async function validateCaller() {
+  async function validateCaller(signal?: AbortSignal) {
     const current = lifetime.current;
     if (!current || !caller.current) return;
-    const session = await loadManagementSession();
+    const session = await loadManagementSession(signal);
     if (lifetime.current !== current) return;
     if (session.kind !== 'ready' || !sameCaller(caller.current, session))
       revoked(
@@ -272,8 +288,10 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   }
   useLayoutEffect(() => {
     const current = {};
+    const controller = new AbortController();
     focusAfterRead.current = reload > 0;
     lifetime.current = current;
+    lifetimeController.current = controller;
     caller.current = null;
     lock.current = false;
     setBusy(false);
@@ -293,14 +311,19 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setHandle('');
     setEmail('');
     const onPageHide = () => retire(true, true);
+    const onFocus = () => void validateCaller();
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setReload((value) => value + 1);
     };
     window.addEventListener('pagehide', onPageHide);
-    window.addEventListener('focus', validateCaller);
+    window.addEventListener('focus', onFocus);
     window.addEventListener('pageshow', restore);
     void (async () => {
       const saved = restoreAutomatedAttempt();
+      work.current = {
+        ...work.current,
+        attempt: saved && saved !== 'invalid' ? saved : null,
+      };
       noteStoredContinuation(saved);
       const session = initial && reload === 0 ? initial : await loadManagementSession();
       if (lifetime.current !== current) return;
@@ -356,7 +379,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     return () => {
       retire(false, false);
       window.removeEventListener('pagehide', onPageHide);
-      window.removeEventListener('focus', validateCaller);
+      window.removeEventListener('focus', onFocus);
       window.removeEventListener('pageshow', restore);
     };
   }, [initial, reload]);
@@ -373,8 +396,9 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   }, [attempt, draft, ready]);
 
   // Approval references may change; the exact parties, key and business body cannot.
-  function currentWork() {
+  function currentWork(): RouteWork {
     const current = lifetime.current;
+    const signal = lifetimeController.current?.signal;
     const binding = () => {
       const saved = restoreAutomatedAttempt();
       return saved && saved !== 'invalid'
@@ -382,20 +406,23 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
         : saved;
     };
     const saved = binding();
-    return () => {
-      if (current === null || lifetime.current !== current) return false;
-      if (binding() !== saved) {
-        revoked('refused');
-        return false;
-      }
-      return true;
+    return {
+      ...(signal ? { signal } : {}),
+      isCurrent: () => {
+        if (current === null || lifetime.current !== current) return false;
+        if (binding() !== saved) {
+          revoked('refused');
+          return false;
+        }
+        return true;
+      },
     };
   }
-  async function observe(selection: Draft, isCurrent: () => boolean) {
+  async function observe(selection: Draft, current: RouteWork) {
     const read = await loadAutomatedCreationPage(selection.accountId, selection.operatorId);
-    if (!isCurrent()) return;
+    if (!current.isCurrent()) return;
     await validateCaller();
-    if (!isCurrent()) return;
+    if (!current.isCurrent()) return;
     if (read.kind !== 'ready') {
       revoked(read.kind);
       return;
@@ -443,13 +470,13 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       setStatus('step-up');
       return;
     }
-    const isCurrent = currentWork();
+    const currentWorkToken = currentWork();
     const current = lifetime.current;
     lock.current = true;
     setBusy(true);
     setStatus('');
     try {
-      await observe(selection, isCurrent);
+      await observe(selection, currentWorkToken);
     } finally {
       if (lifetime.current === current) {
         lock.current = false;
@@ -460,28 +487,29 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!lifetime.current || lock.current || !attempt || !confirmed || reauth || page?.readiness !== 'review') return;
-    const isCurrent = currentWork();
+    const currentWorkToken = currentWork();
     lock.current = true;
     setBusy(true);
     setStatus('');
     setConfirmed(false);
     try {
-      await validateCaller();
-      if (!isCurrent()) return;
-      const result = await submitAutomatedAttempt(attempt, isCurrent);
+      await validateCaller(currentWorkToken.signal);
+      if (!currentWorkToken.isCurrent()) return;
+      const result = await submitAutomatedAttempt(attempt, currentWorkToken.isCurrent, currentWorkToken.signal);
+      if (!currentWorkToken.isCurrent()) return;
       if (result.kind === 'complete') {
         uncertaintySeen.current = true;
         noteFact('acknowledged');
       } else {
-        noteStoredContinuation(restoreAutomatedAttempt());
+        noteStoredContinuation(attempt);
         if (result.kind === 'unknown') {
           uncertaintySeen.current = true;
           noteFact('unknown');
         }
       }
-      if (!isCurrent()) return;
-      await validateCaller();
-      if (!isCurrent()) return;
+      if (!currentWorkToken.isCurrent()) return;
+      await validateCaller(currentWorkToken.signal);
+      if (!currentWorkToken.isCurrent()) return;
       const saved = restoreAutomatedAttempt();
       if (saved && saved !== 'invalid') setAttempt(saved);
       if (result.kind === 'complete') setCreated(result.accountId);
@@ -491,7 +519,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
         setReauth(result.kind === 'step-up');
       }
     } finally {
-      if (isCurrent()) {
+      if (currentWorkToken.isCurrent()) {
         lock.current = false;
         setBusy(false);
         setPassword('');
@@ -508,7 +536,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
         }
       : draft;
     if (!lifetime.current || lock.current || !selection) return;
-    const isCurrent = currentWork();
+    const currentWorkToken = currentWork();
     const current = lifetime.current;
     lock.current = true;
     setBusy(true);
@@ -519,22 +547,28 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setPassword('');
     setEmail('');
     try {
-      const result = await reauthenticateAutomated(selection.accountId, email, secret, isCurrent);
-      if (!isCurrent()) return;
+      const result = await reauthenticateAutomated(
+        selection.accountId,
+        email,
+        secret,
+        currentWorkToken.isCurrent,
+        currentWorkToken.signal,
+      );
+      if (!currentWorkToken.isCurrent()) return;
       if (result) {
         if (result.kind === 'refused') revoked('refused');
         else setStatus(result.kind);
         return;
       }
-      const session = await loadManagementSession();
-      if (!isCurrent()) return;
+      const session = await loadManagementSession(currentWorkToken.signal);
+      if (!currentWorkToken.isCurrent()) return;
       if (session.kind !== 'ready' || session.accountId !== selection.accountId) {
         revoked('refused');
         return;
       }
       // This explicit authentication alone may replace the admitted session binding.
       caller.current = session;
-      await observe(selection, isCurrent);
+      await observe(selection, currentWorkToken);
     } finally {
       if (lifetime.current === current) {
         lock.current = false;

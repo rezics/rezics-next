@@ -10,15 +10,19 @@ import {
   open,
   send,
 } from './creation-page-fixture';
-import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import {
+  automatedAccountOperationRequestByteBudgets,
+  automatedAccountOperationResponseByteBudgets,
+} from '@rezics/auth-contract';
+creationFixture();
+const { AutomatedAccountCreatePage } = await import('../src/routes/automated.new');
+const {
   AUTOMATED_PROFILE,
   AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16,
   createAutomatedAttempt,
   restoreAutomatedAttempt,
   saveAutomatedAttempt,
-} from '../src/automated-account-create';
-creationFixture();
+} = await import('../src/automated-account-create');
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -76,7 +80,11 @@ for (const stage of ['review', 'approval', 'signin'] as const)
       await page.render(<AutomatedAccountCreatePage key="resume" />);
       await confirm(page.host);
       if (stage === 'signin') {
-        await flush(() => page.calls[0]!.resolve(Response.json({ error: 'step_up_required' }, { status: 401 })));
+        await flush(() =>
+          page.calls[0]!.resolve(
+            Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+          ),
+        );
         await authenticate(page.host);
       }
     }
@@ -162,6 +170,213 @@ test('oversized retained attempt stays untouched and cannot allocate a new key o
   } finally {
     randomUUID.mockRestore();
   }
+});
+
+test('approval and execute preserve the maximum escaped opaque reference within the producer-derived request ceiling', async () => {
+  const handle = `a${'b'.repeat(62)}c`;
+  const base = createAutomatedAttempt(human, operator, handle)!;
+  const operationKey = '\u0002'.repeat(128);
+  const attempt = {
+    ...base,
+    operationKey,
+    operation: { ...base.operation, operationKey },
+  };
+  expect(saveAutomatedAttempt(attempt)).toBe(true);
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
+  await confirm(page.host);
+  const reference = '\u0001'.repeat(4096);
+  const raw = JSON.stringify({ reference, expiresAt: new Date(Date.now() + 60000).toISOString() });
+  expect(new TextEncoder().encode(raw).byteLength).toBe(automatedAccountOperationResponseByteBudgets.approval);
+  await flush(() => page.calls[0]!.resolve(new Response(raw, { status: 200, headers: { 'content-length': '1' } })));
+  const execute = page.calls.at(-1)!;
+  expect(execute.path).toBe('/account-operations/execute');
+  expect(execute.body).toEqual({
+    operation: attempt.operation,
+    operationKey,
+    accountId: human,
+    reference,
+  });
+  expect(new TextEncoder().encode(JSON.stringify(execute.body)).byteLength).toBe(
+    automatedAccountOperationRequestByteBudgets.execute,
+  );
+  await flush(() => execute.resolve(Response.json({ accountId: operator.id })));
+  expect(page.host.textContent).toContain(`The native creation workflow returned account ${operator.id}`);
+});
+
+test('approval overflow is rejected before JSON parsing even with a lying small Content-Length', async () => {
+  saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'robot-one')!);
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
+  await confirm(page.host);
+  const raw = JSON.stringify({ reference: '\u0001'.repeat(4097), expiresAt: new Date(Date.now() + 60000).toISOString() });
+  const parse = spyOn(JSON, 'parse');
+  try {
+    await flush(() => page.calls[0]!.resolve(new Response(raw, { status: 200, headers: { 'content-length': '1' } })));
+    expect(parse.mock.calls.some(([input]) => input === raw)).toBe(false);
+    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+    expect(page.host.textContent).toContain('result remains unresolved');
+  } finally {
+    parse.mockRestore();
+  }
+});
+
+test('split UTF-8 approval bytes without Content-Length remain opaque and exact success completes this attempt', async () => {
+  const attempt = createAutomatedAttempt(human, operator, 'robot-one')!;
+  saveAutomatedAttempt(attempt);
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
+  await confirm(page.host);
+  const raw = JSON.stringify({ reference: 'opaque/é', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  const bytes = new TextEncoder().encode(raw);
+  const split = bytes.indexOf(0xc3) + 1;
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, split));
+        controller.enqueue(bytes.slice(split));
+        controller.close();
+      },
+    }),
+    { status: 200 },
+  );
+  await flush(() => page.calls[0]!.resolve(response));
+  const execute = page.calls.at(-1)!;
+  expect(execute.path).toBe('/account-operations/execute');
+  expect(execute.body).toEqual({
+    operation: attempt.operation,
+    operationKey: attempt.operationKey,
+    accountId: attempt.accountId,
+    reference: 'opaque/é',
+  });
+  await flush(() => execute.resolve(Response.json({ accountId: operator.id })));
+  expect(page.host.textContent).toContain(`The native creation workflow returned account ${operator.id}`);
+});
+
+test('an expired approval and malformed execution replies keep the original unknown command', async () => {
+  const original = createAutomatedAttempt(human, operator, 'robot-one')!;
+  saveAutomatedAttempt({ ...original, reference: 'previous-reference', submitted: true });
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
+  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+  await flush(() => send(page.host));
+  const firstApproval = page.calls.at(-1)!;
+  await flush(() =>
+    firstApproval.resolve(
+      Response.json({ reference: 'expired-reference', expiresAt: new Date(Date.now() - 1000).toISOString() }),
+    ),
+  );
+  expect(page.calls.filter((call) => call.path === '/account-operations/execute')).toHaveLength(0);
+  expect(restoreAutomatedAttempt()).toMatchObject({
+    accountId: original.accountId,
+    operationKey: original.operationKey,
+    operation: original.operation,
+    operator: original.operator,
+    reference: 'previous-reference',
+    submitted: true,
+  });
+
+  await confirm(page.host);
+  const secondApproval = page.calls.filter((call) => call.path === '/account-operations/approve').at(-1)!;
+  await flush(() => secondApproval.resolve(approval()));
+  const execute = page.calls.at(-1)!;
+  await flush(() => execute.resolve(Response.json({ accountId: operator.id, extra: 'unbound' })));
+  expect(page.host.textContent).toContain('result remains unresolved');
+  expect(page.host.textContent).not.toContain(`The native creation workflow returned account ${operator.id}`);
+  expect(restoreAutomatedAttempt()).toMatchObject({
+    accountId: original.accountId,
+    operationKey: original.operationKey,
+    operation: original.operation,
+    operator: original.operator,
+    reference: 'native-approval',
+    submitted: true,
+  });
+
+  await confirm(page.host);
+  const thirdApproval = page.calls.filter((call) => call.path === '/account-operations/approve').at(-1)!;
+  await flush(() => thirdApproval.resolve(approval()));
+  const malformedRefusal = page.calls.at(-1)!;
+  await flush(() =>
+    malformedRefusal.resolve(
+      Response.json(
+        { error: 'account_operation_denied', effect_status: 'not_applied', extra: 'unsupported' },
+        { status: 403 },
+      ),
+    ),
+  );
+  expect(page.host.textContent).toContain('result remains unresolved');
+  expect(page.host.textContent).not.toContain(`The native creation workflow returned account ${operator.id}`);
+  expect(restoreAutomatedAttempt()).toMatchObject({
+    accountId: original.accountId,
+    operationKey: original.operationKey,
+    operation: original.operation,
+    operator: original.operator,
+    reference: 'native-approval',
+    submitted: true,
+  });
+});
+
+test('newer exact native approval and execution refusals cannot clear an earlier uncertain creation', async () => {
+  const original = createAutomatedAttempt(human, operator, 'robot-one')!;
+  saveAutomatedAttempt({ ...original, reference: 'previous-reference', submitted: true });
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
+  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+  await flush(() => send(page.host));
+  await flush(() =>
+    page.calls.at(-1)!.resolve(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+    ),
+  );
+  expect(page.calls.filter((call) => call.path === '/account-operations/execute')).toHaveLength(0);
+  expect(page.host.textContent).toContain('result remains unresolved');
+  expect(restoreAutomatedAttempt()).toMatchObject({
+    accountId: original.accountId,
+    operationKey: original.operationKey,
+    operation: original.operation,
+    reference: 'previous-reference',
+    submitted: true,
+  });
+
+  await confirm(page.host);
+  const secondApproval = page.calls.filter((call) => call.path === '/account-operations/approve').at(-1)!;
+  await flush(() => secondApproval.resolve(approval()));
+  const execute = page.calls.at(-1)!;
+  expect(execute.path).toBe('/account-operations/execute');
+  await flush(() =>
+    execute.resolve(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+    ),
+  );
+  expect(page.host.textContent).toContain('result remains unresolved');
+  expect(restoreAutomatedAttempt()).toMatchObject({
+    accountId: original.accountId,
+    operationKey: original.operationKey,
+    operation: original.operation,
+    reference: 'native-approval',
+    submitted: true,
+  });
+});
+
+test('approval classifies exact platform closure and step-up envelopes only', async () => {
+  saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'closed-robot')!);
+  const closed = await open(<AutomatedAccountCreatePage />, { ...body });
+  await confirm(closed.host);
+  await flush(() =>
+    closed.calls[0]!.resolve(
+      Response.json({ error: 'platform_closed', effect_status: 'not_applied' }, { status: 403 }),
+    ),
+  );
+  expect(closed.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+  expect(closed.host.textContent).toContain('Creation was refused');
+  await closed.render(<></>);
+
+  saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'stepup-robot')!);
+  const stepUp = await open(<AutomatedAccountCreatePage />, { ...body });
+  await confirm(stepUp.host);
+  await flush(() =>
+    stepUp.calls[0]!.resolve(
+      Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+    ),
+  );
+  expect(stepUp.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+  expect(stepUp.host.querySelector('#automated-password')).not.toBeNull();
+  expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true });
 });
 test('native acknowledgement survives authority replacement without publishing private result details', async () => {
   saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'robot-one')!);

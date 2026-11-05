@@ -1,10 +1,32 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
-import { afterAll, afterEach, beforeAll } from 'bun:test';
+import { afterAll, afterEach, beforeAll, mock } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 const { Window } = require(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`))),
 );
+let currentSignal: AbortSignal | undefined;
+const nativeEnv = { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' };
+mock.module('@tanstack/react-start', () => ({
+  createServerFn: () => ({
+    handler: (handler: (context: { data?: unknown; signal?: AbortSignal }) => unknown) =>
+      (options?: { data?: unknown; signal?: AbortSignal }) => {
+        currentSignal = options?.signal;
+        return handler({ data: options?.data, signal: options?.signal });
+      },
+  }),
+  createServerOnlyFn: <T extends (...args: never[]) => unknown>(handler: T) => handler,
+}));
+mock.module('cloudflare:workers', () => ({ env: nativeEnv }));
+mock.module('@tanstack/react-start/server', () => ({
+  getRequest: () =>
+    new Request('https://auth.test/_serverFn/session', {
+      headers: { origin: 'https://auth.test', cookie: 'auth_session=original' },
+      ...(currentSignal ? { signal: currentSignal } : {}),
+    }),
+  setResponseHeader() {},
+}));
+globalThis.__AUTH_ORIGIN__ = '';
 export const dom = new Window({ url: 'https://auth.test/organizations/new' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
 const globals = Object.fromEntries(
@@ -61,7 +83,8 @@ export function creationFixture() {
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {
-    if (path === '/signin/page')
+    const requestPath = new URL(String(path), 'https://auth.test').pathname;
+    if (requestPath === '/signin/page')
       return Promise.resolve(
         Response.json({
           methods: { password: true, passkey: true },
@@ -69,13 +92,13 @@ export async function open(page: ReactNode, sessionBody: object) {
           continuation: { href: '/security', requires_sign_in: false },
         }),
       );
-    if (path === '/recovery/page')
+    if (requestPath === '/recovery/page')
       return Promise.resolve(
         Response.json(
           recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
         ),
       );
-    if (path === '/account-management/automated/operator') {
+    if (requestPath === '/account-management/automated/operator') {
       const { operatorAccountId } = JSON.parse(String(init?.body));
       const saved = JSON.parse(window.sessionStorage.getItem('rezics.automated-create.attempt') ?? 'null');
       if (operatorAccountId === null || saved?.operator.id === operatorAccountId) {
@@ -99,7 +122,7 @@ export async function open(page: ReactNode, sessionBody: object) {
         );
       }
     }
-    if (['/session', '/account-management/deletion-page'].includes(String(path)))
+    if (['/session', '/account-management/deletion-page'].includes(requestPath))
       return Promise.resolve(Response.json(sessionBody));
     const request = Promise.withResolvers<Response>();
     calls.push({ path: String(path), body: JSON.parse(String(init?.body)), resolve: request.resolve });
