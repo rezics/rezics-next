@@ -670,7 +670,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     await submit(true);
     const retry = writes.at(-1)!;
     expect(retry.input.data).toEqual(uncertain.input.data);
-    expect(new Headers(retry.input.headers).get('x-csrf-token')).toBe('rotated-csrf');
+    expect(new Headers(retry.input.headers).get('x-csrf-token')).toBe('csrf-B');
     await act(async () =>
       retry.resolve({ ok: true, copy: { ...copy('B'), note: ' Exact captured note.\n第二行 ', revision: 8 } }),
     );
