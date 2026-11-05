@@ -1,5 +1,7 @@
 # Library
 
+Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative.
+
 transport-contract.ts owns the public Progress session and Continue response schemas consumed by
 Progress, Continue and Content Feed. The Progress record and Continue list wire/security metadata
 comes from the immutable operation declarations composed by createKernel; native commands,
