@@ -7,7 +7,7 @@ import { m } from '../../paraglide/messages.js';
 import type { OwnVoteEntry, OwnVotesPage } from './types';
 import { executeOwnVoteIntent, voteReadbackForIntent, type OwnVotesRead } from './actions';
 import { useOwnVotesCurrentOrigin } from './current-origin';
-import { OwnVotesDeparture } from './departure';
+import { OwnVotesDeparture, type OwnVotesDepartureControl } from './departure';
 import { OwnVoteEditor, type OwnVoteFeedback } from './editor';
 import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey, type VotePair } from './inventory';
 import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
@@ -43,7 +43,11 @@ export function CurrentViewerOwnVotesPage({
   const pendingCoordinate = useOwnVotesPendingCoordinate(cursor);
   const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt || pendingCoordinate, responseVersion);
   const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
-  const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
+  const confirmMovement = useRef<OwnVotesDepartureControl>({
+    current: null,
+    allowNavigation: null,
+    clearNavigation: null,
+  });
   const acceptRead = useCallback(
     (candidate: unknown) => {
       const pending = coordinates.pending;
@@ -109,16 +113,23 @@ export function CurrentViewerOwnVotesPage({
         coordinates.cancel(id);
         return;
       }
-      await router.navigate({
-        to: '/library/ratings',
-        search: destination.cursor === null ? {} : { cursor: destination.cursor },
-      });
-      const location = router.state.location;
-      const search = location.search as Record<string, unknown>;
-      const navigatedCursor = typeof search.cursor === 'string' ? search.cursor : null;
-      if (location.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '') !== '/library/ratings' ||
-          navigatedCursor !== destination.cursor)
-        coordinates.cancel(id);
+      confirmMovement.allowNavigation?.();
+      try {
+        await router.navigate({
+          to: '/library/ratings',
+          search: destination.cursor === null ? {} : { cursor: destination.cursor },
+        });
+        const location = router.state.location;
+        const search = location.search as Record<string, unknown>;
+        const navigatedCursor = typeof search.cursor === 'string' ? search.cursor : null;
+        if (
+          location.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '') !== '/library/ratings' ||
+          navigatedCursor !== destination.cursor
+        )
+          coordinates.cancel(id);
+      } finally {
+        confirmMovement.clearNavigation?.();
+      }
     },
     [origin, coordinates, responseVersion, router],
   );
@@ -227,7 +238,7 @@ export function OwnVotesWorkspace({
   hasPrevious?: boolean;
   previousCursor?: string | null;
   firstAvailable?: boolean;
-  confirmMovement?: { current: (() => Promise<boolean>) | null };
+  confirmMovement?: OwnVotesDepartureControl;
 }) {
   const [selectedPair, setSelectedPair] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);

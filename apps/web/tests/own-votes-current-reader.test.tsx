@@ -787,8 +787,8 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
       );
       expect(await waitForBodyText(replaced, m.library_my_ratings_departure_title())).toBe(true);
       await replace(replaced);
-      if (replaced.window.document.body.textContent?.includes(m.library_my_ratings_leave())) {
-        const leave = [...replaced.window.document.body.querySelectorAll('button')].find(
+      if (document.body.textContent?.includes(m.library_my_ratings_leave())) {
+        const leave = [...document.body.querySelectorAll('button')].find(
           (candidate) => candidate.textContent?.trim() === m.library_my_ratings_leave(),
         );
         if (leave) await replaced.click(leave);

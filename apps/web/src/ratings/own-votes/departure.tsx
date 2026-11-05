@@ -12,6 +12,12 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
 
+export type OwnVotesDepartureControl = {
+  current: (() => Promise<boolean>) | null;
+  allowNavigation: (() => void) | null;
+  clearNavigation: (() => void) | null;
+};
+
 /** One editor owns one draft and command; a pending or uncertain command cannot leave without review. */
 export function OwnVotesDeparture({
   dirty,
@@ -26,7 +32,7 @@ export function OwnVotesDeparture({
   isCurrent: () => boolean;
   onLeave?: () => void;
   onStay?: () => void;
-  confirmMovement?: { current: (() => Promise<boolean>) | null };
+  confirmMovement?: OwnVotesDepartureControl;
 }) {
   const live = useRef<{
     dirty: boolean;
@@ -46,6 +52,7 @@ export function OwnVotesDeparture({
   const waiting = useRef<((leave: boolean) => void) | null>(null);
   const stay = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const approvedMovement = useRef(false);
   const protectedNow = () => live.current.isCurrent() && (live.current.dirty || live.current.locked);
 
   function choose(leave: boolean) {
@@ -75,13 +82,24 @@ export function OwnVotesDeparture({
       return admittedLeave;
     });
   };
-  if (confirmMovement) confirmMovement.current = decide;
+  if (confirmMovement) {
+    confirmMovement.current = decide;
+    confirmMovement.allowNavigation = () => {
+      approvedMovement.current = true;
+    };
+    confirmMovement.clearNavigation = () => {
+      approvedMovement.current = false;
+    };
+  }
 
   useBlocker({
-    shouldBlockFn: () =>
-      protectedNow()
-        ? decide().then((leave) => !leave)
-        : false,
+    shouldBlockFn: () => {
+      if (approvedMovement.current) {
+        approvedMovement.current = false;
+        return false;
+      }
+      return protectedNow() ? decide().then((leave) => !leave) : false;
+    },
     enableBeforeUnload: dirty || locked,
   });
 
