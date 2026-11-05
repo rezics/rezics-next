@@ -8,16 +8,20 @@ export const sameCoordinate = (a: ReporterHistoryQuery, b: ReporterHistoryQuery)
 
 /** Operands only: eight admitted predecessors, current, and one uncommitted target. */
 export function createHistoryCoordinates() {
+  let owner: symbol | undefined;
   let predecessors: ReporterHistoryQuery[] = [];
   let current: ReporterHistoryQuery | undefined;
   let staged: { query: ReporterHistoryQuery; movement: Movement; id: symbol } | undefined;
   const clear = () => {
+    owner = undefined;
     predecessors = [];
     current = undefined;
     staged = undefined;
   };
   return {
     clear,
+    claim: (identity: symbol) => { owner = identity; },
+    retire: (identity: symbol) => { if (owner === identity) clear(); },
     previous: () => predecessors.at(-1),
     stage(query: ReporterHistoryQuery, movement: Movement) {
       staged = { query: { ...query }, movement, id: Symbol() };
