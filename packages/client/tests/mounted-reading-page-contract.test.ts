@@ -52,6 +52,7 @@ test('installed public root exposes the mounted reading, review, rating and shel
   await client.me['rating-votes'].get({ query: { cursor: 'selected-page' }, headers });
   await client.collections({ collectionId: id }).members.get({ query: { view: 'FULL' }, headers });
   await client.libraryExports.post(undefined, { headers });
+  await client.threads({ id })['reading-page'].get({ query: { cursor: 'next-page' }, headers });
 
   expect(sent.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
     ['GET', `/v1/boards/${id}/page`],
@@ -66,6 +67,7 @@ test('installed public root exposes the mounted reading, review, rating and shel
     ['GET', '/v1/me/rating-votes'],
     ['GET', `/v1/collections/${id}/members`],
     ['POST', '/v1/libraryExports'],
+    ['GET', `/v1/threads/${id}/reading-page`],
   ]);
   expect(new URL(sent[2]!.url).searchParams.get('board')).toBe(id);
   expect(await sent[5]!.json()).toMatchObject({ target: null, expectedRevision: '9007199254740993' });
@@ -75,6 +77,7 @@ test('installed public root exposes the mounted reading, review, rating and shel
   expect(sent[11]!.body).toBeNull();
   expect(sent[11]!.headers.get('authorization')).toBe(headers.authorization);
   expect(sent[11]!.headers.get('idempotency-key')).toBe(headers['idempotency-key']);
+  expect(new URL(sent[12]!.url).searchParams.get('cursor')).toBe('next-page');
 });
 
 
