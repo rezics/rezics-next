@@ -628,7 +628,7 @@ test('Internal navigation offers Stay or confirmed Discard and keeps unresolved 
     await h.escape();
     expect(h.body.getByRole('alertdialog')).toBeDefined();
     await h.click(m.library_progress_draft_navigation_stay());
-    expect(h.body.textContent).toContain(m.library_progress_clear_scope());
+    expect(window.document.body.textContent).toContain(m.library_progress_clear_scope());
     await h.click(m.library_progress_cancel());
   } finally {
     await h.close();
@@ -742,7 +742,7 @@ test('decimal corrections explain invalid operands before review and retain exac
           : { locator: ' ', position: '999999999999.123456' },
       );
       await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
-      expect(h.field(label).matches(':disabled')).toBe(true);
+      expect(h.field(label).closest('fieldset')?.disabled).toBe(true);
       expect(h.field(label).value).toBe('999999999999.123456');
       await h.submit('record');
       expect(commands[1]!.data).toEqual(original.data);

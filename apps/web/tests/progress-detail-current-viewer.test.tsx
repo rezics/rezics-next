@@ -954,6 +954,40 @@ test('a native section restart clears only its predecessors; replacement retires
   }
 });
 
+test('Stay cancels history movement and cannot lend coordinates or focus to a later unrelated navigation', async () => {
+  const h = await mount(detail(), false, viewer(), true);
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '9');
+    const before = h.reads.length;
+    await act(async () => {
+      within(h.body.getByRole('region', { name: m.library_progress_changes(), exact: true }))
+        .getByRole('link', { name: m.library_progress_more() }).focus();
+      await userEvent.setup({ document }).keyboard('{Enter}');
+    });
+    expect(h.body.getByRole('alertdialog')).toBeTruthy();
+    await h.click(m.library_progress_draft_navigation_stay());
+    expect(h.reads).toHaveLength(before);
+    expect(h.body.getByLabelText(m.library_progress_amount()).getAttribute('value')).toBe('9');
+    await act(async () => {
+      h.body.getByRole('dialog').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await h.click(m.library_progress_draft_navigation_discard());
+    await act(async () => h.router.navigate({
+      to: '/library/progress/$id',
+      params: { id: address.id },
+      search: { ...h.router.state.location.search, changes: 'next-changes' },
+      hash: (previous) => previous,
+      state: (previous) => previous,
+    }));
+    await h.resolveRead(detail('A', h.reads.at(-1)!.data));
+    expect(h.body.queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+    expect(document.activeElement?.hasAttribute('data-progress-history-heading')).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
 test('equal route replacement retires a staged read and its predecessor coordinates', async () => {
   const h = await mount(detail(), false, viewer(), true);
   try {
