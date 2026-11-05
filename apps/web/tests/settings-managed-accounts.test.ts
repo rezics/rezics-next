@@ -861,6 +861,7 @@ test('latest cross-feed navigation retires older admission while older rows stil
   const latest = inventory.more('responsibilities');
   const changed = page();
   changed.organizations.items[0]!.navigation = { state: 'unavailable' };
+  changed.organizations.items.push({ ...changed.organizations.items[0]!, navigation: { state: 'admitted' } });
   replies[1]!(ready(changed));
   await latest;
   expect(inventory.snapshot().navigation?.organizations).toEqual([]);

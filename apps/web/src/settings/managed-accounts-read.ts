@@ -141,8 +141,8 @@ type Navigation = { self: string; organizations: string[]; responsibilities: str
 function navigation(page: ManagedAccountsPage): Navigation {
   return {
     self: page.viewer.account.id,
-    organizations: page.organizations.items.filter((item) => item.navigation.state === 'admitted').map((item) => item.account.id),
-    responsibilities: page.responsibilities.items.filter((item) => item.account && item.navigation.state === 'admitted').map((item) => item.reservationId),
+    organizations: pageItems(page.organizations.items, (item) => item.account.id).filter((item) => item.navigation.state === 'admitted').map((item) => item.account.id),
+    responsibilities: pageItems(page.responsibilities.items, (item) => item.reservationId).filter((item) => item.account && item.navigation.state === 'admitted').map((item) => item.reservationId),
   };
 }
 
