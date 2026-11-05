@@ -34,6 +34,7 @@ type Windows = {
   admitting: boolean;
   completed: { attempt: object; locationKey: string; loadId: string } | undefined;
   targetLocationKey: string | undefined;
+  transferredLoadId: string | undefined;
   activeCursor: SalesCoordinate;
   navigationPending: boolean;
   navigationFailed: boolean;
@@ -131,6 +132,7 @@ export function CreatorSalesCurrent(props: Props) {
       admitting: false,
       completed: undefined,
       targetLocationKey: undefined,
+      transferredLoadId: undefined,
       activeCursor: cursor,
       navigationPending: false,
       navigationFailed: false,
@@ -154,6 +156,7 @@ export function CreatorSalesCurrent(props: Props) {
       visit.windows.coordinates.staged !== undefined &&
       visit.windows.targetLocationKey !== undefined &&
       visit.windows.targetLocationKey === locationKey &&
+      (!visit.windows.transferredLoadId || visit.windows.transferredLoadId === loadId) &&
       (!visit.windows.completed || visit.windows.completed.loadId === loadId) &&
       visit.windows.coordinates.staged.cursor === cursor;
     active = {
@@ -174,12 +177,14 @@ export function CreatorSalesCurrent(props: Props) {
             admitting: false,
             completed: undefined,
             targetLocationKey: undefined,
+            transferredLoadId: undefined,
             activeCursor: cursor,
             navigationPending: false,
             navigationFailed: false,
             retrying: false,
           },
     };
+    if (transfer) active.windows.transferredLoadId ??= loadId;
     active.windows.source = undefined;
     active.windows.admitting = false;
     active.windows.activeCursor = cursor;
@@ -324,12 +329,20 @@ function CurrentSalesRead({
   if (
     windows.source &&
     windows.source !== source &&
-    (!windows.retrying || !windows.coordinates.staged || windows.coordinates.staged.cursor !== cursor)
+    (!windows.retrying || !windows.coordinates.staged || windows.coordinates.staged.cursor !== cursor) &&
+    !(
+      seed &&
+      windows.coordinates.staged?.cursor === cursor &&
+      windows.targetLocationKey === locationKey &&
+      windows.transferredLoadId === loadId &&
+      value === initial
+    )
   ) {
     windows.coordinates = new CreatorSalesWindows(cursor);
     windows.focus = undefined;
     windows.completed = undefined;
     windows.targetLocationKey = undefined;
+    windows.transferredLoadId = undefined;
     windows.admitting = false;
     windows.navigationPending = false;
     windows.navigationFailed = false;
@@ -344,6 +357,7 @@ function CurrentSalesRead({
     windows.focus = undefined;
     windows.completed = undefined;
     windows.targetLocationKey = undefined;
+    windows.transferredLoadId = undefined;
     windows.admitting = false;
     windows.navigationPending = false;
     windows.navigationFailed = false;
@@ -367,6 +381,7 @@ function CurrentSalesRead({
     windows.coordinates.accept();
     windows.completed = undefined;
     windows.targetLocationKey = undefined;
+    windows.transferredLoadId = undefined;
     windows.admitting = false;
     windows.navigationPending = false;
     windows.navigationFailed = false;
@@ -398,6 +413,7 @@ function CurrentSalesRead({
     windows.admitting = false;
     windows.completed = undefined;
     windows.targetLocationKey = undefined;
+    windows.transferredLoadId = undefined;
     windows.navigationPending = true;
     windows.navigationFailed = false;
     const attempt = windows.coordinates.staged;
@@ -416,6 +432,7 @@ function CurrentSalesRead({
             windows.coordinates = new CreatorSalesWindows(windows.activeCursor);
             windows.completed = undefined;
             windows.targetLocationKey = undefined;
+            windows.transferredLoadId = undefined;
             windows.admitting = false;
             windows.navigationFailed = false;
           } else {
@@ -431,6 +448,7 @@ function CurrentSalesRead({
     } else {
       windows.navigationPending = false;
       windows.navigationFailed = true;
+      windows.transferredLoadId = undefined;
       windows.focus = undefined;
       settled();
     }

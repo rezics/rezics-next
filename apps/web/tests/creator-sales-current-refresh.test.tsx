@@ -349,6 +349,7 @@ test('three windows return through exact Previous and failed Restart retry witho
     );
     expect(requested).toHaveLength(0);
     await click('Older sales', true);
+    expect(host.textContent).toContain('Previous sales');
     expect(document.activeElement?.id).toBe('creator-sales-heading');
     await click('Inspect sale');
     expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
@@ -554,6 +555,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     await tick();
     expect(router.state.location.search).toEqual({ cursor: 'second+/=' });
     expect(host.textContent).not.toContain('Previous sales');
+    expect(host.textContent).toContain('Older sales');
     await click('Older sales');
     expect(host.textContent).toContain('Previous sales');
     fail = true;
