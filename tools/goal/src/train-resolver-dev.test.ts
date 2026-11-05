@@ -670,3 +670,87 @@ test('a moving dev head replays the candidate and publishes only the freshly tra
     h.dispose();
   }
 }, 60_000);
+
+// The Kernel dump command needs a throwaway Postgres; this stand-in derives the dump from the migrations and fails on a
+// migration marked `-- fail:`, which is enough to exercise the schema regeneration step, its commit and its handback.
+const KERNEL_DERIVED_STAND_IN = [
+  "import { readdirSync, readFileSync, writeFileSync } from 'node:fs';",
+  "const migrations = readdirSync('db/access/migrations').sort().map((name) => readFileSync('db/access/migrations/' + name, 'utf8')).join('');",
+  'const failure = migrations.match(/^-- fail: (.+)$/m);',
+  'if (failure) {',
+  "  console.error('ERROR: ' + failure[1]);",
+  '  process.exit(1);',
+  '}',
+  "writeFileSync('db/access/schema.sql', '-- derived\\n' + migrations);",
+].join('\n');
+
+test('a migration on a dev landing publishes its regenerated schema dump, and a failed regeneration returns to the worker', async () => {
+  const h = integrationHarness();
+  const migration = 'services/kernel/db/access/migrations/002_recovery.sql';
+  let resumedSession: string | undefined;
+  let repairPrompt = '';
+  const script = `
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { spawnSync } = require('node:child_process');
+    const file = ${JSON.stringify(migration)};
+    const content = process.env.GOAL_ATTEMPT === '1'
+      ? '-- fail: column "recovery" does not exist\\n'
+      : 'alter table accounts add recovery text;\\n';
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, content);
+    const committed = spawnSync('git', ['add', '--', file], { stdio: 'ignore' });
+    if (committed.status !== 0 || spawnSync('git', ['commit', '-qm', 'Worker migration']).status !== 0) process.exit(2);
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'schema-repair-session' }));
+    console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: success' } }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 2 } }));
+  `;
+  const adapter = {
+    ...codexAdapter,
+    start() {
+      return [process.execPath, ['-e', script]] as [string, string[]];
+    },
+    resume(options: Parameters<NonNullable<typeof codexAdapter.resume>>[0]) {
+      resumedSession = options.session;
+      repairPrompt = options.prompt;
+      return [process.execPath, ['-e', script]] as [string, string[]];
+    },
+  };
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.advanceDev(
+      'services/kernel/package.json',
+      `${JSON.stringify({ private: true, scripts: { derived: 'bun scripts/derived.ts' } })}\n`,
+    );
+    h.advanceDev('services/kernel/scripts/derived.ts', `${KERNEL_DERIVED_STAND_IN}\n`);
+    h.advanceDev('services/kernel/db/access/migrations/001_accounts.sql', 'create table accounts ();\n');
+    h.advanceDev('services/kernel/db/access/schema.sql', '-- derived\ncreate table accounts ();\n');
+    h.ensureDev();
+    const task = h.dispatch(migration);
+    await withAgentAdapter(adapter, async () => {
+      await h.start(task);
+      await h.train();
+      expect(resumedSession).toBe('schema-repair-session');
+      expect(repairPrompt).toContain('Schema dump regeneration rejected dev candidate');
+      expect(repairPrompt).toContain('Regeneration error: ERROR: column "recovery" does not exist');
+      expect(repairPrompt).toContain('Retained regeneration log:');
+      expect(h.store.task(task.id).currentAttempt).toBe(2);
+      await h.train();
+    });
+    expect(h.store.events(task.id, 1).some((event) => event.kind === 'dev-landing-transpile-returned')).toBe(true);
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.guardIds).toContain('dev-landing-schema');
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'gate-outcome')).toHaveLength(0);
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(git(h.root, 'show', 'dev:services/kernel/db/access/schema.sql')).toContain(
+      'alter table accounts add recovery text;',
+    );
+    expect(git(h.root, 'log', '--format=%s', '-2', 'dev')).toBe(
+      `chore(kernel): regenerate schema dumps for ${task.id}\nWorker migration`,
+    );
+    expect(git(h.root, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'dev')).toBe(
+      'services/kernel/db/access/schema.sql',
+    );
+  } finally {
+    h.dispose();
+  }
+}, 120_000);
