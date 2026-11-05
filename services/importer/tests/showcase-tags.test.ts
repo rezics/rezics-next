@@ -941,11 +941,14 @@ test('selected rating evidence survives response loss and reopen before terminal
     const sealed = journal.preparedCommands().filter((row) => row.command.op === 'propose');
     const receipt = journal.vndbTagRatingSource('v410')!;
     expect(sealed.length).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(receipt.snapshot!.bytes)).toContain('"rating":2.5000');
+    expect(JSON.stringify(sealed)).toContain('"amount":"+2.5000"');
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     const reopened = await importShowcaseTags(input());
     expect(fetches).toBe(1);
     expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(receipt.snapshot!.digest);
+    expect(journal.vndbTagRatingSource('v410')!.snapshot!.bytes).toEqual(receipt.snapshot!.bytes);
     for (const row of sealed)
       expect(commands.filter((command) => command.key === row.command.key)).toEqual([row.command, row.command]);
   } finally {
