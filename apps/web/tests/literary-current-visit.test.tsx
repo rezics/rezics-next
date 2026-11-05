@@ -165,9 +165,21 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     return page;
   };
   const publicMessages = { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Aliases', search: 'Search' };
+  const publicClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  publicClient.setQueryData(['session'], { state: 'signed-out', csrfToken: null, subject: null });
   const initialPublicMarkup = renderToStaticMarkup(
-    h(SubjectPage, { page: publicPage('An original literary work'), locale: 'en', messages: publicMessages, renderJsonLd: false }),
+    h(
+      QueryClientProvider,
+      { client: publicClient },
+      h(SubjectPage, {
+        page: publicPage('An original literary work'),
+        locale: 'en',
+        messages: publicMessages,
+        renderJsonLd: false,
+      }),
+    ),
   );
+  publicClient.clear();
   const literaryHref = /href="([^"]*\/literary\?context=[^"]*)"/.exec(initialPublicMarkup)?.[1];
   expect(literaryHref).toBeDefined();
   const publicAdmission = new URL(literaryHref!.replaceAll('&amp;', '&'), 'https://site.test');
