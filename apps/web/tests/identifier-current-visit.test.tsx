@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EditorialEntry } from '../src/features/catalogue/editorial-entry';
 import {
@@ -21,13 +22,16 @@ const candidate = '9f4c6b04-7496-4e14-89bc-41abf931e662';
 test('the mounted editorial entry and visit address retain the selected public reading', () => {
   const expected = identifierVisitHref(subject, 'en', { context: realmContext, realm });
   const html = renderToStaticMarkup(
-    createElement(EditorialEntry, {
-      children: null,
-      id: subject.id,
-      label: subject.label,
-      locale: 'en',
-      context: realmContext,
-      realm,
+    createElement(QueryClientProvider, {
+      client: new QueryClient(),
+      children: createElement(EditorialEntry, {
+        children: null,
+        id: subject.id,
+        label: subject.label,
+        locale: 'en',
+        context: realmContext,
+        realm,
+      }),
     }),
   );
   expect(html).toContain('data-slot="subject-contribute"');
@@ -84,8 +88,14 @@ test('bounded visit parsing keeps candidate review separate and rejects malforme
   });
   expect(identifierReviewHref(inspected, 'schema:url', candidate)).not.toContain('inspectStatement');
   expect(parseIdentifierCurrentVisit(`?inspectProperty=schema:isbn`)).toBeNull();
-  expect(parseIdentifierCurrentVisit(`?inspectProperty=schema:isbn&inspectStatement=${candidate}&inspectStatement=${candidate}`)).toBeNull();
+  expect(
+    parseIdentifierCurrentVisit(
+      `?inspectProperty=schema:isbn&inspectStatement=${candidate}&inspectStatement=${candidate}`,
+    ),
+  ).toBeNull();
   expect(parseIdentifierCurrentVisit(`?${'界'.repeat(700)}`)).toBeNull();
-  expect(() => identifierInspectionHref(review, { property: '界'.repeat(256), statement: candidate })).toThrow(RangeError);
+  expect(() => identifierInspectionHref(review, { property: '界'.repeat(256), statement: candidate })).toThrow(
+    RangeError,
+  );
   expect(parseIdentifierCurrentVisit(`?originContext=${realmContext}&padding=${'x'.repeat(2048)}`)).toBeNull();
 });

@@ -30,30 +30,44 @@ export function identifierEvidenceFromPage(
   const read = subjectBody(page);
   if (!read) return { kind: 'unavailable' };
   const context = origin?.context ?? candidateContext;
-  if (page.subject !== id || read.subject.id !== id || read.subject.context !== context)
-    return { kind: 'changed' };
+  if (page.subject !== id || read.subject.id !== id || read.subject.context !== context) return { kind: 'changed' };
   if (origin?.kind === 'realm') {
     if (
-      page.requestedRealm !== origin.realm || page.context?.id !== context ||
-      page.context.population.kind !== 'realm' || page.context.population.id !== origin.realm
-    ) return { kind: 'changed' };
+      page.requestedRealm !== origin.realm ||
+      page.context?.id !== context ||
+      page.context.population.kind !== 'realm' ||
+      page.context.population.id !== origin.realm
+    )
+      return { kind: 'changed' };
   } else if (page.requestedRealm || (page.context && page.context.id !== candidateContext)) {
     return { kind: 'changed' };
   }
   const catalogue = page.catalogue;
-  if (catalogue?.state !== 'released' || !catalogue.definitions || !catalogue.digest || catalogue.type !== read.subject.type)
+  if (
+    catalogue?.state !== 'released' ||
+    !catalogue.definitions ||
+    !catalogue.digest ||
+    catalogue.type !== read.subject.type
+  )
     return { kind: 'unavailable' };
   const properties = identifierProperties(catalogue.definitions, read.subject.type);
   // Spoiler suppression is the ordinary public reader's gate, before any occurrence reaches this pane.
-  const statements = Object.fromEntries(properties.map((property) => [
-    property,
-    bestRank(read.subject.statements[property] ?? []).filter((statement) => spoilerLevel(statement) <= defaultReader.spoilerLevel),
-  ]));
+  const statements = Object.fromEntries(
+    properties.map((property) => [
+      property,
+      bestRank(read.subject.statements[property] ?? []).filter(
+        (statement) => spoilerLevel(statement) <= defaultReader.spoilerLevel,
+      ),
+    ]),
+  );
   return {
     kind: 'ready',
     evidence: {
-      subject: { ...read.subject, statements }, related: read.related,
-      definitions: catalogue.definitions, digest: catalogue.digest, properties,
+      subject: { ...read.subject, statements },
+      related: read.related,
+      definitions: catalogue.definitions,
+      digest: catalogue.digest,
+      properties,
     },
   };
 }
@@ -70,8 +84,14 @@ export function survivingIdentifierOccurrence(
 ) {
   const selected = identifierOccurrence(previous, address);
   const returned = identifierOccurrence(current, address);
-  return !!selected && !!returned &&
-    previous.subject.id === current.subject.id && previous.subject.context === current.subject.context &&
-    previous.subject.type === current.subject.type && previous.subject.release === current.subject.release &&
-    previous.digest === current.digest && JSON.stringify(selected) === JSON.stringify(returned);
+  return (
+    !!selected &&
+    !!returned &&
+    previous.subject.id === current.subject.id &&
+    previous.subject.context === current.subject.context &&
+    previous.subject.type === current.subject.type &&
+    previous.subject.release === current.subject.release &&
+    previous.digest === current.digest &&
+    JSON.stringify(selected) === JSON.stringify(returned)
+  );
 }
