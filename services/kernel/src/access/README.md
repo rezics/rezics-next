@@ -2541,6 +2541,22 @@ other accounts automatically, or open public exposure.
 - Growth check: `growth-bootstrap-governance.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts,
   Global grants and receipts with the bootstrapped actor fixed.
 
+Local showcase setup calls `bootstrapLocalShowcaseBoardCreation` after normal governance bootstrap. It installs
+exactly one direct identity `board:create` grant on Global for the marker's recorded operator. The real Global row
+and matching bootstrap marker are required before receipt lookup on every attempt. One native Global command owns
+the account-keyed `access.local-showcase.board-create` receipt, grant and existing grant-create event atomically;
+validity begins at the command's authoritative time with no upper bound. Exact replay adds no effects and does not
+restore a grant revoked through ordinary native grant commands. Governance and standing-parent markers stay separate.
+This local-only helper has no mounted HTTP/OpenAPI authority and retains the ten-second bootstrap deadline.
+
+Decision: exercise installation and refusal in the Accounts native fixture and reuse the existing Global Board HTTP
+fixture with this helper replacing its direct Board-creation seed grant. Ordinary issued scope, active actor/current
+floor, resource/action isolation and exposure rules still apply. Native cost is one Global attempt, one fixed Global
+and marker lookup, one receipt lookup, one grant insertion and one receipt/event fence on first installation; replay
+omits mutation, while refusal ends before receipt lookup. Work is constant at fixed anchors with logarithmic index
+seeks as grants and receipts grow. The local helper has no separate growth qualification; broader integrated,
+browser and deployment acceptance remain with their existing owners.
+
 ### Workflow approvals
 
 Credential approval consumption validates the complete immutable row in an `AFTER UPDATE` trigger, after PostgreSQL

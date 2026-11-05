@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import type { Pool } from 'pg';
 import {
   bootstrapGovernance,
+  bootstrapLocalShowcaseBoardCreation,
+  BOOTSTRAP_GOVERNANCE_DEADLINE_MS,
   BootstrapGovernanceUnavailableError,
   PLATFORM_GOVERNANCE_ROLE,
   PLATFORM_RESOURCE,
@@ -19,6 +21,7 @@ const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
 
 test('operator governance bootstrap contract exposes the fixed Global authority and no HTTP route', () => {
+  expect(BOOTSTRAP_GOVERNANCE_DEADLINE_MS).toBe(10_000);
   expect(PLATFORM_GOVERNANCE_ROLE).toBe('platform.governance');
   expect(PLATFORM_RESOURCE).toEqual({ route: 0, id: GLOBAL_CONTEXT });
   expect(Object.isFrozen(PLATFORM_RESOURCE)).toBe(true);
@@ -35,7 +38,8 @@ test('operator governance bootstrap contract exposes the fixed Global authority 
     replayed: boolean;
   }>();
   const app = createKernel({ pool: {} as Pool, routeKey: new Uint8Array(32) });
-  expect(JSON.stringify(openApiDocument(app))).not.toMatch(/bootstrap|platform\.governance/i);
+  expect(JSON.stringify(openApiDocument(app))).not.toMatch(/bootstrap|showcase|platform\.governance/i);
+  expect(app.routes.some((route) => /bootstrap|showcase/i.test(route.path))).toBe(false);
 });
 
 test('malformed bootstrap input fails closed before I/O', async () => {
@@ -46,8 +50,24 @@ test('malformed bootstrap input fails closed before I/O', async () => {
       throw new Error('Unavailable bootstrap must not touch storage');
     },
   });
-  for (const id of ['', 'root']) {
-    await expect(bootstrapGovernance(pool, id)).rejects.toBeInstanceOf(BootstrapGovernanceUnavailableError);
+  for (const helper of [bootstrapGovernance, bootstrapLocalShowcaseBoardCreation]) {
+    for (const id of [
+      '',
+      'root',
+      accountId.replace('-8000-', '-4000-'),
+      `${accountId}\n`,
+      accountId.toUpperCase().replace('00000000', 'ABCDEF00'),
+    ]) {
+      await expect(helper(pool, id)).rejects.toBeInstanceOf(BootstrapGovernanceUnavailableError);
+    }
+    expect(touched).toBe(false);
+    // Both historical v8 and native v7 identifiers pass routeOf and reach storage.
+    for (const id of [accountId, accountId.replace('-8000-', '-7000-')]) {
+      touched = false;
+      await expect(helper(pool, id)).rejects.toThrow();
+      expect(touched).toBe(true);
+    }
+    touched = false;
   }
   expect(touched).toBe(false);
   expect(new BootstrapGovernanceUnavailableError().name).toBe('BootstrapGovernanceUnavailableError');
