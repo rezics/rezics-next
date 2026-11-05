@@ -30,6 +30,7 @@ const globals = {
   IS_REACT_ACT_ENVIRONMENT: true,
   requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0),
   cancelAnimationFrame: clearTimeout,
+  scrollTo: () => {},
 };
 const previousGlobals = new Map(
   Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
@@ -77,8 +78,8 @@ mock.module('../src/ratings/question-management/actions', () => ({
     ...visit,
     ...data,
   }),
-  readQuestionManagementForViewer: ({ data }: { data: { visit: QuestionManagementVisit } }) =>
-    new Promise<QuestionManagementRead>((resolve) => reads.push({ visit: data.visit, resolve })),
+  readQuestionManagementForViewer: ({ data }: { data: Pick<ReadRequest, 'visit' | 'address'> }) =>
+    new Promise<QuestionManagementRead>((resolve) => reads.push({ ...data, resolve })),
   readQuestionManagementHistory: ({ data }: { data: { questionId: string; cursor: string | null } }) =>
     new Promise<QuestionManagementHistoryRead>((resolve) => histories.push({ ...data, resolve })),
   executeQuestionManagementIntent: async (input: unknown) => {
@@ -133,7 +134,7 @@ async function mount(cursor: string | null = null) {
   const admit = async (failed = false) => {
     const request = reads.at(-1)!;
     const question = {
-      id: request.visit.selectedQuestionId!,
+      id: request.address.selectedQuestionId!,
       realmId,
       meaning: 'Meaning',
       canonicalLabel: 'Caption',
@@ -144,12 +145,12 @@ async function mount(cursor: string | null = null) {
       scale: { min: 0, max: 20, displayStep: 1 },
       lifecycle: { state: 'active' as const, revision: 1 },
     };
-    const index = directoryCursors.indexOf(request.visit.cursor);
+    const index = directoryCursors.indexOf(request.address.cursor);
     const count = histories.length;
     await act(async () =>
       request.resolve(
         failed
-          ? { ...request.visit, state: 'unavailable' }
+          ? { ...request.visit, ...request.address, state: 'unavailable' }
           : {
               ...request.visit,
               state: 'ready',
@@ -278,13 +279,13 @@ test('actual Router three-window directory/history return, failed-target Retry, 
     await ui.click(ui.directory(), m.home_questions_next());
     await ui.admit(true);
     await ui.click(ui.host, m.home_questions_retry());
-    expect(reads.at(-1)?.visit.cursor).toBe(directoryCursors[2]);
+    expect(reads.at(-1)?.address.cursor).toBe(directoryCursors[2]);
     await ui.admit();
     await ui.admitHistory();
     expect(ui.directory().textContent).toContain(m.realm_question_window_terminal());
     expect(window.document.activeElement?.id).toBe('realm-question-directory-heading');
     await ui.click(ui.directory(), m.realm_question_window_previous());
-    expect(reads.at(-1)?.visit.cursor).toBe(directoryCursors[1]);
+    expect(reads.at(-1)?.address.cursor).toBe(directoryCursors[1]);
     await ui.admit();
     await ui.admitHistory();
     await ui.click(ui.captions(), m.realm_question_history_more());
@@ -297,20 +298,20 @@ test('actual Router three-window directory/history return, failed-target Retry, 
     expect(histories.at(-1)?.cursor).toBeNull();
     await ui.admitHistory();
     await ui.click(ui.directory(), m.realm_question_window_first());
-    expect(reads.at(-1)?.visit.cursor).toBeNull();
+    expect(reads.at(-1)?.address.cursor).toBeNull();
     await ui.admit();
     await ui.admitHistory();
     const count = reads.length;
     await act(async () => ui.router.history.back());
     await until(() => reads.length > count);
-    expect(reads.at(-1)?.visit.cursor).toBe(directoryCursors[1]);
+    expect(reads.at(-1)?.address.cursor).toBe(directoryCursors[1]);
     await ui.admit();
     await ui.admitHistory();
     await act(async () => ui.router.history.forward());
     await until(() => reads.length > count + 1);
     await ui.admit();
     await ui.admitHistory();
-    expect(reads.at(-1)?.visit.cursor).toBeNull();
+    expect(reads.at(-1)?.address.cursor).toBeNull();
   } finally {
     await ui.close();
   }
@@ -328,6 +329,7 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
     await act(async () => {
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, ' raw draft ');
       input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      input.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
     await ui.click(ui.directory(), m.home_questions_next(), true);
     expect(reads).toHaveLength(1);
@@ -351,6 +353,7 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
     await act(async () => {
       Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(draft, 'unfinished');
       draft.dispatchEvent(new window.Event('input', { bubbles: true }));
+      draft.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
     await ui.click(ui.captions(), m.realm_question_history_more());
     await act(async () => {
@@ -368,7 +371,7 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
     await until(() => reads.length > 2);
     await ui.admit();
     await ui.admitHistory();
-    expect(reads.at(-1)?.visit.cursor).toBeNull();
+    expect(reads.at(-1)?.address.cursor).toBeNull();
     expect(histories.at(-1)?.questionId).toBe(viewer);
     expect(ui.directory().textContent).not.toContain(m.realm_question_window_previous());
     // Uncertain commands lock both pagers and retry the original operands and credentials.
