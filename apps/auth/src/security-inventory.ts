@@ -2,7 +2,11 @@ import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { securityFixedResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
 import { AUTH_POST_TIMEOUT_MS } from './api';
 import { readConsent, parseConsentDecisionError, isKnownConsentRefusal } from './consent';
-import { CONSENT_REDUCTION_MAX_RESPONSE_BYTES, CONSENT_REDUCTION_MAX_ERROR_BYTES, CONSENT_PAGE_MAX_SCOPES } from '@rezics/auth-contract';
+import {
+  CONSENT_REDUCTION_MAX_RESPONSE_BYTES,
+  CONSENT_REDUCTION_MAX_ERROR_BYTES,
+  CONSENT_PAGE_MAX_SCOPES,
+} from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
 import { readJsonBounded } from './private-auth-json';
 import { serverSecurityInventoryResponseByteBudget } from './security-response-config';
@@ -405,7 +409,9 @@ export async function reduceConsent(
   const controller = new AbortController();
   let dispatched = false;
   let stop!: (result: ConsentReductionResult) => void;
-  const stopped = new Promise<ConsentReductionResult>((resolve) => { stop = resolve; });
+  const stopped = new Promise<ConsentReductionResult>((resolve) => {
+    stop = resolve;
+  });
   const onAbort = () => stop({ kind: dispatched ? 'unknown' : 'retired' });
   const retire = () => controller.abort();
   controller.signal.addEventListener('abort', onAbort, { once: true });
@@ -423,18 +429,32 @@ export async function reduceConsent(
       // No await separates final currentness, dispatch recording and fetch.
       dispatched = true;
       const receiving = fetch('/consent', {
-        method: 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal,
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: controller.signal,
       });
       operation?.record('dispatched');
       const response = await receiving;
-      const value = await readJsonBounded(response,
+      const value = await readJsonBounded(
+        response,
         response.status === 200 ? CONSENT_REDUCTION_MAX_RESPONSE_BYTES : CONSENT_REDUCTION_MAX_ERROR_BYTES,
-        controller.signal);
+        controller.signal,
+      );
       if (response.status === 200) {
-        return { kind: record(value) && Object.keys(value).sort().join(',') === 'client_id,scope' &&
-          value.client_id === target.clientId && scopeSet(value.scope) && sameScopes(value.scope, target.retained)
-          ? 'accepted' : 'unknown' };
+        return {
+          kind:
+            record(value) &&
+            Object.keys(value).sort().join(',') === 'client_id,scope' &&
+            value.client_id === target.clientId &&
+            scopeSet(value.scope) &&
+            sameScopes(value.scope, target.retained)
+              ? 'accepted'
+              : 'unknown',
+        };
       }
       const refusal = parseConsentDecisionError(response.status, value);
       if (!refusal || !isKnownConsentRefusal(response.status, refusal)) return { kind: 'unknown' };
@@ -447,8 +467,10 @@ export async function reduceConsent(
     const result = await Promise.race([send(), stopped]);
     // Retired receivers retain uncertainty; they cannot acknowledge a replacement.
     if (dispatched && (signal?.aborted || (operation && !operation.isCurrent()))) return { kind: 'unknown' };
-    if (result.kind !== 'retired') operation?.record(result.kind === 'accepted' ? 'acknowledged' :
-      result.kind === 'unknown' ? 'unknown' : 'refused');
+    if (result.kind !== 'retired')
+      operation?.record(
+        result.kind === 'accepted' ? 'acknowledged' : result.kind === 'unknown' ? 'unknown' : 'refused',
+      );
     return result;
   } finally {
     clearTimeout(timer);

@@ -280,11 +280,21 @@ export function useConnectedApplicationReview({
     let result: ConsentReductionResult;
     if (row?.pending_reduction) result = { kind: 'pending' };
     else if (!matches) result = { kind: 'denied' };
-    else result = await reduceConsent(consent, target.retained, {
-      isCurrent: () => generation.current === current && !reviewLifetime.current.signal.aborted && (!held || held.isCurrent()),
-      record: history => { if (history === 'dispatched') reviewDispatched.current = true; held?.record(history); },
-      finish: () => held?.finish(),
-    }, reviewLifetime.current.signal);
+    else
+      result = await reduceConsent(
+        consent,
+        target.retained,
+        {
+          isCurrent: () =>
+            generation.current === current && !reviewLifetime.current.signal.aborted && (!held || held.isCurrent()),
+          record: (history) => {
+            if (history === 'dispatched') reviewDispatched.current = true;
+            held?.record(history);
+          },
+          finish: () => held?.finish(),
+        },
+        reviewLifetime.current.signal,
+      );
 
     if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
     if (result.kind === 'retired') return;

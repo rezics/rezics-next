@@ -525,7 +525,9 @@ function SecurityPageView({
     return {
       signal: lifetime.current.signal,
       isCurrent,
-      record: (history) => { if (isCurrent()) recordConsentHistory(attempt, history); },
+      record: (history) => {
+        if (isCurrent()) recordConsentHistory(attempt, history);
+      },
       finish: () => {
         // A disposed review cannot release a later page authority's operation.
         if (isCurrent()) updateOperation(null);
@@ -1136,7 +1138,11 @@ function SecurityPageView({
             check={() => {}}
             finish={() => {}}
           />
-          <ConnectedApplicationHistory history={consentHistory} priorUnknown={firstUnknownConsent.current} reference={consentHistoryRef} />
+          <ConnectedApplicationHistory
+            history={consentHistory}
+            priorUnknown={firstUnknownConsent.current}
+            reference={consentHistoryRef}
+          />
           {!passwordReturnHistory ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
         </div>
       </AuthPage>
@@ -1160,7 +1166,11 @@ function SecurityPageView({
           ) : null}
           {passwordReturnView}
           <ErrorAlert>{loadMessage}</ErrorAlert>
-          <ConnectedApplicationHistory history={consentHistory} priorUnknown={firstUnknownConsent.current} reference={consentHistoryRef} />
+          <ConnectedApplicationHistory
+            history={consentHistory}
+            priorUnknown={firstUnknownConsent.current}
+            reference={consentHistoryRef}
+          />
           <PasskeyEnrollmentView
             state={enrollment}
             reading={false}
@@ -1216,7 +1226,11 @@ function SecurityPageView({
           aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}
         >
           {passwordReturnView}
-          <ConnectedApplicationHistory history={consentHistory} priorUnknown={firstUnknownConsent.current} reference={consentHistoryRef} />
+          <ConnectedApplicationHistory
+            history={consentHistory}
+            priorUnknown={firstUnknownConsent.current}
+            reference={consentHistoryRef}
+          />
           {loadState === 'loading' ? (
             <p role="status">{m.auth_inventory_loading()}</p>
           ) : (
