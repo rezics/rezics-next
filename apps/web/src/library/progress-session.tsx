@@ -273,7 +273,7 @@ export function CurrentProgressDetail({
           !staged.entered &&
           toLocation.pathname === currentVisit.location.pathname &&
           toLocation.hash === currentVisit.location.hash &&
-          toLocation.search.history === currentVisit.location.search.history &&
+          (toLocation.search as Record<string, unknown>).history === currentVisit.location.search.history &&
           sameAddress(progressSessionAddress({ ...toLocation.search, id: staged.address.id }), staged.address);
         if (eligible) staged.entered = true;
         else visitRef.current = null;
@@ -769,17 +769,22 @@ function ProgressHistoryControls({
 }) {
   const navigation = useContext(HistoryNavigationContext);
   const path = navigation?.paths[section];
-  const link = (movement: HistoryTarget['movement'], at: string | undefined, label: string) => (
+  const link = (movement: HistoryTarget['movement'], at: string | undefined, label: string) => {
+    const destination = { ...search };
+    delete destination[section];
+    if (at !== undefined) destination[section] = at;
+    return (
     <ProgressHistoryLink
       operation={section === 'changes' ? 'progress_session.changes' : 'progress_session.units'}
       id={id}
       originating={originating}
-      search={{ ...search, ...(at === undefined ? {} : { [section]: at }) }}
+      search={destination}
       target={{ section, movement, cursor: at }}
     >
       {label}
     </ProgressHistoryLink>
-  );
+    );
+  };
   return (
     <>
       {originating?.address[section] && !cursor ? <p role="status">{m.library_progress_history_restarted()}</p> : null}
