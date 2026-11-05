@@ -429,7 +429,7 @@ async function mountTriage(loadPage: (query: InboxPageQuery) => Promise<InboxPag
     );
   });
   await tick();
-  await tick();
+  for (let step = 0; step < 20 && (host.textContent ?? '').includes(m.inbox_loading()); step++) await tick();
   return {
     host,
     click: (label: string) =>
