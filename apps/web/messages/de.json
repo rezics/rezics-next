@@ -2560,6 +2560,8 @@
   "inbox_notice_marked_seen": "Diese Benachrichtigung wurde als gelesen markiert.",
   "inbox_notice_seen_unknown": "Das Ergebnis ist unklar. Beim erneuten Versuch wird dieselbe Benachrichtigung verwendet.",
   "inbox_notice_seen_retry": "Erneut versuchen, diese Benachrichtigung als gelesen zu markieren",
+  "inbox_acknowledged_observation_unavailable": "Die aktuelle Posteingangsseite oder die Ungelesen-Zusammenfassung konnte nach dieser Aktualisierung nicht geladen werden.",
+  "inbox_acknowledged_observation_stale": "Die sichtbaren Hinweise stammen von der zuletzt geladenen Seite, nicht von einer aktuellen Posteingangsseite.",
   "discovery_loading": "Ergebnisse werden geladen…",
   "discovery_not_in_library": "Nicht in deiner Bibliothek.",
   "discovery_viewer_unavailable": "Deine Bibliotheks- und Bewertungsdetails sind nicht verfügbar. Lade diese Suche erneut, um es noch einmal zu versuchen.",

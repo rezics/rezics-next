@@ -2560,6 +2560,8 @@
   "inbox_notice_marked_seen": "此通知已標記為已讀。",
   "inbox_notice_seen_unknown": "結果尚未確認。重試時會繼續使用同一則通知。",
   "inbox_notice_seen_retry": "重試將此通知標記為已讀",
+  "inbox_acknowledged_observation_unavailable": "此次更新後無法載入目前收件匣頁面或未讀摘要。",
+  "inbox_acknowledged_observation_stale": "可見通知來自上次載入的頁面，不是目前的收件匣頁面。",
   "discovery_loading": "正在載入結果…",
   "discovery_not_in_library": "不在你的收藏庫中。",
   "discovery_viewer_unavailable": "你的收藏庫與評分詳情目前無法使用。請重新載入此搜尋再試一次。",

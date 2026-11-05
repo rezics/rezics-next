@@ -2560,6 +2560,8 @@
   "inbox_notice_marked_seen": "この通知を既読にしました。",
   "inbox_notice_seen_unknown": "結果を確認できません。同じ通知を使って再試行します。",
   "inbox_notice_seen_retry": "この通知を既読にする処理を再試行",
+  "inbox_acknowledged_observation_unavailable": "この更新のあと、現在の受信箱ページまたは未読の概要を読み込めませんでした。",
+  "inbox_acknowledged_observation_stale": "表示中の通知は最後に読み込んだページのものであり、現在の受信箱ページではありません。",
   "discovery_loading": "検索結果を読み込み中…",
   "discovery_not_in_library": "ライブラリにありません。",
   "discovery_viewer_unavailable": "ライブラリと評価の詳細を利用できません。この検索を再読み込みしてもう一度お試しください。",

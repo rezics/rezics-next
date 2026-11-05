@@ -2560,6 +2560,8 @@
   "inbox_notice_marked_seen": "Cette notification a été marquée comme lue.",
   "inbox_notice_seen_unknown": "Le résultat est inconnu. La nouvelle tentative utilisera la même notification.",
   "inbox_notice_seen_retry": "Réessayer de marquer cette notification comme lue",
+  "inbox_acknowledged_observation_unavailable": "La page actuelle de la boîte de réception ou le résumé des non lus n’a pas pu être chargé après cette mise à jour.",
+  "inbox_acknowledged_observation_stale": "Les notifications visibles proviennent de la dernière page chargée, pas d’une page actuelle de la boîte de réception.",
   "discovery_loading": "Chargement des résultats…",
   "discovery_not_in_library": "Absent de votre bibliothèque.",
   "discovery_viewer_unavailable": "Les informations de votre bibliothèque et de vos évaluations sont indisponibles. Rechargez cette recherche pour réessayer.",

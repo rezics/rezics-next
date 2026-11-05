@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
@@ -322,8 +322,14 @@ test('an uncertain native seen command retries the original quoted key and marke
 });
 
 const { inboxViewerStore, forInboxViewer } = await import('../src/inbox/inbox-viewer');
-const { inboxPageQuery, inboxViewerQueryKey, unreadCountQuery, unreadCountQueryFor, markInboxViewerSeen } =
-  await import('../src/inbox/inbox-query');
+const {
+  inboxPageQuery,
+  inboxViewerQueryKey,
+  unreadCountQuery,
+  unreadCountQueryFor,
+  markInboxViewerNoticeSeen,
+  markInboxViewerSeen,
+} = await import('../src/inbox/inbox-query');
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -925,5 +931,62 @@ test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, an
   } finally {
     unsubscribe();
     client.clear();
+  }
+});
+
+test('validated acknowledgement stays consumed when later current reads fail, and a native send rejection keeps the original', async () => {
+  const { InboxSeenError } = await import('../src/inbox/inbox-read');
+  for (const kind of ['loaded', 'notice'] as const) {
+    const client = new QueryClient();
+    const store = inboxViewerStore(client);
+    const unsubscribe = store.subscribe(() => {});
+    const sends: unknown[] = [];
+    try {
+      client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'alice-token' });
+      const viewer = store.snapshot()!;
+      const invalidation = spyOn(client, 'invalidateQueries').mockImplementation(async () => {
+        throw new Error('current page refresh failed');
+      });
+      const send = async ({ data, headers }: { data: unknown; headers: HeadersInit }) => {
+        sends.push({ data, token: new Headers(headers).get('X-CSRF-Token') });
+        return { signedIn: true };
+      };
+      if (kind === 'loaded') {
+        const attempt = { through: 'displayed', idempotencyKey: crypto.randomUUID() };
+        await expect(markInboxViewerSeen(client, viewer, attempt, 'alice-token', send)).resolves.toMatchObject({
+          page: true,
+          count: true,
+        });
+        await expect(
+          markInboxViewerSeen(client, viewer, attempt, 'alice-token', async () => {
+            sends.push('rejected');
+            return { signedIn: true, failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
+          }),
+        ).rejects.toBeInstanceOf(InboxSeenError);
+      } else {
+        const attempt = Object.freeze({
+          accountId: 'alice',
+          noticeId: 'chosen',
+          idempotencyKey: crypto.randomUUID(),
+        });
+        await expect(markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', send)).resolves.toMatchObject({
+          page: true,
+          count: true,
+        });
+        await expect(
+          markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', async () => {
+            sends.push('rejected');
+            return { signedIn: true, failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
+          }),
+        ).rejects.toBeInstanceOf(InboxSeenError);
+      }
+      expect(sends).toHaveLength(2);
+      expect(sends[1]).toBe('rejected');
+      expect(invalidation).toHaveBeenCalled();
+      invalidation.mockRestore();
+    } finally {
+      unsubscribe();
+      client.clear();
+    }
   }
 });
