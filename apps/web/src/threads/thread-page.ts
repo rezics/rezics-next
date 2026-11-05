@@ -182,7 +182,7 @@ export async function loadThreadPage(
       client,
       posts.posts.map((post) => post.body),
     ),
-    readThreadDocumentMedia(client, posts.posts, authorization),
+    readThreadDocumentMedia(client, posts.posts, authorization, signal),
   ]);
   signal.throwIfAborted();
   // Only identities named by readable posts can enter this page's byline map.

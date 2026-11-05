@@ -626,7 +626,9 @@ idempotency operands, readback and historical-reader/browser-writing recovery ke
 The existing page admission retires the composed observations with authors, media and focus on viewer, credentials,
 locale, route, connection or source replacement. Anonymous SSR remains anonymous. Prepared page examples establish
 DTO closure and consumer behavior only; Content's native disclosure/growth cases and rendered acceptance remain deferred.
-The page loader passes the incoming request's abort signal to selected location, slug, reading-page and Board reads;
+Decision: the retained document-media transport shares the page request's abort signal so route retirement also
+ends an in-flight optional presentation read; an aborted visit cannot publish a late page.
+The page loader passes the incoming request's abort signal to selected location, slug, reading-page, Board and media reads;
 an ended request cannot publish a page or start later hydration from a late reading response.
 
 ## Current-page mention reading
