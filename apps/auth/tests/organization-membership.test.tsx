@@ -158,7 +158,7 @@ test('an unavailable inventory is explicit, reloadable and never presented as em
   expect(host.querySelector('#membership-account')).toBeNull();
   list.mockResolvedValueOnce(ready());
   await click(m.auth_inventory_reload());
-  expect(list.mock.calls.at(-1)).toEqual([organizationId, accountId, undefined]);
+  expect(list.mock.calls.at(-1)).toEqual([organizationId, accountId, undefined, expect.any(AbortSignal)]);
   expect(host.textContent).toContain('Rae Reader');
 });
 

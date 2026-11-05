@@ -150,7 +150,7 @@ test('paging Stay retains exact reservation and confirmation; Leave discards uns
   expect(host.textContent).toContain(reservation);
   await click(m.auth_inventory_next());
   await click(m.auth_members_leave());
-  expect(list.mock.calls.at(-1)).toEqual([org, account, 'next']);
+  expect(list.mock.calls.at(-1)).toEqual([org, account, 'next', expect.any(AbortSignal)]);
   expect(membership.readMembershipCommand()).toBeNull();
   expect(host.querySelector('#membership-confirmation')).toBeNull();
 });
@@ -241,7 +241,7 @@ test('paging Leave rereads current advice before restoring an unresolved review'
   await click(m.auth_inventory_next());
   await click(m.auth_members_leave());
 
-  expect(list.mock.calls.at(-1)).toEqual([org, account, 'next']);
+  expect(list.mock.calls.at(-1)).toEqual([org, account, 'next', expect.any(AbortSignal)]);
   expect(host.textContent).toContain(m.auth_members_unknown());
   expect(host.textContent).toContain(member);
   expect(host.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(false);

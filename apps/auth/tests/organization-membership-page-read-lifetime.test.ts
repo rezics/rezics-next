@@ -2,7 +2,11 @@ import { expect, test } from 'bun:test';
 
 test('production browser membership read bounds ignored cancellation and preserves deliberate exact retry', async () => {
   // Isolate the BFF transport adapter from mounted route spies in other files.
-  const child = Bun.spawn([process.execPath, '-e', `
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `
     import { expect, mock, spyOn } from 'bun:test';
     let complete; const calls = [];
     mock.module('@tanstack/react-start', () => ({ createServerFn: () => {
@@ -46,7 +50,10 @@ test('production browser membership read bounds ignored cancellation and preserv
     expect(await loadMembershipPage(org, account, cursor)).toEqual({ kind: 'unavailable' });
     expect(calls).toHaveLength(6);
     timer.mockRestore();
-  `], { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' });
+  `,
+    ],
+    { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' },
+  );
   const [output, error] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(await child.exited, output + error).toBe(0);
 });

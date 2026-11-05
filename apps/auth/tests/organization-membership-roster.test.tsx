@@ -128,13 +128,18 @@ test('failed Previous retries exactly and commits one pop; failed First preserve
   const timer = spyOn(globalThis, 'setTimeout');
   const late = deferred();
   list.mockImplementationOnce(async (_org, _account, _cursor, signal) => {
-    try { return await privateAuthRead(() => late.promise, signal); }
-    catch { return { kind: 'unavailable' }; }
+    try {
+      return await privateAuthRead(() => late.promise, signal);
+    } catch {
+      return { kind: 'unavailable' };
+    }
   });
   try {
     await click(m.auth_members_previous_page());
     await flush(() => (timer.mock.calls.findLast((call) => call[1] === 5000)![0] as () => void)());
-  } finally { timer.mockRestore(); }
+  } finally {
+    timer.mockRestore();
+  }
   expect(host.textContent).toContain(m.auth_members_unavailable());
   await click(m.auth_members_recovery_retry());
   expect(targets().slice(-2)).toEqual(['first/+opaque=', 'first/+opaque=']);

@@ -265,7 +265,8 @@ export async function loadMembershipPage(
 ): Promise<MembershipPage> {
   try {
     return await privateAuthRead(
-      (readSignal) => readPage({ data: { organizationId, accountId, ...(cursor ? { cursor } : {}) }, signal: readSignal }),
+      (readSignal) =>
+        readPage({ data: { organizationId, accountId, ...(cursor ? { cursor } : {}) }, signal: readSignal }),
       signal,
     );
   } catch {
