@@ -649,8 +649,7 @@ export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefi
   const location = useLocation();
   const router = useRouter();
   const selected = !new URL(location.publicHref, 'https://rezics.local').searchParams.has('managedAccount');
-  // The directory GET carries no CSRF; a CSRF-only session change keeps the loaded pages and makes no IO.
-  const owner = useManagedSessionReader(session.subject, session.subject);
+  const owner = useManagedSessionReader(session.subject, session.subject, session.csrfToken);
   const [visited, setVisited] = useState<ManagedSessionReader | null>(() => (selected ? owner : null));
   if (!owner.isCurrent()) return null;
   if (session.state !== 'signed-in' || !session.subject) return null;

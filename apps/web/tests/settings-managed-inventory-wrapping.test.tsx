@@ -1,25 +1,38 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import * as start from '../.storybook/react-start';
 import type {
   ManagedAccountsCursors,
   ManagedAccountsPage,
   ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // Actual mounted components/readers with supplied bounded IO. DOM plumbing is illustrative, not geometry proof.
 // This additive regression and its browser story geometry counterparts are authored, UNRUN.
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => ({
-  ...start,
-  getRequest: () => {
-    throw new Error('Unexpected native session read');
-  },
-}));
-mock.module('cloudflare:workers', () => ({ env: {} }));
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+beforeAll(installMocks);
+let createRoot: (typeof import('react-dom/client'))['createRoot'];
+let ManagedAccounts: (typeof import('../src/settings/managed-accounts'))['ManagedAccounts'];
+let ManagedAccountsSection: (typeof import('../src/settings/managed-accounts'))['ManagedAccountsSection'];
+let managedAccountHref: (typeof import('../src/settings/managed-accounts-read'))['managedAccountHref'];
+let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-read'))['managedAccountsFailure'];
+let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
+let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let setLocale: (typeof import('../src/paraglide/runtime.js'))['setLocale'];
+beforeAll(async () => {
+  install();
+  installMocks();
+  ({ createRoot } = await import('react-dom/client'));
+  ({ ManagedAccounts, ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
+  ({ managedAccountHref, managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));
+  ({ sessionQuery } = await import('../src/session/query'));
+  ({ m } = await import('../src/paraglide/messages.js'));
+  ({ setLocale } = await import('../src/paraglide/runtime.js'));
+});
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -45,14 +58,13 @@ const globals = {
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-const { createRoot } = await import('react-dom/client');
-const { ManagedAccounts, ManagedAccountsSection } = await import('../src/settings/managed-accounts');
-const { managedAccountHref, managedAccountsFailure } = await import('../src/settings/managed-accounts-read');
-const { sessionQuery } = await import('../src/session/query');
-const { m } = await import('../src/paraglide/messages.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
+// Each file owns its globals while its tests run; test files load together in one process.
+const install = () => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+};
+install();
+beforeAll(install);
 
 const viewer = '019a0000-0000-7000-8000-000000000001';
 const org = '019a0000-0000-7000-8000-000000000002';

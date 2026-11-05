@@ -1,14 +1,14 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import * as start from '../.storybook/react-start';
 import type {
   ManagedAccountsCursors,
   ManagedAccountsPage,
   ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // UNRUN: real component, router, session admission and inventory; only supplied IO/DOM are illustrative.
 // Layout, native disclosure and browser acceptance remain with integration.
@@ -34,22 +34,43 @@ const globals = {
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
-mock.module('cloudflare:workers', () => ({ env: {} }));
-const { createRoot } = await import('react-dom/client');
-const { within } = await import('storybook/test');
-const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
-const { ManagedAccountSelectionUnavailable } = await import('../src/settings/settings-page');
-const { managedAccountsFailure } = await import('../src/settings/managed-accounts-read');
-const { sessionQuery } = await import('../src/session/query');
-const { managedAccountsExample, managedViewer } = await import('../src/stories/patterns/managed-accounts.fixtures');
-const { m } = await import('../src/paraglide/messages.js');
-const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
-const previousLocale = getLocale();
-setLocale('en', { reload: false });
+// Each file owns its globals while its tests run; test files load together in one process.
+const install = () => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+};
+install();
+beforeAll(install);
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+beforeAll(installMocks);
+let createRoot: (typeof import('react-dom/client'))['createRoot'];
+let within: (typeof import('storybook/test'))['within'];
+let ManagedAccountsSection: (typeof import('../src/settings/managed-accounts'))['ManagedAccountsSection'];
+let ManagedAccountSelectionUnavailable: (typeof import('../src/settings/settings-page'))['ManagedAccountSelectionUnavailable'];
+let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-read'))['managedAccountsFailure'];
+let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
+let managedAccountsExample: (typeof import('../src/stories/patterns/managed-accounts.fixtures'))['managedAccountsExample'];
+let managedViewer: (typeof import('../src/stories/patterns/managed-accounts.fixtures'))['managedViewer'];
+let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let getLocale: (typeof import('../src/paraglide/runtime.js'))['getLocale'];
+let setLocale: (typeof import('../src/paraglide/runtime.js'))['setLocale'];
+let previousLocale: string;
+beforeAll(async () => {
+  install();
+  installMocks();
+  ({ createRoot } = await import('react-dom/client'));
+  ({ within } = await import('storybook/test'));
+  ({ ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
+  ({ ManagedAccountSelectionUnavailable } = await import('../src/settings/settings-page'));
+  ({ managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));
+  ({ sessionQuery } = await import('../src/session/query'));
+  ({ managedAccountsExample, managedViewer } = await import('../src/stories/patterns/managed-accounts.fixtures'));
+  ({ m } = await import('../src/paraglide/messages.js'));
+  ({ getLocale, setLocale } = await import('../src/paraglide/runtime.js'));
+  previousLocale = getLocale();
+  setLocale('en', { reload: false });
+});
 
 const longName = 'Independent Readers and Translators — 読書会 — مجموعة القراءة — ' + 'ReadTogether'.repeat(12);
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
