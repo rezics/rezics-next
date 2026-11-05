@@ -118,6 +118,7 @@ export function SubjectExploreSlot({
   context,
   realm,
   returnTo,
+  publicReturnHref,
 }: {
   subjectId: string;
   subjectType: string;
@@ -126,6 +127,7 @@ export function SubjectExploreSlot({
   context?: string | undefined;
   realm?: string | undefined;
   returnTo?: string | undefined;
+  publicReturnHref?: string | undefined;
 }) {
   const unsupportedId = useId();
   const address = { id: subjectId, label, locale };
@@ -142,7 +144,7 @@ export function SubjectExploreSlot({
       : undefined;
   const concepts =
     subjectType === 'skos:Concept' || subjectType === 'skos:ConceptScheme'
-      ? catalogueEntries.concepts(address)
+      ? catalogueEntries.concepts({ ...address, context, realm, returnHref: publicReturnHref })
       : undefined;
   const music =
     subjectType === 'schema:Place' ||

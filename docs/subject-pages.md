@@ -2484,12 +2484,23 @@ filter intent and focus; the original work address remains separate, and tagged-
 Search under fresh admission without restoring a work cursor.
 
 The source Concept reader supports the current Global view. A supplied historical pin remains explicitly unsupported;
-it never falls through to a different Concept binding. The URL-safe descriptor is capped at 8 KiB after encoding,
-including its current Concept identity, role, release/revision/context/type, work filters, section/row focus and up to
-eight hierarchy addresses. Each retained native continuation is at most 4,096 UTF-8 bytes. Older addresses are
-evicted with a visible truncation notice and a Restart action. The descriptor contains no session receipt, evidence
-snapshot, work cursor or nested return URL; the original work return is a separately validated local Subject address
-of at most 2,048 UTF-8 bytes.
+it never falls through to a different Concept binding. Its URL-safe `conceptVisit` descriptor remains capped at 8 KiB
+after encoding and retains only the current Concept identity, role, release/revision/context/type, work filters,
+section/row focus and up to eight hierarchy addresses. Each native continuation remains at most 4,096 UTF-8 bytes;
+older addresses are evicted with a visible truncation notice and Restart. The descriptor contains no session receipt,
+evidence snapshot, work cursor or nested return URL. The original-work return remains a separately validated local
+Subject address capped at 2,048 UTF-8 bytes. The 20-row hierarchy page, 1-MiB/4,096-statement source admission,
+Search limits and all of these inner bounds stay unchanged.
+
+Decision: the public Concept/Scheme entry carries one admitted Subject, its actual Context, optional admitted Realm,
+locale and one compatible same-locale public return as outer intent. The complete encoded outer descriptor, including
+its route path, fits both 2,048 characters and 2,048 UTF-8 bytes. It never nests another return, cursor, assertion or
+reading. A missing legacy observation continues the direct Global visit; malformed supplied intent is explained
+before any inner read. A non-Global Context or Realm is explained before the Global reader mounts, with a current
+public return and a separately named deliberate fresh Global visit. That choice keeps only the validated general
+public return and drops incompatible inner selectors, hierarchy/work cursors and selected evidence before mounting
+the existing Global reader. Outer admission adds no request and grants no reading or mutation authority. Exact Sources
+receiving remains unsupported until its producer supplies admitted Context/document/digest/language metadata.
 
 Child, scheme, association, tagged-work and browser-history returns first perform a current native read. The reader
 compares the saved Concept binding and requested role, then uses only the fresh session receipt for the saved native
