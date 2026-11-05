@@ -176,13 +176,14 @@ export function CurrentLabelShelf({
     };
     return <LabelShelfPage page={page} locale={locale} display={display} {...(presentation ? { presentation } : {})} />;
   }
+  const readAdmission = readGroups.map((group) => origin.capture(group)());
   const visit = JSON.stringify([
     source.labelId,
     locale,
     value.subject,
     value.csrfToken,
     value.authority,
-    value.admitted,
+    readAdmission,
     value.observation?.id,
   ]);
   return (
