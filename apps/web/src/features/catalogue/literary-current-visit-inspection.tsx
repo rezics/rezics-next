@@ -214,6 +214,9 @@ export function LiteraryCurrentAssertionInspection({
       observe(fresh);
       setInspection({ key, selection: selected, evidence: assertionEvidence(exact) });
       revealedCurrent = true;
+    } catch (error) {
+      // The lifetime fence rejects an in-flight read after this visit is replaced.
+      if (!(error instanceof Error) || error.message !== 'Retired catalogue editor') throw error;
     } finally {
       if (attemptRef.current === attempt) {
         setBusy(false);
