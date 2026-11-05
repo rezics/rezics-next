@@ -9375,6 +9375,8 @@
   "work_names_copied": "Copiado",
   "work_names_copy_failed": "No se pudo copiar. Selecciona el texto para copiarlo.",
   "work_names_sources": "Fuentes",
+  "work_names_return_changed": "La lectura de nombres cambió. Se muestran los nombres actuales y no se restauró la vista guardada.",
+  "work_names_return_restart": "La vista guardada de nombres no está disponible. Los nombres actuales empiezan desde el principio.",
   "search_population_label": "Población de valoraciones",
   "search_population_global": "Global",
   "search_population_selected": "Población del Realm seleccionado",

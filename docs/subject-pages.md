@@ -2362,7 +2362,7 @@ candidate and authority and retains its existing draft/uncertain-command recover
 Decision: supplied-name return uses one bounded browser history value and the existing validated same-locale `via`
 address; filters stay out of URLs, and changed caller, Context or release refuses restoration.
 The shared handoff restores the expanded disclosure, mounted language groups, group/row window, filter and Terms
-focus anchor on both work and people names. Its binding includes Subject, actual Context, selected Realm, locale,
+focus on work and people names, plus the work Sources focus anchor. Its binding includes Subject, actual Context, selected Realm, locale,
 release/revision and browser session-cache incarnation metadata (including weak query identity, so replacing a cache entry cannot revive a return); it contains no credentials or editing state.
 A returned fresh page may restore the view, but a mounted retired source object never becomes current again,
 including A-to-B-to-A, locale replacement and session refresh. Late copy and advice callbacks cannot update it.

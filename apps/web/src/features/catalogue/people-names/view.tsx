@@ -4,7 +4,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
 import { PlainLink, type PageLink } from '../../pages/shared';
-import type { NamesWindow } from '../work-names/navigation';
+import type { NamesReturnStatus, NamesWindow } from '../work-names/navigation';
 import type { WorkNameGroup } from '../work-names/model';
 import {
   filterPeopleNames,
@@ -32,6 +32,8 @@ export function PeopleNamesView({
   restored,
   kind = 'people',
   metadata,
+  captureSourcesVisit = false,
+  returnStatus = 'none',
 }: {
   names: PeopleNames;
   locale: string;
@@ -45,6 +47,8 @@ export function PeopleNamesView({
   restored?: NamesWindow | undefined;
   kind?: 'people' | 'work';
   metadata?: ReactNode;
+  captureSourcesVisit?: boolean;
+  returnStatus?: NamesReturnStatus;
 }) {
   const o = { locale: locale as never };
   const id = useId();
@@ -78,7 +82,13 @@ export function PeopleNamesView({
           </span>
         </p>
       )}
-      <details open={restored?.expanded}>
+      {!retired && returnStatus === 'changed' && (
+        <p role="status">{m.work_names_return_changed({}, o)}</p>
+      )}
+      {!retired && returnStatus === 'restart' && (
+        <p role="status">{m.work_names_return_restart({}, o)}</p>
+      )}
+      <details open={restored?.expanded ?? (returnStatus === 'changed' || returnStatus === 'restart')}>
         <summary ref={summary} className={control}>
           {kind === 'work' ? m.work_names_title({}, o) : m.people_names_open({}, o)}
         </summary>
@@ -209,9 +219,17 @@ export function PeopleNamesView({
                 {m.catalogue_terms_title({}, o)}
               </Link>
             </span>
-            <Link href={sourcesHref} className={control}>
-              {m.work_names_sources({}, o)}
-            </Link>
+            {captureSourcesVisit ? (
+              <span data-names-sources>
+                <Link href={sourcesHref} className={control}>
+                  {m.work_names_sources({}, o)}
+                </Link>
+              </span>
+            ) : (
+              <Link href={sourcesHref} className={control}>
+                {m.work_names_sources({}, o)}
+              </Link>
+            )}
           </div>
         </div>
       )}

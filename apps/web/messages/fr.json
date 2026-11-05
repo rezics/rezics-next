@@ -9375,6 +9375,8 @@
   "work_names_copied": "Copié",
   "work_names_copy_failed": "Copie impossible. Sélectionnez le texte pour le copier.",
   "work_names_sources": "Sources",
+  "work_names_return_changed": "La lecture des noms a changé. Les noms actuels sont affichés et la vue enregistrée n’a pas été restaurée.",
+  "work_names_return_restart": "La vue enregistrée des noms est indisponible. Les noms actuels recommencent au début.",
   "search_population_label": "Population des notes",
   "search_population_global": "Globale",
   "search_population_selected": "Population du Realm sélectionné",
