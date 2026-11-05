@@ -52,8 +52,10 @@ test('development seed fetches the shared cache once and passes the local person
   const args: string[] = [];
   let passedOptions: unknown;
   let fetches = 0;
+  const credentialScopes: string[][] = [];
+  const report = { persona: { status: 'incomplete', collections: [] } };
   try {
-    await runDevelopmentSeed({
+    const result = await runDevelopmentSeed({
       root,
       env: {
         REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
@@ -75,13 +77,19 @@ test('development seed fetches the shared cache once and passes the local person
         };
       },
       seedCatalogue: async () => ({ subjects: {}, facts: [] }),
+      createTokenProvider: async (configuration) => {
+        credentialScopes.push([...configuration.scopes]);
+        return async () => 'local-unit-credential';
+      },
       runSeed: async (argv, seedOptions) => {
         args.push(...argv);
         passedOptions = seedOptions;
+        return report as never;
       },
     });
     const option = (name: string) => args[args.indexOf(name) + 1];
     expect(fetches).toBe(1);
+    expect(result).toBe(report);
     expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
     expect(option('--vndb')).toBe('/shared/dumps/vndb');
     expect(option('--api')).toBe('http://127.0.0.1:4100');
@@ -98,7 +106,12 @@ test('development seed fetches the shared cache once and passes the local person
       vndb: ['v2002', 'v4'],
       includeReleases: true,
     });
-    expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
+    expect(passedOptions).toMatchObject({
+      selection: developmentShowcaseSelection,
+      composePersona: expect.any(Function),
+    });
+    expect(credentialScopes[0]).not.toContain('collection:create');
+    expect(credentialScopes[1]).toEqual(['subject:read', 'collection:create', 'collection:read', 'collection:update']);
   } finally {
     await rm(keyDirectory, { recursive: true, force: true });
   }

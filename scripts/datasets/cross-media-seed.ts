@@ -23,7 +23,7 @@ type PublishedCommunity = Extract<Awaited<ReturnType<typeof seedDevelopmentCommu
 type PublishedEdition = Extract<Awaited<ReturnType<typeof seedDevelopmentContentEdition>>, { state: 'published' }>;
 type CreatedOffer = Extract<Awaited<ReturnType<typeof seedDevelopmentContentEditionOffer>>, { state: 'created' }>;
 
-export type DevelopmentShowcaseReport =
+type DevelopmentPublicationReport =
   | Readonly<{
       state: 'complete';
       community: PublishedCommunity;
@@ -37,6 +37,14 @@ export type DevelopmentShowcaseReport =
       offer?: Awaited<ReturnType<typeof seedDevelopmentContentEditionOffer>>;
       failure: DevelopmentSeedFailure;
     }>;
+import {
+  createDevelopmentShowcaseRequest,
+  developmentCollectionScopes,
+  seedDevelopmentShowcase,
+  type DevelopmentShowcaseResult,
+} from './development-showcase.ts';
+
+export type DevelopmentShowcaseReport = DevelopmentPublicationReport & { collections: DevelopmentShowcaseResult };
 
 /** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
 export const developmentShowcaseSelection = {
@@ -146,10 +154,19 @@ export async function runDevelopmentSeed(
   ];
   if (gameGenreBindings) args.push('--bangumi-game-genre-bindings', gameGenreBindings);
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
+  const creatorToken = await (options.createTokenProvider ?? createAccountTokenProvider)({
+    accountKeyPath: showcaseAccountKey,
+    account,
+    client: showcaseClient,
+    authOrigin: auth,
+    scopes: developmentCollectionScopes,
+  });
+  const request = createDevelopmentShowcaseRequest({ origin: api, token: creatorToken });
   const importedResult = await (options.runSeed ?? runCrossMediaSeedCli)(args, {
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
     reviewedCatalogueSubjects: reviewedCatalogue.subjects,
     selection: developmentShowcaseSelection,
+    composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
   });
   if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');
 
@@ -163,7 +180,7 @@ export async function runDevelopmentSeed(
   });
   const actor = { accountId: account, clientId: showcaseClient };
   const journal = new ShowcaseJournal(showcase);
-  let report: DevelopmentShowcaseReport;
+  let report: DevelopmentPublicationReport;
   try {
     const native = createDevelopmentShowcaseClient({
       origin: api,
@@ -188,7 +205,21 @@ export async function runDevelopmentSeed(
   } finally {
     journal.close();
   }
-  await attachDevelopmentShowcase(result, report);
+  const collections = importedResult.persona!;
+  const collectionFailure = collections.collections.find((row) => row.status !== 'current');
+  if (report.state === 'complete' && collections.status !== 'current') {
+    report = {
+      ...report,
+      state: 'incomplete',
+      failure: {
+        state: 'unavailable',
+        operation: `collections.${collectionFailure!.view}`,
+        code: collectionFailure!.status,
+      },
+    };
+  }
+  const composedReport: DevelopmentShowcaseReport = { ...report, collections };
+  await attachDevelopmentShowcase(result, composedReport);
   if (report.state === 'complete') {
     process.stdout.write(
       `Development showcase: work=${report.community.source.subjectId} board=${report.community.board.id} ` +
@@ -200,7 +231,7 @@ export async function runDevelopmentSeed(
       `Development showcase ${report.failure.state} at ${report.failure.operation}: ${report.failure.code ?? 'no-code'}\n`,
     );
   }
-  return report;
+  return composedReport;
 }
 if (import.meta.main) {
   try {

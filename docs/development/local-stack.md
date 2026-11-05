@@ -88,6 +88,41 @@ both app servers bind loopback. Do not expose this development database or host 
 If an opening fails, setup reports the group and native error, exits unsuccessfully and tells you which task to rerun
 after resolving it. Seed does not continue after a failed persona step.
 
+### Compose the development persona Collections
+
+Decision: persona fixtures use native curated occurrence order and released Type presentation; grid is a client
+layout, and mixed presentation stays `null`. Selection order is not an absolute catalogue rank or a personal state.
+The ranked fixture contains the exact selected VNDB roots, grid contains the selected Bangumi roots, and mixed
+contains both in that order. A homogeneous fixture selects its actual current Type; heterogeneous roots stay mixed.
+
+The existing development wrapper calls this component inside the cross-media CLI's open `ShowcaseJournal` lifetime,
+after source publication. Its native outcomes are retained in the existing result file and the wrapper report. Each exact source-key/native
+UUID pair is reread anonymously, including its provider identifier and Type; matching titles never join identities.
+The report preserves the supplied work-link handoffs. Collections are owned by the development persona through
+ordinary Collection commands, with the separate showcase client credential using `subject:read` and Collection create/read/update
+scopes. Ordinary importer scopes and platform grants retain their existing contracts.
+
+Prepared action bodies, keys and acknowledged UUIDs live in the common showcase journal. A lost response retains
+the original operation for exact replay; a permanent refusal stays terminal. Creator and anonymous reads verify
+current owner, kind, occurrence IDs, Subject IDs and order. Missing or changed current membership is incomplete and
+does not create replacement identities. A missing source never truncates a retained Collection.
+
+The wrapper retains Content's delivered `seedDevelopmentContentEdition` and Commerce's delivered offer helper.
+Collections report only their current native outcomes; the wrapper combines them with the actual published edition
+and eligible offer readback. Completion requires all three current Collections as well as the producer outcomes.
+Decision: Collection scopes belong to the separate showcase client; the importer client keeps its existing scopes.
+
+- Touches: three native curated Collections, ten ordered occurrences for the five selected roots, and their common
+  showcase actions; each action stores one acknowledged UUID beside its sealed body/key.
+- Bound: five source reads, at most thirteen create/member operations and twelve creator/public readbacks: thirty
+  application HTTP calls on first completion and seventeen on exact rerun. The existing transport allows at most
+  three sends per call within a 30-second deadline, 4 KiB request and 256 KiB response. Local journal work uses indexed
+  action-key lookups; SQLite counts are not PostgreSQL work measurements.
+- Growth check: `scripts/datasets/development-showcase-seed.test.ts` pins exact reopen, unknown delivery, permanent
+  refusal and unavailable current reads; `services/kernel/test/imports/showcase-persona.test.ts` binds the component to
+  source publication and native Collection commands. Collection presentation/growth and Content publication remain
+  separate producer acceptance; combined persona, offer, doctor and served-page acceptance remain with integration.
+
 ## Imported covers and Character images
 
 `dev:infra` trusts the exact Bangumi media host `lain.bgm.tv` for selected cover and Character image imports. It adds

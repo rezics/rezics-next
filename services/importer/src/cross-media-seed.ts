@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
 import { createReadStream } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -2997,12 +2998,15 @@ export type CrossMediaSeedCliOptions = {
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
   selection?: CrossMediaSelection;
+  composePersona?: (context: DevelopmentShowcaseContext) => Promise<DevelopmentShowcaseResult>;
 };
+
+export type CrossMediaSeedReport = CrossMediaSeedResult & { persona?: DevelopmentShowcaseResult };
 
 export async function runCrossMediaSeedCli(
   argv: readonly string[],
   options: CrossMediaSeedCliOptions = {},
-): Promise<CrossMediaSeedResult | undefined> {
+): Promise<CrossMediaSeedReport | undefined> {
   const {
     composeVndbCharacterVocabularyBindings,
     parseVndbCharacterVocabularyProfile,
@@ -4100,42 +4104,39 @@ export async function runCrossMediaSeedCli(
         tagWeightRefreshes: publicTags.tagWeightRefreshes,
       });
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResult } = combinedResult;
+    const persona =
+      options.composePersona && journal && options.selection
+        ? await options.composePersona({ result: publicCombinedResult, selection: options.selection, journal })
+        : undefined;
+    const report = {
+      ...publicCombinedResult,
+      ...(persona ? { persona } : {}),
+      facts: {
+        works: Object.fromEntries(result.facts.works),
+        releases: Object.fromEntries(result.facts.releases),
+      },
+      ...(bangumiGenrePublication ? { bangumiGenreDiagnostics: bangumiGenrePublication.diagnostics } : {}),
+      ...(bangumiGameGenrePublication ? { bangumiGameGenreDiagnostics: bangumiGameGenrePublication.diagnostics } : {}),
+      ...(showcase ? { showcase } : {}),
+      ...(books
+        ? {
+            books: {
+              family: books.family,
+              selected: books.selected,
+              conversions: books.conversions,
+              identities: books.identities,
+              status: books.status,
+              gaps: books.gaps,
+              creditGaps: books.creditGaps,
+              creditRoles: books.creditRoles ?? [],
+              creditVocabularyRequirements: books.creditVocabularyRequirements ?? [],
+            },
+          }
+        : {}),
+      sourceDigests: Object.fromEntries(input.digests),
+    };
     await mkdir(dirname(resultPath), { recursive: true });
-    await writeFile(
-      resultPath,
-      JSON.stringify(
-        {
-          ...publicCombinedResult,
-          facts: {
-            works: Object.fromEntries(result.facts.works),
-            releases: Object.fromEntries(result.facts.releases),
-          },
-          ...(bangumiGenrePublication ? { bangumiGenreDiagnostics: bangumiGenrePublication.diagnostics } : {}),
-          ...(bangumiGameGenrePublication
-            ? { bangumiGameGenreDiagnostics: bangumiGameGenrePublication.diagnostics }
-            : {}),
-          ...(showcase ? { showcase } : {}),
-          ...(books
-            ? {
-                books: {
-                  family: books.family,
-                  selected: books.selected,
-                  conversions: books.conversions,
-                  identities: books.identities,
-                  status: books.status,
-                  gaps: books.gaps,
-                  creditGaps: books.creditGaps,
-                  creditRoles: books.creditRoles ?? [],
-                  creditVocabularyRequirements: books.creditVocabularyRequirements ?? [],
-                },
-              }
-            : {}),
-          sourceDigests: Object.fromEntries(input.digests),
-        },
-        null,
-        2,
-      ) + '\n',
-    );
+    await writeFile(resultPath, JSON.stringify(report, null, 2) + '\n');
     process.stdout.write(
       showcase
         ? 'Imported ' +
@@ -4164,7 +4165,7 @@ export async function runCrossMediaSeedCli(
       !showcase || showcase.status === 'published',
       'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
     );
-    return combinedResult;
+    return report;
   } finally {
     journal?.close();
   }
