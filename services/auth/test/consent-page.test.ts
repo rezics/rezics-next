@@ -75,9 +75,9 @@ test('the closed projection fits the shared finite allowance with every compatib
     scope: [...new Set([...page!.granted, ...page!.requested.filter((scope) => page!.scopes.includes(scope))])],
   };
   expect(acknowledgement.scope.length).toBe(1000);
-  expect(
-    new TextEncoder().encode(JSON.stringify(acknowledgement)).length,
-  ).toBeLessThanOrEqual(CONSENT_DECISION_MAX_RESPONSE_BYTES);
+  expect(new TextEncoder().encode(JSON.stringify(acknowledgement)).length).toBeLessThanOrEqual(
+    CONSENT_DECISION_MAX_RESPONSE_BYTES,
+  );
   expect(CONSENT_PAGE_MAX_ERROR_BYTES).toBe(
     JSON.stringify({ error: 'authentication_denied', code: 'stale_review' }).length,
   );
