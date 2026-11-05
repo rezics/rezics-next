@@ -156,7 +156,7 @@ async function show(cursor?: string, initial = page()) {
     path: '/en/search/releases',
     validateSearch: (search) => search,
     loaderDeps: ({ search }) => search,
-    loader: ({ deps }) => client.fetchQuery(releaseSearchQueryOptions('en', deps, 'unknown')),
+    loader: ({ deps }) => client.fetchQuery(releaseSearchQueryOptions('en', deps, 'unknown')).then(() => null),
     component: () => {
       const { result, reader } = useReleaseWindowQuery('en', route.useSearch());
       return <ReleaseSearchPage locale="en" reader={reader} {...result} />;

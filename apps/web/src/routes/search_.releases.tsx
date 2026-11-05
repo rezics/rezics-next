@@ -8,7 +8,7 @@ export const Route = createFileRoute('/search_/releases')({
   validateSearch: v.objectWithRest({}, v.unknown()),
   loaderDeps: ({ search }) => search,
   loader: ({ deps, context }) =>
-    context.queryClient.fetchQuery(releaseSearchQueryOptions(getLocale(), deps, 'unknown')),
+    context.queryClient.fetchQuery(releaseSearchQueryOptions(getLocale(), deps, 'unknown')).then(() => null),
   component: ReleaseSearchRoute,
 });
 
