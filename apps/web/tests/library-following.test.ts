@@ -288,7 +288,7 @@ test('Following management has a genuine discovery destination after the last un
     useSession: () => ({ state: 'signed-in', subject: 'alice', csrfToken }),
   }));
   const query = await import('../src/kernel/query');
-  mock.module('../src/kernel/query', () => ({ ...query, personalRead: { ...query.personalRead, enabled: true } }));
+  Object.defineProperty(query.personalRead, 'enabled', { value: true });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');

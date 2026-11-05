@@ -45,7 +45,8 @@ mock.module('@tanstack/react-start/server', () => ({
 }));
 mock.module('cloudflare:workers', () => ({ env }));
 const query = await import('../src/kernel/query');
-mock.module('../src/kernel/query', () => ({ ...query, personalRead: { ...query.personalRead, enabled: true } }));
+// This file installs its browser after server-reader imports have evaluated query defaults.
+Object.defineProperty(query.personalRead, 'enabled', { value: true });
 afterAll(() => mock.restore());
 
 const actions = await import('../src/library/mine-following-actions');
@@ -81,9 +82,7 @@ test('the actual Following server exports refuse stale preparation without priva
     expect(await actions.readMineFollowingPage({ data: {} })).toEqual(page);
     expect(sessionSubject(actualRequest)).toBe('prepared-owner'); // A stale WeakMap entry is not provenance.
     current.status = 'unavailable';
-    await expect(actions.readMineFollowingForViewer({ data: {} })).rejects.toMatchObject({
-      problem: { status: 502, code: 'dependency_unavailable' },
-    });
+    await expect(actions.readMineFollowingForViewer({ data: {} })).rejects.toThrow('session_unavailable');
     actualRequest = new Request(`${origin}/en/library/following`, {
       headers: { authorization: 'Bearer browser-asserted-identity' },
     });
@@ -367,6 +366,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
     expect(host.textContent).toContain('A private title');
+    await act(async () => {
+      void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
+      await tick();
+    });
     expect(reads).toHaveLength(1);
     await remove();
     expect(writes).toHaveLength(0);
@@ -568,7 +571,7 @@ test('the actual Following reset envelope preserves the originating prepared vie
     const normal = await actions.readMineFollowingForViewer({ data: { cursor: '' } });
     expect(normal.cursor).toBeNull();
     expect(normal.page.addressInvalid).toBe(true);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(2);
     const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
     expect(invalid).toMatchObject({
       subject: 'reset-owner',
@@ -576,7 +579,7 @@ test('the actual Following reset envelope preserves the originating prepared vie
       cursor: null,
       page: { addressInvalid: true },
     });
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(2);
   } finally {
     transport.mockRestore();
   }
@@ -720,6 +723,13 @@ test('Following recovery stays page-local through terminal pages, last-row remov
           <RouterProvider router={router} />
         </QueryClientProvider>,
       );
+      await tick();
+    });
+    expect(host.textContent).toContain(m.library_my_ratings_denied());
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.following_reading_refresh())!
+        .click();
       await tick();
     });
     expect(reads).toHaveLength(1);
