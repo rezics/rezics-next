@@ -11,6 +11,7 @@ import realmRecording from '../src/kernel/recorded/realm.json';
 import { GLOBAL, QUESTION, RATING_SOURCES, readRatings } from '../src/features/pages/subject-ratings';
 import { readRatingPopulations, type PopulationInput } from '../src/features/pages/subject-rating-populations';
 import type { SessionEnv } from '../src/session/client';
+import { browserObservation } from '../src/session';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -939,6 +940,7 @@ test('independent QueryClients serialize private responses separately and requir
   console.log(
     'independent client admission',
     extraCache.getQueryData(sessionQuery.queryKey),
+    browserObservation(extraCache).getSnapshot(),
     extraCache.getQueryCache().findAll({ queryKey: ['subject-rating-populations'] }).map((query) => ({
       key: query.queryKey,
       status: query.state.status,
