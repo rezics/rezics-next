@@ -28,7 +28,10 @@ test('a brief over the diagnostic size budget is accepted with a lint warning', 
 
 test('authorization risk excludes local auth scripts while preserving production and overlapping ownership', () => {
   const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
-  const tooling = markdown.replace('paths: [result.txt]', 'paths: [services/auth/scripts/**]');
+  const authOnly = { version: 1 as const, areas: { authorization: ownership.areas.authorization! } };
+  expect(classifyRiskAreas('services/auth/scripts/**', riskAreaRulesFor(authOnly), 'pattern')).toEqual([]);
+
+  const tooling = markdown.replace('paths: [result.txt]', 'paths: [services/auth/scripts/dev-stack.ts]');
   expect(parseBrief(tooling, ownership).riskAreas).toEqual([]);
 
   const production = markdown.replace('paths: [result.txt]', 'paths: [services/auth/src/**]');
