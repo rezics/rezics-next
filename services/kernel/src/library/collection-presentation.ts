@@ -10,6 +10,7 @@ import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { CoverSummary } from '../semantic/summaries.ts';
 import { collectionKind, type CollectionKind } from './collection-kind.ts';
+import type { CollectionReadOperationUse } from './collection-directory-bounds.ts';
 
 export type PresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
 export type CollectionPresentation = {
@@ -47,8 +48,10 @@ export async function readablePresentationCover(
   actor: Actor,
   id: string,
   deadline: number,
+  operation?: CollectionReadOperationUse,
 ): Promise<CoverSummary | null> {
   if (!dependencies.routeKey) return null;
+  operation?.consume('coverPresentation');
   const reference = await withConnection(dependencies.pool, (client) =>
     checkMediaObject(deadlineClient(client, deadline), id, 'cover'),
   );

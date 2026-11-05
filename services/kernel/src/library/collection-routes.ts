@@ -785,7 +785,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             preview === undefined ? undefined : { deadline: job.deadline },
             {
               deadline: job.deadline,
-              present: (page) =>
+              mountedFullView: query.view === 'FULL',
+              present: (page, operation) =>
                 fullView(
                   viewDependencies(),
                   actor,
@@ -794,7 +795,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                     ...page,
                     collections: page.collections.map(collectionReadView),
                   },
-                  { deadline: job.deadline },
+                  { deadline: job.deadline, operation },
                 ),
             },
           );
@@ -827,7 +828,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             },
             {
               deadline: job.deadline,
-              present: (page) =>
+              mountedFullView: query.view === 'FULL',
+              present: (page, operation) =>
                 fullView(
                   viewDependencies(),
                   actor,
@@ -836,7 +838,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                     ...page,
                     collections: page.collections.map(collectionReadView),
                   },
-                  { deadline: job.deadline },
+                  { deadline: job.deadline, operation },
                 ),
             },
           );
@@ -1457,7 +1459,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         admission.run('normal', job, async () =>
           read().listSubjectCollections(actor, params.id, query, {
             deadline: job.deadline,
-            present: (page) => fullView(viewDependencies(), actor, query.view, page, { deadline: job.deadline }),
+            mountedFullView: query.view === 'FULL',
+            present: (page, operation) =>
+              fullView(viewDependencies(), actor, query.view, page, { deadline: job.deadline, operation }),
           }),
         ),
     );

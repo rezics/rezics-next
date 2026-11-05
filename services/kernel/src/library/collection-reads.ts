@@ -44,9 +44,15 @@ import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { readableSubjects, resolveSubject } from './subject-anchor.ts';
 import collectionRead from './collection-reads-collection.sql';
-import { collectionDirectoryPagePlan, collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
+import {
+  bindCollectionReadOperation,
+  collectionDirectoryOperationPlan,
+  collectionDirectoryPagePlan,
+  collectionDirectoryRowPlan,
+  type CollectionReadOperationUse,
+} from './collection-directory-bounds.ts';
 import memberPage from './collection-reads-members.sql';
-import { subjectCollectionCountPlan } from './subject-collection-read-bounds.ts';
+import { subjectCollectionCountPlan, subjectCollectionOperationPlan } from './subject-collection-read-bounds.ts';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
@@ -168,7 +174,8 @@ type CollectionDirectoryPage = {
 /** The mounted presentation finishes before the reader's terminal observations. */
 type PagePresentation<Page, Result = Page> = {
   deadline: number;
-  present(page: Page): Promise<Result>;
+  mountedFullView?: boolean;
+  present(page: Page, operation: CollectionReadOperationUse): Promise<Result>;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -751,12 +758,13 @@ export function createCollectionReads(
     },
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
     ownerManagement = false,
+    operation?: CollectionReadOperationUse,
   ): Promise<CuratedCollectionView | SavedDynamicCollectionView> {
     const owner = ownerManagement && viewer.kind === 'account' && viewer.accountId === row.curatorAccountId;
     const cover =
       row.coverMediaId === null
         ? null
-        : await readablePresentationCover(dependencies, viewer, row.coverMediaId, deadline);
+        : await readablePresentationCover(dependencies, viewer, row.coverMediaId, deadline, operation);
     let editor = false;
     if (owner && viewer.scopes.includes('collection:update')) {
       const check = await accessCheck(
@@ -860,8 +868,20 @@ export function createCollectionReads(
     if (typeof curatorAccountId !== 'string') throw new TypeError('Collection list options need a curator account id');
     const route = routeOf(curatorAccountId);
     if (route === null) throw notFound();
+    // The complete maximum-limit declaration is closed before any account or page read.
+    // Permission and row outcomes select reached terms; they never change its prices.
+    const operationPlan = collectionDirectoryOperationPlan({
+      limit: page.limit,
+      publicOnly,
+      ownerManagement: options.ownerManagement === true,
+      mountedFullView: presentation?.mountedFullView === true,
+      preview: preview !== undefined,
+    });
+    const operation = bindCollectionReadOperation(operationPlan, viewer, pool, deadline);
+    try {
     // Presentation visibility is read before opening the page transaction. A visible account path
     // needs no private account read; only a hidden view needs the existing curator exception.
+    operation.consume('directoryAdmission');
     const publicViews = await withConnection(pool, (client) =>
       readPublicViews(deadlineClient(client, deadline), [curatorAccountId]),
     );
@@ -884,16 +904,24 @@ export function createCollectionReads(
     const after = builtinCursor ? null : listPosition(cursor, route);
     if (!visible && !curator) {
       const body = { collections: [], next: null };
-      return presentation ? presentation.present(body) : body;
+      operation.consume('responseSerialization');
+      return presentation ? presentation.present(body, operation) : body;
     }
     const listFilter = specializeCollectionListPolicy(nativePolicyCatalogueForAccess(access), fullView);
     if (listFilter.status !== 'ready') throw new ProblemError('dependency_unavailable');
-    const logical =
-      fullView && (cursor === null || builtinCursor)
-        ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null, page.limit + 1)
-        : [];
+    let logical: BuiltinCollectionView[] = [];
+    if (fullView && (cursor === null || builtinCursor)) {
+      operation.consume('builtinDiscovery');
+      logical = await builtins.discover(
+        viewer,
+        builtinCursor ? String(cursor.after[1]) : null,
+        page.limit + 1,
+        deadline,
+      );
+    }
     const shownLogical = logical.slice(0, page.limit);
     const remaining = page.limit - shownLogical.length;
+    operation.consume('directoryPage');
     const result = await readOnly(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       const partition = await readPartition(client, partitionOf(route));
@@ -933,8 +961,14 @@ export function createCollectionReads(
     const collections: CollectionDirectoryPage['collections'] = shownLogical.map((collection) =>
       ownerManagement ? { ...collection, allowedVisibilityActions: [] } : collection,
     );
-    for (const row of result.collections) collections.push(await present(viewer, row, deadline, ownerManagement));
-    if (preview) {
+    if (result.collections.length) {
+      operation.consume('collectionObservations');
+      operation.consume('presentationCurrentness');
+      if (ownerManagement) operation.consume('ownerManagement');
+    }
+    for (const row of result.collections)
+      collections.push(await present(viewer, row, deadline, ownerManagement, operation));
+    if (preview && result.collections.length) {
       const previews = await readCollectionPreviews(
         dependencies,
         viewer,
@@ -951,6 +985,7 @@ export function createCollectionReads(
             throw new ProblemError('dependency_unavailable');
         },
         (previews) => retainPreview(viewer, result.collections, previews, preview.deadline),
+        operation,
       );
       for (const collection of collections)
         Object.assign(
@@ -966,7 +1001,8 @@ export function createCollectionReads(
       collections,
       ...(ownerManagement ? { ownerManagement: 'owner' as const, ownerAccountId: curatorAccountId } : {}),
     };
-    const presented = presentation ? await presentation.present(body) : body;
+    operation.consume('responseSerialization');
+    const presented = presentation ? await presentation.present(body, operation) : body;
     const currentViews = await withConnection(pool, (client) =>
       readPublicViews(deadlineClient(client, deadline), [curatorAccountId]),
     );
@@ -997,6 +1033,9 @@ export function createCollectionReads(
     )
       throw new ProblemError('dependency_unavailable');
     return presented;
+    } finally {
+      operation.release();
+    }
   }
 
   /** Common dynamic/curated reader; the native curated primitive retains its occurrence DTO. */
@@ -1418,13 +1457,23 @@ export function createCollectionReads(
   ): Promise<PublicCollectionPage> {
     const deadline = presentation?.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
     const page = pageRequest(options, ['cursor', 'limit', 'view']);
+    const operationPlan = subjectCollectionOperationPlan({
+      subjectId,
+      limit: page.limit,
+      mountedFullView: presentation?.mountedFullView === true,
+    });
+    const operation = bindCollectionReadOperation(operationPlan, viewer, pool, deadline);
+    try {
+    operation.consume('subjectResolution');
     const resolution = await resolveSubject(anchors, viewer, subjectId, undefined, { pool, deadline });
     if (resolution === null) throw notFound();
     const route = routeOf(subjectId)!;
-    const counts = await subjectCollectionCountPlan({
+    const countPlan = subjectCollectionCountPlan({
       partition_no: partitionOf(route),
       subject_ids: [subjectId],
-    }).run(pool);
+    });
+    operation.consume('subjectCount');
+    const counts = await countPlan.run(deadlineClient(pool, deadline));
     const count = counts[0]?.publicCollectionCount ?? 0;
     const binding: CursorBinding = {
       operation: 'library.subject.collections',
@@ -1432,16 +1481,18 @@ export function createCollectionReads(
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = subjectPosition(cursor);
+    operation.consume('subjectPartition');
     const partition = await withConnection(pool, (client) =>
       readPartition(deadlineClient(client, deadline), partitionOf(route)),
     );
     if (!partition) throw new ProblemError('partition_unavailable');
     if (cursor && cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
-    const pairs = await subjectCollections(pool, subjectId, after, page.limit + 1);
+    const pairs = await subjectCollections(pool, subjectId, after, page.limit + 1, { deadline, operation });
     const considered = pairs.slice(0, page.limit);
     const shown: PublicCollectionView[] = [];
     const observations: { row: StoredCollection; visible: boolean }[] = [];
     if (considered.length > 0) {
+      operation.consume('subjectCollectionPage');
       await readOnly(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         for (const pair of considered) {
@@ -1478,7 +1529,8 @@ export function createCollectionReads(
             })
           : null,
     };
-    const presented = presentation ? await presentation.present(body) : body;
+    operation.consume('responseSerialization');
+    const presented = presentation ? await presentation.present(body, operation) : body;
     const finalResolution = await resolveSubject(anchors, viewer, subjectId, undefined, { pool, deadline });
     if (finalResolution === null) throw notFound();
     if (
@@ -1489,6 +1541,7 @@ export function createCollectionReads(
     // Count and pair observations remain separate. This terminal pass certifies
     // only considered Collection/current disclosure evidence, never a new count.
     if (observations.length) {
+      operation.consume('subjectCollectionTerminal');
       await readOnly(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         for (const original of observations) {
@@ -1522,6 +1575,9 @@ export function createCollectionReads(
     )
       throw new ProblemError('dependency_unavailable');
     return presented;
+    } finally {
+      operation.release();
+    }
   }
 }
 

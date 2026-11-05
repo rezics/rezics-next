@@ -8,6 +8,9 @@ import claimCoverMediaStatement from './claim-cover-media.sql';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import readCoverReference from './read-cover-reference.sql';
 
+export const COVER_CREDIT_JSON_MAX_BYTES = 8_192;
+export const COVER_PROVENANCE_JSON_MAX_BYTES = 65_536;
+
 export type CoverReference = Readonly<{
   id: string;
   digest: string;
@@ -44,14 +47,14 @@ export function validateCoverReferenceMetadata(value: unknown): string[] {
   if (
     !credit ||
     typeof credit !== 'object' ||
-    !bytes(credit, 8192) ||
+    !bytes(credit, COVER_CREDIT_JSON_MAX_BYTES) ||
     !text(credit.rightsHolder, 1024) ||
     !text((credit.via as Record<string, unknown> | null)?.name, 1024) ||
     !text((credit.via as Record<string, unknown> | null)?.url, 1024) ||
     !text(credit.license, 128)
   )
     errors.push('credit');
-  if (!bytes(provenance, 65536)) errors.push('provenance');
+  if (!bytes(provenance, COVER_PROVENANCE_JSON_MAX_BYTES)) errors.push('provenance');
   return errors;
 }
 

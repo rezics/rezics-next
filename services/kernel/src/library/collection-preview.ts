@@ -6,7 +6,10 @@ import { readCurrentSubjectSummaries } from '../semantic/current-subject-summari
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SubjectSummary } from '../semantic/summaries.ts';
 import type { PresentationDependencies } from './collection-presentation.ts';
-import { collectionPreviewStatements } from './collection-directory-bounds.ts';
+import {
+  collectionPreviewStatements,
+  type CollectionReadOperationUse,
+} from './collection-directory-bounds.ts';
 
 export type CollectionPreview = {
   previewMembers: { subjectId: string; subject: SubjectSummary }[];
@@ -29,6 +32,7 @@ export async function readCollectionPreviews(
   deadline: number,
   authorizeCurrent: (parent: PreviewParent) => Promise<void>,
   prepareUnresolved?: (previews: ReadonlyMap<string, CollectionPreview>) => Promise<void>,
+  operation?: CollectionReadOperationUse,
 ): Promise<Map<string, CollectionPreview>> {
   if (parents.length > 20) throw new ProblemError('invalid_request');
   const result = new Map<string, CollectionPreview>(
@@ -55,13 +59,17 @@ export async function readCollectionPreviews(
     revisions: selected.map((parent) => parent.revision),
   };
   const plan = collectionPreviewStatements(binding, quota);
+  operation?.consume('previewSql');
   const rows = await withReadTransaction(deps.pool, (client) => plan.members.run(deadlineClient(client, deadline)));
   const originals = [
     ...new Set(rows.flatMap((row) => (row.subjectId && row.deletionId === null ? [row.subjectId] : []))),
   ];
   if (originals.length && !deps.routeKey) throw new ProblemError('dependency_unavailable');
   const display = originals.length
-    ? await readCurrentSubjectSummaries({ ...deps, actor, routeKey: deps.routeKey!, deadline }, originals)
+    ? await (async () => {
+        operation?.consume('previewSubjects');
+        return readCurrentSubjectSummaries({ ...deps, actor, routeKey: deps.routeKey!, deadline }, originals);
+      })()
     : { summaries: new Map<string, SubjectSummary | null>(), verify: async () => {} };
   for (const parent of selected) {
     const prefix = rows.filter((row) => row.collectionId === parent.id);

@@ -31,6 +31,7 @@ import collectionRead from './collection-reads-collection.sql';
 import memberPage from './collection-reads-members.sql';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import type { CollectionReadOperationUse } from './collection-directory-bounds.ts';
 
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
 const nullableText = t.Union([t.String(), t.Null()]);
@@ -203,6 +204,7 @@ export async function fullView<T>(
   body: T,
   options: Readonly<{
     deadline?: number;
+    operation?: CollectionReadOperationUse;
     followingSpaces?: (
       actor: Actor,
       ids: readonly string[],
@@ -232,6 +234,7 @@ export async function fullView<T>(
   const followingSpaces = options.followingSpaces
     ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
     : new Map<string, FollowingSpaceProjection>();
+  if (accountIds.size > 0) options.operation?.consume('fullViewAccount');
   await bounded([...subjectIds], async (id) => {
     reader.subjects.set(id, await reader.subject(id));
   });

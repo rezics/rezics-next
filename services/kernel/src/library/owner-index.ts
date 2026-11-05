@@ -9,6 +9,9 @@ import nativeFacts from './collection-source-native-facts.sql';
 import labelOriginals from './owner-index-native-label-originals.sql';
 
 type Client = Pick<PoolClient, 'query'>;
+
+export const OWNER_INDEX_FRONTIER_READ_SQL = `SELECT phase, after_subject AS subject, after_fact AS fact
+    FROM library.owner_index_control WHERE route=$1 AND account_id=$2`;
 export type OwnerNativeFactDriver = 'entry' | 'label' | 'session' | 'copy';
 
 /** Independent native ranges for retained canonical preparation, including state Sources.
@@ -64,11 +67,7 @@ function key(accountId: string): [number, string] {
 
 /** Pure native reads: absent control is unbuilt, never an empty/ready owner. */
 export async function readOwnerIndexFrontier(client: Client, accountId: string): Promise<OwnerIndexFrontier | null> {
-  const { rows } = await client.query<Control>(
-    `SELECT phase, after_subject AS subject, after_fact AS fact
-    FROM library.owner_index_control WHERE route=$1 AND account_id=$2`,
-    key(accountId),
-  );
+  const { rows } = await client.query<Control>(OWNER_INDEX_FRONTIER_READ_SQL, key(accountId));
   return rows[0] ?? null;
 }
 

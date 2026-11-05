@@ -11,6 +11,7 @@ export async function readSubjectReference(
   pool: Pool,
   id: string,
   authorize: (client: PoolClient) => Promise<boolean>,
+  deadline?: number,
 ): Promise<{ id: string; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
@@ -24,5 +25,5 @@ export async function readSubjectReference(
       id: source.id,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
-  });
+  }, deadline);
 }

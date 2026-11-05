@@ -9,6 +9,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
+import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { partitionOf } from '../route/route.ts';
@@ -16,6 +17,7 @@ import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { requireRoute } from './command-support.ts';
 import apply from './listing-apply.sql';
 import { executeSubjectCollectionPairs, subjectCollectionPairPlan } from './subject-collection-read-bounds.ts';
+import type { CollectionReadOperationUse } from './collection-directory-bounds.ts';
 import {
   admitListingSource,
   observeListingSource,
@@ -196,7 +198,13 @@ export async function applySubjectListing(deps: Dependencies, source: ListingObs
 }
 
 /** Public Collection pairs in Collection ID order, bounded by a subject-leading keyset seek. */
-export async function subjectCollections(pool: Pool, subjectId: string, after: string | null, limit: number) {
+export async function subjectCollections(
+  pool: Pool,
+  subjectId: string,
+  after: string | null,
+  limit: number,
+  options: { deadline?: number; operation?: CollectionReadOperationUse } = {},
+) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5000)
     throw new RangeError('Page limit must be an integer from 1 through 5000');
   const route = requireRoute(subjectId);
@@ -207,7 +215,9 @@ export async function subjectCollections(pool: Pool, subjectId: string, after: s
     after: after ?? '00000000-0000-0000-0000-000000000000',
     limit,
   });
-  return withConnection(pool, async (client) => {
+  return withConnection(pool, async (connection) => {
+    options.operation?.consume('subjectPairPage');
+    const client = options.deadline === undefined ? connection : deadlineClient(connection, options.deadline);
     const rows = await executeSubjectCollectionPairs({ query: client.query.bind(client) }, plan);
     return rows.map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() }));
   });

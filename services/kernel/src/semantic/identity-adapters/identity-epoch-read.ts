@@ -404,7 +404,11 @@ export function classifyIdentityRatingReviewEvidence(
 }
 
 /** Bounded exact mapping proof, with source and control homes released independently. */
-export async function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
+export async function readIdentityMappings(
+  pool: Pool,
+  originals: readonly string[],
+  deadline?: number,
+): Promise<IdentityMapping[]> {
   if (originals.length > 100) throw new RangeError('Identity page must contain at most 100 originals');
   if (!originals.length) return [];
   const routes = originals.map((id) => {
@@ -433,7 +437,7 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
             ])
           ).rows,
         );
-      });
+      }, deadline);
     }
     const available = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
     for (const home of new Set(available.map((row) => row.control_partition!))) {
@@ -452,7 +456,7 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
             ])
           ).rows,
         );
-      });
+      }, deadline);
     }
     return { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows };
   }
