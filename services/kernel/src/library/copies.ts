@@ -383,6 +383,7 @@ export function createCopyCommands(config: Dependencies) {
     const owner = await gate(actor, 'copy:create', deadline);
     const parsed = parseCreate(input);
     const route = requireRoute(owner.accountId);
+    const copyId = newId(route);
     const plan = copyMutationOperationPlan('create', {
       route,
       accountId: owner.accountId,
@@ -393,7 +394,7 @@ export function createCopyCommands(config: Dependencies) {
       requestedBy: owner.requestedBy,
       durationMs: Math.max(0, deadline - Date.now()),
       commandInput: parsed,
-      copyId: '00000000-0000-0000-0000-000000000000',
+      copyId,
       kind: parsed.kind,
       status: parsed.status,
       location: parsed.location,
@@ -444,7 +445,7 @@ export function createCopyCommands(config: Dependencies) {
             ...copyInput,
             status: parsed.status,
             subjectId: source.subjectId,
-            id: newId(route),
+            id: copyId,
             accountId: owner.accountId,
             ...(conditionFacts === undefined ? {} : { conditionFacts }),
           },
