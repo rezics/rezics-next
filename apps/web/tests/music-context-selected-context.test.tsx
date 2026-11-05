@@ -179,12 +179,12 @@ async function flush() {
   });
 }
 
-async function until(predicate: () => boolean) {
+async function until(predicate: () => boolean, detail?: () => string) {
   for (let turn = 0; turn < 80; turn++) {
     if (predicate()) return;
     await flush();
   }
-  throw new Error('Music-context selected reading did not settle');
+  throw new Error(`Music-context selected reading did not settle${detail ? `: ${detail()}` : ''}`);
 }
 
 afterAll(async () => {
@@ -329,7 +329,10 @@ test('selected Context stays bound through the Subject entry, route, session, ac
 
   try {
     await render(route?.context);
-    await until(() => subjectCalls.length === 1);
+    await until(
+      () => subjectCalls.length === 1,
+      () => `session=${JSON.stringify(sessionObservation)}; action readers=${readerCalls.length}; view=${host.textContent}`,
+    );
     await render(contextB);
     await until(() => subjectCalls.length === 2);
     await render(contextA);
