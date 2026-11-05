@@ -611,6 +611,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     await tick();
     expect(host.textContent).toContain('Private note A');
     expect(host.querySelectorAll('[data-slot="list-row"]')).toHaveLength(1);
+    for (const calls of [lists, listInputs, details, editions, writes]) calls.length = 0;
     search = { subjectId: id(10), cursor: 'first' };
     await show(viewer('A'));
     await acceptList('A');
