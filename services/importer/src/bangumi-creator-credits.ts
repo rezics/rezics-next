@@ -255,21 +255,24 @@ export async function deliverBangumiCreatorCredits(input: {
         | undefined;
       const type = nativeType(current);
       const expectedType = input.expectedNativeType(key);
-      const identityProperty = key.startsWith('person:')
+      const organizationTupleIdentity =
+        /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Organization';
+      const identityProperty = /^person:[1-9][0-9]*$/u.test(key) && expectedType === 'schema:Person'
         ? 'wdt:P6298'
-        : key.startsWith('character:')
+        : /^character:[1-9][0-9]*$/u.test(key)
           ? 'wdt:P6296'
-          : /^\d+$/u.test(key)
+          : /^[1-9][0-9]*$/u.test(key)
             ? 'wdt:P5732'
             : undefined;
       const sourceId =
         key.startsWith('person:') || key.startsWith('character:') ? key.slice(key.indexOf(':') + 1) : key;
       const hasIdentity =
-        identityProperty !== undefined &&
-        (subject?.statements?.[identityProperty]?.some(
-          (statement) => statement.value?.type === 'value' && statement.value.content === sourceId,
-        ) ??
-          false);
+        organizationTupleIdentity ||
+        (identityProperty !== undefined &&
+          (subject?.statements?.[identityProperty]?.some(
+            (statement) => statement.value?.type === 'value' && statement.value.content === sourceId,
+          ) ??
+            false));
       if (!type || subject?.id !== claim.subject || type !== expectedType || !hasIdentity) continue;
       const identity = { id: claim.subject, type, releaseDigest: bundledDigest };
       resolved[key] = identity;
