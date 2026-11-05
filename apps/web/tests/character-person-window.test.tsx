@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, useState } from 'react';
+import { act } from 'react';
 import recording from '../src/kernel/recorded/definitions-release.json';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import {
@@ -67,8 +67,6 @@ let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
 let router: ReturnType<typeof createRouter>;
 let pageLocale = 'en';
-let refreshRoute = () => {};
-let lastNavigationHref: string | undefined;
 const originalFetch = globalThis.fetch;
 const work = '018f0000-0000-7000-8000-00a000000001';
 const role = '018f0000-0000-7000-8000-00a000000003';
@@ -104,7 +102,6 @@ async function activateWindow(action: string, duplicate = false) {
 async function show(href = characterPersonHref('en', operand().search)) {
   reads.length = 0;
   pageLocale = 'en';
-  lastNavigationHref = undefined;
   setLocale('en', { reload: false });
   window.history.replaceState({}, '', href);
   globalThis.fetch = (async (input) => {
@@ -125,8 +122,6 @@ async function show(href = characterPersonHref('en', operand().search)) {
     path: '/search/characters',
     validateSearch: (raw) => raw,
     component: () => {
-      const [, setRevision] = useState(0);
-      refreshRoute = () => setRevision((revision) => revision + 1);
       const raw = route.useSearch();
       const parsed = parseCharacterPersonSearch(raw, pageLocale);
       return (
@@ -149,9 +144,6 @@ async function show(href = characterPersonHref('en', operand().search)) {
     history: createBrowserHistory({ window: window as unknown as globalThis.Window }),
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
     defaultViewTransition: false,
-  });
-  router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-    lastNavigationHref = toLocation.publicHref;
   });
   await router.load();
   root = createRoot(host);
@@ -192,10 +184,8 @@ test.each(['people', 'characters'])(
     expect(reads).toHaveLength(2);
     await finish({ ...ready, page: { ...ready.page, next: null } });
     expect(host.textContent).toContain(m.search_window_address({}, { locale: 'en' }));
-    const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]');
-    expect(previous?.href ?? JSON.stringify({ state: window.history.state, lastNavigationHref })).toBe(
-      `https://search.test${characterPersonHref('en', parsed.search)}`,
-    );
+    const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
+    expect(previous.href).toBe(`https://search.test${characterPersonHref('en', parsed.search)}`);
     await activateWindow('previous');
     expect(reads).toHaveLength(3);
     expect(reads.at(-1)!.search).toEqual(parsed.search);
@@ -234,10 +224,8 @@ test('failed forward reads hide old rows and keep the admitted Previous address 
   expect(reads).toHaveLength(2);
   await finish({ status: 'unavailable' });
   expect(host.querySelector('[data-character-person-results] [data-slot="discovery-results"]')).toBeNull();
-  const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]');
-  expect(previous?.href ?? JSON.stringify({ state: window.history.state, lastNavigationHref })).toBe(
-    `https://search.test${characterPersonHref('en', operand().search)}`,
-  );
+  const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
+  expect(previous.href).toBe(`https://search.test${characterPersonHref('en', operand().search)}`);
   await activateWindow('previous');
   expect(reads).toHaveLength(3);
   expect(reads.at(-1)!.search).toEqual(operand().search);
@@ -264,9 +252,13 @@ test('request A/B/A and locale replacement start fresh reads for the current add
   pageLocale = 'de';
   await act(async () => {
     setLocale('de', { reload: false });
-    refreshRoute();
+    await router.navigate({ href: characterPersonHref('de', searchB) });
   });
   expect(reads).toHaveLength(4);
+  expect(reads.at(-1)!.search).toEqual(searchB);
+  await finish();
+  await navigate(characterPersonHref('de', searchA));
+  expect(reads).toHaveLength(5);
   expect(reads.at(-1)!.search).toEqual(searchA);
   await finish();
 });
