@@ -120,9 +120,7 @@ async function read(token?: string): Promise<string[]> {
   const visibleGroups = visible.flatMap((operation) =>
     operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [],
   );
-  const journeys = visible.flatMap(({ operationId }) =>
-    shellJourneys.includes(operationId) ? [operationId] : [],
-  );
+  const journeys = visible.flatMap(({ operationId }) => (shellJourneys.includes(operationId) ? [operationId] : []));
   expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys])].sort());
   for (const group of mountedGroups().filter((group) => !body.admitted.includes(group))) {
     expect(text).not.toContain(group);

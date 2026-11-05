@@ -201,19 +201,27 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   }
 }
 
-function parseArguments(args: string[]): { command: string[]; privateNetwork: boolean } {
+const usage = 'Usage: bun scripts/focused.ts [--private-network] -- <command...>';
+
+/** bun consumes a leading `--`, so `bun focused.ts -- bun test …` arrives without the separator. */
+export function parseFocusedArguments(args: string[]): { command: string[]; privateNetwork: boolean } {
   const separator = args.indexOf('--');
-  if (separator < 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
-  const flags = args.slice(0, separator);
-  if (flags.some((flag) => flag !== '--private-network')) throw new Error(`Unknown option: ${flags.join(' ')}`);
-  const command = args.slice(separator + 1);
-  if (command.length === 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
-  return { command, privateNetwork: flags.includes('--private-network') };
+  if (separator >= 0) {
+    const flags = args.slice(0, separator);
+    if (flags.some((flag) => flag !== '--private-network')) throw new Error(`Unknown option: ${flags.join(' ')}`);
+    const command = args.slice(separator + 1);
+    if (command.length === 0) throw new Error(usage);
+    return { command, privateNetwork: flags.includes('--private-network') };
+  }
+  const privateNetwork = args[0] === '--private-network';
+  const command = privateNetwork ? args.slice(1) : args;
+  if (command.length === 0 || command[0]?.startsWith('-')) throw new Error(usage);
+  return { command, privateNetwork };
 }
 
 if (import.meta.main) {
   try {
-    const { command, privateNetwork } = parseArguments(process.argv.slice(2));
+    const { command, privateNetwork } = parseFocusedArguments(process.argv.slice(2));
     process.exitCode = await runFocusedCommand(command, { privateNetwork });
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

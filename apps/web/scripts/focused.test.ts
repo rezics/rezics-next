@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runFocusedCommand } from './focused.ts';
+import { parseFocusedArguments, runFocusedCommand } from './focused.ts';
 
 const leftoverRoot = mkdtempSync(join(tmpdir(), 'rezics-web-check-leftover-'));
 
@@ -57,4 +57,17 @@ test('a stale leftover journal is ignored rather than treated as a focused-check
     },
   });
   expect(result).toBe(0);
+});
+
+test('a bun-stripped leading separator still runs the remaining command', () => {
+  expect(parseFocusedArguments(['bun', 'test', 'tests/native/library-saved-view.host.test.ts'])).toEqual({
+    command: ['bun', 'test', 'tests/native/library-saved-view.host.test.ts'],
+    privateNetwork: false,
+  });
+  expect(
+    parseFocusedArguments(['--private-network', '--', 'bun', 'test', 'tests/configured-library-controls.test.tsx']),
+  ).toEqual({
+    command: ['bun', 'test', 'tests/configured-library-controls.test.tsx'],
+    privateNetwork: true,
+  });
 });
