@@ -184,6 +184,8 @@ test('mounted installed route and session retain canonical origin, acquire fresh
       await renderNode(<SubjectPage page={page} locale="en" messages={subjectPageMessages()} renderJsonLd={false} />);
       await act(async () => within(window.document.body).getByRole('button', { name: m.contribute_title() }).click());
       // The collector consumes the real action slot; open its edit group to inspect the actual producer.
+      // The menu mounts after its open effects, which a loaded host may finish after the click returns.
+      await waitFor(() => within(window.document.body).getByText(m.contribute_edit(), { exact: true }));
       await act(async () => within(window.document.body).getByText(m.contribute_edit(), { exact: true }).click());
       const actual = window.document.querySelector<HTMLAnchorElement>('a[href*="/manga?origin="]');
       expect(actual).not.toBeNull();
