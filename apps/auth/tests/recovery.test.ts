@@ -186,6 +186,7 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}, sto
   });
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
+  page.setDefaultNavigationTimeout(30_000);
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   await page.addInitScript((storageFailure) => {
