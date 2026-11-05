@@ -7,8 +7,8 @@ import type { PersonalLibraryCurrentRead, PersonalContinueRead } from '../src/li
 import type { LibraryMutationResult, PersonalLibraryEntry } from '../src/library/entries-read';
 import type { ShelfSearch } from '../src/library/shelf-params';
 
-// Controller acceptance owns native/visual proof. This fixture covers the server export and mounted
-// composition with real shelf children against the generated kernel client.
+// UNRUN: controller integration owns execution and native/visual proof. This fixture covers the server export
+// and mounted composition with real shelf children against the generated kernel client.
 type Preparation = { subject?: string; accessToken?: string; status: 'active' | 'absent' | 'unavailable' };
 let preparations: Preparation[] = [];
 let preparationCalls = 0;
