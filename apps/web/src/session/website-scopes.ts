@@ -2,8 +2,12 @@
 export const creatorSalesScope = 'commerce_sale:list';
 
 export function websiteRegistrationScopes(mountedActions: Iterable<string>): string[] {
-  // Auth rejects unmounted scopes. Once delivered, commerce_sale:list enters this exact registration/request set.
-  return [...new Set(['openid', 'offline_access', ...mountedActions])];
+  // Called by trusted composition with actual action names; Auth checks mounted membership.
+  return [
+    'openid',
+    'offline_access',
+    ...[...new Set(mountedActions)].filter((name) => name !== 'openid' && name !== 'offline_access').sort(),
+  ];
 }
 
 /** Request only the configured registration. Existing sessions/refresh never acquire new consent here. */

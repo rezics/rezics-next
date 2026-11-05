@@ -2014,27 +2014,43 @@ Registration is a trusted, in-process deployment operation. There is no dynamic
 or HTTP client registration:
 
 ```ts
-await auth.internal.registerWebsiteClient({
-  publicJwks: { keys: [websitePublicJwk] }, // public P-256 ES256 keys only
-  redirectUris: ['https://rezics.com/auth/callback'],
-  postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: [
-    'openid',
-    'offline_access',
-    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-  ],
-});
+import { registerWebsiteDeployment } from './scripts/website-composition.ts';
+
+await registerWebsiteDeployment(
+  auth,
+  kernel,
+  {
+    publicJwks: { keys: [websitePublicJwk] }, // public P-256 ES256 keys only
+    redirectUris: ['https://rezics.com/auth/callback'],
+    postLogoutRedirectUris: ['https://rezics.com/'],
+  },
+  websiteConfigurationFile,
+);
 ```
 
-`mountedWebsiteActions` is the trusted catalogue of mounted site features supplied
-as `siteActions` when composing Auth. It includes `media:complete` and all mounted
-protected site actions, including `account:read` with its self-revoking replay
-formula and admitted `source_fence:read`, `source_fence:takedown` and
-`media:import_from_url` features. Future mounted entries use this same data path.
-Registration supplies no actor, principal or resource grant; a public-read floor
-requires no scope. Production's configured audience, kernel `AUTH_AUDIENCE` and
-the website's `resource` are exactly `https://api.rezics.com`, without a trailing
-slash. Isolated tests use `https://api.rezics.test`.
+Decision: derive website registration and configuration from all actual mounted operation/action declarations,
+including private branches of anonymous-capable actions, plus the existing Auth `organization:create`,
+`account:manage` and `account:delete` operations; never filter by `anonymous` or maintain a scope hand list.
+`mountedWebsiteConfiguration(kernel)` resolves actual route actions through `actionCatalogue`, deduplicates and
+sorts them with OpenID scopes. Use the same trusted mounted catalogue in Auth's `siteActions`; Auth refuses
+unmounted names. Operation IDs and exposure groups are not action names. Registration grants no resource,
+platform opening, ownership or lifecycle permission.
+
+`registerWebsiteDeployment` invokes the ordinary trusted registration and only then emits the public
+`WEBSITE_SCOPES` JSON configuration artifact. The deployment owner supplies the actual Auth/Kernel composition,
+public JWK, exact callbacks and output file; Web builds consume that file via `WEBSITE_CONFIGURATION_FILE`.
+A supplied `WEBSITE_SCOPES` override must match. No deployed registry or secret environment is implied by this
+source configuration. The production audience, Kernel `AUTH_AUDIENCE` and website `resource` are exactly
+`https://api.rezics.com`, without a trailing slash; isolated tests use `https://api.rezics.test`.
+
+Local setup, host and Web launch derive the same deterministic set from the real mounted Kernel, once per
+lifecycle entry. Setup writes it to Web's generated bindings and launch passes it directly. Importer credentials
+and grants remain separate. No browser service import or request-time catalogue rebuild participates.
+After updating registration and configuration together, deliberately sign out of Web, sign in again and complete
+the ordinary Auth authorization/renewed-consent flow. Existing sessions, access tokens and refresh tokens retain
+their previous scope ceilings. Preserve an original session separately for a negative control; do not patch
+consent/token rows or reset the shared database. Source composition alone establishes no populated journey:
+ordinary native scope/resource checks, exposure, ownership, lifecycle and fixture/preparation receiving still apply.
 
 - The website generates its private P-256 JWK and keeps it as a Worker secret.
   Deployment passes only `{ keys: [public JWK] }`. Each key needs a unique `kid`,
