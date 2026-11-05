@@ -74,6 +74,10 @@ mock.module('../src/session/request', () => ({
 mock.module('../src/kernel/client', () => ({
   kernelClient: () => activeClient as never,
   requestLocale: () => undefined,
+  configuredKernelOrigin: () => undefined,
+  hasKernelOrigin: () => false,
+  preparePrivatePage: () => {},
+  acceptLanguage: () => '',
 }));
 
 const { subjectPageQuery, subjectViewPagesQuery } = await import('../src/features/pages/subject-queries');
