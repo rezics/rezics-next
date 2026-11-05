@@ -116,7 +116,7 @@ export function LabelsCurrent({
       const key = event.query.queryKey;
       if (
         key.length === LABELS_WINDOW_QUERY_KEY.length &&
-        key.every((part, index) => part === LABELS_WINDOW_QUERY_KEY[index])
+        key.every((part: unknown, index: number) => part === LABELS_WINDOW_QUERY_KEY[index])
       )
         setWindowRevision((revision) => revision + 1);
       if (!isLabelsSessionQuery(key) && !(key[0] === 'exposure' && key[1] === 'viewer')) return;
@@ -321,7 +321,7 @@ function LabelsRead({
   }, [client, visitId, owner, currentCursor, query.isFetching, query.isError, page, guard]);
 
   function moveWindow(direction: LabelsWindowDirection, restoreHeadingFocus: boolean) {
-    if (moving || query.isFetching || !origin.isCurrent('library_label.list') || !page) return;
+    if (moving || query.isFetching || !origin.isCurrent() || !page) return;
     const staleRestart = direction === 'first' && currentCursor !== null && page.feedback?.reason === 'stale_cursor';
     if (direction === 'first') {
       if (
@@ -345,7 +345,7 @@ function LabelsRead({
     }
 
     // Re-admit the original private reader after the user's Leave choice, immediately before staging/navigation.
-    if (!origin.isCurrent('library_label.list')) return;
+    if (!origin.isCurrent()) return;
     if ((!page.state || page.state === 'loaded') && !guard?.isCurrent('library_label.list')) return;
     if (staleRestart && (!page.signedIn || !page.operations.includes('library_label.list'))) return;
 
@@ -363,14 +363,14 @@ function LabelsRead({
       return;
     setMoving(true);
     setNavigationRevision((revision) => revision + 1);
-    const state = { ...(location.state as Record<string, unknown>), labelsWindowVisit: nextVisitId };
+    const state = { ...location.state, labelsWindowVisit: nextVisitId };
     const href = labelsCursorHref(location.pathname, window.location.search, window.location.hash, target);
     if (!visitId) router.history.replace(location.href, state);
     router.history.push(href, state);
   }
 
   const retryCurrent = () => {
-    if (origin.isCurrent('library_label.list') && !query.isFetching) void query.refetch();
+    if (origin.isCurrent() && !query.isFetching) void query.refetch();
   };
   if (!page || (hydrated && !guard && (!page.state || page.state === 'loaded')))
     return (

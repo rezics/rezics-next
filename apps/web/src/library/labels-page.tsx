@@ -23,7 +23,7 @@ import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
 import { toast } from '@rezics/ui/shadcn/toast';
 import { manageLabel } from './labels-actions';
 import { readLabelsPage } from './labels-read-route';
-import type { LabelInput, LabelsPage, LabelFeedback } from './labels-read';
+import type { LabelInput, LabelsPage, LabelFeedback, LabelResult } from './labels-read';
 import { shelfHref } from './shelf-params';
 import type { LibraryLabelSummary } from './subject-labels.ts';
 import type { ManagementGuard } from './management-current-origin';
