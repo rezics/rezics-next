@@ -78,6 +78,8 @@ Decision: tag weight uses a released quantity qualifier range (`{property,range:
 
 Decision: mounted Concept works use configured released work kinds and Universal Search kind metadata/counts, with the kind leaf directly under the top-level AND. They do not translate catalogue work kinds through the obsolete `subject` alias.
 
+Decision: M1 Path 7 keeps this mounted Concept-work contract: exact tags are the default, descendant matching uses the complete retained scheme closure, weight/metric/spoiler predicates stay on the selected tag statement, and only the designated kind leaf may carry certified counts.
+
 The mounted Concept visit uses the existing locale-prefixed `/subjects/:id/:slug/concepts` route. Its bounded query
 state keeps the selected property, source scheme, work type, admitted name or rating sort, descendant choice, spoiler
 threshold, additional condition and opaque continuation together with the fixed Concept. Changing a selection,
