@@ -64,8 +64,13 @@ export function ConnectedApplicationReviewView({
   operation,
   reviewElement,
   currentReview,
+  focusAcceptedPage,
+  focusFailedPage,
   onReviewCurrent,
   onNavigate,
+  onReloadCurrent,
+  onRetryPage,
+  onFirstPage,
   onSelect,
   onRemovePermission,
   onConfirmReview,
@@ -73,6 +78,9 @@ export function ConnectedApplicationReviewView({
   onCancel,
   canNavigatePrevious,
   previousCursor,
+  canReloadCurrent,
+  canNavigateFirstPage,
+  canRetryPage,
   focusReturnClientId,
   onFocusReturned,
 }: ConnectedApplicationReviewViewProps) {
@@ -82,13 +90,23 @@ export function ConnectedApplicationReviewView({
   focusReturned.current = onFocusReturned;
 
   useLayoutEffect(() => {
-    if (!focusReturnClientId) return;
+    if (!focusAcceptedPage || pending || page?.kind !== 'ready') return;
+    headingRef.current?.focus();
+  }, [focusAcceptedPage, pending, page]);
+
+  useLayoutEffect(() => {
+    if (!focusFailedPage || pending || !canRetryPage || page?.kind === 'ready') return;
+    sectionRef.current?.querySelector<HTMLButtonElement>('[data-connected-retry]')?.focus();
+  }, [focusFailedPage, pending, canRetryPage, page]);
+
+  useLayoutEffect(() => {
+    if (!focusReturnClientId || pending || page?.kind !== 'ready') return;
     const button = [...(sectionRef.current?.querySelectorAll<HTMLButtonElement>('[data-review-client]') ?? [])].find(
       (candidate) => candidate.getAttribute('data-review-client') === focusReturnClientId,
     );
     (button ?? headingRef.current)?.focus();
     focusReturned.current();
-  }, [focusReturnClientId]);
+  }, [focusReturnClientId, pending, page]);
 
   function review(row: GrantedConsent) {
     if (!selection || selection.consent.client_id !== row.client_id || preflight) return null;
@@ -168,13 +186,40 @@ export function ConnectedApplicationReviewView({
       {page && page.kind !== 'ready' ? (
         <>
           <ErrorAlert>{inventoryMessage(page.kind)}</ErrorAlert>
-          {page.kind === 'signed-out' ? (
-            <a href="/login">{m.auth_security_sign_in()}</a>
-          ) : (
-            <Button type="button" variant="outline" disabled={pending} onClick={() => onNavigate()}>
-              {m.auth_inventory_reload()}
-            </Button>
-          )}
+          {page.kind === 'signed-out' ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
+          <div className="flex flex-wrap gap-3">
+            {canRetryPage ? (
+              <Button
+                type="button"
+                variant="outline"
+                data-connected-retry
+                disabled={pending || reducing || !!selection}
+                onClick={onRetryPage}
+              >
+                {m.auth_connected_retry_page()}
+              </Button>
+            ) : null}
+            {canReloadCurrent ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || reducing || !!selection}
+                onClick={onReloadCurrent}
+              >
+                {m.auth_connected_reload_current()}
+              </Button>
+            ) : null}
+            {canNavigateFirstPage ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || reducing || !!selection}
+                onClick={onFirstPage}
+              >
+                {m.auth_connected_first_page()}
+              </Button>
+            ) : null}
+          </div>
         </>
       ) : null}
       {!page && !pending && currentReview ? (
@@ -184,6 +229,7 @@ export function ConnectedApplicationReviewView({
       ) : null}
       {page?.kind === 'ready' ? (
         <>
+          <p role="status">{m.auth_connected_page_count({ count: page.rows.length })}</p>
           {!page.rows.length ? (
             <p>{m.auth_inventory_consents_empty()}</p>
           ) : (
@@ -283,14 +329,26 @@ export function ConnectedApplicationReviewView({
                 {m.auth_inventory_next()}
               </Button>
             ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending || reducing || !!selection}
-              onClick={() => onNavigate()}
-            >
-              {m.auth_inventory_reload()}
-            </Button>
+            {canNavigateFirstPage ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || reducing || !!selection}
+                onClick={onFirstPage}
+              >
+                {m.auth_connected_first_page()}
+              </Button>
+            ) : null}
+            {canReloadCurrent ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || reducing || !!selection}
+                onClick={onReloadCurrent}
+              >
+                {m.auth_connected_reload_current()}
+              </Button>
+            ) : null}
           </nav>
         </>
       ) : null}

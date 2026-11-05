@@ -232,7 +232,7 @@ test('an unknown write remains separate from the replacement viewer inventory an
   expect(host.textContent).not.toContain('offline_access');
   const consentSection = '#inventory-consents-heading';
   const reload = host.querySelector<HTMLElement>(consentSection)?.parentElement;
-  await flush(() => button(reload!, m.auth_inventory_reload())!.click());
+  await flush(() => button(reload!, m.auth_connected_reload_current())!.click());
   await waitFor(() => inventoryCalls.filter(({ view }) => view === 'consents').length >= 4);
   expect(fetchCalls.filter(({ path, method }) => path === '/consent' && method === 'POST')).toHaveLength(1);
   expect(host.textContent).toContain(m.auth_connected_operation_unknown());

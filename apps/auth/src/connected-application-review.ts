@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
+import { useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { m } from './paraglide/messages.js';
 import {
   createConsentReduction,
@@ -13,6 +13,9 @@ import {
 
 type InventorySource = typeof loadInventory;
 type ReviewPhase = 'idle' | 'review' | 'submitting' | 'unknown';
+type NavigationDirection = 'next' | 'previous' | 'reload' | 'first';
+type NavigationTransition = { target?: string; direction: NavigationDirection };
+const MAX_CURSOR_HISTORY = 32;
 
 export type ConnectedApplicationSelection = { consent: GrantedConsent; retained: string[]; confirming: boolean };
 export type ConnectedApplicationReviewOptions = {
@@ -33,7 +36,10 @@ export type ConnectedApplicationReviewViewProps = {
   reviewElement: Ref<HTMLFieldSetElement>;
   currentReview: boolean;
   onReviewCurrent: () => void;
-  onNavigate: (target?: string, direction?: 'next' | 'previous' | 'reset') => void;
+  onNavigate: (target: string | undefined, direction: 'next' | 'previous') => void;
+  onReloadCurrent: () => void;
+  onRetryPage: () => void;
+  onFirstPage: () => void;
   onSelect: (consent: GrantedConsent, removeAll: boolean) => void;
   onRemovePermission: (scope: string) => void;
   onConfirmReview: () => void;
@@ -41,6 +47,11 @@ export type ConnectedApplicationReviewViewProps = {
   onCancel: () => void;
   canNavigatePrevious: boolean;
   previousCursor?: string | undefined;
+  canReloadCurrent: boolean;
+  canNavigateFirstPage: boolean;
+  canRetryPage: boolean;
+  focusAcceptedPage: number;
+  focusFailedPage: number;
   focusReturnClientId: string;
   onFocusReturned: () => void;
 };
@@ -61,86 +72,122 @@ export function useConnectedApplicationReview({
 }: ConnectedApplicationReviewOptions): ConnectedApplicationReviewViewProps {
   const [page, setPage] = useState<InventoryPage<'consents'> | null>(null);
   const [history, setHistory] = useState<(string | undefined)[]>([]);
+  const [acceptedCursor, setAcceptedCursor] = useState<string | undefined>(undefined);
+  const [hasAcceptedPage, setHasAcceptedPage] = useState(false);
+  const [failedTransition, setFailedTransition] = useState<NavigationTransition | null>(null);
   const [pending, setPending] = useState(true);
   const [reducing, setReducing] = useState(false);
   const [error, setError] = useState('');
   const [selection, setSelection] = useState<ConnectedApplicationSelection | null>(null);
   const [focusReturnClientId, setFocusReturnClientId] = useState('');
+  const [focusAcceptedPage, setFocusAcceptedPage] = useState(0);
+  const [focusFailedPage, setFocusFailedPage] = useState(0);
   const phase = useRef<ReviewPhase>('idle');
   const generation = useRef(0);
   const pendingRef = useRef(false);
+  const requestedRead = useRef<NavigationTransition | null>(null);
   const reviewOperation = useRef<ConsentReviewOperation | null>(null);
   const reviewElement = useRef<HTMLFieldSetElement>(null);
-  const cursorRef = useRef<string | undefined>(undefined);
+  const acceptedCursorRef = useRef<string | undefined>(undefined);
+  const historyRef = useRef<(string | undefined)[]>([]);
+  const [observation, setObservation] = useState(() => ({ source, lifetime }));
+  const observationRetired = observation.source !== source || observation.lifetime !== lifetime || lifetime?.aborted === true;
   const onSessionEndedRef = useRef(onSessionEnded);
   onSessionEndedRef.current = onSessionEnded;
 
   useLayoutEffect(() => {
-    if (!selection) return;
-    const target = selection.confirming ? reviewElement.current : reviewElement.current?.querySelector('button');
-    target?.focus();
-  }, [selection]);
-
-  useLayoutEffect(() => {
-    function retire() {
+    function clearReadState(retireLifetime: boolean) {
       generation.current++;
       pendingRef.current = false;
-      cursorRef.current = undefined;
-      reviewOperation.current = null;
-      phase.current = 'idle';
+      requestedRead.current = null;
+      acceptedCursorRef.current = undefined;
+      historyRef.current = [];
+      if (retireLifetime) {
+        reviewOperation.current = null;
+        phase.current = 'idle';
+      } else if (phase.current === 'review') {
+        phase.current = 'idle';
+        const held = reviewOperation.current;
+        reviewOperation.current = null;
+        held?.finish();
+      }
       setPage(null);
       setHistory([]);
+      setAcceptedCursor(undefined);
+      setHasAcceptedPage(false);
+      setFailedTransition(null);
       setPending(false);
       setReducing(false);
       setError('');
       setSelection(null);
       setFocusReturnClientId('');
+      setFocusAcceptedPage(0);
+      setFocusFailedPage(0);
     }
+
+    function retire() {
+      clearReadState(true);
+    }
+
     lifetime?.addEventListener('abort', retire, { once: true });
+    clearReadState(false);
+    setObservation({ source, lifetime });
+    if (!lifetime?.aborted) void navigate(undefined, 'first');
     return () => {
       lifetime?.removeEventListener('abort', retire);
       generation.current++;
-      if (phase.current === 'review') reviewOperation.current?.finish();
-    };
-  }, [lifetime]);
-
-  useEffect(() => {
-    if (lifetime?.aborted) return;
-    const current = ++generation.current;
-    pendingRef.current = true;
-    setPending(true);
-    setPage(null);
-    void source('consents')
-      .catch((): InventoryPage<'consents'> => ({ kind: 'unavailable' }))
-      .then((result) => {
-        if (generation.current !== current || lifetime?.aborted) return;
-        pendingRef.current = false;
-        setPage(result);
-        setPending(false);
-        if (result.kind === 'signed-out') onSessionEndedRef.current?.();
-      });
-    return () => {
-      generation.current++;
+      pendingRef.current = false;
+      requestedRead.current = null;
+      acceptedCursorRef.current = undefined;
+      historyRef.current = [];
+      if (phase.current === 'review') {
+        phase.current = 'idle';
+        const held = reviewOperation.current;
+        reviewOperation.current = null;
+        held?.finish();
+      }
     };
   }, [source, lifetime]);
 
-  async function navigate(target?: string, direction: 'next' | 'previous' | 'reset' = 'reset') {
+  useLayoutEffect(() => {
+    if (observationRetired || pendingRef.current || !page || page.kind !== 'ready' || !selection) return;
+    const target = selection.confirming ? reviewElement.current : reviewElement.current?.querySelector('button');
+    target?.focus();
+  }, [observationRetired, page, selection]);
+
+  async function navigate(target?: string, direction: NavigationDirection = 'first') {
     if (lifetime?.aborted || pendingRef.current || phase.current === 'review' || phase.current === 'submitting') return;
+    const transition: NavigationTransition = { ...(target === undefined ? {} : { target }), direction };
     pendingRef.current = true;
+    requestedRead.current = transition;
     const current = ++generation.current;
     setPending(true);
+    setPage(null);
     setError('');
-    const result = await source('consents', target).catch((): InventoryPage<'consents'> => ({ kind: 'unavailable' }));
-    if (generation.current !== current || lifetime?.aborted) return;
+    setSelection(null);
+    setFailedTransition(null);
+    const result = await source('consents', target);
+    if (generation.current !== current || requestedRead.current !== transition || lifetime?.aborted) return;
     pendingRef.current = false;
+    requestedRead.current = null;
     setPending(false);
     setPage(result);
     if (result.kind === 'ready') {
-      setHistory((previous) =>
-        direction === 'next' ? [...previous, cursorRef.current] : direction === 'previous' ? previous.slice(0, -1) : [],
-      );
-      cursorRef.current = target;
-    } else if (result.kind === 'signed-out') onSessionEndedRef.current?.();
+      let nextHistory = historyRef.current;
+      if (direction === 'next') nextHistory = [...nextHistory, acceptedCursorRef.current].slice(-MAX_CURSOR_HISTORY);
+      else if (direction === 'previous') nextHistory = nextHistory.slice(0, -1);
+      else if (direction === 'first') nextHistory = [];
+      historyRef.current = nextHistory;
+      setHistory(nextHistory);
+      acceptedCursorRef.current = target;
+      setAcceptedCursor(target);
+      setHasAcceptedPage(true);
+      setFocusAcceptedPage((count) => count + 1);
+    } else {
+      setFailedTransition(transition);
+      setFocusFailedPage((count) => count + 1);
+      if (result.kind === 'signed-out') onSessionEndedRef.current?.();
+    }
   }
 
   function select(consent: GrantedConsent, removeAll: boolean) {
@@ -192,9 +239,7 @@ export function useConnectedApplicationReview({
     setReducing(true);
     setError('');
     const current = generation.current;
-    const fresh = await source('consents', cursorRef.current).catch((): InventoryPage<'consents'> => ({
-      kind: 'unavailable',
-    }));
+    const fresh = await source('consents', acceptedCursorRef.current);
     if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
 
     if (fresh.kind === 'expired') {
@@ -228,9 +273,7 @@ export function useConnectedApplicationReview({
     if (result.kind === 'stale-review') {
       pendingRef.current = true;
       setPending(true);
-      const updated = await source('consents', cursorRef.current).catch((): InventoryPage<'consents'> => ({
-        kind: 'unavailable',
-      }));
+      const updated = await source('consents', acceptedCursorRef.current);
       if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
       pendingRef.current = false;
       setPending(false);
@@ -250,8 +293,12 @@ export function useConnectedApplicationReview({
       setReducing(false);
       setError(m.auth_inventory_unknown());
       setPage(null);
-      cursorRef.current = undefined;
+      acceptedCursorRef.current = undefined;
+      setAcceptedCursor(undefined);
+      setHasAcceptedPage(false);
+      historyRef.current = [];
       setHistory([]);
+      setFailedTransition(null);
       return;
     }
 
@@ -282,25 +329,35 @@ export function useConnectedApplicationReview({
   }
 
   return {
-    page,
-    pending,
-    reducing,
-    error,
-    selection,
+    page: observationRetired ? null : page,
+    pending: observationRetired || pending,
+    reducing: observationRetired ? false : reducing,
+    error: observationRetired ? '' : error,
+    selection: observationRetired ? null : selection,
     preflight,
     ...(operation ? { operation } : {}),
     reviewElement,
-    currentReview: phase.current === 'unknown',
+    currentReview: !observationRetired && phase.current === 'unknown',
     onReviewCurrent: () => void navigate(),
     onNavigate: (target, direction) => void navigate(target, direction),
+    onReloadCurrent: () => void navigate(acceptedCursorRef.current, 'reload'),
+    onRetryPage: () => {
+      if (failedTransition) void navigate(failedTransition.target, failedTransition.direction);
+    },
+    onFirstPage: () => void navigate(undefined, 'first'),
     onSelect: select,
     onRemovePermission: removePermission,
     onConfirmReview: () => setSelection((draft) => (draft ? { ...draft, confirming: true } : null)),
     onReduce: () => void reduce(),
     onCancel: cancelReview,
-    canNavigatePrevious: history.length > 0,
-    previousCursor: history.at(-1),
-    focusReturnClientId,
+    canNavigatePrevious: !observationRetired && history.length > 0,
+    previousCursor: observationRetired ? undefined : history.at(-1),
+    canReloadCurrent: !observationRetired && hasAcceptedPage,
+    canNavigateFirstPage: !observationRetired && (acceptedCursor !== undefined || failedTransition !== null),
+    canRetryPage: !observationRetired && failedTransition !== null,
+    focusAcceptedPage: observationRetired ? 0 : focusAcceptedPage,
+    focusFailedPage: observationRetired ? 0 : focusFailedPage,
+    focusReturnClientId: observationRetired ? '' : focusReturnClientId,
     onFocusReturned: () => setFocusReturnClientId(''),
   };
 }
