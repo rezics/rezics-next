@@ -581,8 +581,8 @@ from its admitted destination for the same reason; a host is shown only as a loc
 
 `ThreadPostReadingBody` enhances the exact available published snapshot only after hydration. Its single iterative
 O(B + N) projection shares traversal with Sections, follows the renderer's spoiler-mark order and omits concealed,
-unsupported-visibility and unsupported-URL occurrences. Disclosed current identities enter through the mention
-occurrence port described below. It retains at most 64 descriptors, each with a
+unsupported-visibility and unsupported-URL occurrences. Admitted mentions use the same return host. It retains at
+most 64 descriptors, each with a
 label of at most 120 Unicode code points; excess disclosed links receive a truthful omitted count. The installed
 link schema has no narrower `href` size than the admitted snapshot, whose authoring ceiling is 2 MiB. Descriptors
 refer to that snapshot's original URL strings, and only the selected destination is retained by the detail view.
@@ -637,6 +637,6 @@ an ended request cannot publish a page or start later hydration from a late read
 Decision: disclosed mention occurrences use the existing References reader and its occurrence return positions;
 unresolved mentions retain the document codec's `@` text. Identity links and ordinary links share one return host,
 with independent ordinal spaces so equal identities and link marks cannot overwrite each other's targets.
-Decision: retain separate `readDocumentMentions` hydration until the complete native ReadingPage mention projection
-is callable through the installed client; partial or obsolete identity lists cannot replace revision-bound sources. The receiver derives its identity and exact source binding types from that installed result;
-no local wire declaration substitutes for missing publication. Accounts retains identity admission.
+Decision: keep `readDocumentMentions` until the complete native projection is callable through the installed
+ReadingPage. Derive identity and source-binding types from that result; never substitute local wire types for
+missing publication. Accounts retains identity admission.
