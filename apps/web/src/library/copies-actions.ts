@@ -144,7 +144,7 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
       },
     };
   }
-  if (page.signedIn) {
+  if (page.signedIn && page.inventoryState !== 'forbidden') {
     await nameSubjectTypes(page.copies.map((copy) => copy.subject));
     const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
     page.copies = page.copies.map(({ nativeReadingContext, ...copy }) => ({

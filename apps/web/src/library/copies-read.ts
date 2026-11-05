@@ -22,6 +22,7 @@ import { prepareSession, viewerCredential } from '../session/request';
 import { copiesSubjectId } from './copies-query';
 import {
   type LibraryLabel,
+  LibraryReadForbiddenError,
   libraryListQuery,
   readLibraryResult,
   StaleCursorError,
@@ -69,8 +70,8 @@ export type CopiesPageData = {
   kind?: string | null;
   status?: string | null;
   filterOptions?: CopyInventoryOptions;
-  /** The installed callable cannot execute the selected kind/status predicates. */
-  inventoryState?: 'unavailable';
+  /** Unsupported predicates and native permission refusal remain distinct inventory outcomes. */
+  inventoryState?: 'forbidden' | 'unavailable';
   /** Original requested cursor, including when the existing invalid-cursor fallback reads page one. */
   requestedCursor?: string | null;
   cursorRestarted?: boolean;
@@ -390,17 +391,35 @@ export async function loadCopiesPage(
       sendKind: true,
     };
   let cursorRestarted = false;
-  const page = await readCopyPage(
-    client,
-    authorization,
-    {
-      ...(subjectId ? { subjectId } : {}),
-      ...(input.cursor ? { cursor: input.cursor } : {}),
-    },
-    () => {
-      cursorRestarted = true;
-    },
-  );
+  let page: Awaited<ReturnType<typeof readCopyPage>>;
+  try {
+    page = await readCopyPage(
+      client,
+      authorization,
+      {
+        ...(subjectId ? { subjectId } : {}),
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+      },
+      () => {
+        cursorRestarted = true;
+      },
+    );
+  } catch (error) {
+    if (!(error instanceof LibraryReadForbiddenError)) throw error;
+    return {
+      signedIn: true,
+      subjectId,
+      kind,
+      status,
+      ...provenance,
+      ...(cursorRestarted ? { cursorRestarted: true } : {}),
+      inventoryState: 'forbidden',
+      copies: [],
+      next: null,
+      addKey: crypto.randomUUID(),
+      sendKind: true,
+    };
+  }
   // The activated profile choice is part of every current copy create request,
   // including an empty filtered page. Do not infer producer support from rows.
   const sendKind = true;
@@ -419,7 +438,9 @@ export async function loadCopiesPage(
   };
 }
 
-export type CopyDetailResult = { ok: true; copy: CopyItem } | { ok: false; reason: 'forbidden' | 'unavailable' };
+export type CopyDetailResult =
+  | { ok: true; copy: CopyItem }
+  | { ok: false; reason: 'closed' | 'forbidden' | 'unavailable' };
 
 /** Explicit inspection only: one credential-bound point read, with no list/profile follow-up. */
 export async function loadCopyDetail(
@@ -439,12 +460,14 @@ export async function loadCopyDetail(
       headers: { authorization, ...(language ? { 'accept-language': language } : {}) },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
+    if (isPlatformClosedProblem(result.status, problemBody(result.error))) return { ok: false, reason: 'closed' };
     // The native point read also conceals denied rows as 404. It is no deletion evidence.
     if ([401, 403, 404].includes(result.status)) return { ok: false, reason: 'forbidden' };
     if (result.error || !result.data?.copy || result.data.copy.id !== id) return { ok: false, reason: 'unavailable' };
     const copy: NativeCopy = result.data.copy;
     return { ok: true, copy: { ...present(copy), ...nativeCopyPresentation(copy) } };
-  } catch {
+  } catch (error) {
+    if (isPlatformClosedError(error) || error instanceof PlatformClosedError) return { ok: false, reason: 'closed' };
     return { ok: false, reason: 'unavailable' };
   }
 }

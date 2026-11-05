@@ -6,6 +6,7 @@ import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Link } from '@tanstack/react-router';
 import { useLayoutEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { getLocale } from '../paraglide/runtime.js';
 import { Exposure, type GatedOperation } from '../kernel/exposure';
 import { coverSubject, rowRatio, SubjectCover } from './subject-row';
@@ -74,6 +75,8 @@ export function CopyForm({
   inline = false,
   initialKind,
   detailState = 'ready',
+  inventoryDenied = false,
+  inspectionRetired = false,
   onRetryDetail,
   subjectId,
   addKey,
@@ -93,7 +96,9 @@ export function CopyForm({
   sendKind?: boolean | undefined;
   inline?: boolean;
   initialKind?: string;
-  detailState?: 'loading' | 'ready' | 'unavailable' | 'forbidden';
+  detailState?: 'loading' | 'ready' | 'unavailable' | 'forbidden' | 'closed';
+  inventoryDenied?: boolean;
+  inspectionRetired?: boolean;
   onRetryDetail?: (() => void) | undefined;
   subjectId: string | null;
   addKey: string;
@@ -122,8 +127,9 @@ export function CopyForm({
       : undefined;
   const [kind, setKind] = useState(copy?.kind ?? initialKind ?? profile?.kinds[0]?.id ?? '');
   const selected = choices?.kinds.find((choice) => choice.id === kind);
-  const readable = detailState !== 'forbidden';
-  const editable = copy ? readable && detailState !== 'loading' : Boolean(selected?.statuses.length);
+  const readable =
+    detailState !== 'forbidden' && detailState !== 'closed' && !inventoryDenied && !inspectionRetired;
+  const editable = readable && (copy ? detailState !== 'loading' : Boolean(selected?.statuses.length));
   const statusChoices = copy?.statusEditing?.state === 'supported' ? (copy.statusEditing.statuses ?? []) : [];
   const statusEditable = Boolean(copy && editable && statusChoices.length);
   const [draft, setDraft] = useState(() => ({
@@ -301,7 +307,7 @@ export function CopyForm({
       busy.current ||
       conflicted ||
       confirming ||
-      !editable ||
+      (!editable && !intent.current) ||
       intent.current?.operation === 'delete'
     )
       return;
@@ -441,7 +447,7 @@ export function CopyForm({
     if (
       !current('copy.delete') ||
       !copy ||
-      !editable ||
+      (!editable && intent.current?.operation !== 'delete') ||
       conflicted ||
       busy.current ||
       (intent.current && intent.current.operation !== 'delete')
@@ -493,7 +499,33 @@ export function CopyForm({
 
   const content: ReactNode = !readable ? (
     <div className="space-y-4">
-      <p role="alert">{m.library_copy_detail_forbidden()}</p>
+      <p role={inventoryDenied || inspectionRetired || detailState === 'closed' ? 'status' : 'alert'}>
+        {inventoryDenied
+          ? m.library_copy_inventory_forbidden()
+          : inspectionRetired
+            ? m.library_copy_inspection_retired()
+            : detailState === 'closed'
+              ? m.platform_closed_message()
+              : m.library_copy_detail_forbidden()}
+      </p>
+      {failure ? <p role="alert">{failure}</p> : null}
+      {intent.current && !pending && !conflicted ? (
+        <button
+          type="button"
+          className={quiet}
+          onClick={() => {
+            if (intent.current?.operation === 'delete') void remove();
+            else if (intent.current) void submit({ preventDefault() {} } as FormEvent<HTMLFormElement>);
+          }}
+        >
+          {m.subject_view_retry()}
+        </button>
+      ) : null}
+      {detailState === 'closed' && onRetryDetail ? (
+        <button type="button" className={quiet} onClick={onRetryDetail}>
+          {m.subject_view_retry()}
+        </button>
+      ) : null}
       <button type="button" className={quiet} onClick={requestClose}>
         {m.library_copy_cancel()}
       </button>
@@ -940,25 +972,37 @@ export function CopiesPage({
   page,
   failure,
   originating,
+  onRetryInventory,
 }: {
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
+  onRetryInventory?: (() => void) | undefined;
 }) {
   const [loaded, setLoaded] = useState({ page, generation: 0 });
   // Reset the whole page lifetime before rendering replacement loader data, including editors and Undo.
   if (!originating && loaded.page !== page) setLoaded({ page, generation: loaded.generation + 1 });
-  return <LoadedCopiesPage key={loaded.generation} page={page} failure={failure} originating={originating} />;
+  return (
+    <LoadedCopiesPage
+      key={loaded.generation}
+      page={page}
+      failure={failure}
+      originating={originating}
+      onRetryInventory={onRetryInventory}
+    />
+  );
 }
 
 function LoadedCopiesPage({
   page,
   failure,
   originating,
+  onRetryInventory,
 }: {
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
+  onRetryInventory?: (() => void) | undefined;
 }) {
   const [copies, setCopies] = useState(page.copies);
   const returnTo = copyInventoryReturnHref(
@@ -972,16 +1016,15 @@ function LoadedCopiesPage({
   );
   const [changed, setChanged] = useState(false);
   const previousPage = useRef(page);
-  if (originating && previousPage.current !== page) {
-    previousPage.current = page;
-    setCopies(page.copies);
-    setChanged(false);
-  }
   const [addKey, setAddKey] = useState(page.addKey);
   const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
-  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
+  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden' | 'closed'>(
+    'ready',
+  );
   const inspection = useRef(0);
+  const detailRead = useRef(0);
+  const retiredInspection = useRef<number | null>(null);
   const editorLauncher = useRef<HTMLElement | null>(null);
   const active = useRef(true);
   const latestRemoval = useRef(removed);
@@ -997,6 +1040,7 @@ function LoadedCopiesPage({
     return () => {
       active.current = false;
       inspection.current += 1;
+      detailRead.current += 1;
     };
   }, []);
   const currentPage = (operation?: GatedOperation) =>
@@ -1010,18 +1054,30 @@ function LoadedCopiesPage({
       page.kind ?? null,
       page.status ?? null,
       page.requestedCursor ?? null,
+      page.inventoryState ?? null,
     ]),
     current: () => currentPage('copy.list'),
   });
+  if (originating && previousPage.current !== page) {
+    previousPage.current = page;
+    setCopies(page.copies);
+    setChanged(false);
+    if (page.inventoryState === 'forbidden') {
+      detailRead.current += 1;
+      if (editing !== undefined) retiredInspection.current = editorKey;
+    }
+  }
   const currentEditor = (operation: GatedOperation = editing ? 'copy.get' : 'copy.create') =>
     currentPage(operation) && editorKey === inspection.current;
   const closeEditor = () => {
     if (!currentEditor()) return;
     inspection.current += 1;
+    detailRead.current += 1;
     setEditing(undefined);
   };
   async function inspect(copy: CopyItem, launcher = editorLauncher.current) {
     if (!currentPage('copy.get')) return;
+    const request = ++detailRead.current;
     const current = ++inspection.current;
     editorLauncher.current = launcher;
     setEditorKey(current);
@@ -1037,7 +1093,7 @@ function LoadedCopiesPage({
     setDetailState('loading');
     try {
       const result = await (originating ? originating.readDetail(copy.id) : readCopyDetail({ data: { id: copy.id } }));
-      if (!currentPage('copy.get') || current !== inspection.current) return;
+      if (!currentPage('copy.get') || current !== inspection.current || request !== detailRead.current) return;
       if (result.ok && result.copy.id !== copy.id) {
         setDetailState('unavailable');
         return;
@@ -1067,8 +1123,9 @@ function LoadedCopiesPage({
           );
         }
       }
-    } catch {
-      if (currentPage('copy.get') && current === inspection.current) setDetailState('unavailable');
+    } catch (error) {
+      if (currentPage('copy.get') && current === inspection.current && request === detailRead.current)
+        setDetailState(isPlatformClosedError(error) ? 'closed' : 'unavailable');
     }
   }
   const filteredLabel = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
@@ -1088,7 +1145,7 @@ function LoadedCopiesPage({
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading>{m.library_copy_heading()}</PageHeading>
-        {!page.subjectId || page.profile?.kinds.length ? (
+        {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
           <button
             type="button"
             className={button}
@@ -1114,7 +1171,7 @@ function LoadedCopiesPage({
         </p>
       ) : null}
       <noscript>
-        <CopiesFallback page={page} csrfToken={page.csrfToken} />
+        {page.inventoryState === 'forbidden' ? null : <CopiesFallback page={page} csrfToken={page.csrfToken} />}
       </noscript>
       <Exposure operation="copy.list">
         <CopyInventoryFilters
@@ -1161,7 +1218,7 @@ function LoadedCopiesPage({
           </Exposure>
         </p>
       ) : null}
-      {copies.length || comparison.open || comparison.retired.length ? (
+      {page.inventoryState !== 'forbidden' && (copies.length || comparison.open || comparison.retired.length) ? (
         <CopyInventoryReview
           id={comparisonId}
           selection={comparison}
@@ -1206,17 +1263,26 @@ function LoadedCopiesPage({
           </ul>
         </>
       ) : (
-        <p role="status" className="text-muted-foreground">
-          {page.inventoryState === 'unavailable'
-            ? m.library_copy_inventory_unavailable()
-            : firstPageEmpty
-              ? predicateFilters.length
-                ? m.library_copy_matching_empty()
-                : page.subjectId
-                  ? m.library_copy_filtered_empty()
-                  : m.library_copy_empty()
-              : m.library_copy_page_empty()}
-        </p>
+        <div className="space-y-2">
+          <p role="status" className="text-muted-foreground">
+            {page.inventoryState === 'forbidden'
+              ? m.library_copy_inventory_forbidden()
+              : page.inventoryState === 'unavailable'
+                ? m.library_copy_inventory_unavailable()
+                : firstPageEmpty
+                  ? predicateFilters.length
+                    ? m.library_copy_matching_empty()
+                    : page.subjectId
+                      ? m.library_copy_filtered_empty()
+                      : m.library_copy_empty()
+                  : m.library_copy_page_empty()}
+          </p>
+          {page.inventoryState === 'forbidden' && onRetryInventory ? (
+            <button type="button" className={quiet} onClick={onRetryInventory}>
+              {m.subject_view_retry()}
+            </button>
+          ) : null}
+        </div>
       )}
       {page.next || recoverable ? (
         <Exposure operation="copy.list">
@@ -1279,11 +1345,13 @@ function LoadedCopiesPage({
               if (!result.ok && result.reason !== 'unavailable' && restoreIntent.current === captured)
                 restoreIntent.current = null;
               if (!currentPage('copy.update') || !result.ok || result.copy.id !== removed.copy.id) return false;
-              setChanged(true);
-              setCopies((current) => [
-                { ...removed.copy, ...result.copy, idempotencyKey: crypto.randomUUID() },
-                ...current,
-              ]);
+              if (page.inventoryState !== 'forbidden') {
+                setChanged(true);
+                setCopies((current) => [
+                  { ...removed.copy, ...result.copy, idempotencyKey: crypto.randomUUID() },
+                  ...current,
+                ]);
+              }
               // A newer same-page deletion keeps its own Undo when this restore finishes later.
               if (currentPage('copy.update') && latestRemoval.current === removed) {
                 latestRemoval.current = null;
@@ -1312,6 +1380,8 @@ function LoadedCopiesPage({
             return currentPage() && inspection.current === editorKey && launcher?.isConnected ? launcher : false;
           }}
           detailState={detailState}
+          inventoryDenied={page.inventoryState === 'forbidden'}
+          inspectionRetired={retiredInspection.current === editorKey}
           onRetryDetail={editing ? () => void inspect(editing) : undefined}
           {...(editing ? { copy: editing } : {})}
           profile={editing ? undefined : page.profile}
@@ -1324,18 +1394,20 @@ function LoadedCopiesPage({
           }}
           onCreated={(copy) => {
             if (!currentEditor()) return;
-            setChanged(true);
-            setCopies((current) => [
-              ...current,
-              {
-                ...copy,
-                subject: copy.subject ?? current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
-                idempotencyKey: crypto.randomUUID(),
-              },
-            ]);
+            if (page.inventoryState !== 'forbidden') {
+              setChanged(true);
+              setCopies((current) => [
+                ...current,
+                {
+                  ...copy,
+                  subject: copy.subject ?? current.find((item) => item.subject?.id === page.subjectId)?.subject ?? null,
+                  idempotencyKey: crypto.randomUUID(),
+                },
+              ]);
+            }
           }}
           onSaved={(next) => {
-            if (currentEditor('copy.update'))
+            if (currentEditor('copy.update') && page.inventoryState !== 'forbidden')
               setCopies((current) => current.map((item) => (item.id === next.id ? next : item)));
           }}
           onReviewed={(next) => {
@@ -1344,8 +1416,8 @@ function LoadedCopiesPage({
           }}
           onRemoved={(id, result, deadline) => {
             if (!currentEditor('copy.delete')) return;
-            setChanged(true);
-            const copy = copies.find((item) => item.id === id);
+            if (page.inventoryState !== 'forbidden') setChanged(true);
+            const copy = copies.find((item) => item.id === id) ?? (editing?.id === id ? editing : undefined);
             if (copy) {
               latestRemoval.current = { copy, result, deadline };
               setRemoved(latestRemoval.current);

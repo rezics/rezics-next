@@ -3,7 +3,9 @@ import * as start from '../.storybook/react-start';
 import type { SessionEnv } from '../src/session/client';
 import { newCsrfToken } from '../src/session/csrf';
 import { prepareSession, viewerCredential } from '../src/session/request';
-import { copyStatusChange } from '../src/library/copies-read';
+import { copyStatusChange, loadCopyDetail } from '../src/library/copies-read';
+import { isPlatformClosedError, PlatformClosedError } from '../src/kernel/platform-closed';
+import type { KernelClient } from '@rezics/client';
 import type { NativeCopy, NativeCopyPresentation } from '../src/library/copies-server';
 import type { Release } from '../src/subject/definitions';
 
@@ -97,7 +99,9 @@ mock.module('../src/subject/definitions', () => ({
     return release;
   },
 }));
-const { readCopiesPage, readCopyDetail, readCopySubject, updateCopy } = await import('../src/library/copies-actions');
+const { readCopiesCurrent, readCopiesPage, readCopyDetail, readCopySubject, updateCopy } = await import(
+  '../src/library/copies-actions'
+);
 
 function reset(): void {
   currentRequest = request();
@@ -157,6 +161,101 @@ test('actual refused preparation conceals cached list/detail credentials and sto
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
   } finally {
     transport.mockRestore();
+  }
+});
+
+test('native Copy-list permission denial stays distinct from missing, closure and transport outcomes', async () => {
+  reset();
+  let outcome: 'forbidden' | 'closed' | 'missing' | 'transport' = 'forbidden';
+  const calls: Request[] = [];
+  const transportFailure = new Error('native transport failed');
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const call = new Request(input, init);
+    calls.push(call);
+    if (new URL(call.url).pathname !== '/v1/copies') throw new Error(`Unexpected read ${call.url}`);
+    if (outcome === 'transport') throw transportFailure;
+    const status = outcome === 'missing' ? 404 : 403;
+    const code = outcome === 'closed' ? 'platform_closed' : outcome === 'missing' ? 'not_found' : 'forbidden';
+    return Response.json({ code, detail: 'private problem body' }, { status });
+  });
+  try {
+    const address = { subjectId, cursor: 'opaque/cursor+exact' };
+    const initial = await readCopiesPage({ data: address });
+    expect(initial).toMatchObject({
+      signedIn: true,
+      subjectId,
+      requestedCursor: address.cursor,
+      inventoryState: 'forbidden',
+      copies: [],
+      next: null,
+    });
+    const current = await readCopiesCurrent({ data: address });
+    expect(current).toMatchObject({
+      sessionSubject: 'owner',
+      requested: { ...address, kind: null, status: null, locale: 'en' },
+      page: { signedIn: true, inventoryState: 'forbidden', requestedCursor: address.cursor, copies: [], next: null },
+    });
+    expect(JSON.stringify(current)).not.toContain('private problem body');
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => new URL(call.url).searchParams.get('cursor') === address.cursor)).toBe(true);
+    expect(counts).toEqual({ credential: 2, identity: 0, types: 0, release: 0 });
+
+    for (const kind of ['closed', 'missing'] as const) {
+      outcome = kind;
+      const before = calls.length;
+      const error = await readCopiesCurrent({ data: address }).catch((caught: unknown) => caught);
+      expect(calls).toHaveLength(before + 1);
+      expect(error).toBeTruthy();
+      expect(isPlatformClosedError(error)).toBe(kind === 'closed');
+    }
+
+    outcome = 'transport';
+    await expect(readCopiesCurrent({ data: address })).rejects.toBe(transportFailure);
+    expect(calls).toHaveLength(5);
+  } finally {
+    transport.mockRestore();
+  }
+});
+
+test('point inspection keeps native closure, concealed denial and unavailable meanings', async () => {
+  reset();
+  const body = { code: 'platform_closed', detail: 'private problem body' };
+  let reads = 0;
+  const point = (get: () => Promise<unknown>, id = copyId) =>
+    loadCopyDetail(
+      { copies: () => ({ get: async () => (reads++, get()) }) } as unknown as KernelClient,
+      currentRequest,
+      sessionEnv,
+      { id },
+    );
+  try {
+    const returnedClosed = await point(async () => ({ status: 403, error: { value: body } }));
+    expect(returnedClosed).toEqual({ ok: false, reason: 'closed' });
+    expect(
+      await point(async () => {
+        throw new PlatformClosedError(403, body);
+      }),
+    ).toEqual({ ok: false, reason: 'closed' });
+    for (const status of [401, 403, 404]) {
+      expect(await point(async () => ({ status, error: { value: { code: 'concealed' } } }))).toEqual({ ok: false, reason: 'forbidden' });
+    }
+    expect(await point(async () => ({ status: 200, data: { copy: { ...native, id: subjectId } } }))).toEqual({
+      ok: false,
+      reason: 'unavailable',
+    });
+    const beforeMalformed = reads;
+    expect(await point(async () => ({}), 'not-a-uuid')).toEqual({
+      ok: false,
+      reason: 'unavailable',
+    });
+    expect(reads).toBe(beforeMalformed);
+    expect(
+      await point(async () => {
+        throw new Error('point transport failed');
+      }),
+    ).toEqual({ ok: false, reason: 'unavailable' });
+  } finally {
+    currentRequest = request();
   }
 });
 

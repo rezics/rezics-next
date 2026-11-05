@@ -218,6 +218,11 @@ function response(viewer: string, search: Search = { subjectId: id(10), cursor: 
     },
   };
 }
+function forbiddenResponse(viewer: string, search: Search): CopiesCurrentRead {
+  const value = response(viewer, search);
+  value.page = { ...value.page, copies: [], next: null, inventoryState: 'forbidden' };
+  return value;
+}
 
 test('Actual server exports certify only the exact native preparation, preserve bounded recovery and refuse missing/retained provenance', async () => {
   const { prepareSession, viewerCredential } = await import('../src/session/request');
@@ -370,6 +375,7 @@ test('The actual Copies route retires retained private rows and editor state on 
   const Page = Route.options.component!;
   expect(Route.options.beforeLoad).toBe(requireSignedIn);
   const lists: ReturnType<typeof deferred<CopiesCurrentRead>>[] = [];
+  const listInputs: unknown[] = [];
   const details: (ReturnType<typeof deferred<CopyDetailCurrentRead>> & { data: unknown })[] = [];
   const editions: (ReturnType<typeof deferred<CopySubjectCurrentRead>> & { data: unknown })[] = [];
   const writes: (ReturnType<typeof deferred<CopyWriteResult>> & { input: Parameters<typeof actions.updateCopy>[0] })[] =
@@ -379,7 +385,8 @@ test('The actual Copies route retires retained private rows and editor state on 
   })[] = [];
   const restores: (ReturnType<typeof deferred<CopyWriteResult>> & { input: Parameters<typeof actions.undoCopy>[0] })[] =
     [];
-  const read = spyOn(actions, 'readCopiesCurrent').mockImplementation(() => {
+  const read = spyOn(actions, 'readCopiesCurrent').mockImplementation(({ data }) => {
+    listInputs.push(data);
     const work = deferred<CopiesCurrentRead>();
     lists.push(work);
     return work.promise;
@@ -529,6 +536,16 @@ test('The actual Copies route retires retained private rows and editor state on 
       }),
     );
   };
+  const detailValue = (
+    subject: string,
+    result: CopyDetailCurrentRead['result'],
+    requested = response(subject, search).requested,
+  ): CopyDetailCurrentRead => ({ sessionSubject: subject, requested, id: id(1), result });
+  const acceptDetail = async (
+    result: CopyDetailCurrentRead['result'],
+    subject = 'B',
+    requested?: CopyDetailCurrentRead['requested'],
+  ) => act(async () => details.at(-1)!.resolve(detailValue(subject, result, requested)));
   const fillNote = async (value: string) => {
     await click(m.library_copy_more(), form());
     const label = [...form().querySelectorAll('label')].find((label) => label.textContent === m.library_copy_note())!;
@@ -570,7 +587,14 @@ test('The actual Copies route retires retained private rows and editor state on 
     const inspections = details.length;
     await act(async () => oldInspect.onClick());
     expect(details).toHaveLength(inspections);
-    await inspect('B');
+    await click(m.library_copy_edit());
+    await acceptDetail({ ok: false, reason: 'closed' });
+    const closedEditor = host.querySelector('[role="dialog"]')!;
+    expect(closedEditor.textContent).toContain(m.platform_closed_message());
+    expect(closedEditor.querySelector('form')).toBeNull();
+    await click(m.subject_view_retry(), closedEditor);
+    await acceptDetail({ ok: true, copy: copy('B') });
+    expect(form().textContent).toContain('Private note B');
     await submit(true);
     expect(writes).toHaveLength(1);
     await act(async () => {
@@ -705,15 +729,12 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(form().textContent).toContain(m.library_copy_detail_unavailable());
     await click(m.library_copy_cancel(), form());
     await click(m.library_copy_edit());
-    await act(async () =>
-      details.at(-1)!.resolve({
-        sessionSubject: 'B',
-        requested: { ...response('B', search).requested, cursor: 'wrong-address' },
-        id: id(1),
-        result: { ok: true, copy: { ...copy('A'), note: 'Wrong detail address' } },
-      }),
+    await acceptDetail(
+      { ok: false, reason: 'closed' },
+      'B',
+      { ...response('B', search).requested, cursor: 'wrong-address' },
     );
-    expect(host.textContent).not.toContain('Wrong detail address');
+    expect(host.textContent).not.toContain(m.platform_closed_message());
     await click(m.library_copy_cancel(), form());
     await click(m.library_copy_edit());
     await act(async () =>
@@ -891,6 +912,61 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(
       [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_copy_filter_reset())?.href,
     ).toContain(`subjectId=${id(10)}`);
+
+    search = { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'opaque/cursor+exact' };
+    await show(viewer('B'));
+    await acceptList('B');
+    await click(m.library_copy_compare_select());
+    await click(m.library_copy_compare_open());
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(1);
+    await inspect('B');
+    await fillNote('Captured before list denial');
+    await submit();
+    const unanswered = writes.at(-1)!;
+    const captured = unanswered.input.data;
+    const capturedHeaders = new Headers(unanswered.input.headers);
+    expect(captured).toEqual({
+      id: id(1),
+      revision: 7,
+      idempotencyKey: id(101),
+      location: 'Private location B',
+      source: 'Private source B',
+      acquiredOn: '2020-02-29',
+      disposedOn: '2025-03-01',
+      note: 'Captured before list denial',
+    });
+    await refetch();
+    const countBeforeDenial = lists.length;
+    await act(async () => lists.at(-1)!.resolve(forbiddenResponse('B', search)));
+    await tick();
+    absent('B');
+    expect(host.textContent).toContain(m.library_copy_inventory_forbidden());
+    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
+    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.library_copy_add())).toBe(false);
+    expect(listInputs.at(-1)).toMatchObject(search);
+    expect(lists).toHaveLength(countBeforeDenial);
+
+    await act(async () => unanswered.reject(new Error('Uncertain before list denial')));
+    const dialog = host.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain(m.library_copy_inventory_forbidden());
+    await click(m.subject_view_retry(), dialog);
+    const replay = writes.at(-1)!;
+    expect(replay.input.data).toEqual(captured);
+    expect(new Headers(replay.input.headers).get('x-csrf-token')).toBe(capturedHeaders.get('x-csrf-token'));
+    await act(async () =>
+      replay.resolve({ ok: true, copy: { ...copy('B'), note: 'Captured before list denial', revision: 8 } }),
+    );
+    await tick();
+    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
+
+    await click(m.subject_view_retry(), host);
+    expect(listInputs.at(-1)).toMatchObject(search);
+    await act(async () => lists.at(-1)!.resolve(response('B', search)));
+    await tick();
+    expect(host.textContent).toContain('Private note B');
+    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(1);
+
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());

@@ -99,6 +99,506 @@ Refresh never substitutes for the original retry, settles its result or rebases 
 
 A denied Progress-session list is a bounded permission state with no session facts or start controls; it is neither
 an empty result nor start authority. The shared 403/empty/preparing distinctions above apply to session reads too.
+[Personal-score shelf ordering](library-personal-score-order.md) defines the native standard-question order,
+bounded explicit installation and Content currentness prerequisite.
+
+## Web personal-score availability
+
+Decision: retain an explicit `personalScore` address as an unavailable visit until the generated native score contract
+is published; a saved unsupported `rating` preference does not activate that order.
+
+At source head `ed91a343d2998cbacb1211c2a59abab8bd010bdd`, the installed
+`packages/client/src/kernel/library/personal-routes.d.ts` lacks the `personalScore` query literal, entry `personalScore`,
+page `scoreQuestion`, and `libraryShelfScorePreparation` method. The generated `shelf-contract.d.ts` also omits the
+score order and question descriptor. Native source alone does not activate Web. Content's owner-wide score currentness
+port remains independently required. Web sends no score request, preparation command, vote read or vote write while
+these declarations are absent. It shows unavailable, separately from native preparation, empty, final and expired
+cursor outcomes. Explicit score URLs retain direction, state/type, display choices and opaque cursor in navigation;
+restart drops the cursor and date-order recovery deliberately begins a new visit. Changing the native predicate
+retires the prior page through the existing personal-shelf address owner. No old rows decorate an unavailable order.
+Decision: sort forms submit the explicit unavailable score address until a date order is selected; replacing the
+supplied address or its filters/display resets pending edits in place, preserving the focused control.
+
+The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
+and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;
+invalid/stale cursors permit one first-page retry. Next and restart replace that page. Continue retains six subjects,
+navigation requests eight pins and one existing owner-collection page, and opening the type chooser reads one bounded
+type page. Score selection adds zero requests and retains zero score rows/cursors in the rendered result. There is no
+per-row score fetch, browser aggregation or local page sort. The shelf address bounds each opaque cursor to 2048
+characters. The existing FULL reader has no independent response-byte ceiling; a row limit alone is not a byte or
+native indexed-growth proof. Generated publication, Content currentness and native cost acceptance retain their owners.
+
+The [private reported-year summary](library-reported-year-summary.md) extends native completed occurrences with
+explicit journal finish-year membership, twelve months and a year-only bucket, preserving separate all-time semantics.
+
+The [personal consumption statistics contract](library-consumption-statistics.md) defines
+private completed occurrences, distinct stored subjects and repeats from retained native
+sessions, independently of current shelf state, holdings and published logs.
+Decision: use explicit native completion for all-time counts and preserve unknown historic
+profile coverage; date editing and canonical episode membership retain their existing owners.
+
+A person's library and their lists are one capability. Every vertical (books, anime, games, visual novels, recipes,
+records) configures it through definitions; no vertical has kernel code of its own. This document adopts required
+first-public behavior, not a claim of runtime completion. The [Library module](../services/kernel/src/library/README.md)
+records actual implementation and remaining gaps. The [Library Goal](goals/library.md) owns delivery under the
+commerce manager, separately from the [purchase contract](../services/kernel/src/commerce/README.md). Purchasing
+does not silently create Library facts; Library presence or Undo never grants or reverses payment/benefit rights.
+[Scope](scope.md) defers user-saved dynamic queries.
+
+The shared owner contracts are [Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
+[filtered lists](filtered-lists.md), [Collection presentation and editor](collection-presentation.md),
+[independent labels](library-labels.md),
+[selected label consolidation](library-label-consolidation.md),
+[profile consumers](library-profile-consumers.md), and [deletion](deletion.md). Indexed evaluation and source-scoped
+concurrent identity currentness below supersede older per-page proof/replay, whole-slot observation and identity-basis protocols in
+those adoption surfaces and earlier research. Their ABI revisions belong to their owners; this adoption creates no
+alternate mode, budget, API or authority document. The [library abstraction research](research/library-abstraction.md)
+is background evidence, not implementation evidence.
+
+## Private consumption diary
+
+The [private diary](library-consumption-diary.md) browses native sessions across subjects apart from public logs and
+shelf summaries. Order by immutable recorded start descending, then full session UUID descending. Keep repeats and
+unfinished sessions separate; recording times are audit facts. Use eight expiring owner slots and the presented-session
+method for exact reopening. The bounded seek reads partial dates and their journal revision; unknown dates stay null
+and never invent historical order. Subject visibility controls optional labels.
+
+Decision: Diary page and period reads retain separate permission denial and account-independent platform closure,
+without retained facts or Retry. A refused year summary cannot admit occurrences without page/summary revision
+agreement. Independently admitted regions remain visible.
+
+## Personal facts and one Collection abstraction
+
+Decision: Account member reads add each viewer's own entry state and standard-question score beside each disclosed subject in a private, no-store response.
+Decision: Viewer entry lookup follows the installed Library read: exact subject entry first, then the current Content terminal only when the exact entry is absent.
+Decision: A public Collection session page may request one bounded authenticated FULL member page from the existing producer; Web joins only exact occurrence keys and source subject IDs, then opens the native Subject Library slot with the current filtered page and occurrence anchor as its return address. Collection and personal action gates remain independent.
+Decision: Collection personal navigation requires an exact occurrence's supplied personal grant; missing action delivery stays unavailable, and filtered rows without native occurrence IDs return to their bounded page without a fragment.
+Decision: Home and Collection use the callable `readViewerPersonalActionsPage` seam with the caller's admitted occurrence key, original Subject ID and disclosed resource type; a current empty allowed-action list remains distinct from unavailable admission.
+
+The installed `library/viewer-facts.ts` producer exports `prepareViewerFacts`, `readViewerFacts` and
+`viewerFactsCurrent` for staged callers, plus `readViewerFactsPage` for Library and Collection consumers.
+Every batch names its question and admits at most 100 rows and 16 KiB encoded input; output is at most 64 KiB.
+Row keys and requested Subject IDs retain their order and repetitions. Only native requested IDs are deduplicated.
+Entry reads prefer the exact requested Subject; only an absent exact Entry permits current terminal fallback.
+
+For standard question `00000000-0000-7000-8000-000000000001`, revision 1, units 0–20 step 1, every requested
+Subject, including an unredirected merge survivor, uses Content's installed `createOwnCountedVoteReader` from
+`rating/register.ts`. A single reader, actor and ordered ID array survive prepare/read/finish. Its instance-local
+preparation and selected-row evidence remain private in a WeakMap; they cannot be reconstructed from a DTO.
+Preparation occurs before checkout, read uses the caller's account-home repeatable-read client, and finish runs
+after release. These are observations across native snapshots, not one atomic cross-home snapshot.
+
+The existing wire remains `present`, `absent` or `unavailable`: zero is present; native clear maps deliberately
+to an absent score. Native clear and true absence remain distinct in the private read result and final comparison:
+a clear retains its selected tombstone, original target/revision, counted target/revision, time and transaction ID;
+true absence has no selected row. Requested targets and source epochs remain in the same instance-local native
+preparation. No identity or revision is relabelled: the wire's present `revision` is the original native vote revision,
+not `countedRevision`. Native disclosure unavailable makes the entire fact page unavailable/identity without
+exposing a concealed terminal. Missing Entry/vote scopes stay unavailable; unavailable question meaning never
+becomes an absent vote. Imported ratings and public aggregates are excluded.
+Decision: retain the existing wire's clear-to-absent-score mapping with distinct native currentness witnesses;
+nonstandard questions return explicit vote `unavailable/question` without rescaling or a client wire extension.
+
+Pending mappings and changed account standing, authentication epoch, scopes, question meaning/lifecycle,
+identity, disclosure or selected vote rows refuse successful current assembly. Staged Search callers must retain
+the original preparation and actor, release their client, call `viewerFactsCurrent`, and withhold the entire
+provisional page when it returns false; retry uses the same admitted input with fresh preparation. Search retains
+candidate admission, source witnesses, private assembly and final disclosure fences. Library list and Collection
+members attach only a current private, no-store page under their existing gates. Web keeps its interfaces.
+This overlay does not implement owner-wide `PersonalScoreCurrentness`, activate shelf score ordering or relax 503.
+
+`viewer-personal-actions.ts` exports `readViewerPersonalActionsPage` and the matching `ViewerPersonalActionsReader`
+callable. Each input row adds the exact disclosed `resourceType` to its `rowKey` and original `subjectId`; the helper
+never replaces that identity with a terminal or sibling. The Home feed receives this callable from Kernel as
+`FeedDependencies.viewerPersonalActions`. Content owns candidate disclosure and source admission. Its caller must
+recheck its feed or Collection source/membership fence after this helper finishes foreign work; the helper proves
+Library facts and mounted Access actions, not the caller's source membership.
+
+Each returned row keeps its existing Entry and vote facts and adds `actions`. `actions: {state: "current", allowed: []}`
+means the admitted resource is readable and Access currently offers no supported action. An unavailable action state
+is explicit (`admission`, `currentness` or `dependency`) and never changes an unreadable Entry or vote into absence.
+Allowed action names and operation IDs come from the mounted `ViewerActionBindings` and `readViewerActions`, preserving
+the distinct own-account Library/progress authority and Subject-resource rating authority. The projection includes
+mounted Entry update/delete and progress-session create/update actions. Manual score operations are included only for
+the current standard question `00000000-0000-7000-8000-000000000001`, revision 1, scale 0–20 step 1, and only for the
+mounted `rating.vote_put` / `rating.vote_delete` operations. Imported conditional vote effects remain unavailable.
+The action projection is an observation; Entry commands and `createVoteCommands.putVoteOutcome` remain the only score
+and Entry writers. Web still owns unsettled-write state and the controls that consume this response.
+
+`viewer-personal-actions.ts` exports `readViewerPersonalActionsPage` and the matching `ViewerPersonalActionsReader`
+callable. Each input row adds the exact disclosed `resourceType` to its `rowKey` and original `subjectId`; the helper
+never replaces that identity with a terminal or sibling. The Home feed receives this callable from Kernel as
+`FeedDependencies.viewerPersonalActions`. Content owns candidate disclosure and source admission. Its caller must
+recheck its feed or Collection source/membership fence after this helper finishes foreign work; the helper proves
+Library facts and mounted Access actions, not the caller's source membership.
+
+Each returned row keeps its existing Entry and vote facts and adds `actions`. `actions: {state: "current", allowed: []}`
+means the admitted resource is readable and Access currently offers no mounted action. An unavailable action state
+is explicit (`admission`, `currentness` or `dependency`) and never changes an unreadable Entry or vote into absence.
+Allowed actions and operation IDs come from the mounted `ViewerActionBindings` and `readViewerActions`, preserving the
+distinct own-account Library authority and Subject-resource rating authority. Manual score operations are included
+only for the current standard question `00000000-0000-7000-8000-000000000001`, revision 1, scale 0–20 step 1, and
+only for the mounted `rating.vote_put` / `rating.vote_delete` operations. Imported conditional vote effects remain
+unavailable. The action projection is an observation; Entry commands and `createVoteCommands.putVoteOutcome` remain
+the only writers. Web still owns unsettled-write state and the controls that consume this response.
+
+The action helper validates raw multiplicity and the full typed input before deduplicating `(resourceType, subjectId)`
+references. It retains the 100-row, 16,384-byte input and 65,536-byte complete-response caps. It releases the Library
+home read before Access preparation, then reads the generic Subject and disclosed resource-type batches, rechecks
+Library facts, repeats both action batches and rechecks facts again. A changed action projection or mounted binding
+is unavailable, never a stale positive. The full caller cost therefore includes four bounded Access preparations
+and action reads plus two complete `viewerFactsCurrent` finishes; each batch contains at most 100 distinct resource
+references and the existing 64-action/256-operation per-type Access caps still apply. The batches use the same
+request deadline, contain no per-row network calls, and perform no internal retry. This is an internal callable seam,
+not a new HTTP route or generated client response; shared client publication remains with Content's existing
+publisher.
+
+For N admitted rows, U distinct requested IDs and T distinct counted destinations, U,T <= N <= 100. A successful
+nonempty standard call pays the following complete composition in addition to its caller's existing admission:
+
+- Preparation: one Library bounded mapping call and one visible-question read, then native preparation's one
+  account-home snapshot, one standard-question read, two mapping calls around one Subject disclosure batch.
+- Caller snapshot: one checkout with BEGIN/COMMIT (ROLLBACK on failure), account-home binding and Library account
+  point, one Entry statement with at most 2U exact/fallback seeks, then native read's account binding/point and one
+  counted-target statement with at most T index seeks and T rows. No foreign-home preparation occurs here.
+- After release: one Library account snapshot; Library also reruns the bounded selected Entry lookup and compares
+  original-exact/terminal-fallback identity, incarnation, state and revision. Native finish repeats its question read, two mapping calls around
+  Subject disclosure, and a separate account-home snapshot with account point and the same T counted-target seeks.
+  Library finally repeats its bounded mapping and visible-question observations. Thus there are five account
+  point reads, four question observations, six direct mapping calls plus disclosure's mapping calls, two disclosure
+  batches, two Entry statements and two counted-target statements on the full successful `readViewerFactsPage` path. Account-only native
+  snapshots, Library final account snapshot and the caller snapshot each pay their own checkout/begin/commit.
+- Mapping calls retain Content's supplied-source/control-home double collection; each disclosure batch also pays
+  its bounded mapping and original/terminal Access preparation/evaluation. Their native row/operation limits and
+  connection/transaction costs remain those of the installed Content/Access contracts, not the wire caps above.
+  Each statement's B-tree positioning can grow with unrelated retained history. No owner-wide Library, vote or
+  history scan, blanket reservation, maintained cache, new payer, vote mutation or repair occurs.
+- Correlation and encoding cost O(N) rows plus the bounded serialized input/output bytes and native fingerprints (which retain clear/absence distinctions).
+  Empty/no-scope/unsupported-question paths skip native vote work; identity/preparation/read/finish mismatch exits
+  early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
+  errors propagate through existing rollback/release paths. A same-input retry pays preparation and snapshots
+  again, with no hidden refill or internal retry loop.
+
+- The personal-action overlay adds four bounded Access preparations and action reads over at most U distinct
+  disclosed `(resourceType, SubjectID)` references, split into generic Subject and exact resource-type batches for
+  each of two passes. It runs the existing full Library/Content finish after each pass, so a page with Entry access
+  pays three Entry statements total: the initial snapshot and one selected-row recheck per pass. Each batch has at most 100
+  references; the exact candidate operation count is bounded by Access's 64 actions and 256 bindings per resource
+  type. The 65,536-byte response limit includes every repeated occurrence's action list. The helper retains no
+  Library home connection during Access preparation and starts no per-row request or retry.
+
+Source bounds do not establish executed native growth. The controller retains independent unrelated owner/vote
+history growth with fixed admitted identities, page size and bytes, plus frozen full acceptance. Closest reference
+journeys remain BookWyrm's owner-review shelf annotation and Bangumi's owner/Subject collection score: both keep
+personal score separate from public aggregates; neither supplies REZICS's cross-home currentness protocol.
+
+[Personal AniList uploads](library-import-anilist.md) have mounted private preview, paged review, confirmed apply
+and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field
+remains visible private evidence. This replaces the AniList personal-import deferral only, not other sources or sync.
+
+Retained AniList custom-list membership has an independent [explicit private-label adoption](library-import-anilist-labels.md)
+review within that producer; default display groups and unsupported tags never imply assignments.
+
+Selected private label consolidation is an explicit Labels action over supplied assignment identities. Its installed
+native review, confirmation, one-item apply/retry, cancel and result boundary is owned by
+[the consolidation contract](library-label-consolidation.md); both labels reopen through the native assignment readers.
+Commerce receives each refreshed Label shelf only against its captured exact request: the source cursor is retained,
+the target starts at its first page, and omitted result/Undo query fields stay omitted. Matching refreshes retain the
+supplied native Undo receipt; mismatches remain unavailable without replaying consolidation.
+Immutable Subject security-evidence binding, generated client declarations and full caller growth remain a continuation.
+
+The mounted [personal VNDB upload](library-import-vndb.md) supports private preview, identifier matching, explicit
+review and confirmed entry-state apply through existing native commands. Scores, dates, progress, notes and unmapped
+fields remain visible private evidence; broader personal-list migration remains second scope. Upload/review records
+are bounded Library-owned data included in terminal erasure; cancellation never reverses acknowledged native facts.
+
+For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
+sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
+immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.
+Progress setup treats the loaded subject and default mode/unit as its baseline; only subject, version, mode, unit or exact total-text changes need departure protection, and restoring those values clears it.
+Stored accepted pins retain their immutable meaning after release activation or retirement. Missing profiles block
+new profiled values, not historic reads, clearing or exact undo. Generic labels and curated occurrence edits need no
+profile binding or lookup, and never invent a default state.
+Decision: Commerce renders an ordinary denied progress-session list as a bounded permission state with no session
+facts or start controls; the state is neither an empty result nor start authority.
+Decision: Commerce receives ordinary Copy-list denial at the exact current address as a private permission state;
+accepted denial retires displayed inventory and inspection while preserving captured command uncertainty, and point
+inspection closure remains distinct.
+Copy location/source allow 200 Unicode scalar values each and notes 1,000; the editor shows localized limits and accessible field errors after an invalid submit, preserves exact draft text, and validates before capturing a new command.
+
+### Physical copy condition
+
+Decision: Library owns the finite `physical-v1` condition vocabulary, independently for media and packaging;
+only an accepting released Copy kind with explicit `condition: 'physical-v1'` admits either field, including clear.
+No kind name, label, note, import mapping or current profile can supply historical admission.
+
+The stable values and English labels are `unknown` (Unknown), `mint` (Mint), `near_mint` (Near mint),
+`very_good_plus` (Very good plus), `very_good` (Very good), `good` (Good), `fair` (Fair) and `poor` (Poor).
+Mint means no observable wear or defects; near mint means almost no wear; very good plus means minor wear;
+very good means noticeable wear while fully usable; good means substantial wear while usable; fair means damage
+limits ordinary use; poor means severe damage prevents ordinary use. These are personal observations, with no
+catalogue, seller, price or valuation authority. Existing bounded Copy notes cover explanations; no additional text
+or arbitrary attributes are admitted.
+
+The existing create/update command input gains independent optional `mediaCondition` and `packagingCondition`
+values. An omitted field remains unchanged on edit and not recorded on creation. `unknown` records an explicit
+unknown assessment; `null` records an intentional clear. Both fields and their presence participate in the existing
+complete command intent, expected revision and original request key. Never fill omitted fields before hashing old
+receipt operands. Old absent rows remain not recorded without a migration that guesses a grade. Each supplied field
+captures its own exact accepting profile pin and kind. Editing the other field preserves that accepted meaning.
+Historical display uses those exact releases; failure to resolve them is unavailable, never unknown or a grade.
+Current editing advice is independent from historical display and cannot authorize a later command.
+
+The Discogs row in the [API audit](research/api-first-platform-coverage.md#discogs) supplies the model requirement.
+The legacy loans view is an interaction reference: it keys individual loan cards by identity and presents edition
+and format beside the work. It supplies no condition vocabulary. The current Copies page already has independent
+field errors and preserves exact draft text. No rendered comparison or earlier Collection-item comparison has been
+established by this implementation part.
+
+The native vocabulary, parsing, field merge and historical display helpers are implemented in `copy-condition.ts` and
+integrated with the existing revisioned create/update commands, private row storage and detail presentation. Each
+observation is stored in its own nullable JSONB column; SQL NULL means not recorded, while an observation value of
+JSON null means intentionally cleared. Definitions now publishes optional `condition: 'physical-v1'` on its Copy
+kind source/release schema and type. Web profile preparation carries that explicit capability for the exact kind,
+including its absence on older releases; it never infers support from an ID or label. This current profile advice
+cannot establish historical admission or replace the private detail's per-field accepted pins.
+
+The installed generated client still lacks condition create/update/detail shapes. The retained Content publisher
+must publish those shapes through the official callables before Web can offer condition editing or render condition
+observations. Controls remain unavailable until that publication; profile preparation alone does not enable them.
+The remaining page journey includes the earlier Collection-item management comparison, independent media and
+packaging controls, full-Copy conflict review, exact retries and saved-copy reopening. Native, growth, browser and
+promoted acceptance remain with the controller.
+
+A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org
+`ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain
+editable. Dynamic membership derives unique subjects from native truth. One shared Collection members service and
+page serves curated, Everything, state and Liked, with shared filters, sorts, summaries, cursors and actions.
+Grid/list/table layout is a client UI choice. Collection presentation kind is an owner-selected or derived
+definitions Type; members keep their own Types. Neither changes membership or authorization. The joint
+[Collection presentation and editor contract](collection-presentation.md) owns the selected fields, editor operations
+and current delivery inventory.
+
+- **Everything** includes a subject with live explicit state, a nonempty private annotation, a reviewed provider
+  observation, an effective live label assignment, retained session/history or retained holding. Removing one fact
+  leaves membership while another survives. Empty entry shells, trash, follows, curated occurrences, ratings and
+  published-log snapshots alone establish no membership. An annotation or observation adds no state, session,
+  copy, label, rating or public disclosure.
+- **State Collections** match explicit state by `(profileId, stateSetId, stateId)`. Only live entry, retained copy
+  and session facts with actual accepted pins support an in-use state set and all its sibling views, including empty
+  siblings. Labels and soft-deleted snapshots support none. No current or historical type is guessed from metadata.
+  Support is derived representation, never a second authority; digest ordering is not semantic chronology.
+- **Liked** derives from the owner's current SUBJECT `like` or `love` reaction. Switching between those preserves
+  membership; clearing or another kind removes it. Thread/post reactions do not qualify. A reaction alone adds
+  nothing to Everything or explicit state. Every account has a stable logical Liked that is always private, including a genuine
+  empty `200`. Content owns the owner-scoped reaction adapter; copying into a curated Collection creates independent
+  occurrences. Native [logical identity](../services/kernel/src/library/builtin-identity.ts) and the
+  [Content reaction source adapter](../services/kernel/src/library/liked-source.ts) are installed. Complete useful
+  members pages, current disclosure/source-version coverage and positive reaction-only outcome evidence remain
+  unmeasured; source presence does not establish that journey.
+
+The [native owner plan](library-owner-queries.md#native-candidate-support-and-complete-observations) owns the ONE
+private OWNER candidate/support directory shared by built-ins and admitted owner queries, native indexed truth,
+complete selective observations and finite repair. It is discovery data, never permission or a new personal fact;
+no per-built-in membership caches or copied exact-fact-witness stores. That plan preserves the full required union.
+Every qualifying producer must cover insertion; incomplete coverage returns preparing/readiness, never false empty.
+Native current membership and disclosure reject stale positives immediately, including deleted label parents.
+Web Shelf cursor values are opaque and limited to 2,048 characters; invalid selections require an explicit field correction, and clearing a stale cursor preserves remaining filters and display choices.
+Bounded durable maintenance may prepare indexes. Logical Library/Collection list and detail reads stay pure;
+they never repair indexes or create headers or grants. The personal native chronological shelf adapter may, after
+current owner admission and an indexed missing/uninitialized-gate probe, run the existing guarded owner initialization
+command before final RR checkout. Only actual initialization creates its command receipt/advancement event and
+original bounded backfill intent; warm reads do not. Empty readiness comes only from the original three owner-input
+EXISTS decisions, and incomplete nonempty generations remain unavailable. See the [shelf contract](../services/kernel/src/library/shelf-contract.md#default-producer-composition).
+The common members GET may
+start bounded idempotent derived preparation and its work intent under the adopted
+[dynamic members contract](dynamic-collections.md#model-and-identity), keyed by viewer, Collection, validated filter,
+sort and accepted release/meaning. It writes no domain state, header, grant, event or receipt. Retained preparation
+returns `202 application/json` with exactly `{preparing:true}`, `Retry-After` and owner-private `no-store` caching;
+retry the same validated URL and cursor. No members, next, operation ID or partial data accompanies `202`.
+Genuine exhaustion stays `200 {members:[],next:null}`; unavailable runtime/work stays `503`. Zone POST is unchanged.
+[Continue](library-continue.md#http-contract) GET starts no work; this exception does not extend to it.
+Accounts owns the additive fenced event-free operational transaction plus atomic intent and native SPEC; consume
+only its actual [Core export/contract](../services/kernel/src/command/README.md#operational-transactions).
+The adopted plan uses same-pg-client DBOS transactional enqueue, existing gate/Access/account fences and DBOS
+recovery, with no separate intent table/relay/queue. Current executor source is present; Library preparation and
+its native custody proof remain required pending. `runCommand`/`noEffect` or enqueue after commit cannot replace it.
+
+## FULL personal list facts
+
+FULL Library list pages and static curated Collection member pages attach the existing Type-specific Semantic list facts
+to the selected, visible rows. The member or Entry Type and current active Semantic release select the properties; a
+Collection presentation kind never changes its members' Types. BASIC keeps its existing fields and page shape. FULL
+uses the existing summary and cover projection beside optional `facts`; a visible subject with no configured values
+has `facts: {}`. Missing or denied originals and terminals expose neither their row nor sibling facts. Semantic
+unavailability and a changed native page fail closed with `503 semantic_not_ready`.
+
+The projection receives only returned rows, at most 100 raw occurrences; a keyset lookahead determines `next` but
+does not enter Semantic or Rating authority. It preserves duplicate Collection occurrences, original UUIDs and order.
+After Semantic facts and summaries return with their homes released, Library or Collection reauthorizes and rereads
+the same native page before disclosure. `Accept-Language` reaches both the fact batch and shared subject summary,
+including cover selection. The Semantic producer rechecks active release, identity, disclosure, related items and
+source tuples during its batch.
+
+`viewerFacts` is caller-private and separate from curator presentation. A zero vote is `present`; a clear or missing
+vote is `absent`; per-row scope/question gaps and page-level identity/currentness/response-size failures remain
+explicitly `unavailable` without disclosing stale values. Imported scores, occurrence assessments and raw vote
+presence do not establish a counted public vote. Personal-score shelf ordering remains unavailable with
+`503 dependency_unavailable` until Content binds a whole-owner currentness fence over Entries, counted votes and
+identity/lifecycle effects, including rows outside the returned page.
+
+Decision: Forward `Accept-Language` to the shared Semantic fact and summary batch for FULL Library and static
+Collection rows; preserve Semantic's current default when the header is absent.
+
+Search owns mixed-result composition. A future preview consumer must call the same helper once over its complete
+globally bounded prefix with owner homes released, then perform final native source and membership reauthorization.
+
+## Logical identities and canonical browsing
+
+Built-in identities are stable and deterministic from owner and built-in key, independent of labels, release digest
+and materialization. Every account has an empty logical Everything; state discovery is read-only and private by
+default. Liked uses the same logical Collection contract. State identities remain pinnable. Dynamic DTOs omit
+curated member count, creation/update times, order epoch and occurrence fields; no fabricated zeros or occurrences.
+An explicit owner rename wins over the localized built-in title.
+
+## Private rich personal entries
+
+One authenticated owner entry combines locally edited notes and priority with independently addressed provider
+observations for one canonical Subject. The mounted owner API is `GET /v1/libraryEntries/{subjectId}/personal`,
+`PUT /v1/libraryEntries/{subjectId}/annotations`, `POST /v1/libraryEntries/{subjectId}/sourceObservations` and
+`PATCH /v1/libraryEntries/{subjectId}/sourceObservations`. The native commands use the existing Library receipt,
+current Subject, account and terminal lifecycle authorities. Reads and write responses are owner-private and
+`no-store`; they do not alter explicit state or the consumption-date/session owner.
+
+Annotation revision `0` creates the first version; each successful compare-and-set advances it. Note and priority
+each require `{op:"set",value:...}`, `{op:"clear"}` or `{op:"unchanged"}`. Notes are limited to 4,096 UTF-8 bytes.
+Priority is personal list position, not a catalogue rank or rating. Null means unranked.
+
+Owners can also review priority and private note corrections for a fixed selection of exact existing entry
+incarnations and revisions. Preserve, set and clear are independent per item; confirmation reuses the addressed rich
+entry annotation command, while reopening returns current native values and per-item outcomes. See the [selected
+correction contract](library-entry-selected-correction.md) for its bounds, expiry, cancellation and client operands.
+
+Decision: Personal priority is an owner-local list position from 1 through 100, where 1 is highest; null is unranked.
+Decision: Priority planning opens ascending so rank `1` leads, supports descending from `100`, keeps Unranked last in both directions, and breaks ties by Subject UUID ascending.
+
+Each source observation is separately addressed by owner, canonical Subject, provider key and provider record ID.
+Admission requires `confirmReviewed:true` and inserts once; a duplicate address conflicts. Correction requires the
+observation's current revision and confirmation; each privacy/timestamp field is set, cleared or left unchanged.
+Source privacy says only what the provider entry meant: `private`, `source_visible`, `unknown`, `absent` or explicitly
+`cleared`. `source_visible` is never a REZICS publication or disclosure grant. Original timestamp strings, precision
+and zone knowledge remain source evidence; they are not native audit time or consumption dates. See the detailed
+[annotation contract](library-entry-annotations.md) and [source provenance contract](library-entry-provenance.md).
+
+Annotation-only facts and any reviewed provider observation participate in Everything through the existing native
+`entry` owner support family. An empty/cleared annotation shell does not. State Collections still require their
+accepted explicit state pin. Ordinary state removal preserves annotations and provider observations. Terminal
+account fact deletion removes both, including all source observations.
+
+The four personal-list import owners use the same typed admission/read DTO. AniList, Bangumi and MAL confirmation
+pages submit that admission after the existing import apply, with independent provider record identities and explicit
+privacy/timestamp confirmation. VNDB remains unavailable until its generated import client is installed. They address
+evidence only with an already-resolved canonical Subject and the provider's stable record identity; this API does not
+resolve provider IDs, parse provider payloads, or activate vocabulary. A field absent from the source is submitted as `absent`; a
+present but uninterpretable field is `unknown`. An import may write a note or priority only after the owner confirms
+the value and the adapter submits the current annotation revision. Unchanged incoming values use `unchanged`; only
+an explicit owner clear uses `clear`. Duplicate source admission returns `409`, stale correction returns `409`, and
+same-key/body retry replays the original response. If an adapter cannot preserve a source timestamp's original value,
+precision or zone knowledge, it leaves that evidence unsupported rather than coercing it. Omitted note/priority data
+never clears or overwrites local edits.
+
+Logical revision 0 becomes revision 1 only on the first authorized materializing write, atomically with native
+resource grants and the account fence. Read authorization stays native; materialization permits no read-grant bypass.
+Denied writes leave no storage. Opaque state references are discovery points, not permission or membership.
+
+Stored personal subject IDs and Collection occurrences are immutable and never rewritten by identity resolution;
+new writes address the terminal. Canonical views choose the live state with highest private `owner_write_seq` among
+merged originals, show conflicts and retain every original fact, stored subject reference and accepted pin. They
+union labels and keep copies/sessions separate. Browsing shows one card per canonical subject; the editor
+preserves every curated occurrence, note and order.
+
+### Native occurrence boundary moves
+
+The single-occurrence `POST /v1/collections/{collectionId}/members/{memberId}:move` accepts `{after?: string | null}`:
+omitting `after` moves to the actual Collection end, `after: null` moves to its actual start, and a string retains
+the existing placement after that member occurrence. Unknown keys, malformed IDs, a null body and numeric/boolean
+`after` remain refusals. The existing command kind and digest inputs for null/string placement, including historic
+receipt replay, stay unchanged. Omission is a distinct end intent throughout transport, receipts and retries.
+The native first/last neighbor seek excludes the moved occurrence, including singleton, already-terminal and
+duplicate-subject cases. Existing authorization, owner/partition fences, no-effect evidence, session recording and
+bounded order placement/repair remain authoritative; there is no global rank, scan or new index.
+
+The curated editor offers explicit immediate Move to start/end actions for a disclosed occurrence only when
+`collection_member.move` is exposed and current edit authority is available. Save or cancel metadata/member drafts
+first. Arrows and dragging retain their staged loaded-page semantics and later-page first-row guard. One captured
+occurrence, placement and immutable idempotency key blocks competing writes until resolved. An uncertain result
+retains that exact request for explicit retry; page, authorization and actor changes fence its use. A definitive
+refusal offers a current-page/access read before another move. A confirmed move refreshes one bounded native page
+through the page callback, with only the source's existing one-time stale-cursor restart. A failed refresh retains
+the acknowledged move and offers read recovery without issuing another mutation or claiming its global location
+has been loaded. Intervening pages are never fetched.
+
+### Owner state-write order
+
+Latest state means a native per-account write sequence in the owner's partition. Each successful state set, state
+clear and Undo restore increments that owner's counter row in the same authorized fact transaction with
+`UPDATE ... SET seq=seq+1 RETURNING seq`. First-row initialization belongs to that write too, never GET. A live
+entry stores the returned value as private `owner_write_seq`. All of one owner's entries share the owner partition,
+so this totally orders that owner's state writes and confines counter contention to that person's writes. No
+cross-partition coordinator, clock/UUID sorting, maximum of unrelated per-slot revisions or executor hook supplies
+the order. This ordering rule supersedes those alternatives.
+
+Private state-change history and explicit recovery are specified in [Library entry state history and recovery](library-entry-state-history.md).
+Decision: retain at most 64 state-change rows per account and subject across entry incarnations; pruning marks affected
+retained history partial, and entries already present at installation remain unknown until a real transition is captured.
+
+Undo is a new state write and obtains a fresh higher `owner_write_seq`, even when native state, subject IDs,
+accepted pin, source stamps and user dates are restored exactly. Existing native new-transaction and revision
+rules still apply. The archive retains the original state snapshot, including its original sequence; archived or
+deleted rows never compete as current live state. A clear advances the counter but keeps the exact retained-entry
+and physical-delete contract, including public status/body/headers; it creates no live state tombstone to hold a
+sequence. Physical payload purge and derived repair are not owner state writes.
+
+Native receipt replay allocates no sequence. Failed, denied, stale, expired or occupied operations roll back any
+counter change with the fact; branded `noEffect` cannot hide a persisted counter write. A successful state-setting
+write still allocates when its value equals another row: equality is not an idempotent receipt replay. Counter and
+stored sequence use native bigint without Number truncation or client-chosen values. Never reset or wrap the
+counter; overflow explicitly fails and rolls back the write.
+
+Existing values without authoritative sequences require explicit bounded migration, cutover and readiness gates.
+Do not fabricate ordering from dates, transaction UUIDs, source-type positions or zero. Fresh supported writers must
+store real sequences before their canonical capability is advertised ready; unsequenced existing values cannot
+silently compete in a ready canonical view. The [native cutover plan](library-owner-queries.md#sequencing-cutover-bounded-cuts-and-native-proof)
+requires complete authoritative state-write evidence and verified locators with bounded live-write cutover, or
+explicit real owner reassertion. Independent complete presence/label/session/holding paths do not all wait on
+unknown state order. This is a required producer, not a permanent launch exception. The native
+[`allocateOwnerWriteSeq` and schema](../services/kernel/src/library/owner-write-sequence.md) are delivered: the live-execute,
+same-owner allocator returns bigint, with private nullable positive sequence columns on live/archive entries and
+an owner counter. Production set/clear/Undo binding, legacy NULL migration/cutover, epoch readiness and complete
+terminal erasure remain missing producers. The primitive establishes no canonical runtime readiness.
+
+The separate [`readOwnerFactVersion`](../services/kernel/src/library/owner-fact-version.md) reads one exact native owner
+head; full changed-row UPDATE hooks are integrated. Missing metadata is `null` (unbuilt), never zero or ready
+absence. It supplies neither authorization nor bootstrap, identity-epoch or whole-query coverage proof. Actual row
+changes, including a separate sequence-stamp UPDATE, each pay automatic trigger work; never disable coverage or
+manually duplicate head increments. This invalidation version is distinct from one allocator increment per
+successful state write. Complete indexed owner plans and canonical/source/Content version integration remain open.
+
+Canonical indexes are keyed by canonical ID. Source-scoped concurrent identity observation, publication and cursor
+currentness cover the actual source and complete query dependencies, including excluded and order originals.
+Relevant pending work yields preparing; changed relevant basis restarts the signed cursor. Disjoint jobs cannot
+keep a finite unchanged owner source preparing. No global active marker, universal page gate, per-page identity-home
+sweep or identity-basis protocol is required. The SAME existing `library-private-follow-counts` participant covers
+EVERY Library canonical record,
+including the OWNER candidate/support directory and concurrent first-apply rekey custody. Its ACK must cover every
+prior removal/addition/fence and exact native transactionId/component/job/epoch/version/scope, current terminal/
+account/source fences and stale destination rejection; follow-only completion is insufficient. No third participant
+or independent ACK shortcut. The [native owner plan](library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
+links the semantic scoped concurrent closure and still-required native proof.
+Epoch maintenance reads `owner_write_seq` and re-keys only derived data; it never allocates a state-write
+sequence or rewrites originals. The counter is private ordering data, never permission, an account lifecycle
+generation, a membership witness database or an aggregate count to disclose. Current authorization still covers
+original support and terminal: a withheld original never becomes public because its terminal is readable.
 
 ## Destinations and actions
 
