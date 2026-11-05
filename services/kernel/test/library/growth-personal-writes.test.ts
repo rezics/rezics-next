@@ -426,7 +426,14 @@ async function seedReturnedLoans(prepared: PreparedGrowth, scale: number, previo
      SELECT route,loan_id,account_id,loan_id,'lent','name','retained history',NULL,
             '2018-01-01','2018-02-01','2019-01-01',2,$6::timestamptz,$6::timestamptz,loan_id
        FROM source`,
-    [prepared.ownerRoute, prepared.actor.accountId, previous * ROWS_PER_SCALE, prepared.seedSalt, scale * ROWS_PER_SCALE, TIME],
+    [
+      prepared.ownerRoute,
+      prepared.actor.accountId,
+      previous * ROWS_PER_SCALE,
+      prepared.seedSalt,
+      scale * ROWS_PER_SCALE,
+      TIME,
+    ],
   );
 }
 

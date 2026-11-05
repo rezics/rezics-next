@@ -81,10 +81,7 @@ function plan<Row extends QueryResultRow>(
         emptySeeks: nativePoints,
         bytes: Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(operands)) + 2,
       }),
-      repeatBound(
-        bytes(projection === null ? 0 : Buffer.byteLength(JSON.stringify(projection)) + 1),
-        projectionRows,
-      ),
+      repeatBound(bytes(projection === null ? 0 : Buffer.byteLength(JSON.stringify(projection)) + 1), projectionRows),
     ),
   });
 }
@@ -265,14 +262,7 @@ export function loanPagePlan(input: LoanPageInput): LoanNativePlan<LoanNativeRow
     SELECT ${pageColumns}, c."copySubjectId",c."copyRevision",c."copyKind",c."copyStatus",c."copyDisposedOn",c."copyDeletionId"
       FROM page p ${copyJoin}
      ORDER BY p.due_on ASC NULLS LAST,p.loan_id ASC`;
-    return pagePlan(
-      'loan-page-dated',
-      sql,
-      [route, accountId, after.day, after.id, limit],
-      limit * 2,
-      2,
-      limit,
-    );
+    return pagePlan('loan-page-dated', sql, [route, accountId, after.day, after.id, limit], limit * 2, 2, limit);
   }
 
   if (filter === 'history' && after) {

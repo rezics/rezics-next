@@ -12,7 +12,13 @@ import { testAccess, testRouteKey, testTokens } from '../support/test-kernel.ts'
 type Kind = 'session' | 'entry' | 'copy' | 'follow' | 'loan';
 const time = '2026-10-26T12:00:00.000Z';
 const scopes = ['progress_session:read', 'progress_session:list', 'library_entry:read', 'copy:read', 'copy:list'];
-const relation = { session: 'progress_session', entry: 'entry', copy: 'copy', follow: 'follow', loan: 'copy_loan' } as const;
+const relation = {
+  session: 'progress_session',
+  entry: 'entry',
+  copy: 'copy',
+  follow: 'follow',
+  loan: 'copy_loan',
+} as const;
 
 function id(route: number, ordinal: number): string {
   return `10000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}${ordinal.toString(16).padStart(8, '0')}`;

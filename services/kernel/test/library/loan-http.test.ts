@@ -24,7 +24,11 @@ beforeAll(async () => {
   loanProfileDigest = await native.publish(await compileCatalogue(fixture(libraryProfile('fixture.loan-http'))));
   await native.activate(loanProfileDigest);
   const mergeClaims = { ...native.steward.actor, scopes: [...native.steward.actor.scopes, 'subject:merge'] };
-  const mergeActor = await authenticateAccount(native.access, { pool: native.pool, deadline: deadlineFor(30_000) }, mergeClaims);
+  const mergeActor = await authenticateAccount(
+    native.access,
+    { pool: native.pool, deadline: deadlineFor(30_000) },
+    mergeClaims,
+  );
   await createGrantCommands({ pool: native.pool, access: native.access, managementAction: 'access:grant' }).create(
     { pool: native.pool, actor: mergeActor, deadline: deadlineFor(30_000) },
     {
@@ -106,20 +110,31 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
 
   const ownerId = native.owner.actor.accountId;
   const ownerRoute = routeOf(ownerId)!;
-  const people = await Promise.all(['Original loan counterparty', 'Current loan counterparty'].map(async (label, n) => {
-    let key = '';
-    for (let index = 0; index < 100_000; index++) {
-      const candidate = `loan-person-${n}-${index}`;
-      if (partitionOf(anchorRoute(testRouteKey(), `${ownerId}\nsubject.create\n${candidate}`)) === partitionOf(ownerRoute)) {
-        key = candidate;
-        break;
+  const people = await Promise.all(
+    ['Original loan counterparty', 'Current loan counterparty'].map(async (label, n) => {
+      let key = '';
+      for (let index = 0; index < 100_000; index++) {
+        const candidate = `loan-person-${n}-${index}`;
+        if (
+          partitionOf(anchorRoute(testRouteKey(), `${ownerId}\nsubject.create\n${candidate}`)) ===
+          partitionOf(ownerRoute)
+        ) {
+          key = candidate;
+          break;
+        }
       }
-    }
-    expect(key).not.toBe('');
-    const response = await native.send('owner', 'POST', '/v1/subjects', { type: 'schema:Person', labels: { en: label } }, key);
-    expect(response.status).toBe(201);
-    return { id: ((await response.json()) as { subject: { id: string } }).subject.id, label };
-  }));
+      expect(key).not.toBe('');
+      const response = await native.send(
+        'owner',
+        'POST',
+        '/v1/subjects',
+        { type: 'schema:Person', labels: { en: label } },
+        key,
+      );
+      expect(response.status).toBe(201);
+      return { id: ((await response.json()) as { subject: { id: string } }).subject.id, label };
+    }),
+  );
   const sortedPeople = [...people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const survivor = sortedPeople[0]!;
   const redirected = sortedPeople[1]!;
@@ -145,11 +160,20 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   };
   const beforeMerge = personPage.items.find(({ loan: item }) => item.id === personLoan.id)?.loan.counterparty;
   expect(beforeMerge).toMatchObject({ kind: 'person', personId: redirected.id, displayName: redirected.label });
-  const merge = await native.send(mergeBearer, 'POST', '/v1/subjects:merge', { subjects: [survivor.id, redirected.id] });
+  const merge = await native.send(mergeBearer, 'POST', '/v1/subjects:merge', {
+    subjects: [survivor.id, redirected.id],
+  });
   expect(merge.status).toBe(200);
   const afterMerge = await (await native.send('owner', 'GET', openPath)).json();
   expect(afterMerge).toMatchObject({
-    items: [{ loan: { id: personLoan.id, counterparty: { kind: 'person', personId: redirected.id, displayName: survivor.label } } }],
+    items: [
+      {
+        loan: {
+          id: personLoan.id,
+          counterparty: { kind: 'person', personId: redirected.id, displayName: survivor.label },
+        },
+      },
+    ],
   });
   const personReturned = await native.send('owner', 'POST', `/v1/copy-loans/${personLoan.id}/return`, {
     revision: 1,
@@ -226,7 +250,8 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
   const route = routeOf(copy.id)!;
   const copies = Array.from({ length: 100 }, () => newId(route));
   const loans = copies.map(
-    (_, index) => `10000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}${(index + 1).toString(16).padStart(8, '0')}`,
+    (_, index) =>
+      `10000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}${(index + 1).toString(16).padStart(8, '0')}`,
   );
   // Populate the boundary from genuine native copy/loan operands. The assertions
   // receive the mounted operation, including its current-source presentation.
@@ -265,9 +290,7 @@ test('maximum mounted open page retains its sentinel and rejects continuation af
   expect(first.items).toHaveLength(100);
   expect(first.items.every((item) => item.loan.dueOn === '9999-12-31' && item.copy.state === 'available')).toBe(true);
   expect(
-    first.items.every(
-      (item) => item.loan.counterparty.kind === 'name' && item.loan.counterparty.name === maximumName,
-    ),
+    first.items.every((item) => item.loan.counterparty.kind === 'name' && item.loan.counterparty.name === maximumName),
   ).toBe(true);
   expect(first.items.map((item) => item.loan.id)).toEqual([loan.id, ...loans.slice(1)].sort());
   expect(first.nextCursor).toBeString();

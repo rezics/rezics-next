@@ -367,8 +367,7 @@ export async function loanPeopleDisplay(
       }),
     );
   } catch (error) {
-    if (error instanceof ProblemError && SOFT_SEMANTIC_FAILURES.has(error.code))
-      return concealed();
+    if (error instanceof ProblemError && SOFT_SEMANTIC_FAILURES.has(error.code)) return concealed();
     throw error;
   }
 }
