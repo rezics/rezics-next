@@ -23,7 +23,7 @@ test('admitted starts retain capacity throughout delayed preparation until runni
       db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
         id,
         1,
-        JSON.stringify({ state: 'pending' }),
+        JSON.stringify({ taskId: id, attempt: 1, state: 'pending' }),
       );
     }
     const preparing: string[] = [];
