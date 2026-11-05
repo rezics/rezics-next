@@ -214,15 +214,22 @@ function PublicationIntentView({
       (uncertain && !origin.attempt)
     )
       return;
-    const input =
-      uncertain && origin.attempt
-        ? origin.attempt.input
-        : {
-            collectionId: page.address.id,
-            revision: Math.max(origin.complete?.collection.revision ?? 0, source.revision),
-            subjectIds: [...origin.selected],
-            idempotencyKey: crypto.randomUUID(),
-          };
+    let input: PublicationInput;
+    let review: PublicationReview;
+    if (uncertain && origin.attempt) {
+      input = origin.attempt.input;
+      review = origin.attempt.review;
+    } else if (source.state === 'ready') {
+      input = {
+        collectionId: page.address.id,
+        revision: Math.max(origin.complete?.collection.revision ?? 0, source.revision),
+        subjectIds: [...origin.selected],
+        idempotencyKey: crypto.randomUUID(),
+      };
+      review = publicationReview(source.page, input.revision, origin.selected);
+    } else {
+      return;
+    }
     const send = origin.attempt?.send ?? (captureSubmit ? captureSubmit() : submit);
     if (!send) return;
     const capturedAttempt =
@@ -231,7 +238,7 @@ function PublicationIntentView({
         input,
         send,
         sourceKey: origin.sourceKey,
-        review: publicationReview(source.page, input.revision, origin.selected),
+        review,
         uncertain: false,
       };
     update((previous) => ({
@@ -274,7 +281,6 @@ function PublicationIntentView({
         isOwnerCurrent,
       );
     };
-    const timeout = Symbol('publication-response-timeout');
     let timedOut = false;
     const response = Promise.resolve()
       .then(() => capturedAttempt.send(capturedAttempt.input))
@@ -282,12 +288,16 @@ function PublicationIntentView({
     void response.then((outcome) => {
       if (timedOut) settle(outcome);
     });
-    const outcome = await publicationReadWithin(response, responseTimeoutMs, timeout);
-    if (outcome === timeout) {
+    const outcome = await publicationReadWithin(
+      response.then((value) => ({ state: 'response' as const, value })),
+      responseTimeoutMs,
+      { state: 'timeout' as const },
+    );
+    if (outcome.state === 'timeout') {
       timedOut = true;
       settle({ ok: false, reason: 'unknown' });
     } else {
-      settle(outcome);
+      settle(outcome.value);
     }
     // The response race never aborts native work. A later result can settle only this captured attempt.
   }
