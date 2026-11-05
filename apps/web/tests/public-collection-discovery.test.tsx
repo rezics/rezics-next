@@ -65,7 +65,9 @@ mock.module('../src/kernel/client', () => ({
   }),
 }));
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/collections' });
 const canonical = window.document.createElement('link');
 canonical.rel = 'canonical';
@@ -105,7 +107,11 @@ const { readPublicCollectionPage } = await import('../src/library/public-collect
 const { Route } = await import('../src/routes/collections/index');
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
-const directoryRoute = Route.update({ id: '/collections/', path: 'collections/', getParentRoute: () => localeRoute } as never);
+const directoryRoute = Route.update({
+  id: '/collections/',
+  path: 'collections/',
+  getParentRoute: () => localeRoute,
+} as never);
 const awayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/away',
@@ -140,7 +146,9 @@ async function mount(initialEntry: string) {
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
-  await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))));
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
+  );
   return {
     host,
     router,
@@ -292,8 +300,10 @@ test('the localized route pages backward, retries its exact cursor, and retires 
   const sparse = 'window-sparse';
   const terminal = 'window-terminal';
   const queued = new Map<string | null, (PublicCollectionDiscoveryState | Promise<PublicCollectionDiscoveryState>)[]>();
-  const enqueue = (cursor: string | null, ...pages: (PublicCollectionDiscoveryState | Promise<PublicCollectionDiscoveryState>)[]) =>
-    queued.set(cursor, pages);
+  const enqueue = (
+    cursor: string | null,
+    ...pages: (PublicCollectionDiscoveryState | Promise<PublicCollectionDiscoveryState>)[]
+  ) => queued.set(cursor, pages);
   enqueue(null, ready('First collection', opaque));
   enqueue(opaque, { status: 'unavailable' }, ready('Second collection', second));
   enqueue(second, ready('Third collection', sparse));

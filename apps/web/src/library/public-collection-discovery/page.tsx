@@ -144,9 +144,7 @@ export function PublicCollectionDiscoveryPage({
               {m.collection_discovery_retry({}, options)}
             </Button>
           )}
-          {continuation ? (
-            control(m.collection_discovery_restart({}, options), 'first', null, 'restart')
-          ) : null}
+          {continuation ? control(m.collection_discovery_restart({}, options), 'first', null, 'restart') : null}
         </section>
       )}
     </main>
