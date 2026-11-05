@@ -11,6 +11,7 @@ type Observation = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   subject: string | null;
   csrfToken: string | null;
+  sessionVersion: number;
   admission: 'preparing' | 'admitted' | 'closed' | 'unavailable';
   observation: number | null;
   exposure: number | null;
@@ -32,6 +33,7 @@ const closed: Observation = {
   state: 'unknown',
   subject: null,
   csrfToken: null,
+  sessionVersion: 0,
   admission: 'preparing',
   observation: null,
   exposure: null,
@@ -54,6 +56,7 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
         : (data?.state ?? 'unknown'),
     subject,
     csrfToken: subject && typeof data?.csrfToken === 'string' && data.csrfToken.trim() ? data.csrfToken : null,
+    sessionVersion: session?.dataUpdateCount ?? 0,
     observation: observation?.id ?? null,
     exposure: exposure?.dataUpdateCount ?? null,
     admission:
@@ -68,12 +71,21 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
 }
 
 const identity = (value: Observation) =>
-  JSON.stringify([value.state, value.subject, value.admission, value.observation, value.exposure]);
+  JSON.stringify([
+    value.state,
+    value.subject,
+    value.csrfToken,
+    value.sessionVersion,
+    value.admission,
+    value.observation,
+    value.exposure,
+  ]);
 
 /** An episode can retire from cache notifications, without waiting for a React render or commit. */
 class CreatorCurrentOrigin implements CreatorOfferGuard {
   readonly id = crypto.randomUUID();
   readonly observed: Observation;
+  readonly visitIdentity: string;
   retired = false;
   private users = 0;
   private mounted = false;
@@ -87,6 +99,7 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
     private expected?: string,
   ) {
     this.observed = observe(client, operation);
+    this.visitIdentity = JSON.stringify([operation, expected ?? null, identity(this.observed)]);
   }
 
   observe = () => {
@@ -95,6 +108,8 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
     if (
       next.state !== 'signed-in' ||
       next.subject !== this.workspace.subject ||
+      next.csrfToken !== this.observed.csrfToken ||
+      next.sessionVersion !== this.observed.sessionVersion ||
       (this.observed.admission === 'admitted' &&
         next.observation === this.observed.observation &&
         next.exposure !== this.observed.exposure) ||

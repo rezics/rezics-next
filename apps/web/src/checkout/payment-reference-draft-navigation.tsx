@@ -1,5 +1,5 @@
 import { useBlocker, useRouter } from '@tanstack/react-router';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,6 +12,17 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../paraglide/messages.js';
 import { validPaymentReference } from './creator-payment-attestation-state';
+
+type Departure = { beforeLeave(href: string): boolean; stayed(): void };
+const DepartureContext = createContext<Departure | null>(null);
+
+export function PaymentReferenceDepartureProvider({
+  beforeLeave,
+  stayed,
+  children,
+}: Departure & { children: ReactNode }) {
+  return <DepartureContext.Provider value={{ beforeLeave, stayed }}>{children}</DepartureContext.Provider>;
+}
 
 export function hasUnsentPaymentReference(value: string, hasCapturedAttempt: boolean) {
   return !hasCapturedAttempt && validPaymentReference(value);
@@ -74,6 +85,7 @@ export function PaymentReferenceDraftNavigation({
   const discarded = useRef(false);
   const approvedDocumentDeparture = useRef(false);
   const router = useRouter({ warn: false });
+  const departure = useContext(DepartureContext);
   const protectedNow = () => live.current.active && live.current.isCurrent();
 
   function choose(discard: boolean) {
@@ -81,6 +93,7 @@ export function PaymentReferenceDraftNavigation({
     pending.current = null;
     discarded.current = discard;
     setOpen(false);
+    if (!discard) departure?.stayed();
     resolve?.(discard);
   }
 
@@ -109,7 +122,7 @@ export function PaymentReferenceDraftNavigation({
   );
 
   useEffect(() => {
-    if (!active) return;
+    if (!active && !departure) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (approvedDocumentDeparture.current) {
         approvedDocumentDeparture.current = false;
@@ -122,12 +135,22 @@ export function PaymentReferenceDraftNavigation({
     const documentLink = (event: MouseEvent) => {
       const target = event.target;
       const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
-      if (!anchor || !protectedNow()) return;
+      if (!anchor || (!protectedNow() && !departure)) return;
       const destination = sameOriginDocumentDestination(anchor, event, window.location.href);
       if (!destination) return;
+      if (
+        !protectedNow() &&
+        departure &&
+        router &&
+        (new URL(destination).pathname !== window.location.pathname || new URL(destination).search !== window.location.search)
+      ) {
+        event.preventDefault();
+        void router.navigate({ href: destination });
+        return;
+      }
       event.preventDefault();
-      void confirmRef.current().then((discard) => {
-        if (!discard) return;
+      void (protectedNow() ? confirmRef.current() : Promise.resolve(true)).then((discard) => {
+        if (!discard || (departure && !departure.beforeLeave(destination))) return;
         approvedDocumentDeparture.current = true;
         window.location.assign(destination);
       });
@@ -138,11 +161,17 @@ export function PaymentReferenceDraftNavigation({
       window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('click', documentLink);
     };
-  }, [active]);
+  }, [active, departure]);
 
   return (
     <>
-      {router ? <RouterDraftBoundary protectedNow={protectedNow} confirm={() => confirmRef.current()} /> : null}
+      {router ? (
+        <RouterDraftBoundary
+          protectedNow={protectedNow}
+          confirm={() => confirmRef.current()}
+          departure={departure}
+        />
+      ) : null}
       <AlertDialog open={open && protectedNow()} onOpenChange={(value) => !value && pending.current && choose(false)}>
         {open && protectedNow() ? (
           <AlertDialogContent
@@ -173,12 +202,17 @@ export function PaymentReferenceDraftNavigation({
 function RouterDraftBoundary({
   protectedNow,
   confirm,
+  departure,
 }: {
   protectedNow: () => boolean;
   confirm: () => Promise<boolean>;
+  departure: Departure | null;
 }) {
   useBlocker({
-    shouldBlockFn: () => (protectedNow() ? confirm().then((discard) => !discard) : false),
+    shouldBlockFn: async ({ next }) => {
+      if (protectedNow() && !(await confirm())) return true;
+      return departure ? !departure.beforeLeave(next.href) : false;
+    },
     enableBeforeUnload: false,
   });
   return null;

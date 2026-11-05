@@ -334,6 +334,7 @@ test('mounted actual routes keep only current viewer/address data across hydrati
   const host = document.createElement('main');
   document.body.append(host);
   let root: ReturnType<typeof createRoot> | undefined;
+  let cachedSession: { state: string; subject?: string; csrfToken: string | null } | undefined;
   const tree = () => {
     const Page = (mode === 'list' ? ListRoute.options.component : DetailRoute.options.component) as ComponentType;
     return (
@@ -350,10 +351,20 @@ test('mounted actual routes keep only current viewer/address data across hydrati
   const show = async (
     session: { state: string; subject?: string; csrfToken: string | null } = viewer(),
     admitted = true,
+    replaceSession = false,
   ) => {
     await act(async () =>
       flushSync(() => {
-        client.setQueryData(['session'], session);
+        if (
+          replaceSession ||
+          !cachedSession ||
+          session.state !== cachedSession.state ||
+          session.subject !== cachedSession.subject ||
+          session.csrfToken !== cachedSession.csrfToken
+        ) {
+          client.setQueryData(['session'], session);
+          cachedSession = { ...session };
+        }
         client.setQueryData(['exposure', 'viewer'], admitted ? ['selling'] : []);
         client.setQueryData(['exposure', 'anonymous'], []);
         setLocale(locale, { reload: false });
@@ -415,7 +426,17 @@ test('mounted actual routes keep only current viewer/address data across hydrati
     expect(hydrationErrors).toEqual([]);
     expect(pending).toHaveLength(0);
     await show({ ...viewer(), csrfToken: 'rotated-credential' });
-    expect(pending).toHaveLength(0);
+    expect(pending).toHaveLength(1);
+    await settle(0, list());
+    pending.length = 0;
+    expect(host.querySelector(`a[href*="${creatorStatementFixture.id}"]`)).not.toBeNull();
+
+    // Replacing the session with an equal snapshot still retires its admitted visit.
+    await show({ ...viewer(), csrfToken: 'rotated-credential' }, true, true);
+    expect(pending).toHaveLength(1);
+    expect(host.querySelector(`a[href*="${creatorStatementFixture.id}"]`)).toBeNull();
+    await settle(0, list());
+    pending.length = 0;
     expect(host.querySelector(`a[href*="${creatorStatementFixture.id}"]`)).not.toBeNull();
 
     search = { cursor: 'pending-A+/=' };
@@ -526,9 +547,21 @@ test('mounted actual routes keep only current viewer/address data across hydrati
       page: { kind: 'unavailable' },
     });
     expect(host.textContent).toContain(m.statements_unavailable());
-    expect(
-      host.querySelector(`a[href="/fr/creator/statements/${pointId}?cursor=retry-lines&from=back%2B%2F%3D"]`),
-    ).not.toBeNull();
+    const retry = host.querySelector<HTMLButtonElement>('button');
+    expect(retry?.textContent).toBe(m.statements_retry());
+    const retryCount = pending.length;
+    await act(async () => retry!.click());
+    await tick();
+    expect(pending).toHaveLength(retryCount + 1);
+    expect(pending[retryCount]!.address).toEqual({
+      kind: 'detail',
+      locale: 'fr',
+      id: pointId,
+      cursor: 'retry-lines',
+      from: 'back+/=',
+    });
+    await settle(retryCount, detail(B, pointId, 'retry-lines', 'back+/=', locale));
+    expect(host.textContent).toContain(`Private payment ${B}`);
     const after = pending.length;
     await act(async () => root!.unmount());
     root = undefined;

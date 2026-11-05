@@ -78,6 +78,43 @@ export const NegativeAdjustment: Story = {
   },
 };
 
+export const BoundedJourney: Story = {
+  render: () => {
+    selectCreatorStatementStory('creator');
+    return <PageStory visitor="Signed In" path="/creator/statements" />;
+  },
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await userEvent.click(view.getByRole('link', { name: m.statements_next() }));
+    await expect(await view.findByText(m.statements_paid())).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: m.statements_previous() }));
+    await expect(await view.findByText(m.statements_open())).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: /USD/ }));
+    await expect(await view.findByRole('heading', { name: m.statements_detail_heading() })).toBeVisible();
+
+    const reference = view.getByLabelText(m.statements_paid_reference());
+    await userEvent.type(reference, 'bank-reference-for-this-month');
+    const nextLines = view.getByRole('link', { name: m.statements_next_lines() });
+    await userEvent.click(nextLines);
+    await expect(await view.findByRole('alertdialog')).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.payment_reference_draft_navigation_stay() }));
+    await expect(reference).toHaveValue('bank-reference-for-this-month');
+    await userEvent.click(view.getByRole('link', { name: m.statements_next_lines() }));
+    await userEvent.click(view.getByRole('button', { name: m.payment_reference_draft_navigation_discard() }));
+    await expect(await view.findByText('txn_creatorRefund')).toBeVisible();
+    await expect(view.getByRole('link', { name: m.statements_previous_lines() })).toBeVisible();
+
+    await userEvent.click(view.getByRole('link', { name: m.statements_previous_lines() }));
+    await expect(await view.findByText('txn_creatorCharge')).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: m.statements_next_lines() }));
+    await expect(await view.findByText('txn_creatorRefund')).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: m.statements_back() }));
+    await expect(await view.findByRole('heading', { name: m.statements_heading() })).toBeVisible();
+    await expect(view.getByText(m.statements_open())).toBeVisible();
+  },
+};
+
 const longTransaction =
   'txn_creatorCharge_retained_provider_reference_with_a_long_unbroken_source_identifier_20260930233000';
 const longPaymentReference =
