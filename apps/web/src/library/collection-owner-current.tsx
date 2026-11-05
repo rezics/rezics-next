@@ -46,6 +46,7 @@ function ownerStore(client: QueryClient) {
   let signature: readonly unknown[] = [];
   let mounted = false;
   let retired = false;
+  let publicationQueued = false;
   const listeners = new Set<() => void>();
 
   function read() {
@@ -131,7 +132,13 @@ function ownerStore(client: QueryClient) {
   function changed() {
     const previous = snapshot;
     read();
-    if (snapshot !== previous) listeners.forEach((notify) => notify());
+    if (snapshot !== previous && !publicationQueued) {
+      publicationQueued = true;
+      queueMicrotask(() => {
+        publicationQueued = false;
+        listeners.forEach((notify) => notify());
+      });
+    }
   }
   return {
     read,
