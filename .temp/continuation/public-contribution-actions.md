@@ -1,21 +1,60 @@
-# Complete public contribution actions
+# Public contribution actions continuation
 
-Goal: content
-Manager: content
+## Goal content
 
-Keep this original worktree/session and retained receiver. Do not start a parallel receiver or replace its handle.
+Finish the same serial complete profile action journey. Production still uses the unavailable wire because the
+installed public client lacks both the contribution-actions callable and anonymous actionSelection. The admitted
+publisher commit is integrated, but its own retained publication continuation confirms that no generated closure
+was installed. Do not create another publisher, edit generated declarations, import service producer types, add a
+local DTO/cast, or parse unknown receiver values into native authority.
 
-The installed public entry packages/client/src/index.ts and its generated kernel contain neither the contribution-actions callable nor anonymous actionSelection. Production must remain unavailable until publication000 installs both through the official public entry. No publisher, generated patch, private producer import, local replacement DTO or unknown-value native authority is permitted.
+The committed coherent slice preserves the integrated watch operation lease and adds denial-safe recovery:
+watch/reaction owners keep their original uncertain commands during denied current advice; watch baseline changes
+and reaction watermarks do not retire uncertain commands; native new-command gates remain separate from exact retry
+and deliberate discard. Reply retains its original draft with a separate new-submission gate. Report keeps its
+existing PostActions owner. No new native writer or lifetime framework was added.
 
-This attempt fixes one prepared watch defect: cloning otherwise-current advice used to replace ThreadWatch's readAuthority and retire its unresolved command. Authority now uses the original operation lease. The existing focused host test checks exact command object retry after that echo. It does not establish the full journey.
+After the sole publisher installs its complete official output, derive request/reference/response aliases from the
+actual public callable and anonymous selection. Mount one official adapter in the original surviving Discussion,
+Post and Review rows. Receive native current advice, watch/react/report/reply using existing command owners, recover
+uncertain delivery deliberately, and return to the same profile view/cursor/query/hash/occurrence. Keep denied,
+withheld, missing, sign-in, not-applicable and unavailable states distinct. Do not substitute readback for write
+acknowledgement. Reaction set and clear require their respective current advice. Report privacy, original body/key/
+credential, reply parent/thread/draft, and native immutable uncertain command owners retain authority.
 
-Continue from the original contract and owner documents:
+The uninstalled adapter draft is saved in the sibling directory `installed-contribution-actions/`, with original
+repository-relative paths. It includes callable-derived aliases, one private/no-store server function, typed closed
+HTTP response validation, a mounted row adapter, and focused integration draft tests. It was removed from tracked
+source to avoid leaving code that depends on an absent public method. Treat these files as unfinished implementation,
+not a passing result. In particular, inspect slot retention when currentness or viewer changes, retain command owners
+through pending/failed/denied advice, and complete deliberate retry/discard and fresh-advice admission after recovery.
+Use current committed native owners rather than overwriting them with an older snapshot. The saved test file also
+contains the retained meaningful assertions; reconcile its prepared cases with the current focused file.
 
-- apps/web/src/accounts/public-profile/contributions/README.md
-- services/kernel/src/content/README.md#public-author-contribution-context
+Keep account-public-journey, prepared watch/reaction recovery, occurrence return, shared observation retirement and
+managed-session-reader tests with their current owners. Preserve synchronous retirement for fetching/invalidation,
+equal successful session replacement, remount and A/B/A. Do not add shared lifetime tests. Native, physical-growth,
+mounted/browser and root acceptance remains required after integration and is not established by these drafts.
 
-After official publication, derive request/reference/response from the installed callable, replace the local ABI and validate the closed external response. Mount the single adapter on surviving original Discussion, Post and Review rows with prepared watch/reaction/report/reply owners. Keep current, denied, missing, withheld, sign-in, not-applicable and unavailable distinct. Reaction requires both set/clear advice. Preserve exact occurrence, destination, operation lease, reader/credential and return view/cursor/query/hash. Report/reply retain original private operands through uncertainty; reads never acknowledge writes. Replacement readers obtain new advice without old intent.
+Contract-named owner sources read: apps/web/src/accounts/public-profile/contributions/README.md and
+services/kernel/src/content/README.md, Public author contribution context. Development workflow, conduct,
+documentation, verification skill reference and architecture/scope sections were also read. No main-checkout writes.
+Changes beyond the listed task paths are limited to native owners under apps/web/src/threads: composer.tsx,
+thread-reactions.tsx, thread-watch-current.tsx and thread-watch.tsx.
 
-Complete denied-advice uncertain-owner retention, deliberate exact retry/discard and current recovery notice. Preserve shared browser observation and address retirement across fetching/invalidation/equal replacement/remount/A-B-A. Do not add native writers, shared lifetime tests or another frontier.
+## Manager content
 
-Keep original account-public-journey, managed-session-reader, prepared watch/reaction recovery and occurrence-return acceptance with their owners. Add only focused mounted tests needed by the actual integration. Run changed tests using bun apps/web/scripts/focused.ts --private-network -- bun test <files>, typecheck changed workspaces, and commit before checks and after fixes. Controller runs deferred native, growth, browser and root integration acceptance. Actual installed production integration remains unfinished.
+Keep this single continuation with Goal content, manager content. The installed publication dependency is unfinished,
+not a spec blocker. The content inbox has been notified of the adopted recovery choice and missing installed output.
+Do not restart the earlier integrated session or split out a proof-only/unavailable-only outcome.
+
+Checks must use committed clean source. Web typecheck attempts stopped before compilation with:
+`root typecheck infrastructure failure: compiler database setup could not be proven: spawnSync docker ETIMEDOUT`.
+No base-equivalence or compilation pass is established. The first focused invocation used a repository-relative
+file while its runner changed to apps/web, so Bun matched no tests. It also retained unknown check custody because
+the candidate changed during execution. The exact invocation was reconciled without redispatch; its retained
+invocation ID is 32325394-9cdf-43ca-8900-ec012c258ab2, descriptor /tmp/rezics-web-check-OEafsC/prepared-descriptor.json.
+Do not call that focused invocation a pass. The corrected final command is:
+`bun apps/web/scripts/focused.ts --private-network -- bun test tests/public-contribution-actions-host.test.tsx`.
+Final outcomes are appended below after the open sessions complete. No service, process, database or container from
+another attempt was stopped or removed.
