@@ -64,6 +64,8 @@ open the exact Episode or Season page. If the assertion projection is withheld, 
 
 Decision: preserve native episode link order and position strings; an absent released episode-kind fact stays unknown.
 
+Decision: anime Movies, TVSeries, TVSeason, Episode and `rezics:AnimeRelease` publications remain separate Subject identities; only TVSeries and TVSeason browse episodes through the released inverse `schema:isPartOf` window.
+
 ### Screen episode reader Cost
 
 One screen profile read and one inverse link page suffice for a visit; the reader requests `WORK_PARTS_PAGE_CAP` (20)
