@@ -71,6 +71,8 @@ capabilities it registers. The kinds are:
    two production consumers, or a recorded standalone requirement. A package never imports a service or an app.
 8. Existing violations are listed in a ratchet baseline with an owner and a reason. The baseline may only shrink.
 
+Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
