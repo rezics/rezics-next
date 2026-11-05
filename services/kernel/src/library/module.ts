@@ -13,6 +13,16 @@ import {
   type IdentitySourceConsumerMaintenanceContext,
 } from '../semantic/identity-source-consumer-maintenance.ts';
 import type { LibraryIdentityPlanInput, LibraryIdentityPlanResult } from './identity-native-planner-types.ts';
+import {
+  advanceLibraryIdentityNativeScope,
+  prepareLibraryIdentityNativeEffect,
+  stepLibraryIdentityEpochWithSource,
+} from './identity-epoch-participant.ts';
+import type { IdentityReceivingSelection } from '../semantic/identity-receiving-effects.ts';
+import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
+import type { LibraryScopeEffectsKey, LibraryExpectedEffectAfter } from './identity-scope-effects.ts';
+import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
+import type { NativeCollectionWork } from './collection-source-work.ts';
 
 /** Named public ports retain the opaque seal through its owning page union during declaration emission. */
 export type LibraryIdentityNativePlanner = Readonly<{
@@ -39,6 +49,28 @@ export function createLibraryIdentityNativePlanner({ pool }: { pool: Pool }): Li
       const work = identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, input.deadline);
       if (!work || input.deadline !== context.deadline) throw new TypeError('Missing live prepaid Library partition');
       return advanceLibraryIdentityNativePlanWithWork(pool, input, work);
+    },
+  });
+}
+
+/** Default Library binding consumed inside Semantic's existing Source maintenance frame.
+ * It deliberately exposes bounded scope advancement, retained native selections and one-effect
+ * receiving progress; the fixed IdentityEpochStep receipt remains Semantic's final composition.
+ */
+export function createLibraryIdentityEpochReceiver({ pool }: { pool: Pool }) {
+  return Object.freeze({
+    step(job: IdentityJobRef, context: IdentitySourceConsumerMaintenanceContext) {
+      return stepLibraryIdentityEpochWithSource(pool, job, context);
+    },
+    advanceScope(
+      key: LibraryScopeEffectsKey,
+      after: LibraryExpectedEffectAfter | null,
+      context: IdentitySourceConsumerMaintenanceContext,
+    ) {
+      return advanceLibraryIdentityNativeScope(pool, key, after, context);
+    },
+    prepareEffect(selection: IdentityReceivingSelection, work: NativeCollectionWork) {
+      return prepareLibraryIdentityNativeEffect(pool, selection, work);
     },
   });
 }
