@@ -170,3 +170,23 @@ test('current native denial and unavailable actions preserve evidence without co
     expect(html).toContain(actions.state === 'available' ? 'current authority' : 'temporarily unavailable');
   }
 });
+
+
+test('exact projection owns an empty citation list and cannot borrow page support or preferred language', () => {
+  const fixture = catalogueSourcesFixture();
+  const template = fixture.read.subject.statements['schema:isbn']![0]!;
+  const fact = { ...template, property: { id: 'schema:abstract', data_type: 'document' as const },
+    value: { type: 'somevalue' as const }, qualifiers: [], references: [] };
+  const page = explainSubjectSources({ ...fixture.read,
+    selectedSynopsis: { kind: 'matched', fact, context: fixture.read.subject.context, release: fixture.read.subject.release },
+  }, 'ja', sourceDefinitions);
+  expect(page.fields).toHaveLength(1);
+  expect(page.fields[0]!.facts[0]!.statement).toBe(fact.id);
+  expect(page.fields[0]!.facts[0]!.citations).toEqual([]);
+  expect(page.sources.records).toEqual([]);
+  expect(page.sources.credit).toBeNull();
+  expect(render({ kind: 'ready', page })).toContain('No citations were supplied');
+  const changed = explainSubjectSources({ ...fixture.read, selectedSynopsis: { kind: 'changed' } }, 'en', sourceDefinitions);
+  expect(changed.fields).toEqual([]);
+  expect(changed.sources.records).toEqual([]);
+});
