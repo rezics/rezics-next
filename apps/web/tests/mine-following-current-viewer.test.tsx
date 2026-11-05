@@ -89,7 +89,7 @@ test('the actual Following server exports refuse stale preparation without priva
     expect(await actions.readMineFollowingForViewer({ data: { cursor: '' } })).toEqual({
       subject: null,
       kind: 'all',
-      cursor: '',
+      cursor: null,
       locale: 'en',
       page,
     });
@@ -338,6 +338,15 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
   const remove = async () => {
+    for (
+      let i = 0;
+      i < 20 && host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')?.disabled;
+      i++
+    )
+      await act(async () => {
+        await tick();
+      });
+    expect(host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.disabled).toBe(false);
     await act(async () => {
       host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
       await tick();
@@ -371,7 +380,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
     expect(reads).toHaveLength(1);
-    await remove();
+    expect(host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.disabled).toBe(true);
     expect(writes).toHaveLength(0);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('A'));
@@ -572,6 +581,7 @@ test('the actual Following reset envelope preserves the originating prepared vie
     expect(normal.cursor).toBeNull();
     expect(normal.page.addressInvalid).toBe(true);
     expect(calls).toHaveLength(2);
+    current.subject = 'reset-owner';
     const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
     expect(invalid).toMatchObject({
       subject: 'reset-owner',
@@ -704,6 +714,15 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       await tick();
     });
   const remove = async () => {
+    for (
+      let i = 0;
+      i < 20 && host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')?.disabled;
+      i++
+    )
+      await act(async () => {
+        await tick();
+      });
+    expect(host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.disabled).toBe(false);
     await act(async () => {
       host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
       await tick();
