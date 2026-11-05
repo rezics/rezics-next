@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.mjs';
 import {
   classifySection,
   formatLine,
