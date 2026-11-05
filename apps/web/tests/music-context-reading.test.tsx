@@ -232,7 +232,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     const next = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Next page'));
     if (!next) throw new Error('The current native continuation was not rendered');
     await settle(() => next.click());
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('unavailable');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('relation page could not be read');
     expect(host.textContent).toContain('last readable page');
     expect(host.textContent).toContain('Current venue');
     expect(host.querySelector('button')?.textContent).toContain('Retry this page');
