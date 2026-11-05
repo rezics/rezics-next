@@ -1,6 +1,6 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
@@ -8,6 +8,13 @@ import { migrate } from './database.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
+const LOCAL_MEDIA_SOURCE_HOST = 'lain.bgm.tv';
+const CONTENT_R2_VARIABLES = [
+  'CONTENT_R2_ENDPOINT',
+  'CONTENT_R2_BUCKET',
+  'CONTENT_R2_ACCESS_KEY_ID',
+  'CONTENT_R2_SECRET_ACCESS_KEY',
+] as const;
 export const origins = {
   web: 'http://127.0.0.1:3000',
   issuer: 'http://127.0.0.1:4200',
@@ -97,6 +104,78 @@ export function developmentBindings(values: Record<string, string>): string {
       .join('\n') + '\n'
   );
 }
+
+/** Local API and worker defaults for Bangumi source media; explicit R2 stays the selected backend. */
+export function developmentContentBindings(
+  env: Readonly<Record<string, string | undefined>>,
+  repository = root,
+): Readonly<Record<string, string>> {
+  const configuredR2 = CONTENT_R2_VARIABLES.filter((variable) => env[variable] !== undefined);
+  if (configuredR2.length > 0 && configuredR2.length < CONTENT_R2_VARIABLES.length) {
+    const missing = CONTENT_R2_VARIABLES.find((variable) => env[variable] === undefined)!;
+    throw new Error(`Incomplete content storage configuration: ${missing}`);
+  }
+
+  const currentHosts = env.CONTENT_SOURCE_HOSTS;
+  if (currentHosts === '') throw new Error('CONTENT_SOURCE_HOSTS');
+  const hosts = currentHosts === undefined ? LOCAL_MEDIA_SOURCE_HOST : currentHosts.split(',').includes(LOCAL_MEDIA_SOURCE_HOST)
+    ? currentHosts
+    : `${currentHosts},${LOCAL_MEDIA_SOURCE_HOST}`;
+  if (hosts.split(',').length > 100) throw new Error('CONTENT_SOURCE_HOSTS');
+  const bindings: Record<string, string> = { CONTENT_SOURCE_HOSTS: hosts };
+  if (configuredR2.length === CONTENT_R2_VARIABLES.length) {
+    if (env.CONTENT_LOCAL_MEDIA_ROOT !== undefined) throw new Error('CONTENT_LOCAL_MEDIA_ROOT');
+    return Object.freeze(bindings);
+  }
+
+  const mediaRoot = resolve(repository, '.temp/local-stack/content-media');
+  if (env.NODE_ENV !== undefined && env.NODE_ENV !== 'development') throw new Error('NODE_ENV');
+  if (env.CONTENT_LOCAL_MEDIA_ROOT !== undefined && env.CONTENT_LOCAL_MEDIA_ROOT !== mediaRoot)
+    throw new Error('CONTENT_LOCAL_MEDIA_ROOT');
+  bindings.NODE_ENV = 'development';
+  bindings.CONTENT_LOCAL_MEDIA_ROOT = mediaRoot;
+  return Object.freeze(bindings);
+}
+
+function updateEnvironmentText(contents: string, values: Readonly<Record<string, string>>): string {
+  const lines = contents.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  for (const [name, value] of Object.entries(values)) {
+    const index = lines.findLastIndex((line) => line.startsWith(`${name}=`));
+    if (index === -1) lines.push(`${name}=${value}`);
+    else lines[index] = `${name}=${value}`;
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+export async function resetLocalContentMedia(
+  repository = root,
+  env?: Readonly<Record<string, string | undefined>>,
+): Promise<void> {
+  const environment = env ?? (await kernelEnvironment());
+  const expected = resolve(repository, '.temp/local-stack/content-media');
+  const bindings = developmentContentBindings(environment, repository);
+  if (bindings.CONTENT_LOCAL_MEDIA_ROOT === undefined) return;
+  if (bindings.CONTENT_LOCAL_MEDIA_ROOT !== expected) throw new Error('CONTENT_LOCAL_MEDIA_ROOT');
+  const parent = resolve(repository, '.temp/local-stack');
+  let parentInfo;
+  try {
+    parentInfo = await lstat(parent);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink()) throw new Error('CONTENT_LOCAL_MEDIA_ROOT');
+  let rootInfo;
+  try {
+    rootInfo = await lstat(expected);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('CONTENT_LOCAL_MEDIA_ROOT');
+  await rm(expected, { recursive: true });
+}
 export async function developmentKeys(directory = state): Promise<DevelopmentKeys> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const file = resolve(directory, 'keys.json');
@@ -180,6 +259,12 @@ async function setup() {
   }
   migrate(await authDatabaseUrl());
   const keys = await developmentKeys();
+  const contentBindings = developmentContentBindings(env);
+  const kernelEnvFile = resolve(root, 'services/kernel/.env');
+  await privateFile(
+    kernelEnvFile,
+    updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), contentBindings),
+  );
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),
@@ -571,6 +656,7 @@ if (import.meta.main) {
     const action = process.argv[2];
     if (action === 'setup') await setup();
     else if (action === 'reset') {
+      await resetLocalContentMedia();
       await retireDevelopmentSeedState();
       const keys = await developmentKeys();
       if (keys.bootstrapPassword) {

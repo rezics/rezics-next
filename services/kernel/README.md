@@ -1284,7 +1284,13 @@ with Cloudflare Siteverify. Set both together; partial or malformed configuratio
 secret. If both are absent, public reads and authenticated reports continue, while anonymous reports fail closed with
 the same not-found response used for ineligible targets. `CONTENT_SOURCE_HOSTS` is an optional comma-separated list
 of exact lowercase DNS hosts for URL-import requests. The API uses its existing `KERNEL_SESSION_KEYS` ring for content
-cursors and does not need media storage credentials. Content worker settings are optional and all or nothing.
+cursors and does not need media storage credentials. Content worker storage is optional and selects exactly one
+complete backend: the strict production R2 group below, or the explicit development-only local root. The local root
+is accepted only with `NODE_ENV=development`, must be the repository's `.temp/local-stack/content-media`, and is
+limited to the same 20 MiB per object as R2. The local adapter validates canonical
+`m/<media UUID>/<original or normalized variant>` keys, writes by atomic replacement, and confines prefix deletion
+to one media UUID. It never serves files directly; downloads still use native Media authorization and disclosure.
+R2 and local storage cannot be configured together.
 
 The content registration in `src/content/register.ts` uses the shared kernel worker and its
 queues, database pool, enqueue client and shutdown. It does not start a separate process or relay.
@@ -1300,7 +1306,12 @@ variable, never a value. Startup logs one line for each absent group.
 | `CONTENT_R2_BUCKET`            | Media bucket name, 3–63 lowercase letters, digits and hyphens.                                                                                                      |
 | `CONTENT_R2_ACCESS_KEY_ID`     | Private host-side R2 access key with media read/write/delete permission.                                                                                            |
 | `CONTENT_R2_SECRET_ACCESS_KEY` | Corresponding private secret.                                                                                                                                       |
+| `CONTENT_LOCAL_MEDIA_ROOT`     | Development only: exact repository path `.temp/local-stack/content-media`, with `NODE_ENV=development`; mutually exclusive with all R2 settings.                   |
 | `CONTENT_SOURCE_HOSTS`         | Comma-separated exact lowercase DNS source hosts, at most 100, for trusted HTTPS source imports. No schemes, ports, wildcard suffixes, IP literals or whitespace.   |
+
+Decision: the documented local stack selects a confined file-backed `MediaStorage` at `.temp/local-stack/content-media`
+and adds only the selected Bangumi media host `lain.bgm.tv`; production continues to require the complete validated
+R2 group.
 
 Access reads the shared consent group with `readAuthConsentConfig(env)`. It is optional and all or nothing:
 `KERNEL_AUTH_CONSENT_URL` is the exact private HTTPS

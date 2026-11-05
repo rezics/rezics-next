@@ -17,6 +17,7 @@ import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaImportFetchConfig } from './media-import.ts';
 import { R2Storage } from './r2-storage.ts';
+import { LocalMediaStorage } from './local-media.ts';
 import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
 import { registerFeedWork } from './feed-work.ts';
@@ -98,7 +99,22 @@ export function contentWorkDependencies(
       ...config.absentGroups,
       ...(consent === null ? [Object.freeze({ name: 'consent', variables: AUTH_CONSENT_VARIABLES })] : []),
     ]),
-    storage: config.storage === null ? unavailableStorage() : new R2Storage({ ...config.storage, fetch: fetchImpl }),
+    storage:
+      config.storage === null
+        ? unavailableStorage()
+        : config.storage.kind === 'r2'
+          ? new R2Storage({
+              endpoint: config.storage.endpoint,
+              bucket: config.storage.bucket,
+              accessKeyId: config.storage.accessKeyId,
+              secretAccessKey: config.storage.secretAccessKey,
+              maxObjectBytes: config.storage.maxObjectBytes,
+              ...(config.storage.requestTimeoutMs === undefined
+                ? {}
+                : { requestTimeoutMs: config.storage.requestTimeoutMs }),
+              fetch: fetchImpl,
+            })
+          : new LocalMediaStorage(config.storage),
     readConsent: consent === null ? unavailableConsent() : createAuthConsentReader(consent),
     fetchConfig: Object.freeze({ allowedHosts: config.sourceHosts }),
   });

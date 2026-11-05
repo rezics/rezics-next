@@ -1,8 +1,11 @@
 import { isIP } from 'node:net';
 import { ConfigError } from '../commerce/config.ts';
 import type { R2StorageOptions } from './r2-storage.ts';
+import { LOCAL_MEDIA_MAX_OBJECT_BYTES, LOCAL_MEDIA_ROOT } from './local-media.ts';
 
-export type ContentStorageConfig = Readonly<Omit<R2StorageOptions, 'fetch'>>;
+export type ContentStorageConfig =
+  | Readonly<{ kind: 'r2' } & Omit<R2StorageOptions, 'fetch'>>
+  | Readonly<{ kind: 'local'; root: string; maxObjectBytes: number }>;
 
 export type ContentWorkGroupName = 'storage' | 'sources';
 
@@ -61,7 +64,19 @@ function storageValue(env: Environment, variable: string): string {
 }
 
 function readStorage(env: Environment): ContentStorageConfig | null {
-  if (!groupPresent(env, STORAGE_VARIABLES)) return null;
+  const r2Configured = groupPresent(env, STORAGE_VARIABLES);
+  const localRoot = env.CONTENT_LOCAL_MEDIA_ROOT;
+  if (r2Configured) {
+    if (localRoot !== undefined) throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+    return readR2Storage(env);
+  }
+  if (localRoot === undefined) return null;
+  if (env.NODE_ENV !== 'development') throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+  if (storageValue(env, 'CONTENT_LOCAL_MEDIA_ROOT') !== LOCAL_MEDIA_ROOT) throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+  return Object.freeze({ kind: 'local', root: LOCAL_MEDIA_ROOT, maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES });
+}
+
+function readR2Storage(env: Environment): ContentStorageConfig {
   const endpoint = storageValue(env, 'CONTENT_R2_ENDPOINT');
   let url: URL;
   try {
@@ -83,6 +98,7 @@ function readStorage(env: Environment): ContentStorageConfig | null {
   const bucket = storageValue(env, 'CONTENT_R2_BUCKET');
   if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) throw new ConfigError('CONTENT_R2_BUCKET');
   return Object.freeze({
+    kind: 'r2',
     endpoint: url.origin,
     bucket,
     accessKeyId: storageValue(env, 'CONTENT_R2_ACCESS_KEY_ID'),

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { ConfigError } from '../../src/commerce/config.ts';
+import { LOCAL_MEDIA_MAX_OBJECT_BYTES, LOCAL_MEDIA_ROOT } from '../../src/content/local-media.ts';
 import { readContentWorkConfig } from '../../src/content/work-config.ts';
 
 const env = {
@@ -13,6 +14,7 @@ const env = {
 test('production R2 and exact HTTPS source hosts are explicit and bounded', () => {
   const config = readContentWorkConfig(env);
   expect(config.storage).toEqual({
+    kind: 'r2',
     endpoint: env.CONTENT_R2_ENDPOINT,
     bucket: 'content-media',
     accessKeyId: 'private-access-id',
@@ -97,6 +99,28 @@ test('each group is all or nothing and a partial group names its first missing v
   expect(String(endpointFailure)).toContain('CONTENT_R2_ENDPOINT');
   expect(String(endpointFailure)).not.toContain('private-access-id');
   expect(String(endpointFailure)).not.toContain('private-secret');
+});
+
+test('local storage is an explicit development-only root with the same object limit', () => {
+  const local = readContentWorkConfig({ NODE_ENV: 'development', CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT });
+  expect(local.storage).toEqual({ kind: 'local', root: LOCAL_MEDIA_ROOT, maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES });
+  expect(local.absentGroups.map((group) => group.name)).toEqual(['sources']);
+  expect(() => readContentWorkConfig({ CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT })).toThrow(
+    'CONTENT_LOCAL_MEDIA_ROOT',
+  );
+  expect(() =>
+    readContentWorkConfig({ NODE_ENV: 'production', CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT }),
+  ).toThrow('CONTENT_LOCAL_MEDIA_ROOT');
+  expect(() =>
+    readContentWorkConfig({ NODE_ENV: 'development', CONTENT_LOCAL_MEDIA_ROOT: '/tmp/outside-media' }),
+  ).toThrow('CONTENT_LOCAL_MEDIA_ROOT');
+  expect(() =>
+    readContentWorkConfig({
+      ...env,
+      NODE_ENV: 'development',
+      CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT,
+    }),
+  ).toThrow('CONTENT_LOCAL_MEDIA_ROOT');
 });
 
 test('R2 rejects non-R2 origins, plaintext, paths and URL credentials', () => {

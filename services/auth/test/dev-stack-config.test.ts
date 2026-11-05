@@ -1,17 +1,19 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   developmentKeys,
   developmentBindings,
   developmentRegistrationPassword,
+  developmentContentBindings,
   issuerRequest,
   localDatabase,
   openLocalShowcase,
   publicKey,
   privateFile,
   retireDevelopmentSeedState,
+  resetLocalContentMedia,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
@@ -44,6 +46,53 @@ test('development setup gives finite dataset write capacity and preserves explic
   expect(developmentEnv('KERNEL_WRITE_RATE_OVERRIDES={}\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_WRITE_RATE_OVERRIDES={}\n',
   );
+});
+
+test('local content setup selects exact Bangumi media hosts and preserves complete R2 configuration', () => {
+  const repository = '/tmp/rezics-local-content';
+  expect(developmentContentBindings({}, repository)).toEqual({
+    CONTENT_SOURCE_HOSTS: 'lain.bgm.tv',
+    NODE_ENV: 'development',
+    CONTENT_LOCAL_MEDIA_ROOT: resolve(repository, '.temp/local-stack/content-media'),
+  });
+  expect(
+    developmentContentBindings({ CONTENT_SOURCE_HOSTS: 'covers.example.test' }, repository).CONTENT_SOURCE_HOSTS,
+  ).toBe('covers.example.test,lain.bgm.tv');
+  const r2 = {
+    CONTENT_R2_ENDPOINT: `https://${'a'.repeat(32)}.r2.cloudflarestorage.com`,
+    CONTENT_R2_BUCKET: 'content-media',
+    CONTENT_R2_ACCESS_KEY_ID: 'private-access',
+    CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
+    CONTENT_SOURCE_HOSTS: 'lain.bgm.tv,operator.example.test',
+  };
+  expect(developmentContentBindings(r2, repository)).toEqual({
+    CONTENT_SOURCE_HOSTS: r2.CONTENT_SOURCE_HOSTS,
+  });
+  expect(() => developmentContentBindings({ CONTENT_R2_BUCKET: 'content-media' }, repository)).toThrow(
+    'CONTENT_R2_ENDPOINT',
+  );
+  expect(() =>
+    developmentContentBindings({ NODE_ENV: 'production' }, repository),
+  ).toThrow('NODE_ENV');
+});
+
+test('local content reset removes only its configured media root', async () => {
+  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/reset-local-media-'));
+  const stack = resolve(repository, '.temp/local-stack');
+  const media = resolve(stack, 'content-media');
+  try {
+    await mkdir(media, { recursive: true });
+    await writeFile(resolve(media, 'owned-object'), 'local media');
+    await writeFile(resolve(stack, 'keys.json'), 'retained keys');
+    await resetLocalContentMedia(repository, {
+      NODE_ENV: 'development',
+      CONTENT_LOCAL_MEDIA_ROOT: media,
+    });
+    expect(await readFile(resolve(stack, 'keys.json'), 'utf8')).toBe('retained keys');
+    expect(await readdir(stack)).toEqual(['keys.json']);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
 });
 
 test('native loopback transport retains the public issuer and original request evidence', async () => {
