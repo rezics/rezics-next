@@ -2,7 +2,11 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { admitGroup } from '../access/gates/admission.ts';
 import { ProblemError } from '../http/problem.ts';
-import { collectionReadView, createCollectionReads } from '../library/collection-reads.ts';
+import {
+  collectionReadView,
+  createCollectionReads,
+  type CollectionResourceView,
+} from '../library/collection-reads.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -11,8 +15,17 @@ import { createZoneReads, type ZoneCollectionBasis } from './resource-reads.ts';
 const CURSOR_EPOCH = 1;
 const CURSOR_ROUTE = 'GET /v1/zones/{id}/collections';
 
+function publicCollectionView(value: CollectionResourceView) {
+  const view = collectionReadView(value);
+  if (!('allowedVisibilityActions' in view)) return view;
+  const { allowedVisibilityActions: _ownerActions, ...publicView } = view;
+  return publicView;
+}
+
+type PublicCollectionView = ReturnType<typeof publicCollectionView>;
+
 export type ZoneCollectionPage = {
-  collections: ReturnType<typeof collectionReadView>[];
+  collections: PublicCollectionView[];
   next: string | null;
 };
 
@@ -68,10 +81,10 @@ export async function readZoneCollections(
 
   const collections = createCollectionReads({ pool, access, tokens });
   const readVisible = async (mounts: readonly string[]) => {
-    const visible: ReturnType<typeof collectionReadView>[] = [];
+    const visible: PublicCollectionView[] = [];
     for (const mount of mounts) {
       try {
-        visible.push(collectionReadView(await collections.readCollection(actor, mount, deadline)));
+        visible.push(publicCollectionView(await collections.readCollection(actor, mount, deadline)));
       } catch (error) {
         if (error instanceof ProblemError && error.code === 'not_found') continue;
         throw error;
