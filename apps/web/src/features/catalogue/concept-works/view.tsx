@@ -42,9 +42,17 @@ export type ConceptWorksRouteState = {
 };
 
 export type ConceptWorksRoutePatch = {
-  [Key in 'property' | 'scheme' | 'type' | 'sort' | 'includeChildren' | 'spoilerThreshold' | 'cursor' | 'tagQualifiersText']?:
-    | ConceptWorksRouteState[Key]
-    | undefined;
+  [
+    Key in
+      | 'property'
+      | 'scheme'
+      | 'type'
+      | 'sort'
+      | 'includeChildren'
+      | 'spoilerThreshold'
+      | 'cursor'
+      | 'tagQualifiersText'
+  ]?: ConceptWorksRouteState[Key] | undefined;
 } & { condition?: FilterDocument | undefined };
 
 type Props = {
