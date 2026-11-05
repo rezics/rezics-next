@@ -259,7 +259,7 @@ class Harness {
   }
 }
 async function harness(run: (h: Harness) => Promise<void>) {
-  const factory = await loadMediaResolver(); // Every outcome is red for this exact missing production binding.
+  const factory = await loadMediaResolver();
   expect(typeof factory).toBe('function');
   const directory = mkdtempSync(join(tmpdir(), 'import-media-resolver-'));
   const h = new Harness(resolve(directory, 'bindings.sqlite'), factory);
@@ -305,6 +305,11 @@ function seed(h: Harness, count: number) {
     }
   }
 }
+
+test('media resolver loads the production driver and rejects an explicit missing path', async () => {
+  expect(await loadMediaResolver()).toBeFunction();
+  await expect(loadMediaResolver('./missing-import-media-resolver-driver.ts')).rejects.toThrow();
+});
 
 test('journal exact portable request before POST and actual 202 before first GET and observation before converter UUID', () =>
   harness(async (h) => {
