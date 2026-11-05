@@ -470,6 +470,12 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
         )!;
         (cancel as HTMLButtonElement).click();
       });
+      await act(async () => {
+        const discard = [...document.querySelectorAll('[role="alertdialog"] button')].find(
+          (button) => button.textContent === m.library_label_draft_navigation_discard(),
+        )!;
+        (discard as HTMLButtonElement).click();
+      });
       await act(async () => select('rename')());
       await changeName('Changed B draft');
       await submit('rename');
