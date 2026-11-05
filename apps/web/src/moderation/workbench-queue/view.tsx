@@ -77,7 +77,7 @@ function CaseRow({
   selection?: ReportsBulkAction;
   number: number;
   isCurrent?: () => boolean;
-  onOpenCase?: (item: WorkbenchCase, href: string) => void;
+  onOpenCase?: (item: WorkbenchCase, href: string, source?: HTMLAnchorElement, keyboard?: boolean) => void;
   requestDeparture: (proceed: () => void) => void;
 }) {
   const scope = workbenchQueueScope(search);
