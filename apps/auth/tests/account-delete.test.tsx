@@ -127,3 +127,56 @@ for (const phase of ['read', 'approval', 'success', 'step-up'] as const)
       assign.mockRestore();
     }
   });
+test('malformed execution preserves submitted custody through a later proven refusal and never retries', async () => {
+  const page = await open(<DeleteAccountContent {...props} initial={initial} />, body);
+  await submit(page.host);
+  await flush(() => page.calls[0]!.resolve(approval()));
+  await flush(() => page.calls[1]!.resolve(Response.json({ accountId: initial.accountId, extra: true })));
+  const saved = readPendingAccountOperationStepUp()!;
+  expect(saved.submitted).toBe(true);
+  expect(page.calls).toHaveLength(2);
+  await flush(() => button(page.host, 'Refresh requirements')!.click());
+  await submit(page.host);
+  expect(page.calls[2]!.body).toEqual({ operationKey: saved.operationKey, operation: saved.operation });
+  await flush(() =>
+    page.calls[2]!.resolve(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+    ),
+  );
+  expect(readPendingAccountOperationStepUp()).toEqual(saved);
+  expect(page.host.querySelector('[data-account-deletion-return="unknown"]')).not.toBeNull();
+  expect(page.calls).toHaveLength(3);
+});
+test('replacement during unavailable retry keeps its own continuation and cannot be marked deleted', async () => {
+  const page = await open(<DeleteAccountContent {...props} initial={initial} />, body);
+  await submit(page.host);
+  await flush(() => page.calls[0]!.resolve(approval()));
+  await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  expect(page.calls[2]!.body).toEqual(page.calls[1]!.body);
+  const replacement = {
+    kind: 'delete' as const,
+    accountId: 'replacement',
+    operationKey: 'e'.repeat(32),
+    operation: { kind: 'delete' as const, accountId: 'replacement' },
+    submitted: false,
+  };
+  storePendingAccountOperationStepUp(replacement);
+  await flush(() => page.calls[2]!.resolve(Response.json({ accountId: initial.accountId })));
+  expect(readPendingAccountOperationStepUp()).toMatchObject(replacement);
+  expect(page.host.textContent).not.toContain('Your account has been deleted');
+  expect(page.calls).toHaveLength(3);
+});
+test('refused submitted-marker persistence sends no execution', async () => {
+  const page = await open(<DeleteAccountContent {...props} initial={initial} />, body);
+  await submit(page.host);
+  const storage = spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+    throw new Error('storage refused');
+  });
+  try {
+    await flush(() => page.calls[0]!.resolve(approval()));
+    expect(page.calls).toHaveLength(1);
+    expect(readPendingAccountOperationStepUp()?.submitted).toBe(false);
+  } finally {
+    storage.mockRestore();
+  }
+});

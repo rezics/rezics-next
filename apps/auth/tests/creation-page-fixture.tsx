@@ -115,7 +115,7 @@ export async function open(page: ReactNode, sessionBody: object) {
 export const send = (host: HTMLElement) => host.querySelector<HTMLFormElement>('form')!.requestSubmit();
 export const leave = () => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
 export const approval = () =>
-  Response.json({ reference: 'native-approval', expiresAt: new Date(Date.now() + 60000).toISOString() });
+  Response.json({ reference: 'bmF0aXZl.' + 'a'.repeat(43), expiresAt: new Date(Date.now() + 60000).toISOString() });
 
 /** Closed native selected-page fixture; identity remains admitted presentation only. */
 export const automatedOperatorPage = (accountId: string, operator: object) =>

@@ -1,3 +1,13 @@
+import {
+  ACCOUNT_OPERATION_MAX_ERROR_BYTES,
+  DELETION_APPROVAL_MAX_RESPONSE_BYTES,
+  DELETION_EXECUTION_MAX_RESPONSE_BYTES,
+  parseAccountOperationApprovalResponse,
+  parseDeletionExecutionResponse,
+  parseDeletionOperationRefusal,
+} from '@rezics/auth-contract';
+import { readJsonBounded } from './private-auth-json';
+import { AUTH_POST_TIMEOUT_MS } from './api';
 import { privateAuthRead } from './private-auth-read';
 import { authPost, type AuthPostResult } from './api';
 import { requestAccountSession } from './account-session';
@@ -168,6 +178,97 @@ function failure(result: Exclude<AuthPostResult, { ok: true }>): AccountOperatio
   return { ok: false, reason: 'failure' };
 }
 
+/** One independent headers-and-body lifetime for each original POST and retry. */
+async function deletionPost(path: string, body: unknown, maxBytes: number): Promise<AuthPostResult> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unreadable = { ok: false, status: 503, code: 'unreadable', retryAfter: null } as const;
+  const deadline = new Promise<AuthPostResult>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(unreadable);
+      controller.abort();
+    }, AUTH_POST_TIMEOUT_MS);
+  });
+  const receive = async (): Promise<AuthPostResult> => {
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const value = await readJsonBounded(
+        response,
+        response.status === 200 ? maxBytes : ACCOUNT_OPERATION_MAX_ERROR_BYTES,
+        controller.signal,
+      );
+      if (response.status === 200) return { ok: true, body: value };
+      const refused = parseDeletionOperationRefusal(value, response.status);
+      if (refused)
+        return {
+          ok: false,
+          status: response.status,
+          code: refused.error,
+          effectStatus: 'not_applied',
+          retryAfter: null,
+        };
+      if (
+        response.status === 503 &&
+        value &&
+        typeof value === 'object' &&
+        Object.keys(value).join(',') === 'error' &&
+        'error' in value &&
+        value.error === 'unavailable'
+      )
+        return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+      return unreadable;
+    } catch {
+      // External transport, decoding and parsing failures provide no effect evidence.
+      return unreadable;
+    }
+  };
+  try {
+    return await Promise.race([receive(), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runDeletion(
+  operationKey: string,
+  operation: Extract<AccountOperation, { kind: 'delete' }>,
+  browser?: { isCurrent: () => boolean; retryUncertain?: boolean; onExecutionDispatch?: () => boolean },
+): Promise<AccountOperationResult> {
+  const current = () => !browser || browser.isCurrent();
+  if (!current()) return { ok: false, reason: 'failure' };
+  const approvalBody = { operationKey, operation };
+  const approve = () => deletionPost('/account-operations/approve', approvalBody, DELETION_APPROVAL_MAX_RESPONSE_BYTES);
+  let approved = await approve();
+  if (!approved.ok && approved.code === 'unavailable' && current()) approved = await approve();
+  if (!current()) return { ok: false, reason: 'failure' };
+  if (!approved.ok) return failure(approved);
+  const approval = parseAccountOperationApprovalResponse(approved.body);
+  if (!approval || Date.parse(approval.expiresAt) <= Date.now()) return { ok: false, reason: 'unavailable' };
+  const executionBody = { operationKey, operation, reference: approval.reference };
+  if (browser?.onExecutionDispatch && !browser.onExecutionDispatch()) return { ok: false, reason: 'failure' };
+  if (!current()) return { ok: false, reason: 'failure' };
+  const execute = () =>
+    deletionPost('/account-operations/execute', executionBody, DELETION_EXECUTION_MAX_RESPONSE_BYTES);
+  let executed = await execute();
+  const uncertain = !executed.ok && executed.effectStatus !== 'not_applied';
+  if (!executed.ok && executed.code === 'unavailable' && (!browser || browser.retryUncertain) && current())
+    executed = await execute();
+  if (!executed.ok)
+    return uncertain || executed.effectStatus !== 'not_applied' ? { ok: false, reason: 'unknown' } : failure(executed);
+  const result = parseDeletionExecutionResponse(executed.body);
+  return result && result.accountId === operation.accountId
+    ? { ok: true, accountId: result.accountId }
+    : { ok: false, reason: 'unknown' };
+}
+
 export async function runAccountOperation(
   operationKey: string,
   operation: AccountOperation,
@@ -177,6 +278,7 @@ export async function runAccountOperation(
     onExecutionDispatch?: () => boolean;
   },
 ): Promise<AccountOperationResult> {
+  if (operation.kind === 'delete') return runDeletion(operationKey, operation, browser);
   if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   const approved = await post<{ reference?: unknown; expiresAt?: unknown }>(
     '/account-operations/approve',
@@ -223,8 +325,7 @@ export async function runAccountOperation(
     executed.body.expired ||
     executed.body.error ||
     typeof executed.body.accountId !== 'string' ||
-    !executed.body.accountId ||
-    (operation.kind === 'delete' && executed.body.accountId !== operation.accountId)
+    !executed.body.accountId
   )
     return { ok: false, reason: 'unknown' };
   return { ok: true, accountId: executed.body.accountId };

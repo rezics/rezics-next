@@ -76,7 +76,7 @@ export function finishAccountDeletionAttempt(
   runId: number,
   result: AccountOperationResult,
 ): AccountDeletionAttempt {
-  if (attempt.runId !== runId || (attempt.phase !== 'approval' && attempt.phase !== 'execution')) return attempt;
+  if (attempt.runId !== runId || !['approval', 'execution', 'unknown'].includes(attempt.phase)) return attempt;
   if (result.ok && result.accountId === attempt.operation.accountId)
     return { ...attempt, phase: 'committed', uncertain: false, hintOnly: false, lastResponse: undefined };
 

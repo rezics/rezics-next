@@ -115,7 +115,11 @@ test('intended step-up and accepted deletion leave freely; unknown outcomes warn
   try {
     await page.type();
     await flush(() => send(page.host));
-    await flush(() => page.calls[0]!.resolve(Response.json({ error: 'step_up_required' }, { status: 401 })));
+    await flush(() =>
+      page.calls[0]!.resolve(
+        Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+      ),
+    );
     expect(assign).toHaveBeenCalledTimes(1);
     expect(page.unload()).toBe(false);
     const original = readPendingAccountOperationStepUp()!;

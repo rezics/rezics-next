@@ -3193,10 +3193,29 @@ The shared three-second deadline covers native I/O and the post-read disclosure 
 five-second private-read deadline and no automatic page retry. Security retains its existing bounded inventory
 interface and link; this source adds no inventory or ownership scan.
 
-Advice is a current read, not approval. Operated accounts, last ownership, transfers, temporary holds and pending
-native work remain explicit requirements rechecked by the durable command. Retry retains the exact operation key
-and uncertain submitted operation. Commit means the tombstone was committed; active cleanup, named adopted
-retention exceptions, backups and external copies remain separate. The page preserves cleanup-pending wording.
+Decision: deletion shares the public sealed-reference approval contract with rename; its only supported workflow
+success/replay projection is exact `{accountId}` for the requested account. Approval is validated before emission:
+exact `{reference,expiresAt}`, reference nonempty sealed ASCII up to 4,096 units, canonical ISO expiry up to 27 bytes.
+The browser approval allowance is the empty-string skeleton plus `6 × 4096 + 27` bytes (legal escaped reference);
+execution is its empty-string skeleton plus `6 × 4096` bytes for the opaque native id. Delete has no successful
+expired/incomplete variant. Incompatible, wrong-target or failed post-dispatch results emit exact `{error:unavailable}`
+with 503, never fabricated `not_applied`. Organization deletion keeps the same `{accountId}` wire projection.
+Resolution, native freshness, preparations, responsibilities, fences, CAS and erasure authority are unchanged.
+
+The finite refusal allowance is the maximum serialized `{error:account_operation_denied,effect_status:not_applied}`
+and `{error:step_up_required,effect_status:not_applied}` skeletons (quoted JSON strings). Supported statuses are
+400,401,403,409,413,415,503 for denied and 401 for step-up. Exact `{error:unavailable}`/503 fits that same allowance.
+Only these pairs establish browser refusal or retry eligibility. Each command POST retains its own five-second
+headers/body lifetime. Approval and explicit deletion recovery each permit one exact unavailable retry, so submission
+costs two POSTs normally and at most four, with the identical execution key, descriptor and reference. No calls are
+added. Timeout, malformed output and lost acknowledgement stay unknown and never automatically retry.
+
+Advice is a current read, not approval or original command acknowledgement. Operated accounts, last ownership,
+transfers, temporary holds and pending work are rechecked by the durable command. Original acknowledged completion
+survives private retirement as generic history; submitted/unknown custody is monotone through later refusal, missing
+account, sign-out or replacement. Exact-owned cleanup cannot affect a replacement. Commit means tombstone committed;
+active cleanup, adopted retention exceptions, backups and external copies remain separate. Fixture evidence does not
+qualify native output/replay or mounted browser behavior; integrated native/browser acceptance remains required.
 
 ## Organization deletion review
 

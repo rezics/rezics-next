@@ -1,4 +1,8 @@
-import { parseRenameApprovalResponse, parseRenameExecutionResponse } from '@rezics/auth-contract';
+import {
+  parseAccountOperationApprovalResponse,
+  parseRenameExecutionResponse,
+  parseDeletionExecutionResponse,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
 import { managementCallerMatches } from './auth-management-client.ts';
@@ -138,6 +142,7 @@ export function accountOperationTransport(
       request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json'
     )
       return denied(400);
+    let deletionDispatched = false;
     try {
       const body = await readJsonObject(request);
       const names =
@@ -182,7 +187,7 @@ export function accountOperationTransport(
         });
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
-        if (operation.kind === 'rename' && !parseRenameApprovalResponse(projected))
+        if (['rename', 'delete'].includes(operation.kind) && !parseAccountOperationApprovalResponse(projected))
           return response({ error: 'unavailable' }, 503);
         return response(projected);
       }
@@ -236,14 +241,19 @@ export function accountOperationTransport(
             ? response(result)
             : response({ error: 'unavailable' }, 503);
         }
-        case 'delete':
-          return response(
+        case 'delete': {
+          deletionDispatched = true;
+          const result = parseDeletionExecutionResponse(
             await workflows.deleteAccount({
               ...input,
               accountId: operation.accountId as string,
               ...(operation.responsibility === undefined ? {} : { responsibility: operation.responsibility as never }),
             }),
           );
+          return result && result.accountId === operation.accountId
+            ? response(result)
+            : response({ error: 'unavailable' }, 503);
+        }
         case 'transfer':
           return response(
             await workflows.transferOperator({
@@ -268,6 +278,8 @@ export function accountOperationTransport(
           return response(await workflows.fenceOperator({ ...input, accountId: operation.accountId as string }));
       }
     } catch (error) {
+      // After invoking deletion, an exception can follow a committed tombstone.
+      if (deletionDispatched) return response({ error: 'unavailable' }, 503);
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;

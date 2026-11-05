@@ -87,6 +87,7 @@ test('unknown execution survives dismissal and a late acknowledgement without ch
   expect(readPendingAccountOperationStepUp()).toEqual(saved);
   expect(page.host.querySelector('#account-delete-input')).toBeNull();
   expect(page.host.textContent).not.toContain(m.auth_account_delete_success());
+  expect(page.host.querySelector('[data-account-deletion-return="acknowledged"]')).not.toBeNull();
   expect(page.calls).toHaveLength(2);
 });
 

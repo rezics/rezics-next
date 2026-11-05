@@ -524,7 +524,23 @@ export function DeleteAccountContent({
       retryUncertain: true,
       onExecutionDispatch,
     });
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      // Retirement cannot erase evidence from this original send. Keep only
+      // generic history; replacement custody and private controls stay untouched.
+      const original = attemptRef.current;
+      if (
+        result.ok &&
+        original?.runId === runId &&
+        original.operationKey === operationKey &&
+        original.operation.accountId === operation.accountId &&
+        JSON.stringify(pendingAccountOperationStepUpState()) === continuation
+      ) {
+        const completed = finishAccountDeletionAttempt(original, runId, result);
+        publishAttempt(completed);
+        setReturnHistory(returnController.remember(completed));
+      }
+      return;
+    }
     const activeAttempt = attemptRef.current;
     if (!activeAttempt) return;
     const completedAttempt = finishAccountDeletionAttempt(activeAttempt, runId, result);

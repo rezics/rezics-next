@@ -378,6 +378,10 @@ test('a signed-in person approves and executes organization creation rename and 
   expect(deleted.headers.get('x-content-type-options')).toBe('nosniff');
   expect(await stateOf(leaving.accountId)).not.toBe('active');
   await refused(await approve(leaving, 'after-delete', removal), 401);
+  await refused(
+    await execute(leaving, { operationKey: 'delete-self', operation: removal, reference: removalApproval.reference }),
+    401,
+  );
 }, 120000);
 
 test('a transfer is approved by the source manager accepted by the destination manager and executed', async () => {
