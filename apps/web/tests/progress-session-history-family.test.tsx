@@ -294,7 +294,7 @@ test('Discrete history and sparse unit pages preserve each exact key and every i
       expect(within(region).queryByRole('link', { name: m.library_window_previous() })).toBeNull();
       const href = within(region).getByRole('link', { name: m.library_progress_more() }).getAttribute('href')!;
       const url = new URL(href, window.location.href);
-      expect(url.pathname).toBe(`/library/progress/${original.session.id}`);
+      expect(url.pathname).toBe(`/en/library/progress/${original.session.id}`);
       expect(Object.fromEntries(url.searchParams)).toEqual({
         changes,
         units: unitCursor,
