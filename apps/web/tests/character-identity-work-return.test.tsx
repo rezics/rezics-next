@@ -277,6 +277,8 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
     const { fixture, character, read } = prepare('en');
     const page = pageFor(character);
     setLocale('en', { reload: false });
+    browser.location.href = `https://site.test/en/subjects/${character}/character`;
+    calls.length = 0;
     await act(async () => {
       client.setQueryData(['session'], { state: 'signed-in', subject: member, csrfToken: 'member' });
     });
