@@ -397,7 +397,12 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       property: { id: 'schema:url' },
       value: { type: 'value', content: 'https://bgm.tv/person/8101' },
     });
-    await editor.adoptSubject(personId, 'schema:birthDate', birthCandidate.statement.value.content as Json, globalContext);
+    await editor.adoptSubject(
+      personId,
+      'schema:birthDate',
+      birthCandidate.statement.value.content as Json,
+      globalContext,
+    );
     const birthRead = await editor.http(`/v1/subjects/${personId}?context=${globalContext}`);
     expect(birthRead.status).toBe(200);
     expect(

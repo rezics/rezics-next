@@ -1058,7 +1058,6 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
 Game-name mapping; the combined registration keeps `cross-media-entities@13`.
 
-
 Current `bangumi@14` shares one bounded infobox scan for the exact pinned
 `{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
 records. It preserves the existing cited name, original-run and work-evidence

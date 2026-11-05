@@ -132,8 +132,9 @@ test('partial, invalid and Organization dates are withheld while independent per
   expect(birth(organization)).toBeUndefined();
   expect(organization.diagnostics).toContainEqual({ pointer: '/type', code: 'unadmitted_person_birth_date' });
   expect(organization.normalizedRecord.summary).toBe('制作室。');
-  expect(projectBangumiPersonBirthDate({ profile: 'schema:Organization', birth_year: 1999, birth_mon: 1, birth_day: 1 }))
-    .toEqual({ diagnostic: { pointer: '/type', code: 'unadmitted_person_birth_date' } });
+  expect(
+    projectBangumiPersonBirthDate({ profile: 'schema:Organization', birth_year: 1999, birth_mon: 1, birth_day: 1 }),
+  ).toEqual({ diagnostic: { pointer: '/type', code: 'unadmitted_person_birth_date' } });
 
   const character = convertCrossMediaEntity(
     {
@@ -150,7 +151,9 @@ test('partial, invalid and Organization dates are withheld while independent per
     { sourceKind: 'bangumi' },
   );
   expect(
-    character.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:birthDate'),
+    character.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:birthDate',
+    ),
   ).toBe(false);
   expect(character.diagnostics).toContainEqual({
     pointer: '/infobox/fields/0',

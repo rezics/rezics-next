@@ -119,8 +119,7 @@ async function readCareers(
     const responseDigest = createHash('sha256').update(bytes).digest('hex');
     const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     const person = object(parsed);
-    if (!person || person.id !== id)
-      throw new TypeError('Invalid Bangumi Person career response');
+    if (!person || person.id !== id) throw new TypeError('Invalid Bangumi Person career response');
     const careers = admittedCareers(person.career);
     const birth_year = integerOrNull(person.birth_year);
     const birth_mon = integerOrNull(person.birth_mon);
@@ -202,7 +201,8 @@ export async function acquireBangumiPersonCareerSources(
       try {
         await pause(requestGapMs, signal);
       } catch {
-        for (const remaining of people.slice(index + 1)) if (neededCareer.has(remaining.key)) failures.add(remaining.key);
+        for (const remaining of people.slice(index + 1))
+          if (neededCareer.has(remaining.key)) failures.add(remaining.key);
         break;
       }
     }

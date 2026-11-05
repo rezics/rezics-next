@@ -56,8 +56,7 @@ test('ordinary CLI person JSON and selected PersonDetail reuse one cited birth d
       })}\n`,
     );
   }
-  for await (const row of readDump('bangumi', personDump()))
-    dump.push(row);
+  for await (const row of readDump('bangumi', personDump())) dump.push(row);
   expect(dump).toEqual([
     expect.objectContaining({
       source: 'bangumi',

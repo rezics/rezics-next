@@ -36,10 +36,7 @@ import {
   projectBangumiCharacterMeasurements,
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
-import {
-  projectBangumiPersonBirthDate,
-  type BangumiPersonBirthDate,
-} from './bangumi-person-birth-date.ts';
+import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './bangumi-person-birth-date.ts';
 
 export const converter_revision = 'cross-media-entities@13';
 export const bangumiCharacterNameCommandLimit =
