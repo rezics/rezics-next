@@ -327,7 +327,7 @@ export async function resolveConditionEntityLabels(
   signal: AbortSignal,
 ): Promise<ConditionEntityLabelResult> {
   const ids = uniqueResolvableIds(values);
-  if (!ids.length) return { labels: {}, withheld: [] };
+  if (!ids.length) return { labels: {}, withheld: [], failures: {} };
   if (!context.available) throw new ConditionEntityLookupError('unavailable');
   const controller = new AbortController();
   const unlink = linkedSignal(signal, controller);
