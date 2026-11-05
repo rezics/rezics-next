@@ -402,13 +402,13 @@ test('review transport keeps original source observations, decimal security revi
     fetch: Object.assign(
       async () => {
         synchronousMergeCalls++;
-        return Response.json({ survivor: original, redirected: other, revision: 2 }, { status: 200 });
+        return Response.json({ operation: { id: original } }, { status: 202 });
       },
       { preconnect() {} },
     ),
   });
   await expect(synchronousMerge.mergeReviewedPersons(body, 'synchronous-result')).rejects.toMatchObject({
-    status: 200,
+    status: 202,
   });
   expect(synchronousMergeCalls).toBe(1);
 

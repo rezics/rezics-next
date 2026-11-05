@@ -2,7 +2,6 @@ import type { OperatorTransferPageAccess } from '../../src/access/operator-trans
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { AccountWorkflowOptions } from '@rezics/auth';
 import type { AutomatedOperatorAccess } from '../../src/access/automated-operator-source.ts';
-import type { OperatorTransferPageAccess } from '../../src/access/operator-transfer-page-source.ts';
 import type {
   AccountWorkflowPorts,
   AuthSessionPort,
