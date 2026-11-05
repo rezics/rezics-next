@@ -252,9 +252,10 @@ function currentPosition(
 export function conceptWorkIntentFor(route: ConceptWorksRouteState | undefined, page: ConceptPage): ConceptWorkIntent {
   const readableSchemes = page.schemes.filter((scheme) => scheme.readable && scheme.conceptPage);
   const onlyScheme = page.schemes.length === 1 && readableSchemes.length === 1 ? readableSchemes[0] : undefined;
+  const scheme = route?.scheme ?? onlyScheme?.id;
   return {
     ...(route?.property ? { property: route.property } : {}),
-    ...(route?.scheme || onlyScheme ? { scheme: route?.scheme ?? onlyScheme?.id } : {}),
+    ...(scheme ? { scheme } : {}),
     ...(route?.type ? { type: route.type } : {}),
     ...(route?.includeChildren ? { includeChildren: true } : {}),
     ...(route?.spoilerThreshold !== undefined ? { spoilerThreshold: route.spoilerThreshold } : {}),
