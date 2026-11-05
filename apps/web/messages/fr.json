@@ -10490,5 +10490,16 @@
   "subject_synopsis_visit_invalid": "Cette visite du synopsis ne peut pas être ouverte. Revenez à la lecture actuelle de l’œuvre et sélectionnez à nouveau le synopsis.",
   "subject_synopsis_visit_changed": "Le synopsis demandé ne peut pas être rouvert avec le document associé à l’origine. La lecture actuelle a peut-être changé ou est indisponible.",
   "subject_synopsis_current_field": "Consulter le champ Global actuel dans une nouvelle visite",
-  "subject_synopsis_return_changed": "Le synopsis précédemment sélectionné a changé ou n’est plus disponible. La lecture actuelle est affichée."
+  "subject_synopsis_return_changed": "Le synopsis précédemment sélectionné a changé ou n’est plus disponible. La lecture actuelle est affichée.",
+  "identifiers_origin_realm": "Cette visite provient de la lecture publique du Realm sélectionné.",
+  "identifiers_origin_unsupported": "Cette visite provient d’un Context sélectionné que cette route publique ne peut pas relire.",
+  "identifiers_global_only_notice": "La correction des identifiants ici utilise uniquement la lecture Global actuelle. L’origine publique sélectionnée n’autorise pas une correction Global.",
+  "identifiers_global_choice": "Ouvrir la correction Global actuelle",
+  "identifiers_return_origin": "Retourner à la lecture publique sélectionnée",
+  "identifiers_open_global_subject": "Ouvrir le sujet Global",
+  "identifiers_origin_realm_named": "Cette visite provient du Realm public sélectionné : {name}.",
+  "identifiers_origin_changed": "Le Realm sélectionné ne résout plus vers le même Context pour ce sujet. Les anciennes valeurs ne sont pas affichées.",
+  "identifiers_origin_missing": "La lecture du Realm sélectionné n’est plus disponible pour ce sujet.",
+  "identifiers_origin_refused": "La lecture du Realm sélectionné est inaccessible. Ses valeurs ne sont pas affichées.",
+  "identifiers_origin_unavailable": "La lecture du Realm sélectionné est temporairement indisponible. Ses valeurs ne sont pas affichées."
 }

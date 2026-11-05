@@ -555,6 +555,28 @@ multivalued. No URL, scheme, identifier spelling or provider key is normalized o
 relations and original text retain their separate editors. Citations support a fact; they do not prove identity,
 license an asset or supply ingestion Source metadata. Bootstrap receipts and imported claim tuples are untouched.
 
+Decision: the installed Identifier visit carries the selected Context and existing Realm selector as bounded public
+origin intent. A non-Global origin shows the Global-only correction limit before an explicit choice mounts the existing
+Global correction reader; origin intent never enters `readCorrection`, candidate schemas or proposal commands. A direct
+legacy `/identifiers` address remains a Global correction visit with no invented origin.
+
+The menu records at most one Context and one Realm UUID in the route search. The installed route admits no root
+Context selector and re-reads a Realm origin through the existing public page reader; it requires the exact returned
+Realm and Context before naming that reading current. Changed, missing, refused and unavailable Realm readings show
+no earlier facts. A Context-only origin without the established Realm selector is explicitly unsupported and offers
+an explicit Global recovery choice. The selected Realm reading and any later Global correction are separate reads.
+Choosing Global starts `readCorrection` with only its existing Subject address and current Global advice; candidate
+review remains its existing independent controller. Review links preserve the bounded origin, so revisiting a
+non-Global URL requires the deliberate Global choice again.
+
+The combined route search, including an existing review pair, is capped at 2,048 characters and 2,048 UTF-8 bytes;
+duplicate or contradictory selectors are refused before the editor mounts. A direct Global visit performs one route
+canonical Subject read and then the existing correction read: one public Subject request, one active Definition
+request, one immutable release request, and at most one authorized viewer-actions request. A Realm visit adds one
+bounded public page read before the explicit Global choice; the page reader's existing optional Terms advice remains
+its owner. The installed visit makes no per-identifier read, source lookup or write. Exact selected-assertion
+inspection, current evidence return and focus settlement remain the receiving work for this visit.
+
 Changed included fields seal separate native candidate requests and keys. Partial success, denial, invalid values,
 stale metadata, uncertainty and unavailability retain the existing per-field behavior. Session preparation hides
 retained work until the current read is available again. A field no longer admitted by the refreshed Type disables

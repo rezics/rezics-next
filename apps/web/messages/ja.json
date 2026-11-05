@@ -10584,5 +10584,16 @@
   "subject_synopsis_visit_invalid": "このあらすじを開けませんでした。作品の現在の閲覧ページに戻り、あらすじを選び直してください。",
   "subject_synopsis_visit_changed": "元の文書との対応関係で、選択したあらすじを再表示できませんでした。現在の閲覧内容が変更されたか、利用できない可能性があります。",
   "subject_synopsis_current_field": "新しい閲覧として現在の Global フィールドを確認",
-  "subject_synopsis_return_changed": "以前選択したあらすじは変更されたか、利用できなくなりました。現在の閲覧内容を表示しています。"
+  "subject_synopsis_return_changed": "以前選択したあらすじは変更されたか、利用できなくなりました。現在の閲覧内容を表示しています。",
+  "identifiers_origin_realm": "この訪問は、選択した Realm の公開読み取りから始まりました。",
+  "identifiers_origin_unsupported": "この訪問の選択 Context は、この公開ルートでは再読できません。",
+  "identifiers_global_only_notice": "ここでの識別子修正は、現在の Global 読み取りだけを使用します。選択した公開元は Global の修正権限を与えません。",
+  "identifiers_global_choice": "現在の Global 修正を開く",
+  "identifiers_return_origin": "選択した公開読み取りに戻る",
+  "identifiers_open_global_subject": "Global の Subject を開く",
+  "identifiers_origin_realm_named": "この訪問は、選択した Realm「{name}」の公開読み取りから始まりました。",
+  "identifiers_origin_changed": "この Subject の選択 Realm は、同じ Context に解決されなくなりました。以前の値は表示しません。",
+  "identifiers_origin_missing": "この Subject の選択 Realm 読み取りは利用できなくなりました。",
+  "identifiers_origin_refused": "選択した Realm 読み取りにアクセスできなかったため、値は表示しません。",
+  "identifiers_origin_unavailable": "選択した Realm 読み取りは一時的に利用できないため、値は表示しません。"
 }

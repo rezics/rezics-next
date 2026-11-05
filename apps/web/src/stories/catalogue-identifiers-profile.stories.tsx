@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { IdentifiersProfile } from '../features/catalogue/identifiers-profile-view';
+import { IdentifierOriginChoice } from '../features/catalogue/identifier-current-visit-view';
+import {
+  identifierOriginHref,
+  identifierRouteHref,
+  type IdentifierVisitOrigin,
+} from '../features/catalogue/identifier-current-visit';
 import {
   identifiersProfileFixture,
   identifiersSubject,
@@ -30,6 +36,50 @@ function Example({ scenario = 'ready' }: { scenario?: IdentifiersScenario }) {
           transport={fixture.transport}
           review={fixture.review}
         />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+function OriginVisitExample({ unsupported = false }: { unsupported?: boolean }) {
+  const locale = getLocale();
+  const [global, setGlobal] = useState(false);
+  const fixture = useMemo(() => identifiersProfileFixture('ready', locale), [locale]);
+  const origin: IdentifierVisitOrigin = unsupported
+    ? { context: '9f4c6b04-7496-4e14-89bc-41abf931e662', kind: 'unsupported' }
+    : {
+        context: '0ac7c5d7-1f67-4d02-8a72-0676044ecb19',
+        realm: 'b7d92525-081e-42e1-9cb8-ef72b1492a25',
+        realmTitle: 'Example Realm',
+        state: 'current',
+        kind: 'realm',
+      };
+  const subject = { id: identifiersSubject, label: 'A book' };
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        {global ? (
+          <IdentifiersProfile
+            key={`${locale}:${unsupported}`}
+            id={identifiersSubject}
+            locale={locale}
+            session="signed-in"
+            transport={fixture.transport}
+            review={fixture.review}
+            origin={origin}
+            editorHref={identifierRouteHref(locale, identifiersSubject, 'a-book', { origin })}
+            originHref={unsupported ? undefined : identifierOriginHref(subject, locale, origin)}
+            globalHref={identifierOriginHref(subject, locale)}
+          />
+        ) : (
+          <IdentifierOriginChoice
+            locale={locale}
+            origin={origin}
+            originHref={unsupported ? undefined : identifierOriginHref(subject, locale, origin)}
+            globalHref={identifierOriginHref(subject, locale)}
+            onChooseGlobal={() => setGlobal(true)}
+          />
+        )}
       </AppShell>
     </PatternStory>
   );
@@ -62,6 +112,16 @@ export const RouteEntry: Story = {
   ),
 };
 export const CurrentEvidence: Story = {};
+export const SelectedRealmOrigin: Story = { render: () => <OriginVisitExample /> };
+export const UnsupportedSelectedContext: Story = { render: () => <OriginVisitExample unsupported /> };
+export const DeliberateGlobalCorrection: Story = {
+  render: () => <OriginVisitExample />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.identifiers_global_choice() }));
+    await expect(canvas.findByRole('region', { name: /ISBN-13/u })).resolves.toBeVisible();
+  },
+};
 export const ExactCurrentValue: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

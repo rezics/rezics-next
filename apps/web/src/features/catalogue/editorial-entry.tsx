@@ -3,7 +3,7 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
-import { subjectHref } from '../../subject/subject-href';
+import { identifierVisitHref } from './identifier-current-visit';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { CreateSubjectEntry } from './create-subject-entry';
 import { GameProfileEntry, gameProfileEntry } from './game-profile-entry';
@@ -140,7 +140,7 @@ export function EditorialEntry({
   entries.push({
     group: 'edit',
     label: m.identifiers_title({}, { locale: locale as never }),
-    href: `${subjectHref({ id, label }, locale).href}/identifiers`,
+    href: identifierVisitHref({ id, label }, locale, { context, realm }),
   });
   const o = { locale: locale as never };
   return (
