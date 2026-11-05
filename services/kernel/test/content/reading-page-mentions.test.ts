@@ -119,13 +119,13 @@ test('empty, unavailable, active, concealed and erased identity states stay dist
 
 test('first, continued and exact-selected-post pages contain only their readable body mentions', async () => {
   const thread = await f.thread();
-  const missingAccountId = newId(routeOf(f.author.actor.accountId)!);
+  const missingAccountId = newId(routeOf(f.author.accountId)!);
   const selectedReply = f.system.actors.other.actor.accountId;
   let firstMention: { id: string; revisionId: string } | undefined;
   let lastReply: { id: string; revisionId: string } | undefined;
   for (let index = 0; index < 22; index++) {
     if (index === 0 || index === 21) {
-      const ids = index === 0 ? [f.author.actor.accountId, missingAccountId] : [selectedReply];
+      const ids = index === 0 ? [f.author.accountId, missingAccountId] : [selectedReply];
       await f.setTime(Date.now() + ++window * 60_000);
       const value = await f.checked('POST', `/v1/threads/${thread.id}/posts`, {
         bearer: f.author.bearer,
@@ -145,7 +145,7 @@ test('first, continued and exact-selected-post pages contain only their readable
   expect(first.response.status, first.text).toBe(200);
   expect(first.value.mentions).toMatchObject({ state: 'current', retryable: false, overflow: false });
   expect(first.value.mentions.identities.map((identity: { id: string }) => identity.id)).toEqual([
-    f.author.actor.accountId,
+    f.author.accountId,
     missingAccountId,
   ]);
   expect(first.value.mentions.identities[1]).toEqual({ id: missingAccountId, state: 'concealed' });
@@ -153,7 +153,7 @@ test('first, continued and exact-selected-post pages contain only their readable
     first.value.mentions.sources.find((source: { postId: string }) => source.postId === firstMention?.id),
   ).toMatchObject({
     pageIndex: 1,
-    references: [f.author.actor.accountId, missingAccountId],
+    references: [f.author.accountId, missingAccountId],
   });
   expect(first.value.mentions.identities.some((identity: { id: string }) => identity.id === selectedReply)).toBe(false);
 

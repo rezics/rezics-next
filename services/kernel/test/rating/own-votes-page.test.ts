@@ -486,7 +486,8 @@ test('native mapping stays preparing through merge and counted reads follow the 
 
 test('equal-time merge selection and eventless losing-row cleanup leave the counted destination authoritative', async () => {
   const [candidateA, candidateB] = await Promise.all([fixture.createSubject(), fixture.createSubject()]);
-  const [first, second] = [candidateA, candidateB].sort();
+  const first = candidateA < candidateB ? candidateA : candidateB;
+  const second = candidateA < candidateB ? candidateB : candidateA;
   const survivor = await fixture.createSubject();
   const reader = createOwnCountedVoteReader({ pool: fixture.database.pool, access: fixture.access });
   const { actor } = await countedVoteActor();

@@ -22,7 +22,7 @@ test('the native page binds declared images to the current revision and rejects 
   const image = fixture.globalImage;
   const path = `/v1/threads/${image.threadId}/reading-page`;
   const initial = await fixture.call('GET', path);
-  expect(initial.response.status, initial.text).toBe(200);
+  expect(initial.response.status).toBe(200);
   expect(initial.response.headers.get('cache-control')).toBe('private, no-store');
   const post = initial.value.replies.items.find((entry: any) => entry.mediaIds.includes(image.id));
   expect(post).toBeDefined();
@@ -41,7 +41,7 @@ test('the native page binds declared images to the current revision and rejects 
     { headers: { 'if-match': JSON.stringify(post.revisionId) } },
   );
   const admitted = await fixture.call('GET', path);
-  expect(admitted.response.status, admitted.text).toBe(200);
+  expect(admitted.response.status).toBe(200);
   const document = admitted.value.documentMedia.documents.find((entry: any) => entry.postId === post.id);
   expect(document).toMatchObject({
     postId: post.id,
@@ -87,7 +87,7 @@ test('the native page binds declared images to the current revision and rejects 
     expect(stale.value.code).toBe('dependency_unavailable');
 
     const current = await fixture.call('GET', path);
-    expect(current.response.status, current.text).toBe(200);
+    expect(current.response.status).toBe(200);
     expect(current.value.documentMedia).toEqual({ state: 'available', documents: [] });
     const currentPost = current.value.replies.items.find((entry: any) => entry.id === post.id);
     expect(currentPost.revisionId).toBe(edited.post.revisionId);
