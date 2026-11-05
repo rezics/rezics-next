@@ -448,9 +448,10 @@ export function QuestionManagementContent({
                       className="w-full rounded-md border bg-background p-3"
                       value={definition.meaning}
                       disabled={createState === 'uncertain' || requireFreshInspection}
-                      onChange={(event) =>
-                        setDefinition((current) => ({ ...current, meaning: event.currentTarget.value }))
-                      }
+                      onChange={(event) => {
+                        const meaning = event.currentTarget.value;
+                        setDefinition((current) => ({ ...current, meaning }));
+                      }}
                     />
                   </label>
                   <label className="space-y-1">
@@ -461,9 +462,10 @@ export function QuestionManagementContent({
                       className="w-full rounded-md border bg-background px-3 py-2"
                       value={definition.label}
                       disabled={createState === 'uncertain' || requireFreshInspection}
-                      onChange={(event) =>
-                        setDefinition((current) => ({ ...current, label: event.currentTarget.value }))
-                      }
+                      onChange={(event) => {
+                        const label = event.currentTarget.value;
+                        setDefinition((current) => ({ ...current, label }));
+                      }}
                     />
                   </label>
                   <label className="space-y-1">
@@ -472,12 +474,13 @@ export function QuestionManagementContent({
                       className="w-full rounded-md border bg-background px-3 py-2"
                       value={definition.grain}
                       disabled={createState === 'uncertain' || requireFreshInspection}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const grain = event.currentTarget.value as QuestionDefinitionInput['grain'];
                         setDefinition((current) => ({
                           ...current,
-                          grain: event.currentTarget.value as QuestionDefinitionInput['grain'],
-                        }))
-                      }
+                          grain,
+                        }));
+                      }}
                     >
                       {(['work', 'release', 'episode', 'character'] as const).map((grain) => (
                         <option key={grain} value={grain}>
@@ -509,12 +512,13 @@ export function QuestionManagementContent({
                           className="w-full rounded-md border bg-background px-3 py-2"
                           value={definition.scale[key]}
                           disabled={createState === 'uncertain' || requireFreshInspection}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const value = Number(event.currentTarget.value);
                             setDefinition((current) => ({
                               ...current,
-                              scale: { ...current.scale, [key]: Number(event.currentTarget.value) },
-                            }))
-                          }
+                              scale: { ...current.scale, [key]: value },
+                            }));
+                          }}
                         />
                       </label>
                     ))}
@@ -1109,8 +1113,8 @@ export function QuestionManagementPage({
         windows.focus = null;
         return;
       }
-      if (restart) windows.history = new QuestionWindow(null);
-      if (!windows.history.stage(cursor)) return;
+      if (restart) windows.history.target = { cursor };
+      else if (!windows.history.stage(cursor)) return;
       if (dirty) {
         setDirty(false);
         setInspectionKey((value) => value + 1);
