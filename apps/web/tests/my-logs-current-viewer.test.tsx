@@ -500,11 +500,10 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(link(m.library_my_logs_previous())).toBeDefined();
     expect(link(m.library_my_logs_newest())).toBeDefined();
 
+    const readsBeforeRemount = reads.length;
     await remountRoute();
-    const remountedRead = reads.at(-1)!;
-    expect(remountedRead.cursor).toBe(next.cursor);
-    await settle(remountedRead, history('B', next.cursor, 'B after route remount'));
-    expect(host.textContent).toContain('B after route remount');
+    expect(reads).toHaveLength(readsBeforeRemount);
+    expect(host.textContent).toContain('B next page');
     expect(link(m.library_my_logs_previous())).toBeDefined();
 
     const previous = await navigateByKeyboard(m.library_my_logs_previous());
