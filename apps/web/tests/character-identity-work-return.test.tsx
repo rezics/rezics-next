@@ -67,47 +67,63 @@ function prepare(locale: string) {
     character,
     locale,
   ).find((stream) => stream.property === identityProperty && stream.direction === 'out')!;
-  const identityRow = {
-    target: related,
-    statement: {
-      id: identityStatement,
-      rank: 'normal',
-      property: { id: identity.property, data_type: 'wikibase-item' },
-      value: { type: 'value', content: related },
-      qualifiers: [],
-      references: [
-        { parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://vndb.org/c5' } }] },
-      ],
-      rezics: { release: fixture.profile.read.subject.release, revision: 1 },
-    },
-    label: 'Amadeus',
-    type: 'wd:Q95074',
-    summary: {
-      id: related,
-      type: 'wd:Q95074',
-      types: ['wd:Q95074'],
-      label: { value: 'Amadeus', language: 'en' },
-      creativeWork: false,
-      cover: null,
-    },
-    related: {},
-  };
-  const read: ConnectionRead = async (address) => {
-    const visit = fixture.visit(Boolean(address.only && address.selection?.[address.only]?.cursor)) as Extract<
-      ConnectionVisit,
-      { ok: true }
-    >;
-    visit.streams = [...visit.streams, identity];
-    visit.sections.relations = {
-      stream: identity,
-      reading: 'd'.repeat(64),
-      section: {
-        ok: true,
-        read: { kind: 'relations', id: character, property: identity.property, limit: 12 },
-        body: { relations: [identityRow], next: null },
+  const identitySection = {
+    stream: identity,
+    reading: 'd'.repeat(64),
+    section: {
+      ok: true as const,
+      read: { kind: 'relations' as const, id: character, property: identity.property, limit: 12 },
+      body: {
+        relations: [
+          {
+            target: related,
+            statement: {
+              id: identityStatement,
+              rank: 'normal',
+              property: { id: identity.property, data_type: 'wikibase-item' },
+              value: { type: 'value', content: related },
+              qualifiers: [],
+              references: [
+                {
+                  parts: [
+                    {
+                      property: { id: 'schema:url', data_type: 'url' },
+                      value: { type: 'value', content: 'https://vndb.org/c5' },
+                    },
+                  ],
+                },
+              ],
+              rezics: { release: fixture.profile.read.subject.release, revision: 1 },
+            },
+            label: 'Amadeus',
+            type: 'wd:Q95074',
+            summary: {
+              id: related,
+              type: 'wd:Q95074',
+              types: ['wd:Q95074'],
+              label: { value: 'Amadeus', language: 'en' },
+              creativeWork: false,
+              cover: null,
+            },
+            related: {},
+          },
+        ],
+        next: null,
       },
-    };
-    if (address.only) visit.sections = { [address.only]: visit.sections[address.only]! };
+    },
+  };
+  const read: ConnectionRead = async (address, signal) => {
+    if (address.only === 'relations')
+      return {
+        ok: true,
+        id: character,
+        release: fixture.profile.read.subject.release,
+        streams: [...fixture.streams, identity],
+        sections: { relations: identitySection },
+      };
+    const visit = (await fixture.read(address, signal)) as Extract<ConnectionVisit, { ok: true }>;
+    visit.streams = [...visit.streams, identity];
+    if (!address.only) visit.sections.relations = identitySection;
     return visit;
   };
   return { fixture, character, read };
@@ -209,6 +225,7 @@ test('composed Character keeps names, traits, appearances, credits, exact Work/P
       expect(connectionReturnWindow(new URL(via, 'https://site.test').hash)).toMatchObject({
         stream: 'in:schema:character',
         cursor: 'native-next',
+        reading: 'b'.repeat(64),
         focus: appearance,
         holder: work,
       });
