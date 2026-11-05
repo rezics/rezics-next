@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import { createKernelClient, type SubjectReadQuery } from '@rezics/client';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
@@ -85,6 +86,17 @@ test('native public Character and page reads carry the exact current-language do
     expect(exact.status).toBe(200);
     expect(reading.body.documents).toEqual({ [statement.id]: exact.body.document });
     expect(exact.body.document.body).toEqual(japanese);
+    const client = createKernelClient('http://kernel.test', {
+      fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+      ...(signedIn ? { headers: { authorization: `Bearer ${real.bearer('editor')}` } } : {}),
+    });
+    const query = { language: 'ja', includeDocuments: true } satisfies SubjectReadQuery;
+    const installed = await client.subjects({ id: subject.id }).get({ query });
+    expect(installed.status).toBe(200);
+    expect(installed.data?.documents?.[statement.id]).toEqual(exact.body.document);
+    const withoutDocuments = await client.subjects({ id: subject.id }).get();
+    expect(withoutDocuments.status).toBe(200);
+    expect(withoutDocuments.data?.documents).toBeUndefined();
     const page = await call('POST', '/v1/pages:read', { target: { subject: subject.id }, languages: ['ja'] }, signedIn);
     expect(page.status).toBe(200);
     const filled = Object.values(page.body.reads).find((read: any) => read.body?.subject?.id === subject.id) as any;
