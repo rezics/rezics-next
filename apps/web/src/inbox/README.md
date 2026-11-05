@@ -40,9 +40,15 @@ the page retry control and does not schedule a fetch. The shell badge stays a co
 **Decision:** Inbox list and detail share one local actor presenter for available, withheld and system labels and
 identity fallbacks; native actor disclosure remains unchanged until the additive media summary is officially installed.
 
-**Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. A
-successful continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed
-continuation it retains only the prior 20-row window. A chosen or bulk acknowledgement dispatches one native command,
-followed by the existing deliberate badge/list invalidation. Sequential visits release the previous page and callbacks;
-the browser growth check varies unrelated list size and visits while checking request, retained-row and materialized-byte
-bounds. Native database and Access history growth are owned by Content, not inferred from browser requests.
+**Decision:** After return, a notice absent from the freshly admitted selected page is reported at the Inbox heading;
+only a deliberate first-page refresh recovers, and no neighbor receives restored focus or acknowledgement.
+
+**Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. Next,
+Previous and browser return each issue a fresh native page read at the selected exact address; a query admission ID
+prevents an earlier cached response from substituting for that read. Pagination retains at most eight prior addresses,
+each paired with All/Unread and its mounted viewer episode, plus one current address. The native cursor bound is 4,096
+UTF-16 code units: those eight addresses, the current address and one return receipt contribute at most 80 KiB of cursor
+payload; selection, episode and notice-key metadata are fixed-size. At most one 20-row response body is readable,
+including during a pending or transiently failed direction; the eight prior bodies are never retained. A chosen or bulk
+acknowledgement dispatches one native command, followed by the existing deliberate badge/list invalidation. Native
+database and Access history growth are owned by Content, not inferred from browser requests.

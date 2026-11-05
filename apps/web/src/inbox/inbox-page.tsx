@@ -1,4 +1,5 @@
-import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useRouter, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
@@ -20,13 +21,23 @@ import { preferenceRetryDeadline, usePreferenceRetry } from '../settings/prefere
 import {
   confirmLoadedInboxSeen,
   confirmInboxNoticeSeen,
-  emptyInboxPagination,
+  inboxPaginationFor,
   nextInboxPage,
+  previousInboxPage,
   readableInboxPage,
   receiveInboxPage,
   restartInboxPage,
   selectInboxPage,
+  transientInboxPageFailure,
 } from './inbox-pagination';
+import {
+  armInboxReturn,
+  completeInboxReturn,
+  inboxReturnFor,
+  retireInboxReturn,
+  subscribeInboxReturn,
+  type InboxReturnReceipt,
+} from './inbox-return';
 import {
   inboxTargetContext,
   inboxSeenFailure,
@@ -53,6 +64,7 @@ type InboxPageIntent = Readonly<{
   viewer: InboxViewer;
   selection: InboxSelection;
   cursor: string | undefined;
+  readId: number;
 }>;
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
@@ -93,6 +105,8 @@ export function InboxRows({
   noticeRetryBlocked = false,
   acknowledgementBlocked = false,
   confirmedNoticeId,
+  returnNoticeId,
+  onOpenNotice,
 }: {
   page: Pick<ResolvedInboxPage, 'items' | 'next'>;
   onLoadMore?: () => void;
@@ -106,6 +120,8 @@ export function InboxRows({
   noticeRetryBlocked?: boolean;
   acknowledgementBlocked?: boolean;
   confirmedNoticeId?: string | null;
+  returnNoticeId?: string | null;
+  onOpenNotice?: (noticeId: string) => void;
 }) {
   const locale = getLocale();
   const exactDate = new Intl.DateTimeFormat(locale, {
@@ -115,7 +131,31 @@ export function InboxRows({
   });
   return (
     <>
-      <ol aria-label={m.inbox_heading()} className="mt-6 space-y-1">
+      <ol
+        aria-label={m.inbox_heading()}
+        className="mt-6 space-y-1"
+        onClickCapture={(event: MouseEvent<HTMLOListElement>) => {
+          const native = event.nativeEvent;
+          if (
+            event.defaultPrevented ||
+            native.button !== 0 ||
+            native.altKey ||
+            native.ctrlKey ||
+            native.metaKey ||
+            native.shiftKey
+          )
+            return;
+          const target = event.target;
+          if (!(target instanceof Element)) return;
+          const anchor = target.closest<HTMLAnchorElement>('a[href]');
+          if (!anchor || (anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) return;
+          const row = anchor.closest<HTMLElement>('[data-notice-id]');
+          const noticeId = row?.dataset.noticeId;
+          const item = noticeId ? page.items.find((candidate) => candidate.id === noticeId) : undefined;
+          if (!row || !noticeId || !item?.href || anchor.getAttribute('href') !== item.href) return;
+          onOpenNotice?.(noticeId);
+        }}
+      >
         {page.items.map((item) => {
           const hasComposedDisclosure = !!item.actor && !!item.target && !!item.actions;
           const hiddenLegacyItem = item.unavailable && !hasComposedDisclosure;
@@ -152,6 +192,7 @@ export function InboxRows({
                     type="button"
                     variant="outline"
                     className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                    data-inbox-notice-action="true"
                     disabled={
                       pendingNoticeId === item.id || loading || noticeWaiting || noticeRetryBlocked || !onRetrySeen
                     }
@@ -165,6 +206,7 @@ export function InboxRows({
                   type="button"
                   variant="outline"
                   className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                  data-inbox-notice-action="true"
                   disabled={
                     acknowledgementBlocked || loading || (pendingNoticeId !== null && pendingNoticeId !== undefined)
                   }
@@ -237,6 +279,7 @@ export function InboxRows({
               }
               actions={chosenAction}
               data-notice-id={item.id}
+              tabIndex={item.id === returnNoticeId ? -1 : undefined}
               data-unread={item.unread}
               data-kind={item.reportId ? 'report_outcome' : item.kind}
               data-actor-id={actor.actorId ?? undefined}
@@ -275,12 +318,20 @@ type NoticeSeenStoryTransport = (attempt: InboxNoticeSeenAttempt, csrfToken: str
 export function InboxPageView({
   loadPage,
   acknowledgeNotice,
+  historyKey: suppliedHistoryKey,
 }: {
   loadPage?: InboxPageLoader;
   acknowledgeNotice?: NoticeSeenStoryTransport;
+  historyKey?: string;
 } = {}) {
+  const router = useRouter({ warn: false });
+  const routedHistoryKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
+  const historyKey = suppliedHistoryKey ?? routedHistoryKey;
   const queryClient = useQueryClient();
   const { state, csrfToken, viewer, sessionRead } = useInboxViewer();
+  useEffect(() => {
+    if (!viewer) retireInboxReturn(router);
+  }, [router, viewer]);
   const ownerEpisode = useRef<{
     client: typeof queryClient;
     viewer: InboxViewer | null;
@@ -307,6 +358,7 @@ export function InboxPageView({
         viewer={viewer}
         csrfToken={csrfToken}
         episode={episode}
+        historyKey={historyKey}
         loadPage={loadPage}
         acknowledgeNotice={acknowledgeNotice}
       />
@@ -325,35 +377,63 @@ export function ViewerInboxPage({
   viewer,
   csrfToken,
   episode,
+  historyKey,
   loadPage,
   acknowledgeNotice,
 }: {
   viewer: InboxViewer;
   csrfToken: string | null;
   episode: number;
+  historyKey: string;
   loadPage?: InboxPageLoader | undefined;
   acknowledgeNotice?: NoticeSeenStoryTransport | undefined;
 }) {
+  const router = useRouter({ warn: false });
+  const pageInstance = useId();
   const queryClient = useQueryClient();
+  const [returnReceipt, setReturnReceipt] = useState<InboxReturnReceipt | null>(() =>
+    inboxReturnFor(router, historyKey),
+  );
+  const admittedReturn =
+    returnReceipt?.historyKey === historyKey && returnReceipt.owner.isCurrent() ? returnReceipt : null;
+  useEffect(() => subscribeInboxReturn(router, setReturnReceipt), [router]);
+  useEffect(() => {
+    if (returnReceipt && !admittedReturn) retireInboxReturn(router, returnReceipt.id);
+  }, [admittedReturn, returnReceipt, router]);
   const episodeOwnerCurrent = useCallback(
     () => viewer.isCurrent() && inboxViewerCsrfToken(queryClient, viewer) === csrfToken,
     [csrfToken, queryClient, viewer],
   );
-  const [pagination, setPagination] = useState(emptyInboxPagination);
+  const [pagination, setPagination] = useState(() =>
+    admittedReturn
+      ? inboxPaginationFor(admittedReturn.selection, episode, 0, admittedReturn.cursor)
+      : inboxPaginationFor('all', episode),
+  );
   const boundaryId = useId();
   const boundary = useRef<HTMLHeadingElement>(null);
-  const continuation = useRef<{ cursor: string } | null>(null);
+  const continuation = useRef<{
+    cursor: string | undefined;
+    readId: number;
+    direction: 'next' | 'previous';
+    focusVersion: number;
+  } | null>(null);
+  const focusVersion = useRef(0);
   const [continuing, setContinuing] = useState(false);
   const [continuationMessage, setContinuationMessage] = useState('');
-  const { cursor, selection } = pagination;
+  const [returnNoticeState, setReturnNoticeState] = useState<'found' | 'missing' | null>(null);
+  const [returnNoticeId, setReturnNoticeId] = useState<string | null>(null);
+  const resolvedReturnId = useRef<string | null>(null);
+  const returnDataUpdateCount = useRef<number | null>(null);
+  const { cursor, selection, readId } = pagination;
   const pageIntentRef = useRef<InboxPageIntent | null>(null);
   if (
     !pageIntentRef.current ||
     pageIntentRef.current.viewer !== viewer ||
     pageIntentRef.current.selection !== selection ||
-    pageIntentRef.current.cursor !== cursor
+    pageIntentRef.current.cursor !== cursor ||
+    pageIntentRef.current.readId !== readId
   )
-    pageIntentRef.current = Object.freeze({ viewer, selection, cursor });
+    pageIntentRef.current = Object.freeze({ viewer, selection, cursor, readId });
   const pageIntent = pageIntentRef.current!;
   const pageRetryAtRef = useRef<{ intent: InboxPageIntent; deadline: number }>({ intent: pageIntent, deadline: 0 });
   const markedThrough = useRef<string | null>(null);
@@ -378,7 +458,17 @@ export function ViewerInboxPage({
   const accessPending = useRef(false);
   const [checkingAccess, setCheckingAccess] = useState(false);
   const [accessCheck, setAccessCheck] = useState<'checked' | 'unavailable'>();
-  const pageQuery = useQuery(inboxPageQuery(viewer, cursor, loadPage, selection, episode, episodeOwnerCurrent));
+  const pageQueryOptions = inboxPageQuery(
+    viewer,
+    cursor,
+    loadPage,
+    selection,
+    episode,
+    episodeOwnerCurrent,
+    pageInstance,
+    readId,
+  );
+  const pageQuery = useQuery(pageQueryOptions);
   const received = receiveInboxPage(pagination, pageQuery.data, pageQuery.isError);
   // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
   if (received !== pagination) setPagination(received);
@@ -410,6 +500,14 @@ export function ViewerInboxPage({
     (accessRefused(seenFailure) ? accessCheck === 'checked' : seenFailure?.retryable !== false);
   seenRetryPolicy.current = { pageReady: page !== null, allowed: offerSeenRetry };
 
+  useEffect(() => {
+    const moved = () => {
+      focusVersion.current += 1;
+    };
+    document.addEventListener('focusin', moved, true);
+    return () => document.removeEventListener('focusin', moved, true);
+  }, []);
+
   useLayoutEffect(() => {
     active.current = true;
     return () => {
@@ -433,14 +531,21 @@ export function ViewerInboxPage({
       !episodeOwnerCurrent() ||
       pageQuery.isFetching ||
       received.cursor !== request.cursor ||
+      received.readId !== request.readId ||
       !received.result
     )
       return;
     continuation.current = null;
     setContinuing(false);
     if (!pageQuery.isError && received.result.signedIn && received.result.state === 'ready') {
-      setContinuationMessage(received.result.next ? m.inbox_page_loaded() : m.inbox_page_end());
-      boundary.current?.focus();
+      setContinuationMessage(
+        request.direction === 'previous'
+          ? m.inbox_previous_page_loaded()
+          : received.result.next
+            ? m.inbox_page_loaded()
+            : m.inbox_page_end(),
+      );
+      if (focusVersion.current === request.focusVersion && episodeOwnerCurrent()) boundary.current?.focus();
     } else {
       // The same control remains mounted as the exact retry; failure never moves focus.
       setContinuationMessage('');
@@ -451,12 +556,67 @@ export function ViewerInboxPage({
     (intent: InboxPageIntent) => {
       if (intent.viewer !== viewer || !episodeOwnerCurrent()) return true;
       return (
-        queryClient.getQueryState([...inboxViewerQueryKey(viewer), episode, intent.selection, intent.cursor ?? null])
-          ?.fetchStatus === 'fetching'
+        queryClient.getQueryState([
+          ...inboxViewerQueryKey(viewer),
+          episode,
+          intent.selection,
+          intent.cursor ?? null,
+          pageInstance,
+          intent.readId,
+        ])?.fetchStatus === 'fetching'
       );
     },
-    [episode, episodeOwnerCurrent, queryClient, viewer],
+    [episode, episodeOwnerCurrent, pageInstance, queryClient, viewer],
   );
+
+  useLayoutEffect(() => {
+    const receipt = admittedReturn;
+    if (!receipt || resolvedReturnId.current === receipt.id || pageQuery.isFetching || pageQuery.isError) return;
+    const data = pageQuery.data;
+    const queryState = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey);
+    if (!data || !queryState || queryState.status !== 'success' || queryState.dataUpdateCount === 0) return;
+    if (data.signedIn && data.state !== 'ready' && transientInboxPageFailure(data)) return;
+    if (!data.signedIn || data.state !== 'ready') {
+      resolvedReturnId.current = receipt.id;
+      retireInboxReturn(router, receipt.id);
+      return;
+    }
+
+    const currentPage = received.current;
+    const matchesAddress =
+      data.selection === receipt.selection &&
+      data.viewer.accountId === viewer.subject &&
+      received.selection === receipt.selection &&
+      received.cursor === receipt.cursor &&
+      currentPage?.viewer.accountId === viewer.subject;
+    const item = matchesAddress ? currentPage?.items.find((candidate) => candidate.id === receipt.noticeId) : undefined;
+    const completed = completeInboxReturn(router, receipt.id);
+    if (!completed) return;
+    resolvedReturnId.current = receipt.id;
+    returnDataUpdateCount.current = queryState.dataUpdateCount;
+    setReturnNoticeState(item ? 'found' : 'missing');
+    setReturnNoticeId(item ? item.id : null);
+    if (!completed.restoreFocus || !episodeOwnerCurrent() || !completed.receipt.owner.isCurrent()) return;
+    if (item?.unread) {
+      const row = Array.from(document.querySelectorAll<HTMLElement>('[data-notice-id]')).find(
+        (candidate) => candidate.dataset.noticeId === item.id,
+      );
+      const action = row?.querySelector<HTMLButtonElement>('[data-inbox-notice-action]');
+      if (action && !action.disabled) action.focus();
+      else boundary.current?.focus();
+    } else {
+      boundary.current?.focus();
+    }
+  });
+
+  useEffect(() => {
+    if (returnDataUpdateCount.current === null) return;
+    const currentCount = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey)?.dataUpdateCount ?? null;
+    if (currentCount === null || currentCount === returnDataUpdateCount.current) return;
+    returnDataUpdateCount.current = currentCount;
+    setReturnNoticeState(null);
+    setReturnNoticeId(null);
+  }, [pageQuery.dataUpdatedAt, pageQueryOptions.queryKey, queryClient]);
 
   const sendSeenAttempt = useCallback(
     async (intent: InboxLoadedSeenIntent, deliberateRetry = false, dispatchIntent: InboxPageIntent = pageIntent) => {
@@ -495,6 +655,8 @@ export function ViewerInboxPage({
             episode,
             current.selection,
             current.cursor ?? null,
+            pageInstance,
+            current.readId,
           ]);
           return confirmLoadedInboxSeen(
             receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error'),
@@ -520,7 +682,7 @@ export function ViewerInboxPage({
         }
       }
     },
-    [episodeOwnerCurrent, pageIntent, pageQueryFetching, queryClient, viewer],
+    [episodeOwnerCurrent, pageInstance, pageIntent, pageQueryFetching, queryClient, viewer],
   );
 
   const sendNoticeSeenAttempt = useCallback(
@@ -556,6 +718,8 @@ export function ViewerInboxPage({
             episode,
             current.selection,
             current.cursor ?? null,
+            pageInstance,
+            current.readId,
           ]);
           return confirmInboxNoticeSeen(
             receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error'),
@@ -581,7 +745,7 @@ export function ViewerInboxPage({
         }
       }
     },
-    [acknowledgeNotice, episode, episodeOwnerCurrent, pageIntent, pageQueryFetching, queryClient, viewer],
+    [acknowledgeNotice, episode, episodeOwnerCurrent, pageInstance, pageIntent, pageQueryFetching, queryClient, viewer],
   );
 
   const markLoadedThroughLatest = () => {
@@ -614,6 +778,63 @@ export function ViewerInboxPage({
     void sendSeenAttempt(intent, false, pageIntent);
   };
 
+  const captureNoticeDeparture = (noticeId: string) => {
+    const item = readable?.items.find((candidate) => candidate.id === noticeId && candidate.href);
+    const read = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey);
+    if (
+      !historyKey ||
+      !item ||
+      !active.current ||
+      pageIntentRef.current !== pageIntent ||
+      !episodeOwnerCurrent() ||
+      pageQueryFetching(pageIntent) ||
+      !read ||
+      read.status !== 'success' ||
+      !read.data?.signedIn ||
+      read.data.state !== 'ready' ||
+      read.data.selection !== selection ||
+      read.data.viewer.accountId !== viewer.subject ||
+      !read.data.items.some((candidate) => candidate.id === noticeId)
+    )
+      return;
+    const responseVersion = read.dataUpdateCount;
+    const currentLocale = getLocale();
+    let departed = false;
+    armInboxReturn(router, {
+      historyKey,
+      selection,
+      cursor,
+      noticeId,
+      owner: {
+        admitDeparture: () => {
+          const current = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey);
+          if (
+            departed ||
+            !active.current ||
+            pageIntentRef.current !== pageIntent ||
+            !episodeOwnerCurrent() ||
+            getLocale() !== currentLocale ||
+            current?.status !== 'success' ||
+            current.dataUpdateCount !== responseVersion ||
+            !current.data?.signedIn ||
+            current.data.state !== 'ready' ||
+            current.data.selection !== selection ||
+            current.data.viewer.accountId !== viewer.subject ||
+            !current.data.items.some((candidate) => candidate.id === noticeId)
+          )
+            return false;
+          departed = true;
+          return true;
+        },
+        isCurrent: () =>
+          departed &&
+          getLocale() === currentLocale &&
+          viewer.isCurrent() &&
+          inboxViewerCsrfToken(queryClient, viewer) === csrfToken,
+      },
+    });
+  };
+
   const chooseSelection = (next: InboxSelection) => {
     if (
       !active.current ||
@@ -627,6 +848,10 @@ export function ViewerInboxPage({
       return;
     const first = selectInboxPage(received, next);
     if (first === received) return;
+    retireInboxReturn(router);
+    setReturnNoticeState(null);
+    setReturnNoticeId(null);
+    returnDataUpdateCount.current = null;
     void queryClient.cancelQueries({ queryKey: inboxViewerQueryKey(viewer) });
     queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
     setPagination(first);
@@ -737,13 +962,50 @@ export function ViewerInboxPage({
     )
       return;
     const next = nextInboxPage(received);
-    continuation.current = { cursor: next.cursor! };
+    if (next === received) return;
+    retireInboxReturn(router);
+    setReturnNoticeState(null);
+    setReturnNoticeId(null);
+    returnDataUpdateCount.current = null;
+    continuation.current = {
+      cursor: next.cursor,
+      readId: next.readId,
+      direction: 'next',
+      focusVersion: focusVersion.current,
+    };
     setContinuing(true);
     setContinuationMessage(m.inbox_page_loading());
-    if (next === received) void pageQuery.refetch();
-    else setPagination(next);
+    setPagination(next);
   };
-  const startAtFirstPage = () => {
+  const loadPrevious = () => {
+    if (
+      !active.current ||
+      pageIntentRef.current !== pageIntent ||
+      !episodeOwnerCurrent() ||
+      continuation.current ||
+      pageQueryFetching(pageIntent) ||
+      noticeAttempt.current !== null ||
+      accessPending.current ||
+      !received.history.length
+    )
+      return;
+    const previous = previousInboxPage(received);
+    if (previous === received) return;
+    retireInboxReturn(router);
+    setReturnNoticeState(null);
+    setReturnNoticeId(null);
+    returnDataUpdateCount.current = null;
+    continuation.current = {
+      cursor: previous.cursor,
+      readId: previous.readId,
+      direction: 'previous',
+      focusVersion: focusVersion.current,
+    };
+    setContinuing(true);
+    setContinuationMessage(m.inbox_page_loading());
+    setPagination(previous);
+  };
+  const startAtFirstPage = (forceRead = false) => {
     if (
       !active.current ||
       pageIntentRef.current !== pageIntent ||
@@ -754,8 +1016,12 @@ export function ViewerInboxPage({
       !episodeOwnerCurrent()
     )
       return;
-    const first = restartInboxPage(received);
+    const first = restartInboxPage(received, forceRead);
     if (first === received) return;
+    retireInboxReturn(router);
+    setReturnNoticeState(null);
+    setReturnNoticeId(null);
+    returnDataUpdateCount.current = null;
     // Retire cached pages and any stale responses before observing the native first-page query.
     void queryClient.cancelQueries({ queryKey: inboxViewerQueryKey(viewer) });
     queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
@@ -772,8 +1038,13 @@ export function ViewerInboxPage({
       pageWaitActive(pageIntent)
     )
       return;
-    if (cursor !== undefined) {
-      continuation.current = { cursor };
+    if (cursor !== undefined || received.direction !== null) {
+      continuation.current = {
+        cursor,
+        readId,
+        direction: received.direction ?? 'next',
+        focusVersion: focusVersion.current,
+      };
       setContinuing(true);
       setContinuationMessage(m.inbox_page_loading());
     }
@@ -831,6 +1102,24 @@ export function ViewerInboxPage({
       <p role="status" aria-atomic="true" className="sr-only">
         {continuationMessage}
       </p>
+      {returnNoticeState === 'found' ? (
+        <p role="status" className="mt-4 text-sm text-muted-foreground">
+          {m.inbox_return_notice_restored()}
+        </p>
+      ) : returnNoticeState === 'missing' ? (
+        <section role="status" className="mt-4 flex min-w-0 flex-wrap items-center gap-3">
+          <p className="min-w-0 text-sm text-muted-foreground">{m.inbox_return_notice_missing()}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+            disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting || !episodeOwnerCurrent()}
+            onClick={() => startAtFirstPage(true)}
+          >
+            {m.inbox_start_first_page()}
+          </Button>
+        </section>
+      ) : null}
       {noticeAttemptView && !noticeAttemptRowVisible ? (
         <section
           role="status"
@@ -963,6 +1252,20 @@ export function ViewerInboxPage({
                   {m.inbox_triage_filter_unread()}
                 </Button>
               </div>
+              {received.history.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  aria-busy={continuing && received.direction === 'previous'}
+                  aria-disabled={
+                    continuing || failed || pageQueryFetching(pageIntent) || checkingAccess || pageWaitActive(pageIntent)
+                  }
+                  onClick={loadPrevious}
+                >
+                  {m.inbox_previous_page()}
+                </Button>
+              ) : null}
               {cursor !== undefined && !failed && page ? (
                 <Button
                   type="button"
@@ -1040,6 +1343,8 @@ export function ViewerInboxPage({
                   !episodeOwnerCurrent()
                 }
                 confirmedNoticeId={noticeConfirmedId}
+                returnNoticeId={returnNoticeId}
+                onOpenNotice={captureNoticeDeparture}
               />
             )
           ) : null}

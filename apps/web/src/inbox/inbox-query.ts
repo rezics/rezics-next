@@ -36,11 +36,15 @@ export function inboxPageQuery(
   selection: InboxSelection = DEFAULT_INBOX_SELECTION,
   episode = 1,
   ownerCurrent: () => boolean = () => viewer.isCurrent(),
+  pageInstance = 'default',
+  readId = 0,
 ) {
   const query: InboxPageQuery = { selection, ...(cursor ? { cursor } : {}) };
   return queryOptions({
     ...personalRead,
-    queryKey: [...inboxViewerQueryKey(viewer), episode, selection, cursor ?? null],
+    // Each direction change and mounted return receives a fresh key. A prior cached payload
+    // can never stand in for native admission of the same opaque address.
+    queryKey: [...inboxViewerQueryKey(viewer), episode, selection, cursor ?? null, pageInstance, readId],
     queryFn: ({ signal }) =>
       forInboxViewer(
         viewer,

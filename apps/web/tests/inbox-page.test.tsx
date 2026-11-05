@@ -62,8 +62,16 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
-  await import('@tanstack/react-router');
+const {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterContextProvider,
+  RouterProvider,
+  useRouterState,
+} = await import('@tanstack/react-router');
 const buttonModule = await import('@rezics/ui/shadcn/button');
 const OriginalButton = buttonModule.Button;
 const buttonCallbacks = new Map<string, (event: MouseEvent<HTMLButtonElement>) => void>();
@@ -102,7 +110,7 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
 });
-const notice = (id: string, unread = true) => ({
+const notice = (id: string, unread = true, overrides: { text?: string } = {}) => ({
   id,
   unread,
   kind: 'reply',
@@ -114,7 +122,7 @@ const notice = (id: string, unread = true) => ({
   decisionId: null,
   reportId: null,
   href: `/threads/thread#post-${id}`,
-  text: `Private reply ${id}`,
+  text: overrides.text ?? `Private reply ${id}`,
   unavailable: false,
 });
 const tick = () =>
@@ -174,6 +182,77 @@ async function mount(
         root.unmount();
         host.remove();
       }),
+  };
+}
+
+async function mountRouted(
+  loadPage: (query: InboxPageQuery) => Promise<InboxPage>,
+  acknowledgeNotice?: (attempt: InboxNoticeSeenAttempt, csrfToken: string) => Promise<void>,
+) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(sessionQuery.queryKey, {
+    state: 'signed-in',
+    subject: 'alice',
+    csrfToken: 'original-token',
+  });
+  const rootRoute = createRootRoute({
+    component: () => createElement(Fragment, null, createElement(UnreadBadge), createElement(Outlet)),
+  });
+  const inboxRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/inbox',
+    component: () => {
+      const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
+      return createElement(InboxPageView, {
+        loadPage,
+        historyKey,
+        ...(acknowledgeNotice ? { acknowledgeNotice } : {}),
+      });
+    },
+  });
+  const threadRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/threads/$threadId',
+    component: () => createElement('h1', null, 'Thread destination'),
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([inboxRoute, threadRoute]),
+    history: createMemoryHistory({ initialEntries: ['/en/inbox'] }),
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  await router.load();
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+  });
+  await tick();
+  const settle = async (ready: () => boolean) => {
+    for (let count = 0; count < 180 && !ready(); count++)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    expect(ready()).toBe(true);
+  };
+  const click = async (label: string) =>
+    act(async () => {
+      const node = [...host.querySelectorAll('button')].find((button) => button.textContent === label);
+      expect(node, label).toBeDefined();
+      node!.click();
+    });
+  return {
+    host,
+    client,
+    router,
+    click,
+    settle,
+    unmount: async () => {
+      await act(async () => {
+        root.unmount();
+        host.remove();
+      });
+      client.clear();
+    },
   };
 }
 
@@ -437,5 +516,129 @@ test('ready zero and lower-bound summaries stay distinct from the selected page,
     expect(signedOut.host.textContent).toContain('Private reply visible');
   } finally {
     await signedOut.unmount();
+  }
+});
+
+test('Previous and browser return re-admit the exact unread address and restore only its current notice', async () => {
+  const queries: InboxPageQuery[] = [];
+  const noticeAcknowledgements: InboxNoticeSeenAttempt[] = [];
+  let unreadFirstPageReads = 0;
+  const view = await mountRouted(
+    async (query) => {
+      queries.push(query);
+      if (query.selection === 'all') return readyInboxPage([notice('all-first')], 'all-older', 'alice', 'all');
+      if (query.cursor === 'unread-older')
+        return readyInboxPage([notice('sparse-only')], 'unread-end', 'alice', 'unread');
+      if (query.selection === 'unread') {
+        unreadFirstPageReads += 1;
+        if (unreadFirstPageReads === 1)
+          return readyInboxPage([notice('return-origin', true, { text: 'Original admitted notice' })], 'unread-older', 'alice', 'unread');
+        if (unreadFirstPageReads === 2)
+          return readyInboxPage(
+            [notice('return-origin', true, { text: 'Previous fresh notice' }), notice('read-neighbor', false)],
+            'unread-older',
+            'alice',
+            'unread',
+          );
+        return readyInboxPage([notice('return-origin', true, { text: 'Current native replacement' })], 'unread-older', 'alice', 'unread');
+      }
+      throw new Error(`Unexpected inbox query: ${JSON.stringify(query)}`);
+    },
+    async (attempt) => {
+      noticeAcknowledgements.push(attempt);
+    },
+  );
+  try {
+    await view.settle(() => view.host.textContent?.includes('all-first') === true);
+    await view.click(m.inbox_triage_filter_unread());
+    await view.settle(() => view.host.textContent?.includes('Original admitted notice') === true);
+    await view.click(m.inbox_load_more());
+    await view.settle(() => view.host.textContent?.includes('sparse-only') === true);
+    expect(view.host.textContent).toContain(m.inbox_previous_page());
+    await view.click(m.inbox_previous_page());
+    await view.settle(() => view.host.textContent?.includes('Previous fresh notice') === true);
+    expect(view.host.textContent).toContain('read-neighbor');
+
+    const destination = view.host.querySelector<HTMLAnchorElement>('[data-notice-id="return-origin"] a[href]');
+    expect(destination?.getAttribute('href')).toBe('/threads/thread#post-return-origin');
+    await act(async () => destination!.click());
+    await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
+    await act(async () => view.router.history.back());
+    await view.settle(() => view.host.textContent?.includes('Current native replacement') === true);
+
+    expect(queries).toEqual([
+      { selection: 'all' },
+      { selection: 'unread' },
+      { selection: 'unread', cursor: 'unread-older' },
+      { selection: 'unread' },
+      { selection: 'unread' },
+    ]);
+    expect(view.host.textContent).not.toContain('Original admitted notice');
+    expect(view.host.textContent).toContain(m.inbox_return_notice_restored());
+    expect(document.activeElement).toBe(
+      view.host.querySelector('[data-notice-id="return-origin"] [data-inbox-notice-action]'),
+    );
+    expect(noticeAcknowledgements).toEqual([]);
+    expect(seenCommands).toEqual([]);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test('a missing returned notice names the changed result, focuses the heading, and offers a fresh first-page read', async () => {
+  const queries: InboxPageQuery[] = [];
+  const noticeAcknowledgements: InboxNoticeSeenAttempt[] = [];
+  let firstPageReads = 0;
+  const view = await mountRouted(
+    async (query) => {
+      queries.push(query);
+      if (query.selection === 'all') return readyInboxPage([notice('all-first')], null, 'alice', 'all');
+      if (query.cursor) return readyInboxPage([notice('sparse-only')], 'unread-end', 'alice', 'unread');
+      firstPageReads += 1;
+      if (firstPageReads <= 2)
+        return readyInboxPage([notice('disappearing-origin', true, { text: 'Original unread notice' })], 'unread-old', 'alice', 'unread');
+      return readyInboxPage([notice('current-neighbor', true, { text: 'Fresh selected page' })], null, 'alice', 'unread');
+    },
+    async (attempt) => {
+      noticeAcknowledgements.push(attempt);
+    },
+  );
+  try {
+    await view.settle(() => view.host.textContent?.includes('all-first') === true);
+    await view.click(m.inbox_triage_filter_unread());
+    await view.settle(() => view.host.textContent?.includes('Original unread notice') === true);
+    await view.click(m.inbox_load_more());
+    await view.settle(() => view.host.textContent?.includes('sparse-only') === true);
+    await view.click(m.inbox_previous_page());
+    await view.settle(() => view.host.textContent?.includes('Original unread notice') === true);
+    const destination = view.host.querySelector<HTMLAnchorElement>('[data-notice-id="disappearing-origin"] a[href]');
+    await act(async () => destination!.click());
+    await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
+    await act(async () => view.router.history.back());
+    await view.settle(() => view.host.textContent?.includes(m.inbox_return_notice_missing()) === true);
+
+    expect(view.host.textContent).toContain('current-neighbor');
+    expect(view.host.textContent).not.toContain('Original unread notice');
+    expect(document.activeElement).toBe(view.host.querySelector('h1'));
+    expect(document.activeElement).not.toBe(
+      view.host.querySelector('[data-notice-id="current-neighbor"] [data-inbox-notice-action]'),
+    );
+    expect(noticeAcknowledgements).toEqual([]);
+    expect(seenCommands).toEqual([]);
+
+    await view.click(m.inbox_start_first_page());
+    await view.settle(() => view.host.textContent?.includes('Fresh selected page') === true);
+    expect(queries).toEqual([
+      { selection: 'all' },
+      { selection: 'unread' },
+      { selection: 'unread', cursor: 'unread-old' },
+      { selection: 'unread' },
+      { selection: 'unread' },
+      { selection: 'unread' },
+    ]);
+    expect(noticeAcknowledgements).toEqual([]);
+    expect(seenCommands).toEqual([]);
+  } finally {
+    await view.unmount();
   }
 });

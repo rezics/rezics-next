@@ -4,6 +4,7 @@ import {
   inboxPaginationFor,
   inboxTransportFailure,
   nextInboxPage,
+  previousInboxPage,
   readableInboxPage,
   receiveInboxPage,
   restartInboxPage,
@@ -106,7 +107,7 @@ test('duplicate notice IDs keep first-seen order with latest details, and a succ
 test('a selection change restarts without a cursor and ignores a page for a different selection', () => {
   const loaded = receiveInboxPage(emptyInboxPagination, ready([item('all-row')], secondCursor));
   const unread = selectInboxPage(loaded, 'unread');
-  expect(unread).toEqual(inboxPaginationFor('unread'));
+  expect(unread).toEqual(inboxPaginationFor('unread', loaded.episode, loaded.readId + 1));
   expect(unread.cursor).toBeUndefined();
   expect(readableInboxPage(unread)).toBeNull();
   expect(selectInboxPage(unread, 'unread')).toBe(unread);
@@ -188,4 +189,53 @@ test('a failed first-page restart cannot resurrect the abandoned chain, includin
     const recovered = receiveInboxPage(resetFailed, ready([item('new-private-row')], null));
     expect(readableInboxPage(recovered)?.items).toEqual([item('new-private-row')]);
   }
+});
+
+test('Previous re-admits exact paired addresses, caps history at eight, and clears it on restart or refusal', () => {
+  const episode = 37;
+  let current = receiveInboxPage(inboxPaginationFor('unread', episode), ready([item('page-0')], 'cursor-1', 'unread'));
+  for (let index = 1; index <= 10; index += 1) {
+    const requested = nextInboxPage(current);
+    expect(requested.cursor).toBe(`cursor-${index}`);
+    const rows = index === 5 ? [] : [item(`page-${index}`)];
+    current = receiveInboxPage(
+      requested,
+      ready(rows, index === 10 ? null : `cursor-${index + 1}`, 'unread'),
+    );
+  }
+
+  expect(current.history).toHaveLength(8);
+  expect(current.history.map(({ cursor, selection, episode: addressEpisode }) => [cursor, selection, addressEpisode])).toEqual(
+    Array.from({ length: 8 }, (_, index) => [`cursor-${index + 2}`, 'unread', episode]),
+  );
+  const previous = previousInboxPage(current);
+  expect(previous.cursor).toBe('cursor-9');
+  expect(previous.readId).toBe(current.readId + 1);
+  expect(previous.direction).toBe('previous');
+  expect(readableInboxPage(previous)?.items).toEqual([item('page-10')]);
+  const admitted = receiveInboxPage(previous, ready([item('fresh-page-9')], null, 'unread'));
+  expect(readableInboxPage(admitted)?.items).toEqual([item('fresh-page-9')]);
+  expect(admitted.earlier).toBeNull();
+  expect(admitted.history).toHaveLength(7);
+
+  const restarted = restartInboxPage(admitted);
+  expect(restarted.cursor).toBeUndefined();
+  expect(restarted.history).toEqual([]);
+  const denied = receiveInboxPage(previous, {
+    signedIn: true,
+    state: 'unavailable',
+    failure: { status: 403, code: 'forbidden' },
+  });
+  expect(readableInboxPage(denied)).toBeNull();
+  expect(denied.history).toEqual([]);
+
+  const first = receiveInboxPage(inboxPaginationFor('all', episode), ready([item('first')], 'sparse-cursor'));
+  const sparse = receiveInboxPage(nextInboxPage(first), ready([], 'sparse-next'));
+  expect(readableInboxPage(sparse)?.items).toEqual([]);
+  const sparsePrevious = previousInboxPage(sparse);
+  expect(sparsePrevious.cursor).toBeUndefined();
+  expect(sparsePrevious.direction).toBe('previous');
+  expect(readableInboxPage(receiveInboxPage(sparsePrevious, ready([item('fresh-first')], null)))?.items).toEqual([
+    item('fresh-first'),
+  ]);
 });
