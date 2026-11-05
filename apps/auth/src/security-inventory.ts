@@ -5,6 +5,7 @@ import { readConsent } from './consent';
 import { privateAuthRead } from './private-auth-read';
 import { readJsonBounded } from './private-auth-json';
 import { serverSecurityInventoryResponseByteBudget } from './security-response-config';
+import { readSecurityIssuerResponse } from './security-response-config';
 import type { SecurityPageEnvelope, SecurityAdvice } from '../../../services/auth/src/security-page';
 export type { SecurityPageEnvelope, SecurityAdvice } from '../../../services/auth/src/security-page';
 
@@ -78,51 +79,17 @@ export function parseInventoryPage<V extends InventoryView>(view: V, body: unkno
 }
 
 type InventoryInput = { view: InventoryView; cursor?: string };
-async function sendIssuerSecurityRequest(
-  path: string,
-  body?: unknown,
-): Promise<{ response: Response; signal: AbortSignal }> {
-  const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
-  const request = getRequest();
-  setResponseHeader('Cache-Control', 'private, no-store');
-  const origin = new URL(request.url).origin;
-  const nativeOrigin = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
-  if (
-    (request.headers.get('origin') !== origin && request.headers.get('origin') !== nativeOrigin) ||
-    request.headers.get('sec-fetch-site') === 'cross-site'
-  )
-    return { response: new Response(null, { status: 403 }), signal: request.signal };
-  // The existing issuer origin serves host.handler and owns its pools/keys and
-  // immutable accountOperations binding. No credentials leave this issuer.
-  const response = await fetch(new URL(path, nativeOrigin), {
-    method: body === undefined ? 'GET' : 'POST',
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    headers: {
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      Accept: 'application/json',
-      Origin: request.headers.get('origin')!,
-      Cookie: request.headers.get('cookie') ?? '',
-    },
-    // workerd supports manual redirects; reject them without forwarding issuer cookies.
-    redirect: 'manual',
-    cache: 'no-store',
-    signal: request.signal,
-  });
-  if (response.status >= 300 && response.status < 400) throw new Error('Unexpected issuer redirect');
-  return { response, signal: request.signal };
-}
-
-export const issuerSecurityRequest = createServerOnlyFn(async (path: string, body?: unknown): Promise<Response> => {
-  return (await sendIssuerSecurityRequest(path, body)).response;
-});
+export const issuerSecurityRequest = createServerOnlyFn(async (path: string, body?: unknown): Promise<Response> =>
+  readSecurityIssuerResponse(path, body, async (response) => response),
+);
 
 /** Preserve the BFF request deadline through native body consumption. */
 export const issuerSecurityJsonRequest = createServerOnlyFn(
-  async (path: string, maxBytes: number): Promise<{ response: Response; body: unknown }> => {
-    const { response, signal } = await sendIssuerSecurityRequest(path);
-    const body = response.status === 200 ? await readJsonBounded(response, maxBytes, signal) : undefined;
-    return { response, body };
-  },
+  async (path: string, maxBytes: number): Promise<{ response: Response; body: unknown }> =>
+    readSecurityIssuerResponse(path, undefined, async (response, signal) => {
+      const body = response.status === 200 ? await readJsonBounded(response, maxBytes, signal) : undefined;
+      return { response, body };
+    }),
 );
 
 // Browser GET cannot set Origin. Use the existing Start BFF and carry the
@@ -142,16 +109,15 @@ const readInventory = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<InventoryPage<InventoryView>> => {
     const query = data.cursor ? `?${new URLSearchParams({ cursor: data.cursor })}` : '';
     try {
-      const { getRequest } = await import('@tanstack/react-start/server');
-      const request = getRequest();
       const maxBytes = await serverSecurityInventoryResponseByteBudget(data.view);
       if (maxBytes === null) return { kind: 'unavailable' };
-      const response = await issuerSecurityRequest(`/${data.view}${query}`);
-      if (response.status === 401) return { kind: 'signed-out' };
-      if (response.status === 403) return { kind: 'denied' };
-      if (response.status === 400 && data.cursor) return { kind: 'expired' };
-      if (response.status !== 200) return { kind: 'unavailable' };
-      return parseInventoryPage(data.view, await readJsonBounded(response, maxBytes, request.signal));
+      return await readSecurityIssuerResponse(`/${data.view}${query}`, undefined, async (response, signal) => {
+        if (response.status === 401) return { kind: 'signed-out' };
+        if (response.status === 403) return { kind: 'denied' };
+        if (response.status === 400 && data.cursor) return { kind: 'expired' };
+        if (response.status !== 200) return { kind: 'unavailable' };
+        return parseInventoryPage(data.view, await readJsonBounded(response, maxBytes, signal));
+      });
     } catch {
       return { kind: 'unavailable' };
     }

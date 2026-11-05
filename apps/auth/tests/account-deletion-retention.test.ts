@@ -36,7 +36,7 @@ function site(privacyContact: string | null = 'mailto:privacy@example.test'): Pr
     const keep = (chunk: Buffer) => {
       serverOutput = (serverOutput + chunk.toString()).slice(-8000);
     };
-    const env = { ...process.env, AUTH_ORIGIN: fake.url.origin };
+    const env = { ...process.env, AUTH_ORIGIN: fake.url.origin, AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' };
     delete env.PRIVACY_CONTACT_URL;
     if (privacyContact !== null) env.PRIVACY_CONTACT_URL = privacyContact;
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {

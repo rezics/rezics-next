@@ -310,7 +310,12 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
     cwd: new URL('..', import.meta.url),
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
-    env: { ...process.env, AUTH_ORIGIN: fake.url.origin, PRIVACY_CONTACT_URL: 'mailto:privacy@example.test' },
+    env: {
+      ...process.env,
+      AUTH_ORIGIN: fake.url.origin,
+      AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+      PRIVACY_CONTACT_URL: 'mailto:privacy@example.test',
+    },
   });
   let startError: Error | undefined;
   child.on('error', (error) => {
@@ -594,7 +599,12 @@ test('Default Security and deletion flows show a genuine recognizable current si
     cwd: new URL('..', import.meta.url),
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
-    env: { ...process.env, AUTH_ORIGIN: identityHost.url.origin, PRIVACY_CONTACT_URL: 'mailto:privacy@example.test' },
+    env: {
+      ...process.env,
+      AUTH_ORIGIN: identityHost.url.origin,
+      AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+      PRIVACY_CONTACT_URL: 'mailto:privacy@example.test',
+    },
   });
   let output = '';
   let startError: Error | undefined;

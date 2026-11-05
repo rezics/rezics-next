@@ -19,14 +19,18 @@ test('whole ordinary call includes route proof and both installed bounded source
   // Isolate server-function runtime adaptation from the mounted tests' source spy.
   const script = `
     import { mock } from 'bun:test';
-    mock.module('@tanstack/react-start', () => ({ createServerFn: () => {
+    let requestSignal;
+    mock.module('@tanstack/react-start', () => ({ createServerOnlyFn: fn => fn, createServerFn: () => {
       let validate = value => value;
       const builder = { validator(fn) { validate = fn; return builder; },
-        handler(fn) { return ({ data }) => fn({ data: validate(data) }); } };
+        handler(fn) { return ({ data, signal }) => { requestSignal = signal; return fn({ data: validate(data), signal }); }; } };
       return builder;
     } }));
+    mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' } }));
     mock.module('@tanstack/react-start/server', () => ({
-      getRequest: () => new Request('https://auth.test/organizations/members', { headers: { Origin: 'https://auth.test' } }),
+      getRequest: () => new Request('https://auth.test/organizations/members', {
+        headers: { Origin: 'https://auth.test' }, ...(requestSignal ? { signal: requestSignal } : {}),
+      }),
       setResponseHeader() {},
     }));
     globalThis.__AUTH_ORIGIN__ = '';

@@ -409,24 +409,34 @@ Six bytes per UTF-16 unit covers escaping, lone surrogates and UTF-8. All arithm
 nonnegative safe finite integers; invalid composition fails before serving. Totals derive from
 closed fields and count limits, including worst-case escaped text, rather than row counts alone.
 
-Accounts' Auth-page receiver gets C from the trusted native composition that supplies the actual Access
-`siteActions` map to `createAuthHost`. Deployment passes `AUTH_SECURITY_SCOPE_CONFIGURATION=catalogue:<C>`, computed
-as `securityScopeLimit(siteActions.keys())`, to the Auth-page Worker. Only a composition that explicitly has no
-catalogue may pass `native-no-catalogue` and receive the native 1,000 fallback. The Web client's requested scopes,
-issued session scopes and mounted website scope list do not establish C. Local pages launch builds the value from
-its mounted Kernel and Access catalogue; production deployment must provide the equivalent value from its own
-native composition.
+Decision: the Auth-page Worker receives `AUTH_SECURITY_SCOPE_CONFIGURATION` from the same trusted composition that
+mounts the actual Access `siteActions` map for native Auth. `catalogue:<C>` carries
+`C=securityScopeLimit(siteActions.keys())`; only an explicitly absent catalogue uses `native-no-catalogue` and the
+native 1,000-scope fallback. Local `pages` launch derives this value from its mounted Kernel and Access catalogue.
+Production deployment supplies it from its own native composition. Requested website scopes and issued session
+scopes do not establish C. Missing or malformed configuration refuses dependent reads. The page imports only public
+`@rezics/auth-contract` helpers, never service/database code, and no browser value chooses C.
 
 The Auth-page `/clients` and `/consents` receivers use `securityResponseByteBudgets(C, 20).clients` and `.consents`
 with `readJsonBounded` before parsing. Each admitted page still makes one selected native read of 20 rows; byte
-admission adds no native reads or per-row probes. The five-second private read signal covers issuer fetch, body
-consumption and BFF delivery. Fixed `GET /security-page`, `GET /passkeys` and `GET /registration-page` receivers use
-`securityFixedResponseByteBudgets` with `readJsonBounded`; these DTO allowances need no catalogue count. The distinct
-`/session` response remains catalogue-dependent and still needs the trusted C/native-mode input.
-The page/BFF imports only the public pure helpers, never service/database code. Neither response
-Content-Length nor an arbitrary response header may raise a cap. There is no new metadata endpoint,
-scan, per-row read, polling or storage migration. Browser parsing/migration and native journey
-qualification remain separate work; sign-in's installed 16,384-byte cap is unchanged.
+admission adds no native reads or per-row probes. The account-session BFF receives exactly one native `GET /session`
+per user observation and applies `securityResponseByteBudgets(C).session` to actual response bytes before UTF-8
+decoding and JSON parsing. Its complete DTO budget is
+`O({account_id:S(1024),client_id:S(1024),scope:A(C,S(128)),authn_epoch:17,auth_time:17,amr:A(1,S(15))})`, where
+`S(n)=2+6n`, `A(k,b)=2+kb+max(0,k−1)`, and
+`O(F)=2+Σ(JSON.stringify(key).length+1+F[key])+max(0,|F|−1)`. This includes emitted keys, colons, commas and the
+maximum safe-integer widths. Actual bytes are checked with absent or dishonest Content-Length.
+
+The existing five-second private read signal covers issuer headers, body consumption and BFF delivery. The session
+receiver forwards the original cookie only to the configured issuer and adds no metadata request, kernel/SQL read,
+retry, poll or command. It validates only consumed account/client identifiers and scope entries; native proof fields
+remain native authority. Overflow, malformed input, missing configuration, stalled or retired reads remain failure;
+native 401 remains signed-out. Neither response Content-Length nor another response header raises a cap. These
+receivers add no per-row read, polling or storage migration. Fixed `GET /security-page`, both `GET /passkeys` reads
+and both `GET /registration-page` reads use their C-independent `securityFixedResponseByteBudgets` through
+`readJsonBounded`; inventory and session use C-derived budgets. The page/BFF imports only public pure helpers, never
+service/database code. Browser parsing/migration and native journey qualification remain separate work; sign-in's
+installed 16,384-byte cap is unchanged.
 
 Better Auth 1.8.0-beta.3's installed public `$context.adapter` types support
 `create({ forceAllowId: true })` and `transaction()`. Provisioning uses that

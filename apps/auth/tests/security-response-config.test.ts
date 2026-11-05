@@ -1,32 +1,51 @@
 import { expect, test } from 'bun:test';
-import { securityResponseByteBudgets } from '@rezics/auth-contract';
-import { securityInventoryResponseByteBudget } from '../src/security-response-config';
+import { securityResponseByteBudgets, securityScopeLimit } from '@rezics/auth-contract';
+import {
+  parseSecurityResponseConfiguration,
+  securityInventoryResponseByteBudget,
+} from '../src/security-response-config';
 
-test('selected inventory budgets require an explicit native catalogue mode and retain native bounds', () => {
+test('selected inventory and session budgets share the trusted native catalogue configuration', () => {
   for (const count of [3, 4, 512, 1203]) {
-    const config = `catalogue:${count}`;
-    expect(securityInventoryResponseByteBudget('clients', config)).toBe(securityResponseByteBudgets(count, 20).clients);
-    expect(securityInventoryResponseByteBudget('consents', config)).toBe(
+    const configuration = `catalogue:${count}`;
+    const parsed = parseSecurityResponseConfiguration(configuration);
+    expect(parsed).toEqual({ scopeLimit: count, sessionBytes: securityResponseByteBudgets(count, 20).session });
+    expect(securityInventoryResponseByteBudget('clients', configuration)).toBe(
+      securityResponseByteBudgets(count, 20).clients,
+    );
+    expect(securityInventoryResponseByteBudget('consents', configuration)).toBe(
       securityResponseByteBudgets(count, 20).consents,
     );
   }
+
+  const fallbackLimit = securityScopeLimit();
+  expect(parseSecurityResponseConfiguration('native-no-catalogue')).toEqual({
+    scopeLimit: fallbackLimit,
+    sessionBytes: securityResponseByteBudgets(fallbackLimit, 20).session,
+  });
   expect(securityInventoryResponseByteBudget('clients', 'native-no-catalogue')).toBe(
-    securityResponseByteBudgets(1000, 20).clients,
+    securityResponseByteBudgets(fallbackLimit, 20).clients,
   );
+});
+
+test('missing, malformed and overflowing trusted configuration refuses dependent reads', () => {
   for (const invalid of [
     undefined,
     null,
     '',
-    '1000',
+    '4',
     'catalogue:0',
     'catalogue:-1',
     'catalogue:1.5',
+    'catalogue:4x',
     'catalogue:9007199254740991',
-  ])
+  ]) {
+    expect(parseSecurityResponseConfiguration(invalid)).toBeNull();
     expect(securityInventoryResponseByteBudget('clients', invalid)).toBeNull();
+  }
 });
 
-test('the Cloudflare worker receives the deployment composition value as a text binding', async () => {
+test('the Cloudflare worker receives the trusted composition value as a text binding', async () => {
   const script = `
     process.env.AUTH_SECURITY_SCOPE_CONFIGURATION = 'catalogue:1203';
     const { default: config } = await import('./apps/auth/cloudflare.config.ts');

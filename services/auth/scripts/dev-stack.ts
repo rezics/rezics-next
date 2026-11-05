@@ -35,6 +35,22 @@ export function developmentAuthPageBindings(website: { AUTH_SECURITY_SCOPE_CONFI
   return { AUTH_SECURITY_SCOPE_CONFIGURATION: website.AUTH_SECURITY_SCOPE_CONFIGURATION };
 }
 
+/** Build the Web launch bindings from the same mounted website scope composition. */
+export function developmentWebsiteBindings(
+  keys: Pick<DevelopmentKeys, 'website'>,
+  website: { scopes: readonly string[] },
+) {
+  return {
+    AUTH_ISSUER: origins.issuer,
+    API_RESOURCE: origins.audience,
+    WEBSITE_CLIENT_ID: 'rezics-website',
+    WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
+    WEBSITE_SCOPES: website.scopes.join(' '),
+    SITE_ORIGINS: origins.web,
+    KERNEL_ORIGIN: origins.kernel,
+  };
+}
+
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   await import('reylo/register');
@@ -65,18 +81,6 @@ export async function developmentWebsiteConfiguration(env?: Record<string, strin
   }
 }
 
-/** Both generated local bindings and the Web child use this exact configuration. */
-export function developmentWebsiteBindings(keys: DevelopmentKeys, website: { WEBSITE_SCOPES: string }) {
-  return {
-    AUTH_ISSUER: origins.issuer,
-    API_RESOURCE: origins.audience,
-    WEBSITE_CLIENT_ID: 'rezics-website',
-    WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
-    WEBSITE_SCOPES: website.WEBSITE_SCOPES,
-    SITE_ORIGINS: origins.web,
-    KERNEL_ORIGIN: origins.kernel,
-  };
-}
 export const importerScopes = [
   'subject:create',
   'subject:batch_write',

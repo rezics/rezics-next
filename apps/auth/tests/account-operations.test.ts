@@ -41,7 +41,12 @@ function site(): Promise<string> {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, AUTH_ORIGIN: fake.url.origin, PRIVACY_CONTACT_URL: 'mailto:privacy@example.test' },
+      env: {
+        ...process.env,
+        AUTH_ORIGIN: fake.url.origin,
+        AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+        PRIVACY_CONTACT_URL: 'mailto:privacy@example.test',
+      },
     });
     let startError: Error | undefined;
     child.on('error', (error) => (startError = error));

@@ -397,15 +397,15 @@ for 1,578 bytes. It uses the installed `privateAuthRead` signal and five-second 
 timer or retry. Sign-in keeps its native 16,384-byte allowance, five-second full-call bound and request count: zero
 extra requests.
 
-Decision: selected Security inventory reads carry C from trusted native `siteActions` into the Auth-page Worker,
-then use the admitted native byte formulas with the existing five-second whole-call signal.
+Decision: selected Security inventory and `/session` share trusted `AUTH_SECURITY_SCOPE_CONFIGURATION` and the
+existing five-second whole-call signal.
 
 The public `@rezics/auth-contract` exports are `securityResponseLimits`, `securityScopeLimit(siteActions?)`,
 `securityJsonStringBytes(units)` and `securityResponseByteBudgets(scopeLimit, selectedLimit=20)`. The required,
 nonsecret `AUTH_SECURITY_SCOPE_CONFIGURATION` Worker binding is `catalogue:<C>`, where deployment derives
 `C=securityScopeLimit(siteActions.keys())` from the same Access `siteActions` map passed to native Auth. Only an
 explicit `native-no-catalogue` value selects the native 1,000-scope fallback; a missing, malformed or overflowing
-configuration makes the dependent read unavailable. Local `pages` launch derives this value from its actual mounted
+configuration makes dependent reads unavailable. Local `pages` launch derives this value from its actual mounted
 Kernel and Access composition. Production deployment supplies it from its own mounted composition, never from the
 Web client's requested scopes.
 
@@ -420,8 +420,24 @@ Decision: `securityFixedResponseByteBudgets` exposes the native `securityPage`, 
 `registrationPage` allowances without C. The production `/security-page`, both `/passkeys` readers and both
 `/registration-page` readers (registration advice and password-change limits) use those allowances through
 `readJsonBounded` with the BFF request signal through body consumption. This keeps legal escaped maxima while
-rejecting overflow before parsing. `/clients` and `/consents` retain their selected-page budgets from trusted C;
-`/session` also remains catalogue-dependent and requires trusted C. Public consent approval is separate.
+rejecting overflow before parsing. `/clients` and `/consents` retain their selected-page budgets from trusted C.
+
+`/session` receives `securityResponseByteBudgets(C).session` through `readJsonBounded` before UTF-8 decoding and JSON
+parsing. It retains one native `GET /session` per user read, forwards the original cookie only to the configured
+issuer and adds no metadata request, SQL read, retry or command. Its full DTO byte formula is
+`O({account_id:S(1024),client_id:S(1024),scope:A(C,S(128)),authn_epoch:17,auth_time:17,amr:A(1,S(15))})`, where
+`S(n)=2+6n`, `A(k,b)=2+kb+max(0,k−1)`, and
+`O(F)=2+Σ(JSON.stringify(key).length+1+F[key])+max(0,|F|−1)`. It includes emitted keys, colons, commas and
+maximum safe-integer widths. The reader validates only consumed account/client identifiers and scopes against
+`securityResponseLimits.id`, `securityResponseLimits.scope` and C; native proof fields remain native authority. The
+same `privateAuthRead` signal bounds issuer headers and body consumption. Missing or malformed trusted configuration,
+overflow, a stalled read or retirement remains failure; native 401 remains signed-out.
+
+Together, `/clients`, `/consents`, `/session`, `/security-page`, both `/passkeys` readers and both
+`/registration-page` readers are bounded before parsing; public consent approval is separate. The fixed endpoints
+use native C-independent budgets, while inventory and session retain the same trusted C composition. Sign-in keeps
+its native 16,384-byte allowance, five-second full-call bound and request count: zero extra requests. Browser
+parsing/migration and native journey qualification remain separate work.
 
 ## Security
 

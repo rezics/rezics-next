@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
-import { loadAccountSession } from '../src/account-operations';
+import { parseAccountSession } from '../src/account-session';
 import {
   ACCOUNT_OPERATION_STEP_UP_STORAGE_LIMIT,
   pendingAccountOperationStepUpState,
@@ -310,11 +310,10 @@ test('malformed, absent and inaccessible storage keep their established distinct
   expect(data.get(reviewStorageKey)).toBe('{');
 });
 
-test('the account session producer rejects IDs above the existing 4,096-code-unit descriptor ceiling', async () => {
-  const fetch = spyOn(globalThis, 'fetch')
-    .mockResolvedValueOnce(Response.json({ account_id: 'x'.repeat(4096) }))
-    .mockResolvedValueOnce(Response.json({ account_id: 'x'.repeat(4097) }));
-  expect(await loadAccountSession()).toEqual({ kind: 'ready', accountId: 'x'.repeat(4096) });
-  expect(await loadAccountSession()).toMatchObject({ kind: 'failure' });
-  fetch.mockRestore();
+test('the account session parser uses the native 1,024-code-unit ID ceiling', () => {
+  expect(parseAccountSession({ account_id: 'x'.repeat(1024) }, 3)).toEqual({
+    kind: 'ready',
+    accountId: 'x'.repeat(1024),
+  });
+  expect(parseAccountSession({ account_id: 'x'.repeat(1025) }, 3)).toEqual({ kind: 'failure' });
 });

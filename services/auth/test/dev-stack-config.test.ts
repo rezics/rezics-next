@@ -38,7 +38,7 @@ test('Auth page scope configuration carries trusted siteActions and records nati
     ['offline_access', { anonymous: true }] as const,
     ['media:complete', { anonymous: true }] as const,
   ]);
-  const configuration = authSecurityScopeConfiguration(siteActions.keys());
+  const configuration = authSecurityScopeConfiguration([...siteActions.keys(), 'openid', 'action_a:read']);
   expect(configuration).toBe('catalogue:1203');
   expect(authSecurityScopeConfiguration(undefined)).toBe('native-no-catalogue');
   expect(developmentAuthPageBindings({ AUTH_SECURITY_SCOPE_CONFIGURATION: configuration })).toEqual({

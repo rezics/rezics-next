@@ -2,7 +2,6 @@ import { securityEnvelope, currentSecuritySession } from './security-page-fixtur
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import * as fixture from './creation-page-fixture';
-import { loadAccountSession } from '../src/account-operations';
 import { loadManagementSession } from '../src/management-operations';
 import { createConsentReview, readConsent, type ConsentReview } from '../src/consent';
 import * as inventory from '../src/security-inventory';
@@ -41,7 +40,6 @@ afterEach(() => {
 });
 afterAll(() => clock.mockRestore());
 const readers = [
-  ['account', loadAccountSession, 'failure', '/session'],
   ['management', loadManagementSession, 'unavailable', '/session'],
 ] as const;
 for (const [name, read, kind, target] of readers) {

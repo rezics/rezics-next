@@ -39,7 +39,7 @@ function site(): Promise<string> {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, AUTH_ORIGIN: fake.url.origin },
+      env: { ...process.env, AUTH_ORIGIN: fake.url.origin, AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' },
     });
     let startError: Error | undefined;
     child.on('error', (error) => (startError = error));
