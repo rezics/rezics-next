@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { TEXT_DIAGNOSTIC_REASONS, TEXT_LIMITS } from '../../../../../packages/search-text/src/index.ts';
+import { TEXT_DIAGNOSTIC_REASONS, TEXT_LIMITS } from '@rezics/search-text';
 
 /** Additive producer input for Content's complete mounted-contract publication. */
 export const TextDiagnosticSchema = t.Object(

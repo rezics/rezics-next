@@ -1,12 +1,12 @@
-import type { TextNode } from '../../../../packages/search-text/src/index.ts';
+import type { TextNode } from '@rezics/search-text';
 export {
   TEXT_LIMITS,
   TextSyntaxError,
   parseText,
   positiveText,
   textSyntaxProblem,
-} from '../../../../packages/search-text/src/index.ts';
-export type { TextNode } from '../../../../packages/search-text/src/index.ts';
+} from '@rezics/search-text';
+export type { TextNode } from '@rezics/search-text';
 
 type TextQuery =
   | { match: Record<string, { query: string; operator: 'and'; _name: string }> }
