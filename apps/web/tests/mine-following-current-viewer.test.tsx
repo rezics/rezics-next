@@ -417,8 +417,15 @@ test('the mounted default Following composition retires viewer, cursor and row l
       void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
       await tick();
     });
-    await settle(reads[0]!, loaded('A', null, 'A private title'));
+    await settle(reads[0]!, loaded('A', null, 'A refreshed title'));
+    console.log('following retry before remove', {
+      text: host.textContent,
+      control: host.querySelector('[data-slot="follow-control"]')?.outerHTML,
+      writes: writes.length,
+      reads: reads.length,
+    });
     await remove();
+    console.log('following retry after remove', { writes: writes.length });
     const aRemoval = writes[0]!;
     expect(aRemoval.input).toEqual({
       targetId: initial.page.follows[0]!.targetId,
