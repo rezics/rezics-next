@@ -45,12 +45,23 @@ afterAll(async () => {
 function deferred<T>() {
   return Promise.withResolvers<T>();
 }
-const settle = (work: () => void = () => {}) => act(async () => { work(); });
+const settle = (work: () => void = () => {}) =>
+  act(async () => {
+    work();
+  });
 const catalogue = (next: string | null = null): MoveChoices => ({
-  collections: [{ id: 'target', title: 'Target' }, { id: 'other', title: 'Other' }], next,
+  collections: [
+    { id: 'target', title: 'Target' },
+    { id: 'other', title: 'Other' },
+  ],
+  next,
 });
 const anchors = (next: string | null = null): MovePlacements => ({
-  members: [{ id: 'occurrence-a', title: 'Repeated subject' }, { id: 'occurrence-b', title: 'Repeated subject' }], next,
+  members: [
+    { id: 'occurrence-a', title: 'Repeated subject' },
+    { id: 'occurrence-b', title: 'Repeated subject' },
+  ],
+  next,
 });
 function mounted() {
   const host = document.createElement('main');
@@ -58,24 +69,49 @@ function mounted() {
   const root = createRoot(host);
   let choice: CollectionMoveChoice | null = null;
   let current = true;
-  const render = (key = 'first') => root.render(createElement(CollectionMoveChooser, {
-    key, sourceId: 'source', disabled: false, current: () => current,
-    onChange: (value) => { choice = value; },
-  }));
-  const click = (label: string) => settle(() => {
-    const button = [...host.querySelectorAll('button')].find((row) => row.textContent === label);
-    expect(button).toBeDefined();
-    button!.click();
-  });
+  const render = (key = 'first') =>
+    root.render(
+      createElement(CollectionMoveChooser, {
+        key,
+        sourceId: 'source',
+        disabled: false,
+        current: () => current,
+        onChange: (value) => {
+          choice = value;
+        },
+      }),
+    );
+  const click = (label: string) =>
+    settle(() => {
+      const button = [...host.querySelectorAll('button')].find((row) => row.textContent === label);
+      expect(button).toBeDefined();
+      button!.click();
+    });
   const row = (id: string) => host.querySelector<HTMLButtonElement>(`[data-move-destination="${id}"]`)!;
-  return { host, render, click, row, choice: () => choice, retire: () => { current = false; },
-    close: async () => { await settle(() => root.unmount()); host.remove(); } };
+  return {
+    host,
+    render,
+    click,
+    row,
+    choice: () => choice,
+    retire: () => {
+      current = false;
+    },
+    close: async () => {
+      await settle(() => root.unmount());
+      host.remove();
+    },
+  };
 }
 
 test('bounded recovery repeats failed Next/Previous, refuses stale choices and explicitly restarts expiry', async () => {
   let pending = deferred<MoveChoices>();
   const choiceRead = spyOn(reads, 'readCollectionMoveChoices').mockImplementation(() => pending.promise);
-  const header = spyOn(destinationReads, 'readCollectionDestination').mockResolvedValue({ id: 'target', title: 'Target', revision: 7 });
+  const header = spyOn(destinationReads, 'readCollectionDestination').mockResolvedValue({
+    id: 'target',
+    title: 'Target',
+    revision: 7,
+  });
   const pageRead = spyOn(reads, 'readCollectionMovePlacements').mockResolvedValue(anchors('p2'));
   const view = mounted();
   try {
@@ -87,7 +123,10 @@ test('bounded recovery repeats failed Next/Previous, refuses stale choices and e
     await settle(() => pending.reject(new Error('offline')));
     expect(view.row('target').disabled).toBe(true);
     // A synthetic event must also be refused by the handler.
-    await settle(() => { view.row('target').disabled = false; view.row('target').click(); });
+    await settle(() => {
+      view.row('target').disabled = false;
+      view.row('target').click();
+    });
     expect(header).not.toHaveBeenCalled();
     pending = deferred();
     await view.click(m.library_collection_move_retry());
@@ -103,7 +142,9 @@ test('bounded recovery repeats failed Next/Previous, refuses stale choices and e
     await view.click(m.library_collection_move_retry());
     expect(choiceRead.mock.calls.at(-1)![0]).toEqual({ data: 'c2' });
     await settle(() => pending.resolve(catalogue('c3')));
-    expect([...view.host.querySelectorAll('button')].some(b => b.textContent === m.library_collection_move_previous())).toBe(false);
+    expect(
+      [...view.host.querySelectorAll('button')].some((b) => b.textContent === m.library_collection_move_previous()),
+    ).toBe(false);
     pending = deferred();
     await view.click(m.library_collection_move_more_destinations());
     await settle(() => pending.reject(new Error('stale_cursor')));
@@ -131,7 +172,9 @@ test('bounded recovery repeats failed Next/Previous, refuses stale choices and e
     expect(pageRead.mock.calls.at(-1)![0].data.cursor).toBe('p2');
     await settle(() => placement.resolve(anchors('p3')));
     const browse = view.host.querySelector('[data-placement-browse]')!;
-    expect([...browse.querySelectorAll('button')].some(b => b.textContent === m.library_collection_move_previous())).toBe(false);
+    expect(
+      [...browse.querySelectorAll('button')].some((b) => b.textContent === m.library_collection_move_previous()),
+    ).toBe(false);
     placement = deferred();
     await view.click(m.library_collection_move_more_members());
     await settle(() => placement.reject(new Error('stale_cursor')));
@@ -140,12 +183,18 @@ test('bounded recovery repeats failed Next/Previous, refuses stale choices and e
     expect(pageRead.mock.calls.at(-1)![0].data.cursor).toBeUndefined();
     await settle(() => placement.resolve(anchors()));
     expect(view.choice()).toBeNull();
-  } finally { await view.close(); }
+  } finally {
+    await view.close();
+  }
 });
 
 test('recovery keeps exact revision/occurrence, requires re-selection and retires replaced or detached responses', async () => {
   spyOn(reads, 'readCollectionMoveChoices').mockResolvedValue(catalogue());
-  const header = spyOn(destinationReads, 'readCollectionDestination').mockResolvedValue({ id: 'target', title: 'Target', revision: 7 });
+  const header = spyOn(destinationReads, 'readCollectionDestination').mockResolvedValue({
+    id: 'target',
+    title: 'Target',
+    revision: 7,
+  });
   let pending = deferred<MovePlacements>();
   const pageRead = spyOn(reads, 'readCollectionMovePlacements').mockImplementation(() => pending.promise);
   const view = mounted();
@@ -157,8 +206,11 @@ test('recovery keeps exact revision/occurrence, requires re-selection and retire
     expect(header.mock.calls.at(-1)![0]).toEqual({ data: 'target' });
     await settle(() => pending.resolve(anchors('p2')));
     await settle(() => view.host.querySelector<HTMLButtonElement>('[data-move-anchor="occurrence-b"]')!.click());
-    expect(view.choice()).toEqual({ destination: { id: 'target', title: 'Target', revision: 7 }, after: 'occurrence-b',
-      anchor: { id: 'occurrence-b', title: 'Repeated subject', page: 1, position: 2 } });
+    expect(view.choice()).toEqual({
+      destination: { id: 'target', title: 'Target', revision: 7 },
+      after: 'occurrence-b',
+      anchor: { id: 'occurrence-b', title: 'Repeated subject', page: 1, position: 2 },
+    });
     pending = deferred();
     await view.click(m.library_collection_move_more_members());
     await settle(() => pending.reject(new Error('offline')));
@@ -194,5 +246,7 @@ test('recovery keeps exact revision/occurrence, requires re-selection and retire
     await settle(() => pending.reject(new Error('Move destination changed')));
     expect(view.host.textContent).not.toContain(m.library_collection_move_destination_changed());
     expect(view.choice()).toBeNull();
-  } finally { await view.close(); }
+  } finally {
+    await view.close();
+  }
 });
