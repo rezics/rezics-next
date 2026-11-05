@@ -7,7 +7,6 @@ import type { SessionEnv } from '../session/client';
 import { requestCsrfToken, sessionSubject } from '../session/request';
 import { personalRead } from '../kernel/query';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
-import { readCollectionPage } from './collection-queries';
 import { collectionResultMatches, type CollectionPageResult } from './collection-load';
 import type { DynamicCollectionPage } from './dynamic-collection';
 import { asSession, isRecord, kernelHeaders, writeSession } from './collection-records';
@@ -186,6 +185,7 @@ export const readCollectionPublication = createServerFn({ method: 'GET' })
       const { env } = await import('cloudflare:workers');
       if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN) return unavailablePublicationPage(null, data);
       const request = getRequest();
+      const { readCollectionPage } = await import('./collection-queries');
       return await loadCollectionPublication(request, data, () =>
         readCollectionPage({
           data: { ...data, credentialMode: 'session', editor: true, filterActive: false },
