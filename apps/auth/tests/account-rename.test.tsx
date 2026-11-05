@@ -1,3 +1,4 @@
+const nativeReference = 'AQ.' + 'a'.repeat(43);
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -148,7 +149,7 @@ test('an observed matching handle keeps uncertain execution locked until native 
   globalThis.fetch = (async (_, init) => {
     bodies.push(JSON.parse(String(init?.body)));
     if (bodies.length === 1)
-      return Response.json({ reference: 'approval', expiresAt: new Date(Date.now() + 60000).toISOString() });
+      return Response.json({ reference: nativeReference, expiresAt: new Date(Date.now() + 60000).toISOString() });
     throw Error('response lost');
   }) as typeof fetch;
   const read = async (): Promise<RenameRead> => ({
@@ -160,7 +161,7 @@ test('an observed matching handle keeps uncertain execution locked until native 
   expect(ui.host.textContent).toContain(m.auth_rename_unknown());
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.disabled).toBe(true);
   expect(bodies[0]).toEqual({ operationKey: selected.operationKey, operation: selected.operation });
-  expect(bodies[1]).toEqual({ ...bodies[0], reference: 'approval' });
+  expect(bodies[1]).toEqual({ ...bodies[0], reference: nativeReference });
   expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
   await send(ui.host);
   expect(ui.host.textContent).toContain(m.auth_rename_unknown());
@@ -185,7 +186,9 @@ test('departure stops the next browser stage and preserves a newer continuation'
   );
   await Promise.resolve();
   active = false;
-  approval.resolve(Response.json({ reference: 'approval', expiresAt: new Date(Date.now() + 60000).toISOString() }));
+  approval.resolve(
+    Response.json({ reference: nativeReference, expiresAt: new Date(Date.now() + 60000).toISOString() }),
+  );
   await run;
   expect(posts).toBe(1);
   expect(selected.submitted).toBe(false);
@@ -196,7 +199,7 @@ test('departure stops the next browser stage and preserves a newer continuation'
     expect(JSON.parse(String(init?.body))).toEqual({
       operationKey: selected.operationKey,
       operation: selected.operation,
-      reference: 'approval',
+      reference: nativeReference,
     });
     return Response.json({ accountId: selected.accountId });
   }) as typeof fetch;

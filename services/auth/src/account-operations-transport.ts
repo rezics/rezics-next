@@ -1,3 +1,4 @@
+import { parseRenameApprovalResponse, parseRenameExecutionResponse } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
 import { managementCallerMatches } from './auth-management-client.ts';
@@ -180,7 +181,10 @@ export function accountOperationTransport(
           );
         });
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
-        return response({ reference: approval.reference, expiresAt: approval.expiresAt });
+        const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
+        if (operation.kind === 'rename' && !parseRenameApprovalResponse(projected))
+          return response({ error: 'unavailable' }, 503);
+        return response(projected);
       }
       if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return denied(400);
       if (body.acceptance !== undefined) {
@@ -217,8 +221,8 @@ export function accountOperationTransport(
         }
         case 'organization':
           return response(await workflows.createOrganization({ ...input, handle: operation.handle as string }));
-        case 'rename':
-          return response(
+        case 'rename': {
+          const result = parseRenameExecutionResponse(
             await workflows.renameHandle({
               ...input,
               accountId: operation.accountId as string,
@@ -226,6 +230,12 @@ export function accountOperationTransport(
               expectedHandle: operation.expectedHandle as string | null,
             }),
           );
+          // Completion may already have happened. An incompatible projection is
+          // unavailable, never a fabricated not_applied refusal.
+          return result && result.accountId === operation.accountId
+            ? response(result)
+            : response({ error: 'unavailable' }, 503);
+        }
         case 'delete':
           return response(
             await workflows.deleteAccount({

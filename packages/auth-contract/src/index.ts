@@ -689,3 +689,4 @@ export {
 export * from './automated-page-response-bounds.ts';
 export * from './registration-response-bounds.ts';
 export * from './sign-in-response-bounds.ts';
+export * from './account-operation-response-bounds.ts';
