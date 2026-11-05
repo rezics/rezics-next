@@ -116,6 +116,9 @@ The brief writer picks the model by the task's difficulty. A simple, well-specif
 that follows an existing pattern. Judgment work keeps the routed default: debugging an unknown cause, design,
 cross-module contracts, security and money.
 
+Decision: the cross-module evidence and admission work for one reviewed Person across VN and anime retains the routed
+model default.
+
 Record attempts and accepted landings by Goal, task class and model profile. Include failed, replaced and abandoned
 attempts. Count resumed cumulative usage by deltas, once.
 
