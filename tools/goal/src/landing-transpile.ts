@@ -38,7 +38,7 @@ export class LandingTranspileInterruptedError extends Error {
 function diagnosticFrom(output: string): LandingTranspileDiagnostic | undefined {
   const message = output.match(/^\s*error:\s*(.+)$/m)?.[1]?.trim();
   if (!message) return undefined;
-  const location = output.match(/(?:at\s+)?((?:[A-Za-z]:)?[^\n\r]*?\.(?:tsx?|mts|cts)):(\d+):(\d+)/i);
+  const location = output.match(/^\s*(?:at\s+)?((?:[A-Za-z]:)?[^\n\r]*?\.(?:tsx?|mts|cts)):(\d+):(\d+)\s*$/im);
   return {
     file: location?.[1] ?? null,
     line: location ? Number(location[2]) : null,
