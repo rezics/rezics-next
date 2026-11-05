@@ -344,6 +344,27 @@ export function labelSnapshotComponent(kind: string, input: unknown, responseByt
   );
 }
 
+/** Inline owner queries that already execute on the operation's native client. */
+export function labelOwnerSqlComponent(
+  kind: string,
+  input: unknown,
+  output: object,
+  statements: number,
+  rows: number,
+): LabelOperationComponent {
+  return component(
+    kind,
+    work({
+      candidateKeys: rows,
+      nativeRows: rows,
+      emptySeeks: rows,
+      nativePoints: rows,
+      statements,
+      bytes: encoded(input) + encoded(output) + statements * 1024,
+    }),
+  );
+}
+
 /** Reserve one closed operation once, then execute its leaves on the caller's existing native resources. */
 export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: () => Promise<T>): Promise<T> {
   if (activeLabelOperation.getStore()) return body();
@@ -499,11 +520,16 @@ export function labelCataloguePlan(input: {
       outputRows: input.limit,
     },
   );
+  const continuation =
+    input.prefix !== undefined && input.afterLabelId !== '00000000-0000-0000-0000-000000000000'
+      ? [component('label.catalogue.continuation-name', labelPoint(input.route, input.accountId, input.afterLabelId).bound)]
+      : [];
   return operation(
     'label.catalogue',
     input.prefix === undefined ? 'page' : input.afterName ? 'next-prefix' : 'prefix',
     input,
     [leaf],
+    continuation,
   );
 }
 
