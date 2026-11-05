@@ -50,7 +50,13 @@ import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { prepareProgressPresentation } from './progress-presentation.ts';
-import sessionLock from './session-lock.sql';
+import {
+  sessionLockPlan, consumeSessionWork, sessionSourceWork, sessionReleaseWork,
+  sessionSnapshotWork, sessionPartitionWork, sessionHeadWork, sessionActivityWork,
+  sessionShelfWork, sessionPresentationWork,
+} from './session-operation-bounds.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { sameLibraryProfileAnchor } from './profile-source.ts';
 import { clearProgressValues, isProgressClear } from './progress-commands.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { parseProgressSessionJournalPatch } from './progress-journal.ts';
@@ -147,10 +153,34 @@ function event(session: Pick<ProgressSession, 'accountId' | 'id'>) {
 /** Private progress commands and snapshot/keyset reads on the owning account's partition. */
 export function createSessionCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
-  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const runner = createLibraryCommandRunner({ pool, access, ...(clock === undefined ? {} : { clock }) });
 
   const heads = createShelfHeads();
   const activity = createProgressActivity();
+
+  type SourceDeps = Parameters<typeof readLibraryProfileSourceObservation>[0];
+  function observeSource(deps: SourceDeps, subjectId: string) {
+    return consumeSessionWork('source', sessionSourceWork(subjectId, true),
+      () => readLibraryProfileSourceObservation(deps, subjectId));
+  }
+  async function verifyPreparedSource(deps: SourceDeps, subjectId: string,
+    before: Awaited<ReturnType<typeof observeSource>>) {
+    if (!before) return;
+    const after = await observeSource(deps, subjectId);
+    if (!after || !sameLibraryProfileAnchor(before.anchor, after.anchor) ||
+      JSON.stringify(before.source) !== JSON.stringify(after.source)) throw new ProgressConflictError();
+  }
+  function observePartition(client: Client, partition: number) {
+    return consumeSessionWork('partition', sessionPartitionWork(partition), () => readPartition(client, partition));
+  }
+  function ensureHead(write: Parameters<typeof heads.ensure>[0], subjectId: string) {
+    return consumeSessionWork('head', sessionHeadWork({ route: write.route, account_id: write.accountId, subject_id: subjectId }),
+      () => heads.ensure(write, subjectId));
+  }
+  function touchActivity(write: Parameters<typeof activity.touch>[0], touch: Parameters<typeof activity.touch>[1]) {
+    return consumeSessionWork('activity', sessionActivityWork({ route: write.route, account_id: write.accountId,
+      subject_id: touch.subjectId, time: touch.time, completed: touch.completed }), () => activity.touch(write, touch));
+  }
 
   function descriptor(profile: LibraryProfileDescriptor, session: Pick<ProgressSession, 'mode' | 'unit'>) {
     const unit = nativeProgressUnit(profile, session);
@@ -159,7 +189,7 @@ export function createSessionCommands(config: Dependencies) {
   }
 
   async function admit(client: Client, owner: AccountActor): Promise<void> {
-    const current = await readAccount(client, requireRoute(owner.accountId), owner.accountId);
+    const current = await readAccount(client, requireRoute(owner.accountId), owner.accountId, currentCommandWorkAssociation()?.access);
     if (
       !current ||
       current.kind !== 'actor' ||
@@ -190,21 +220,23 @@ export function createSessionCommands(config: Dependencies) {
       {
         action: 'progress_session:create',
         kind: 'progress_session.start',
+        sessionOperation: 'start',
+        deadline,
         requestKey,
         input: parsed,
         async prepare(attempt) {
           try {
             const deps = { pool, access, actor: owner, at: attempt.time, deadline };
-            const observation = await readLibraryProfileSourceObservation(deps, parsed.subjectId),
+            const observation = await observeSource(deps, parsed.subjectId),
               source = observation?.source ?? null;
             const version =
               parsed.versionSubjectId === null
                 ? null
                 : parsed.versionSubjectId === parsed.subjectId
                   ? source
-                  : await readLibraryProfileSource(deps, parsed.versionSubjectId);
+                  : (await observeSource(deps, parsed.versionSubjectId))?.source ?? null;
             assertExpectedBinding(observation, expected);
-            return { source, version };
+            return { source, version, observation };
           } catch (error) {
             return { error };
           }
@@ -213,6 +245,7 @@ export function createSessionCommands(config: Dependencies) {
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
         const { source, version } = prepared;
+        await verifyPreparedSource({ pool, access, actor: owner, at: command.time, deadline }, parsed.subjectId, prepared.observation);
         if (!source || (parsed.versionSubjectId !== null && !version)) throw new LibraryNotFoundError();
         if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
         const acceptedDescriptor = descriptor(source.profile, parsed);
@@ -225,8 +258,8 @@ export function createSessionCommands(config: Dependencies) {
         }
         const route = requireRoute(owner.accountId);
         const write = { client: tx, route, accountId: owner.accountId };
-        await enterShelfWrite(write);
-        await heads.ensure(write, source.subjectId);
+        await consumeSessionWork('shelf-owner', sessionShelfWork(route, owner.accountId, true), () => enterShelfWrite(write));
+        await ensureHead(write, source.subjectId);
         const time = authoritativeTimeValue(command.time);
         const session = await store.insertSession(
           tx,
@@ -242,7 +275,7 @@ export function createSessionCommands(config: Dependencies) {
           source.pin,
           meaningDescriptors,
         );
-        await activity.touch(write, { subjectId: session.subjectId, time, completed: false });
+        await touchActivity(write, { subjectId: session.subjectId, time, completed: false });
         return { value: session, events: [event(session)] };
       },
     );
@@ -273,6 +306,8 @@ export function createSessionCommands(config: Dependencies) {
       {
         action: 'progress_session:update',
         kind: `progress_session.${action}`,
+        sessionOperation: action,
+        deadline,
         requestKey,
         input: { sessionId, revision, ...record },
         async prepare(attempt) {
@@ -282,42 +317,29 @@ export function createSessionCommands(config: Dependencies) {
                 load(client, owner, sessionId),
               );
               const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },
-                observation = await readLibraryProfileSourceObservation(sourceDeps, session.subjectId),
+                observation = await observeSource(sourceDeps, session.subjectId),
                 source = observation?.source ?? null;
               assertExpectedBinding(observation, expected);
               if (!source) throw new LibraryNotFoundError();
               // No new value is admitted. The original session identity and meaning stay intact,
               // including when the current profile no longer offers its unit.
-              return { original: null, source, pin: null };
+              return { original: null, source, pin: null, observation };
             }
-            if (action !== 'record' || clearing) return { original: null, source: null, pin: null };
+            if (action !== 'record' || clearing) return { original: null, source: null, pin: null, observation: null };
             // Release the owner snapshot before any source or Global connection is acquired.
-            const fact = await withConnection(pool, async (client) => {
-              await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-              try {
-                await admit(client, owner);
-                const value = await store.readSessionFact(client, route, sessionId);
-                await client.query('COMMIT');
-                return value;
-              } catch (error) {
-                await client.query('ROLLBACK');
-                throw error;
-              }
-            });
+            const fact = await snapshot(owner, 'progress_session:update', (client) =>
+              store.readSessionFact(client, route, sessionId));
             if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
             if (fact.pin === null) throw new ProblemError('unsupported_library_profile');
-            const release = await readRelease(pool, fact.pin.releaseDigest, { composed: false });
+            const release = await consumeSessionWork('original-release', sessionReleaseWork(fact.pin.releaseDigest),
+              () => readRelease(pool, fact.pin!.releaseDigest, { composed: false }));
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');
             const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },
-              observation = expected
-                ? await readLibraryProfileSourceObservation(sourceDeps, fact.session.subjectId)
-                : null,
-              source = expected
-                ? (observation?.source ?? null)
-                : await readLibraryProfileSource(sourceDeps, fact.session.subjectId);
+              observation = await observeSource(sourceDeps, fact.session.subjectId),
+              source = observation?.source ?? null;
             assertExpectedBinding(observation, expected);
-            return { original, source, pin: fact.pin };
+            return { original, source, pin: fact.pin, observation };
           } catch (error) {
             return { error };
           }
@@ -325,12 +347,15 @@ export function createSessionCommands(config: Dependencies) {
       },
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
+        if (prepared.observation)
+          await verifyPreparedSource({ pool, access, actor: owner, at: command.time, deadline },
+            prepared.source!.requestedSubjectId ?? prepared.source!.subjectId, prepared.observation);
         const observed = await load(tx, owner, sessionId);
         const write = { client: tx, route, accountId: owner.accountId };
         // Every session writer orders the shared subject head before the session point lock.
-        await enterShelfWrite(write);
-        await heads.ensure(write, observed.subjectId);
-        await sessionLock.run(tx, { route, session_id: sessionId });
+        await consumeSessionWork('shelf-owner', sessionShelfWork(route, owner.accountId, true), () => enterShelfWrite(write));
+        await ensureHead(write, observed.subjectId);
+        await sessionLockPlan({ route, session_id: sessionId }).run(tx);
         const fact = await store.readSessionFact(tx, route, sessionId);
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
@@ -401,7 +426,7 @@ export function createSessionCommands(config: Dependencies) {
         // Corrections leave the current shelf and holdings untouched. Native source hooks
         // invalidate derived membership; they do not rewrite an independent Library entry.
         if (action !== 'reopen' && action !== 'retire')
-          await activity.touch(write, {
+          await touchActivity(write, {
             subjectId: session.subjectId,
             time: context.time,
             completed: action === 'complete',
@@ -443,7 +468,8 @@ export function createSessionCommands(config: Dependencies) {
     body: (client: Client, owner: AccountActor) => Promise<T>,
   ): Promise<T> {
     const owner = account(actor, action);
-    return withConnection(pool, async (client) => {
+    return consumeSessionWork('snapshot', sessionSnapshotWork(owner.accountId), () => withConnection(pool, async (raw) => {
+      const client = deadlineClient(raw, deadlineFor(WORK_STEP_DEADLINE_MS));
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
         await admit(client, owner);
@@ -454,7 +480,7 @@ export function createSessionCommands(config: Dependencies) {
         await client.query('ROLLBACK');
         throw error;
       }
-    });
+    }));
   }
 
   const readSession = (actor: Actor, sessionId: string) =>
@@ -463,8 +489,6 @@ export function createSessionCommands(config: Dependencies) {
   const inspectSession = (actor: Actor, sessionId: string) =>
     snapshot(actor, 'progress_session:read', async (client, owner) => {
       const route = sameAccountRoute(owner.accountId, sessionId);
-      const session = await store.readSession(client, route, sessionId);
-      if (!session || session.accountId !== owner.accountId) throw new LibraryNotFoundError();
       const fact = await store.readSessionFact(client, route, sessionId);
       if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
       return fact;
@@ -495,6 +519,8 @@ export function createSessionCommands(config: Dependencies) {
       {
         action: 'progress_session:update',
         kind: 'progress_session.journal',
+        sessionOperation: 'journal',
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
         requestKey,
         // Retain the public receipt shape. Private import admission is execution
         // evidence, not part of the caller's journal command identity.
@@ -502,7 +528,7 @@ export function createSessionCommands(config: Dependencies) {
       },
       async (tx) => {
         if (admission) {
-          await sessionLock.run(tx, { route, session_id: sessionId });
+          await sessionLockPlan({ route, session_id: sessionId }).run(tx);
           const fact = await store.readSessionFact(tx, route, sessionId);
           if (!fact || fact.session.accountId !== owner.accountId || fact.session.state === 'retired')
             throw new LibraryNotFoundError();
@@ -566,7 +592,7 @@ export function createSessionCommands(config: Dependencies) {
           // current native account, and the occurrence's exact owning account.
           return snapshot(owner, 'progress_session:read', async (client) => {
             const bounded = deadlineClient(client, deadline);
-            const partition = await readPartition(bounded, partitionOf(route));
+            const partition = await observePartition(bounded, partitionOf(route));
             if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
               throw new ProblemError('partition_unavailable');
             const fact = await store.readSessionFact(bounded, route, sessionId);
@@ -578,12 +604,12 @@ export function createSessionCommands(config: Dependencies) {
         try {
           const before = await observed();
           const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
-          const result = await render(
+          const result = await consumeSessionWork('presentation', sessionPresentationWork(before.fact.session.measures?.length ?? 1), () => render(
             before.fact.session,
             prepared.presentation,
             prepared.disclosure,
             prepared.measurePresentations,
-          );
+          ));
           const finalTime = await time();
           try {
             await prepared.verify(finalTime);
@@ -614,7 +640,7 @@ export function createSessionCommands(config: Dependencies) {
     const size = options.limit ?? 20;
     if (!Number.isInteger(size) || size < 1 || size > 100) throw new ProgressInvalidError('limit');
     const binding: CursorBinding = { operation, parameters: { accountId: owner.accountId, ...parameters } };
-    const partition = await readPartition(client, partitionOf(requireRoute(owner.accountId)));
+    const partition = await observePartition(client, partitionOf(requireRoute(owner.accountId)));
     let after: CursorKey[] | null = null;
     if (options.cursor !== undefined) {
       const cursor = decodeCursor(tokens, binding, options.cursor);
@@ -684,7 +710,7 @@ export function createSessionCommands(config: Dependencies) {
           predicate,
         },
       };
-      const partition = await readPartition(client, partitionOf(route));
+      const partition = await observePartition(client, partitionOf(route));
       let after: store.ProgressDiscoveryAfter | null = null;
       if (options.cursor !== undefined) {
         const cursor = decodeCursor(tokens, binding, options.cursor);
@@ -723,7 +749,7 @@ export function createSessionCommands(config: Dependencies) {
     return snapshot(actor, 'progress_session:list', async (client, owner) => {
       const route = requireRoute(owner.accountId);
       const currentGeneration = await store.progressDiscoveryGeneration(client, route, owner.accountId);
-      const partition = await readPartition(client, partitionOf(route));
+      const partition = await observePartition(client, partitionOf(route));
       if (currentGeneration !== generation || (partition?.epoch ?? null) !== partitionEpoch)
         throw new ProblemError('stale_cursor');
     });

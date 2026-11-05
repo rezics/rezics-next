@@ -1,0 +1,402 @@
+import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
+import { RELEASE_LIMITS } from '@rezics/definitions';
+import type { PoolClient } from 'pg';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import sessionInsert from './progress-store-session-insert.sql';
+import sessionRead from './progress-store-session-read.sql';
+import sessionUpdate from './progress-store-session-update.sql';
+import sessionPage from './progress-store-session-page.sql';
+import journalRead from './progress-store-session-journal-read.sql';
+import journalLock from './progress-store-session-journal-lock.sql';
+import journalUpdate from './progress-store-session-journal-update.sql';
+import unitAdd from './progress-store-unit-add.sql';
+import unitRemove from './progress-store-unit-remove.sql';
+import unitClear from './progress-commands-clear-units.sql';
+import unitPage from './progress-store-unit-page.sql';
+import changeAppend from './progress-store-change-append.sql';
+import changePage from './progress-store-change-page.sql';
+import sessionLock from './session-lock.sql';
+import discoveryPage from './progress-discovery-page.sql';
+import discoveryGeneration from './progress-discovery-generation-read.sql';
+import discoveryReleases from './progress-discovery-releases.sql';
+import receiptRead from '../command/read-receipt.sql';
+import eventFence from '../command/fence.sql';
+import noEffectFence from '../command/no-effect-fence.sql';
+import timeRead from '../command/time.sql';
+import accountRead from '../access/account-read.sql';
+import accountShare from '../access/account-share.sql';
+import partitionRead from '../partition/read.sql';
+import releaseRead from '../semantic/definitions-read.sql';
+import releaseExists from '../semantic/definitions-exists.sql';
+import releaseActive from '../semantic/definitions-active.sql';
+import mappingOwners from '../semantic/identity-epoch-read-owners.sql';
+import mappingSources from '../semantic/identity-epoch-read-sources.sql';
+import mappingPending from '../semantic/identity-epoch-read-pending.sql';
+import mappingCurrent from '../semantic/identity-terminal-closure-current.sql';
+import subjectReference from '../semantic/read-subject-reference.sql';
+import headEnsure from './shelf-head-ensure.sql';
+import headTouch from './shelf-head-touch.sql';
+import entryRaise from './shelf-entry-raise.sql';
+import gateRead from './shelf-maintenance-gate-read.sql';
+import gateEnsure from './shelf-maintenance-gate-ensure.sql';
+import gateLock from './shelf-maintenance-gate-lock.sql';
+import gateShare from './shelf-maintenance-gate-share.sql';
+import gateSave from './shelf-maintenance-gate-save.sql';
+import shelfInputs from './shelf-maintenance-inputs.sql';
+import runCreate from './shelf-maintenance-run-create.sql';
+import runRead from './shelf-maintenance-run-read.sql';
+import stepSave from './shelf-maintenance-step-save.sql';
+import counterInitialize from './shelf-counter-owner-initialize.sql';
+import counterRead from './shelf-counter-owner-read.sql';
+import counterComplete from './shelf-counter-owner-complete.sql';
+
+type Client = Pick<PoolClient, 'query'>;
+type Query<I, R> = Readonly<{ sql: string; run(client: Client, input: I): Promise<R> }>;
+type Input<Q> = Q extends Query<infer I, unknown> ? I : never;
+
+/** Closed Library leaves. A declaration is neither a grant nor execution evidence. */
+export type SessionSqlKind =
+  | 'insert' | 'read' | 'update' | 'lock' | 'subject-page'
+  | 'journal-read' | 'journal-lock' | 'journal-update'
+  | 'unit-add' | 'unit-remove' | 'unit-clear' | 'unit-page'
+  | 'change-append' | 'change-page' | 'owner-page' | 'owner-generation'
+  | 'discovery-releases' | 'meaning-insert' | 'meaning-refresh';
+
+export type SessionSqlPlan<I, R> = Readonly<{
+  kind: SessionSqlKind;
+  input: Readonly<I>;
+  total: Bound;
+  run(client: Client): Promise<R>;
+}>;
+
+export const SESSION_LIMITS = Object.freeze({ page: 100, ownerPage: 50, measures: 8, unitWrite: 100, units: 20_000 });
+const uuid = 'f'.repeat(36);
+const timestamp = '\0'.repeat(64);
+// PostgreSQL unconstrained numeric: 131072 digits before and 16383 after the
+// decimal point, plus sign and point. Native imported/retained values can exceed
+// today's HTTP decimal range; a read declaration must cover them too.
+const numeric = '9'.repeat(131_072 + 16_383 + 2);
+const text = (characters: number) => '\0'.repeat(characters);
+const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
+const pin = { provenance: 'profile', releaseDigest: `sha256:${'f'.repeat(64)}`, acceptingType: '', profileId: '' };
+const pinBytes = size(pin) + 2 * 6 * RELEASE_LIMITS.bytes;
+const measure = { unit: text(64), amount: numeric, total: numeric };
+const session = {
+  route: 65535, id: uuid, accountId: uuid, subjectId: uuid, versionSubjectId: uuid,
+  mode: 'completed_units', unit: text(64), total: numeric, amount: numeric,
+  locator: text(256), position: numeric, completedUnitCount: 20_000, state: 'completed',
+  revision: 2_147_483_647, startedAt: timestamp, completedAt: timestamp, transactionId: uuid,
+  additionalMeasures: [],
+};
+// additional_measures has a separate 4096-byte JSONB CHECK. At most seven
+// repeated measures are returned even when every unit is a different meaning.
+const sessionBytes = size(session) + 6 * 4096;
+const factBytes = sessionBytes + size({ libraryProfilePin: null }) + pinBytes;
+const journalBytes = size({
+  sessionId: uuid, accountId: uuid, revision: 2_147_483_646,
+  startYear: 9999, startMonth: 12, startDay: 31, finishYear: 9999, finishMonth: 12, finishDay: 31,
+  reflection: text(2000), assessmentPresence: 'explicit_null', assessmentUnits: 20, assessmentMeaningRevision: 1,
+});
+const unitBytes = size({ route: 65535, sessionId: uuid, unitId: text(128), addedAt: timestamp });
+// A change retains the original 100 add AND 100 remove IDs, not just their net
+// cardinality. Cursor records and lifecycle corrections are smaller branches.
+const intentBytes = size({ add: Array(100).fill(text(128)), remove: Array(100).fill(text(128)) }) + size(measure);
+const changeBytes = size({ route: 65535, sessionId: uuid, changeNo: 2_147_483_647,
+  intent: null, recordedAt: timestamp, transactionId: uuid }) + intentBytes;
+
+export function sessionBytesWork(bytes: number): Bound {
+  return declareBound({ candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0,
+    emptySeeks: 0, nativePoints: 0, witnessKeys: 0, statements: 0, bytes, engineRequests: 0 });
+}
+
+type Shape = Readonly<{ keys: number; rows: number; points: number; seeks: number; output: number; rowBytes: number }>;
+const point = (rowBytes: number): Shape => ({ keys: 1, rows: 1, points: 1, seeks: 1, output: 1, rowBytes });
+
+/** Each native point counts its heap and every reached index tuple separately. */
+function nativePoint(rows: number, points: number, statements: number, bytes: number): Bound {
+  return declareBound({ candidateKeys: 0, nativeRows: rows, identityMetadataRows: 0,
+    nativePoints: points, emptySeeks: points, witnessKeys: 0, statements, bytes, engineRequests: 0 });
+}
+
+// Old/new index entries of progress_session: primary plus the 20 schema indexes
+// (including partial indexes, which can be entered/withdrawn on state change).
+// A failed CAS retains this maximum. No result rowCount refunds dispatched work.
+const sessionHeapAndIndexes = nativePoint(2 + 2 * 21, 1 + 2 * 21, 0, 2 * factBytes);
+// All scalar statistics are exact owner/subject/year/meaning points. These
+// counts include negative probes, ON CONFLICT old/new tuples and cleanup DELETEs.
+const sourceHeads = nativePoint(4 * 4, 4, 4, 4 * size({ route: 65535, accountId: uuid, generation: '-9223372036854775808' }));
+const consumption = repeatBound(nativePoint(4 + 1 + 3 + 3 + 2 + 2, 6, 6, 512), 2);
+const reportedYear = repeatBound(nativePoint(4 + 3 + 2 + 4 + 3, 5, 5, 512), 2);
+const insightsYear = repeatBound(nativePoint(4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3, 10, 10, 2048), 2);
+const assessment = sumBounds(nativePoint(4 + 1 + 3, 3, 3, 256),
+  repeatBound(nativePoint(4 + 3 + 1 + 4 + 2, 5, 5, 256), 2));
+
+// reading_insights_current_progress_refresh removes every OLD measure then
+// inserts every NEW one, even for a same-value update or a journal-only patch.
+// apply touches group, scope, owner and its empty-group cleanup independently.
+const progressApply = nativePoint(1 + 4 + 3 + 3 + 2, 5, 5, pinBytes + size(measure));
+const progressRefresh = sumBounds(
+  nativePoint(1 + 1 + 2 + 3 + 2 + 3 + 2 + 2 + 1 + 4 + 1 + 2 + 4 + 3 + 3 + 3, 16, 16, 2 * factBytes),
+  repeatBound(sumBounds(nativePoint(3 + 1 + 3, 3, 3, pinBytes + size(measure)), progressApply), 2 * SESSION_LIMITS.measures),
+);
+const migration = nativePoint(4 + 1 + 4 + 3, 7, 7, pinBytes);
+// Scope refresh: exact head lock, live pin existence, support/index/pin
+// insertion or withdrawal, and at most 64 state metadata rows on pin removal.
+const memberScope = repeatBound(nativePoint(1 + 2 + 4 + 4 + 4 + 2 + 2 + 2 + 64, 9, 9, pinBytes), 2);
+const sessionTriggers = sumBounds(sourceHeads, consumption, reportedYear, insightsYear, assessment,
+  progressRefresh, migration, memberScope);
+const childFence = nativePoint(1 + 4, 2, 2, 128);
+
+function frozen<I>(input: I): I {
+  const original = structuredClone(input);
+  function freeze(value: unknown): void {
+    if (value === null || typeof value !== 'object') return;
+    for (const child of Object.values(value)) freeze(child);
+    Object.freeze(value);
+  }
+  freeze(original);
+  return original;
+}
+
+function statement<I, R>(kind: SessionSqlKind, query: Query<I, R>, input: I, shape: Shape, nested?: Bound): SessionSqlPlan<I, R> {
+  const original = frozen(input);
+  const total = sumBounds(declareBound({
+    candidateKeys: shape.keys, nativeRows: shape.rows, identityMetadataRows: 0,
+    nativePoints: shape.points, emptySeeks: shape.seeks, witnessKeys: 0, statements: 1,
+    bytes: Buffer.byteLength(query.sql) + size(original) + 2 + shape.output * (shape.rowBytes + 1),
+    // These closed leaves execute SQL only. Keep the ninth axis explicit.
+    engineRequests: 0,
+  }), ...(nested ? [nested] : []));
+  return Object.freeze({ kind, input: original, total,
+    run(client: Client) { return consumeSessionWork(`sql.${kind}`, total, () => query.run(client, original)); } });
+}
+
+/** Translation to the existing eight-axis port is explicit; no ninth-axis work is dropped. */
+export function consumeSessionWork<T>(kind: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
+  const association = currentCommandWorkAssociation();
+  const { engineRequests, ...native } = total;
+  // The closed operation set contains no Search request. Search's discovery
+  // composition keeps its own engineRequests accounting at its existing root.
+  void engineRequests;
+  return association ? association.run(`library.session.${kind}`, native, dispatch) : dispatch();
+}
+
+export const sessionInsertPlan = (input: Input<typeof sessionInsert>) =>
+  statement('insert', sessionInsert, input, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers));
+export const sessionReadPlan = (input: Input<typeof sessionRead>) => statement('read', sessionRead, input, point(factBytes));
+export const sessionUpdatePlan = (input: Input<typeof sessionUpdate>) =>
+  statement('update', sessionUpdate, input, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers));
+export const sessionLockPlan = (input: Input<typeof sessionLock>) => statement('lock', sessionLock, input, point(size({ sessionId: uuid })));
+export const sessionJournalReadPlan = (input: Input<typeof journalRead>) => statement('journal-read', journalRead, input, point(journalBytes));
+export const sessionJournalLockPlan = (input: Input<typeof journalLock>) => statement('journal-lock', journalLock, input, point(journalBytes));
+export const sessionJournalUpdatePlan = (input: Input<typeof journalUpdate>) =>
+  statement('journal-update', journalUpdate, input, point(journalBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers));
+
+export function sessionUnitAddPlan(input: Input<typeof unitAdd>) {
+  const count = input.unit_ids.length;
+  return statement('unit-add', unitAdd, input, { keys: count, rows: 1 + count * 4, points: 1 + count * 2,
+    seeks: 1 + count, output: 1, rowBytes: size({ added: 100 }) }, repeatBound(childFence, count));
+}
+export function sessionUnitRemovePlan(input: Input<typeof unitRemove>) {
+  const count = input.unit_ids.length;
+  return statement('unit-remove', unitRemove, input, { keys: count, rows: count * 3, points: count,
+    seeks: count, output: 1, rowBytes: size({ removed: 100 }) }, repeatBound(childFence, count));
+}
+export function sessionUnitClearPlan(input: Input<typeof unitClear>) {
+  return statement('unit-clear', unitClear, input, { keys: SESSION_LIMITS.units, rows: 3 * SESSION_LIMITS.units,
+    points: 1, seeks: 1, output: 0, rowBytes: 0 }, repeatBound(childFence, SESSION_LIMITS.units));
+}
+export const sessionChangeAppendPlan = (input: Input<typeof changeAppend>) =>
+  statement('change-append', changeAppend, input, { ...point(changeBytes), rows: 3, points: 2 }, childFence);
+
+export function sessionSubjectPagePlan(input: Input<typeof sessionPage>) {
+  // First uses one branch. Next may visit both timestamp ranges, each with its
+  // own LIMIT, before the merge discards candidates. The sentinel is raw work.
+  const ranges = input.has_cursor ? 2 : 1;
+  return statement('subject-page', sessionPage, input, { keys: ranges * input.limit,
+    rows: ranges * input.limit, points: ranges, seeks: ranges, output: input.limit, rowBytes: factBytes });
+}
+export const sessionUnitPagePlan = (input: Input<typeof unitPage>) => statement('unit-page', unitPage, input,
+  { keys: input.limit, rows: input.limit, points: 1, seeks: 1, output: input.limit, rowBytes: unitBytes });
+export const sessionChangePagePlan = (input: Input<typeof changePage>) => statement('change-page', changePage, input,
+  { keys: input.limit, rows: input.limit, points: 1, seeks: 1, output: input.limit, rowBytes: changeBytes });
+export const sessionDiscoveryGenerationPlan = (input: Input<typeof discoveryGeneration>) =>
+  statement('owner-generation', discoveryGeneration, input, point(size({ generation: '-9223372036854775808' })));
+export function sessionDiscoveryPagePlan(input: Input<typeof discoveryPage>) {
+  // Exactly one of the eight filter branches is active. Candidate IDs and the
+  // joined session point are distinct work, including the discarded 51st row.
+  return statement('owner-page', discoveryPage, input, { keys: input.limit, rows: 2 * input.limit,
+    points: 1 + input.limit, seeks: 1 + input.limit, output: input.limit, rowBytes: factBytes });
+}
+export const sessionDiscoveryReleasesPlan = (input: Input<typeof discoveryReleases>) =>
+  statement('discovery-releases', discoveryReleases, input, { keys: input.digests.length, rows: input.digests.length,
+    points: input.digests.length, seeks: input.digests.length, output: input.digests.length,
+    rowBytes: size({ digest: pin.releaseDigest, body: null }) + 6 * RELEASE_LIMITS.bytes });
+
+const meaningSql = `INSERT INTO library.reading_insights_progress_meaning
+        (route,session_id,unit_id,meaning_revision,mode,profile_pin,dimension,precision,minimum,maximum,
+         total_policy,identity_kind,structure_kind)
+       SELECT $1,$2,unit_id,1,mode,$3::jsonb,dimension,precision,minimum,maximum,total_policy,identity_kind,structure_kind
+       FROM jsonb_to_recordset($4::jsonb) AS accepted(
+         unit_id text, mode text, dimension text, precision smallint, minimum numeric, maximum numeric,
+         total_policy text, identity_kind text, structure_kind text)`;
+type MeaningInput = { route: number; sessionId: string; pin: string; meanings: string };
+export function sessionMeaningInsertPlan(input: MeaningInput, count: number) {
+  return statement('meaning-insert', { sql: meaningSql, run: (client, original: MeaningInput) =>
+    client.query(meaningSql, [original.route, original.sessionId, original.pin, original.meanings]) },
+  input, { keys: count, rows: count * 2, points: count, seeks: count, output: 0, rowBytes: 0 });
+}
+const refreshSql = 'SELECT library.reading_insights_current_progress_refresh($1,$2)';
+export function sessionMeaningRefreshPlan(input: { route: number; sessionId: string }) {
+  return statement('meaning-refresh', { sql: refreshSql, run: (client, original: typeof input) =>
+    client.query(refreshSql, [original.route, original.sessionId]) }, input,
+  { keys: 0, rows: 0, points: 0, seeks: 0, output: 1, rowBytes: 4 }, progressRefresh);
+}
+
+/** Response work is declared before rendering, independently of its success. */
+export function sessionPresentationWork(measures: number, sessions = 1): Bound {
+  // Labels, forms and input rules are projections of one bounded immutable
+  // release. Repeated measures serialize independently, even on the same pin.
+  return repeatBound(sessionBytesWork(factBytes + (1 + measures) * 6 * RELEASE_LIMITS.bytes), sessions);
+}
+
+export type SessionOperationKind = 'start' | 'record' | 'complete' | 'abandon' | 'reopen' | 'retire' | 'journal';
+export type SessionCommandPlan = Readonly<{
+  kind: SessionOperationKind;
+  original: Readonly<{ accountId: string; kind: string; key: string; input: unknown }>;
+  /** Executor work only. Store, source and native Access leaves compose separately. */
+  control: Bound;
+}>;
+
+function sqlWork(sql: string, input: unknown, rows: number, points: number, outputBytes: number, metadata = 0): Bound {
+  return declareBound({ candidateKeys: 0, nativeRows: rows, identityMetadataRows: metadata,
+    nativePoints: points, emptySeeks: points, witnessKeys: 0, statements: 1,
+    bytes: Buffer.byteLength(sql) + size(input) + outputBytes, engineRequests: 0 });
+}
+
+/** One command attempt, including replay, rollback and the no-effect fence.
+ * Native Access owns account/action/group preparation via its original work port.
+ * There is no second command invocation or admission for these declarations.
+ */
+export function sessionCommandPlan(kind: SessionOperationKind, original: SessionCommandPlan['original'], receiptKeys: number): SessionCommandPlan {
+  const retained = frozen(original);
+  const responseBytes = kind === 'journal' ? size({ sessionId: uuid, revision: 2_147_483_646, changed: false }) : sessionBytes;
+  const receipt = { principal: { kind: 'account', id: retained.accountId }, kind: retained.kind,
+    key: 'rk1.2147483647.' + 'f'.repeat(64), digest: 'f'.repeat(44), response: null };
+  const controls = [
+    'BEGIN ISOLATION LEVEL SERIALIZABLE', 'BEGIN ISOLATION LEVEL SERIALIZABLE',
+    "SET LOCAL lock_timeout = '200ms'", "SET LOCAL statement_timeout = '5000ms'",
+    "SET LOCAL statement_timeout = '5000ms'", 'COMMIT', 'ROLLBACK',
+  ];
+  const control = sumBounds(
+    ...controls.map((sql) => sqlWork(sql, [], 0, 0, 0)),
+    sqlWork(timeRead.sql, {}, 1, 1, size({ time: timestamp })),
+    // Current account projection/hold are independent of the permission engine.
+    sqlWork(accountShare.sql, { route: 65535, account_id: retained.accountId }, 1, 1, 256),
+    sqlWork(receiptRead.sql, { partition_no: 4095, principal_kind: 'account', principal_id: retained.accountId,
+      command_kind: retained.kind, idempotency_keys: Array(receiptKeys).fill(receipt.key) }, receiptKeys, receiptKeys,
+      responseBytes + size({ requestDigest: 'f'.repeat(64), epoch: 2_147_483_647, position: '-9223372036854775808',
+        transactionId: uuid, response: null, payloadState: 'retained' })),
+    // event fence: partition old/new heap + PK; outbox heap + all five indexes;
+    // History basis heap + its three indexes; receipt heap + three indexes.
+    sqlWork(eventFence.sql, { partition_no: 4095, transaction_id: uuid, receipt,
+      basis: { principal: { kind: 'account', id: retained.accountId }, clientId: '', requestedBy: uuid },
+      events: [{ type: 'com.rezics.library.progress_session.updated.v1', subject: retained.accountId,
+        id: uuid, data: { sessionId: uuid } }] }, 4 + 6 + 4 + 4, 1 + 5 + 3 + 3,
+      size({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
+    sqlWork(noEffectFence.sql, { partition_no: 4095, transaction_id: uuid, receipt }, 1 + 4, 1 + 3,
+      size({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
+    sessionBytesWork(size(retained) + 3 * responseBytes),
+  );
+  return Object.freeze({ kind, original: retained, control });
+}
+
+/** Preparation snapshots have one connection and one RR transaction, released by
+ * withConnection. Rollback is retained even if the first statement fails. */
+export function sessionSnapshotWork(accountId: string): Bound {
+  return sumBounds(...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((sql) => sqlWork(sql, [], 0, 0, 0)),
+    // Access's own native account read supplies the row/byte work; this term adds
+    // the actual statement text and original binds, absent from its six axes.
+    sqlWork(accountRead.sql, { route: 65535, account_id: accountId }, 0, 0, 0));
+}
+
+export function sessionPartitionWork(partition: number): Bound {
+  return sqlWork(partitionRead.sql, { partition_no: partition }, 1, 1,
+    size({ partitionNo: 4095, node: text(255), movedTo: text(255), writeState: 'active', epoch: 2_147_483_647, position: '-9223372036854775808' }));
+}
+
+/** Cache hit/miss are both native points. Cold validation/digest parsing is
+ * bounded by the immutable Definitions release ceiling, never another profile. */
+export function sessionReleaseWork(digest: string, active = false): Bound {
+  return sumBounds(
+    sqlWork(releaseExists.sql, { route: 0, digest }, 1, 1, size({ digest })),
+    sqlWork(releaseRead.sql, { route: 0, digest }, 1, 1, 6 * RELEASE_LIMITS.bytes),
+    ...(active ? [sqlWork(releaseActive.sql, { route: 0 }, 1, 1, size({ digest: pin.releaseDigest, head: 2_147_483_647 }))] : []),
+  );
+}
+
+/** One original Source anchor: three mapping reads (before, resolve, final),
+ * each double-collects source and control homes. Source and terminal disclosure
+ * repeat even when their IDs coincide. Native Access charges its own checks.
+ */
+export function sessionSourceWork(subjectId: string, withProfile: boolean): Bound {
+  const mapping = sumBounds(
+    sqlWork(mappingOwners.sql, [[4095]], 1, 1, 256, 1),
+    sqlWork(mappingSources.sql, [[subjectId], [65535]], 4, 4, 2048, 3),
+    sqlWork(mappingOwners.sql, [[4095]], 1, 1, 256, 1),
+    sqlWork(mappingPending.sql, [[4095], [uuid]], 1, 1, 256, 1),
+    sqlWork(mappingCurrent.sql, [[4095], [uuid], [subjectId]], 4, 4, 2048, 3),
+    repeatBound(sumBounds(...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', "SET LOCAL statement_timeout = '5000ms'", 'COMMIT', 'ROLLBACK']
+      .map((sql) => sqlWork(sql, [], 0, 0, 0))), 2),
+  );
+  return sumBounds(repeatBound(mapping, 2 * 3),
+    sqlWork(accountRead.sql, { route: 65535, account_id: uuid }, 0, 0, 0),
+    repeatBound(sumBounds(sessionPartitionWork(4095),
+      sqlWork(subjectReference.sql, { route: 65535, subject_id: subjectId }, 2, 2, size({ id: uuid, redirect: uuid })),
+      ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', "SET LOCAL statement_timeout = '5000ms'", 'COMMIT', 'ROLLBACK']
+        .map((sql) => sqlWork(sql, [], 0, 0, 0))), 3),
+    // readItemTypes selects exactly the terminal's one native type label.
+    nativePoint(1, 1, 1, 6 * RELEASE_LIMITS.bytes),
+    ...(withProfile ? [sessionReleaseWork(pin.releaseDigest, true)] : []));
+}
+
+export function sessionHeadWork(input: { route: number; account_id: string; subject_id: string }): Bound {
+  return sumBounds(sqlWork(headEnsure.sql, input, 4, 1, size({ lastChangedAt: timestamp, lastCompletedAt: timestamp })),
+    // Head triggers refresh the one owner activity projection.
+    nativePoint(1 + 1 + 3, 3, 3, size(input)));
+}
+
+export function sessionActivityWork(input: { route: number; account_id: string; subject_id: string; time: string; completed: boolean }): Bound {
+  return sumBounds(sqlWork(headTouch.sql, input, 4, 1, 0),
+    sqlWork(entryRaise.sql, input, 3, 1, 0),
+    // Exact Entry activity update reaches its source-fence, owner activity and
+    // statistics hooks even when no logical state transition is appended.
+    sourceHeads, memberScope, nativePoint(1 + 1 + 3, 3, 3, size(input)));
+}
+
+/** Existing gate initialization can retain a durable backfill run. It does not
+ * execute that run's future pages or enqueue a second scheduler here. */
+export function sessionShelfWork(route: number, accountId: string, counters: boolean): Bound {
+  const input = { route, account_id: accountId };
+  const gateBytes = size({ initialized: false, mode: 'rebuilding', ready: false,
+    epoch: '-9223372036854775808', activeGeneration: uuid, runId: uuid });
+  const runBytes = size({ runId: uuid, epoch: '-9223372036854775808', sequence: '-9223372036854775808',
+    segment: 2_147_483_647, kind: 'backfill', phase: 'sessions', cursor: null, buildGeneration: uuid,
+    enqueuePending: false, cancelled: false });
+  const gate = sumBounds(sqlWork(accountShare.sql, input, 1, 1, 256),
+    sqlWork(gateRead.sql, input, 1, 1, gateBytes),
+    sqlWork(gateEnsure.sql, input, 4, 1, 0),
+    sqlWork(gateLock.sql, input, 1, 1, gateBytes),
+    // EXISTS uses three independent leading owner indexes, including the empty
+    // result and LIMIT node of each family. It never scans all owner facts.
+    sqlWork(shelfInputs.sql, input, 6, 3, size({ entries: false, collections: false, sessions: false })),
+    sqlWork(runCreate.sql, { ...input, run_id: uuid, epoch: '-9223372036854775808', kind: 'backfill', phase: 'drain', build_generation: null }, 4, 3, 0),
+    sqlWork(gateSave.sql, { ...input, mode: 'open', ready: false, epoch: '-9223372036854775808', active_generation: uuid, run_id: uuid }, 3, 1, 0),
+    sqlWork(stepSave.sql, { ...input, run_id: uuid }, 1 + 3, 2, 0),
+    repeatBound(sqlWork(runRead.sql, { ...input, run_id: uuid }, 1, 1, runBytes), 2),
+    repeatBound(sqlWork(gateShare.sql, input, 1, 1, gateBytes), 2));
+  return counters ? sumBounds(gate,
+    sqlWork(counterInitialize.sql, { ...input, fence_id: uuid }, 4, 1, 0),
+    repeatBound(sqlWork(counterRead.sql, input, 1, 1, size({ fenceId: uuid, epoch: '-9223372036854775808', state: 'initializing', ready: false, generationId: uuid })), 2),
+    sqlWork(counterComplete.sql, { ...input, ready: false, epoch: '-9223372036854775808', generation_id: uuid }, 3, 1, 0)) : gate;
+}

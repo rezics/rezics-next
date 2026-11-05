@@ -18,8 +18,11 @@ import {
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../request/access.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { receiptKeysFor } from '../command/receipt-key.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { consumeSessionWork, sessionCommandPlan, sessionShelfWork, type SessionOperationKind } from './session-operation-bounds.ts';
 
 import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 
@@ -38,6 +41,8 @@ export type OwnAccountCommand = {
   kind: string;
   requestKey: string;
   input: unknown;
+  sessionOperation?: SessionOperationKind;
+  deadline?: number;
 };
 
 export type TrustedAccountCommand = {
@@ -123,13 +128,18 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const route = routeOf(owner.accountId);
     if (route === null) throw new GrantDeniedError();
     const identity = principalCommandIdentity(owner);
+    const deadline = request.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    const plan = request.sessionOperation === undefined ? undefined : sessionCommandPlan(request.sessionOperation,
+      { accountId: owner.accountId, kind: request.kind, key: request.requestKey, input: request.input }, receiptKeysFor(pool).keys.size);
+    // Capture original command identity before any permission preparation awaits.
+    const commandInput = plan?.original.input ?? request.input;
     const native = config.access
       ? await accessCommandAuthorization(
           config.access,
           owner,
           request.action,
           { route, id: owner.accountId },
-          { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+          { pool, deadline },
           () => new GrantDeniedError(),
         )
       : undefined;
@@ -138,6 +148,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => (receiptOnly ? new ReceiptNotFoundError() : new GrantDeniedError()),
       async prepare(attempt) {
+        if (plan) await consumeSessionWork('command-control', plan.control, async () => undefined);
         const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
         return evidence;
@@ -149,7 +160,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
           throw error;
         }
-        const current = await readAccount(tx, route, owner.accountId);
+        const current = await readAccount(tx, route, owner.accountId, currentCommandWorkAssociation()?.access);
         if (
           !current ||
           current.kind !== 'actor' ||
@@ -172,25 +183,27 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       },
     };
 
-    return runCommand(
+    return withRequestDeadline(deadline, () => runCommand(
       pool,
       {
         ...identity,
         partition: partitionOf(route),
-        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+        deadline,
         clock,
         receipt: {
           kind: request.kind,
           key: request.requestKey,
-          digest: receiptOnly ?? digest(identity, request.kind, request.input),
+          digest: receiptOnly ?? digest(identity, request.kind, commandInput),
         },
         authorization,
       },
       async (tx, command) => {
-        await enterShelfWrite(tx, { route, accountId: owner.accountId });
+        const enter = () => enterShelfWrite(tx, { route, accountId: owner.accountId });
+        if (plan) await consumeSessionWork('shelf-gate', sessionShelfWork(route, owner.accountId, false), enter);
+        else await enter();
         return body(tx, command);
       },
-    );
+    ));
   }
 
   async function ownAccount<T>(

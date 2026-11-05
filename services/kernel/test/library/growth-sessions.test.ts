@@ -72,7 +72,11 @@ async function createFixture(route: number): Promise<Fixture> {
     authorize: async () => true,
   });
   const access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
+    actions: new Map([
+      ['subject:read', { anonymous: true }],
+      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list']
+        .map((action) => [action, { anonymous: false, authority: 'own-account' as const }] as const),
+    ]),
     accountEvidence: (candidate) => accounts.get(candidate.accountId) ?? null,
   });
   return {

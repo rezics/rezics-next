@@ -91,7 +91,11 @@ beforeAll(async () => {
     accounts.set(actor.accountId, (await readAccount(database.admin, route, actor.accountId))!);
   }
   const access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
+    actions: new Map([
+      ['subject:read', { anonymous: true }],
+      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list']
+        .map((action) => [action, { anonymous: false, authority: 'own-account' as const }] as const),
+    ]),
     accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
   });
   commands = createSessionCommands({ pool: database.pool, access, tokens, clock });

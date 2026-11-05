@@ -1,7 +1,7 @@
 import { clearedProgressValues } from '@rezics/progress';
 import type { CommandTransaction } from '../command/command.ts';
 import type { ProgressSession, ProgressSessionUpdate } from './progress-model.ts';
-import clearUnits from './progress-commands-clear-units.sql';
+import { sessionUnitClearPlan } from './session-operation-bounds.ts';
 
 export { isProgressClear } from '@rezics/progress';
 
@@ -15,6 +15,6 @@ export async function clearProgressValues(
   const projected = clearedProgressValues(session, measureId);
   if (!projected.ok) throw new TypeError('Unknown progress measure');
   if (measureId === undefined && session.mode === 'completed_units')
-    await clearUnits.run({ query: client.query.bind(client) }, { route, session_id: session.id });
+    await sessionUnitClearPlan({ route, session_id: session.id }).run(client);
   return projected.value;
 }
