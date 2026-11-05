@@ -60,7 +60,7 @@ import {
 } from './search-recovery';
 
 import { useSearchRetryFocus } from './search-retry-focus';
-import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
+import { discoverySearchHref, searchUrlIntake, type SearchLoaderDeps } from './search-params';
 import {
   isSearchResourceScope,
   parseSearchResourceScope,
@@ -248,7 +248,8 @@ function validateSearchInput(input: unknown): SearchParams {
     input.locale.length > 35
   )
     throw new Error('Invalid search');
-  const parsed = v.parse(searchParams, {
+  if (input.facetValues !== undefined && !isRecord(input.facetValues)) throw new Error('Invalid facets');
+  const urlInput: Record<string, unknown> = {
     q: input.query,
     type: input.type,
     cursor: input.cursor,
@@ -257,7 +258,21 @@ function validateSearchInput(input: unknown): SearchParams {
     language: input.languages,
     filter: input.filter,
     [RATING_POPULATION_FIELD]: input.ratingPopulation,
-  });
+  };
+  if (isRecord(input.facetValues)) {
+    for (const [property, values] of Object.entries(input.facetValues)) urlInput[`f.${property}`] = values;
+  }
+  const intake = searchUrlIntake(urlInput);
+  if (intake.kind !== 'ready') throw new Error('Invalid search');
+  const parsed = {
+    q: intake.request.query,
+    type: intake.request.type,
+    cursor: intake.request.cursor,
+    sort: intake.request.sort,
+    kinds: intake.request.kinds,
+    language: intake.request.languages,
+    filter: intake.request.filter,
+  };
   if (input.resourceScope !== undefined && !isSearchResourceScope(input.resourceScope))
     throw new Error('Invalid search resource scope');
   if (input.reader !== undefined && (typeof input.reader !== 'string' || input.reader.length > 256))
@@ -282,19 +297,7 @@ function validateSearchInput(input: unknown): SearchParams {
   const filter = searchFilterWithScope(typeof parsed.filter === 'string' ? parsed.filter : undefined, resourceScope);
   if (input.kindCursor !== undefined && (typeof input.kindCursor !== 'string' || input.kindCursor.length > 4864))
     throw new Error('Invalid kind cursor');
-  const facetValues: Record<string, string[]> = Object.create(null);
-  if (isRecord(input.facetValues)) {
-    if (Object.keys(input.facetValues).length > FILTER_LIMITS.leaves) throw new Error('Invalid facets');
-    for (const [property, values] of Object.entries(input.facetValues)) {
-      if (
-        !Array.isArray(values) ||
-        values.length > FILTER_LIMITS.in ||
-        !values.every((value) => typeof value === 'string')
-      )
-        throw new Error('Invalid facet');
-      facetValues[property] = values;
-    }
-  }
+  const facetValues = intake.request.facets;
   return {
     query: parsed.q,
     locale: input.locale,

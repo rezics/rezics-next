@@ -10,6 +10,7 @@ import {
   SearchPage,
   searchInputDependency,
   searchInputFingerprint,
+  searchLoaderDeps,
   searchParams,
   searchUrlIntake,
   removeSearchInput,
@@ -40,7 +41,7 @@ const publicOrigin = createIsomorphicFn()
 export const Route = createFileRoute('/search')({
   staticData: { publicCache: true },
   validateSearch: searchParams,
-  loaderDeps: ({ search }) => searchInputDependency(search),
+  loaderDeps: ({ search }) => ({ fingerprint: searchInputDependency(search) }),
   loader: ({ context, location }) => {
     const intake = searchUrlIntake(location.search, location.searchStr, location.publicHref);
     if (intake.kind !== 'ready') return { query: '' };
