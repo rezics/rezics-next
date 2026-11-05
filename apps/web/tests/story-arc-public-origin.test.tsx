@@ -218,7 +218,8 @@ test('the mounted Subject, canonical route, correction session and existing read
         renderJsonLd: false,
       }),
     );
-    const publicDom = within(host);
+    // Menu submenus render through a body portal, so query the same mounted surface as the addon flow.
+    const publicDom = within(window.document.body);
     await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
     await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
     return host.querySelector<HTMLAnchorElement>('a[href*="/story-arc?"]')?.getAttribute('href');
