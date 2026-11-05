@@ -1226,7 +1226,7 @@
   "library_nav_sidebar_label": "Library navigation",
   "library_pin_actions": "Collection pin actions",
   "library_pin_conflict": "Pins changed elsewhere. Review the current list before trying again.",
-  "library_pin_denied": "You don't have access to your pinned Collections.",
+  "library_pin_denied": "Your current access does not allow viewing your pinned Collections.",
   "library_pin_limit": "You have reached the 100 Collection pin limit.",
   "library_pin_more": "All Collections",
   "library_pin_move_down": "Move down",

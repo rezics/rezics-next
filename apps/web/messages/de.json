@@ -1215,7 +1215,7 @@
   "library_nav_sidebar_label": "Bibliotheksnavigation",
   "library_pin_actions": "Sammlungsaktionen",
   "library_pin_conflict": "Die angehefteten Sammlungen wurden anderswo geändert. Prüfe die aktuelle Liste, bevor du es erneut versuchst.",
-  "library_pin_denied": "Du hast keinen Zugriff auf deine angehefteten Sammlungen.",
+  "library_pin_denied": "Mit deinem aktuellen Zugriff kannst du deine angehefteten Sammlungen nicht ansehen.",
   "library_pin_limit": "Du hast das Limit von 100 angehefteten Sammlungen erreicht.",
   "library_pin_more": "Alle Sammlungen",
   "library_pin_move_down": "Nach unten verschieben",
