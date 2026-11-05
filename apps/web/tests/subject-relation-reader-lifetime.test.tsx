@@ -25,6 +25,7 @@ function deferred<T>(): Deferred<T> {
 type HeldRelation = {
   request: RelationGroupRequest;
   response: Deferred<Section>;
+  signal?: AbortSignal;
 };
 
 let heldRelations: HeldRelation[] = [];
@@ -51,7 +52,8 @@ function createServerFn() {
         const data = validate ? validate(supplied) : supplied;
         if (relationRequest(data)) {
           const response = deferred<Section>();
-          heldRelations.push({ request: data, response });
+          const signal = (input as { signal?: AbortSignal } | undefined)?.signal;
+          heldRelations.push({ request: data, response, signal });
           return response.promise;
         }
         return Promise.resolve(handler({ data } as never));
@@ -488,6 +490,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       const sharedKey = assertPendingKey(clientB, sharedRequest);
       expect(originalKey).not.toEqual(sharedKey);
       await mountPrimary(false);
+      expect([originalRequest.signal?.aborted, sharedRequest.signal?.aborted]).toEqual([true, false]);
       expect(clientB.getQueryCache().find({ queryKey: originalKey, exact: true })).toBeUndefined();
       expect(clientB.getQueryCache().find({ queryKey: sharedKey, exact: true })).toBeDefined();
 

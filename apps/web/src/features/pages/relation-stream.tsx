@@ -579,7 +579,7 @@ function StreamState({
         retry: false,
         queryFn: async ({ signal }) => {
           if (!owner.current(generation)) throw new Error('Retired relation continuation');
-          const result = await loadRelationGroup({ data: request });
+          const result = await loadRelationGroup({ data: request, signal });
           if (signal.aborted || !owner.current(generation)) throw new Error('Retired relation continuation');
           return result;
         },

@@ -8,7 +8,7 @@ import {
   type View,
 } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
-import { setResponseHeader } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { notFound } from '@tanstack/react-router';
 import { pageContext, loadSubjectPage, PageReadError } from './subject';
 import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
@@ -50,12 +50,14 @@ export async function readRelationGroup(
   client: KernelClient,
   input: RelationGroupRequest,
   authorization?: string,
+  signal?: AbortSignal,
 ): Promise<Section> {
   let loaded;
   try {
     loaded = await loadSubjectPage(client, input.subject, input.view, input.locale, {
       realm: input.realm,
       authorization,
+      signal,
       continuation: { node: input.node, cursor: input.cursor },
     });
   } catch (error) {
@@ -141,5 +143,6 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
       data.reader === null
         ? { client: (await import('../../kernel/client')).kernelClient(data.locale), authorization: undefined }
         : await subjectKernelClient(data.locale, data.realm, data.reader);
-    return readRelationGroup(client, data, authorization);
+    const signal = getRequest().signal;
+    return readRelationGroup(client, data, authorization, signal);
   });
