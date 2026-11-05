@@ -205,7 +205,7 @@ test('The default My Collections route immediately retires private collections a
     });
     preparation = 'unavailable';
     await expect(load({ deps: { layout: 'previews' } })).rejects.toMatchObject({
-      problem: { code: 'dependency_unavailable' },
+      problem: { code: 'session_unavailable' },
     });
     preparation = 'active';
     actualSubject = undefined;
