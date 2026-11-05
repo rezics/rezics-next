@@ -108,3 +108,60 @@ test('rendered lists, receipt destinations and benefit return links retain both 
     await window.happyDOM.close();
   }
 });
+
+test('paired buyer paths stage exact retry targets, branch after Previous and bound retained coordinates', async () => {
+  const { BuyerHistoryWindows } = await import('../src/checkout/buyer-history-windows');
+  const visit = new BuyerHistoryWindows();
+  visit.admitEntry('orders', null);
+  visit.admitEntry('entitlements', history.entitlementsCursor);
+  const move = (movement: 'next' | 'previous' | 'first', cursor: string | null = null) => {
+    const ticket = visit.stage('orders', movement, cursor)!;
+    expect(visit.admit(ticket)).toBe(true);
+  };
+  move('next', history.ordersCursor);
+  move('next', 'terminal');
+  expect(visit.window('orders').previous).toBe(history.ordersCursor);
+  const failed = visit.stage('orders', 'previous')!;
+  expect(visit.window('orders').current).toBe('terminal');
+  expect(visit.window('orders').pending).toBe(failed);
+  expect(visit.stage('orders', 'next', 'unrelated')).toBeUndefined();
+  expect(visit.admit(failed)).toBe(true);
+  move('next', 'branch');
+  expect(visit.window('orders').previous).toBe(history.ordersCursor);
+  for (let n = 0; n < 20; n++) move('next', `raw/+?=購入${n}`);
+  expect(visit.window('orders').predecessorCount).toBe(8);
+  for (let n = 0; n < 8; n++) move('previous');
+  expect(visit.window('orders').previous).toBeUndefined();
+  expect(visit.stage('orders', 'previous')).toBeUndefined();
+  move('first');
+  expect(visit.window('orders').current).toBeNull();
+  expect(visit.window('entitlements').current).toBe(history.entitlementsCursor);
+});
+
+test('direct later entry and cancellation infer nothing; replacement permanently retires both paths and tickets', async () => {
+  const { BuyerHistoryWindows } = await import('../src/checkout/buyer-history-windows');
+  const visit = new BuyerHistoryWindows();
+  visit.admitEntry('orders', history.ordersCursor);
+  visit.admitEntry('entitlements', null);
+  expect(visit.window('orders').previous).toBeUndefined();
+  const canceled = visit.stage('orders', 'first')!;
+  visit.cancel(canceled);
+  expect(visit.admit(canceled)).toBe(false);
+  expect(visit.window('orders').current).toBe(history.ordersCursor);
+  const late = visit.stage('orders', 'next', 'late')!;
+  const sibling = visit.stage('entitlements', 'next', 'sibling')!;
+  visit.retire();
+  expect(visit.admit(late)).toBe(false);
+  expect(visit.admit(sibling)).toBe(false);
+  expect(visit.admitEntry('orders', null)).toBe(false);
+  expect(visit.window('orders').pending).toBeUndefined();
+  expect(visit.window('entitlements').current).toBeUndefined();
+  // Even an equal replacement and A/B/A use fresh instances; they never revive the old visit.
+  for (let n = 0; n < 3; n++) {
+    const replacement = new BuyerHistoryWindows();
+    replacement.admitEntry('orders', history.ordersCursor);
+    expect(replacement.window('orders').previous).toBeUndefined();
+    replacement.retire();
+    expect(visit.admit(late)).toBe(false);
+  }
+});
