@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Finite Kind raw-original input. Values describe work only and never grant Type or catalogue admission. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { ProblemError } from '../http/problem.ts';

@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Native request composition. Captures and locators are structural evidence, never permission. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';

@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';

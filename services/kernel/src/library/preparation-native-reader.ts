@@ -3,7 +3,7 @@ import {
   TypePreparationBindingSchema,
   TypePreparationOriginSchema,
   TypePreparationIdentitySchema,
-} from './type-preparation-contract.ts';
+} from './type-preparation-schema.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { PoolClient } from 'pg';
 import readReceipt from '../command/read-receipt.sql';

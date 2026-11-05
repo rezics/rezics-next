@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { commandRecordSources, finalizeCommandRecordSources } from '../history/record-source.ts';
 import { hasCommandRecordSourceSet } from '../history/record-source-set.ts';
 import { commandAgentIdentitySource } from '../history/agent-identity-source.ts';

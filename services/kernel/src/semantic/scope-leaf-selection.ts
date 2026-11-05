@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Private Source selection and bounded native IO; not a matcher or permission resolver. */
 import type { IndexedStatement } from '../search/source.ts';
 import { readNativeCalendarDate, readNativeSpoilerLevel } from '@rezics/filter';

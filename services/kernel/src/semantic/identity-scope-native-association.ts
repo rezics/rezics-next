@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import {

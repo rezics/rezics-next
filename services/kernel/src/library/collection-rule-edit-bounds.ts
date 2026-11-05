@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Closed nine-axis declarations for the existing saved-rule INSERT and CAS UPDATE statements. */
 import { declareBound, withinCeiling, type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';

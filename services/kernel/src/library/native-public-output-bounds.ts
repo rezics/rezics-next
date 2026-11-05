@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Immutable Library plans for the activated public Collection output original command.
  * One closed native descriptor serves composition and adapter execution. Values describe work only;
  * native SQL, evidence, custody and dispatch stay Library-owned. `engineRequests` is zero because

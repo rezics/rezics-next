@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';

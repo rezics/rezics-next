@@ -456,6 +456,8 @@
       ],
       "publicEntries": [
         "services/kernel/src/command/receipt-key.ts",
+        "services/kernel/src/database/json.ts",
+        "services/kernel/src/database/statement-bytes.ts",
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",

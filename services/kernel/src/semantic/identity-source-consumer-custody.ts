@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';

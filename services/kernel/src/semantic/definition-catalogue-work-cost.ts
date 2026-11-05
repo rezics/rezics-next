@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { CatalogueArtifactError } from '@rezics/definitions';
 import nativeWithdrawalAck from './definition-catalogue-withdrawal-ack.sql';
 import nativeactivationCAS from './definition-catalogue-activation-cas.sql';

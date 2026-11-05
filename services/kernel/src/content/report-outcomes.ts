@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';

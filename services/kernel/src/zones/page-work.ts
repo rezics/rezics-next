@@ -1,6 +1,6 @@
 import { Value } from 'typebox/value';
 import { ZonePagePositionSchema } from './page-position.ts';
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';

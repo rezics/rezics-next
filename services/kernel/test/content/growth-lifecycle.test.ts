@@ -1,4 +1,4 @@
-import { jsonParameter } from '../../src/sql/json.ts';
+import { jsonParameter } from '../../src/database/json.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';

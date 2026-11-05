@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Library-owned declarations. A declaration prices dispatch; it is never run authority. */
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { Pool, PoolClient, QueryResult } from 'pg';

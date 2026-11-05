@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import page from './listing-page.sql';
 import counts from './listing-counts.sql';

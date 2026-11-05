@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { recordSemanticProducerRole } from './erasure-producer.ts';
 import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';

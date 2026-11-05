@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import workHomes from './subject-page-publication-homes.sql';
 import generationWitnesses from './subject-page-publication-witnesses.sql';
 import deliveryTime from './subject-page-publication-delivery-time.sql';

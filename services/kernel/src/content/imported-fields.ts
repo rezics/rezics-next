@@ -1,5 +1,5 @@
 import { Type } from 'typebox';
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import type { PoolClient } from 'pg';
 import { BatchReferenceSchema, SourceSchema } from '@rezics/definitions/bulk';
 import { Value } from 'typebox/value';

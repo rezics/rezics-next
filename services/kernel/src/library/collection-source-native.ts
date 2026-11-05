@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 // Loaded first: nativeCollectionOrdinalPageBound runs during module initialization of an import cycle
 // (search/service-scope-order.ts), before later imports of this file are evaluated.
 import ordinalPage from './collection-source-native-ordinal.sql';

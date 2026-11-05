@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { profileDigest, platformRegistry, validateProfileFilters, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { activeRelease } from '../semantic/definitions.ts';

@@ -3,7 +3,7 @@ import {
   TypePreparationBindingSchema,
   TypePreparationOriginSchema,
   TypePreparationIdentitySchema,
-} from './type-preparation-contract.ts';
+} from './type-preparation-schema.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { routeOf } from '../route/route.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';

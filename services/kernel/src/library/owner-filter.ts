@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { admitFilter, FilterError, parseFilter, walkFilter, type FilterDocument, type OwnerLeaf } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';

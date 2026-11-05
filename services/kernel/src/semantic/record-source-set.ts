@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';

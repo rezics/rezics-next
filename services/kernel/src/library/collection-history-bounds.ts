@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Immutable nine-axis declarations for the existing Collection metadata journal SQL. */
 import { declareBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';

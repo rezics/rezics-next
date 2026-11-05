@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { collectSemanticRecordFacts } from './record-source-set.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { CommandTransaction } from '../command/command.ts';

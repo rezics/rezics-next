@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { beginSemanticRecordSourceSet, sealSemanticRecordSourceSet } from './record-source-set.ts';
 import { collectSemanticCandidateSource, recordSemanticDocumentSource } from './record-source-set.ts';

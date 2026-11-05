@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Closed nine-axis declaration for the exact saved-rule point read. */
 import { declareBound, withinCeiling, type Bound } from '@rezics/bounds';
 import { FILTER_LIMITS } from '@rezics/filter';

@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Closed Library-owned plan for canonical Collection generation repair, publication and completed-pointer readback.
  * Declarations constrain dispatch; they never fund a ledger or mint native authority.
  */

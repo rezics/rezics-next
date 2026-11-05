@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import type { ConceptStatementReader } from '../search/concept-browse-statements.ts';
 import { indexedStatement, selectedRank } from './scope-leaf-selection.ts';
 export { indexedStatement } from './scope-leaf-selection.ts';

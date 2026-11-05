@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { BOUND_AXES, declareBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import ownerRead from './public-filter-collection-reduction-owner.sql';

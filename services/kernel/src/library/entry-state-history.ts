@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import type { PoolClient } from 'pg';
 import append from './entry-state-history-append.sql';
 import markIncomplete from './entry-state-history-mark-incomplete.sql';

@@ -1,5 +1,5 @@
-import { jsonParameter } from '../sql/json.ts';
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { jsonParameter } from '../database/json.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';

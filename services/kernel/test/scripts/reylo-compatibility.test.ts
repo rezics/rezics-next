@@ -1,9 +1,9 @@
 import { Client } from 'pg';
-import { jsonParameter } from '../../src/sql/json.ts';
+import { jsonParameter } from '../../src/database/json.ts';
 import { expect, test } from 'bun:test';
 import { defineQuery, type Json } from 'reylo';
 import { resolve } from 'node:path';
-import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../../src/sql/statement-bytes.ts';
+import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../../src/database/statement-bytes.ts';
 import fence from '../../src/command/fence.sql';
 import noEffectFence from '../../src/command/no-effect-fence.sql';
 

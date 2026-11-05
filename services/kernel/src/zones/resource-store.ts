@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import type { ZoneConfiguration } from '@rezics/composition';
 import type { AccessClient } from '../request/access.ts';
 import { readAccount } from '../access/account-data.ts';

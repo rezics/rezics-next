@@ -1,4 +1,4 @@
-import { jsonParameter } from '../../src/sql/json.ts';
+import { jsonParameter } from '../../src/database/json.ts';
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';

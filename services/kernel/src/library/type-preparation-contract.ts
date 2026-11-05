@@ -1,4 +1,13 @@
-import { Type, type Static } from 'typebox';
+import type {
+  TypePreparationBinding,
+  TypePreparationOrigin,
+  TypePreparationIdentity,
+} from './type-preparation-schema.ts';
+export type {
+  TypePreparationBinding,
+  TypePreparationOrigin,
+  TypePreparationIdentity,
+} from './type-preparation-schema.ts';
 /** Native preparation ports; final work registration composes the bounded continuation runner. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -16,19 +25,6 @@ export interface TypePreparationInput {
   readonly ownerEpoch: bigint;
 }
 
-/** Bounded internal workflow identity. Neither a source proof nor an authorization token. */
-export const TypePreparationBindingSchema = Type.Object({
-  accountId: Type.String(),
-  subjectId: Type.String(),
-  requestKey: Type.String(),
-  sourceId: Type.String(),
-  sourcePartition: Type.Number(),
-  sourceEpoch: Type.Number(),
-  sourcePosition: Type.String(),
-  ownerEpoch: Type.String(),
-});
-export type TypePreparationBinding = Readonly<Static<typeof TypePreparationBindingSchema>>;
-
 export function typePreparationBinding(input: TypePreparationInput): TypePreparationBinding {
   if (input.source.position < 0n || input.ownerEpoch < 0n)
     throw new RangeError('Preparation positions and owner epochs must be nonnegative');
@@ -43,27 +39,6 @@ export function typePreparationBinding(input: TypePreparationInput): TypePrepara
     ownerEpoch: input.ownerEpoch.toString(10),
   });
 }
-
-/** Requested-source binding retained even if it redirects to the resolved source in binding. */
-export const TypePreparationOriginSchema = Type.Object({
-  sourceId: Type.String(),
-  partition: Type.Number(),
-  epoch: Type.Number(),
-  position: Type.String(),
-  survivorId: Type.Union([Type.String(), Type.Null()]),
-});
-export type TypePreparationOrigin = Readonly<Static<typeof TypePreparationOriginSchema>>;
-
-/** Fixed visible create/identity version; partition position is ordering, not an item version or Access proof. */
-export const TypePreparationIdentitySchema = Type.Object({
-  sourceId: Type.String(),
-  partition: Type.Number(),
-  epoch: Type.Number(),
-  revision: Type.Number(),
-  transactionId: Type.String(),
-  redirect: Type.Union([Type.String(), Type.Null()]),
-});
-export type TypePreparationIdentity = Readonly<Static<typeof TypePreparationIdentitySchema>>;
 
 /** Immutable native row header. Exact input text/bytes and their equality evidence stay native. */
 export interface TypePreparationEvidence {

@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import type { Pool, PoolClient } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

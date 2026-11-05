@@ -62,3 +62,6 @@ Decision: materialize JSON wire values at SQL parameter boundaries rather than a
 domain values and undefined object fields keep their JSON serialization semantics. These codecs stay at database I/O.
 The command fences normalize JSON null receipt/basis parameters to SQL NULL, preserving absence rather than trying
 to insert metadata without a principal. The compatibility regression covers both event and no-effect fences.
+
+Decision: shared JSON parameter and statement-byte helpers belong to the platform database module and use its declared
+public entries. Preparation JSON schemas live in a leaf module; runtime readers do not import the composition facade.

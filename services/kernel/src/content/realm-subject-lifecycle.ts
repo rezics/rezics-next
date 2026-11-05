@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkDimensions } from '../library/collection-source.ts';

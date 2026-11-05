@@ -1,4 +1,4 @@
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import type {
   PrivacyReduction,

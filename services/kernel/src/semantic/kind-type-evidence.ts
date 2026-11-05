@@ -1,4 +1,4 @@
-import { statementBytes } from '../sql/statement-bytes.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Private native Kind evidence. References are locators, never read authority. */
 import type { Pool, QueryResultRow } from 'pg';
 import type { Access } from '../request/access.ts';

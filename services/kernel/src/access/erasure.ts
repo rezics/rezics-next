@@ -1,6 +1,6 @@
 import { Type } from 'typebox';
 import { Value } from 'typebox/value';
-import { jsonParameter } from '../sql/json.ts';
+import { jsonParameter } from '../database/json.ts';
 import { registerLiveCopyRecovery } from './live-copy-work.ts';
 import { registerNativeErasureWork } from './erasure-native.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
