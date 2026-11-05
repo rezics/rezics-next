@@ -20,6 +20,10 @@ const mutations = JSON.parse(
   responseTypeMismatch: Record<string, unknown>;
 };
 
+function valueContent(command: Extract<BatchCommand, { op: 'propose' }>) {
+  return command.statement.value.type === 'value' ? command.statement.value.content : undefined;
+}
+
 test('actual runImportCli accepts pinned five-column PersonDetail rows as proposal-only imports', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-person-names-cli-'));
   try {
@@ -32,7 +36,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
     const subjects = new Map<string, string>();
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
     let sequence = 0;
-    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fakeFetch: typeof globalThis.fetch = async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
       if (url.origin === auth) {
@@ -73,7 +77,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
         }),
       };
       return Response.json(result);
-    }) as typeof fetch;
+    };
     const result = await runImportCli(
       [
         '--source', 'bangumi', '--source-alias', 'bangumi_cross_media', '--dump', '-', '--state', state,
@@ -83,7 +87,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
         stdin: (async function* () {
           yield new TextEncoder().encode(row);
         })(),
-        fetch,
+        fetch: fakeFetch,
         testOrigin: origin,
         clock: { now: () => 1_000, sleep: async () => {} },
       },
@@ -94,7 +98,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
-    expect(names.map(({ statement }) => statement.value.content)).toEqual([
+    expect(names.map(valueContent)).toEqual([
       { language: 'und', text: '岸本斉史' },
       { language: 'zh', text: '岸本齐史' },
     ]);

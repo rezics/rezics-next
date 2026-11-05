@@ -28,6 +28,10 @@ function names(result: ReturnType<typeof convert>) {
   );
 }
 
+function valueContent(command: Extract<BatchCommand, { op: 'propose' }>) {
+  return command.statement.value.type === 'value' ? command.statement.value.content : undefined;
+}
+
 test('PersonDetail infobox name reaches cited Person statements with the original name', () => {
   const record = JSON.parse(evidence.operatorExample.responseBody) as Record<string, unknown>;
   expect(createHash('sha256').update(evidence.operatorExample.responseBody).digest('hex')).toBe(
@@ -36,7 +40,7 @@ test('PersonDetail infobox name reaches cited Person statements with the origina
   expect(converter_revision).toBe('cross-media-entities@13');
   expect(convert(record).normalizedRecord.name_cn).toBe('岸本齐史');
   const proposals = names(convert(record));
-  expect(proposals.map(({ statement }) => statement.value.content)).toEqual([
+  expect(proposals.map(valueContent)).toEqual([
     { language: 'und', text: '岸本斉史' },
     { language: 'zh', text: '岸本齐史' },
   ]);
@@ -79,7 +83,7 @@ test('ambiguous or invalid Chinese values are withheld without dropping an indep
   ];
   for (const entry of badValues) {
     const result = convert({ ...base, infobox: [entry] });
-    expect(names(result).map(({ statement }) => statement.value.content)).toEqual([{ language: 'und', text: '原名' }]);
+    expect(names(result).map(valueContent)).toEqual([{ language: 'und', text: '原名' }]);
     expect(result.diagnostics.length).toBeGreaterThan(0);
   }
 
@@ -87,24 +91,20 @@ test('ambiguous or invalid Chinese values are withheld without dropping an indep
     [{ key: '简体中文名', value: '甲' }, { key: '简体中文名', value: '乙' }],
     Array.from({ length: 65 }, (_, index) => ({ key: index === 64 ? '简体中文名' : 'unknown', value: '越界' })),
   ])
-    expect(names(convert({ ...base, infobox })).map(({ statement }) => statement.value.content)).toEqual([
+    expect(names(convert({ ...base, infobox })).map(valueContent)).toEqual([
       { language: 'und', text: '原名' },
     ]);
 
   expect(
-    names(convert({ ...base, name_cn: '甲', infobox: [{ key: '简体中文名', value: '乙' }] })).map(
-      ({ statement }) => statement.value.content,
-    ),
+    names(convert({ ...base, name_cn: '甲', infobox: [{ key: '简体中文名', value: '乙' }] })).map(valueContent),
   ).toEqual([{ language: 'und', text: '原名' }]);
   expect(
-    names(convert({ ...base, name_cn: '甲', infobox: [{ key: '简体中文名', value: '甲' }] })).map(
-      ({ statement }) => statement.value.content,
-    ),
+    names(convert({ ...base, name_cn: '甲', infobox: [{ key: '简体中文名', value: '甲' }] })).map(valueContent),
   ).toEqual([
     { language: 'und', text: '原名' },
     { language: 'zh', text: '甲' },
   ]);
-  expect(names(convert({ ...base })).map(({ statement }) => statement.value.content)).toEqual([
+  expect(names(convert({ ...base })).map(valueContent)).toEqual([
     { language: 'und', text: '原名' },
   ]);
   const duplicate = projectBangumiPersonName(undefined, false, [

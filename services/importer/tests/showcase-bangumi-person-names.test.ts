@@ -21,9 +21,13 @@ const evidence = JSON.parse(
   };
 };
 
+function valueContent(command: Extract<BatchCommand, { op: 'propose' }>) {
+  return command.statement.value.type === 'value' ? command.statement.value.content : undefined;
+}
+
 test('the default selected Person shares one bounded PersonDetail response for careers and Chinese names', async () => {
   const selection = evidence.defaultSelection;
-  expect(developmentShowcaseSelection.bangumi).toContain(selection.rootSubject);
+  expect((developmentShowcaseSelection.bangumi as readonly number[]).includes(selection.rootSubject)).toBe(true);
   const selectedRows = JSON.parse(selection.responseBody) as { id: number; type: number; name: string }[];
   expect(createHash('sha256').update(selection.responseBody).digest('hex')).toBe(selection.responseSha256);
   expect(
@@ -43,7 +47,7 @@ test('the default selected Person shares one bounded PersonDetail response for c
     payload: { id: selection.person.id, type: 1, name: selection.person.name },
   });
   plan.members.push(
-    { source: 'bangumi', key: String(selection.rootSubject), kind: 'work', membership: 'root' },
+    { source: 'bangumi', key: String(selection.rootSubject), kind: 'work', membership: 'family' },
     { source: 'bangumi', key: `person:${selection.person.id}`, kind: 'person', membership: 'referenced' },
   );
   const requests: string[] = [];
@@ -81,7 +85,7 @@ test('the default selected Person shares one bounded PersonDetail response for c
         journal: reopened,
         fetch: (async () => {
           throw new Error('sealed PersonDetail response unexpectedly fetched again');
-        }) as typeof globalThis.fetch,
+        }) as unknown as typeof globalThis.fetch,
         sleep: async () => {},
       });
       expect(replay.entities.bangumi.find(({ key }) => key === `person:${selection.person.id}`)?.payload).toMatchObject({
@@ -138,7 +142,7 @@ test('spoofed, absent and over-bound PersonDetail names preserve each independen
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
-    expect(names.map(({ statement }) => statement.value.content)).toEqual([
+    expect(names.map(valueContent)).toEqual([
       { language: 'und', text: `Original ${payload.id}` },
     ]);
   }

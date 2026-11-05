@@ -315,8 +315,10 @@ export class Importer {
     return this.runRecords(
       registration,
       readDump(registration.sourceKind, bytes, {
-        maxRecordBytes: options.maxRecordBytes,
-        bangumiPersonDetailRows: options.bangumiPersonDetailRows,
+        ...(options.maxRecordBytes === undefined ? {} : { maxRecordBytes: options.maxRecordBytes }),
+        ...(options.bangumiPersonDetailRows === undefined
+          ? {}
+          : { bangumiPersonDetailRows: options.bangumiPersonDetailRows }),
       }),
       options,
     );
