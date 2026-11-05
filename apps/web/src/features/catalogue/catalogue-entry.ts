@@ -10,6 +10,7 @@ import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation'
 import { isReleaseType } from './release-fidelity/model';
 import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/navigation';
 import { factsPublicCorrectionHref, type FactsPublicOrigin } from './facts-public-visit';
+import { termsPublicCorrectionHref, type TermsPublicOrigin } from './terms-public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -123,10 +124,12 @@ export const catalogueEntries = {
       ? factsPublicCorrectionHref(`${subject(address)}/edit`, address.id, address.locale, address.origin)
       : `${subject(address)}/edit`,
   }),
-  terms: (address: Subject): CatalogueEntry => ({
+  terms: (address: Subject & { origin?: TermsPublicOrigin | undefined }): CatalogueEntry => ({
     group: 'edit',
     label: m.catalogue_terms_title({}, options(address.locale)),
-    href: `${subject(address)}/terms`,
+    href: address.origin
+      ? termsPublicCorrectionHref(`${subject(address)}/terms`, address.id, address.locale, address.origin)
+      : `${subject(address)}/terms`,
   }),
   manga: ({
     id,
