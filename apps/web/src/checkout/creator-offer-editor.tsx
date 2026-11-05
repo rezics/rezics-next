@@ -188,7 +188,7 @@ function CreatorOfferOriginPanelSlot() {
           }
         : {})}
       onRestart={restart}
-      editionId={resolution.kind === 'current' ? resolution.receipt.editionId : undefined}
+      {...(resolution.kind === 'current' ? { editionId: resolution.receipt.editionId } : {})}
     />
   );
 }
