@@ -1,11 +1,14 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import * as start from '../.storybook/react-start';
 import { producerRecoveryExample } from '../src/features/pages/producer-history-reading/examples';
 import { producerStudioId } from '../src/kernel/fake/producer-history';
 import { organizationHistoryVisitReturnFragment } from '../src/features/pages/subject-visit-navigation';
 import { candidateContext } from '../src/subject/candidates';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 const admitted = producerRecoveryExample().first;
 const producerReads: { data: Record<string, unknown> }[] = [];
 mock.module('../src/features/catalogue/producer-history/actions', () => ({
