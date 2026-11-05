@@ -899,12 +899,7 @@ export function QuestionManagementPage({
       signal: controller.signal,
     })
       .then((result) => {
-        if (
-          controller.signal.aborted ||
-          generation.current !== readGeneration ||
-          !isVisitCurrent(candidate)
-        )
-          return;
+        if (controller.signal.aborted || generation.current !== readGeneration || !isVisitCurrent(candidate)) return;
         admittedReadGeneration.current = readGeneration;
         if (result.state === 'ready' && result.page.viewer.accountId !== result.viewer) {
           setRead({ ...result, state: 'retired' });
@@ -960,7 +955,8 @@ export function QuestionManagementPage({
     if (isVisitCurrent()) onSelectQuestion(questionId);
   };
   const restart = () => {
-    if (isVisitCurrent()) navigate(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {});
+    if (isVisitCurrent())
+      navigate(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {});
   };
   const next = (cursor: string) => {
     if (isVisitCurrent())
@@ -1139,19 +1135,11 @@ export function QuestionManagementPage({
       signal: controller.signal,
     })
       .then((result) => {
-        if (
-          !controller.signal.aborted &&
-          generation.current === historyGeneration &&
-          isVisitCurrent(candidate)
-        )
+        if (!controller.signal.aborted && generation.current === historyGeneration && isVisitCurrent(candidate))
           setHistory(result);
       })
       .catch(() => {
-        if (
-          !controller.signal.aborted &&
-          generation.current === historyGeneration &&
-          isVisitCurrent(candidate)
-        )
+        if (!controller.signal.aborted && generation.current === historyGeneration && isVisitCurrent(candidate))
           setHistory({ state: 'unavailable', questionId: selectedHistoryId, cursor });
       })
       .finally(() => {
@@ -1172,11 +1160,7 @@ export function QuestionManagementPage({
     return <p role="status">{m.home_questions_loading()}</p>;
   if (!isVisitAdmitted()) return <p role="status">{m.own_classifications_stale()}</p>;
   const keepDuringRequiredInspection = requiresFreshInspection && read?.state === 'ready';
-  if (
-    sessionCurrent === null ||
-    (busy && !keepDuringRequiredInspection) ||
-    (initial.state === 'preparing' && !read)
-  )
+  if (sessionCurrent === null || (busy && !keepDuringRequiredInspection) || (initial.state === 'preparing' && !read))
     return <p role="status">{m.home_questions_loading()}</p>;
   if (sessionCurrent === false || read?.state === 'retired')
     return <p role="status">{m.own_classifications_stale()}</p>;
@@ -1245,9 +1229,7 @@ export function QuestionManagementPage({
       />
       <OwnVotesDeparture
         dirty={dirty && !postAcknowledgementRead}
-        locked={
-          Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')
-        }
+        locked={Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')}
         isCurrent={() => sessionCurrent === true && initial.state === 'preparing' && isVisitCurrent()}
         onLeave={() => retireQuestionVisit(owner)}
       />

@@ -40,7 +40,11 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     const [draft, setDraft] = useState('Keep this exact unsent draft');
     return (
       <>
-        <input aria-label="Unsent assessment draft" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
+        <input
+          aria-label="Unsent assessment draft"
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+        />
         <OwnVotesDeparture
           dirty={draft.length > 0}
           locked={false}

@@ -146,9 +146,7 @@ export function ClassificationsReader({
       onNext={onNext}
       onRetry={refresh}
       commands={
-        commands && candidate.state === 'ready' && admitted
-          ? { ...commands, read: candidate, retire }
-          : undefined
+        commands && candidate.state === 'ready' && admitted ? { ...commands, read: candidate, retire } : undefined
       }
     />
   );

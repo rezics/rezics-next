@@ -169,7 +169,12 @@ function QuestionManagementRoute() {
   };
   const captureFocusEpoch = () => focusEpoch.current;
   const acknowledgeFocus = (questionId: string | null, expectedEpoch: number, afterRead: number) => {
-    if (!questionId || focusEpoch.current !== expectedEpoch || !currentSessionObservation() || !addressOrigin.isCurrent())
+    if (
+      !questionId ||
+      focusEpoch.current !== expectedEpoch ||
+      !currentSessionObservation() ||
+      !addressOrigin.isCurrent()
+    )
       return;
     const ticket = {
       id: ++focusId.current,
