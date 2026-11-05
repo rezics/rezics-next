@@ -584,3 +584,142 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     setLocale('en', { reload: false });
   }
 });
+
+test('mounted paired buyer windows survive exact receipt/Edition return and commit only ready reader targets', async () => {
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createRouter, createRootRoute, createRoute, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
+  const { BuyerHistoryVisit } = await import('../src/checkout/buyer-history-visit');
+  const { browserObservation } = await import('../src/session/observation');
+  const { OrdersCurrent } = await import('../src/checkout/orders-current');
+  const { EntitlementsCurrent, EntitlementCurrent } = await import('../src/checkout/entitlements-current');
+  const entitlementReads = await import('../src/checkout/entitlements');
+  const { mappedEntitlement, fixedEditionTerms } = await import('../src/kernel/fake/entitlements');
+  const { OrderPage } = await import('../src/checkout/order-page');
+  const { subjectCover } = await import('../src/checkout/subject-cover');
+  const { purchaseHistorySearch } = await import('../src/checkout/purchase-return');
+  const { EditionRoute } = await import('../src/routes/editions/$id');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const visit = new BuyerHistoryVisit(client);
+  const rootRoute = createRootRoute();
+  const search = (value: Record<string, unknown>) => ({ ...purchaseHistorySearch(value), cursor: typeof value.cursor === 'string' ? value.cursor : undefined });
+  const ordersRoute = createRoute({ getParentRoute: () => rootRoute, path: 'orders', validateSearch: search,
+    component: () => <OrdersCurrent initial={null} search={ordersRoute.useSearch()} locale="en" /> });
+  const receiptRoute = createRoute({ getParentRoute: () => rootRoute, path: 'orders/$id', validateSearch: search,
+    component: () => <OrderPage history={receiptRoute.useSearch()} order={{ ...order('A'),
+      entitlement: { kind: 'current', active: true }, subject: subjectCover('en', mappedEntitlement.targetSubjectId, 'Purchase', mappedEntitlement.summary),
+      canUseBenefit: false }} /> });
+  const benefitsRoute = createRoute({ getParentRoute: () => rootRoute, path: 'entitlements', validateSearch: search,
+    component: () => <EntitlementsCurrent locale="en" cursor={benefitsRoute.useSearch().cursor} history={benefitsRoute.useSearch()}
+      initial={{ sessionSubject: null, requested: { kind: 'list', locale: 'en', cursor: null }, page: { kind: 'preparing' } }} /> });
+  const benefitRoute = createRoute({ getParentRoute: () => rootRoute, path: 'entitlements/$id', validateSearch: search,
+    component: () => <EntitlementCurrent locale="en" id={benefitRoute.useParams().id} history={benefitRoute.useSearch()}
+      initial={{ sessionSubject: null, requested: { kind: 'detail', locale: 'en', id: mappedEntitlement.id }, page: { kind: 'preparing' } }} /> });
+  const editionRoute = createRoute({ getParentRoute: () => rootRoute, path: 'editions/$id',
+    loader: () => ({ state: 'published' as const, metadata: { editionId: fixedEditionTerms.benefit.resource.id,
+      editionRevision: '1', state: 'published' as const, targetSubjectId: mappedEntitlement.targetSubjectId,
+      creatorAccountId: fixedEditionTerms.creatorAccountId, revisionId: fixedEditionTerms.benefit.version.revisionId,
+      sha256: fixedEditionTerms.benefit.version.sha256, licence: 'CC-BY-SA-4.0' },
+      body: { version: 1 as const, doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Fixed Edition body' }] }] } },
+      subject: null, creator: null, media: { kind: 'ready' as const, images: [] } }), component: EditionRoute });
+  const router = createRouter({ routeTree: rootRoute.addChildren([ordersRoute, receiptRoute, benefitsRoute, benefitRoute, editionRoute]),
+    context: { queryClient: client, buyerHistory: visit }, history: createMemoryHistory({ initialEntries: ['/en/orders'] }),
+    defaultPendingMs: 0, defaultPendingMinMs: 0, defaultPreload: false,
+    rewrite: { input: ({ url }) => { url.pathname = url.pathname.replace(/^\/en(?=\/)/, ''); return url; },
+      output: ({ url }) => { if (!url.pathname.startsWith('/en/')) url.pathname = `/en${url.pathname}`; return url; } } });
+  const stop = visit.mount(router);
+  const viewer = (subject: string) => {
+    client.setQueryData(['session'], { state: 'signed-in', subject, csrfToken: `csrf-${subject}` });
+    const snapshot = browserObservation(client).getSnapshot();
+    if (snapshot.state === 'signed-in') client.setQueryData(['exposure', 'viewer', subject, snapshot.observation.id], { subject, admitted: ['purchases'] });
+  };
+  viewer('A');
+  const calls: string[] = [];
+  let failOrders = false;
+  let benefitKind: 'ready' | 'preparing' | 'denied' | 'cursor-error' | 'unavailable' = 'ready';
+  const orderRead = spyOn(orders, 'readBuyerOrdersCurrent').mockImplementation(async ({ data }) => {
+    const cursor = data.cursor ?? null; calls.push(`orders:${cursor}`);
+    if (failOrders) throw new Error('constructed target failure');
+    return { ...response('A', cursor), page: { orders: cursor === 'o2/+?=' ? [] : [order('A')], next: cursor === null ? 'o1/+?=' : cursor === 'o1/+?=' ? 'o2/+?=' : null } };
+  });
+  const benefitRead = spyOn(entitlementReads, 'readBuyerEntitlementsCurrent').mockImplementation(async ({ data }) => {
+    const cursor = data.cursor ?? null; calls.push(`entitlements:${cursor}`);
+    return { sessionSubject: 'A', requested: { kind: 'list', locale: 'en', cursor },
+      page: benefitKind === 'ready' ? { kind: 'ready', data: { entitlements: cursor === 'e2/+?=' ? [] : [mappedEntitlement], next: cursor === null ? 'e1/+?=' : cursor === 'e1/+?=' ? 'e2/+?=' : null } } : { kind: benefitKind } };
+  });
+  const detailRead = spyOn(entitlementReads, 'readBuyerEntitlementCurrent').mockImplementation(async ({ data }) => ({
+    sessionSubject: 'A', requested: { kind: 'detail', locale: 'en', id: data.id }, page: { kind: 'ready', data: { ...mappedEntitlement, id: data.id } },
+  }));
+  const host = document.createElement('main'); document.body.append(host);
+  const root = createRoot(host);
+  const tick = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); }); };
+  const click = async (text: string, keyboard = false) => {
+    const element = [...host.querySelectorAll<HTMLElement>('a,button')].find((node) => node.textContent?.trim() === text);
+    expect(element).toBeDefined();
+    await act(async () => { if (keyboard) element!.focus(); element!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: keyboard ? 0 : 1 })); });
+    await tick();
+  };
+  try {
+    await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
+    await tick();
+    expect(visit.windows.window('orders').current).toBeNull();
+    const next = [...host.querySelectorAll('a')].find((a) => a.textContent === m.buyer_history_next())!;
+    const beforeModified = calls.length;
+    next.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+    expect(calls).toHaveLength(beforeModified);
+    expect(visit.windows.window('orders').pending).toBeUndefined();
+    await click(m.buyer_history_next(), true);
+    expect(document.activeElement?.id).toBe('orders-heading');
+    await click(m.buyer_history_next());
+    expect(host.textContent).toContain(m.orders_page_empty());
+    expect(visit.windows.window('orders').predecessorCount).toBe(2);
+    await click(m.buyer_history_previous());
+    await click(order('A').title);
+    expect(router.state.location.pathname).toBe(`/orders/${order('A').id}`);
+    await click(m.entitlements_detail_heading());
+    expect(router.state.location.pathname).toBe(`/entitlements/${order('A').entitlementId}`);
+    await click(m.entitlements_heading());
+    await click(m.buyer_history_next());
+    for (const kind of ['preparing', 'denied', 'cursor-error', 'unavailable'] as const) {
+      benefitKind = kind;
+      if (kind === 'preparing') await click(m.buyer_history_next());
+      else await click(m.buyer_history_retry());
+      expect(visit.windows.window('entitlements').current).toBe('e1/+?=');
+      expect(visit.windows.window('entitlements').pending?.cursor).toBe('e2/+?=');
+      expect(calls.at(-1)).toBe('entitlements:e2/+?=');
+    }
+    benefitKind = 'ready'; await click(m.buyer_history_retry());
+    expect(host.textContent).toContain(m.entitlements_page_empty());
+    await click(m.buyer_history_previous());
+    await click(mappedEntitlement.summary!.label!.value);
+    const reader = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((a) => a.href.includes('/editions/'))!;
+    await act(async () => reader.click()); await tick();
+    expect(host.textContent).toContain('Fixed Edition body');
+    expect(router.state.location.searchStr).toBe('');
+    await click(m.content_edition_return_entitlement());
+    expect(router.state.location.pathname).toBe(`/entitlements/${mappedEntitlement.id}`);
+    await click(m.entitlements_heading());
+    await click(m.buyer_history_previous());
+    expect(visit.windows.window('entitlements').current).toBeNull();
+    expect(visit.windows.window('orders').current).toBe('o1/+?=');
+    await click(m.entitlements_orders());
+    failOrders = true; await click(m.buyer_history_previous(), true);
+    expect(visit.windows.window('orders').pending?.cursor).toBeNull();
+    expect(visit.windows.window('orders').current).toBe('o1/+?=');
+    expect(document.activeElement?.id).not.toBe('orders-heading');
+    failOrders = false; await click(m.status_retry());
+    expect(calls.at(-1)).toBe('orders:null');
+    expect(visit.windows.window('orders').current).toBeNull();
+    for (const subject of ['A', 'B', 'A']) {
+      const previousWindows = visit.windows;
+      act(() => viewer(subject));
+      expect(previousWindows.admitEntry('orders', 'obsolete')).toBe(false);
+      expect(visit.windows.window('entitlements').current).toBeUndefined();
+      await tick();
+    }
+    await act(async () => router.navigate({ href: '/en/orders?cursor=direct-later' })); await tick();
+    expect(visit.windows.window('orders').previous).toBeUndefined();
+  } finally {
+    await act(async () => root.unmount()); stop(); orderRead.mockRestore(); benefitRead.mockRestore(); detailRead.mockRestore(); client.clear(); host.remove();
+  }
+});
