@@ -337,7 +337,8 @@ async function runPersona(name: string, work: () => Promise<void>) {
     const where = lastPage ? await dumpControls(lastPage).catch(() => '(page unavailable)') : '(no page)';
     failures.push(`${name}: ${message.split('\n')[0]}`);
     record({ persona: name, step: 'walk failed', ok: false, detail: message.split('\n')[0] });
-    console.log(`[walk] ${name} failure detail:\n${message}\n${where}`);
+    const serverLines = stackTail(/\[web auth\]|\[auth\]|\berror\b|Error/i, 20);
+    console.log(`[walk] ${name} failure detail:\n${message}\n${where}\nserver log:\n${serverLines}`);
   }
 }
 
