@@ -107,8 +107,18 @@ test('refusing the submitted marker preserves the original descriptor and sends 
   await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
   await flush(() => send(page.host));
   const original = readPendingAccountOperationStepUp()!;
-  const write = spyOn(Object.getPrototypeOf(window.sessionStorage), 'setItem').mockImplementation(() => {
-    throw new Error('storage refused');
+  const storage = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    value: new Proxy(window.sessionStorage, {
+      get(target, key) {
+        if (key === 'setItem')
+          return () => {
+            throw new Error('storage refused');
+          };
+        return Reflect.get(target, key);
+      },
+    }),
   });
   try {
     await flush(() => page.calls[0]!.resolve(approval()));
@@ -116,6 +126,7 @@ test('refusing the submitted marker preserves the original descriptor and sends 
     expect(readPendingAccountOperationStepUp()).toEqual(original);
     expect(page.host.textContent).not.toContain('was created');
   } finally {
-    write.mockRestore();
+    if (storage) Object.defineProperty(window, 'sessionStorage', storage);
+    else Reflect.deleteProperty(window, 'sessionStorage');
   }
 });
