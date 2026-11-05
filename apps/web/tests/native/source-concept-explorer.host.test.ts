@@ -4,7 +4,11 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { expect as ui } from 'playwright/test';
 import type { Page } from 'playwright';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
+import {
+  buildSearchImage,
+  cgroupArgs,
+  subjectAutoCreateIndexSetting,
+} from '../../../../services/kernel/scripts/search.ts';
 import { catalogueEntries } from '../../src/features/catalogue/catalogue-entry.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import {
@@ -25,6 +29,55 @@ function docker(args: string[]): string {
   return result.stdout.toString().trim();
 }
 
+function dockerText(args: string[]): string | undefined {
+  const result = Bun.spawnSync(['docker', ...args]);
+  if (result.exitCode !== 0) return;
+  return result.stdout.toString().trim();
+}
+
+function ownedSearchUrls(container: string): string[] {
+  const urls: string[] = [];
+  const published = dockerText(['port', container, '9200/tcp']);
+  const port = published?.match(/127\.0\.0\.1:(\d+)/)?.[1];
+  if (port) urls.push(`http://127.0.0.1:${port}`);
+  const addresses = dockerText([
+    'inspect',
+    '-f',
+    '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}',
+    container,
+  ]);
+  for (const ip of addresses?.split(/\s+/).filter(Boolean) ?? []) urls.push(`http://${ip}:9200`);
+  return [...new Set(urls)];
+}
+
+async function waitForOwnedSearch(container: string, timeoutMs = 180_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let lastFailure = 'no address';
+  while (Date.now() < deadline) {
+    const candidates = ownedSearchUrls(container);
+    for (const url of candidates) {
+      try {
+        const response = await fetch(new URL('/_cluster/health?wait_for_status=yellow&timeout=2s', url), {
+          signal: AbortSignal.timeout(Math.min(2500, Math.max(1, deadline - Date.now()))),
+        });
+        if (!response.ok) {
+          lastFailure = `${url} HTTP ${response.status}`;
+          continue;
+        }
+        const health = (await response.json()) as { status?: string; timed_out?: boolean };
+        if (!health.timed_out && (health.status === 'yellow' || health.status === 'green')) return url;
+        lastFailure = `${url} cluster ${health.status ?? 'unknown'}`;
+      } catch (error) {
+        lastFailure = `${url} ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    if (!candidates.length) lastFailure = 'owned search has no 127.0.0.1 mapping or container address yet';
+    await Bun.sleep(500);
+  }
+  const logs = dockerText(['logs', '--tail', '80', container]) ?? lastFailure;
+  throw new Error(`OpenSearch node did not become reachable within ${timeoutMs} ms (${lastFailure}).\n${logs}`);
+}
+
 beforeAll(async () => {
   priorSearchUrl = process.env.OPENSEARCH_URL;
   if (!priorSearchUrl) {
@@ -42,6 +95,8 @@ beforeAll(async () => {
       '-e',
       'discovery.type=single-node',
       '-e',
+      subjectAutoCreateIndexSetting,
+      '-e',
       'DISABLE_SECURITY_PLUGIN=true',
       '-e',
       'DISABLE_INSTALL_DEMO_CONFIG=true',
@@ -49,9 +104,7 @@ beforeAll(async () => {
       'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
       buildSearchImage(),
     ]);
-    const address = docker(['port', ownedSearch, '9200/tcp']).split('\n')[0]!;
-    process.env.OPENSEARCH_URL = `http://${address}`;
-    await waitForSearch(process.env.OPENSEARCH_URL, ownedSearch);
+    process.env.OPENSEARCH_URL = await waitForOwnedSearch(ownedSearch);
   }
   fixture = await startCatalogueClassificationFixture();
 }, 600_000);
