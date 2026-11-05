@@ -1896,6 +1896,12 @@
       "topic": "zones-site-journey-design",
       "researcher": "unknown",
       "state": "open"
+    },
+    {
+      "path": "docs/research/merge-reviewed-identity-atomic-boundary.md",
+      "topic": "merge-reviewed-identity-atomic-boundary",
+      "researcher": "codex",
+      "state": "open"
     }
   ]
 }
