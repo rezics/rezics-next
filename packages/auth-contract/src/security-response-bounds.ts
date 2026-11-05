@@ -30,6 +30,56 @@ const object = (fields: Record<string, number>) =>
   );
 const nullable = (bytes: number) => Math.max(4, bytes);
 
+const l = securityResponseLimits;
+const s = securityJsonStringBytes;
+const id = s(l.id);
+const label = nullable(s(l.displayName));
+const date = s(l.date);
+const advice = s(16);
+const passkey = object({ id, name: s(l.passkeyName), created_at: date, last_used_at: nullable(date) });
+const session = object({
+  id,
+  client_id: id,
+  client_display_name: label,
+  created_at: date,
+  expires_at: date,
+  user_agent: nullable(s(l.userAgent)),
+  current: 5,
+  revoke: advice,
+});
+const inventory = (rows: number) => object({ kind: s(5), rows, limit: 2, truncated: 5 });
+const securityPage = object({
+  viewer: object({ account_id: id, session_id: id, client_id: id }),
+  sessions: inventory(array(l.sessions, session)),
+  passkeys: inventory(
+    array(
+      l.passkeys,
+      object({ id, name: s(l.passkeyName), created_at: date, last_used_at: nullable(date), remove: advice }),
+    ),
+  ),
+  actions: object({ change_password: advice, register_passkey: advice }),
+});
+const registrationPage = object({
+  kind: s(17),
+  viewer: object({ account_id: id }),
+  requirements: object({
+    handle: object({ minLength: 1, maxLength: 2 }),
+    email: object({ maxLength: 3 }),
+    password: object({ minLength: 16, maxLength: 16 }),
+    verification: object({ provider: s(9), required: 4 }),
+  }),
+  verification: object({ configured: 5 }),
+  actions: object({ register: 5, continue: 5 }),
+  reason: s(12),
+});
+
+/** Exact byte allowances for Security page, passkey list and registration advice. */
+export const securityFixedResponseByteBudgets = Object.freeze({
+  securityPage,
+  passkeys: object({ passkeys: array(l.passkeys, passkey) }),
+  registrationPage,
+});
+
 /** Pass the same mounted keys used by native Auth, or undefined only when no catalogue is installed. */
 export function securityScopeLimit(siteActions?: Iterable<string>): number {
   return siteActions === undefined
@@ -44,25 +94,7 @@ export function securityResponseByteBudgets(scopeLimit: number, selectedLimit = 
   finite(scopeLimit);
   if (!Number.isSafeInteger(selectedLimit) || selectedLimit < 1 || selectedLimit > 100)
     throw new RangeError('Invalid Security page size');
-  const l = securityResponseLimits,
-    s = securityJsonStringBytes;
-  const id = s(l.id),
-    label = nullable(s(l.displayName)),
-    date = s(l.date),
-    advice = s(16);
   const scopes = array(scopeLimit, s(l.scope));
-  const passkey = object({ id, name: s(l.passkeyName), created_at: date, last_used_at: nullable(date) });
-  const session = object({
-    id,
-    client_id: id,
-    client_display_name: label,
-    created_at: date,
-    expires_at: date,
-    user_agent: nullable(s(l.userAgent)),
-    current: 5,
-    revoke: advice,
-  });
-  const inventory = (rows: number) => object({ kind: s(5), rows, limit: 2, truncated: 5 });
   const client = object({ client_id: id, display_name: label, disabled: 5, scopes });
   const consent = object({
     client_id: id,
@@ -73,17 +105,7 @@ export function securityResponseByteBudgets(scopeLimit: number, selectedLimit = 
     pending_reduction: 5,
   });
   return Object.freeze({
-    securityPage: object({
-      viewer: object({ account_id: id, session_id: id, client_id: id }),
-      sessions: inventory(array(l.sessions, session)),
-      passkeys: inventory(
-        array(
-          l.passkeys,
-          object({ id, name: s(l.passkeyName), created_at: date, last_used_at: nullable(date), remove: advice }),
-        ),
-      ),
-      actions: object({ change_password: advice, register_passkey: advice }),
-    }),
+    securityPage: securityFixedResponseByteBudgets.securityPage,
     clients: object({ clients: array(selectedLimit, client), next: nullable(s(l.cursor)) }),
     consents: object({ consents: array(selectedLimit, consent), next: nullable(s(l.cursor)) }),
     session: object({
@@ -94,19 +116,7 @@ export function securityResponseByteBudgets(scopeLimit: number, selectedLimit = 
       auth_time: 17,
       amr: array(1, s(15)),
     }),
-    passkeys: object({ passkeys: array(l.passkeys, passkey) }),
-    registrationPage: object({
-      kind: s(17),
-      viewer: object({ account_id: id }),
-      requirements: object({
-        handle: object({ minLength: 1, maxLength: 2 }),
-        email: object({ maxLength: 3 }),
-        password: object({ minLength: 16, maxLength: 16 }),
-        verification: object({ provider: s(9), required: 4 }),
-      }),
-      verification: object({ configured: 5 }),
-      actions: object({ register: 5, continue: 5 }),
-      reason: s(12),
-    }),
+    passkeys: securityFixedResponseByteBudgets.passkeys,
+    registrationPage: securityFixedResponseByteBudgets.registrationPage,
   });
 }

@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { securityResponseByteBudgets, securityScopeLimit, securityJsonStringBytes } from '@rezics/auth-contract';
+import {
+  securityFixedResponseByteBudgets,
+  securityResponseByteBudgets,
+  securityScopeLimit,
+  securityJsonStringBytes,
+} from '@rezics/auth-contract';
 import { composeSecurityPage } from '../src/security-page.ts';
 import { securityPasskey } from '../src/security-response-bounds.ts';
 import { securityInventory } from '../src/security-inventory.ts';
@@ -52,11 +57,11 @@ test('escaped native maxima fit field-derived budgets and projections discard ex
   expect(page.passkeys.kind).toBe('ready');
   expect(page.sessions.kind === 'ready' && page.sessions.rows).toHaveLength(64);
   expect(page.actions.register_passkey).toBe('capacity');
-  expect(bytes(page)).toBeLessThanOrEqual(securityResponseByteBudgets(1000).securityPage);
+  expect(bytes(page)).toBeLessThanOrEqual(securityFixedResponseByteBudgets.securityPage);
   const projected = securityPasskey(key);
   expect(Object.keys(projected)).toEqual(['id', 'name', 'created_at', 'last_used_at']);
   expect(bytes({ passkeys: Array(32).fill(projected) })).toBeLessThanOrEqual(
-    securityResponseByteBudgets(1000).passkeys,
+    securityFixedResponseByteBudgets.passkeys,
   );
   for (const value of ['\u0000', '\ud800', '😀', '"', '\\'])
     expect(bytes(value.repeat(128))).toBeLessThanOrEqual(securityJsonStringBytes(value.repeat(128).length));
@@ -153,6 +158,22 @@ test('budget arithmetic refuses unsafe or nonfinite configuration rather than pr
   expect(() => securityResponseByteBudgets(1000, 101)).toThrow(RangeError);
 });
 
+test('public fixed endpoint budgets need no catalogue count and match every combined-helper formula', () => {
+  for (const scopeLimit of [0, 1, 3, 1000, 1203]) {
+    const combined = securityResponseByteBudgets(scopeLimit);
+    expect({
+      securityPage: combined.securityPage,
+      passkeys: combined.passkeys,
+      registrationPage: combined.registrationPage,
+    }).toEqual(securityFixedResponseByteBudgets);
+  }
+  expect(Object.keys(securityFixedResponseByteBudgets).sort()).toEqual([
+    'passkeys',
+    'registrationPage',
+    'securityPage',
+  ]);
+});
+
 test('registration requirements and current viewer fit the published private registration allowance', async () => {
   const page = await readRegistrationPage({
     readSession: async () => Response.json({ account_id: id }),
@@ -160,7 +181,7 @@ test('registration requirements and current viewer fit the published private reg
     verificationConfigured: true,
   });
   expect(page.kind).toBe('already-signed-in');
-  expect(bytes(page)).toBeLessThanOrEqual(securityResponseByteBudgets(1000).registrationPage);
+  expect(bytes(page)).toBeLessThanOrEqual(securityFixedResponseByteBudgets.registrationPage);
 });
 
 test('maximally escaped exact client IDs round-trip through a bound cursor without clipping', () => {

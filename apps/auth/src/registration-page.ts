@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
+import { securityFixedResponseByteBudgets } from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
-import { issuerSecurityRequest } from './security-inventory';
+import { issuerSecurityJsonRequest } from './security-inventory';
 import { readTurnstileConfig } from './turnstile.ts';
 
 export type RegistrationPageRequirements = {
@@ -147,9 +148,12 @@ const registrationPageRead = createServerFn({ method: 'GET' }).handler(async ():
     // Keep reading native viewer state; without a site key, signed-out registration stays unavailable.
   }
   try {
-    const response = await issuerSecurityRequest('/registration-page');
+    const { response, body } = await issuerSecurityJsonRequest(
+      '/registration-page',
+      securityFixedResponseByteBudgets.registrationPage,
+    );
     if (response.status !== 200) return unavailable('dependency');
-    return parseRegistrationPage(await response.json(), turnstile);
+    return parseRegistrationPage(body, turnstile);
   } catch {
     return unavailable('dependency');
   }

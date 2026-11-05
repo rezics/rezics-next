@@ -223,3 +223,157 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
   const error = await new Response(child.stderr).text();
   expect(await child.exited, output + error).toBe(0);
 });
+test('fixed Security response readers accept escaped maxima, reject overflow before parsing and retire stalled bodies', async () => {
+  const script = `
+    import { expect, mock } from 'bun:test';
+    let activeSignal, mode = 'maximum', overflowPath = '', streamStarted, expire, cancelled = 0;
+    const calls = [];
+    mock.module('@tanstack/react-start', () => ({
+      createServerFn: () => {
+        let validate = value => value;
+        const builder = {
+          validator(fn) { validate = fn; return builder; },
+          handler(fn) { return options => {
+            activeSignal = options?.signal;
+            return fn({ data: validate(options?.data), signal: options?.signal });
+          }; },
+        };
+        return builder;
+      },
+      createServerOnlyFn: fn => fn,
+    }));
+    mock.module('@tanstack/react-start/server', () => ({
+      getRequest: () => new Request('https://auth.test/security', {
+        headers: { origin: 'https://auth.test', cookie: 'fixture=session' }, signal: activeSignal,
+      }),
+      setResponseHeader() {},
+    }));
+    mock.module('../src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
+    globalThis.__AUTH_ORIGIN__ = '';
+    const { securityFixedResponseByteBudgets } = await import('@rezics/auth-contract');
+    const id = '\\u0000'.repeat(1024), date = '2026-11-05T00:00:00.000Z';
+    const rowId = index => '\\u0000'.repeat(1021) + String(index).padStart(3, '0');
+    const page = {
+      viewer: { account_id: id, session_id: rowId(0), client_id: id },
+      actions: { change_password: 'step-up-required', register_passkey: 'step-up-required' },
+      sessions: { kind: 'ready', limit: 64, truncated: false, rows: Array.from({ length: 64 }, (_, i) => ({
+        id: rowId(i), client_id: id, client_display_name: '\\u0000'.repeat(100), created_at: date,
+        expires_at: date, user_agent: '\\u0000'.repeat(512), current: i === 0, revoke: 'step-up-required',
+      })) },
+      passkeys: { kind: 'ready', limit: 32, truncated: false, rows: Array.from({ length: 32 }, (_, i) => ({
+        id: rowId(i + 64), name: '\\u0000'.repeat(128), created_at: date, last_used_at: date,
+        remove: 'step-up-required',
+      })) },
+    };
+    const passkeys = { passkeys: Array.from({ length: 32 }, (_, i) => ({
+      id: rowId(i), name: '\\u0000'.repeat(128), created_at: date, last_used_at: date,
+    })) };
+    const registration = {
+      kind: 'already-signed-in', viewer: { account_id: id },
+      requirements: {
+        handle: { minLength: 3, maxLength: 64 }, email: { maxLength: 254 },
+        password: { minLength: 10, maxLength: Number.MAX_SAFE_INTEGER },
+        verification: { provider: 'turnstile', required: true },
+      },
+      verification: { configured: false }, actions: { register: false, continue: true },
+    };
+    function response(path) {
+      if (path === '/session') return Response.json({ account_id: id });
+      const body = path === '/security-page' ? page : path === '/passkeys' ? passkeys : registration;
+      const maximum = securityFixedResponseByteBudgets[
+        path === '/security-page' ? 'securityPage' : path === '/passkeys' ? 'passkeys' : 'registrationPage'
+      ];
+      let bytes = new TextEncoder().encode(JSON.stringify(body));
+      expect(bytes.byteLength).toBeLessThanOrEqual(maximum);
+      if (mode === 'overflow' && path === overflowPath) bytes = new Uint8Array(maximum + 1);
+      const stream = new ReadableStream({
+        start(controller) {
+          if (mode === 'stalled' && path === overflowPath) { streamStarted.resolve(); return; }
+          controller.enqueue(bytes);
+          controller.close();
+        },
+        cancel() { cancelled++; },
+      });
+      const result = new Response(stream, { status: 200 });
+      result.json = () => { throw new Error('fixed Security responses must use readJsonBounded'); };
+      return result;
+    }
+    globalThis.fetch = async input => {
+      const path = new URL(String(input)).pathname;
+      calls.push(path);
+      if (mode === 'stalled' && path === overflowPath) streamStarted.resolve();
+      return response(path);
+    };
+    const { loadSecurityPage, loadPasskeyInventory } = await import('../src/security-inventory');
+    const { readRegistrationPage } = await import('../src/registration-page');
+    const { loadPasswordChangeLimits, reviewPasskeyRegistration } = await import('../src/security');
+    expect((await loadSecurityPage()).kind).toBe('ready');
+    const list = await loadPasskeyInventory();
+    expect(list.ok && list.body.passkeys.length === 32).toBe(true);
+    expect((await readRegistrationPage()).kind).toBe('already-signed-in');
+    expect(await loadPasswordChangeLimits()).toEqual({ minLength: 10, maxLength: Number.MAX_SAFE_INTEGER });
+    expect((await reviewPasskeyRegistration(id)).kind).toBe('ready');
+    expect(calls).toEqual([
+      '/security-page', '/passkeys', '/registration-page', '/registration-page',
+      '/session', '/passkeys', '/session',
+    ]);
+
+    const parse = JSON.parse;
+    let parses = 0;
+    JSON.parse = (...args) => { parses++; return parse(...args); };
+    for (const [path, read] of [
+      ['/security-page', () => loadSecurityPage()],
+      ['/passkeys', () => loadPasskeyInventory()],
+      ['/registration-page', () => readRegistrationPage()],
+      ['/registration-page', () => loadPasswordChangeLimits()],
+    ]) {
+      mode = 'overflow'; overflowPath = path;
+      const before = parses;
+      const result = await read();
+      expect(parses).toBe(before);
+      if (path === '/security-page') expect(result.kind).toBe('unavailable');
+      else if (path === '/passkeys') expect(result).toEqual({ ok: false });
+      else if (result === null || result.kind === 'unavailable') expect(true).toBe(true);
+      else throw new Error('overflow must leave registration advice unavailable');
+    }
+
+    const timeout = globalThis.setTimeout;
+    let heldTimer;
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      if (delay === 5000) {
+        expire = callback;
+        heldTimer = timeout(() => {}, 60000);
+        return heldTimer;
+      }
+      return timeout(callback, delay, ...args);
+    };
+    mode = 'stalled'; overflowPath = '/security-page'; streamStarted = Promise.withResolvers();
+    const retired = new AbortController(), beforeStall = calls.length, beforeCancel = cancelled;
+    const pending = loadSecurityPage(retired.signal);
+    await streamStarted.promise;
+    retired.abort();
+    expect(await pending).toEqual({ kind: 'unavailable' });
+    expect(retired.signal.aborted).toBe(true);
+    expect(cancelled).toBe(beforeCancel + 1);
+    expect(calls.length).toBe(beforeStall + 1);
+    mode = 'stalled'; streamStarted = Promise.withResolvers();
+    const timed = new AbortController(), beforeDeadline = calls.length, cancelBeforeDeadline = cancelled;
+    const deadlineRead = loadSecurityPage(timed.signal);
+    await streamStarted.promise;
+    expire();
+    expect(await deadlineRead).toEqual({ kind: 'unavailable' });
+    expect(timed.signal.aborted).toBe(false);
+    expect(cancelled).toBe(cancelBeforeDeadline + 1);
+    expect(calls.length).toBe(beforeDeadline + 1);
+    globalThis.setTimeout = timeout;
+    clearTimeout(heldTimer);
+  `;
+  const child = Bun.spawn([process.execPath, '-e', script], {
+    cwd: `${import.meta.dir}/../../..`,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const output = await new Response(child.stdout).text();
+  const error = await new Response(child.stderr).text();
+  expect(await child.exited, output + error).toBe(0);
+});

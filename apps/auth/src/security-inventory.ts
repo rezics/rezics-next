@@ -1,5 +1,5 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
-import { securityResponseLimits } from '@rezics/auth-contract';
+import { securityFixedResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
 import { authPost } from './api';
 import { readConsent } from './consent';
 import { privateAuthRead } from './private-auth-read';
@@ -78,7 +78,10 @@ export function parseInventoryPage<V extends InventoryView>(view: V, body: unkno
 }
 
 type InventoryInput = { view: InventoryView; cursor?: string };
-export const issuerSecurityRequest = createServerOnlyFn(async (path: string, body?: unknown): Promise<Response> => {
+async function sendIssuerSecurityRequest(
+  path: string,
+  body?: unknown,
+): Promise<{ response: Response; signal: AbortSignal }> {
   const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
   const request = getRequest();
   setResponseHeader('Cache-Control', 'private, no-store');
@@ -88,7 +91,7 @@ export const issuerSecurityRequest = createServerOnlyFn(async (path: string, bod
     (request.headers.get('origin') !== origin && request.headers.get('origin') !== nativeOrigin) ||
     request.headers.get('sec-fetch-site') === 'cross-site'
   )
-    return new Response(null, { status: 403 });
+    return { response: new Response(null, { status: 403 }), signal: request.signal };
   // The existing issuer origin serves host.handler and owns its pools/keys and
   // immutable accountOperations binding. No credentials leave this issuer.
   const response = await fetch(new URL(path, nativeOrigin), {
@@ -106,7 +109,21 @@ export const issuerSecurityRequest = createServerOnlyFn(async (path: string, bod
     signal: request.signal,
   });
   if (response.status >= 300 && response.status < 400) throw new Error('Unexpected issuer redirect');
-  return response;
+  return { response, signal: request.signal };
+}
+
+export const issuerSecurityRequest = createServerOnlyFn(async (path: string, body?: unknown): Promise<Response> => {
+  return (await sendIssuerSecurityRequest(path, body)).response;
+});
+
+/** Preserve the BFF request deadline through native body consumption. */
+export const issuerSecurityJsonRequest = createServerOnlyFn(
+  async (path: string, maxBytes: number): Promise<{ response: Response; body: unknown }> => {
+    const { response, signal } = await sendIssuerSecurityRequest(path);
+    const body = response.status === 200 ? await readJsonBounded(response, maxBytes, signal) : undefined;
+    return { response, body };
+  },
+);
 });
 
 // Browser GET cannot set Origin. Use the existing Start BFF and carry the

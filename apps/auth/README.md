@@ -416,9 +416,12 @@ same BFF request signal; there is no second timer or extra native call. Overflow
 configuration, a stalled body and retirement are unavailable. 401 remains signed-out, 403 denied, and 400 with a
 cursor expired. Exact cursor forwarding and browser history still commit only after an admitted replacement.
 
-This receiving slice covers only `/clients` and `/consents`; public consent approval is separate. The fixed-response
-receiver still owns `/security-page`, `/passkeys` and `/registration-page`, and the distinct `/session` receiver
-still needs the same server-only C/native-mode configuration. Those endpoints do not gain byte coverage here.
+Decision: `securityFixedResponseByteBudgets` exposes the native `securityPage`, `passkeys` and
+`registrationPage` allowances without C. The production `/security-page`, both `/passkeys` readers and both
+`/registration-page` readers (registration advice and password-change limits) use those allowances through
+`readJsonBounded` with the BFF request signal through body consumption. This keeps legal escaped maxima while
+rejecting overflow before parsing. `/clients` and `/consents` retain their selected-page budgets from trusted C;
+`/session` also remains catalogue-dependent and requires trusted C. Public consent approval is separate.
 
 ## Security
 

@@ -387,9 +387,13 @@ recognition. `/passkeys` projects at most 32 entries. Selected clients/consents 
 Invalid owned scope arrays refuse the page; invalid consent authority remains unavailable.
 
 `@rezics/auth-contract` exports `securityResponseLimits`, `securityScopeLimit`,
-`securityJsonStringBytes` and `securityResponseByteBudgets`. For configuration count C,
-`securityResponseByteBudgets(C, L=20)` publishes byte allowances `securityPage`, `clients`,
-`consents`, `session`, `passkeys`, `registrationPage` for the corresponding exact native reads.
+`securityJsonStringBytes`, `securityFixedResponseByteBudgets` and `securityResponseByteBudgets`.
+The fixed object publishes `securityPage`, `passkeys` and `registrationPage` without a scope-count
+operand. For configuration count C, `securityResponseByteBudgets(C, L=20)` retains its existing
+allowances for `securityPage`, `clients`, `consents`, `session`, `passkeys` and `registrationPage`;
+its three fixed endpoint values are the same formulas exposed by the fixed object.
+Auth's readers use those fixed allowances for `GET /security-page`, `GET /passkeys` and
+`GET /registration-page`, including the registration advice and password-change limits reads.
 C is `securityScopeLimit(siteActions.keys())`: union of mounted keys with openid, offline_access
 and media:complete; only an absent catalogue uses 1,000. Native selected inventory uses this same
 ceiling rather than the separate kind-consent 512 contract. No configured scope is clipped.

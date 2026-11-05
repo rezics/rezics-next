@@ -677,5 +677,6 @@ export {
   securityResponseLimits,
   securityScopeLimit,
   securityJsonStringBytes,
+  securityFixedResponseByteBudgets,
   securityResponseByteBudgets,
 } from './security-response-bounds.ts';

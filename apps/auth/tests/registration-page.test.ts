@@ -42,8 +42,9 @@ test('production registration advice bounds BFF completion and cancellation with
     mock.module('../src/turnstile.ts', () => ({ readTurnstileConfig: async () => {
       configReads++; return mode === 'config' ? configWait.promise : config;
     } }));
-    mock.module('../src/security-inventory', () => ({ issuerSecurityRequest: async path => {
-      expect(path).toBe('/registration-page'); nativeReads++; return Response.json(body);
+    mock.module('../src/security-inventory', () => ({ issuerSecurityJsonRequest: async (path, maxBytes) => {
+      expect(path).toBe('/registration-page'); expect(maxBytes > 0).toBe(true); nativeReads++;
+      return { response: Response.json(body), body };
     } }));
     mock.module('@tanstack/react-start', () => ({ createServerFn: () => ({ handler: fn => async options => {
       const phase = mode, held = late, finish = completed;

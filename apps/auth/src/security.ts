@@ -1,8 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
+import { securityFixedResponseByteBudgets } from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage } from './api';
 import { m } from './paraglide/messages.js';
 import {
+  issuerSecurityJsonRequest,
   issuerSecurityRequest,
   loadSecurityPage,
   type SecurityPageEnvelope,
@@ -63,9 +65,11 @@ export type PasskeyRegistrationReview =
 const passwordChangeLimitsRead = createServerFn({ method: 'POST' }).handler(
   async (): Promise<PasswordChangeLimits | null> => {
     try {
-      const response = await issuerSecurityRequest('/registration-page');
+      const { response, body } = await issuerSecurityJsonRequest(
+        '/registration-page',
+        securityFixedResponseByteBudgets.registrationPage,
+      );
       if (response.status !== 200) return null;
-      const body: unknown = await response.json();
       if (!body || typeof body !== 'object' || Array.isArray(body) || !('requirements' in body)) return null;
       const requirements = body.requirements;
       if (
@@ -121,11 +125,13 @@ const registrationReview = createServerFn({ method: 'POST' })
     try {
       const before = await authority();
       if (before !== 'current') return { kind: before };
-      const response = await issuerSecurityRequest('/passkeys');
+      const { response, body } = await issuerSecurityJsonRequest(
+        '/passkeys',
+        securityFixedResponseByteBudgets.passkeys,
+      );
       if (response.status === 401) return { kind: 'signed-out' };
       if (response.status === 403) return { kind: 'denied' };
       if (response.status !== 200) return { kind: 'unavailable' };
-      const body: unknown = await response.json();
       const passkeys = parseSecurityPasskeys(body);
       if (!passkeys) return { kind: 'unavailable' };
       const bodyRecord = body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
