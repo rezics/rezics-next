@@ -74,16 +74,21 @@ test('an admitted ticket holds the slot until the attempt leaves pending, withou
       JSON.stringify({ taskId: 'held', attempt: 1, state: 'pending' }),
     );
     const policy = { ...defaultPolicy.capacity, maxWorkers: 1, minAvailableMiB: 0, reservationPollMs: 5 };
+    const queue = join(directory.path, 'capacity-queue');
+    const admitted = () => readdirSync(queue).filter((name) => name.endsWith('.admitted'));
     release = await awaitHostCapacity(store, directory.path, false, 'held', 1, { policy, pollIntervalMs: 5 });
+    expect(admitted()).toHaveLength(1);
     expect(capacityAvailable(store, directory.path)).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(admitted()).toHaveLength(1);
     expect(capacityAvailable(store, directory.path)).toBe(false);
     store.updateAttempt({ taskId: 'held', attempt: 1 }, (attempt) => {
       attempt.state = 'running';
     });
-    for (let step = 0; step < 40 && !capacityAvailable(store, directory.path); step += 1)
+    for (let step = 0; step < 40 && admitted().length > 0; step += 1)
       await new Promise((resolve) => setTimeout(resolve, 5));
-    expect(capacityAvailable(store, directory.path)).toBe(true);
+    expect(admitted()).toHaveLength(0);
+    expect(capacityAvailable(store, directory.path)).toBe(false);
   } finally {
     release?.();
     db.close();
