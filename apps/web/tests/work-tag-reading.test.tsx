@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { Release } from '@rezics/definitions';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Related, Subject } from '../src/subject/types';
 import type { Stmt } from '../src/features/pages/shared';
 import { projectWorkTags } from '../src/features/catalogue/work-tag-reading/model';
+import { subjectCatalogueTagDefinitions } from '../src/features/pages/subject-catalogue-metadata';
 
 const workId = '00000000-0000-4000-8000-000000000001';
 const property = 'schema:genre';
@@ -114,6 +116,35 @@ test('empty, unsupported and unavailable facet readings stay distinct', () => {
   expect(unsupported?.state).toBe('unsupported');
   expect(unavailable?.state).toBe('unavailable');
 });
+
+test.each(['wd:Q689445', 'schema:Movie', 'schema:TVSeries'])(
+  'released %s metadata displays its supplied Concept tag',
+  (type) => {
+    const targetId = id(9000);
+    const current = { ...subject([assertion(0, targetId)], bundledDigest), type };
+    const definitions = subjectCatalogueTagDefinitions(current, {
+      state: 'released',
+      type,
+      digest: bundledDigest,
+      definitions: { types: bundledRelease.types, properties: bundledRelease.properties },
+    });
+
+    const model = projectWorkTags({
+      subject: current,
+      related: related([targetId]),
+      definitions,
+      locale: 'en',
+      spoilerThreshold: 0,
+    });
+
+    expect(model).toMatchObject({
+      state: 'available',
+      rows: [{ property, targetId }],
+      disclosedCount: 1,
+      hasUnavailable: false,
+    });
+  },
+);
 
 test('hidden membership cannot change rows, empty state or pagination; a preference change restores exact assertions', () => {
   const visible = assertion(0, id(0));

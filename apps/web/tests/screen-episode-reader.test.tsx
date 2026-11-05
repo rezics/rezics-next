@@ -245,6 +245,47 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
   );
   expect(emptyHtml).toContain('This film or series has no admitted profile facts yet.');
 
+  const terminalQueries: unknown[] = [];
+  const terminalContinuation = await readScreenEpisodePage(
+    clientFor(linkPage([]), terminalQueries),
+    profile.release,
+    profile.public,
+    'en',
+    realmId,
+    'opaque-terminal-window',
+  );
+  expect(terminalContinuation).toEqual({ ok: true, state: 'ready', entries: [], next: null });
+  expect(terminalQueries).toEqual([
+    {
+      id: profile.public.subject.id,
+      property: 'schema:isPartOf',
+      language: 'en',
+      limit: 20,
+      context: realmId,
+      cursor: 'opaque-terminal-window',
+    },
+  ]);
+
+  const continuationHtml = renderToStaticMarkup(
+    <ScreenEpisodeList
+      locale="en"
+      read={terminalContinuation}
+      release={profile.release}
+      origin={{
+        pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory',
+        searchStr: '?screenCursor=opaque-terminal-window',
+      }}
+      visit={
+        {
+          previousHref: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory?screenCursor=opaque-previous',
+        } as unknown as NonNullable<Parameters<typeof ScreenEpisodeList>[0]['visit']>
+      }
+    />,
+  );
+  expect(continuationHtml).toContain('Previous');
+  expect(continuationHtml).not.toContain('Continue');
+  expect(continuationHtml).not.toContain('This film or series has no admitted profile facts yet.');
+
   const membership = statement(seasonMembership, profile.public.subject.id, ' 1/2 ');
   const sparse = await readScreenEpisodePage(
     clientFor(

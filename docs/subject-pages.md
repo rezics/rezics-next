@@ -214,8 +214,10 @@ page capped at 20 rows. A deliberate continuation repeats those bounded reads fo
 not refill sparse pages, hydrate each member or traverse a season's episodes from the series. The native relation page
 supplies each disclosed member summary, its admitted order and any string `schema:position`; absent positions remain
 absent and specials keep their exact identity and position. Withheld, stale or unavailable membership remains distinct
-from an exact empty page. The reader exposes navigation only; personal completion, current advice and mutation stay with
-the existing progress checklist. No Screen reader read or navigation grants checklist authority.
+from an exact empty page. Decision: an empty continuation with no count ends only that cursor window when `next` is
+null; it keeps Previous available and does not imply the whole Work has no episodes. The reader exposes navigation
+only; personal completion, current advice and mutation stay with the existing progress checklist. No Screen reader
+read or navigation grants checklist authority.
 
 ## Read a story arc
 
