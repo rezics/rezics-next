@@ -191,6 +191,11 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
       (entry) => entry.type === 'submenu' && entry.label === m.contribute_edit(),
     );
     expect(editGroup?.type === 'submenu' ? editGroup.entries[0]?.href : undefined).toBe(originHref);
+    const directUnsupported = await load(
+      'harbor-northern-lights',
+      factsPublicCorrectionHref(base, addonProfileId, 'en', { ...observed, context: addonWorkId }),
+    );
+    expect(directUnsupported).toMatchObject({ visit: { kind: 'origin', origin: { context: addonWorkId } } });
     expect(
       parseFactsPublicVisit(new URL(collected[0]!.href, 'https://site.test').search, addonProfileId, 'en', base),
     ).toMatchObject({ kind: 'origin', origin: { subject: addonProfileId, context: candidateContext } });
@@ -216,6 +221,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     ).toEqual({ kind: 'invalid' });
 
     await navigate(unsupported);
+    expect(router.state.location.searchStr).toBe(new URL(unsupported, 'https://site.test').search);
     await waitFor(() => expect(host.textContent).toContain(m.facts_public_unsupported()));
     expect(correctionReads).toHaveLength(0);
     expect(host.querySelector('input,select')).toBeNull();
