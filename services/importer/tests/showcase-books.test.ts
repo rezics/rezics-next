@@ -527,12 +527,6 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
     );
     const publisherId = first.identities['person:128']!.id;
-    const publisherRead = (await world.publicClient.readSubject(publisherId)).subject as {
-      type: string;
-      statements: Record<string, { value?: { content?: unknown } }[]>;
-    };
-    expect(publisherRead.type).toBe('schema:Organization');
-    expect(publisherRead.statements['schema:name']?.some((row) => row.value?.content === '講談社')).toBe(true);
     const publication = await publishShowcase({
       plan: showcaseBooksToCrossMediaPlan(first.planned),
       result: first,
@@ -542,6 +536,12 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       publicClient: world.publicClient,
       ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
+    const publisherRead = (await world.publicClient.readSubject(publisherId)).subject as {
+      type: string;
+      statements: Record<string, { value?: { content?: unknown } }[]>;
+    };
+    expect(publisherRead.type).toBe('schema:Organization');
+    expect(publisherRead.statements['schema:name']?.some((row) => row.value?.content === '講談社')).toBe(true);
     const publisherRole = first.creditRoles!.find((role) => role.code === '2004')!;
     expect(publisherRole.property).toBe('schema:publisher');
     const publisherClaims = [...world.receipts.values()]
