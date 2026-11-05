@@ -90,8 +90,9 @@ export function useSubjectCommunityReading(input: {
         setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
       }
     } else if (
-      observation.state === 'signed-out' ||
-      (observation.state === 'signed-in' && observation.observation.subject !== input.reader)
+      !binding.privateRetired &&
+      (observation.state === 'signed-out' ||
+        (observation.state === 'signed-in' && observation.observation.subject !== input.reader))
     ) {
       setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
     } else if (
