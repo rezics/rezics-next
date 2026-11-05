@@ -257,6 +257,8 @@ must cover that enclosing composition rather than borrowing the unrelated ordina
 
 ## Private physical-copy loans
 
+Decision: The mounted loan routes expose one whole-request work seam carrying the original request, actor and absolute deadline; the sole manifest owner supplies the original funded frame with zero worker allowance, while Library keeps loan SQL and producer-owned costs at their existing owners.
+
 Decision: Preserve authenticated generation-bound cursor meaning by resolving legacy sentinel cursors against
 their exact retained loan; newly emitted cursors carry an explicit due-state discriminator and seek raw dated/null
 index branches.
@@ -266,11 +268,12 @@ uniqueness, generation read/advance, writes, copy/loan point reads, ambiguous le
 first/continuation pages. It freezes the exact scalar bind array used on the caller's live client. The public
 `declareBound`, `sumBounds` and `repeatBound` arithmetic includes literal SQL bytes, JSON-serialized original
 binds and schema-valid returned projections. When the existing command work association is active, it consumes
-each declaration before dispatch; the charge remains on misses, negative probes, failed CAS and rollback. No
-production HTTP path currently creates that association or supplies its original funded envelope for these loan
-routes; the manager-owned root composition is recorded in the continuation. These leaves do not establish
-authority, receipt success or a new allowance. Their eight-axis `WorkDimensions` translation explicitly drops only
-`engineRequests`, which is zero for SQL-only leaves, from the declared public nine-axis vector.
+each declaration before dispatch; the charge remains on misses, negative probes, failed CAS and rollback. The
+mounted routes pass the original HTTP request, actor and absolute deadline through one optional whole-request work
+seam, covering command retries, page revalidation and current disclosure. The manifest owner must bind the original
+funded frame there; Library creates no ledger or allowance. These leaves do not establish authority or receipt
+success. Their eight-axis `WorkDimensions` translation explicitly drops only `engineRequests`, which is zero for
+SQL-only leaves, from the declared public nine-axis vector.
 
 Copy and joined-copy projection widths come from the existing admitted copy writer: kind and status IDs are
 1–64 ASCII characters. The schema has no maximum width, so bounds use the writer's admitted vocabulary and do

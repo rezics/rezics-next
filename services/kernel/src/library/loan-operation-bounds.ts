@@ -2,11 +2,32 @@ import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds
 import type { PoolClient, QueryResultRow } from 'pg';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { routeOf } from '../route/route.ts';
+import type { Actor } from '../request/access.ts';
 import { MAX_LOAN_PARTY_SCALARS, MAX_LOAN_REVISION, type Loan } from './loan-model.ts';
 
 export const MAX_OPEN_LOAN_PAGE = 100;
 export const MAX_HISTORY_LOAN_PAGE = 50;
 export const MAX_LOAN_GENERATION = 2_147_483_647;
+
+export type LoanHttpOperation = 'list' | 'create' | 'extend' | 'return';
+export type LoanHttpWorkContext = Readonly<{
+  operation: LoanHttpOperation;
+  request: Request;
+  actor: Actor;
+  deadline: number;
+  input: unknown;
+  workerAllowance: 0;
+}>;
+export type LoanHttpWorkOwner = <T>(context: LoanHttpWorkContext, dispatch: () => Promise<T>) => Promise<T>;
+
+/** The route forwards the existing request frame; only its manifest owner can bind funding. */
+export function withLoanHttpWork<T>(
+  owner: LoanHttpWorkOwner | undefined,
+  context: LoanHttpWorkContext,
+  dispatch: () => Promise<T>,
+): Promise<T> {
+  return owner ? owner(context, dispatch) : dispatch();
+}
 
 type Operand = string | number | null;
 type Point = Readonly<{ route: number; accountId: string; id: string }>;
