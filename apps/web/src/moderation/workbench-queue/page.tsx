@@ -181,7 +181,7 @@ export function WorkbenchPage({
         search,
         fence: windowFence,
         move,
-        source,
+        ...(source ? { source } : {}),
         keyboard,
       })
     )
@@ -210,7 +210,7 @@ export function WorkbenchPage({
         visitId: navigation.visitId,
         search,
         fence: windowFence,
-        source,
+        ...(source ? { source } : {}),
         keyboard,
       })
     )
