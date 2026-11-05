@@ -12,6 +12,7 @@ import { SpoilerGate } from '../values';
 import { connectionReturnHref, withSubjectVisitReturn } from '../subject-visit-navigation';
 import { OverviewContext, holderItems, statementItems, type Section } from '../overview';
 import type { ProfileRelationWindow } from '../views';
+import { workFranchisePeerStream } from '../../catalogue/work-franchise-reading/navigation';
 import { kindLabel, WorkRelation } from './relation';
 import { workDestinations, workFranchiseGroups, WORK_FRANCHISE_PREVIEW } from './model';
 import { useWorkRegionReturn } from './return';
@@ -189,8 +190,14 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
                       focus,
                     });
                   const rowReturn = returnToFor('browse');
+                  const peerReturn = journey.returnToFor({
+                    stream: workFranchisePeerStream(direction, window.property),
+                    statement: relation.statement.id,
+                    holder: relation.holder,
+                    focus: 'browse',
+                  });
                   const WorkLink: PageLink = (props) => (
-                    <Link {...props} href={withSubjectVisitReturn(props.href, rowReturn, locale)} />
+                    <Link {...props} href={withSubjectVisitReturn(props.href, peerReturn, locale)} />
                   );
                   return (
                     <WorkRelation

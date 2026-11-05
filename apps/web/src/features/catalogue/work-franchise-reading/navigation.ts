@@ -10,6 +10,10 @@ export type WorkFranchiseReturn = {
   spoiler: number;
 };
 
+export function workFranchisePeerStream(direction: 'in' | 'out', property: string): string {
+  return `${direction === 'in' ? 'out' : 'in'}:${property}`;
+}
+
 export function workFranchiseReturn(hash: string): WorkFranchiseReturn | undefined {
   if (!hash.startsWith('#work-franchise?') || hash.length > 1024) return;
   const params = new URLSearchParams(hash.slice('#work-franchise?'.length));

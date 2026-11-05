@@ -5,6 +5,7 @@ import type { ProfileRelationWindow } from '../features/pages/views';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { directedWorkRelations, showcaseWorkKind, workFranchiseGroups } =
   await import('../features/pages/showcase-work/model');
+const { workFranchisePeerStream } = await import('../features/catalogue/work-franchise-reading/navigation');
 
 // Authored native-response controls. These UUIDs do not identify seeded catalogue objects.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -42,6 +43,8 @@ function window(
 }
 
 test('native forward and reverse visits retain the original holder, direction and source evidence', () => {
+  expect(workFranchisePeerStream('out', 'wdt:P144')).toBe('in:wdt:P144');
+  expect(workFranchisePeerStream('in', 'wdt:P144')).toBe('out:wdt:P144');
   const original = assertion('wdt:P144', vn);
   const outward = directedWorkRelations(anime, 'wdt:P144', 'out', {
     relations: [{ target: vn, statement: original, summary: summary(vn, 'wd:Q689445') }],

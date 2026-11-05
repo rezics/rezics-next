@@ -5,6 +5,13 @@ seed adds only observed members Bangumi 3154, 129807, 247445 and VNDB v17102 whe
 the selected roots include 10380, 84148 and v2002. The persona's original five
 collection roots stay unchanged. No title or franchise label joins identities.
 
+Map selected VNDB `side` rows from `id` to `vid` and `par` rows from `vid` to
+`id` through released `wdt:P144`. Coalesce reciprocal rows into one directed
+assertion while retaining both exact source rows, revisions and citations. Both
+endpoints require current native identities and facts fences; an endpoint outside
+the selected graph stays an explicit gap. The v2002 to Bangumi 3154 counterpart
+remains a separately reviewed link between provider identities, not equivalence.
+
 Bangumi code 1 supplies the admitted cross-media counterpart meaning, not an
 inferred adapted-from direction. The selected sequel and side-story rows keep
 their mapped direction and reciprocal evidence. Bangumi 84148 is the manga
@@ -22,9 +29,6 @@ propagate. Editorial selection and adoption remain owned by the common publisher
 The complete VNDB/Bangumi journey additionally requires a currently reviewed
 identity handoff between v2002 and 3154; a Bangumi infobox link to VNDB alone
 does not supply that review. Selection and publication do not create this join.
-The retained VNDB enumeration also reports `side` as omitted; its relation owner
-must supply an admitted typed endpoint/result contract before it can publish.
-
 - Touches: selected source rows, existing graph delivery evidence, common journal
   acknowledgements, current endpoint identities, facts fences and public reads.
 - Bound: four additional exact work keys, without transitive work selection.

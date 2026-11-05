@@ -19,6 +19,7 @@ import {
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
 import type { Claim } from './record-bindings.ts';
+import type { VndbWorkRelationEvidence } from './showcase-vndb-relations.ts';
 
 export type Provider = 'bangumi' | 'vndb';
 export type GraphMembership = 'family' | 'referenced';
@@ -57,17 +58,24 @@ export type GraphEdgeDraft = {
     mappingRevision: string;
     evidence: { path: string; code: string; sourceSubject: string; sourceEndpoint: string; digest: string }[];
   };
+  vndbRelation?: {
+    sourceSubject: string;
+    sourceEndpoint: string;
+    mappingRevision: string;
+    evidence: readonly VndbWorkRelationEvidence[];
+  };
 };
 
 /** Exact source envelope used by an ordinary selected graph proposal. */
 export function graphEdgeSource(draft: GraphEdgeDraft): Source {
+  const digest = draft.vndbRelation ? sourceDigest(draft.vndbRelation.evidence) : sourceDigest(draft.record);
   return sourceEnvelope(
     {
       source: draft.alias,
       external_id: draft.holder,
       record_revision: draft.recordRevision ?? null,
       converter_revision: draft.converterRevision ?? 'cross-media-entities@1',
-      digest: sourceDigest(draft.record),
+      digest,
     },
     'facts',
   );
@@ -206,6 +214,9 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
     ...(draft.relation && draft.property === 'wdt:P179' ? [String(draft.relation.order ?? 'unknown')] : []),
     ...(draft.producerParent
       ? [draft.producerParent.mappingRevision, sourceDigest(draft.producerParent.evidence)]
+      : []),
+    ...(draft.vndbRelation
+      ? [draft.vndbRelation.mappingRevision, sourceDigest(draft.vndbRelation.evidence)]
       : []),
   ]);
 }
@@ -438,7 +449,7 @@ export class CrossMediaGraph {
         }
       }
       const sourceFactOwner =
-        draft.source === 'vndb' && draft.table === 'vn_relations'
+        draft.source === 'vndb' && draft.table === 'vn_relations' && !draft.vndbRelation
           ? String(draft.record.id)
           : draft.fenceFacts
             ? draft.holder
@@ -583,6 +594,103 @@ export class CrossMediaGraph {
           target: actualTarget.subject,
           sourceHolder: command.source.external_id,
           sourceTarget: sourceIsHolder ? draft.relation.sourceEndpoint : draft.relation.sourceSubject,
+          bytes: retained.bytes,
+        });
+        continue;
+      }
+      if (draft.vndbRelation) {
+        const relation = draft.vndbRelation;
+        const endpoints = [
+          {
+            externalId: relation.sourceSubject,
+            claim: holder,
+            nativeType: input.nativeType(relation.sourceSubject, draft.alias),
+          },
+          {
+            externalId: relation.sourceEndpoint,
+            claim: target,
+            nativeType: input.nativeType(relation.sourceEndpoint, draft.alias),
+          },
+        ];
+        if (endpoints.some((endpoint) => endpoint.nativeType === undefined)) {
+          unresolved.push({ ...draft, reason: 'missing_native_endpoint_profile' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const [endpointReads, endpointFences] = await Promise.all([
+          Promise.all(
+            endpoints.map(({ externalId, claim, nativeType }) =>
+              input.currentRelationEndpoint(externalId, claim.subject, nativeType!),
+            ),
+          ),
+          Promise.all(endpoints.map(({ externalId }) => currentFactFence(draft.alias, externalId))),
+        ]);
+        if (endpointFences.some((fence) => fence.fenced)) {
+          unresolved.push({ ...draft, reason: 'fenced_relation_endpoint' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const staleEndpointIndex = endpointReads.findIndex((status) => status !== 'current');
+        if (staleEndpointIndex !== -1) {
+          const endpoint = endpoints[staleEndpointIndex]!;
+          unresolved.push({
+            ...draft,
+            reason:
+              'current_relation_endpoint_' +
+              endpointReads[staleEndpointIndex] +
+              ':' +
+              endpoint.externalId,
+          });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const citationUrls = [...new Set(relation.evidence.map((row) => row.sourceUrl))].sort();
+        const statement = {
+          ...relationStatement({
+            property: draft.property,
+            target: target.subject,
+            url: citationUrls[0]!,
+          }),
+          references: citationUrls.map((url) => ({
+            parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: url } }],
+          })),
+        };
+        const command: BatchCommand = {
+          op: 'propose',
+          key: graphEdgeCommandKey(draft),
+          source: graphEdgeSource(draft),
+          subject: holder.subject,
+          statement,
+        };
+        if (checkBatchWrite({ commands: [command] }, bundledRelease).length)
+          throw new TypeError('VNDB work-relation proposal failed portable validation');
+        const prepared = input.journal?.prepare(command);
+        const exact = prepared
+          ? (JSON.parse(prepared.bytes) as { commands?: BatchCommand[] }).commands?.[0]
+          : command;
+        if (!exact || exact.op !== 'propose')
+          throw new TypeError('VNDB work-relation journal is invalid');
+        const exactValue = exact.statement.value;
+        if (
+          exact.source.external_id !== relation.sourceSubject ||
+          sourceDigest(exact.source) !== sourceDigest(command.source) ||
+          exact.subject !== holder.subject ||
+          exact.statement.property.id !== draft.property ||
+          exactValue.type !== 'value' ||
+          exactValue.content !== target.subject
+        ) {
+          unresolved.push({ ...draft, reason: 'journaled_native_identity_changed' });
+          mark.run('unresolved', exact.key, graphEdgeKey(draft));
+          continue;
+        }
+        const retained = this.retainCommand(graphEdgeKey(draft), exact);
+        commands.push({
+          draft,
+          command: JSON.parse(retained.bytes).commands[0] as BatchCommand,
+          subject: holder.subject,
+          target: target.subject,
+          sourceHolder: relation.sourceSubject,
+          sourceTarget: relation.sourceEndpoint,
           bytes: retained.bytes,
         });
         continue;
@@ -810,6 +918,7 @@ export class CrossMediaGraph {
           const journaled = !!(
             entry.draft.relation ||
             entry.draft.producerParent ||
+            entry.draft.vndbRelation ||
             (entry.draft.source === 'vndb' && entry.draft.table === 'vn_relations') ||
             isVndbReleaseSupersession(entry.draft)
           );

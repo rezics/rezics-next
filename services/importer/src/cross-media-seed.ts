@@ -59,6 +59,11 @@ import {
   type ShowcaseWorkLinkHandoff,
 } from './showcase-work-links.ts';
 import {
+  coalesceVndbWorkRelations,
+  isTypedVndbWorkRelation,
+  mapVndbWorkRelation,
+} from './showcase-vndb-relations.ts';
+import {
   deliverBangumiCreatorCredits,
   bangumiStaffDraft,
   type BangumiStaffAssociation,
@@ -1237,16 +1242,49 @@ export async function planCrossMediaSeed(
     });
     member({ source: 'vndb', key: id, kind: 'work', membership: 'family', ...tagged(vnFamily.get(id)) });
   }
+  const selectedVndbRelationCounts = new Map<string, number>();
+  const typedVndbRelationEdges: GraphEdgeDraft[] = [];
+  const vndbRelationRevisions = new Map(
+    [...revisions].map(([key, value]) => [key, String(value.revision)] as const),
+  );
   for await (const row of input.rows('vndb', 'vn_relations')) {
     const id = text(row, 'id');
     const vid = text(row, 'vid');
-    if (selection && (!vnIds.has(id) || !vnIds.has(vid))) continue;
     if (!vnIds.has(id) && !vnIds.has(vid)) continue;
     const relation = text(row, 'relation');
-    if (UNMAPPED_TYPED_VNDB_WORK_RELATIONS.has(relation)) {
-      gap('vndb', 'vn_relations', row, 'Selected VNDB relation awaits its typed work-relations result', {
+    const owner = vnIds.has(id) ? id : vid;
+    const count = selectedVndbRelationCounts.get(owner) ?? 0;
+    if (count >= vndbLimits.maxLinks) {
+      gap('vndb', 'vn_relations', row, 'Selected VNDB relation limit exceeded', { code: relation });
+      continue;
+    }
+    selectedVndbRelationCounts.set(owner, count + 1);
+    if (!vnIds.has(id) || !vnIds.has(vid)) {
+      gap('vndb', 'vn_relations', row, 'Selected VNDB relation endpoint is outside the current work graph', {
         code: relation,
+        endpoint: !vnIds.has(id) ? id : vid,
       });
+      continue;
+    }
+    if (isTypedVndbWorkRelation(relation)) {
+      const mapped = mapVndbWorkRelation({
+        alias: crossMediaAliases.vndb,
+        id,
+        vid,
+        code: relation,
+        record: row,
+        fields: fieldsOf('vn_relations', row),
+        revisions: vndbRelationRevisions,
+      });
+      if (mapped.status === 'gap') {
+        gap('vndb', 'vn_relations', mapped.record, mapped.reason, {
+          ...(mapped.code === undefined ? {} : { code: mapped.code }),
+          ...(mapped.endpoint === undefined ? {} : { endpoint: mapped.endpoint }),
+          ...(mapped.property === undefined ? {} : { property: mapped.property }),
+        });
+      } else if (mapped.status === 'mapped') {
+        typedVndbRelationEdges.push(mapped.edge);
+      }
       continue;
     }
     const mapping = mapSourceEnumeration('vndb', 'vn_relation', relation);
@@ -1256,15 +1294,12 @@ export async function planCrossMediaSeed(
         'vn_relations',
         row,
         mapping?.reason ?? 'No registered native converter for this source relation or entity',
+        { code: relation, property: 'vn_relations.relation' },
       );
       continue;
     }
     const holder = mapping.inverse ? vid : id;
     const target = mapping.inverse ? id : vid;
-    if (!vnIds.has(target)) {
-      gap('vndb', 'vn_relations', row, 'Missing target record for this source relation');
-      continue;
-    }
     edge({
       source: 'vndb',
       alias: crossMediaAliases.vndb,
@@ -1278,6 +1313,7 @@ export async function planCrossMediaSeed(
       fields: fieldsOf('vn_relations', row),
     });
   }
+  for (const draft of coalesceVndbWorkRelations(typedVndbRelationEdges)) edge(draft);
   const releases = new Set<string>(),
     chars = new Set<string>(),
     aliases = new Set<string>();
@@ -2153,12 +2189,12 @@ function currentWorkRead(read: ReviewedSubjectRead): CurrentWorkRead | undefined
   return { subjectId, route: subjectRoute(read) };
 }
 
-function vndbRelationCitation(command: GraphEdgeEvidence['command']): string | null {
+function vndbRelationCitation(command: GraphEdgeEvidence['command'], sourceUrl: string): string | null {
   if (command?.op !== 'propose') return null;
   for (const reference of command.statement.references ?? []) {
     for (const part of reference.parts) {
       if (part.property.id === 'schema:url' && part.value.type === 'value' && typeof part.value.content === 'string')
-        return part.value.content;
+        if (part.value.content === sourceUrl) return sourceUrl;
     }
   }
   return null;
@@ -2180,27 +2216,38 @@ export function buildVndbWorkRelationOutcomes(input: {
   );
   return input.plan.edges
     .filter((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')
-    .map((edge) => {
+    .flatMap((edge) => {
       const key = graphEdgeKey(edge);
       const evidence = evidenceByKey.get(key);
       const acknowledged = evidence?.status === 'proposed' && evidence.candidate !== undefined;
       const unresolvedReason = unresolvedByKey.get(key);
-      return {
-        sourceRecordKey: String(edge.record.id),
-        relatedRecordKey: String(edge.record.vid),
-        relation: String(edge.record.relation),
+      const sourceRows = edge.vndbRelation?.evidence ?? [
+        {
+          sourceSubject: String(edge.record.id),
+          sourceEndpoint: String(edge.record.vid),
+          code: String(edge.record.relation),
+          sourceUrl: edge.url,
+          fields: edge.fields,
+        },
+      ];
+      return sourceRows.map((sourceRow) => ({
+        sourceRecordKey: sourceRow.sourceSubject,
+        relatedRecordKey: sourceRow.sourceEndpoint,
+        relation: sourceRow.code,
         holderKey: edge.holder,
         targetKey: edge.target,
         property: edge.property,
         holderSubjectId: readings.get(edge.holder) ?? null,
         targetSubjectId: readings.get(edge.target) ?? null,
-        fields: edge.fields,
-        citation: vndbRelationCitation(evidence?.command) ?? (acknowledged ? null : edge.url),
+        fields: sourceRow.fields,
+        citation:
+          vndbRelationCitation(evidence?.command, sourceRow.sourceUrl) ??
+          (acknowledged ? null : sourceRow.sourceUrl),
         delivery: acknowledged ? ('acknowledged' as const) : ('unavailable' as const),
         publication: 'pending' as const,
         ...(acknowledged ? { candidateId: evidence.candidate } : {}),
         ...(!acknowledged ? { reason: unresolvedReason ?? 'candidate-not-acknowledged' } : {}),
-      };
+      }));
     });
 }
 
