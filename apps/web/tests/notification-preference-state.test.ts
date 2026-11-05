@@ -66,16 +66,18 @@ function controlledManagedDeadlines() {
   const pending = new Map<ReturnType<typeof setTimeout>, { delay: number; fire: () => void }>();
   const managedHandles = new Set<ReturnType<typeof setTimeout>>();
   let next = 0;
-  const schedule = spyOn(globalThis, 'setTimeout').mockImplementation(
-    ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
-      if (delay !== 10_000) return originalSetTimeout(handler, delay, ...args);
-      const handle = (++next) as unknown as ReturnType<typeof setTimeout>;
-      const callback = handler as (...values: unknown[]) => void;
-      managedHandles.add(handle);
-      pending.set(handle, { delay, fire: () => callback(...args) });
-      return handle;
-    }) as typeof setTimeout,
-  );
+  const schedule = spyOn(globalThis, 'setTimeout').mockImplementation(((
+    handler: TimerHandler,
+    delay = 0,
+    ...args: unknown[]
+  ) => {
+    if (delay !== 10_000) return originalSetTimeout(handler, delay, ...args);
+    const handle = ++next as unknown as ReturnType<typeof setTimeout>;
+    const callback = handler as (...values: unknown[]) => void;
+    managedHandles.add(handle);
+    pending.set(handle, { delay, fire: () => callback(...args) });
+    return handle;
+  }) as typeof setTimeout);
   const cancel = spyOn(globalThis, 'clearTimeout').mockImplementation((handle) => {
     if (managedHandles.has(handle)) {
       managedHandles.delete(handle);
