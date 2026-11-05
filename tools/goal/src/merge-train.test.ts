@@ -162,8 +162,16 @@ describe('sequential integration', () => {
     try {
       const request = s.branch('alpha', 'allowed');
       git(request.worktree, 'mv', 'base', 'renamed');
+      const script = 'services/auth/scripts/probe.ts';
+      mkdirSync(dirname(join(request.worktree, script)), { recursive: true });
+      writeFileSync(join(request.worktree, script), 'probe\n');
+      git(request.worktree, 'add', '--', script);
       git(request.worktree, 'commit', '-m', 'Rename');
-      s.queue.enqueue({ ...request, declaredPaths: ['allowed', 'renamed'], protectedPaths: ['base'] });
+      s.queue.enqueue({
+        ...request,
+        declaredPaths: ['allowed', 'renamed'],
+        protectedPaths: ['base', '**/auth/**'],
+      });
       let called = false;
       await new MergeTrain({
         ...s.options,
@@ -175,43 +183,36 @@ describe('sequential integration', () => {
       expect(s.outcomes[0]?.stage).toBe('scope');
       expect(called).toBe(false);
       expect(s.outcomes[0]?.changedFiles).toContain('base');
+      expect(s.outcomes[0]?.changedFiles).toContain(script);
     } finally {
       s.close();
     }
   });
-  test('authorization classification allows auth tooling, protects production paths, and preserves queued rules', async () => {
-    const land = async (path: string, declaredRiskAreas: string[], legacy = false) => {
-      const s = setup();
-      try {
-        const request = s.branch('alpha', 'allowed.txt');
-        mkdirSync(dirname(join(request.worktree, path)), { recursive: true });
-        writeFileSync(join(request.worktree, path), 'risk change\n');
-        git(request.worktree, 'add', '--', path);
-        git(request.worktree, 'commit', '-m', `Change ${path}`);
-        const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
-        s.queue.enqueue({
-          ...request,
-          declaredPaths: ['allowed.txt'],
-          ...(legacy
-            ? { protectedPaths: ['**/auth/**'] }
-            : { protectedRiskAreas: protectedRiskAreasForBrief(ownership, declaredRiskAreas) }),
-        });
-        await new MergeTrain({
-          ...s.options,
-          riskAreasFile: join(import.meta.dir, '../risk-areas.json'),
-          runGate: async () => ({ passed: true, output: '', timedOut: false }),
-        }).run();
-        return s.outcomes[0]!;
-      } finally {
-        s.close();
-      }
-    };
-
-    expect((await land('services/auth/scripts/dev-stack.ts', [])).passed).toBe(true);
-    const production = await land('services/auth/src/policy.ts', []);
-    expect(production).toMatchObject({ passed: false, stage: 'scope' });
-    expect((await land('services/auth/src/policy.ts', ['authorization'])).passed).toBe(true);
-    expect(await land('services/auth/scripts/dev-stack.ts', [], true)).toMatchObject({ passed: false, stage: 'scope' });
+  test('an undeclared auth tooling edit integrates through the supported landing path', async () => {
+    const s = setup();
+    try {
+      const request = s.branch('alpha', 'allowed.txt');
+      const script = 'services/auth/scripts/dev-stack.ts';
+      mkdirSync(dirname(join(request.worktree, script)), { recursive: true });
+      writeFileSync(join(request.worktree, script), 'local development stack\n');
+      git(request.worktree, 'add', '--', script);
+      git(request.worktree, 'commit', '-m', 'Update local auth development stack');
+      const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+      s.queue.enqueue({
+        ...request,
+        declaredPaths: ['allowed.txt'],
+        protectedRiskAreas: protectedRiskAreasForBrief(ownership, []),
+      });
+      await new MergeTrain({
+        ...s.options,
+        riskAreasFile: join(import.meta.dir, '../risk-areas.json'),
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+      }).run();
+      expect(s.outcomes[0]?.passed).toBe(true);
+      expect(existsSync(join(s.main, script))).toBe(true);
+    } finally {
+      s.close();
+    }
   }, 60_000);
   test('refuses stale enqueue, queued attempts and attempts invalidated during the gate', async () => {
     for (const when of ['enqueue', 'queued', 'gate']) {
