@@ -5,6 +5,7 @@ import {
   reconcileFollowingAddress,
   reconcileFollowingAuthority,
   reconcileFollowingIdentity,
+  sameFollowingWindow,
   seedFollowingWindow,
   stageFollowingWindow,
   type FollowingMovement,

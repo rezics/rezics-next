@@ -69,7 +69,15 @@ mock.module('@rezics/ui/menu', () => ({
             entry.type === 'item' || entry.type === 'destructive'
               ? createElement(
                   'button',
-                  { key: index, type: 'button', disabled: entry.disabled, onClick: entry.onSelect },
+                  {
+                    key: index,
+                    type: 'button',
+                    disabled: entry.disabled,
+                    onClick: () => {
+                      setOpen(false);
+                      entry.onSelect?.();
+                    },
+                  },
                   entry.label,
                 )
               : null,
@@ -394,6 +402,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     });
     expect(writes).toHaveLength(0);
     await remove();
+    expect(writes).toHaveLength(1);
     const aRead = reads[0]!;
     const aRemoval = writes[0]!;
     await act(async () => {
