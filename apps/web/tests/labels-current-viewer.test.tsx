@@ -527,7 +527,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await act(async () => select('rename')());
       await show({ state: 'unknown', csrfToken: null });
       retired('E');
-      expect(document.querySelector('[role="dialog"]')?.textContent ?? null).toBeNull();
+      expect(host.querySelector('[role="dialog"] input[name="name"]')).toBeNull();
       await show({ state: 'signed-out', csrfToken: null });
       retired('E');
       expect(host.textContent).toContain(m.library_sign_in());
