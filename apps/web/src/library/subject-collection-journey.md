@@ -34,6 +34,20 @@ cannot change that captured target or mint a replacement command key. Previous s
 one; Next consumes the opaque frontier. Closing the chooser returns focus to its trigger. Next and Restart expose the
 list heading and do not move focus into an add action.
 
+## Received destination inspection
+
+Decision: Inspect opens one exact curated row from the current admitted chooser page in a compact detail region;
+Choose this Collection hands its supplied id/title to the existing selection review. Inspection uses only supplied
+title, curator projection, visibility and reported member count. Missing curator or visibility stays unavailable
+or unknown. The count describes reported members of that Collection, not capacity or this Subject's membership.
+Visibility describes the Collection; adding creates an independent occurrence and publishes no private notes or ratings.
+
+Reading remains available independently of member-create admission and CSRF. Opening, switching and closing details
+perform no command or read. Close returns to the same page's exact Inspect trigger; replacement returns focus to
+the chooser heading. Page replacement, pending reads, read failures and private-origin retirement clear inspection
+and retire its callbacks. The independently captured add target survives normal paging and refresh unchanged.
+Inspection retains no off-page details and uses the existing page generation and private currentness checks.
+
 ## Member command
 
 `POST /v1/collections/{collectionId}/members` with `{subjectId}` is the only writer. Duplicate Subject occurrences
