@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import { act } from 'react';
+import { act, createContext, useContext, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { CollectionWriteResult } from '../src/library/collection-edit';
 import type { ManagedSavedQuery } from '../src/library/saved-query-management/controller';
@@ -37,6 +37,38 @@ mock.module('../src/library/collection-current-admission', () => ({
   }),
 }));
 mock.module('../src/library/saved-query-publication', () => ({ SavedQueryPublicationAction: () => null }));
+const dialogOpenChange = createContext<(open: boolean, details: { cancel: () => void }) => void>(() => {});
+type DialogRootProps = {
+  open: boolean;
+  onOpenChange: (open: boolean, details: { cancel: () => void }) => void;
+  children: ReactNode;
+};
+type DialogButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode };
+const dialogPart = ({ children }: { children: ReactNode }) => <div>{children}</div>;
+mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
+  AlertDialog: ({ open, onOpenChange, children }: DialogRootProps) =>
+    open ? <dialogOpenChange.Provider value={onOpenChange}>{children}</dialogOpenChange.Provider> : null,
+  AlertDialogAction: ({ children, ...props }: DialogButtonProps) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
+  AlertDialogCancel: ({ children, ...props }: DialogButtonProps) => {
+    const onOpenChange = useContext(dialogOpenChange);
+    return (
+      <button type="button" {...props} onClick={() => onOpenChange(false, { cancel: () => {} })}>
+        {children}
+      </button>
+    );
+  },
+  AlertDialogContent: ({ children }: { children: ReactNode }) => (
+    <div data-slot="alert-dialog-content">{children}</div>
+  ),
+  AlertDialogDescription: dialogPart,
+  AlertDialogFooter: dialogPart,
+  AlertDialogHeader: dialogPart,
+  AlertDialogTitle: dialogPart,
+}));
 
 const { SavedQueryManagement } = await import('../src/library/saved-query-management');
 
@@ -298,10 +330,12 @@ test('mounted manager callbacks keep their originating controller state and port
     const title = host.querySelector<HTMLInputElement>('input');
     const description = host.querySelector<HTMLTextAreaElement>('textarea');
     if (!title || !description) throw new Error('Expected the mounted metadata editor');
-    await user.clear(title);
-    await user.type(title, 'Draft title');
-    await user.clear(description);
-    await user.type(description, 'Draft description');
+    await act(async () => {
+      await user.clear(title);
+      await user.type(title, 'Draft title');
+      await user.clear(description);
+      await user.type(description, 'Draft description');
+    });
     await settle();
     expect(title.value).toBe('Draft title');
     expect(description.value).toBe('Draft description');
@@ -322,8 +356,10 @@ test('mounted manager callbacks keep their originating controller state and port
     expect(reads).toBe(2);
     const reopenedTitle = host.querySelector<HTMLInputElement>('input');
     if (!reopenedTitle) throw new Error('Expected the reopened metadata editor');
-    await user.clear(reopenedTitle);
-    await user.type(reopenedTitle, 'Unsaved title');
+    await act(async () => {
+      await user.clear(reopenedTitle);
+      await user.type(reopenedTitle, 'Unsaved title');
+    });
     await settle();
     await clickButton(harness.browser.document, m.library_collection_save(), host);
     expect(host.textContent).toContain(m.library_saved_query_management_refused());
