@@ -197,6 +197,8 @@ test('only exact source key forms on Person records participate in reviewed iden
   });
   expect(personIdentityForSource('vndb', 'p7', 'schema:Person')).toBeUndefined();
   expect(personIdentityForSource('bangumi', 'person:8', 'schema:Organization')).toBeUndefined();
+  expect(personIdentityForSource('bangumi', 'person:8\n', 'schema:Person')).toBeUndefined();
+  expect(personIdentityForSource('vndb', 's7\n', 'schema:Person')).toBeUndefined();
 });
 
 test('Jun Maeda discovery retains the exact source records until a reviewer confirms the human bridge', () => {

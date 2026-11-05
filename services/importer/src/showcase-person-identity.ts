@@ -97,9 +97,9 @@ export function personIdentityForSource(
   expectedType: string | undefined,
 ): PersonIdentity | undefined {
   if (expectedType !== 'schema:Person') return undefined;
-  if (source === 'bangumi' && /^person:[1-9][0-9]*$/u.test(externalId))
+  if (source === 'bangumi' && /^person:[1-9][0-9]*$(?![\s\S])/u.test(externalId))
     return { source, externalId, property: 'wdt:P6298', value: externalId.slice('person:'.length) };
-  if (source === 'vndb' && /^s[1-9][0-9]*$/u.test(externalId))
+  if (source === 'vndb' && /^s[1-9][0-9]*$(?![\s\S])/u.test(externalId))
     return { source, externalId, property: 'wdt:P3180', value: externalId };
   return undefined;
 }
