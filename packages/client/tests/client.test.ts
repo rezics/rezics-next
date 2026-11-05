@@ -201,7 +201,8 @@ test('the derived subjects group keeps native counts and routes contributed by o
   const typed = async () => {
     // Every mounted root group remains present in the client representation.
     const complete: Record<keyof Kernel['~Routes']['v1'], object> = client;
-    const noExtraGroups: Exclude<keyof KernelClient, keyof Kernel['~Routes']['v1'] | '~path'> extends never
+    // This released native group is bound while whole-Kernel declaration publication is pending.
+    const noExtraGroups: Exclude<keyof KernelClient, keyof Kernel['~Routes']['v1'] | 'subjectIdentityOperations' | '~path'> extends never
       ? true
       : false = true;
     const path: string = client['~path'];
@@ -306,6 +307,7 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   const remote = kernel([
     () => json(200, { subject, reviewedIdentity: endpoint }),
     () => json(202, { operation: { id: ID } }),
+    () => json(200, { operation: { id: ID, done: false } }),
   ]);
   const client = createKernelClient(ORIGIN, { fetch: remote.fetch });
   const reviewed = reviewedPersonRequests(client);
@@ -314,7 +316,12 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentitySource')).toBe('bangumi');
   expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentityExternalId')).toBe('person:123');
   expect(new URL(remote.sent[0]!.url).searchParams.get('includeViewerActions')).toBe('true');
-  await reviewed.merge(body, { headers: { 'idempotency-key': '"review"' } });
+  const admitted = await reviewed.merge(body, { headers: { 'idempotency-key': '"review"' } });
+  expect(admitted.status).toBe(202);
+  expect(admitted.data?.operation.id).toBe(ID);
+  const pending = await reviewed.operation(ID);
+  expect(pending.data?.operation).toEqual({ id: ID, done: false });
+  expect(remote.sent[2]!.url).toBe(`${ORIGIN}/v1/subjectIdentityOperations/${ID}`);
   expect(JSON.parse(remote.sent[1]!.body!)).toEqual(body);
   expect(isReviewedPersonEndpoint(endpoint)).toBe(true);
   expect(isReviewedPersonEndpoint({ ...endpoint, privateClaim: ID })).toBe(false);
