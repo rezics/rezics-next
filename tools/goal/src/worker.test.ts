@@ -57,13 +57,20 @@ test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then i
         branch: task.branch,
         declaredPaths: ['result.txt'],
         workerCommit,
-        protectedPaths: h.tasks.protectedPaths(task.brief),
+        protectedRiskAreas: h.tasks.protectedRiskAreas(task.brief),
         gate: ['bun', 'test'],
       },
     ]);
     const landingEvent = h.store.events(task.id, 1).find((event) => event.kind === 'landing-requested');
     expect(JSON.parse(landingEvent!.body)).toEqual(landings[0]);
-    expect(landings[0]!.protectedPaths).toContain('**/auth/**');
+    expect(
+      landings[0]!.protectedRiskAreas?.some(
+        ({ area, include, exclude }) =>
+          area === 'authorization' &&
+          include.includes('**/auth/**') &&
+          exclude.includes('services/auth/scripts/**'),
+      ),
+    ).toBe(true);
     const ref = { taskId: task.id, attempt: 1 },
       record = h.store.record(ref)!;
     expect(record.tokens).toEqual({ input: 120, cached: 80, output: 20 });
