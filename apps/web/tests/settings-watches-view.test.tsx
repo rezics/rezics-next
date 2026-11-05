@@ -50,7 +50,7 @@ const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/se
 const { WatchesSection } = await import('../src/settings/watches');
 const { SettingsWatchesOwner } = await import('../src/settings/settings-page');
 const { SettingsNavigationProvider, useSettingsNavigationDraft } = await import('../src/settings/reading-navigation');
-const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+const { createBrowserHistory, createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
 const { m } = await import('../src/paraglide/messages.js');
 
@@ -297,9 +297,10 @@ test('a disclosed later-page visit returns to its exact current window without s
     path: '/threads/$threadId/$slug',
     component: () => <p>Thread target</p>,
   });
+  window.history.replaceState(null, '', '/settings#watches');
   const router = createRouter({
     routeTree: base.addChildren([settings, target]),
-    history: createMemoryHistory({ initialEntries: ['/settings#watches'] }),
+    history: createBrowserHistory({ window: window as unknown as globalThis.Window }),
   });
   const root = createRoot(host as unknown as HTMLElement);
   const link = (label: string) => {
@@ -316,8 +317,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => link(label).click());
     expect(host.textContent).toContain('Thread target');
     await act(async () => {
-      router.history.back();
-      await Promise.resolve();
+      await router.history.back();
     });
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
   };
@@ -351,8 +351,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     expect(host.textContent).toContain('Thread target');
     expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeDefined();
     await act(async () => {
-      router.history.back();
-      await Promise.resolve();
+      await router.history.back();
     });
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
 
@@ -381,6 +380,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     ]);
   } finally {
     await act(async () => root.unmount());
+    router.history.destroy();
     host.remove();
     client.clear();
   }
