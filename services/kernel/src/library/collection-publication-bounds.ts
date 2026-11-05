@@ -57,74 +57,26 @@ export function collectionPublicationWorkDimensions(bound: PrivatePublicationBou
 }
 
 /**
- * Necessary work for a first-prefix/one-subject staging branch, before accounting for its other fixed costs.
- * The source prefix admits at most sixteen canonical candidates. One whole owner closure admits up to one
- * one hundred original/fact keys. The branch with fifty originals can contain forty-nine raw canonical keys and
- * forty-nine fact keys, for ninety-eight owner-closure keys total; each original's retained identity disclosure
- * reserves 8,192 rows. The native fact query reserves `32 * remaining + 32` rows per original.
- * This lower bound is deliberately not presented as a complete staging plan.
+ * Necessary work for one complete native owner closure in a first-prefix/one-subject staging branch,
+ * before its canonical queries, fact probes, Search evaluation, second closure read or settlement costs.
+ * The staging Search path takes the non-deferred closure. A closure with fifty originals (possible with
+ * forty-nine raw canonical keys under the closure's 100-key structural fence) reserves two resolveSubject
+ * disclosures for each original. This lower bound is deliberately not presented as a complete staging plan.
  */
 export function collectionPublicationFrontierLowerBound() {
-  const prefixCandidates = privateBound({
-    candidateKeys: 16,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-  });
-  const wholeOwnerClosure = privateBound({
-    candidateKeys: 98,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-  });
   const disclosurePerOriginal = privateBound({
-    candidateKeys: 0,
+    candidateKeys: 1,
     nativeRows: 8_192,
     identityMetadataRows: 0,
     emptySeeks: 0,
-    nativePoints: 0,
+    nativePoints: 128,
     witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
+    statements: 128,
+    bytes: 1024 * 1024,
   });
-  const factQueryPerRemainingKey = privateBound({
-    candidateKeys: 0,
-    nativeRows: 32,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-  });
-  const factQueryFixed = privateBound({
-    candidateKeys: 0,
-    nativeRows: 32,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-  });
-  const factQueryRows = sumPrivateBounds(
-    repeatPrivateBound(factQueryPerRemainingKey, (50 * 51) / 2),
-    repeatPrivateBound(factQueryFixed, 50),
-  );
-  const required = sumPrivateBounds(
-    prefixCandidates,
-    wholeOwnerClosure,
-    repeatPrivateBound(disclosurePerOriginal, 50),
-    factQueryRows,
-  );
+  const initialDisclosurePass = repeatPrivateBound(disclosurePerOriginal, 50);
+  const finalDisclosurePass = repeatPrivateBound(disclosurePerOriginal, 50);
+  const required = sumPrivateBounds(initialDisclosurePass, finalDisclosurePass);
   return Object.freeze({
     required,
     ceiling: COLLECTION_PUBLICATION_STEP_CEILING,

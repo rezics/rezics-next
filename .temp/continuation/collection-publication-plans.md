@@ -10,7 +10,7 @@ This attempt committed a service-local nine-axis lower-bound calculation, reused
 root allowance, and moved public-catalogue refusal before Search scope preparation. It did not alter the staging
 settlement hold or final output dispatch.
 
-The current first-prefix branch's lower bound is over the existing candidate-key and native-row ceilings. Keep the
+One complete first-prefix owner closure's disclosure lower bound exceeds the existing native-row ceiling. Keep the
 caps and producer limits unchanged until the performance owner resolves the recorded derivation. Then complete and
 wire immutable one-attempt plans for staging, checkpoint recovery, exhaustion sealing and final activation, including
 all nested Source/currentness/identity/custody, output and callback costs. Replace the held settlement envelope only
