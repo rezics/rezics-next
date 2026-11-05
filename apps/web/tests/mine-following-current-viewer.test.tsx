@@ -81,7 +81,7 @@ test('the actual Following server exports refuse stale preparation without priva
     expect(sessionSubject(actualRequest)).toBe('prepared-owner'); // A stale WeakMap entry is not provenance.
     current.status = 'unavailable';
     await expect(actions.readMineFollowingForViewer({ data: {} })).rejects.toMatchObject({
-      problem: { status: 503, code: 'session_unavailable' },
+      problem: { status: 502, code: 'session_unavailable' },
     });
     actualRequest = new Request(`${origin}/en/library/following`, {
       headers: { authorization: 'Bearer browser-asserted-identity' },
@@ -270,6 +270,11 @@ test('the mounted default Following composition retires viewer, cursor and row l
     return call.promise;
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const admitCurrentViewer = async () => {
+    const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('No current viewer exposure observation');
+    await client.ensureQueryData(exposure.viewerExposureQuery(snapshot.observation));
+  };
   const viewer = (subject: string, token: string | null = 'csrf-one') => ({
     state: 'signed-in',
     subject,
@@ -336,6 +341,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
       );
       await tick();
     });
+    await act(async () => {
+      await admitCurrentViewer();
+      await tick();
+    });
     expect(host.textContent).toContain('A private title');
     await refetchFor('A', null); // Loader data seeds this visit; explicitly read to exercise late-viewer retirement.
     expect(reads).toHaveLength(1);
@@ -343,6 +352,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(writes).toHaveLength(0);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('A'));
+      await admitCurrentViewer();
       await tick();
     });
     expect(writes).toHaveLength(0);
@@ -351,6 +361,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     const aRemoval = writes[0]!;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      await admitCurrentViewer();
       await tick();
     });
     expectRetired();
@@ -380,6 +391,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(uncertain.input.idempotencyKey).not.toBe(rejected.input.idempotencyKey);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B', 'csrf-rotated'));
+      await admitCurrentViewer();
       await tick();
     });
     await refetch(null);
@@ -573,6 +585,11 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     return call.promise;
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const admitCurrentViewer = async () => {
+    const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('No current viewer exposure observation');
+    await client.ensureQueryData(exposure.viewerExposureQuery(snapshot.observation));
+  };
   const viewer = (subject: string) => ({ state: 'signed-in', subject, csrfToken: 'current-csrf' });
   client.setQueryData(sessionQuery.queryKey, viewer('A'));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
@@ -655,6 +672,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       );
       await tick();
     });
+    await act(async () => {
+      await admitCurrentViewer();
+      await tick();
+    });
     expect(reads).toHaveLength(0); // Loader data supplies a direct visit without an in-app predecessor.
     expect(host.textContent).toContain('Last visible row');
     expect(previousLink()).toBeUndefined(); // A direct cursor visit does not invent an in-app predecessor.
@@ -707,6 +728,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     const beforeRetirement = reads.length;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
+      await admitCurrentViewer();
       // Exercise still-connected old handlers before React replaces the retired page.
       oldRestart.click();
       oldNext.click();
