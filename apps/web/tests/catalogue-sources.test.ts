@@ -3,6 +3,7 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
+import { summaryReadingFragment } from '../src/features/pages/subject-visit-navigation';
 import type { SourcesResult } from '../src/features/catalogue/subject-sources';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -12,8 +13,16 @@ const { catalogueSourcesFixture, citationUrl, sourceDefinitions } =
   await import('../src/kernel/fake/catalogue-sources');
 
 const render = (result: SourcesResult) => {
-  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/en'] }) });
-  return renderToString(createElement(RouterContextProvider, { router, children: createElement(SubjectSourcesPage, { result, locale: 'en' }) }));
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/en'] }),
+  });
+  return renderToString(
+    createElement(RouterContextProvider, {
+      router,
+      children: createElement(SubjectSourcesPage, { result, locale: 'en' }),
+    }),
+  );
 };
 
 test('Explain the currently selected subject facts and their sources through the existing API and reader with honest failure states', async () => {
@@ -175,22 +184,105 @@ test('current native denial and unavailable actions preserve evidence without co
   }
 });
 
-
 test('exact projection owns an empty citation list and cannot borrow page support or preferred language', () => {
   const fixture = catalogueSourcesFixture();
   const template = fixture.read.subject.statements['schema:isbn']![0]!;
-  const fact = { ...template, property: { id: 'schema:abstract', data_type: 'document' as const },
-    value: { type: 'somevalue' as const }, qualifiers: [], references: [] };
-  const page = explainSubjectSources({ ...fixture.read,
-    selectedSynopsis: { kind: 'matched', fact, context: fixture.read.subject.context, release: fixture.read.subject.release },
-  }, 'ja', sourceDefinitions);
+  const fact = {
+    ...template,
+    property: { id: 'schema:abstract', data_type: 'document' as const },
+    value: { type: 'somevalue' as const },
+    qualifiers: [],
+    references: [],
+  };
+  const page = explainSubjectSources(
+    {
+      ...fixture.read,
+      selectedSynopsis: {
+        kind: 'matched',
+        fact,
+        context: fixture.read.subject.context,
+        release: fixture.read.subject.release,
+      },
+    },
+    'ja',
+    sourceDefinitions,
+  );
   expect(page.fields).toHaveLength(1);
   expect(page.fields[0]!.facts[0]!.statement).toBe(fact.id);
   expect(page.fields[0]!.facts[0]!.citations).toEqual([]);
   expect(page.sources.records).toEqual([]);
   expect(page.sources.credit).toBeNull();
   expect(render({ kind: 'ready', page })).toContain('No citations were supplied');
-  const changed = explainSubjectSources({ ...fixture.read, selectedSynopsis: { kind: 'changed' } }, 'en', sourceDefinitions);
+  const changed = explainSubjectSources(
+    { ...fixture.read, selectedSynopsis: { kind: 'changed' } },
+    'en',
+    sourceDefinitions,
+  );
   expect(changed.fields).toEqual([]);
   expect(changed.sources.records).toEqual([]);
+});
+
+test('exact HTTP receiving binds the original second/non-default selection and rejects foreign or leaking results', async () => {
+  const fixture = catalogueSourcesFixture();
+  const candidateId = '00000000-0000-4000-8000-000000000102';
+  const documentId = '00000000-0000-4000-8000-000000000202';
+  const selection = {
+    candidateId,
+    documentId,
+    digest: 'c'.repeat(64),
+    language: 'ja',
+    locale: 'en',
+    context: fixture.read.subject.context,
+    subjectRelease: fixture.read.subject.release,
+  };
+  const via = `/en/subjects/${fixture.id}/work${summaryReadingFragment(selection)}`;
+  const { rezics: _revision, ...template } = fixture.read.subject.statements['schema:isbn']![0]!;
+  const fact = {
+    ...template,
+    id: candidateId,
+    property: { id: 'schema:abstract', data_type: 'document' },
+    value: { type: 'somevalue' },
+    references: [],
+  };
+  const matched = { kind: 'matched', fact, context: selection.context, release: selection.subjectRelease };
+  let component: unknown = matched;
+  const requests: URL[] = [];
+  const client = createKernelClient('http://sources.test', {
+    fetch: (async (input, init) => {
+      requests.push(new URL(input instanceof Request ? input.url : String(input)));
+      expect(init?.cache).toBe('no-store');
+      return new Response(JSON.stringify({ ...fixture.read, selectedSynopsis: component }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+  const read = () => readSubjectSources(client, fixture.id, 'en', sourceDefinitions, false, via);
+  const result = await read();
+  expect(result.kind).toBe('ready');
+  if (result.kind !== 'ready') throw new Error('Expected exact Sources');
+  expect(result.page.fields[0]?.facts.map((row) => row.statement)).toEqual([candidateId]);
+  expect(result.page.fields[0]?.facts[0]?.citations).toEqual([]);
+  for (const secret of [documentId, selection.digest, citationUrl])
+    expect(JSON.stringify(result)).not.toContain(secret);
+  expect(JSON.parse(requests[0]!.searchParams.get('selectedSynopsis')!)).toMatchObject({
+    statement: candidateId,
+    document: documentId,
+    digest: selection.digest,
+    language: 'ja',
+  });
+  for (component of [
+    undefined,
+    { ...matched, body: 'secret' },
+    { ...matched, context: candidateId },
+    { ...matched, release: 'other' },
+    { ...matched, fact: { ...fact, id: documentId } },
+    { ...matched, fact: { ...fact, value: { type: 'value', content: { document: documentId } } } },
+  ])
+    expect(await read()).toEqual({ kind: 'unavailable' });
+  const count = requests.length;
+  const nonGlobal = via.replace(encodeURIComponent(selection.context), encodeURIComponent(candidateId));
+  expect(await readSubjectSources(client, fixture.id, 'en', sourceDefinitions, false, nonGlobal)).toEqual({
+    kind: 'unsupported',
+  });
+  expect(requests).toHaveLength(count);
 });

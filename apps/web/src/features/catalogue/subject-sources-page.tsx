@@ -87,9 +87,11 @@ export function SubjectSourcesPage({
                 ? m.sources_denied({}, o)
                 : result.kind === 'invalid'
                   ? m.sources_invalid({}, o)
-                  : result.kind === 'conflict'
-                    ? m.sources_conflict({}, o)
-                    : m.sources_unavailable({}, o)}
+                  : result.kind === 'unsupported'
+                    ? m.subject_synopsis_sources_unsupported({}, o)
+                    : result.kind === 'conflict'
+                      ? m.sources_conflict({}, o)
+                      : m.sources_unavailable({}, o)}
         </p>
         {onRetry && result.kind !== 'loading' && result.kind !== 'missing' && (
           <Button
@@ -140,7 +142,11 @@ export function SubjectSourcesPage({
       className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]"
     >
       {page.selectedSynopsis && page.selectedSynopsis !== 'matched' && (
-        <p role="status">{page.selectedSynopsis === 'unsupported' ? m.subject_synopsis_sources_unsupported({}, o) : m.sources_conflict({}, o)}</p>
+        <p role="status">
+          {page.selectedSynopsis === 'unsupported'
+            ? m.subject_synopsis_sources_unsupported({}, o)
+            : m.sources_conflict({}, o)}
+        </p>
       )}
       <SubjectFrame
         frame={{ id: page.id, type: '', title: page.title, summary: null }}

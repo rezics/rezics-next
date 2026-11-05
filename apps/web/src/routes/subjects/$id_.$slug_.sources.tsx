@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { csrfHeaders } from '../../threads/composer';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { subjectRequestReader } from '../../features/pages/subject-queries';
@@ -27,9 +27,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
   shouldReload: true,
   validateSearch: (search: Record<string, unknown>) => {
     const selection = sourceObservationSelection(search);
+    const via = subjectVisitReturn(search.via, getLocale());
+    if (search.via !== undefined && !via) throw new Error('Invalid synopsis visit');
     return {
       realm: validatePageRealm(search.realm),
-      via: subjectVisitReturn(search.via, getLocale()),
+      via,
       ...(selection ? { provider: selection.source, digest: selection.digest } : {}),
     };
   },
@@ -45,7 +47,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
       if (result.page.id !== params.id || canonical.params.slug !== params.slug)
         throw redirect(canonicalRedirect(result.page.sourcesHref.split('?', 1)[0]!, location.searchStr, location.hash));
     }
-    return { result, reader, visit: crypto.randomUUID() };
+    return { result, reader, visit: crypto.randomUUID(), request: { ...deps, locale: getLocale() } };
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -61,16 +63,19 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
 });
 
 function SourcesRoute() {
-  const { result, reader, visit } = Route.useLoaderData();
+  const { result, reader, visit, request } = Route.useLoaderData();
   const { realm, via } = Route.useSearch();
+  const locale = getLocale();
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
-  const scope = JSON.stringify([visit, session.state, session.subject, session.csrfToken]);
-  const [current, setCurrent] = useState<{ source: SourcesResult; scope: string; result: SourcesResult }>();
+  const scope = useMemo(() => ({}), [visit, realm, via, locale, session.state, session.subject, session.csrfToken]);
+  const ownsRequest = request.realm === realm && request.via === via && request.locale === locale;
+  const [current, setCurrent] = useState<{ source: SourcesResult; scope: object; result: SourcesResult }>();
   useEffect(() => {
     let live = true;
     setCurrent(undefined);
     if (
+      ownsRequest &&
       !realm &&
       result.kind === 'ready' &&
       (session.state === 'signed-out' || (session.state === 'signed-in' && session.subject))
@@ -79,9 +84,9 @@ function SourcesRoute() {
       void readCurrentSubjectSources({
         data: {
           id: result.kind === 'ready' ? result.page.id : '',
-          locale: getLocale(),
+          locale: request.locale,
           expectedReader: session.subject ?? null,
-          via,
+          via: request.via,
         },
         headers: csrfHeaders(),
       })
@@ -95,7 +100,7 @@ function SourcesRoute() {
     return () => {
       live = false;
     };
-  }, [result, scope, realm, via]);
+  }, [result, scope, realm, ownsRequest, request]);
   const selected =
     !realm && result.kind === 'ready' && (session.state === 'signed-in' || session.state === 'signed-out')
       ? current?.scope === scope && current.source === result
@@ -104,7 +109,7 @@ function SourcesRoute() {
       : result;
   return (
     <SourcesPresentation
-      result={currentReader ? selected : { kind: 'loading' }}
+      result={currentReader && ownsRequest ? selected : { kind: 'loading' }}
       reader={reader}
       {...(via ? { returnTo: via } : {})}
     />

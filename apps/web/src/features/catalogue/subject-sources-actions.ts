@@ -8,21 +8,30 @@ import { contextHref } from '../pages/context-navigation';
 import { explainSubjectSources, readSubjectSources, type SourcesResult } from './subject-sources';
 
 export const loadSubjectSources = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { id: string; locale: string; realm?: string | undefined; via?: string; reader?: string | null }) => {
-    if (
-      !input ||
-      typeof input.id !== 'string' ||
-      input.id.length > 128 ||
-      typeof input.locale !== 'string' ||
-      input.locale.length > 35 ||
-      (input.reader !== undefined &&
-        input.reader !== null &&
-        (typeof input.reader !== 'string' || !input.reader || input.reader.length > 128))
-    )
-      throw new Error('Invalid subject sources request');
-    if (synopsisVisit(input.via, input.id, input.locale).kind === 'invalid') throw new Error('Invalid synopsis visit');
-    return { via: input.via, id: input.id, locale: input.locale, realm: validatePageRealm(input.realm), reader: input.reader };
-  })
+  .validator(
+    (input: { id: string; locale: string; realm?: string | undefined; via?: string; reader?: string | null }) => {
+      if (
+        !input ||
+        typeof input.id !== 'string' ||
+        input.id.length > 128 ||
+        typeof input.locale !== 'string' ||
+        input.locale.length > 35 ||
+        (input.reader !== undefined &&
+          input.reader !== null &&
+          (typeof input.reader !== 'string' || !input.reader || input.reader.length > 128))
+      )
+        throw new Error('Invalid subject sources request');
+      if (synopsisVisit(input.via, input.id, input.locale).kind === 'invalid')
+        throw new Error('Invalid synopsis visit');
+      return {
+        via: input.via,
+        id: input.id,
+        locale: input.locale,
+        realm: validatePageRealm(input.realm),
+        reader: input.reader,
+      };
+    },
+  )
   .handler(async ({ data }): Promise<SourcesResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const [{ kernelClient }, { readRelease }] = await Promise.all([
@@ -31,8 +40,9 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
     ]);
     // Start independent reads together; missing labels must not hide permitted citations.
     const definitions = readRelease().catch(() => undefined);
-    if (!data.realm) return readSubjectSources(kernelClient(data.locale), data.id, data.locale, definitions, false, data.via);
-    if (synopsisVisit(data.via, data.id, data.locale).kind === 'selected') return { kind: 'conflict' };
+    if (!data.realm)
+      return readSubjectSources(kernelClient(data.locale), data.id, data.locale, definitions, false, data.via);
+    if (synopsisVisit(data.via, data.id, data.locale).kind === 'selected') return { kind: 'unsupported' };
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
     let loaded = await loadSubjectPage(client, data.id, undefined, data.locale, { realm: data.realm, authorization });
     if (loaded.kind === 'redirect' && loaded.target !== 'account')

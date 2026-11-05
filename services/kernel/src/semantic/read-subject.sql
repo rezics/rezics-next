@@ -51,11 +51,24 @@ LEFT JOIN LATERAL (
     SELECT current_term.slot_id, current_term.log_seq, current_term.operation, current_term.kind,
            current_term.language, current_term.property, current_term.statement_id, current_term.body,
            current_term.recorded_transaction_id
-    FROM semantic.current_term_fact AS current_term
-    WHERE current_term.route = input.route AND current_term.subject_id = input.subject_id
-      AND current_term.kind <> 'statement'
-      AND current_term.route >= input.partition_no * 16
-      AND current_term.route < (input.partition_no + 1) * 16
+    FROM (
+      SELECT slot_id, first_seq, support_transaction_id
+      FROM semantic.term_head
+      WHERE route = input.route AND subject_id = input.subject_id AND active
+      OFFSET 0
+    ) AS head
+    JOIN LATERAL (
+      SELECT term.slot_id, term.log_seq, term.operation, term.kind,
+             term.language, term.property, term.statement_id, term.body,
+             head.support_transaction_id AS recorded_transaction_id
+      FROM semantic.fact AS term
+      WHERE term.route = input.route AND term.subject_id = input.subject_id
+        AND term.slot_id = head.slot_id AND term.log_seq >= head.first_seq
+        AND term.kind <> 'statement' AND term.operation = 'assert'
+        AND term.route >= input.partition_no * 16
+        AND term.route < (input.partition_no + 1) * 16
+      OFFSET 0
+    ) AS current_term ON true
     OFFSET 0
   ) AS fact
 ) AS f ON true

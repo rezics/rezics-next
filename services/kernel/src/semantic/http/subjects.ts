@@ -318,10 +318,23 @@ const viewerActionEntry = t.Object(
 const readResponse = t.Object(
   {
     subject: ItemSchema,
-    selectedSynopsis: t.Optional(t.Union([
-      t.Object({ kind: t.Literal('matched'), fact: t.Omit(StatementSchema, ['rezics']), context: t.String(), release: t.String() }, { additionalProperties: false }),
-      ...(['changed', 'missing', 'unsupported', 'unavailable'] as const).map((kind) => t.Object({ kind: t.Literal(kind) }, { additionalProperties: false })),
-    ])),
+    selectedSynopsis: t.Optional(
+      t.Union([
+        t.Object(
+          {
+            kind: t.Literal('matched'),
+            fact: t.Omit(StatementSchema, ['rezics']),
+            context: t.String(),
+            release: t.String(),
+          },
+          { additionalProperties: false },
+        ),
+        t.Object({ kind: t.Literal('changed') }, { additionalProperties: false }),
+        t.Object({ kind: t.Literal('missing') }, { additionalProperties: false }),
+        t.Object({ kind: t.Literal('unsupported') }, { additionalProperties: false }),
+        t.Object({ kind: t.Literal('unavailable') }, { additionalProperties: false }),
+      ]),
+    ),
     reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
     account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
@@ -1058,7 +1071,9 @@ function subjectRoutes(
           308: withHeaders(redirectResponse, { location: t.String() }),
           400: problemSchema('invalid_request'),
           401: unauthorized,
+          403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },
         detail: {
@@ -1069,8 +1084,23 @@ function subjectRoutes(
         },
       },
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
-        const selectedSynopsis = query.selectedSynopsis === undefined ? undefined : parseSelectedSynopsis(query.selectedSynopsis);
+        if (query.selectedSynopsis !== undefined) set.headers['cache-control'] = 'private, no-store';
+        const selectedSynopsis =
+          query.selectedSynopsis === undefined ? undefined : parseSelectedSynopsis(query.selectedSynopsis);
         if (query.selectedSynopsis !== undefined && !selectedSynopsis) throw new ProblemError('invalid_request');
+        if (
+          selectedSynopsis &&
+          (routeOf(selectedSynopsis.statement) !== routeOf(params.id) ||
+            routeOf(selectedSynopsis.document) !== routeOf(params.id))
+        )
+          throw new ProblemError('invalid_request');
+        if (
+          selectedSynopsis &&
+          (selectedSynopsis.context !== GLOBAL_CONTEXT ||
+            selectedSynopsis.realm ||
+            (query.context !== undefined && query.context !== GLOBAL_CONTEXT))
+        )
+          throw new ProblemError('conflict');
         const reviewIdentity =
           query.reviewIdentitySource !== undefined && query.reviewIdentityExternalId !== undefined
             ? { source: query.reviewIdentitySource, externalId: query.reviewIdentityExternalId }
@@ -1090,12 +1120,35 @@ function subjectRoutes(
         const result = await admission.run('normal', job, () =>
           readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
             languages,
-            ...(selectedSynopsis ? { selectedSynopsis: { input: selectedSynopsis, admit: async () => {
-              const admitted = await readDocument({ pool, access: access(), routeKey }, selectedSynopsis.document, { actor, deadline: job.deadline });
-              const document = admitted?.document;
-              return !!document && document.availability === 'available' && document.subjectId === params.id &&
-                document.candidateId === selectedSynopsis.statement && document.digest === selectedSynopsis.digest && document.language === selectedSynopsis.language;
-            } } } : {}),
+            ...(selectedSynopsis
+              ? {
+                  selectedSynopsis: {
+                    input: selectedSynopsis,
+                    admit: async () => {
+                      const admitted = await readDocument(
+                        { pool, access: access(), routeKey },
+                        selectedSynopsis.document,
+                        { actor, deadline: job.deadline },
+                      );
+                      for (const anchor of admitted?.anchors ?? [])
+                        session.record({
+                          partition: anchor.partition.partitionNo,
+                          epoch: anchor.epoch,
+                          position: anchor.position,
+                        });
+                      const document = admitted?.document;
+                      return (
+                        !!document &&
+                        document.availability === 'available' &&
+                        document.subjectId === params.id &&
+                        document.candidateId === selectedSynopsis.statement &&
+                        document.digest === selectedSynopsis.digest &&
+                        document.language === selectedSynopsis.language
+                      );
+                    },
+                  },
+                }
+              : {}),
             ...(reviewIdentity ? { reviewIdentity } : {}),
             authorize: authorizeSummary,
             seen: [...session.components],
@@ -1209,6 +1262,36 @@ function subjectRoutes(
           const summary = summaries.get(reference.redirect ?? id);
           if (summary) related[id] = { ...reference, type: summary.type, types: summary.types, cover: summary.cover };
         }
+        if (selectedSynopsis && result.selectedSynopsis?.kind === 'matched') {
+          const fact = result.selectedSynopsis.fact;
+          const ids = new Set(
+            [fact, ...fact.qualifiers, ...fact.references.flatMap((reference) => reference.parts)].flatMap((snak) => [
+              snak.property.id,
+              ...(snak.property.data_type === 'wikibase-item' &&
+              snak.value.type === 'value' &&
+              typeof snak.value.content === 'string'
+                ? [snak.value.content]
+                : []),
+            ]),
+          );
+          const labels = Object.fromEntries(
+            Object.entries(related)
+              .filter(([id]) => ids.has(id))
+              .map(([id, entry]) => [id, { labels: entry.labels }]),
+          );
+          if (
+            Buffer.byteLength(
+              JSON.stringify({
+                input: selectedSynopsis,
+                result: result.selectedSynopsis,
+                labels,
+                subject: result.subject.labels,
+              }),
+              'utf8',
+            ) > 262144
+          )
+            result.selectedSynopsis = { kind: 'unavailable' };
+        }
 
         const documentRead = query.includeDocuments
           ? await readCharacterPublicDocuments(
@@ -1224,7 +1307,9 @@ function subjectRoutes(
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
         set.headers['cache-control'] =
-          query.includeViewerActions || documentRead || reviewIdentity || selectedSynopsis ? 'private, no-store' : 'no-cache';
+          query.includeViewerActions || documentRead || reviewIdentity || selectedSynopsis
+            ? 'private, no-store'
+            : 'no-cache';
         return {
           subject: result.subject,
           ...(result.selectedSynopsis ? { selectedSynopsis: result.selectedSynopsis } : {}),
