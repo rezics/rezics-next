@@ -509,7 +509,7 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(link(m.library_my_logs_previous())).toBeUndefined();
     const directAfterRouteReturn = await leaveAndReturnTo(next.cursor!);
     expect(directAfterRouteReturn.cursor).toBe(next.cursor);
-    await settle(directAfterRouteReturn, history('B', nextAgain.cursor, 'Fresh direct later page'));
+    await settle(directAfterRouteReturn, history('B', next.cursor, 'Fresh direct later page'));
     expect(host.textContent).toContain('Fresh direct later page');
     expect(link(m.library_my_logs_previous())).toBeUndefined();
     const newestAfterReturn = await navigate(m.library_my_logs_newest());
