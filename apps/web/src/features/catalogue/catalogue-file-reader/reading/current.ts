@@ -7,7 +7,7 @@ const noSubscribe = () => () => {};
 const unobserved = () => 'unobserved';
 type InspectionKind = 'assertion' | 'association';
 type Selection = { key: string; group: string; kind: InspectionKind; part?: string | undefined };
-type Receipt = { opener?: HTMLButtonElement; fallback?: HTMLElement; keyboard: boolean };
+type Receipt = { opener?: HTMLButtonElement; fallback?: HTMLElement; keyboard: boolean; returning?: boolean };
 type Recovery = { destination: string; state: 'pending' | 'failed' };
 
 type CurrentReading = {
@@ -28,32 +28,32 @@ type CurrentReading = {
   retire: () => void;
 };
 
-function scheduleFocus(episode: CurrentReading, target: HTMLElement | undefined) {
+function scheduleFocus(episode: CurrentReading, target: HTMLElement | undefined, preserveFocus = false) {
   episode.cancelFocus?.();
   if (!target || typeof window === 'undefined') return;
+  const active = window.document.activeElement;
+  if (preserveFocus && active?.isConnected && active !== window.document.body) return;
   let cancelled = false;
+  let frame = 0;
   const removeListeners = () => {
     window.removeEventListener('pointerdown', cancel, true);
     window.removeEventListener('keydown', cancel, true);
     window.removeEventListener('focusin', cancel, true);
-    episode.cancelFocus = undefined;
+    if (episode.cancelFocus === cancel) episode.cancelFocus = undefined;
   };
   const cancel = () => {
     cancelled = true;
+    window.cancelAnimationFrame(frame);
     removeListeners();
   };
   window.addEventListener('pointerdown', cancel, true);
   window.addEventListener('keydown', cancel, true);
   window.addEventListener('focusin', cancel, true);
-  const frame = window.requestAnimationFrame(() => {
+  frame = window.requestAnimationFrame(() => {
     removeListeners();
     if (!cancelled && episode.current() && target.isConnected) target.focus();
   });
-  episode.cancelFocus = () => {
-    cancelled = true;
-    window.cancelAnimationFrame(frame);
-    removeListeners();
-  };
+  episode.cancelFocus = cancel;
 }
 
 function createReading(
@@ -173,7 +173,13 @@ export function useCatalogueFileReading(input: {
   }, [episode]);
 
   const select = useCallback(
-    (selection: Selection, opener: HTMLButtonElement, fallback: HTMLElement | undefined, keyboard: boolean) => {
+    (
+      selection: Selection,
+      opener: HTMLButtonElement,
+      fallback: HTMLElement | undefined,
+      keyboard: boolean,
+      returning = false,
+    ) => {
       if (!episode.current()) return;
       episode.cancelFocus?.();
       episode.selection = selection;
@@ -181,6 +187,7 @@ export function useCatalogueFileReading(input: {
         ...(keyboard ? { opener } : {}),
         ...(fallback ? { fallback } : {}),
         keyboard,
+        returning,
       };
       episode.recovery = undefined;
       refresh();
@@ -225,7 +232,15 @@ export function useCatalogueFileReading(input: {
     refresh();
   }, [episode, input.currentHref, input.recoverCurrentPage]);
 
+  const focus = useCallback(
+    (target: HTMLElement | undefined, preserveFocus = episode.receipt?.returning ?? false) => {
+      if (episode.current()) scheduleFocus(episode, target, preserveFocus);
+    },
+    [episode],
+  );
+
   return {
+    focus,
     episode,
     selection: episode.selection,
     recovery: episode.recovery,

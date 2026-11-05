@@ -15,6 +15,11 @@ import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
 import { subjectHref } from '../../../subject/subject-href';
 import { CatalogueFileProfileEntry } from '../catalogue-file-profile/entry';
+import { fileScalarFields } from '../catalogue-file-profile/model';
+import {
+  catalogueFileCorrectionReturnHref,
+  type CatalogueFileCorrectionOrigin,
+} from '../catalogue-file-profile/origin';
 import { CandidateValue } from '../../pages/data';
 import { ProfileBoundNotes, ProfileSourceList } from '../music-reader-view';
 import type { SubjectPageData } from '../../pages/subject';
@@ -101,6 +106,49 @@ function receipt(
     ...(realm ? { realm } : {}),
     ...selection,
     part: 'part' in selection && typeof selection.part === 'string' ? selection.part : 'value',
+  };
+}
+
+/** Observe the current public reading; the profile receiver still owns native admission and advice. */
+function correctionOrigin(
+  visit: CatalogueFileReaderVisit,
+  currentHref: string | undefined,
+  evidence: Evidence | undefined,
+  readerSpoiler: number,
+): CatalogueFileCorrectionOrigin {
+  const subject = visit.public.subject;
+  const definition = visit.digest ?? '';
+  const current = catalogueFileCorrectionReturnHref(currentHref, visit.locale, subject.id, subject.context, definition);
+  const realm = fileReaderRealm(current, subject.id, visit.locale);
+  const disclosed =
+    evidence &&
+    spoilerLevel(evidence.statement) <= readerSpoiler &&
+    evidence.statement.rezics.release === definition &&
+    !evidence.association?.historical &&
+    (!evidence.association || evidence.association.readability === 'readable');
+  const exactReceipt = disclosed ? fileEvidenceFragment(receipt(visit, evidence, current)) : undefined;
+  // A missing address or an unrepresentable receipt reaches the installed invalid/restart state.
+  // Never silently turn a selected correction into a legacy Global visit.
+  const returnHref =
+    current && (!disclosed || exactReceipt)
+      ? `${current.split('#')[0]}${exactReceipt ?? '#catalogue-file-reader'}`
+      : '';
+  const selection =
+    disclosed &&
+    evidence.kind === 'assertion' &&
+    (!evidence.part || evidence.part === 'value') &&
+    visit.release &&
+    fileScalarFields(visit.release, subject.type).includes(evidence.property)
+      ? { property: evidence.property, statement: evidence.statement.id, holder: subject.id }
+      : undefined;
+  return {
+    subject: subject.id,
+    type: subject.type,
+    context: subject.context,
+    definition,
+    ...(realm ? { realm } : {}),
+    returnHref,
+    ...(selection ? { selection } : {}),
   };
 }
 
@@ -877,7 +925,10 @@ export function CatalogueFileReader({
         if (attemptedReturn.current.episode === reading.episode) return;
         // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
         setReturnOutcome('retired');
-        (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
+        reading.focus(
+          groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
+          true,
+        );
         return;
       }
       if (visit.state === 'loading') return;
@@ -911,10 +962,13 @@ export function CatalogueFileReader({
         opener
       ) {
         setReturnOutcome(undefined);
-        reading.select(returned, opener, groupHeadings.current.get(returned.group), true);
+        reading.select(returned, opener, groupHeadings.current.get(returned.group), true, true);
       } else {
         setReturnOutcome(!available ? 'unavailable' : historical ? 'historical' : 'changed');
-        (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
+        reading.focus(
+          groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
+          true,
+        );
       }
     });
     return () => {
@@ -929,7 +983,7 @@ export function CatalogueFileReader({
               `[data-slot="catalogue-file-inspection"] [data-file-evidence-part="${evidence.part}"]`,
             )
           : undefined;
-      (part ?? inspectionHeading.current)?.focus();
+      reading.focus(part ?? inspectionHeading.current ?? undefined);
     }
   }, [evidence?.key, reading.episode]);
 
@@ -1078,6 +1132,7 @@ export function CatalogueFileReader({
                   locale={visit.locale}
                   release={visit.release}
                   returnSourceId={visit.public.subject.id}
+                  origin={correctionOrigin(visit, currentHref, evidence, readerSpoiler)}
                 />
               </nav>
             ) : null}

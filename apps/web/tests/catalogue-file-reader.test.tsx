@@ -313,6 +313,7 @@ test('one exact inspection keeps value provenance and grouped evidence while con
     expect(host.querySelector('[data-slot="catalogue-file-inspection"]')).toBeNull();
     expect(host.textContent).not.toContain('sha256');
     await act(async () => assertion.click());
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
     const panel = host.querySelector<HTMLElement>('[data-slot="catalogue-file-inspection"]');
     expect(panel?.textContent).toContain('Evidence inspection');
     expect(panel?.textContent).toContain('abc123def456');
