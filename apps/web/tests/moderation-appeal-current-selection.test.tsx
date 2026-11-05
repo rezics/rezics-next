@@ -7,7 +7,7 @@ import type { ResolutionCommand } from '../src/moderation/appeal-resolution';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/threads/authoring-departure', () => ({
   AuthoringDepartureBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useAuthoringDeparture: () => ({ release() {} }),
+  useAuthoringDeparture: () => ({ release() {}, requestNavigation: (proceed: () => void) => proceed() }),
 }));
 const sent: ResolutionCommand[] = [];
 let acknowledge = false;
@@ -44,6 +44,7 @@ const sessionModule = await import('../src/session/query');
 mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
 const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
 const { prepareWorkbenchRead } = await import('../src/moderation/workbench-queue/read');
+const { workbenchQueueWindowHistory } = await import('../src/moderation/workbench-queue/window-history');
 const { workbenchSearch, workbenchReadKey } = await import('../src/moderation/workbench-queue/scope');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
 const { m } = await import('../src/paraglide/messages.js');
@@ -336,4 +337,94 @@ test.each([false, true])('mounted exact retry receives covered cross-home select
   expect(address.searchParams.has('case')).toBe(false);
   expect(requests).toHaveLength(4);
   expect(new Set(requests).size).toBe(1);
+});
+
+test('mounted keyboard appeal return restores the activator only after exact queue admission', async () => {
+  cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  cache.setQueryData(['session'], session);
+  const history = workbenchQueueWindowHistory(cache);
+  const queueSearch = workbenchSearch({ queue: 'appeals', board: 'board', cursor: 'captured' });
+  const selectedSearch = workbenchSearch({ ...queueSearch, case: selected.id });
+  const queueRaw: WorkbenchRead = {
+    ...page('ready'),
+    search: queueSearch,
+    readKey: workbenchReadKey(queueSearch),
+    cases: [
+      {
+        kind: 'appeal',
+        id: selected.id,
+        createdAt: selected.createdAt,
+        outcome: null,
+        reason: null,
+        evidence: null,
+        statement: selected.statement,
+        decisionId: selected.decisionId,
+        target: { kind: 'board', id: 'board' },
+      },
+    ],
+    selectedAppeal: null,
+  };
+  const selectedRaw = { ...page('ready'), search: selectedSearch, readKey: workbenchReadKey(selectedSearch) };
+  host = document.createElement('main');
+  document.body.append(host);
+  root = createRoot(host);
+  let current: { visitId: string; search: typeof queueSearch; page: WorkbenchRead } | undefined;
+  let transition: Promise<void> | undefined;
+
+  async function renderVisit(raw: WorkbenchRead, search: typeof queueSearch, visitId: string) {
+    const prepared = await prepareWorkbenchRead(cache!, search, async () => raw, new AbortController().signal);
+    current = { visitId, search, page: prepared };
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={cache!}>
+          <WorkbenchPage
+            key={visitId}
+            page={prepared}
+            search={search}
+            navigation={{ visitId, isCurrent: () => true, subscribe: () => () => {} }}
+            onSearch={(next) => {
+              transition = move(next);
+            }}
+            onOpenCase={() => {
+              transition = move(selectedSearch);
+            }}
+          />
+        </QueryClientProvider>,
+      ),
+    );
+  }
+
+  async function move(next: typeof queueSearch) {
+    const targetPage = next.case ? selectedRaw : queueRaw;
+    const visitId = next.case ? 'selected' : 'returned';
+    expect(
+      history.navigate(
+        current!.visitId,
+        { pathname: '/moderation/workbench', search: { ...next } },
+        current!.search,
+        current!.page,
+      ),
+    ).toBe(true);
+    await renderVisit(targetPage, next, visitId);
+  }
+
+  await renderVisit(queueRaw, queueSearch, 'queue');
+  const activator = host.querySelector<HTMLAnchorElement>('[data-workbench-appeal-activator]')!;
+  activator.focus();
+  await act(async () => {
+    activator.dispatchEvent(new browser.MouseEvent('click', { bubbles: true, detail: 0 }));
+  });
+  await transition;
+  expect(host.textContent).toContain('Reconsider.');
+  const returnLink = [...host.querySelectorAll('a')].find(
+    (link) => link.textContent === m.moderation_workbench_history_return(),
+  )!;
+  returnLink.focus();
+  await act(async () => {
+    returnLink.dispatchEvent(new browser.MouseEvent('click', { bubbles: true, detail: 0 }));
+  });
+  await transition;
+  expect(current.search.cursor).toBe('captured');
+  expect(current.search.case).toBeUndefined();
+  expect(document.activeElement).toBe(host.querySelector('[data-workbench-appeal-activator]'));
 });

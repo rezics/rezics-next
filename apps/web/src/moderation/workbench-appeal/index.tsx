@@ -20,6 +20,7 @@ export function WorkbenchAppeal({
   onRestart,
   onUnresolvedChange,
   nativeSession,
+  onReturn,
 }: {
   appealId: string;
   page: Parameters<typeof workbenchAppealFromPage>[0];
@@ -29,6 +30,7 @@ export function WorkbenchAppeal({
   onRestart?: () => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
   nativeSession?: string;
+  onReturn?: (appealId: string, source: HTMLAnchorElement, event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const result = workbenchAppealFromPage(page, appealId);
   if (result.state !== 'ready') {
@@ -48,6 +50,7 @@ export function WorkbenchAppeal({
       queueHref={queueHref}
       {...(isCurrent ? { isCurrent } : {})}
       {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
+      {...(onReturn ? { onReturn } : {})}
     />
   );
 }
@@ -58,18 +61,24 @@ export function WorkbenchAppealDetail({
   isCurrent,
   onUnresolvedChange,
   nativeSession,
+  onReturn,
 }: {
   appeal: Appeal;
   queueHref: string;
   isCurrent?: () => boolean;
   onUnresolvedChange?: (unresolved: boolean) => void;
   nativeSession?: string;
+  onReturn?: (appealId: string, source: HTMLAnchorElement, event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const originalTarget = appealTarget(appeal);
   const resolution = appeal.resolution !== undefined ? appeal.resolution : (appeal.decision.appeal ?? null);
   return (
     <article className="space-y-5">
-      <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
+      <a
+        className="inline-flex min-h-11 items-center underline underline-offset-4"
+        href={queueHref}
+        onClick={(event) => onReturn?.(appeal.id, event.currentTarget, event)}
+      >
         {m.moderation_workbench_history_return()}
       </a>
       <h2 className="text-xl font-semibold">{m.moderation_appeals_tab()}</h2>
