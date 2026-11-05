@@ -1110,8 +1110,7 @@ before/final snapshots, one Access formula), eight closed source entries/matches
 Decision: rename alone uses public `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`.
 Access `workflow-approvals.ts` seals base64url body + dot + SHA-256 MAC43; native unseal/execute cap it at 4096 ASCII
 characters. Expiry is canonical `Date.toISOString()` (maximum 27 ASCII bytes). The UTF-8 allowance is the closed
-empty-string JSON skeleton plus `4096 + 27`; references are opaque, never assumed UUIDs. Invalid projection returns
-503 unavailable and cannot authorize execute. Workflow/replay return only `{accountId}`; its compatible opaque ID
+empty-string JSON skeleton plus `4096 + 27`; references stay opaque. Invalid approval returns 503 unavailable. Workflow/replay return only `{accountId}`; its compatible opaque ID
 ceiling is 4096 UTF-16 units and allowance is the closed skeleton plus `6 * 4096`, covering escapes/lone surrogates.
 Mismatched/extra/expired/error completion returns `{error:'unavailable'}`/503 without invented not_applied. Other
 kinds' shapes and in-process workflows remain unchanged.
@@ -1129,8 +1128,8 @@ workflow CAS/replay remain. No native call, permission or automatic retry is add
 Current review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
 Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
 with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.
-Step-up return requires same-account review and deliberate confirmation, sending no command. Local focused tests
-qualify receiving/recovery; broader native/browser acceptance and integration remain pending.
+Step-up return needs same-account review and confirmation, with zero commands. Local tests qualify receiving;
+broader native/browser acceptance and integration remain pending.
 
 `apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
 `loadManagementSession()`, `managementOperationProfile(kind)` and

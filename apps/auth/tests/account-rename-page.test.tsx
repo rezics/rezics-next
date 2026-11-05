@@ -138,7 +138,7 @@ async function savedReview(readCurrent = async () => ready()) {
   const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
   saveRenameContinuation(selected);
   const host = await mount(
-    source({ readCurrent, run: (attempt, owns) => runRenameAttempt(attempt, readCurrent, owns) }),
+    source({ readCurrent, run: (attempt, owns, signal) => runRenameAttempt(attempt, readCurrent, owns, signal) }),
   );
   await flush(() => host.querySelector<HTMLInputElement>('#rename-confirm')!.click());
   return { host, selected };
