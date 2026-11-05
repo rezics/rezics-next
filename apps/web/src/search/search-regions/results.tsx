@@ -111,9 +111,9 @@ export function SearchResultsRegion({
             query={query}
             type={type}
             facets={selectedFacets}
-            state={data?.queryState}
+            state={retryState}
             ratingPopulations={data?.ratingPopulations}
-            ratingPopulation={data?.queryState?.ratingPopulation}
+            ratingPopulation={retryState?.ratingPopulation}
             ratingReadiness={data?.ratingReadiness}
             disabled={invalid}
           />
