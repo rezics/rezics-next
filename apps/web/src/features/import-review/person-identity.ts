@@ -4,6 +4,7 @@ import {
   reviewedPersonRequests,
   reviewedPersonMergeInput,
   type KernelClient,
+  type SubjectRead,
   type ReviewedPersonRead,
   type ReviewedPersonSource,
   type ReviewedPersonMerge,
@@ -23,9 +24,21 @@ export type PersonComparison =
     };
 export type PersonReviewCommand = { body: ReviewedPersonMerge; key: string };
 export type PersonReviewResult = ProviderFailure | { ok: true; admission: ReviewedPersonAdmission };
+export type PersonPublication = ProviderFailure | { ok: true } & (
+  | { state: 'pending' | 'unconfirmed' }
+  | { state: 'published'; read: SubjectRead }
+);
+export type PersonPublicationRequest = { command: PersonReviewCommand; operation: string };
+export function personPublicationInput(value: unknown): PersonPublicationRequest {
+  const v = value as PersonPublicationRequest | null;
+  if (!v || typeof v.operation !== 'string' || !uuid.test(v.operation))
+    throw new TypeError('Invalid Person operation');
+  return { command: personReviewCommandInput(v.command), operation: v.operation };
+}
 export type PersonReviewTransport = {
   compare: (pair: PersonReviewPair) => Promise<PersonComparison>;
   merge: (command: PersonReviewCommand) => Promise<PersonReviewResult>;
+  publication: (request: PersonPublicationRequest) => Promise<PersonPublication>;
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function personReviewPairInput(value: unknown): PersonReviewPair {
@@ -38,8 +51,8 @@ export function personReviewPairInput(value: unknown): PersonReviewPair {
         typeof (v as PersonReviewAddress).subject === 'string' &&
         uuid.test((v as PersonReviewAddress).subject),
     ) ||
-    value[0].source !== 'bangumi' ||
-    value[1].source !== 'vndb' ||
+    !['bangumi', 'bangumi_cross_media'].includes(value[0].source) ||
+    !['vndb', 'vndb_cross_media'].includes(value[1].source) ||
     value[0].subject === value[1].subject
   )
     throw new TypeError('Invalid Person comparison');
@@ -100,7 +113,7 @@ export async function readPersonComparison(
     if (response.status !== 200 || !response.data) return providerFailure(response.status, response.headers);
   const reads = responses.map((r) => r.data) as unknown as [ReviewedPersonRead, ReviewedPersonRead];
   for (const read of reads)
-    if (read.reviewedIdentity !== undefined && !isReviewedPersonEndpoint(read.reviewedIdentity))
+    if (read.reviewedIdentity != null && !isReviewedPersonEndpoint(read.reviewedIdentity))
       throw new TypeError('Invalid native reviewed Person identity');
   return personComparison(pair, reads);
 }
@@ -119,4 +132,38 @@ export async function mergePersonComparison(
   if (!admission.operation || !uuid.test(admission.operation.id))
     throw new TypeError('Invalid native identity admission');
   return { ok: true, admission };
+}
+
+/** Publication comes from the native job; public facts are then read independently without review credentials. */
+export async function readPersonPublication(
+  client: KernelClient,
+  authorization: string,
+  { command, operation }: PersonPublicationRequest,
+  signal?: AbortSignal,
+): Promise<PersonPublication> {
+  const response = await reviewedPersonRequests(client).operation(operation, {
+    headers: { authorization },
+    ...(signal === undefined ? {} : { fetch: { signal } }),
+  });
+  if (response.status !== 200 || !response.data) return providerFailure(response.status, response.headers);
+  const observed = response.data.operation;
+  if (!observed.done) return { ok: true, state: 'pending' };
+  const originals = command.body.subjects;
+  if (!originals.includes(observed.result.survivor) || !originals.includes(observed.result.redirected) ||
+      observed.result.survivor === observed.result.redirected)
+    throw new TypeError('Invalid native Person publication');
+  const responses = await Promise.all(originals.map((id) => client.subjects({ id }).get({
+    fetch: { redirect: 'follow', ...(signal === undefined ? {} : { signal }) },
+  })));
+  for (const read of responses)
+    if (read.status !== 200 || !read.data) return providerFailure(read.status, read.headers);
+  const reads = responses.map((read) => read.data!);
+  const current = reads.every((read) =>
+    read.subject.id === observed.result.survivor && read.subject.type === 'schema:Person' &&
+    command.body.expectedIdentity.endpoints.every((endpoint) => {
+      const values = (read.subject.statements[endpoint.property] ?? []).filter((row) => row.rank !== 'deprecated');
+      return values.length > 0 && values.every((row) =>
+        row.value.type === 'value' && row.value.content === endpoint.value);
+    }));
+  return current ? { ok: true, state: 'published', read: reads[0]! } : { ok: true, state: 'unconfirmed' };
 }

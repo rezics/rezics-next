@@ -8,6 +8,7 @@ import { ProviderStatement, providerOutcomeText } from './provider-review-action
 import { useProviderVisit } from './provider-visit';
 import type {
   PersonComparison,
+  PersonPublication,
   PersonReviewCommand,
   PersonReviewResult,
   PersonReviewTransport,
@@ -33,6 +34,7 @@ export function ProviderPersonReview({
   const [citation, setCitation] = useState('');
   const [intent, setIntent] = useState<PersonReviewCommand>();
   const [result, setResult] = useState<PersonReviewResult>();
+  const [publication, setPublication] = useState<PersonPublication>();
   const [busy, setBusy] = useState(false);
   const held = useRef(false);
   const generation = useRef(0);
@@ -42,6 +44,7 @@ export function ProviderPersonReview({
   const locked = busy || uncertain || result?.ok === true;
   function changed() {
     generation.current++;
+    setPublication(undefined);
     setComparison(undefined);
     setConsent(false);
     setResult(undefined);
@@ -79,10 +82,10 @@ export function ProviderPersonReview({
           const pair: PersonReviewPair = [
             {
               subject: String(values.get('bangumi-subject')),
-              source: 'bangumi',
+              source: String(values.get('bangumi-source')) as PersonReviewPair[0]['source'],
               externalId: String(values.get('bangumi-key')),
             },
-            { subject: String(values.get('vndb-subject')), source: 'vndb', externalId: String(values.get('vndb-key')) },
+            { subject: String(values.get('vndb-subject')), source: String(values.get('vndb-source')) as PersonReviewPair[1]['source'], externalId: String(values.get('vndb-key')) },
           ];
           const version = ++generation.current;
           held.current = true;
@@ -104,6 +107,12 @@ export function ProviderPersonReview({
             {(['bangumi', 'vndb'] as const).map((source) => (
               <fieldset key={source} className="min-w-0 space-y-2 rounded border p-4">
                 <legend>{source === 'bangumi' ? 'Bangumi · wdt:P6298' : 'VNDB · wdt:P3180'}</legend>
+                <label htmlFor={`${id}-${source}-source`}>{m.person_review_claim_source({}, o)}</label>
+                <select id={`${id}-${source}-source`} name={`${source}-source`} defaultValue={`${source}_cross_media`}
+                  className="min-h-11 w-full rounded border bg-background px-3">
+                  <option value={`${source}_cross_media`}>{source}_cross_media</option>
+                  <option value={source}>{source}</option>
+                </select>
                 <label htmlFor={`${id}-${source}-subject`}>{m.person_review_original({}, o)}</label>
                 <Input id={`${id}-${source}-subject`} name={`${source}-subject`} required pattern="[0-9a-fA-F-]{36}" />
                 <label htmlFor={`${id}-${source}-key`}>{m.person_review_source_key({}, o)}</label>
@@ -150,7 +159,7 @@ export function ProviderPersonReview({
                       {original.source} · {original.externalId}
                     </p>
                     <p className="text-xs">{original.subject}</p>
-                    {['schema:name', original.source === 'bangumi' ? 'wdt:P6298' : 'wdt:P3180'].flatMap((property) =>
+                    {['schema:name', original.source.startsWith('bangumi') ? 'wdt:P6298' : 'wdt:P3180'].flatMap((property) =>
                       (read.subject.statements[property] ?? []).map((statement) => (
                         <ProviderStatement
                           key={statement.id}
@@ -219,6 +228,35 @@ export function ProviderPersonReview({
       {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
       {result && (
         <p role="status">{result.ok ? m.person_review_admitted({}, o) : providerOutcomeText(result, locale)}</p>
+      )}
+      {result?.ok && intent && (
+        <div className="space-y-3">
+          <Button type="button" className="min-h-11" disabled={busy} onClick={async () => {
+            if (!visit.live() || held.current) return;
+            held.current = true;
+            setBusy(true);
+            try {
+              const next = await transport.publication({ command: intent, operation: result.admission.operation.id });
+              if (visit.live()) setPublication(next);
+            } finally {
+              held.current = false;
+              if (visit.live()) setBusy(false);
+            }
+          }}>{m.person_review_check_publication({}, o)}</Button>
+          {publication && (!publication.ok ? (
+            <p role="status">{providerOutcomeText(publication, locale)}</p>
+          ) : publication.state === 'published' ? (
+            <p role="status">
+              {m.person_review_published({}, o)}{' '}
+              <a className="inline-flex min-h-11 items-center underline"
+                href={subjectHref({ id: publication.read.subject.id,
+                  label: pickText(publication.read.subject.labels, locale).text }, locale).href}>
+                {pickText(publication.read.subject.labels, locale).text || publication.read.subject.id}
+              </a>
+            </p>
+          ) : <p role="status">{publication.state === 'pending'
+              ? m.person_review_publication_pending({}, o) : m.person_review_unconfirmed({}, o)}</p>)}
+        </div>
       )}
       {uncertain && !busy && (
         <>
