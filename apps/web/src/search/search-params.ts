@@ -45,6 +45,11 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
   return searchLoaderDepsFromIntake(searchUrlIntake(search));
 }
 
+/** A Realm page owns the shelf cursor; Search reads its independent opaque token from searchCursor. */
+export function realmCatalogueSearchLoaderDeps(search: Record<string, unknown>): SearchLoaderDeps {
+  return searchLoaderDeps({ ...search, cursor: search.searchCursor });
+}
+
 export { facetValuesFromSearch, rangeValuesFromSearch } from './search-input/intake';
 
 /** Carry URL inputs through the header's ordinary GET form without parsing away an invalid predicate. */

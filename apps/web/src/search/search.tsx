@@ -75,7 +75,12 @@ import {
 } from './search-recovery';
 
 import { useSearchRetryFocus } from './search-retry-focus';
-import { discoverySearchHref, searchLoaderDeps, searchUrlIntake, type SearchLoaderDeps } from './search-params';
+import {
+  discoverySearchHref,
+  realmCatalogueSearchLoaderDeps,
+  searchUrlIntake,
+  type SearchLoaderDeps,
+} from './search-params';
 import {
   isSearchResourceScope,
   parseSearchResourceScope,
@@ -1792,7 +1797,7 @@ export function RealmCatalogueSearch({
   const browserSession = useSession();
   const reader = searchSessionOwner(browserSession);
   const search = location.search as Record<string, unknown>;
-  const authored = searchLoaderDeps({ ...search, cursor: search.searchCursor });
+  const authored = realmCatalogueSearchLoaderDeps(search);
   const resourceScope: SearchResourceScope = { kind: 'realm', id: realmId.toLowerCase() };
   const queryState: SearchLoaderDeps = {
     ...authored,

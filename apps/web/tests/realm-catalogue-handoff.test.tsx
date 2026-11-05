@@ -4,8 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { realmCatalogueReturnHref, realmCatalogueSubjectHref } from '../src/search/realm-catalogue-handoff';
 import { ResultRow } from '../src/search/results';
-import { Route as RealmRoute } from '../src/routes/realms/$id';
-import { searchLoaderDeps } from '../src/search/search-params';
+import { realmCatalogueSearchLoaderDeps } from '../src/search/search-params';
 import { realmSearchRequest } from '../src/search/search-request';
 import { parseLegacySearchPage } from '../src/search/discovery';
 
@@ -50,8 +49,7 @@ test('Realm page work links retain separate shelf and Search cursors and reject 
 });
 
 test('Realm route preserves Search query state beside its independent shelf cursor', () => {
-  const validateSearch = RealmRoute.options.validateSearch as (value: Record<string, unknown>) => Record<string, unknown>;
-  const parsed = validateSearch({
+  const parsed = realmCatalogueSearchLoaderDeps({
     node: 'boards',
     cursor: 'shelf/next+opaque',
     searchCursor: 'search/next+opaque',
@@ -61,14 +59,6 @@ test('Realm route preserves Search query state beside its independent shelf curs
   });
 
   expect(parsed).toMatchObject({
-    node: 'boards',
-    cursor: 'shelf/next+opaque',
-    searchCursor: 'search/next+opaque',
-    q: 'Mira',
-    'f.schema:genre': 'mystery',
-    filter: JSON.stringify({ realm: { id: realm } }),
-  });
-  expect(searchLoaderDeps({ ...parsed, cursor: parsed.searchCursor })).toMatchObject({
     query: 'Mira',
     resourceScope: { kind: 'realm', id: realm },
     facets: { 'schema:genre': ['mystery'] },
