@@ -489,3 +489,25 @@ test('failing reservation and transfer keep Retry-After observed before body cle
   expect(ignored).toMatchObject({ reason: 'rate-limited', retryAfterHeader: 'later', responseTime: 10_000 });
   expect(ignored.retryAfter).toBeUndefined();
 });
+
+test('exact avatar reservation replay observes settled media without transferring bytes again', async () => {
+  for (const state of ['uploaded', 'available', 'rejected']) {
+    calls.length = 0;
+    const stages: string[] = [];
+    intercept((_path, init) => {
+      if (init.method === 'POST') return media(state, mediaId, 'original-account');
+      if (init.method === 'GET') return media('available', mediaId, 'original-account');
+      throw new Error('Settled media must not receive another byte transfer');
+    });
+    const result = uploadAvatar('original-account', file, signal(), undefined, (stage) => stages.push(stage));
+    if (state === 'rejected') {
+      expect(await refusal(result)).toMatchObject({ reason: 'rejected', mediaId });
+      expect(stages).toEqual(['reservation']);
+      expect(calls.map(({ init }) => init.method)).toEqual(['POST']);
+    } else {
+      expect(await result).toMatchObject({ src: mediaId, width: 7, height: 5 });
+      expect(stages).toEqual(['reservation', 'processing']);
+      expect(calls.map(({ init }) => init.method)).toEqual(['POST', 'GET']);
+    }
+  }
+});
