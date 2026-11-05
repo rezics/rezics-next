@@ -590,7 +590,9 @@ test('Owner results join a current private rule basis and retire it on sign-out'
     expect(h.host.textContent).toContain('saved-release-41');
     expect(h.host.textContent).toContain('current-release-52');
     expect(h.host.textContent).toContain('generation-41');
-    expect([...h.host.querySelectorAll('details')].some((node) => node.open && node.textContent?.includes('generation-41'))).toBe(true);
+    expect(
+      [...h.host.querySelectorAll('details')].some((node) => node.open && node.textContent?.includes('generation-41')),
+    ).toBe(true);
     await h.signOut();
     await h.render(currentPage, h.reader('saved'), null, readRule);
     expect(h.host.textContent).not.toContain('Alice private label');

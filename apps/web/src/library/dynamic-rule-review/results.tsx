@@ -49,15 +49,7 @@ export function DynamicRuleResultsReview({
   const headingId = useId();
   const locale = getLocale();
   const ownerId = page.curatorAccountId ?? null;
-  const binding = JSON.stringify([
-    page.id,
-    ownerId,
-    viewerId,
-    owner.subject,
-    owner.generation,
-    owner.lifetime,
-    locale,
-  ]);
+  const binding = JSON.stringify([page.id, ownerId, viewerId, owner.subject, owner.generation, owner.lifetime, locale]);
   const bindingRef = useRef(binding);
   const sequence = useRef(0);
   const ownerCurrentRef = useRef<() => boolean>(() => false);
@@ -201,20 +193,11 @@ function acceptedMeaning(page: Extract<RulePage, { state: 'ready' }>): RuleRevie
     : { state: 'unavailable', digest: page.rule.releaseDigest };
 }
 
-function ResultsResponse({
-  page,
-  basisState,
-}: {
-  page: ResultsPage;
-  basisState: RuleReviewRelease['state'];
-}) {
-  const incomplete = !!page.filterIgnored?.length || page.filterStatus === 'unsupported' || page.filterStatus === 'failed';
+function ResultsResponse({ page, basisState }: { page: ResultsPage; basisState: RuleReviewRelease['state'] }) {
+  const incomplete =
+    !!page.filterIgnored?.length || page.filterStatus === 'unsupported' || page.filterStatus === 'failed';
   const ready =
-    !page.preparing &&
-    !page.unavailable &&
-    page.filterStatus !== 'preparing' &&
-    basisState === 'ready' &&
-    !incomplete;
+    !page.preparing && !page.unavailable && page.filterStatus !== 'preparing' && basisState === 'ready' && !incomplete;
   const empty = ready && page.members.length === 0;
   const exhausted = page.cursor === undefined && page.next === null;
   let status: string;

@@ -6,7 +6,12 @@ import { localizedLabel } from '../../search/results';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { RuleChoices, SavedRule } from '../collection-rule-read';
-import { savedFilterReviewTree, type CurrentFieldState, type ReviewOperand, type ReviewTree } from '../saved-filter-review/model';
+import {
+  savedFilterReviewTree,
+  type CurrentFieldState,
+  type ReviewOperand,
+  type ReviewTree,
+} from '../saved-filter-review/model';
 import type { ReviewRelease } from '../saved-filter-review/read';
 import { OwnerConditionReview } from './owner';
 
@@ -124,7 +129,11 @@ function ReleaseStatus({ label, value }: { label: string; value: RuleReviewRelea
     <div className="min-w-0">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="break-all">
-        {value.digest ? <code>{value.digest}</code> : <span>{failure ?? m.library_rule_review_metadata_unavailable()}</span>}
+        {value.digest ? (
+          <code>{value.digest}</code>
+        ) : (
+          <span>{failure ?? m.library_rule_review_metadata_unavailable()}</span>
+        )}
       </dd>
       {failure ? <p className="mt-1 text-sm text-muted-foreground">{failure}</p> : null}
     </div>
@@ -134,7 +143,9 @@ function ReleaseStatus({ label, value }: { label: string; value: RuleReviewRelea
 function FieldIdentity({ value }: { value: ReviewOperand }) {
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span className="font-medium">{value.role === 'type' ? m.saved_filter_review_type() : m.saved_filter_review_property()}</span>
+      <span className="font-medium">
+        {value.role === 'type' ? m.saved_filter_review_type() : m.saved_filter_review_property()}
+      </span>
       {value.fieldId ? <code className="break-all">{value.fieldId}</code> : null}
       <code>{value.operation}</code>
       {value.datatype ? (
@@ -222,7 +233,12 @@ function Operand({
       </li>
     );
 
-  const roleLabel = value.role === 'type' ? m.saved_filter_review_type() : value.role === 'saved' ? m.saved_filter_review_group_saved() : m.saved_filter_review_property();
+  const roleLabel =
+    value.role === 'type'
+      ? m.saved_filter_review_type()
+      : value.role === 'saved'
+        ? m.saved_filter_review_group_saved()
+        : m.saved_filter_review_property();
   return (
     <li key={value.path || 'operand'} className="min-w-0 space-y-2 rounded-lg border border-border p-3">
       {value.role === 'saved' ? (
@@ -235,9 +251,7 @@ function Operand({
         <>
           <FieldIdentity value={value} />
           <LabelPair accepted={value.acceptedLabel} current={value.currentLabel} />
-          {currentStateText(value.currentState) ? (
-            <p role="status">{currentStateText(value.currentState)}</p>
-          ) : null}
+          {currentStateText(value.currentState) ? <p role="status">{currentStateText(value.currentState)}</p> : null}
           {value.values?.length ? (
             <ExactValues values={value.values} labels={labels} property={value.fieldId} locale={locale} />
           ) : null}
@@ -256,7 +270,12 @@ function Operand({
                   {currentStateText(qualifier.currentState) ? (
                     <p role="status">{currentStateText(qualifier.currentState)}</p>
                   ) : null}
-                  <ExactValues values={qualifier.values} labels={labels} property={qualifier.property} locale={locale} />
+                  <ExactValues
+                    values={qualifier.values}
+                    labels={labels}
+                    property={qualifier.property}
+                    locale={locale}
+                  />
                 </li>
               ))}
             </ul>
@@ -307,7 +326,8 @@ function Tree({
         {title}
         {value.reference ? (
           <>
-            {' · '}<code className="break-all">{value.reference}</code>
+            {' · '}
+            <code className="break-all">{value.reference}</code>
           </>
         ) : null}
       </p>
@@ -371,7 +391,9 @@ export const DynamicRuleReview = memo(function DynamicRuleReview({
           {m.library_rule_review_heading()}
         </h2>
         <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_review_intro()}</p>
-        <p role="status" className="font-medium">{stageMessage(stage)}</p>
+        <p role="status" className="font-medium">
+          {stageMessage(stage)}
+        </p>
         {returnedId ? (
           <p className="break-all">
             {m.library_rule_review_confirmed_collection()} <code>{returnedId}</code>

@@ -67,8 +67,7 @@ async function loadRuleMeaning(
     };
   try {
     const response = await client.definitions.releases({ digest }).get({ headers: { authorization } });
-    if (response.error || !response.data)
-      return { state: preparing(response.error?.value), digest, profiles: [] };
+    if (response.error || !response.data) return { state: preparing(response.error?.value), digest, profiles: [] };
     const release = response.data.release as Release;
     return {
       state: 'ready',

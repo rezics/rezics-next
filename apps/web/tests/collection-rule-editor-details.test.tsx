@@ -176,9 +176,12 @@ test('available choices use supplied localized names, with exact saved and field
   try {
     for (const locale of locales) {
       setLocale(locale, { reload: false });
-      const ui = await mount({
-        page: ready({ and: [state, { owner: { label: { id: '00000000-0000-4000-8000-000000000001' } } }] }),
-      }, locale);
+      const ui = await mount(
+        {
+          page: ready({ and: [state, { owner: { label: { id: '00000000-0000-4000-8000-000000000001' } } }] }),
+        },
+        locale,
+      );
       try {
         expect(ui.select(m.library_rule_state()).selectedOptions[0]!.textContent).toBe(stateLabels[locale]);
         expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
@@ -194,7 +197,10 @@ test('available choices use supplied localized names, with exact saved and field
           const code = [...ui.host.querySelectorAll('details code')].find(
             (node) =>
               node.textContent === raw &&
-              node.closest('details')?.querySelector('summary')?.textContent?.startsWith(m.catalogue_technical_details()),
+              node
+                .closest('details')
+                ?.querySelector('summary')
+                ?.textContent?.startsWith(m.catalogue_technical_details()),
           );
           expect(code).toBeDefined();
           const details = code!.closest('details')!;
@@ -405,7 +411,12 @@ test('viewer, address, CSRF and admission retirement remove exact private detail
   let original = ready();
   let late = deferred<CollectionWriteResult>();
   const navigation: string[] = [];
-  const ui = await mount({ page: original, ...authority, save: async () => late.promise, navigate: (id) => navigation.push(id) });
+  const ui = await mount({
+    page: original,
+    ...authority,
+    save: async () => late.promise,
+    navigate: (id) => navigation.push(id),
+  });
   try {
     for (const [index, loss] of losses.entries()) {
       await ui.submit(false);

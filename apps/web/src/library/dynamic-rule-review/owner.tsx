@@ -17,9 +17,7 @@ type OwnerValue = OwnerLeaf['owner'];
 function parseOwner(value: string): OwnerValue | null {
   try {
     const document: unknown = JSON.parse(value);
-    return document && typeof document === 'object' && 'owner' in document
-      ? (document as OwnerLeaf).owner
-      : null;
+    return document && typeof document === 'object' && 'owner' in document ? (document as OwnerLeaf).owner : null;
   } catch {
     return null;
   }
@@ -99,10 +97,7 @@ function StateCondition({
         profiles={profiles}
         purpose={m.library_rule_state()}
       />
-      <Descriptor
-        label={m.library_rule_state_set()}
-        id={value.stateSetId}
-      />
+      <Descriptor label={m.library_rule_state_set()} id={value.stateSetId} />
       {profileState !== 'ready' || !stateSet ? (
         <p role="status">
           {profileState === 'preparing' ? m.library_rule_preparing() : m.library_rule_review_metadata_unavailable()}
@@ -132,13 +127,7 @@ function StateCondition({
   );
 }
 
-function LabelCondition({
-  id,
-  labels,
-}: {
-  id: string;
-  labels: RuleChoices['labels'];
-}) {
+function LabelCondition({ id, labels }: { id: string; labels: RuleChoices['labels'] }) {
   const choice = labels.values.find((entry) => entry.id === id);
   return (
     <>
@@ -198,12 +187,17 @@ function SessionCondition({
                           {localizedLabel(unit.labels, locale).text} · <code>{unit.id}</code>
                           {unit.dimension ? (
                             <span>
-                              {' · '}{m.library_rule_review_dimension()} <code>{unit.dimension}</code>
+                              {' · '}
+                              {m.library_rule_review_dimension()} <code>{unit.dimension}</code>
                             </span>
                           ) : null}
                           {unit.minimum || unit.maximum ? (
                             <span>
-                              {' · '}{m.library_rule_review_bounds()} <code>{unit.minimum ?? '−∞'}–{unit.maximum ?? '∞'}</code>
+                              {' · '}
+                              {m.library_rule_review_bounds()}{' '}
+                              <code>
+                                {unit.minimum ?? '−∞'}–{unit.maximum ?? '∞'}
+                              </code>
                             </span>
                           ) : null}
                         </li>
@@ -297,17 +291,18 @@ export function OwnerConditionReview({ exact, profiles, profileState, labels, lo
       </aside>
     );
 
-  const detail = 'presence' in owner ? (
-    <p>{m.library_rule_presence()}</p>
-  ) : 'label' in owner ? (
-    <LabelCondition id={owner.label.id} labels={labels} />
-  ) : 'state' in owner ? (
-    <StateCondition value={owner.state} profiles={profiles} profileState={profileState} locale={locale} />
-  ) : 'session' in owner ? (
-    <SessionCondition value={owner.session} profiles={profiles} profileState={profileState} locale={locale} />
-  ) : (
-    <HoldingCondition value={owner.holding} profiles={profiles} profileState={profileState} locale={locale} />
-  );
+  const detail =
+    'presence' in owner ? (
+      <p>{m.library_rule_presence()}</p>
+    ) : 'label' in owner ? (
+      <LabelCondition id={owner.label.id} labels={labels} />
+    ) : 'state' in owner ? (
+      <StateCondition value={owner.state} profiles={profiles} profileState={profileState} locale={locale} />
+    ) : 'session' in owner ? (
+      <SessionCondition value={owner.session} profiles={profiles} profileState={profileState} locale={locale} />
+    ) : (
+      <HoldingCondition value={owner.holding} profiles={profiles} profileState={profileState} locale={locale} />
+    );
   return (
     <aside className="min-w-0 space-y-3 rounded-md border border-border bg-muted/30 p-3">
       <h4 className="font-medium">{m.saved_filter_review_owner()}</h4>

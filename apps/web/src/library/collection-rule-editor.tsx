@@ -272,7 +272,8 @@ export function CollectionRuleEditor(props: EditorProps) {
     hasCredential &&
     !!viewerId &&
     !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
-  const canSave = hasCredential && !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
+  const canSave =
+    hasCredential && !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
   const canLabel = !!admitted?.includes('library_label.list');
   const scope = JSON.stringify(
     props.isOwnerCurrent
@@ -714,35 +715,26 @@ function RuleForm({
     [canLabel, canLabelCurrent, choices],
   );
   const currentMeaning = useMemo(() => ruleReviewReleaseFromChoices(choices), [choices]);
-  const filterMatchesSaved = base.state === 'ready' && ruleDraftSnapshot(filter) === ruleDraftSnapshot(base.rule.filter);
+  const filterMatchesSaved =
+    base.state === 'ready' && ruleDraftSnapshot(filter) === ruleDraftSnapshot(base.rule.filter);
   const reviewFilter = intent?.filter ?? filter ?? presence;
-  const reviewStage = intent
-    ? 'submitted'
-    : savedId
-      ? 'confirmed'
-      : filterMatchesSaved
-        ? 'saved'
-        : 'draft';
-  const savedMeaning: RuleMeaning | undefined = useMemo(
-    () => {
-      if (base.state !== 'ready') return undefined;
-      const matchingRelease =
-        choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest;
-      return (
-        base.accepted ?? {
-          state: matchingRelease ? 'ready' : 'unavailable',
-          digest: base.rule.releaseDigest,
-          ...(matchingRelease
-            ? {
-                ...(choices.release.metadata ? { metadata: choices.release.metadata } : {}),
-                profiles: choices.release.profiles,
-              }
-            : { profiles: [] }),
-        }
-      );
-    },
-    [base, choices],
-  );
+  const reviewStage = intent ? 'submitted' : savedId ? 'confirmed' : filterMatchesSaved ? 'saved' : 'draft';
+  const savedMeaning: RuleMeaning | undefined = useMemo(() => {
+    if (base.state !== 'ready') return undefined;
+    const matchingRelease = choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest;
+    return (
+      base.accepted ?? {
+        state: matchingRelease ? 'ready' : 'unavailable',
+        digest: base.rule.releaseDigest,
+        ...(matchingRelease
+          ? {
+              ...(choices.release.metadata ? { metadata: choices.release.metadata } : {}),
+              profiles: choices.release.profiles,
+            }
+          : { profiles: [] }),
+      }
+    );
+  }, [base, choices]);
   const reviewUsesSavedMeaning = filterMatchesSaved && base.state === 'ready' && !savedId;
   const reviewMeaning = reviewUsesSavedMeaning && savedMeaning ? savedMeaning : undefined;
   const reviewProfiles = reviewMeaning?.profiles ?? choices.release.profiles;
@@ -890,7 +882,7 @@ function RuleForm({
               profileState={reviewProfileState}
               basis={base.state === 'ready' && reviewStage !== 'confirmed' ? base.rule : undefined}
               basisKind={intent ? 'original' : 'loaded'}
-              collectionId={base.state === 'ready' ? base.id : savedId ?? undefined}
+              collectionId={base.state === 'ready' ? base.id : (savedId ?? undefined)}
               returnedId={savedId ?? undefined}
               locale={locale}
               ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
@@ -904,9 +896,7 @@ function RuleForm({
                   aria-expanded={reviewCurrentRule}
                   onClick={() => setReviewCurrentRule((value) => !value)}
                 >
-                  {reviewCurrentRule
-                    ? m.library_rule_review_current_close()
-                    : m.library_rule_review_current_button()}
+                  {reviewCurrentRule ? m.library_rule_review_current_close() : m.library_rule_review_current_button()}
                 </Button>
                 {reviewCurrentRule ? (
                   <DynamicRuleReview
