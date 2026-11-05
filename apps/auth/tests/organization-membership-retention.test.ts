@@ -117,7 +117,11 @@ test('retained membership commands round-trip within the JSON UTF-16 ceiling and
 
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
-      value: { get sessionStorage(): Storage { throw new Error('storage unavailable'); } },
+      value: {
+        get sessionStorage(): Storage {
+          throw new Error('storage unavailable');
+        },
+      },
     });
     expect(readMembershipCommand()).toBe('invalid');
     expect(clearMembershipCommandIfMatches(mismatch)).toBe(false);
