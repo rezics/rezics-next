@@ -359,7 +359,7 @@ test('manager override changes prompt guidance, sleep alarms and the continuatio
   try {
     const state = await s.managers.start(s.spec);
     const opening = s.requests().find((request) => request.method === 'turn/start').params.input[0].text;
-    for (const text of ['keep at least 3', 'within 1000 ms', 'at most 25 words', 'under 1,200 characters'])
+    for (const text of ['Keep about 3', 'within 1000 ms', 'at most 25 words', 'under 1,200 characters'])
       expect(opening).toContain(text);
     await report(s, state.threadId!, 'active', 499);
     expect(s.inbox.pending(state.id)).toHaveLength(0);

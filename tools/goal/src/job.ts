@@ -14,12 +14,14 @@ import {
   constants,
   existsSync,
   fstatSync,
+  mkdirSync,
   lstatSync,
   openSync,
   readdirSync,
   readFileSync,
   readSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
@@ -51,6 +53,7 @@ import {
   makeRecord,
   readMeasurement,
   readLogTail,
+  attemptSession,
   reportedApproaches,
   CHECK_HOST_TRANSPORT,
   reportsSuccess,
@@ -68,12 +71,14 @@ import {
 import {
   git,
   HeldTaskConflictError,
+  PageDataSessionUnavailableError,
   TaskHeldForDependenciesError,
   type WorkerTasks,
   type RetryOptions,
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
+import type { PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
 import {
   applyRenderedPrompt,
@@ -520,6 +525,61 @@ export class WorkerJob implements GateOutcomeSink {
       if (options.expectedAttempt !== undefined && error instanceof StaleAttemptError) return;
       throw error;
     }
+  }
+  /** Continue the integrated author task only when its original session and provider pool can be resumed. */
+  async resumePageDataRepair(repair: PageDataRepair): Promise<boolean> {
+    if (!repair.owner) return false;
+    const task = this.tasks.store.task(repair.owner.id);
+    if (
+      !['integrated', 'merged'].includes(task.state) ||
+      task.currentAttempt !== repair.owner.currentAttempt ||
+      !task.currentAttempt
+    )
+      return false;
+    const ref = { taskId: task.id, attempt: task.currentAttempt };
+    const previous = this.tasks.store.attempt(ref);
+    const session = attemptSession(previous, this.tasks.settings.policy?.records);
+    if (
+      !session ||
+      !agentAdapter(previous.profile.cli).canResume ||
+      ['pending', 'running', 'waiting'].includes(previous.state)
+    )
+      return false;
+    const evidencePath = join(this.tasks.settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.md`);
+    const evidence = [
+      `page-data-repair-key: ${repair.repairKey}`,
+      `Integrated head: ${repair.head}`,
+      `Section: ${repair.section.page}/${repair.section.persona}/${repair.section.section}`,
+      `Class: ${repair.section.class} (previously ${repair.previousClass})`,
+      `First error line: ${repair.section.firstErrorLine ?? 'unavailable'}`,
+      '',
+      'Repair this section in the same task and continue the retained provider session.',
+      '',
+    ].join('\n');
+    mkdirSync(join(this.tasks.settings.stateDirectory, 'page-data-repairs'), { recursive: true });
+    if (existsSync(evidencePath)) {
+      if (readFileSync(evidencePath, 'utf8') !== evidence)
+        throw new Error('page-data repair evidence changed for an existing cause');
+    } else writeFileSync(evidencePath, evidence, { flag: 'wx', mode: 0o600 });
+    let worker: RunningWorker;
+    try {
+      worker = await this.tasks.retry(task.id, {
+        expectedAttempt: ref.attempt,
+        profile: previous.profile,
+        evidence: evidencePath,
+        pageDataRepairKey: repair.repairKey,
+      });
+    } catch (error) {
+      if (
+        error instanceof LeaseHeldError ||
+        error instanceof StaleAttemptError ||
+        error instanceof PageDataSessionUnavailableError
+      )
+        return false;
+      throw error;
+    }
+    this.track(this.follow(worker));
+    return true;
   }
   /** Tasks whose lost pending attempt this process is already retrying. */
   private readonly recovering = new Set<string>();

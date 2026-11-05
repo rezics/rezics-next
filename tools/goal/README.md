@@ -61,6 +61,7 @@ Workers do not merge, except that a product worker integrating into dev in its o
 cherry-picks a branch or commit its contract names explicitly.
 If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
 Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
+Decision: task-local Git/worktree preparation (branch heads, leftover and finished-work commits, shared frozen files, missing-worktree recreation and authorized proof captures) lives in `task-workspace.ts`. `WorkerTasks` remains the lifecycle coordinator and delegates that family under the caller's lease and existing store writes. Tests pin those behaviours at the public `WorkerTasks` entry with real Git fixtures rather than mirroring each helper.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
@@ -680,6 +681,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.appServer.diagnosticCharacters`               | `262144`                             | Maximum retained startup stderr characters.                                                                                                                                                 |
 | `policy.containers.commandTimeoutMs`                  | `15000`                              | Deadline for each worker container Docker operation (ms).                                                                                                                                   |
 | `policy.containers.maxAgeHours`                       | `4`                                  | Default stale-container age for opted-in hosts (hours).                                                                                                                                     |
+| `policy.containers.keep`                              | `["rezics-pagecheck-"]`              | Container name prefixes that stale-container cleanup retains.                                                                                                                               |
 | `policy.process.groupPollMs`                          | `1000`                               | Poll interval until an owned detached process group exits (ms).                                                                                                                             |
 | `policy.process.exitPollMs`                           | `50`                                 | Fallback identity poll interval after a pidfd waiter fails (ms).                                                                                                                            |
 | `policy.process.signalDiagnosticCharacters`           | `4096`                               | Maximum retained signal-helper stderr characters.                                                                                                                                           |
@@ -818,6 +820,15 @@ protocol or representation meaning; they are not operator limits.
 | `policy.verifier.gitBufferBytes`                      | `33554432`                           | Native Git revert and commit output buffer limit (bytes).                                                                                                                                   |
 | `policy.verifier.residentPollMs`                      | `60000`                              | Pause between completed resident verifier passes (ms).                                                                                                                                      |
 | `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                             | Newest-head boot-smoke deadline (ms); about two minutes for the tests in `bootSmoke.tests`.                                                                                                 |
+| `policy.pageData.intervalMs`                          | `7200000`                            | Minimum time between page-data checks on the dedicated seeded stack (ms).                                                                                                                   |
+| `policy.pageData.bootTimeoutMs`                       | `300000`                             | Dedicated stack startup readiness deadline (ms).                                                                                                                                            |
+| `policy.pageData.commandTimeoutMs`                    | `600000`                             | Database migration, search startup and auth setup deadline (ms).                                                                                                                            |
+| `policy.pageData.installTimeoutMs`                    | `600000`                             | Dependency install deadline for the isolated source checkout (ms).                                                                                                                          |
+| `policy.pageData.seedTimeoutMs`                       | `3600000`                            | Persona provisioning and initial dataset seed deadline (ms).                                                                                                                                |
+| `policy.pageData.checkTimeoutMs`                      | `3600000`                            | Page-data browser and API check deadline (ms).                                                                                                                                              |
+| `policy.pageData.stopTimeoutMs`                       | `10000`                              | Grace period before terminating an owned stack process group (ms).                                                                                                                          |
+| `policy.pageData.outputBytes`                         | `1048576`                            | Maximum captured output per page-data command and stack stream (bytes).                                                                                                                     |
+| `policy.pageData.reportRuns`                          | `24`                                 | Maximum recent page-data runs included in flow reports.                                                                                                                                     |
 | `policy.routing.implementation.maxSteps`              | `300`                                | Implementation route step limit.                                                                                                                                                            |
 | `policy.routing.implementation.maxMs`                 | `7200000`                            | Implementation route attempt time budget (ms).                                                                                                                                              |
 | `policy.routing.interface.maxSteps`                   | `300`                                | Interface route step limit.                                                                                                                                                                 |
@@ -1420,6 +1431,14 @@ integration base, reuse a result for the same base and command, or run a separat
 added by the branch are introduced by definition; failures shared with the base are allowed. These checks retain their
 existing transport retries, unverified environment classification and failure logs. Dev verification uses its own
 captured `dev-verified..dev` change set and advances `dev-verified` only after its selected checks pass.
+
+Decision: every two hours by default, the resident verifier refreshes a dedicated detached `dev` checkout against a
+persistent seeded local stack whose PostgreSQL and OpenSearch containers and volumes use the `rezics-pagecheck-`
+prefix. It runs `bun scripts/page-data-check.ts`, records each section's class and the run's per-class counts in
+`flow_events`, and includes the section results by run in flow reports. A section moving from `DATA`, `EMPTY`,
+`UNAUTHORIZED` or `UNAVAILABLE` to `API`, `WEB` or `SEED` returns to the latest integrated task that changed one of
+its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
+Goal. A local-stack boot failure is recorded and sent to the supermanager with its first error line in the same run.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. A control-plane brief without a `target` line, including launch, settle, wake, retry, train
