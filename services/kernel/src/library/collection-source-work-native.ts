@@ -1,12 +1,14 @@
 /** Same-client structural reads for the selected Source branch. Declarations constrain calls, never fund them. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { Pool, QueryConfig, QueryResultRow } from 'pg';
+import type { Pool, QueryResultRow } from 'pg';
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
+import { deadlineClient } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
+import { routeOf } from '../route/route.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { CollectionSourceObservation, WorkDimensions, WorkReceipt } from './collection-source.ts';
@@ -148,12 +150,7 @@ async function query<R extends QueryResultRow>(
   const requestBytes = Buffer.byteLength(statement.sql) + Buffer.byteLength(JSON.stringify(values));
   if (requestBytes > statement.requestBytes) throw new ProblemError('dependency_unavailable');
   current.called.add(statement.name);
-  const config: QueryConfig = {
-    text: statement.sql,
-    values,
-    query_timeout: Math.max(1, current.deadline - Date.now()),
-  };
-  const rows = (await work.tx.query<R>(config)).rows;
+  const rows = (await deadlineClient(work.tx, current.deadline).query<R>(statement.sql, values)).rows;
   if (rows.length > statement.rows || Buffer.byteLength(JSON.stringify(rows) ?? '') > statement.resultBytes)
     throw new ProblemError('dependency_unavailable');
   return rows;

@@ -538,7 +538,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       access: dependencies.access(),
       tokens,
       clock,
-      viewerPersonalActions: dependencies.viewerPersonalActions,
+      ...(dependencies.viewerPersonalActions ? { viewerPersonalActions: dependencies.viewerPersonalActions } : {}),
       routeKey: dependencies.routeKey,
       ...(dependencies.workClient ? { workClient: dependencies.workClient } : {}),
       ...(dependencies.search ? { search: dependencies.search } : {}),
