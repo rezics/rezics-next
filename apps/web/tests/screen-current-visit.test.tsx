@@ -484,7 +484,11 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
       .map((anchor) =>
         contract.screenCurrentRouteVisit(new URL(anchor.getAttribute('href')!, 'https://site.invalid').search),
       );
-    expect(visibleInspections.some((result) => result.kind === 'current' && result.visit.occurrence?.statement === statement.id)).toBe(false);
+    expect(
+      visibleInspections.some(
+        (result) => result.kind === 'current' && result.visit.occurrence?.statement === statement.id,
+      ),
+    ).toBe(false);
 
     // Withheld evidence cannot be reconstructed from a previously valid locator.
     await go(source);
