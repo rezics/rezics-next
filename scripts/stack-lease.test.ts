@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { acquireStackSlot, stackCapacity } from './stack-lease.ts';
@@ -21,11 +21,18 @@ function environment(capacity = 1): Record<string, string> {
   directories.push(directory);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    REZICS_CHECK_MEMORY: 'off',
+    REZICS_CHECK_MEMORY_DIR: directory,
+    REZICS_CHECK_SCOPE: 'off',
     REZICS_STACK_SLOTS: String(capacity),
     REZICS_STACK_LEASE_DIR: directory,
   };
   delete env.REZICS_STACK_SLOT;
   delete env.REZICS_STACK_LEASE;
+  delete env.GOAL_CHECK_WAIT_FILE;
+  // These runs test the local lease. An empty KERNEL_CHECK_REMOTE falls back to the shared hosts file, so a missing
+  // file is what keeps them here.
+  env.KERNEL_CHECK_REMOTE = join(directory, 'no-such-hosts.json');
   return env as Record<string, string>;
 }
 
@@ -263,6 +270,48 @@ test('the wait is printed when a slot is taken', async () => {
   expect(immediate.output.stderr).toMatch(/^stack-lease: immediate slot 1\/1 after \d+ ms\n$/);
 });
 
+test('a stack lease wait is appended to GOAL_CHECK_WAIT_FILE', async () => {
+  const env = environment();
+  const waitFile = join(env.REZICS_STACK_LEASE_DIR!, 'goal-check-wait-ms');
+  env.GOAL_CHECK_WAIT_FILE = waitFile;
+  const holder = await take(env);
+  const waiter = start(env, 'recorded-wait');
+
+  await waitFor(() => existsSync(waitFile) && waiter.output.stderr.includes('waiting (1/1 held, 0 ahead)'));
+  const whileWaiting = readFileSync(waitFile, 'utf8');
+  expect(waiter.child.exitCode).toBeNull();
+  await Bun.sleep(50);
+  await holder.release();
+  await waitFor(() => waiter.output.stdout.includes('1/1'));
+  await stop(waiter);
+
+  const lines = readFileSync(waitFile, 'utf8').trim().split('\n');
+  expect(lines.length).toBeGreaterThan(0);
+  expect(lines.every((line) => /^\d+$/.test(line) && Number(line) > 0 && Number(line) <= 60_000)).toBe(true);
+  expect(lines.reduce((sum, line) => sum + Number(line), 0)).toBeGreaterThan(
+    whileWaiting
+      .trim()
+      .split('\n')
+      .reduce((sum, line) => sum + Number(line), 0),
+  );
+});
+
+test('without GOAL_CHECK_WAIT_FILE no wait is recorded', async () => {
+  const env = environment();
+  const waitFile = join(env.REZICS_STACK_LEASE_DIR!, 'goal-check-wait-ms');
+  delete env.GOAL_CHECK_WAIT_FILE;
+  const holder = await take(env);
+  const waiter = start(env, 'unrecorded-wait');
+
+  await waitFor(() => waiter.output.stderr.includes('waiting (1/1 held, 0 ahead)'));
+  await Bun.sleep(50);
+  await holder.release();
+  await waitFor(() => waiter.output.stdout.includes('1/1'));
+  await stop(waiter);
+
+  expect(existsSync(waitFile)).toBe(false);
+});
+
 test('web and auth isolated runs hold one slot for the whole command', async () => {
   const env = environment();
   for (const app of ['web', 'auth']) {
@@ -288,7 +337,9 @@ test('remote commands run with the lease off', async () => {
     join(bin, 'ssh'),
     `#!/usr/bin/env bun
     const script = process.argv.at(-1);
-    if (script.includes('MemAvailable')) console.log('AVAILABLE 1000000000');
+    if (script.includes('/proc/loadavg')) {
+      console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 4000000000\\nPROCESSORS 4\\nSLICE_PROCESSORS 2\\nLOAD 0\\nSLOTS_USED 0');
+    }
     else if (script.includes('systemd-run')) await Bun.write(${JSON.stringify(scriptFile)}, script);
     else if (script.includes('SLOT')) { console.log('SLOT 0'); await Bun.stdin.text(); }
   `,
@@ -300,7 +351,7 @@ test('remote commands run with the lease off', async () => {
     hosts,
     JSON.stringify({
       hosts: [
-        { name: 'test', address: 'ops@test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 100, slots: 1 },
+        { name: 'test', address: 'ops@test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 200, slots: 1 },
       ],
     }),
   );
@@ -318,3 +369,78 @@ test('remote commands run with the lease off', async () => {
   const remoteEnv = Bun.spawnSync(['sh', '-c', `${exportLine}\nprintf '%s' "$REZICS_STACK_LEASE"`], { env });
   expect(remoteEnv.stdout.toString()).toBe('off');
 });
+
+test('weighted leases queue requests that exceed capacity and admit requests that fit together', async () => {
+  const env = environment(3);
+  const first = await acquireStackSlot('heavy', env, 2);
+  const waiterRun = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('weighted-wait', process.env, 2); console.log('ready'); await Bun.stdin.text(); await s.release();`,
+    ],
+    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
+  const stdout = waiterRun.stdout.getReader();
+  await Bun.sleep(100);
+  expect(waiterRun.exitCode).toBeNull();
+  await first.release();
+  const ready = await stdout.read();
+  expect(new TextDecoder().decode(ready.value)).toContain('ready');
+  await waiterRun.stdin.end();
+  await waiterRun.exited;
+
+  const one = await acquireStackSlot('one', env, 1);
+  const two = await acquireStackSlot('two', env, 2);
+  expect(one.weight + two.weight).toBe(3);
+  await Promise.all([one.release(), two.release()]);
+}, 20_000);
+
+test('a weighted holder killed with SIGKILL frees its full weight', async () => {
+  const env = environment(3);
+  const source = `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('kill-weight', process.env, 2); console.log('held'); await Bun.stdin.text();`;
+  const holder = Bun.spawn([process.execPath, '-e', source], {
+    cwd: repository,
+    env,
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const reader = holder.stdout.getReader();
+  await reader.read();
+  holder.kill('SIGKILL');
+  await holder.exited;
+  const next = await acquireStackSlot('after-kill', env, 3);
+  expect(next.weight).toBe(3);
+  await next.release();
+}, 20_000);
+
+test('a waiting heavy weighted ticket is not overtaken by a later light ticket', async () => {
+  const env = environment(3);
+  const holder = await acquireStackSlot('occupier', env, 2);
+  const heavy = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('heavy-ticket', process.env, 2); console.log('heavy'); await Bun.stdin.text();`,
+    ],
+    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
+  await Bun.sleep(100);
+  const light = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `import { acquireStackSlot } from ${JSON.stringify(lease)}; const s=await acquireStackSlot('light-ticket', process.env, 1); console.log('light'); await Bun.stdin.text();`,
+    ],
+    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
+  await Bun.sleep(100);
+  await holder.release();
+  const heavyText = new TextDecoder().decode((await heavy.stdout.getReader().read()).value);
+  expect(heavyText).toContain('heavy');
+  expect(light.exitCode).toBeNull();
+  heavy.kill('SIGTERM');
+  light.kill('SIGTERM');
+  await Promise.all([heavy.exited, light.exited]);
+}, 20_000);

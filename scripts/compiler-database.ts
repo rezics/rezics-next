@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { migrate as migrateAuth } from '../services/auth/scripts/database.ts';
 import { migrate as migrateKernel, POSTGRES_IMAGE } from '../services/kernel/scripts/database.ts';
+import { withCommandPhase } from '../services/kernel/scripts/command-phases.ts';
 import type { StartedDatabase } from './typecheck.ts';
 
 function docker(args: string[]): string {
@@ -18,48 +19,68 @@ function docker(args: string[]): string {
 /** Start a throwaway database and apply the kernel migrations, then the Auth migrations. */
 export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   process.stdout.write(`Compiler database owner PID=${process.pid}\n`);
-  const container = docker([
-    'run',
-    '-d',
-    '--rm',
-    '--label',
-    `rezics.compiler.pid=${process.pid}`,
-    '-p',
-    '127.0.0.1::5432',
-    '--tmpfs',
-    '/var/lib/postgresql:rw,size=1g',
-    '-e',
-    'POSTGRES_USER=rezics',
-    '-e',
-    'POSTGRES_PASSWORD=rezics',
-    '-e',
-    'POSTGRES_DB=rezics',
-    POSTGRES_IMAGE,
-    '-c',
-    'fsync=off',
-    '-c',
-    'synchronous_commit=off',
-    '-c',
-    'full_page_writes=off',
-  ]);
+  const container = await withCommandPhase(
+    'database-image',
+    () =>
+      docker([
+        'run',
+        '-d',
+        '--rm',
+        '--label',
+        `rezics.compiler.pid=${process.pid}`,
+        '-p',
+        '127.0.0.1::5432',
+        '--tmpfs',
+        '/var/lib/postgresql:rw,size=1g',
+        '-e',
+        'POSTGRES_USER=rezics',
+        '-e',
+        'POSTGRES_PASSWORD=rezics',
+        '-e',
+        'POSTGRES_DB=rezics',
+        POSTGRES_IMAGE,
+        '-c',
+        'fsync=off',
+        '-c',
+        'synchronous_commit=off',
+        '-c',
+        'full_page_writes=off',
+      ]),
+    process.env,
+  );
   let removed = false;
+  let cleanupFailed = false;
+  let cleanupFailure: unknown;
   const remove = (): void => {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
-    if (removed) return;
+    if (removed) {
+      if (cleanupFailed) throw cleanupFailure;
+      return;
+    }
     removed = true;
     try {
       docker(['rm', '-f', '-v', container]);
     } catch (error) {
-      console.error(error);
+      cleanupFailed = true;
+      cleanupFailure = error;
+      throw error;
     }
   };
   const onSigint = (): void => {
-    remove();
+    try {
+      remove();
+    } catch (error) {
+      console.error(error);
+    }
     process.exit(130);
   };
   const onSigterm = (): void => {
-    remove();
+    try {
+      remove();
+    } catch (error) {
+      console.error(error);
+    }
     process.exit(143);
   };
   process.on('SIGINT', onSigint);
@@ -68,11 +89,25 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     const port = docker(['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
     if (!port) throw new Error('Could not determine the compiler database port');
     const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-    migrateKernel(url);
-    migrateAuth(url);
-    return { url, remove };
+    await withCommandPhase(
+      'migrations',
+      () => {
+        migrateKernel(url);
+        migrateAuth(url);
+      },
+      process.env,
+    );
+    return { url, container, remove };
   } catch (error) {
-    remove();
+    try {
+      remove();
+    } catch (cleanupError) {
+      const setup = error instanceof Error ? error.message : String(error);
+      const cleanup = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+      throw new Error(`Compiler database setup failed (${setup}); cleanup could not be proven (${cleanup})`, {
+        cause: error,
+      });
+    }
     throw error;
   }
 }

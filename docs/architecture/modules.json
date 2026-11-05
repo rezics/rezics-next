@@ -1,0 +1,1055 @@
+{
+  "version": 1,
+  "sourceRoots": [
+    {
+      "path": "services/kernel/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".sql", ".json"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
+      "path": "services/kernel/db",
+      "extensions": [".sql"],
+      "exclude": ["**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "services/auth/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".sql"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
+      "path": "services/importer/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".sql"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
+      "path": "apps/web/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".sql", ".css", ".json", ".svg"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**",
+        "**/kernel/fake/**",
+        "**/kernel/recorded/**"
+      ]
+    },
+    {
+      "path": "apps/auth/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".css", ".json", ".svg"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
+      "path": "packages/auth-contract/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "packages/access/src",
+      "extensions": [".ts"]
+    },
+    {
+      "path": "packages/bounds/src",
+      "extensions": [".ts"]
+    },
+    {
+      "path": "packages/operations/src",
+      "extensions": [".ts"]
+    },
+    {
+      "path": "packages/conversion/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**", "**/examples/**"]
+    },
+    {
+      "path": "packages/composition/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "packages/composition/profiles",
+      "extensions": [".json"]
+    },
+    {
+      "path": "packages/composition/schema",
+      "extensions": [".json"]
+    },
+    {
+      "path": "packages/definitions/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "packages/definitions/catalogue",
+      "extensions": [".json", ".yaml", ".yml"]
+    },
+    {
+      "path": "packages/definitions/contexts",
+      "extensions": [".json", ".yaml", ".yml"]
+    },
+    {
+      "path": "packages/definitions/filters",
+      "extensions": [".json", ".yaml", ".yml"]
+    },
+    {
+      "path": "packages/definitions/presentation",
+      "extensions": [".json", ".yaml", ".yml"]
+    },
+    {
+      "path": "packages/definitions/schema",
+      "extensions": [".json", ".yaml", ".yml"]
+    },
+    {
+      "path": "packages/definitions/sources",
+      "extensions": [".json", ".yaml", ".yml"]
+    },
+    {
+      "path": "packages/document/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".css", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "packages/document/schema",
+      "extensions": [".json"]
+    },
+    {
+      "path": "packages/filter/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "packages/money/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
+      "path": "packages/ui/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".css", ".json", ".svg"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
+      "path": "packages/client/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
+      "path": "packages/progress/src",
+      "extensions": [".ts"],
+      "exclude": ["**/*.test.*"]
+    },
+    {
+      "path": "packages/search-text/src",
+      "extensions": [".ts"],
+      "exclude": []
+    }
+  ],
+  "modules": [
+    {
+      "id": "kernel-access",
+      "kind": "adapter",
+      "owner": "accounts",
+      "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
+      "publicEntries": [
+        "services/kernel/src/access/index.ts",
+        "services/kernel/src/access/account-discovery-source.ts",
+        "services/kernel/src/access/handle-policy.ts",
+        "services/kernel/src/access/authenticate.ts",
+        "services/kernel/src/access/write-rate.ts",
+        "services/kernel/src/access/write-rate-stage.ts"
+      ],
+      "allowedDependencies": [
+        "access-policy",
+        "auth-contract",
+        "auth-service",
+        "kernel-commerce",
+        "kernel-community",
+        "kernel-content",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-search",
+        "kernel-semantic"
+      ],
+      "capabilities": ["access"],
+      "postgresPaths": ["services/kernel/src/access/**"]
+    },
+    {
+      "id": "kernel-commerce",
+      "kind": "adapter",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
+      "publicEntries": ["services/kernel/src/commerce/config.ts"],
+      "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic", "money"],
+      "capabilities": ["commerce"],
+      "postgresPaths": ["services/kernel/src/commerce/**"]
+    },
+    {
+      "id": "kernel-content",
+      "kind": "adapter",
+      "owner": "content",
+      "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
+      "excludes": ["services/kernel/src/content/community-projection/**"],
+      "publicEntries": [
+        "services/kernel/src/content/document-public.ts",
+        "services/kernel/src/content/realm-board-home.ts",
+        "services/kernel/src/content/index.ts",
+        "services/kernel/src/content/review-discovery.ts"
+      ],
+      "allowedDependencies": [
+        "definitions",
+        "document",
+        "filter",
+        "operations",
+        "kernel-access",
+        "kernel-commerce",
+        "kernel-community",
+        "kernel-content-community-projection",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-rating",
+        "kernel-search",
+        "kernel-semantic"
+      ],
+      "capabilities": ["content"],
+      "postgresPaths": ["services/kernel/src/content/**"]
+    },
+    {
+      "id": "kernel-content-community-projection",
+      "kind": "core",
+      "owner": "content",
+      "paths": ["services/kernel/src/content/community-projection/**"],
+      "publicEntries": ["services/kernel/src/content/community-projection/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["community-activity-projection"]
+    },
+    {
+      "id": "kernel-community",
+      "kind": "adapter",
+      "owner": "content",
+      "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
+      "publicEntries": ["services/kernel/src/community/index.ts"],
+      "allowedDependencies": [
+        "auth-contract",
+        "document",
+        "kernel-access",
+        "kernel-commerce",
+        "kernel-content",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-rating",
+        "kernel-semantic"
+      ],
+      "capabilities": ["community"],
+      "postgresPaths": ["services/kernel/src/community/**"]
+    },
+    {
+      "id": "kernel-rating",
+      "kind": "adapter",
+      "owner": "content",
+      "paths": ["services/kernel/src/rating/**", "services/kernel/db/rating/**"],
+      "publicEntries": ["services/kernel/src/rating/index.ts"],
+      "allowedDependencies": [
+        "kernel-access",
+        "kernel-community",
+        "kernel-content",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-search",
+        "kernel-semantic",
+        "kernel-identity-core"
+      ],
+      "capabilities": ["rating"],
+      "postgresPaths": ["services/kernel/src/rating/**"]
+    },
+    {
+      "id": "kernel-library",
+      "kind": "adapter",
+      "owner": "commerce",
+      "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
+      "publicEntries": [
+        "services/kernel/src/library/index.ts",
+        "services/kernel/src/library/collection-discovery-source.ts",
+        "services/kernel/src/library/collection-discovery-summaries.ts"
+      ],
+      "allowedDependencies": [
+        "access-policy",
+        "auth-contract",
+        "bounds",
+        "definitions",
+        "filter",
+        "kernel-access",
+        "kernel-community",
+        "kernel-content",
+        "kernel-platform",
+        "kernel-rating",
+        "kernel-search",
+        "kernel-semantic",
+        "operations",
+        "progress"
+      ],
+      "capabilities": ["library"],
+      "postgresPaths": ["services/kernel/src/library/**"]
+    },
+    {
+      "id": "catalogue-page-metadata",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["services/kernel/src/presentation/catalogue-page-metadata/**"],
+      "publicEntries": ["services/kernel/src/presentation/catalogue-page-metadata/index.ts"],
+      "allowedDependencies": ["definitions", "filter"],
+      "capabilities": []
+    },
+    {
+      "id": "kernel-search",
+      "kind": "adapter",
+      "owner": "search",
+      "paths": [
+        "services/kernel/src/search/**",
+        "services/kernel/src/presentation/**",
+        "services/kernel/db/search/**",
+        "services/kernel/db/presentation/**"
+      ],
+      "excludes": ["services/kernel/src/presentation/catalogue-page-metadata/**"],
+      "publicEntries": [
+        "services/kernel/src/search/index.ts",
+        "services/kernel/src/search/composition.ts",
+        "services/kernel/src/search/rated-source.ts",
+        "services/kernel/src/search/space-discovery.ts",
+        "services/kernel/src/search/work.ts",
+        "services/kernel/src/search/discovery-filter.ts"
+      ],
+      "allowedDependencies": [
+        "bounds",
+        "composition",
+        "definitions",
+        "document",
+        "filter",
+        "kernel-access",
+        "kernel-commerce",
+        "kernel-community",
+        "kernel-content",
+        "kernel-library",
+        "catalogue-page-metadata",
+        "kernel-platform",
+        "kernel-rating",
+        "kernel-semantic",
+        "search-text"
+      ],
+      "capabilities": ["search", "presentation"],
+      "postgresPaths": ["services/kernel/src/search/**", "services/kernel/src/presentation/**"]
+    },
+    {
+      "id": "kernel-semantic",
+      "kind": "adapter",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/semantic/**", "services/kernel/db/semantic/**"],
+      "publicEntries": [
+        "services/kernel/src/semantic/index.ts",
+        "services/kernel/src/semantic/identity-adapters/index.ts",
+        "services/kernel/src/semantic/identity-adapters/read.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
+      ],
+      "allowedDependencies": [
+        "composition",
+        "definitions",
+        "document",
+        "filter",
+        "kernel-access",
+        "kernel-content",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-rating",
+        "kernel-search",
+        "kernel-zones",
+        "kernel-identity-core"
+      ],
+      "capabilities": ["semantic", "canonical-identity-native"],
+      "postgresPaths": ["services/kernel/src/semantic/**"],
+      "excludes": ["services/kernel/src/semantic/identity-core/**"]
+    },
+    {
+      "id": "kernel-zones",
+      "kind": "adapter",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/zones/**", "services/kernel/db/zones/**"],
+      "publicEntries": [],
+      "allowedDependencies": [
+        "composition",
+        "filter",
+        "kernel-access",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-search",
+        "kernel-semantic"
+      ],
+      "capabilities": ["zones"],
+      "postgresPaths": ["services/kernel/src/zones/**"]
+    },
+    {
+      "id": "kernel-platform",
+      "kind": "adapter",
+      "owner": "platform",
+      "paths": [
+        "services/kernel/src/command/**",
+        "services/kernel/src/history/**",
+        "services/kernel/src/work/**",
+        "services/kernel/src/http/**",
+        "services/kernel/src/events/**",
+        "services/kernel/src/tokens/**",
+        "services/kernel/src/partition/**",
+        "services/kernel/src/request/**",
+        "services/kernel/src/database/**",
+        "services/kernel/src/imports/**",
+        "services/kernel/src/route/**",
+        "services/kernel/src/clock.ts",
+        "services/kernel/db/migrations/**",
+        "services/kernel/db/schema.sql"
+      ],
+      "publicEntries": [
+        "services/kernel/src/command/receipt-key.ts",
+        "services/kernel/src/clock.ts",
+        "services/kernel/src/request/access.ts",
+        "services/kernel/src/route/route.ts",
+        "services/kernel/src/tokens/seal.ts"
+      ],
+      "allowedDependencies": [
+        "bounds",
+        "auth-contract",
+        "definitions",
+        "kernel-access",
+        "kernel-commerce",
+        "kernel-community",
+        "kernel-content",
+        "kernel-library",
+        "kernel-rating",
+        "kernel-search",
+        "kernel-semantic",
+        "operations",
+        "kernel-zones"
+      ],
+      "capabilities": ["kernel-runtime"],
+      "postgresPaths": [
+        "services/kernel/src/command/**",
+        "services/kernel/src/history/**",
+        "services/kernel/src/work/**",
+        "services/kernel/src/http/**",
+        "services/kernel/src/events/**",
+        "services/kernel/src/tokens/**",
+        "services/kernel/src/partition/**",
+        "services/kernel/src/request/**",
+        "services/kernel/src/database/**",
+        "services/kernel/src/imports/**",
+        "services/kernel/src/route/**",
+        "services/kernel/src/clock.ts"
+      ]
+    },
+    {
+      "id": "kernel-composition",
+      "kind": "composition root",
+      "owner": "platform",
+      "paths": ["services/kernel/src/server.ts", "services/kernel/src/worker.ts", "services/kernel/src/composition/**"],
+      "publicEntries": [],
+      "allowedDependencies": [
+        "definitions",
+        "kernel-access",
+        "kernel-commerce",
+        "kernel-content",
+        "kernel-community",
+        "kernel-library",
+        "kernel-platform",
+        "kernel-search",
+        "kernel-semantic"
+      ],
+      "capabilities": []
+    },
+    {
+      "id": "auth-service",
+      "kind": "adapter",
+      "owner": "accounts",
+      "paths": ["services/auth/src/**"],
+      "publicEntries": [
+        "@rezics/auth",
+        "@rezics/auth/membership-workflows",
+        "@rezics/auth/kind-consent",
+        "@rezics/auth/current-consent",
+        "@rezics/auth/internal-consent",
+        "@rezics/auth/website-maintenance"
+      ],
+      "allowedDependencies": ["auth-contract"],
+      "capabilities": ["authentication"],
+      "postgresPaths": ["services/auth/src/**"]
+    },
+    {
+      "id": "importer",
+      "kind": "adapter",
+      "owner": "imports",
+      "paths": ["services/importer/src/**"],
+      "publicEntries": [],
+      "allowedDependencies": ["client", "conversion", "definitions", "kernel-rating"],
+      "capabilities": ["imports"]
+    },
+    {
+      "id": "web-public-collection-discovery",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/library/public-collection-discovery/**"],
+      "publicEntries": [
+        "apps/web/src/library/public-collection-discovery/address.ts",
+        "apps/web/src/library/public-collection-discovery/page.tsx",
+        "apps/web/src/library/public-collection-discovery/query.ts",
+        "apps/web/src/library/public-collection-discovery/read.ts",
+        "apps/web/src/library/public-collection-discovery/request.ts",
+        "apps/web/src/library/public-collection-discovery/window-navigation.ts"
+      ],
+      "allowedDependencies": ["client", "composition", "ui", "web-app", "web-library", "web-search"],
+      "capabilities": ["public-collection-directory"]
+    },
+    {
+      "id": "web-library",
+      "kind": "UI/transport library",
+      "owner": "commerce",
+      "paths": ["apps/web/src/library/**"],
+      "excludes": ["apps/web/src/library/public-collection-discovery/**"],
+      "publicEntries": ["apps/web/src/library/follow-control.tsx"],
+      "allowedDependencies": [
+        "client",
+        "composition",
+        "definitions",
+        "filter",
+        "ui",
+        "web-accounts",
+        "web-app",
+        "web-content",
+        "web-performance",
+        "web-search",
+        "web-semantic",
+        "progress"
+      ],
+      "capabilities": ["library-pages"]
+    },
+    {
+      "id": "search-personal-recovery",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["apps/web/src/search/personal-recovery/**"],
+      "publicEntries": ["apps/web/src/search/personal-recovery/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["search-personal-read-settlement"]
+    },
+    {
+      "id": "curation-opening-read",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/curation-opening-read/**"],
+      "publicEntries": ["apps/web/src/features/pages/curation-opening-read/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["curation-opening-read-transport"]
+    },
+    {
+      "id": "subject-page-read-lifetime",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/subject-page-read-lifetime/**"],
+      "publicEntries": ["apps/web/src/features/pages/subject-page-read-lifetime/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["subject-page-read-lifetime"]
+    },
+    {
+      "id": "subject-canonical-lifetime",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/subject-canonical-lifetime/**"],
+      "publicEntries": ["apps/web/src/features/pages/subject-canonical-lifetime/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["subject-canonical-read-lifetime"]
+    },
+    {
+      "id": "subject-catalogue-metadata",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/subject-catalogue-metadata/**"],
+      "publicEntries": ["apps/web/src/features/pages/subject-catalogue-metadata/index.ts"],
+      "allowedDependencies": ["definitions"],
+      "capabilities": []
+    },
+    {
+      "id": "public-reaction-recovery",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/public-reaction-recovery/**"],
+      "publicEntries": ["apps/web/src/features/pages/public-reaction-recovery/index.tsx"],
+      "allowedDependencies": [],
+      "capabilities": ["subject-public-reaction-recovery"]
+    },
+    {
+      "id": "web-search",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
+      "excludes": [
+        "apps/web/src/search/personal-recovery/**",
+        "apps/web/src/features/pages/curation-opening-read/**",
+        "apps/web/src/features/pages/subject-page-read-lifetime/**",
+        "apps/web/src/features/pages/subject-canonical-lifetime/**",
+        "apps/web/src/features/pages/subject-catalogue-metadata/**",
+        "apps/web/src/features/pages/public-reaction-recovery/**"
+      ],
+      "publicEntries": [
+        "apps/web/src/search/search.tsx",
+        "apps/web/src/search/search-window/index.ts",
+        "apps/web/src/search/release-window.ts",
+        "apps/web/src/search/language-preferences.tsx",
+        "apps/web/src/features/pages/agent-reader-read/index.ts",
+        "apps/web/src/features/pages/showcase-work/index.ts"
+      ],
+      "allowedDependencies": [
+        "client",
+        "composition",
+        "definitions",
+        "document",
+        "filter",
+        "ui",
+        "web-accounts",
+        "web-app",
+        "web-content",
+        "web-library",
+        "web-performance",
+        "web-semantic",
+        "search-text",
+        "search-personal-recovery",
+        "curation-opening-read",
+        "subject-page-read-lifetime",
+        "subject-catalogue-metadata",
+        "public-reaction-recovery"
+      ],
+      "capabilities": ["search-pages"]
+    },
+    {
+      "id": "web-accounts",
+      "kind": "UI/transport library",
+      "owner": "accounts",
+      "paths": ["apps/web/src/accounts/**", "apps/web/src/account-verification/**"],
+      "publicEntries": [],
+      "allowedDependencies": [
+        "client",
+        "composition",
+        "ui",
+        "web-app",
+        "web-content",
+        "web-library",
+        "web-performance",
+        "web-search"
+      ],
+      "capabilities": ["account-pages"]
+    },
+    {
+      "id": "web-performance",
+      "kind": "UI/transport library",
+      "owner": "performance",
+      "paths": ["apps/web/src/settings/**", "apps/web/src/inbox/**"],
+      "publicEntries": ["apps/web/src/settings/preferences.ts"],
+      "allowedDependencies": ["client", "ui", "web-accounts", "web-app", "web-content", "web-library", "web-search"],
+      "capabilities": ["account-settings"]
+    },
+    {
+      "id": "web-commerce",
+      "kind": "UI/transport library",
+      "owner": "commerce",
+      "paths": ["apps/web/src/checkout/**"],
+      "publicEntries": ["apps/web/src/checkout/reader-origin.ts"],
+      "allowedDependencies": ["client", "money", "ui", "web-app", "web-content", "web-search"],
+      "capabilities": ["checkout-pages"]
+    },
+    {
+      "id": "web-content",
+      "kind": "UI/transport library",
+      "owner": "content",
+      "paths": [
+        "apps/web/src/threads/**",
+        "apps/web/src/community/**",
+        "apps/web/src/ratings/**",
+        "apps/web/src/moderation/**",
+        "apps/web/src/media/**"
+      ],
+      "publicEntries": ["apps/web/src/media/cover-src.ts"],
+      "allowedDependencies": [
+        "client",
+        "composition",
+        "definitions",
+        "document",
+        "kernel-rating",
+        "ui",
+        "web-accounts",
+        "web-app",
+        "web-library",
+        "web-search"
+      ],
+      "capabilities": ["content-pages"]
+    },
+    {
+      "id": "web-imports",
+      "kind": "UI/transport library",
+      "owner": "imports",
+      "paths": ["apps/web/src/features/import-review/**"],
+      "publicEntries": [],
+      "allowedDependencies": ["client", "composition", "ui", "web-app", "web-search", "web-semantic"],
+      "capabilities": ["import-pages"]
+    },
+    {
+      "id": "web-semantic",
+      "kind": "UI/transport library",
+      "owner": "semantic",
+      "paths": [
+        "apps/web/src/features/catalogue/**",
+        "apps/web/src/features/zones/**",
+        "apps/web/src/features/contexts/**",
+        "apps/web/src/zones/**"
+      ],
+      "publicEntries": [],
+      "allowedDependencies": [
+        "client",
+        "composition",
+        "definitions",
+        "document",
+        "filter",
+        "kernel-zones",
+        "ui",
+        "web-app",
+        "web-content",
+        "web-library",
+        "web-search"
+      ],
+      "capabilities": ["semantic-pages"]
+    },
+    {
+      "id": "web-composition",
+      "kind": "composition root",
+      "owner": "web",
+      "paths": ["apps/web/src/routes/**"],
+      "publicEntries": [],
+      "allowedDependencies": [
+        "composition",
+        "ui",
+        "web-accounts",
+        "web-app",
+        "web-commerce",
+        "web-content",
+        "web-imports",
+        "web-library",
+        "web-performance",
+        "web-public-collection-discovery",
+        "web-search",
+        "subject-canonical-lifetime",
+        "web-semantic"
+      ],
+      "capabilities": []
+    },
+    {
+      "id": "web-app",
+      "kind": "UI/transport library",
+      "owner": "web",
+      "paths": ["apps/web/src/**"],
+      "excludes": [
+        "apps/web/src/library/**",
+        "apps/web/src/search/**",
+        "apps/web/src/features/pages/**",
+        "apps/web/src/accounts/**",
+        "apps/web/src/account-verification/**",
+        "apps/web/src/settings/**",
+        "apps/web/src/inbox/**",
+        "apps/web/src/checkout/**",
+        "apps/web/src/threads/**",
+        "apps/web/src/community/**",
+        "apps/web/src/ratings/**",
+        "apps/web/src/moderation/**",
+        "apps/web/src/media/**",
+        "apps/web/src/features/import-review/**",
+        "apps/web/src/features/catalogue/**",
+        "apps/web/src/features/zones/**",
+        "apps/web/src/features/contexts/**",
+        "apps/web/src/zones/**",
+        "apps/web/src/subject/display-definition-cache/**",
+        "apps/web/src/routes/**"
+      ],
+      "publicEntries": [
+        "apps/web/src/kernel/client.ts",
+        "apps/web/src/session/index.ts",
+        "apps/web/src/session/reader.ts",
+        "apps/web/src/subject/reader.ts",
+        "apps/web/src/subject/definitions.ts",
+        "apps/web/src/subject/quantity-presentation.ts",
+        "apps/web/src/subject/reading-state/index.tsx",
+        "apps/web/src/paraglide/messages.js",
+        "apps/web/src/paraglide/messages.d.ts",
+        "apps/web/src/paraglide/runtime.js",
+        "apps/web/src/paraglide/runtime.d.ts"
+      ],
+      "allowedDependencies": [
+        "client",
+        "composition",
+        "definitions",
+        "document",
+        "filter",
+        "ui",
+        "web-commerce",
+        "web-content",
+        "web-library",
+        "web-performance",
+        "web-search",
+        "web-semantic",
+        "web-display-definition-cache"
+      ],
+      "capabilities": ["web-interface"]
+    },
+    {
+      "id": "web-display-definition-cache",
+      "kind": "adapter",
+      "owner": "web",
+      "paths": ["apps/web/src/subject/display-definition-cache/**"],
+      "publicEntries": ["apps/web/src/subject/display-definition-cache/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["display-definition-cache"]
+    },
+    {
+      "id": "auth-pages",
+      "kind": "UI/transport library",
+      "owner": "web",
+      "paths": ["apps/auth/src/**"],
+      "publicEntries": [],
+      "allowedDependencies": ["auth-contract", "auth-service", "ui"],
+      "capabilities": ["auth-pages"]
+    },
+    {
+      "id": "auth-contract",
+      "kind": "contract",
+      "owner": "accounts",
+      "paths": ["packages/auth-contract/src/**"],
+      "publicEntries": ["@rezics/auth-contract"],
+      "allowedDependencies": [],
+      "capabilities": ["auth-contract"]
+    },
+    {
+      "id": "access-policy",
+      "kind": "core",
+      "owner": "accounts",
+      "paths": ["packages/access/src/**"],
+      "publicEntries": ["@rezics/access"],
+      "allowedDependencies": [],
+      "capabilities": ["permission-policy"]
+    },
+    {
+      "id": "bounds",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["packages/bounds/src/**"],
+      "publicEntries": ["@rezics/bounds"],
+      "allowedDependencies": [],
+      "capabilities": ["work-bounds"]
+    },
+    {
+      "id": "operations",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["packages/operations/src/**"],
+      "publicEntries": ["@rezics/operations", "@rezics/operations/protocol"],
+      "allowedDependencies": [],
+      "capabilities": ["operation-descriptors"]
+    },
+    {
+      "id": "conversion",
+      "kind": "application",
+      "owner": "imports",
+      "paths": ["packages/conversion/src/**"],
+      "publicEntries": [
+        "@rezics/conversion",
+        "@rezics/conversion/bangumi",
+        "@rezics/conversion/bangumi-vocabulary",
+        "@rezics/conversion/vndb",
+        "@rezics/conversion/vndb-vocabulary",
+        "@rezics/conversion/source-vocabulary",
+        "@rezics/conversion/open-library",
+        "@rezics/conversion/wikidata",
+        "@rezics/conversion/cross-media-entities"
+      ],
+      "allowedDependencies": ["definitions", "document"],
+      "capabilities": ["source-conversion"]
+    },
+    {
+      "id": "composition",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["packages/composition/src/**", "packages/composition/profiles/**", "packages/composition/schema/**"],
+      "publicEntries": [
+        "@rezics/composition",
+        "@rezics/composition/profiles/*.json",
+        "@rezics/composition/schema/*.json"
+      ],
+      "allowedDependencies": ["filter"],
+      "capabilities": ["search-composition"]
+    },
+    {
+      "id": "definitions",
+      "kind": "contract",
+      "owner": "semantic",
+      "paths": [
+        "packages/definitions/src/**",
+        "packages/definitions/catalogue/**",
+        "packages/definitions/contexts/**",
+        "packages/definitions/filters/**",
+        "packages/definitions/presentation/**",
+        "packages/definitions/schema/**",
+        "packages/definitions/sources/**"
+      ],
+      "publicEntries": [
+        "@rezics/definitions",
+        "@rezics/definitions/schema/release.json",
+        "@rezics/definitions/extension",
+        "@rezics/definitions/compile",
+        "@rezics/definitions/bundled",
+        "@rezics/definitions/validate",
+        "@rezics/definitions/bulk",
+        "@rezics/definitions/media-import",
+        "@rezics/definitions/slug",
+        "@rezics/definitions/catalogue",
+        "@rezics/definitions/catalogue/files",
+        "@rezics/definitions/schema/catalogue.json",
+        "@rezics/definitions/schema/catalogue-node.json",
+        "@rezics/definitions/schema/kind.json"
+      ],
+      "allowedDependencies": ["document", "filter"],
+      "capabilities": ["definitions"]
+    },
+    {
+      "id": "document",
+      "kind": "UI/transport library",
+      "owner": "web",
+      "paths": ["packages/document/src/**", "packages/document/schema/**"],
+      "publicEntries": ["@rezics/document", "@rezics/document/schema/*.json"],
+      "allowedDependencies": [],
+      "capabilities": ["document-rendering"]
+    },
+    {
+      "id": "filter",
+      "kind": "core",
+      "owner": "semantic",
+      "paths": ["packages/filter/src/**"],
+      "publicEntries": ["@rezics/filter"],
+      "allowedDependencies": [],
+      "capabilities": ["filtering"]
+    },
+    {
+      "id": "money",
+      "kind": "core",
+      "owner": "commerce",
+      "paths": ["packages/money/src/**"],
+      "publicEntries": ["@rezics/money"],
+      "allowedDependencies": [],
+      "capabilities": ["recorded-money-values"]
+    },
+    {
+      "id": "ui",
+      "kind": "UI/transport library",
+      "owner": "web",
+      "paths": ["packages/ui/src/**"],
+      "publicEntries": [
+        "@rezics/ui",
+        "@rezics/ui/styles.css",
+        "@rezics/ui/utils",
+        "@rezics/ui/shadcn/*",
+        "@rezics/ui/hooks/use-mobile",
+        "@rezics/ui/hooks/use-highlighted-code",
+        "@rezics/ui/hooks/*",
+        "@rezics/ui/lib/*",
+        "@rezics/ui/list-row",
+        "@rezics/ui/*"
+      ],
+      "allowedDependencies": ["document"],
+      "capabilities": ["ui-components"]
+    },
+    {
+      "id": "client",
+      "kind": "UI/transport library",
+      "owner": "web",
+      "paths": ["packages/client/src/**"],
+      "publicEntries": ["@rezics/client"],
+      "allowedDependencies": ["auth-contract", "composition", "definitions", "document", "filter"],
+      "capabilities": ["typed-client"]
+    },
+    {
+      "id": "kernel-identity-core",
+      "kind": "core",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/semantic/identity-core/**"],
+      "publicEntries": ["services/kernel/src/semantic/identity-core/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["canonical-identity-rules"]
+    },
+    {
+      "id": "progress",
+      "kind": "core",
+      "owner": "commerce",
+      "paths": ["packages/progress/src/**"],
+      "publicEntries": ["@rezics/progress"],
+      "allowedDependencies": [],
+      "capabilities": ["progress-rules"]
+    },
+    {
+      "id": "search-text",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["packages/search-text/src/**"],
+      "publicEntries": ["packages/search-text/src/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["text-query-grammar"]
+    }
+  ]
+}

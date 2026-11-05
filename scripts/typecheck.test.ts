@@ -1,14 +1,27 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
 import { prepareCompilerDatabase } from './compiler-database.ts';
-import { typecheck, type StartedDatabase } from './typecheck.ts';
+import { affectedWorkspaces, typecheck, type StartedDatabase } from './typecheck.ts';
 
 function fixture(): { root: string; remove: () => void } {
-  const root = mkdtempSync(join(tmpdir(), 'rezics-typecheck-'));
+  const repository = join(import.meta.dir, '..');
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const root = mkdtempSync(join(repository, '.temp/typecheck-'));
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: `bun@${Bun.version}` }));
+  mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
+  symlinkSync(process.execPath, join(root, 'node_modules/.bin/bun'));
   return { root, remove: () => rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -168,13 +181,31 @@ const url = process.env.DATABASE_URL ?? '';
 if (!url) process.exit(1);
 await Bun.write('database-url', url);
 `;
-    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun record.ts', { 'record.ts': recordDatabase });
-    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun record.ts', { 'record.ts': recordDatabase });
+    // Kernel and Auth type .sql imports through content mappers, which read the compiler database.
+    const mapped = '{ "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }] }\n';
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun record.ts', {
+      'record.ts': recordDatabase,
+      'tsconfig.json': mapped,
+    });
+    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun record.ts', {
+      'record.ts': recordDatabase,
+      'tsconfig.json': mapped,
+    });
     writeWorkspace(root, 'packages/client', '@fixture/client', undefined, { 'tsconfig.json': '{ "files": [] }\n' });
     const output = collector();
 
     const code = await typecheck({
       root,
+      env: {},
+      recognize: () => ({
+        outcome: 'admitted',
+        runId: 'fixture',
+        scope: 'fixture.scope',
+        supervisor: { pid: 1, started: '1', group: 1 },
+      }),
+      place: async () => {
+        throw new Error('nested host admission');
+      },
       stdout: output.stdout,
       startDatabase: async () => {
         starts += 1;
@@ -285,5 +316,147 @@ test('a workspace without a check script fails the run, because the root gate re
     expect(existsSync(join(root, 'apps/scripted/typechecked'))).toBe(true);
   } finally {
     remove();
+  }
+});
+
+test('a change checks the workspaces containing it and their dependents; a root file checks all', () => {
+  const root = '/repo';
+  const workspaces = [
+    { name: '@x/client', directory: '/repo/packages/client', dependencies: [] },
+    { name: '@x/ui', directory: '/repo/packages/ui', dependencies: [] },
+    { name: '@x/web', directory: '/repo/apps/web', dependencies: ['@x/client', '@x/ui'] },
+    { name: '@x/kernel', directory: '/repo/services/kernel', dependencies: [] },
+  ];
+  const names = (changed: string[] | undefined) => affectedWorkspaces(root, workspaces, changed).map((w) => w.name);
+  expect(names(['apps/web/src/a.ts'])).toEqual(['@x/web']);
+  expect(names(['packages/ui/src/b.tsx', 'docs/x.md'])).toEqual(['@x/ui', '@x/web']);
+  expect(names(['services/kernel/src/c.ts'])).toEqual(['@x/kernel']);
+  expect(names(['apps/web/README.md'])).toEqual([]);
+  expect(names(['bun.lock'])).toHaveLength(4);
+  expect(names(undefined)).toHaveLength(4);
+});
+
+test('a local Kernel landing reuses the prior dev compiler state and publishes the candidate state', async () => {
+  const { root, remove } = fixture();
+  try {
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': `
+const state = process.env.TYPECHECK_BUILD_INFO_FILE;
+if (!state) throw new Error('missing compiler state path');
+const previous = await Bun.file(state).text().catch(() => '');
+await Bun.write('reused', previous.length ? 'yes' : 'no');
+await Bun.write(state, previous + 'state');
+`,
+    });
+    const run = (base: string, candidate: string) =>
+      typecheck({
+        root,
+        changedFiles: ['services/kernel/src/changed.ts'],
+        env: { TYPECHECK_LOCAL: '1', TYPECHECK_DEV_COMMIT: base, TYPECHECK_CANDIDATE_COMMIT: candidate },
+        startDatabase: unusedDatabase(),
+        stdout: collector().stdout,
+      });
+
+    expect(await run('a'.repeat(40), 'b'.repeat(40))).toBe(0);
+    expect(readFileSync(join(root, 'services/kernel/reused'), 'utf8')).toBe('no');
+    expect(await run('b'.repeat(40), 'c'.repeat(40))).toBe(0);
+    expect(readFileSync(join(root, 'services/kernel/reused'), 'utf8')).toBe('yes');
+  } finally {
+    remove();
+  }
+});
+
+test('compiler cleanup and no-diagnostic compiler failures are infrastructure, never type errors', async () => {
+  const databaseFixture = fixture();
+  const error = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    writeWorkspace(databaseFixture.root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': passScript,
+    });
+    const local = {
+      TYPECHECK_LOCAL: '1',
+      TYPECHECK_DEV_COMMIT: 'a'.repeat(40),
+      TYPECHECK_CANDIDATE_COMMIT: 'b'.repeat(40),
+    };
+    const cleanupCode = await typecheck({
+      root: databaseFixture.root,
+      changedFiles: ['services/kernel/src/file.ts'],
+      env: local,
+      stdout: collector().stdout,
+      startDatabase: async () => ({
+        url: 'postgres://fixture/shared',
+        remove() {
+          throw new Error('volume remains');
+        },
+      }),
+    });
+    expect(cleanupCode).toBe(75);
+    expect(error).toHaveBeenCalledWith(
+      'root typecheck infrastructure failure: compiler database cleanup could not be proven: volume remains',
+    );
+  } finally {
+    error.mockRestore();
+    databaseFixture.remove();
+  }
+
+  const commandFixture = fixture();
+  try {
+    writeWorkspace(commandFixture.root, 'packages/failing', '@fixture/failing', 'bun fail.ts', {
+      'fail.ts': 'process.exit(2)\n',
+    });
+    const output = collector();
+    const code = await typecheck({
+      root: commandFixture.root,
+      changedFiles: ['packages/failing/fail.ts'],
+      stdout: output.stdout,
+    });
+    expect(code).toBe(75);
+    expect(output.text()).toContain('infrastructure after');
+    expect(output.text()).not.toContain('type-errors after');
+  } finally {
+    commandFixture.remove();
+  }
+});
+
+test('an admitted explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {
+  const repository = join(import.meta.dir, '..');
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repository, '.temp/compiler-explicit-url-'));
+  try {
+    const fixture = join(directory, 'run.ts');
+    writeFileSync(
+      fixture,
+      `
+import assert from 'node:assert/strict';
+import { typecheck } from ${JSON.stringify(join(repository, 'scripts/typecheck.ts'))};
+let consumers = 0;
+Bun.spawn = (command, options) => {
+  assert.equal(options.env.DATABASE_URL, process.env.DATABASE_URL);
+  consumers++;
+  return { exited: Promise.resolve(0), stdout: new Blob([]).stream(), stderr: new Blob([]).stream() };
+};
+assert.equal(await typecheck({
+  root: ${JSON.stringify(repository)},
+  recognize: () => ({ outcome: 'admitted', runId: 'fixture', scope: 'fixture.scope', supervisor: { pid: 1, started: '1', group: 1 } }),
+  place: async () => { throw new Error('nested host admission'); },
+  changedFiles: ['services/kernel/scripts/typecheck.ts'],
+  stdout: { write() {} },
+  startDatabase: async () => { throw new Error('must not replace a developer database'); },
+}), 0);
+assert.ok(consumers > 0);
+`,
+    );
+    const result = spawnSync(process.execPath, [fixture], {
+      cwd: repository,
+      encoding: 'utf8',
+      timeout: 10_000,
+      env: { ...process.env, DATABASE_URL: 'postgres://developer.test/explicit' },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

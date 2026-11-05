@@ -2594,7 +2594,16 @@ export async function reconcileCheckRunInvocation(
       return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
     });
   }
-  if (before.phase === 'unknown' && !options.force) return before;
+  if (before.phase === 'unknown' && !options.force) {
+    // Unknown earlier runs are not a result. Clean leftover private files; never start a replacement.
+    return mutateRecord(invocationId, options, async (directory, record) => {
+      try {
+        return (await cleanupPrivateReferencesUnderLock(directory, record, options)).record;
+      } catch {
+        return record;
+      }
+    });
+  }
   if (!before.physical) {
     if (before.cancellation.requested) {
       return mutateRecord(invocationId, options, async (directory, record) => {
