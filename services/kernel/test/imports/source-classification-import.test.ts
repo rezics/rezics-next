@@ -12,6 +12,7 @@ import { createSourceRegistration } from '../../../importer/src/source-registry.
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { Statement } from '../../src/semantic/item.ts';
 import { classificationQualifiersDigest } from '../../src/rating/register.ts';
+import { fixtureFetch } from './type-helpers.ts';
 import {
   createSourceStatisticLifecycleFixture,
   type SourceStatisticLifecycleFixture,
@@ -106,7 +107,7 @@ test('admitted classification uses the mounted client, retains provenance separa
     const ballots = await fixture.database.admin.query(
       'SELECT count(*)::text AS n FROM rating.classification_ballot_actor',
     );
-    return [votes[0]?.n, ballots[0]?.n];
+    return [votes.rows[0]?.n, ballots.rows[0]?.n];
   };
   const ballotsBefore = await ballotCounts();
   let loseNextPutResponse = false;
@@ -127,7 +128,7 @@ test('admitted classification uses the mounted client, retains provenance separa
     origin: 'https://kernel.test',
     tokenProvider: async () => fixture.bearer,
     maxAttempts: 1,
-    fetch: (async (input, init) => {
+    fetch: fixtureFetch(async (input, init) => {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
       if (path.endsWith(':put'))
@@ -139,7 +140,7 @@ test('admitted classification uses the mounted client, retains provenance separa
         throw new TypeError('classification response lost after commit');
       }
       return response;
-    }) as typeof fetch,
+    }),
   });
   const transport: ImportTransport = {
     batchWrite: (request) => Promise.resolve(resultFor(request, association.subjectId)),
@@ -198,13 +199,15 @@ test('admitted classification uses the mounted client, retains provenance separa
       subjectId: association.subjectId,
       associations: [association],
     });
-    expect(current[0]).toMatchObject({
+    const currentItem = current[0];
+    if (!currentItem) throw new Error('Missing classification observation read result');
+    expect(currentItem).toMatchObject({
       state: 'available',
       value: { confidence: { state: 'available', value: 1.2 }, sourceRecordId: 'v123' },
     });
     expect(await ballotCounts()).toEqual(ballotsBefore);
 
-    const digest = current[0]!.state === 'available' ? current[0].value.observation.digest : '';
+    const digest = currentItem.state === 'available' ? currentItem.value.observation.digest : '';
     facts = {
       ...facts,
       value: { kind: 'observation', confidence: 2.8, lie: false },

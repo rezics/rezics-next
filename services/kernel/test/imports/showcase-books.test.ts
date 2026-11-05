@@ -18,6 +18,7 @@ import {
 } from '../../../importer/src/showcase-books.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const origin = 'https://kernel.import.test';
@@ -91,10 +92,10 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin,
-      fetch: (async (input: RequestInfo | URL) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      }) as typeof fetch,
+      }),
     });
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const first = await importShowcaseBooks({
@@ -112,6 +113,9 @@ test('reader keeps book, volume and author identities after accept, adopt and on
       volumes: ['26', '27'],
       editions: [],
       authors: ['person:6023'],
+      illustrators: [],
+      publishers: [],
+      anime: [],
     });
     expect(first.identities['499']?.type).toBe('schema:BookSeries');
     expect(first.identities['26']?.type).toBe('schema:Book');
