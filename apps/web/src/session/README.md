@@ -37,6 +37,8 @@ physically removed during publication, outside render. Raw cache subscriptions r
 epochs and command retirement. React-facing session, exposure, workspace admission, response provenance and Inbox
 subscriptions publish after the current stack and ignore released listeners. Inbox retains its account viewer epoch
 and independent credential fencing for original uncertain commands; phone and desktop share its existing count query.
+Subject community/reaction revisions and personal response epochs also retire in-stack; their existing adapters
+publish React notifications through this same observer without changing specialist admission or command custody.
 
 Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed.
 

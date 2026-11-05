@@ -1,6 +1,7 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { observeReactionSession } from '../../threads/thread-reactions';
+import { browserObservation } from '../../session';
 
 /** Observe the existing owners without starting a session, exposure or per-card request. */
 function observeCommunityEnvironment(client: QueryClient | undefined) {
@@ -24,8 +25,13 @@ function observeCommunityEnvironment(client: QueryClient | undefined) {
     snapshot,
     serverSnapshot: () => '0:0',
     subscribe(notify: () => void) {
+      let active = true;
+      const observation = client && browserObservation(client);
+      const publish = () => {
+        if (active) notify();
+      };
       const stopSession = session.subscribe(notify);
-      const stopExposure = client?.getQueryCache().subscribe((event) => {
+      const stopExposure = observation?.subscribeCache((event) => {
         if (
           event.query.queryKey.length !== 2 ||
           event.query.queryKey[0] !== 'exposure' ||
@@ -40,9 +46,10 @@ function observeCommunityEnvironment(client: QueryClient | undefined) {
           return;
         previous = exposure();
         exposureRevision++;
-        notify();
+        observation.publish(publish);
       });
       return () => {
+        active = false;
         stopSession();
         stopExposure?.();
       };
