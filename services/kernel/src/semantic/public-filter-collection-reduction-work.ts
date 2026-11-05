@@ -22,7 +22,7 @@ const time = '9999-12-31T23:59:59.999999Z';
 const dependency = { kind: 'dependency', locator: { kind: 'collection', route: 65535, collection: uuid } };
 const affected = [{ kind: 'collection', route: 65535, collection: uuid }];
 const jsonKeys = ['["scope","unresolved"]'];
-const statements: Readonly<Record<string, Statement>> = Object.freeze({
+const statements = Object.freeze({
   owner: {
     query: ownerRead,
     maximum: { partition_no: 4095 },
@@ -75,7 +75,7 @@ const statements: Readonly<Record<string, Statement>> = Object.freeze({
     work: { candidateKeys: 2, nativeRows: 2, nativePoints: 2 },
     projection: { position: bigint },
   },
-});
+} satisfies Record<string, Statement>);
 
 const zero = (): Bound =>
   declareBound({
@@ -106,7 +106,10 @@ function bound(statement: Statement, input: Readonly<Record<string, unknown>>): 
 }
 
 const statementBounds = Object.freeze(
-  Object.fromEntries(Object.entries(statements).map(([id, item]) => [id, bound(item, item.maximum)])),
+  Object.fromEntries(Object.entries(statements).map(([id, item]) => [id, bound(item, item.maximum)])) as Record<
+    keyof typeof statements,
+    Bound
+  >,
 );
 
 export const PUBLIC_FILTER_COLLECTION_REDUCTION_DECLARATION = Object.freeze({

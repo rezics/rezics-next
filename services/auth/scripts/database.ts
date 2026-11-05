@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isCheckHostRun } from '../../../scripts/check-placement.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
@@ -24,7 +25,7 @@ function registerCleanup(): void {
 }
 
 export function assertDatabasePlacement(): void {
-  if (!placed && !laneContext(process.env)) {
+  if (!placed && !laneContext(process.env) && !isCheckHostRun(directory)) {
     throw new Error('Auth test databases require placement; use bun run --cwd services/auth check <file>');
   }
 }

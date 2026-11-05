@@ -2464,6 +2464,13 @@ requiring the DBOS schema to exist during migration.
 The Cost table records the full/short native batch series and its fixed-batch,
 retained-child and long-lived-workflow qualifications.
 
+The retained growth and protocol tests also run directly with `bun test` inside
+an admitted remote check. Their fixtures recognize the same physical check-host
+confinement as the Auth runner, create their own migrated databases, and retain
+the native SQL, plan and examined-work assertions. Environment markers alone
+do not grant placement. Keep those causal assertions unchanged; the seeded API
+and page walk supplies separate consumer acceptance.
+
 ### Erasure cursor deployment
 
 Quiesce Auth issuers and account workers before applying the ordinal migration.
