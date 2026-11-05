@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { creationFixture } from '../tests/creation-page-fixture';
 import { nativeSignInProof } from '../tests/sign-in-fixture';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
@@ -10,6 +11,8 @@ import {
   type TransferRequest,
 } from '../src/operator-transfer';
 import { OPERATOR_TRANSFER_PAGE_PATH } from '../src/operator-transfer-page';
+
+creationFixture();
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
