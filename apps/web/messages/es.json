@@ -10479,5 +10479,10 @@
   "release_search_window_first": "Primera ventana de grupos",
   "release_search_window_limit": "Solo se conservan las últimas 12 ventanas de grupos admitidas. Vuelve a la primera para empezar de nuevo.",
   "release_search_window_repeated": "Esta continuación repite una ventana de grupos anterior. Empieza de nuevo desde la primera.",
-  "release_search_window_results": "Grupos actuales de obras y ediciones"
+  "release_search_window_results": "Grupos actuales de obras y ediciones",
+  "subject_synopsis_global_only": "Esta página de corrección solo admite lecturas Global. Vuelve a la lectura seleccionada para consultar su sinopsis y sus referencias.",
+  "subject_synopsis_visit_invalid": "No se ha podido abrir esta visita a la sinopsis. Vuelve a la lectura actual de la obra y selecciona de nuevo la sinopsis.",
+  "subject_synopsis_visit_changed": "No se ha podido volver a abrir la sinopsis solicitada con su documento original. La lectura actual puede haber cambiado o no estar disponible.",
+  "subject_synopsis_current_field": "Consultar el campo Global actual en una nueva visita",
+  "subject_synopsis_return_changed": "La sinopsis seleccionada anteriormente ha cambiado o ya no está disponible. Se muestra la lectura actual."
 }

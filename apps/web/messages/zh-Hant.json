@@ -10573,5 +10573,10 @@
   "release_search_window_first": "第一個分組頁面",
   "release_search_window_limit": "僅保留最近 12 個已讀取的分組頁面。可選擇第一個分組頁面重新開始。",
   "release_search_window_repeated": "此接續位置重複了先前的分組頁面。請從第一個分組頁面重新開始。",
-  "release_search_window_results": "目前作品與發行版本分組"
+  "release_search_window_results": "目前作品與發行版本分組",
+  "subject_synopsis_global_only": "此修正頁面僅支援 Global 閱讀。請返回所選閱讀，繼續查看其簡介與證據。",
+  "subject_synopsis_visit_invalid": "無法開啟這次簡介檢視。請返回作品目前的閱讀頁面，重新選擇簡介。",
+  "subject_synopsis_visit_changed": "無法依照原本的文件綁定重新開啟所選簡介。目前的閱讀可能已變更或無法使用。",
+  "subject_synopsis_current_field": "另行檢視目前的 Global 欄位",
+  "subject_synopsis_return_changed": "先前所選的簡介已變更或不再提供。此處顯示目前的閱讀。"
 }

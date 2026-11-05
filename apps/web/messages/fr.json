@@ -10479,5 +10479,10 @@
   "release_search_window_first": "Première fenêtre de groupes",
   "release_search_window_limit": "Seules les 12 dernières fenêtres de groupes admises sont conservées. Reprenez à la première pour recommencer.",
   "release_search_window_repeated": "Cette suite répète une fenêtre de groupes précédente. Reprenez à la première.",
-  "release_search_window_results": "Groupes actuels d’œuvres et d’éditions"
+  "release_search_window_results": "Groupes actuels d’œuvres et d’éditions",
+  "subject_synopsis_global_only": "Cette page de correction prend uniquement en charge les lectures Global. Revenez à la lecture sélectionnée pour consulter son synopsis et ses références.",
+  "subject_synopsis_visit_invalid": "Cette visite du synopsis ne peut pas être ouverte. Revenez à la lecture actuelle de l’œuvre et sélectionnez à nouveau le synopsis.",
+  "subject_synopsis_visit_changed": "Le synopsis demandé ne peut pas être rouvert avec le document associé à l’origine. La lecture actuelle a peut-être changé ou est indisponible.",
+  "subject_synopsis_current_field": "Consulter le champ Global actuel dans une nouvelle visite",
+  "subject_synopsis_return_changed": "Le synopsis précédemment sélectionné a changé ou n’est plus disponible. La lecture actuelle est affichée."
 }

@@ -20,19 +20,21 @@ import {
 } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
 import { bestRank, isRecord } from '../pages/shared';
+import { synopsisVisit } from '../pages/subject-summary-reading/visit';
+import { synopsisChoices, synopsisReturnMatches, SUMMARY_PROPERTY } from '../pages/subject-summary-reading/model';
 import { readCorrectionActions, type ProposalResult, type StatementInput } from './statement-editor';
 
 // The native proposal schema accepts a generic statement; reuse the shared definition input for its parts.
 export type AuthoredStatement = StatementInput;
 export type AuthoredCommand = { id: string; key: string; statement: AuthoredStatement; session?: string };
-export type AuthoredAddress = { id: string; property?: string; session?: string };
+export type AuthoredAddress = { id: string; property?: string; session?: string; via?: string };
 type Statement = SubjectRead['subject']['statements'][string][number];
 export type AuthoredDocument = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['documents']>['get']>>['data']
 >['document'];
 export type AuthoredBody = { ok: true; document: AuthoredDocument } | CandidateFailure;
 export type AuthoredRead =
-  | CandidateFailure
+  | (CandidateFailure & { inspection?: 'changed' | 'unsupported' | 'invalid' })
   | {
       ok: true;
       public: SubjectRead;
@@ -167,7 +169,15 @@ export async function readAuthoredField(
   address: AuthoredAddress,
   locale: string,
   authorization?: string,
+
 ): Promise<AuthoredRead> {
+  const visit = synopsisVisit(address.via, address.id, locale);
+  if (visit.kind === 'invalid') return { ok: false, reason: 'invalid', inspection: 'invalid' };
+  const inspection = visit.kind === 'selected' ? visit.selection : undefined;
+  if (inspection && (inspection.realm || inspection.context !== candidateContext))
+    return { ok: false, reason: 'invalid', inspection: 'unsupported' };
+  if (inspection && address.property !== SUMMARY_PROPERTY)
+    return { ok: false, reason: 'invalid', inspection: 'invalid' };
   try {
     // These reads are independent. Public selection never borrows the editor's bearer.
     const [current, active] = await Promise.all([
@@ -197,18 +207,32 @@ export async function readAuthoredField(
       locale,
       originalLanguage(current.data.subject),
     );
-    const statement =
+    let statement =
       selected.find(
         (statement) =>
           statement.value.type === 'value' &&
           isRecord(statement.value.content) &&
           statement.value.content.language === language,
       ) ?? null;
+    if (inspection) {
+      const choices = synopsisChoices(current.data.subject, locale);
+      const exact = choices.kind === 'ready'
+        ? choices.choices.find((choice) => synopsisReturnMatches(choice, inspection))
+        : undefined;
+      if (
+        !exact ||
+        (inspection.release !== undefined && inspection.release !== active.data.digest) ||
+        (inspection.source !== undefined && inspection.source !== String(Reflect.get(current.data.subject, 'revision')))
+      )
+        return { ok: false, reason: 'stale', inspection: 'changed' };
+      statement = exact.statement as Statement;
+    }
     const session = new Headers(current.headers).get('rezics-session-token') ?? address.session;
     const [body, actions] = await Promise.all([
       statement ? readAuthoredBody(client, address.id, statement, undefined, session) : null,
       readCorrectionActions(client, authorization, address.id),
     ]);
+    if (inspection && body && !body.ok) return { ...body, inspection: 'changed' };
     return {
       ok: true,
       public: current.data,
@@ -268,6 +292,10 @@ export async function readAuthoredReview(
   address: AuthoredAddress & { property: string; candidate: string; cursor?: string },
   locale: string,
 ): Promise<AuthoredReview> {
+  const visit = synopsisVisit(address.via, address.id, locale);
+  if (visit.kind === 'invalid' || (visit.kind === 'selected' &&
+    (visit.selection.realm || visit.selection.context !== candidateContext || address.property !== SUMMARY_PROPERTY)))
+    return { comparison: candidateFailure(400), body: null };
   const [comparison, form] = await Promise.all([
     readCandidates(client, authorization, address.id, address.property, address.cursor, undefined, address.session),
     readAuthoredField(client, address, locale, authorization),

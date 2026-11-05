@@ -10666,5 +10666,10 @@
   "release_search_window_first": "First group window",
   "release_search_window_limit": "Only the last 12 admitted group windows are kept. Use First group window to start again.",
   "release_search_window_repeated": "This continuation repeats an earlier group window. Start again from the first group window.",
-  "release_search_window_results": "Current work and release groups"
+  "release_search_window_results": "Current work and release groups",
+  "subject_synopsis_global_only": "This correction destination supports Global readings only. Return to the selected reading to continue inspecting its synopsis and evidence.",
+  "subject_synopsis_visit_invalid": "This synopsis visit could not be opened. Return to the current work reading and choose the synopsis again.",
+  "subject_synopsis_visit_changed": "The requested synopsis could not be reopened with its original document binding. The current reading may have changed or be unavailable.",
+  "subject_synopsis_current_field": "Inspect the current Global field as a new visit",
+  "subject_synopsis_return_changed": "The previous synopsis selection has changed or is no longer available. This is the current reading."
 }

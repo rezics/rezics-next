@@ -1,3 +1,4 @@
+import { SUMMARY_VISIT_ADDRESS_BYTE_CAP } from '../pages/subject-summary-reading/visit';
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
@@ -27,13 +28,16 @@ function address(value: unknown): AuthoredAddress {
     typeof input.id !== 'string' ||
     !uuid.test(input.id) ||
     (input.property !== undefined && (typeof input.property !== 'string' || input.property.length > 256)) ||
-    (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384))
+    (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384)) ||
+    (input.via !== undefined && (typeof input.via !== 'string' ||
+      new TextEncoder().encode(input.via).byteLength > SUMMARY_VISIT_ADDRESS_BYTE_CAP))
   )
     throw new Error('Invalid authored address');
   return {
     id: input.id,
     ...(typeof input.property === 'string' ? { property: input.property } : {}),
     ...(typeof input.session === 'string' ? { session: input.session } : {}),
+    ...(typeof input.via === 'string' ? { via: input.via } : {}),
   };
 }
 

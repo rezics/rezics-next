@@ -10573,5 +10573,10 @@
   "release_search_window_first": "最初のグループページ",
   "release_search_window_limit": "読み込んだ直近12ページのグループを保持します。最初のグループページからやり直せます。",
   "release_search_window_repeated": "この続きは前のグループページと重複しています。最初のグループページからやり直してください。",
-  "release_search_window_results": "現在の作品とリリースのグループ"
+  "release_search_window_results": "現在の作品とリリースのグループ",
+  "subject_synopsis_global_only": "この修正ページは Global の閲覧にのみ対応しています。選択した閲覧に戻り、そのあらすじと根拠を確認してください。",
+  "subject_synopsis_visit_invalid": "このあらすじを開けませんでした。作品の現在の閲覧ページに戻り、あらすじを選び直してください。",
+  "subject_synopsis_visit_changed": "元の文書との対応関係で、選択したあらすじを再表示できませんでした。現在の閲覧内容が変更されたか、利用できない可能性があります。",
+  "subject_synopsis_current_field": "新しい閲覧として現在の Global フィールドを確認",
+  "subject_synopsis_return_changed": "以前選択したあらすじは変更されたか、利用できなくなりました。現在の閲覧内容を表示しています。"
 }
