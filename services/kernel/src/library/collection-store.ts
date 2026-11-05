@@ -353,7 +353,7 @@ export async function deleteMembers(
     ...write(context),
   };
   // Bind the JSON document once, as in native ordinal respacing; never JSON-encode an already encoded string.
-  const plan = memberRetentionRemovalPlan(input);
+  const plan = memberRetentionRemovalPlan(input, items.length);
   const { rows } = await consumeMemberRetention('remove', plan.total, () =>
     client.query<(typeof memberDelete)['~reylo']['element']>(memberDelete.sql, [...plan.values]));
   return rows.map((row) => {

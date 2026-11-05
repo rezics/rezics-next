@@ -50,8 +50,7 @@ export function memberRetentionDuePlan(input: Parameters<typeof due.run>[1]) {
   });
 }
 
-export function memberRetentionRemovalPlan(input: Parameters<typeof remove.run>[1]) {
-  const n = input.items.length;
+export function memberRetentionRemovalPlan(input: Parameters<typeof remove.run>[1], n: number) {
   const values = remove.params.map(key => key === 'items' ? JSON.stringify(input.items) : input[key as keyof typeof input]);
   return Object.freeze({ values: Object.freeze(values), ...memberRetentionSqlPlan(remove.sql, values, {
     // requested/selected materialization and scans, parent CAS and addressed member writes.
@@ -60,7 +59,8 @@ export function memberRetentionRemovalPlan(input: Parameters<typeof remove.run>[
 }
 
 export function memberRetentionReadPlan(input: Parameters<typeof read.run>[1]) {
-  return memberRetentionPoint(read.sql, read.params.map(key => input[key as keyof typeof input]));
+  return memberRetentionPoint(read.sql, read.params.map(key => input[key as keyof typeof input]), 1,
+    memberBytes + size({ deletedAt: timestamp, purgeAfter: timestamp, deletionRevision: '9223372036854775807' }));
 }
 export function memberRetentionRestorePlan(input: Parameters<typeof restore.run>[1]) {
   return memberRetentionPoint(restore.sql, restore.params.map(key => input[key as keyof typeof input]), 8);
