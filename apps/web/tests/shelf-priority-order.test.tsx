@@ -46,16 +46,18 @@ test('priority order sends native direction and continuation and preserves rank 
     { subjectId: 'rank-tie-a', state: 'reading.arc-1', revision: 1, priority: 7 },
     { subjectId: 'rank-missing', state: 'reading.arc-1', revision: 3, priority: null },
   ];
+  let responseNumber = 0;
   const fetch = mock((input: RequestInfo | URL) => {
     requests.push(new URL(input instanceof Request ? input.url : String(input)));
-    return Promise.resolve(Response.json({ libraryEntries: nativeRows, next: 'opaque:native-next' }));
+    const next = responseNumber++ % 2 === 0 ? 'opaque:native-next' : null;
+    return Promise.resolve(Response.json({ libraryEntries: nativeRows, next }));
   });
   const client = createKernelClient('https://api.test', { fetch });
   for (const direction of ['asc', 'desc'] as const) {
-    const page = await readEntryPage(
+    const first = await readEntryPage(
       client,
       'Bearer owner',
-      'opaque:priority-cursor',
+      undefined,
       'reading.arc-1',
       20,
       { orderBy: 'priority', direction },
@@ -64,18 +66,36 @@ test('priority order sends native direction and continuation and preserves rank 
     expect(Object.fromEntries(requests.at(-1)!.searchParams)).toEqual({
       view: 'FULL',
       limit: '20',
-      cursor: 'opaque:priority-cursor',
       state: 'reading.arc-1',
       orderBy: 'priority',
       direction,
       type: 'schema:Book',
     });
-    expect(page.libraryEntries.map((entry) => [entry.subjectId, entry.priority])).toEqual([
+    expect(first.next).toBe('opaque:native-next');
+    const next = await readEntryPage(
+      client,
+      'Bearer owner',
+      first.next ?? undefined,
+      'reading.arc-1',
+      20,
+      { orderBy: 'priority', direction },
+      'schema:Book',
+    );
+    expect(Object.fromEntries(requests.at(-1)!.searchParams)).toEqual({
+      view: 'FULL',
+      limit: '20',
+      cursor: 'opaque:native-next',
+      state: 'reading.arc-1',
+      orderBy: 'priority',
+      direction,
+      type: 'schema:Book',
+    });
+    expect(next.libraryEntries.map((entry) => [entry.subjectId, entry.priority])).toEqual([
       ['rank-tie-b', 7],
       ['rank-tie-a', 7],
       ['rank-missing', null],
     ]);
-    expect(page.next).toBe('opaque:native-next');
+    expect(next.next).toBeNull();
   }
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(4);
 });

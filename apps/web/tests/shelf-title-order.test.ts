@@ -41,6 +41,7 @@ test('localized title order reads one native FULL page in the selected direction
     { subjectId: 'z-native-first', state: 'planned', revision: 1 },
     { subjectId: 'a-native-second', state: 'planned', revision: 2 },
   ];
+  let responseNumber = 0;
   const client = createKernelClient('https://kernel.invalid', {
     headers: { 'accept-language': 'ja-JP, ja;q=0.9' },
     fetch: async (input, init) => {
@@ -48,14 +49,15 @@ test('localized title order reads one native FULL page in the selected direction
         url: new URL(input instanceof Request ? input.url : String(input)),
         headers: new Headers(init?.headers),
       });
-      return Response.json({ libraryEntries: nativeRows, next: 'native-next' });
+      const next = responseNumber++ % 2 === 0 ? 'opaque:title-next' : null;
+      return Response.json({ libraryEntries: nativeRows, next });
     },
   });
   for (const direction of ['asc', 'desc'] as const) {
-    const page = await readEntryPage(
+    const first = await readEntryPage(
       client,
       'Bearer current',
-      'opaque:title-cursor',
+      undefined,
       'planned',
       20,
       { orderBy: 'title', direction },
@@ -64,7 +66,6 @@ test('localized title order reads one native FULL page in the selected direction
     expect(Object.fromEntries(requests.at(-1)!.url.searchParams)).toEqual({
       view: 'FULL',
       limit: '20',
-      cursor: 'opaque:title-cursor',
       state: 'planned',
       orderBy: 'title',
       direction,
@@ -72,7 +73,29 @@ test('localized title order reads one native FULL page in the selected direction
     });
     expect(requests.at(-1)!.headers.get('authorization')).toBe('Bearer current');
     expect(requests.at(-1)!.headers.get('accept-language')).toBe('ja-JP, ja;q=0.9');
-    expect(page.libraryEntries.map((entry) => entry.subjectId)).toEqual(['z-native-first', 'a-native-second']);
-    expect(page.next).toBe('native-next');
+    expect(first.libraryEntries.map((entry) => entry.subjectId)).toEqual(['z-native-first', 'a-native-second']);
+    expect(first.next).toBe('opaque:title-next');
+    const next = await readEntryPage(
+      client,
+      'Bearer current',
+      first.next ?? undefined,
+      'planned',
+      20,
+      { orderBy: 'title', direction },
+      'schema:Book',
+    );
+    expect(Object.fromEntries(requests.at(-1)!.url.searchParams)).toEqual({
+      view: 'FULL',
+      limit: '20',
+      cursor: 'opaque:title-next',
+      state: 'planned',
+      orderBy: 'title',
+      direction,
+      type: 'schema:Book',
+    });
+    expect(next.libraryEntries.map((entry) => entry.subjectId)).toEqual(['z-native-first', 'a-native-second']);
+    expect(next.next).toBeNull();
+    expect(requests.at(-1)!.headers.get('authorization')).toBe('Bearer current');
+    expect(requests.at(-1)!.headers.get('accept-language')).toBe('ja-JP, ja;q=0.9');
   }
 });
