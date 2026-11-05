@@ -109,12 +109,10 @@ export function readRealmDiscoveryQuery(
   const onAbort = () => rejectAbort(signal.reason);
   signal.addEventListener('abort', onAbort, { once: true });
   if (signal.aborted) onAbort();
-  const request = observer
-    .refetch({ cancelRefetch: false, throwOnError: true })
-    .then((result) => {
-      if (result.status !== 'success') throw result.error;
-      return result.data;
-    });
+  const request = observer.refetch({ cancelRefetch: false, throwOnError: true }).then((result) => {
+    if (result.status !== 'success') throw result.error;
+    return result.data;
+  });
   return Promise.race([request, aborted]).finally(() => {
     signal.removeEventListener('abort', onAbort);
     unsubscribe();

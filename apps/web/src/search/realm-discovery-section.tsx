@@ -39,12 +39,15 @@ export function createSearchRealmDiscoveryPage(
 ) {
   const page = createRealmPageProgress({
     read: ({ cursor, signal }) =>
-      load({
-        locale,
-        sort: 'trending',
-        limit: REALM_DISCOVERY_LIMIT,
-        ...(cursor === undefined ? {} : { cursor }),
-      }, signal),
+      load(
+        {
+          locale,
+          sort: 'trending',
+          limit: REALM_DISCOVERY_LIMIT,
+          ...(cursor === undefined ? {} : { cursor }),
+        },
+        signal,
+      ),
     publish: (window) =>
       publish(window.state, {
         pending: window.pending,
