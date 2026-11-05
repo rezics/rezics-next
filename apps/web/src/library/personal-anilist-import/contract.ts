@@ -12,6 +12,8 @@ type NativeAniListApplyResult = NonNullable<Awaited<ReturnType<NonNullable<Nativ
 type NativeAniListRow = NativeAniListPage['rows'][number];
 type NativeAniListReview = NonNullable<NativeAniListRow['review']>;
 type NativeAniListOutcome = NonNullable<NativeAniListRow['outcome']>;
+type NativeAniListObservation = NonNullable<NativeAniListRow['proposal']>;
+type NativeAniListSource = NativeAniListRow['source'];
 
 /** Native AniList personal-list caps, verified at Commerce delivery. */
 export const ANILIST_UPLOAD_BYTES = 1_048_576;
@@ -45,21 +47,33 @@ export type AniListJson = string | number | boolean | null | AniListJson[] | { r
 export type AniListRecord = { readonly [key: string]: AniListJson };
 export type AniListIdentifier = NativeAniListRow['source']['identifiers'][number];
 export type AniListSourceField = NativeAniListRow['source']['fields'][number];
-export type AniListSource = NativeAniListRow['source'];
+export type AniListSource = Omit<NativeAniListSource, 'evidence' | 'group'> & {
+  evidence: AniListRecord;
+  group: AniListRecord | null;
+};
 export type AniListMatch = NativeAniListRow['match'];
 export type AniListCurrent = NonNullable<NonNullable<NativeAniListRow['proposal']>['current']>;
-export type AniListObservation = NonNullable<NativeAniListRow['proposal']>;
+export type AniListObservation = Omit<NativeAniListObservation, 'pin'> & { pin: AniListJson | null };
 export type AniListReviewInput = NativeAniListReview['input'];
-// The installed client return types own native DTOs. `unknown` here preserves additive score payloads
-// until their generated declaration catches up without introducing a second native schema.
-export type AniListReview = Omit<NativeAniListReview, 'score'> & { score?: unknown };
-export type AniListOutcome = Omit<NativeAniListOutcome, 'score'> & { score?: unknown };
+// Native DTOs stay derived from the installed client; only values validated as JSON are narrowed
+// for the Web server-function serialization boundary.
+export type AniListReview = Omit<NativeAniListReview, 'observation' | 'score'> & {
+  observation: AniListObservation | null;
+  score?: AniListRecord;
+};
+export type AniListOutcome = Omit<NativeAniListOutcome, 'score'> & { score?: AniListRecord };
 export type AniListOutcomeStatus = AniListOutcome['status'];
-export type AniListHeader = NativeAniListPage['header'];
-export type AniListRow = Omit<NativeAniListRow, 'review' | 'outcome' | 'currentScore'> & {
+export type AniListHeader = Omit<NativeAniListPage['header'], 'document' | 'scoreFormat'> & {
+  document: AniListJson | null;
+  scoreFormat: AniListScoreFormat | null;
+};
+export type AniListRow = Pick<NativeAniListRow, 'ordinal' | 'match'> & {
+  source: AniListSource;
+  proposal: AniListObservation | null;
   review: AniListReview | null;
+  started: boolean;
   outcome: AniListOutcome | null;
-  currentScore?: unknown;
+  currentScore?: AniListJson;
   scoreLexeme?: string;
 };
 export type AniListCompleteness = {
@@ -67,8 +81,9 @@ export type AniListCompleteness = {
   hasNextChunk: boolean;
   listedGroups: number;
 };
-export type AniListPage = Omit<NativeAniListPage, 'rows'> & {
+export type AniListPage = Omit<NativeAniListPage, 'header' | 'rows'> & {
   importId: string;
+  header: AniListHeader;
   completeness: AniListCompleteness;
   rows: AniListRow[];
 };

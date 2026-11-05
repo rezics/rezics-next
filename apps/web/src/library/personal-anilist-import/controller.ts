@@ -132,7 +132,12 @@ function scoreSourceMeta(
   const field = row.source.fields.find((candidate) => candidate.field === 'score');
   return {
     value: row.source.evidence.score,
-    lexeme: typeof row.scoreLexeme === 'string' ? row.scoreLexeme : null,
+    lexeme:
+      typeof row.scoreLexeme === 'string'
+        ? row.scoreLexeme
+        : typeof row.source.scoreLexeme === 'string'
+          ? row.source.scoreLexeme
+          : null,
     scale: scoreFormat,
     validity: field?.validity ?? 'unknown',
     reason: field?.reason ?? 'The source score was retained without a field mapping.',
@@ -513,21 +518,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const response = await run(command, () => port.review(command));
     if (!response || response.kind !== 'reviewed' || !live()) return snapshot();
     cost.recordReview();
-    const row = page.find((item) => item.ordinal === ordinal);
-    if (row) row.review = response.review;
+    const row = page.find((item) => item.ordinal === ordinal)!;
+    row.review = response.review;
     meta.set(ordinal, {
-      ...(current ??
-        metaFromRow(
-          row ?? {
-            ordinal,
-            source: { evidence: {}, group: null, identifiers: [], fields: [] },
-            match: { state: 'unmatched', candidates: [], fingerprint: '' },
-            proposal: null,
-            review: response.review,
-            started: false,
-            outcome: null,
-          },
-        )),
+      ...(current ?? metaFromRow(row, undefined, scoreFormat)),
       match: response.review.match.state,
       target: response.review.input.subjectId ?? response.review.observation?.subjectId ?? target ?? null,
       proposedState: response.review.observation?.proposedState ?? null,
@@ -537,11 +531,11 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       replace: response.review.input.replace === true,
       applyStatus: response.review.input.fields.includes('status'),
       reviewInvalidated: false,
-      scoreSource: row ? scoreSourceMeta(row, scoreFormat) : current?.scoreSource ?? null,
+      scoreSource: scoreSourceMeta(row, scoreFormat) ?? current?.scoreSource ?? null,
       scoreAction: response.review.input.score?.action ?? 'keep',
       scoreUnits: response.review.input.score?.action === 'vote' ? response.review.input.score.units : null,
-      scoreReview: row ? scoreReviewMeta(row) : null,
-      currentScore: row && Object.hasOwn(row, 'currentScore') ? row.currentScore : (current?.currentScore ?? null),
+      scoreReview: scoreReviewMeta(row),
+      currentScore: Object.hasOwn(row, 'currentScore') ? row.currentScore : (current?.currentScore ?? null),
       nativeVoteConsent: null,
       outcome: null,
     });

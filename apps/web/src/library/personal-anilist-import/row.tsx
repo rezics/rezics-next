@@ -54,14 +54,29 @@ function currentReadback(value: unknown): {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const score = value as Record<string, unknown>;
   if (score.status === 'unavailable')
-    return { status: 'unavailable', units: null, reason: typeof score.reason === 'string' ? score.reason : undefined };
+    return {
+      status: 'unavailable',
+      units: null,
+      ...(typeof score.reason === 'string' ? { reason: score.reason } : {}),
+    };
   if (score.status !== 'current') return null;
   const question = score.question && typeof score.question === 'object' ? score.question as Record<string, unknown> : {};
   const questionLabel = typeof question.label === 'string' ? question.label : undefined;
   const questionRevision = typeof question.revision === 'number' ? question.revision : undefined;
-  if (score.vote === null) return { status: 'current', units: null };
+  if (score.vote === null)
+    return {
+      status: 'current',
+      units: null,
+      ...(questionLabel === undefined ? {} : { questionLabel }),
+      ...(questionRevision === undefined ? {} : { questionRevision }),
+    };
   if (score.vote && typeof score.vote === 'object' && 'units' in score.vote && typeof score.vote.units === 'number')
-    return { status: 'current', units: score.vote.units, questionLabel, questionRevision };
+    return {
+      status: 'current',
+      units: score.vote.units,
+      ...(questionLabel === undefined ? {} : { questionLabel }),
+      ...(questionRevision === undefined ? {} : { questionRevision }),
+    };
   return null;
 }
 

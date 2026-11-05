@@ -149,6 +149,7 @@ function makeJourneyPort() {
         commandKey: command.key,
         clientId: 'story-client',
         requestedBy: null,
+        sourceFingerprint: `source-${command.ordinal}`,
         match: { state: 'matched', candidates: [subject], fingerprint: `match-${command.ordinal}` },
         observation: {
           subjectId: subject,
@@ -175,6 +176,9 @@ function makeJourneyPort() {
       const outcomes = command.body.confirmations.map(({ ordinal, confirmNativeVoteEffects }) => {
         const reviewed = reviews.get(ordinal);
         const hasScore = !!reviewed?.score;
+        const score = reviewed?.score;
+        const scoreAction = score?.action;
+        const scoreUnits = score?.units;
         const scoreStatus = ordinal === 2 ? 'unavailable' : 'applied';
         if (hasScore && confirmNativeVoteEffects) {
           readbacks.set(
@@ -184,7 +188,7 @@ function makeJourneyPort() {
               : {
                   status: 'current',
                   question: { id: QUESTION, revision: questionRevision, label: 'Overall' },
-                  vote: reviewed.score!.action === 'clear' ? null : { units: reviewed.score!.units, revision: 4 },
+                  vote: scoreAction === 'clear' ? null : { units: scoreUnits, revision: 4 },
                 },
           );
         }

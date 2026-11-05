@@ -43,8 +43,7 @@ import {
   type AniListUnknown,
 } from './contract';
 
-type NativeResult = { data?: unknown; error?: { value?: unknown }; status: number };
-type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
+type NativeResult = { data?: unknown; error?: { value?: unknown } | null; status: number };
 type AniListSurface = NonNullable<KernelClient['libraryImports']['anilist']>;
 type IdResource = ReturnType<AniListSurface>;
 
@@ -55,7 +54,7 @@ function record(value: unknown): value is Record<string, unknown> {
 function asSurface(value: unknown): AniListSurface | undefined {
   if (typeof value !== 'function') return undefined;
   const surface = value as AniListSurface;
-  const preview = surface.$preview ?? surface.preview;
+  const preview = surface.$preview;
   if (!preview || typeof preview.post !== 'function') return undefined;
   return surface;
 }
@@ -180,14 +179,14 @@ function isReview(value: unknown): value is AniListReview {
   if (typeof value.commandKey !== 'string' || typeof value.clientId !== 'string') return false;
   if (value.requestedBy !== null && typeof value.requestedBy !== 'string') return false;
   if (!isMatch(value.match) || !isReviewInput(value.input)) return false;
-  if (value.score !== undefined && !record(value.score)) return false;
+  if (value.score !== undefined && !isRecord(value.score)) return false;
   return value.observation === null || isObservation(value.observation);
 }
 
 function isOutcome(value: unknown): value is AniListOutcome {
   if (!record(value) || typeof value.ordinal !== 'number' || !Array.isArray(value.retained)) return false;
   if (!value.retained.every((field) => typeof field === 'string')) return false;
-  if (value.score !== undefined && !record(value.score)) return false;
+  if (value.score !== undefined && !isRecord(value.score)) return false;
   return (
     value.status === 'applied' ||
     value.status === 'skipped' ||
@@ -201,7 +200,7 @@ function isOutcome(value: unknown): value is AniListOutcome {
 function isHeader(value: unknown): value is AniListHeader {
   if (!record(value) || typeof value.count !== 'number' || typeof value.cancelled !== 'boolean') return false;
   if (typeof value.rawUpload !== 'string') return false;
-  if (value.document !== null && value.document !== undefined && !isJson(value.document)) return false;
+  if (value.document !== null && !isJson(value.document)) return false;
   if (value.scoreFormat !== null && !isScoreFormat(value.scoreFormat)) return false;
   return true;
 }
@@ -218,7 +217,7 @@ function isRow(value: unknown): value is AniListRow {
 }
 
 function isCurrentScore(value: unknown): boolean {
-  if (!record(value)) return false;
+  if (!isRecord(value)) return false;
   if (value.status === 'unavailable') return typeof value.reason === 'string';
   if (value.status !== 'current' || !record(value.question)) return false;
   return (
@@ -301,9 +300,10 @@ export function kernelAniListPort(
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
 ): AniListImportPort {
-  const headers = (authorization: string, key?: string): NativeHeaders => ({
+  const authorizationHeaders = (authorization: string) => ({ authorization });
+  const idempotencyHeaders = (authorization: string, key: string) => ({
     authorization,
-    ...(key ? { 'idempotency-key': quotedIdempotencyKey(key) } : {}),
+    'idempotency-key': quotedIdempotencyKey(key),
   });
   async function call<T>(
     command: AniListCommand,
@@ -338,14 +338,13 @@ export function kernelAniListPort(
       return call(
         command,
         (anilist, authorization) => {
-          const preview = anilist.$preview ?? anilist.preview;
+          const preview = anilist.$preview;
           if (!preview) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return preview.post(
-            command.scoreFormat
-              ? { upload: command.upload, scoreFormat: command.scoreFormat }
-              : { upload: command.upload },
-            { headers: headers(authorization, command.key) },
-          );
+          const body = command.scoreFormat
+            ? { upload: command.upload, scoreFormat: command.scoreFormat }
+            : { upload: command.upload };
+          // The installed route accepts scoreFormat; the generated client currently marks it `never`.
+          return preview.post(body as never, { headers: idempotencyHeaders(authorization, command.key) });
         },
         (data) => {
           if (!record(data) || typeof data.id !== 'string' || !SUBJECT_ID.test(data.id)) return undefined;
@@ -360,7 +359,7 @@ export function kernelAniListPort(
         (anilist, authorization) =>
           anilist({ importId: command.importId }).get({
             query: { after: command.after },
-            headers: headers(authorization),
+            headers: authorizationHeaders(authorization),
           }),
         (data) => {
           const page = isPage(command.importId, data);
@@ -373,7 +372,7 @@ export function kernelAniListPort(
         command,
         (anilist, authorization) => {
           const resource = anilist({ importId: command.importId });
-          const review = resource.$review ?? resource.review;
+          const review = resource.$review;
           if (!review) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
           return review.post(
             {
@@ -384,7 +383,7 @@ export function kernelAniListPort(
               ...(command.skip ? { skip: true } : {}),
               ...(command.score === undefined ? {} : { score: command.score }),
             },
-            { headers: headers(authorization, command.key) },
+            { headers: idempotencyHeaders(authorization, command.key) },
           );
         },
         (data) => {
@@ -401,9 +400,9 @@ export function kernelAniListPort(
         command,
         (anilist, authorization) => {
           const resource = anilist({ importId: command.importId });
-          const apply = resource.$apply ?? resource.apply;
+          const apply = resource.$apply;
           if (!apply) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return apply.post(command.body, { headers: headers(authorization) });
+          return apply.post(command.body, { headers: authorizationHeaders(authorization) });
         },
         (data) => (isApply(data) ? ({ kind: 'applied', result: data } as const) : undefined),
       );
@@ -413,9 +412,9 @@ export function kernelAniListPort(
         command,
         (anilist, authorization) => {
           const resource = anilist({ importId: command.importId });
-          const cancel = resource.$cancel ?? resource.cancel;
+          const cancel = resource.$cancel;
           if (!cancel) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
-          return cancel.post({ remove: command.remove }, { headers: headers(authorization, command.key) });
+          return cancel.post({ remove: command.remove }, { headers: idempotencyHeaders(authorization, command.key) });
         },
         (data) => {
           if (!record(data) || data.cancelled !== true) return undefined;
