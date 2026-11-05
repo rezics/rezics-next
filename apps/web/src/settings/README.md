@@ -30,6 +30,8 @@ Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current 
 
 **Decision:** During an unresolved avatar upload, a separate availability check may reread current `media:create` advice without changing the retained file, reservation identity or upload retry deadline; only the existing upload retry resumes it.
 
+**Decision:** Avatar reservation, transfer and processing waits keep the longest Retry-After deadline captured at the failing response, including 503 and HTTP dates; expiry enables deliberate retry only, and local replacement cannot bypass it.
+
 ## Notifications
 
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
