@@ -6,17 +6,28 @@ export type SearchRetryOwner = {
   scope: string;
   locale: string;
   session: string | null;
+  observation?: object | undefined;
 };
 
 export function searchRetryOwnerCurrent(pending: SearchRetryOwner, current: SearchRetryOwner): boolean {
-  return pending.scope === current.scope && pending.locale === current.locale && pending.session === current.session;
+  return (
+    pending.scope === current.scope &&
+    pending.locale === current.locale &&
+    pending.session === current.session &&
+    pending.observation === current.observation
+  );
 }
 
 type PendingRetryFocus = {
   owner: SearchRetryOwner;
   source: HTMLButtonElement;
   moved: boolean;
+  retrying: boolean;
 };
+
+function searchRetryScopeCurrent(pending: SearchRetryOwner, current: SearchRetryOwner): boolean {
+  return pending.scope === current.scope && pending.locale === current.locale && pending.session === current.session;
+}
 
 function fallbackFocus(active: Element | null, source: HTMLButtonElement): boolean {
   const document = source.ownerDocument;
@@ -63,11 +74,21 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
   useFocusLayoutEffect(() => {
     const request = pending.current;
     if (!request) return;
-    if (!searchRetryOwnerCurrent(request.owner, current)) {
+    if (!searchRetryScopeCurrent(request.owner, current)) {
       clear();
       return;
     }
-    if (!settled) return;
+    if (!settled) {
+      request.retrying = true;
+      return;
+    }
+    if (request.owner.observation !== current.observation) {
+      if (!request.retrying) {
+        clear();
+        return;
+      }
+      request.owner = { ...current };
+    }
     const target = searchRetryFocusTarget({
       pending: request,
       current,
@@ -78,7 +99,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
     });
     clear();
     target?.focus();
-  }, [current.scope, current.locale, current.session, settled]);
+  }, [current.scope, current.locale, current.session, current.observation, settled]);
 
   return {
     regionRef,
@@ -91,6 +112,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
         owner: { scope: current.scope, locale: current.locale, session: current.session },
         source,
         moved: false,
+        retrying: false,
         document,
         onFocusIn(event: FocusEvent) {
           const target = event.target;

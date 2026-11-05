@@ -61,7 +61,10 @@ function page(recovery: SearchRecoveryState, discovery?: DiscoveryState, query =
   };
 }
 
-async function show(data: SearchPageData, extra?: { query?: string; session?: string | null }) {
+async function show(
+  data: SearchPageData,
+  extra?: { query?: string; session?: string | null; onRetry?: () => PromiseLike<unknown> | void },
+) {
   root ??= createRoot(host);
   const query = extra?.query ?? data.queryState?.query ?? 'Mira';
   await act(async () =>
@@ -73,7 +76,7 @@ async function show(data: SearchPageData, extra?: { query?: string; session?: st
         createElement(SearchPage, {
           query,
           data,
-          onRetry() {},
+          onRetry: extra?.onRetry ?? (() => {}),
           session: extra?.session ?? null,
         }),
       ),
@@ -87,6 +90,20 @@ function retry() {
 
 function region() {
   return host.querySelector<HTMLElement>('[data-search-results]')!;
+}
+
+function emptyRecoveryPage(status: 'preparing' | 'unavailable' | 'ready', query = 'Mira'): SearchPageData {
+  return page(
+    { status: 'ready' },
+    {
+      status: 'ready',
+      page: {
+        ...emptyDiscovery.page,
+        emptyRecovery: { status, alternatives: [], actions: [{ kind: 'edit-query' }] },
+      },
+    },
+    query,
+  );
 }
 
 async function activate(value: HTMLButtonElement) {
@@ -143,6 +160,31 @@ test('keyboard result Retry restores the current region or surviving action with
   expect(document.activeElement).toBe(elsewhere);
 });
 
+test('native empty Retry focuses the current recovery action after its exact request settles', async () => {
+  setLocale('en', { reload: false });
+  let retries = 0;
+  await show(emptyRecoveryPage('unavailable'), {
+    onRetry: () => {
+      retries++;
+      return Promise.resolve();
+    },
+  });
+  await activate(retry()!);
+  expect(retries).toBe(1);
+  await show(emptyRecoveryPage('unavailable'));
+  expect(document.activeElement).not.toBe(retry());
+
+  await activate(retry()!);
+  await show(page({ status: 'loading' }));
+  await show(emptyRecoveryPage('unavailable'));
+  expect(document.activeElement).toBe(retry());
+
+  await activate(retry()!);
+  await show(page({ status: 'loading' }));
+  await show(emptyRecoveryPage('unavailable', 'Later'), { query: 'Later' });
+  expect(document.activeElement).not.toBe(retry());
+});
+
 test('retired query, session and unmounted retries do not move focus', async () => {
   setLocale('en', { reload: false });
   await show(page({ status: 'unavailable' }), { session: 'one' });
@@ -170,11 +212,12 @@ test('a settled retry restores only the same owner while the reader stayed', () 
   const results = document.createElement('section');
   document.body.append(source, retryButton, results);
   const owner = { scope: JSON.stringify({ query: 'Mira', facets: {} }), locale: 'en', session: 'one' };
-  const pending = { owner, source, moved: false };
+  const pending = { owner, source, moved: false, retrying: false };
   const args = { pending, current: owner, settled: true, active: source, retry: retryButton, region: results };
   expect(searchRetryFocusTarget(args)).toBe(retryButton);
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, locale: 'zh-Hans' } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, session: 'two' } })).toBeNull();
+  expect(searchRetryFocusTarget({ ...args, current: { ...owner, observation: {} } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, pending: { ...pending, moved: true } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, active: results })).toBeNull();
   retryButton.remove();

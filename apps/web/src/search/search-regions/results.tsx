@@ -49,8 +49,10 @@ export type SearchResultsRegionProps = {
   data?: ResultData | undefined;
   continuationAllowed?: boolean;
   invalid?: boolean;
-  onRetry?: (() => void) | undefined;
+  onRetry?: (() => PromiseLike<unknown> | void) | undefined;
   retryState?: SearchLoaderDeps | undefined;
+  recoveryOwnerKey?: string | undefined;
+  onNavigate?: ((href: string) => void) | undefined;
   retryFocus?: Pick<ReturnType<typeof useSearchRetryFocus>, 'regionRef' | 'retryRef' | 'captureRetryFocus'>;
   currentSearchHref?: string | undefined;
   windowNavigation?: SearchWindowNavigation | undefined;
@@ -84,6 +86,8 @@ export function SearchResultsRegion({
   invalid = false,
   onRetry,
   retryState = data?.queryState,
+  recoveryOwnerKey,
+  onNavigate,
   retryFocus,
   currentSearchHref,
   personal,
@@ -91,6 +95,12 @@ export function SearchResultsRegion({
 }: SearchResultsRegionProps) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
+  const executedState = retryState ?? data?.queryState;
+  const retryWithoutWaiting = onRetry
+    ? () => {
+        void onRetry();
+      }
+    : undefined;
   const subjectHrefFor = currentSearchHref
     ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, currentSearchHref)
     : undefined;
@@ -136,7 +146,7 @@ export function SearchResultsRegion({
             observation={data.discovery?.status === 'ready' ? data.discovery.page : result!}
             locale={locale}
             refreshHref={discoverySearchHref(locale, { ...(retryState ?? data.queryState), cursor: undefined })}
-            onRefresh={onRetry}
+            onRefresh={retryWithoutWaiting}
             refreshRef={retryFocus?.retryRef}
             onFocus={retryFocus?.captureRetryFocus}
           />
@@ -200,7 +210,7 @@ export function SearchResultsRegion({
             state={data.recovery}
             retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
             restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
-            onRetry={onRetry}
+            onRetry={retryWithoutWaiting}
             locale={locale}
             {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
           />
@@ -211,7 +221,7 @@ export function SearchResultsRegion({
                 state={data.recovery}
                 retryHref={discoverySearchHref(locale, retryState ?? data.queryState!)}
                 restartHref={discoverySearchHref(locale, { ...data.queryState!, cursor: undefined })}
-                onRetry={onRetry}
+                onRetry={retryWithoutWaiting}
                 locale={locale}
                 {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
               />
@@ -228,23 +238,27 @@ export function SearchResultsRegion({
               }
             />
             {data.recovery?.status === 'ready' &&
-            data.queryState &&
+            executedState &&
             data.discovery.status === 'ready' &&
             data.discovery.page.hits.length === 0 &&
             data.discovery.page.next === null &&
-            data.queryState.cursor === undefined &&
+            executedState.cursor === undefined &&
             data.discovery.page.emptyRecovery ? (
               <EmptySearchRecovery
                 recovery={data.discovery.page.emptyRecovery}
-                state={data.queryState}
+                state={executedState}
                 locale={locale}
+                ownerKey={recoveryOwnerKey}
+                observation={data.discovery.page.emptyRecovery}
                 labels={{
                   typeLabels: data.typeLabels ?? {},
                   typeChoices: data.typeChoices,
                   selectedFacetLabels: data.selectedFacetLabels,
                   groups: data.groups,
                 }}
+                onNavigate={onNavigate}
                 onRetry={onRetry}
+                {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
               />
             ) : null}
           </>
@@ -255,21 +269,26 @@ export function SearchResultsRegion({
                 <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
               </EmptyHeader>
             </Empty>
-            {data?.queryState &&
-            data.queryState.cursor === undefined &&
+            {executedState &&
+            executedState.cursor === undefined &&
             result.next === null &&
+            (!data?.recovery || data.recovery.status === 'ready') &&
             result.emptyRecovery ? (
               <EmptySearchRecovery
                 recovery={result.emptyRecovery}
-                state={data.queryState}
+                state={executedState}
                 locale={locale}
+                ownerKey={recoveryOwnerKey}
+                observation={result.emptyRecovery}
                 labels={{
                   typeLabels: data.typeLabels ?? {},
                   typeChoices: data.typeChoices,
                   selectedFacetLabels: data.selectedFacetLabels,
                   groups: data.groups,
                 }}
+                onNavigate={onNavigate}
                 onRetry={onRetry}
+                {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
               />
             ) : null}
           </>

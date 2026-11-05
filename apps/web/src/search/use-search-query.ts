@@ -75,8 +75,6 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
         : searchPageForRecovery(searchUnavailablePage(params), { status: query.isPending ? 'loading' : 'unavailable' });
   return {
     data,
-    retry: () => {
-      void query.refetch();
-    },
+    retry: () => query.refetch(),
   };
 }
