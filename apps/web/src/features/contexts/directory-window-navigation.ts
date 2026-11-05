@@ -29,7 +29,13 @@ export class DirectoryWindowNavigation {
     }
   }
 
-  request() {
+  request(cursor: Cursor) {
+    // A browser address change replaces a pending target; a reread of that target does not arm it.
+    if (this.target && cursor !== this.target.cursor) {
+      this.target = undefined;
+      this.armed = false;
+      this.cancelFocus();
+    }
     const movement = this.armed ? this.target : undefined;
     this.armed = false;
     return movement;

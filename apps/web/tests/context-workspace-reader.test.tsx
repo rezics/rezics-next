@@ -705,7 +705,7 @@ test('directory admits three exact windows, retains predecessors on failed Previ
     );
   const admit = (direction: 'next' | 'previous' | 'first', cursor: string | undefined) => {
     navigation.stage(direction, cursor);
-    navigation.accept(cursor, navigation.request());
+    navigation.accept(cursor, navigation.request(cursor));
   };
   try {
     navigation.accept(undefined, undefined);
@@ -717,7 +717,7 @@ test('directory admits three exact windows, retains predecessors on failed Previ
     expect(visibleText(panel.host)).toContain(m.ctxw_empty_final_page({}, o));
     expect(navigation.previous).toEqual({ cursor: 'second+/=' });
     navigation.stage('previous', 'second+/=');
-    navigation.request();
+    navigation.request('second+/=');
     navigation.failed();
     await panel.render(
       <ContextDirectoryView
@@ -730,10 +730,10 @@ test('directory admits three exact windows, retains predecessors on failed Previ
     );
     expect(visibleText(panel.host)).toContain(m.ctxw_stale({}, o));
     expect(navigation.previous).toEqual({ cursor: 'second+/=' });
-    navigation.accept('second+/=', navigation.request()); // Ordinary reload cannot commit the failed movement.
+    navigation.accept('second+/=', navigation.request('second+/=')); // Ordinary reload cannot commit the failed movement.
     expect(navigation.previous).toEqual({ cursor: 'second+/=' });
     navigation.retry('second+/=');
-    navigation.accept('second+/=', navigation.request());
+    navigation.accept('second+/=', navigation.request('second+/='));
     expect(navigation.previous).toEqual({ cursor: undefined });
     admit('previous', undefined);
     await show(undefined, 'second+/=');
