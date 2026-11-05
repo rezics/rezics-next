@@ -172,10 +172,10 @@ export function CollectionMoveChooser({
         readAttempt.current = null;
         setDestination(null);
         if (issue === 'changed' || issue === 'denied') {
-        readAttempt.current = null;
-        setDestination(null);
-        if (issue === 'denied') setDestinationId('');
-      }
+          readAttempt.current = null;
+          setDestination(null);
+          if (issue === 'denied') setDestinationId('');
+        }
         setSelectedAnchor(null);
         setPlacements({ members: [], next: null });
       }
@@ -500,9 +500,7 @@ export function CollectionMoveChooser({
                 variant="outline"
                 className={controlClass}
                 disabled={disabled || loading}
-                onClick={
-                  placementIssue === 'expired' ? restartPlacements : retryPlacementPage
-                }
+                onClick={placementIssue === 'expired' ? restartPlacements : retryPlacementPage}
               >
                 {placementIssue === 'changed' || placementIssue === 'denied'
                   ? m.library_collection_move_reread_destination()
