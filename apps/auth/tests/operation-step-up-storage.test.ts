@@ -158,11 +158,22 @@ test('account compatibility is closed and the optional submitted marker stays op
   expect(pendingAccountOperationStepUpState()).toEqual({ kind: 'invalid' });
   expect(data.get(accountStorageKey)).toBe(unknown);
   const stringify = spyOn(JSON, 'stringify');
-  const invalidAccount = { kind: 'delete', accountId: 'account', operationKey: 'a'.repeat(32), operation: { kind: 'delete', accountId: 'account' }, authorization: 'private' } as never;
+  const invalidAccount = {
+    kind: 'delete',
+    accountId: 'account',
+    operationKey: 'a'.repeat(32),
+    operation: { kind: 'delete', accountId: 'account' },
+    authorization: 'private',
+  } as never;
   expect(storePendingAccountOperationStepUp(invalidAccount)).toBe(false);
   expect(data.get(accountStorageKey)).toBe(unknown);
   data.set(managementStorageKey, 'previous-management-value');
-  const invalidManagement = { accountId: 'human', operationKey: 'key', operation: { kind: 'opening', operatorAccountId: 'operator', subjectAccountId: 'subject' }, authorization: 'private' } as never;
+  const invalidManagement = {
+    accountId: 'human',
+    operationKey: 'key',
+    operation: { kind: 'opening', operatorAccountId: 'operator', subjectAccountId: 'subject' },
+    authorization: 'private',
+  } as never;
   expect(storePendingManagementOperationStepUp(invalidManagement)).toBe(false);
   expect(stringify).not.toHaveBeenCalled();
   expect(data.get(managementStorageKey)).toBe('previous-management-value');
@@ -185,7 +196,14 @@ test('producers bound escaping at legal field maxima and round-trip every manage
   expect(accountRaw.length).toBeLessThanOrEqual(ACCOUNT_OPERATION_STEP_UP_STORAGE_LIMIT);
   expect(pendingAccountOperationStepUpState()).toMatchObject({ kind: 'pending', value: { submitted: true } });
   const handle = `a${'x'.repeat(62)}z`;
-  expect(storePendingAccountOperationStepUp({ kind: 'organization', accountId: 'human', operationKey: 'b'.repeat(32), operation: { kind: 'organization', handle } })).toBe(true);
+  expect(
+    storePendingAccountOperationStepUp({
+      kind: 'organization',
+      accountId: 'human',
+      operationKey: 'b'.repeat(32),
+      operation: { kind: 'organization', handle },
+    }),
+  ).toBe(true);
   expect(pendingAccountOperationStepUpState()).toMatchObject({ kind: 'pending', value: { operation: { handle } } });
 
   const largest: ManagementOperationInput = {
@@ -244,9 +262,19 @@ test('producers bound escaping at legal field maxima and round-trip every manage
 
 test('rename review consumption is deliberate and account-bound', () => {
   expect(storePendingRenameReviewStepUp(reviewAccountId)).toBe(true);
-  expect(markRenameReviewReturned({ kind: 'rename', accountId: reviewAccountId, returnTo: '/account/rename', phase: 'awaiting' })).toBe(true);
+  expect(
+    markRenameReviewReturned({
+      kind: 'rename',
+      accountId: reviewAccountId,
+      returnTo: '/account/rename',
+      phase: 'awaiting',
+    }),
+  ).toBe(true);
   expect(consumeRenameReviewReturn('00000000-0000-4000-8000-000000000002')).toBe(false);
-  expect(pendingRenameReviewStepUpState()).toMatchObject({ kind: 'pending', value: { accountId: reviewAccountId, phase: 'returned' } });
+  expect(pendingRenameReviewStepUpState()).toMatchObject({
+    kind: 'pending',
+    value: { accountId: reviewAccountId, phase: 'returned' },
+  });
   expect(consumeRenameReviewReturn(reviewAccountId)).toBe(true);
   expect(pendingRenameReviewStepUpState()).toEqual({ kind: 'absent' });
 });
@@ -271,12 +299,14 @@ test('malformed, absent and inaccessible storage keep their established distinct
   failGet = false;
   failSet = true;
   expect(storePendingRenameReviewStepUp(reviewAccountId)).toBe(false);
-  expect(markRenameReviewReturned({
-    kind: 'rename',
-    accountId: reviewAccountId,
-    returnTo: '/account/rename',
-    phase: 'awaiting',
-  })).toBe(false);
+  expect(
+    markRenameReviewReturned({
+      kind: 'rename',
+      accountId: reviewAccountId,
+      returnTo: '/account/rename',
+      phase: 'awaiting',
+    }),
+  ).toBe(false);
   expect(data.get(reviewStorageKey)).toBe('{');
 });
 

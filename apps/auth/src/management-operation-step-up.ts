@@ -189,7 +189,9 @@ function validPendingInput(value: unknown): value is PendingManagementOperationS
     typeof value.operationKey === 'string' &&
     value.operationKey.length > 0 &&
     value.operationKey.length <= maxTextCodeUnits &&
-    (value.phase === 'awaiting' || value.phase === 'returned' || (value.kind === 'opening' && value.phase === 'submitted'))
+    (value.phase === 'awaiting' ||
+      value.phase === 'returned' ||
+      (value.kind === 'opening' && value.phase === 'submitted'))
   );
 }
 export function storePendingManagementOperationStepUp(input: ManagementOperationInput): boolean {
