@@ -24,7 +24,12 @@ export function OwnVotesDeparture({
   isCurrent: () => boolean;
   onLeave?: () => void;
 }) {
-  const live = useRef<{ dirty: boolean; locked: boolean; isCurrent: () => boolean; onLeave?: () => void }>({
+  const live = useRef<{
+    dirty: boolean;
+    locked: boolean;
+    isCurrent: () => boolean;
+    onLeave: (() => void) | undefined;
+  }>({
     dirty,
     locked,
     isCurrent,
