@@ -497,6 +497,8 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
         capture: PublicFilterSourceCaptureInput;
         consumer: PublicFilterConsumer;
         snapshot: 'pit' | 'prepared';
+        /** Deterministic owner locator for Search generation publication recovery. */
+        bootstrap?: string;
       }>,
       context: PublicFilterConsumerContext,
     ): Promise<PublicSourceBootstrapResult>;
@@ -1939,7 +1941,8 @@ export function createPublicFilterSourceBinding(
         consumer.meaningDigest !== resolved.definition.meaning.digest
       )
         throw new BindingError('binding_mismatch');
-      const existing = retainedId === undefined ? null : await loadBootstrap(retainedId, db, resolved.definition);
+      const fixedBootstrap = retainedId ?? request.bootstrap;
+      const existing = fixedBootstrap === undefined ? null : await loadBootstrap(fixedBootstrap, db, resolved.definition);
       if (
         existing &&
         (encode(existing.bootstrap.consumer) !== encode(consumer) ||
@@ -1951,7 +1954,7 @@ export function createPublicFilterSourceBinding(
         ? { bootstrap: existing.row.bootstrap }
         : (
             await beginBootstrap.run(db, {
-              bootstrap: randomUUID(),
+              bootstrap: fixedBootstrap === undefined ? randomUUID() : nativeId(fixedBootstrap),
               read_definition: resolved.definition.readDefinition,
               request_key: hash(encode({ consumer, snapshot })),
               consumer: encode(consumer),
@@ -2832,7 +2835,7 @@ export function createPublicFilterSourceBinding(
     return result;
   });
   nativePreparations.set(bootstrapBinding, async (input, context) => {
-    if (!('bootstrap' in input)) return beginRetained(input, context);
+    if ('source' in input) return beginRetained(input, context, input.bootstrap);
     const retained = await run(context, async (cost, db) => {
       const cut = await loadBootstrap(input.bootstrap, db);
       if (cut.row.state !== 'capturing' && cut.row.state !== 'begun') throw new BindingError('observation_lost');
@@ -2875,7 +2878,10 @@ export function createPublicFilterSourceBinding(
         addCost(cost, joined.cost);
         if (joined.status !== 'joined') return { ...joined, cost };
         const cut = await loadBootstrap(input.bootstrap, db, joined.definition);
-        if (cut.bootstrap.snapshot !== 'prepared' || encode(cut.bootstrap.covered) !== encode(joined.covered))
+        if (
+          cut.bootstrap.snapshot !== input.queried.snapshot.kind ||
+          encode(cut.bootstrap.covered) !== encode(joined.covered)
+        )
           throw new BindingError('binding_mismatch');
         cost.frontierWrites++;
         const pinned = await db.query(

@@ -581,6 +581,7 @@ CREATE TABLE search.generation_publication (
     observation text,
     previous_target text,
     previous_uuid text,
+    source_completion_started boolean DEFAULT false NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
     CONSTRAINT generation_publication_binding_check CHECK ((octet_length((binding)::text) <= 8192)),
     CONSTRAINT generation_publication_check CHECK (((after_route IS NULL) = (after_id IS NULL))),

@@ -6,6 +6,8 @@ import {
 import type { HistoryBarrier } from '../history/registry.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
+import type { NativePublicFilterRepairSettlement } from './public-filter-custody-contract.ts';
+import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
 import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicFilterConsumerContext,
@@ -734,6 +736,10 @@ export type SearchWriterNativeCustody = SearchWriterGuard &
   }>;
 
 export type SearchWriterPublicationFence = Readonly<{ consumer: PublicFilterConsumer; job: string; fence: string }>;
+export type SearchWriterGenerationPublicationProof = Readonly<{
+  completion: NativePublicFilterPublicationCompletion;
+  searchSettlement: NativePublicFilterRepairSettlement;
+}>;
 export type SearchWriterPublicationGuard = SearchWriterGuard &
   Readonly<{
     fencePublication(
@@ -753,12 +759,14 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
     adoptPublication(
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
+      proof?: SearchWriterGenerationPublicationProof,
     ): Promise<
       { status: 'held'; fence: SearchWriterPublicationFence; cost: PublicFilterCost } | PublicFilterConsumerUnavailable
     >;
     releasePublication(
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
+      proof?: SearchWriterGenerationPublicationProof,
     ): Promise<{ status: 'released'; cost: PublicFilterCost } | PublicFilterConsumerUnavailable>;
   }>;
 
@@ -987,16 +995,37 @@ export function createSearchWriterGuard(options: {
     if (erasure.rowCount !== 1) return pendingPublication();
     return erasure.rows[0]!;
   }
-  async function publicationSource(value: SearchWriterPublicationFence, context: PublicFilterConsumerContext) {
+  async function publicationSource(
+    value: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+    proof?: SearchWriterGenerationPublicationProof,
+  ) {
     const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value));
-    // Generation publication retains its own owner protocol; its unavailable receiving proof stays pending.
-    if (!job.barrier) return pendingPublication();
-    const proof = await readSubjectErasureSourceProof({ pool: options.pool }, job.barrier, context);
-    if (!proof) return pendingPublication();
+    if (!job.barrier) {
+      if (!proof) {
+        if (job.phase === 'active') return pendingPublication();
+        return;
+      }
+      const completion = proof.completion;
+      if (
+        completion.status !== 'complete' ||
+        completion.publication.job !== value.job ||
+        completion.publication.bootstrap !== `0:${value.job}` ||
+        !isDeepStrictEqual(completion.publication.queried.consumer, value.consumer) ||
+        completion.publication.execution !== value.job ||
+        completion.execution.id !== value.job ||
+        completion.settlement.id !== proof.searchSettlement.id
+      )
+        return pendingPublication();
+      return;
+    }
+    if (proof) return pendingPublication();
+    const erasureProof = await readSubjectErasureSourceProof({ pool: options.pool }, job.barrier, context);
+    if (!erasureProof) return pendingPublication();
     const verified = await runCommand(
       options.pool,
       { partition: job.barrier.accountRoute >> 4, deadline: context.deadline },
-      async (tx) => noEffect(await verifySubjectErasureSourceProof(tx, job.barrier, proof)),
+      async (tx) => noEffect(await verifySubjectErasureSourceProof(tx, job.barrier, erasureProof)),
     );
     if (!verified.value) return pendingPublication();
   }
@@ -1075,7 +1104,6 @@ export function createSearchWriterGuard(options: {
         await publicationPhysical(input);
         const before = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
         if (before.publication_home === 4096) {
-          await publicationSource(input, context);
           return { status: 'drained' as const, fence: input, cost };
         }
         const home = before.publication_home;
@@ -1165,19 +1193,20 @@ export function createSearchWriterGuard(options: {
         };
       });
     },
-    adoptPublication(value, context) {
+    adoptPublication(value, context, proof) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost) => {
-        await publicationSource(input, context);
+        await publicationSource(input, context, proof);
         await publicationPhysical(input);
         const row = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
         if (row.publication_home !== 4096) return pendingPublication();
         return { status: 'held' as const, fence: input, cost };
       });
     },
-    releasePublication(value, context) {
+    releasePublication(value, context, proof) {
       const input = structuredClone(value);
       return publicationCall(context, async (cost) => {
+        await publicationSource(input, context, proof);
         await publicationPhysical(input);
         await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
           publicationDeadline(context);

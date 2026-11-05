@@ -12,19 +12,33 @@ import type {
   PublicFilterCost,
   PublicFilterProjectionMeaning,
   PublicFilterSource,
+  PrivacyReductionStart,
 } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicFilterSourceBinding,
   PublicFilterSourceDefinition,
+  NativePublicFilterPublication,
+  NativePublicFilterPublicationCompletion,
+  NativePublicFilterPublicationRequest,
+} from '../semantic/public-filter-source-binding.ts';
+import {
+  advanceNativePublicFilterPreparation,
+  readNativePublicFilterPublicationCompletion,
+  readNativePublicFilterRepairStart,
 } from '../semantic/public-filter-source-binding.ts';
 import type { SubjectSourceKeyPages, SubjectSourceKeyCursor } from '../semantic/subject-source-key-pages.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
+  PublicFilterQueriedObservation,
   PublicFilterConsumerUnavailable,
 } from './public-filter-consumer-contract.ts';
-import type { SearchWriterPublicationFence, SearchWriterPublicationGuard } from './writer-guard.ts';
+import type {
+  SearchWriterGenerationPublicationProof,
+  SearchWriterPublicationFence,
+  SearchWriterPublicationGuard,
+} from './writer-guard.ts';
 import type { DiscoveryConsumerCaptureInput, DiscoveryKey, DiscoveryRegistry, DiscoveryUnionKey } from './discovery.ts';
 import { createDiscoveryProjection, validateAccountPage } from './account-discovery.ts';
 import { parseDiscoveryHitIdentity, discoveryDocumentId, validateDiscoveryDocument } from './discovery-documents.ts';
@@ -34,7 +48,12 @@ import {
   assertNativeGenerationActionsVisible,
   GenerationReconciliationMismatch,
 } from './generations.ts';
-import { readGenerationPublicationCustody } from './public-filter-custody.ts';
+import {
+  createPublicFilterCustody,
+  readGenerationPublicationCustody,
+  readPublicFilterRepairSettlement,
+} from './public-filter-custody.ts';
+import type { NativePublicFilterRepairSettlement } from './public-filter-custody-contract.ts';
 import { discoveryAlias } from './indices.ts';
 import {
   discoveryIndexName,
@@ -85,6 +104,10 @@ export type SearchGenerationPublicationConfig = Readonly<{
   clock: KernelClock;
   meaning: PublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
+  completeSourcePublication?(
+    request: NativePublicFilterPublicationRequest,
+    context: PublicFilterConsumerContext,
+  ): Promise<NativePublicFilterPublicationCompletion>;
   registry?: DiscoveryRegistry;
 }>;
 
@@ -154,6 +177,19 @@ function bindingKey(definition: PublicFilterSourceDefinition) {
     readDefinition: definition.readDefinition,
   };
 }
+export function isVerifiedNativeGenerationPublicationCompletion(
+  completion: NativePublicFilterPublicationCompletion,
+  publication: NativePublicFilterPublication,
+  start: PrivacyReductionStart,
+): completion is Extract<NativePublicFilterPublicationCompletion, { status: 'complete' }> {
+  return (
+    completion.status === 'complete' &&
+    same(completion.publication, publication) &&
+    completion.covered.observation === start.observation &&
+    completion.execution.id === publication.execution &&
+    same(completion.execution.start, start)
+  );
+}
 type Job = {
   job: string;
   physical_target: string;
@@ -167,6 +203,7 @@ type Job = {
   kinds: string[];
   source_home: number;
   binding: ReturnType<typeof bindingKey>;
+  source_completion_started: boolean;
   phase: 'subject' | 'account' | 'engine' | 'validate' | 'reconciled' | 'fencing' | 'intent' | 'active';
   home: number;
   after_route: number | null;
@@ -219,6 +256,11 @@ export function createSearchGenerationPublication(
   );
   requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
   const { pool, search, source, sourceKeys, binding, writerGuard, registry } = config;
+  const custodyOwner = createPublicFilterCustody(pool);
+  const completeSourcePublication =
+    config.completeSourcePublication ??
+    ((request: NativePublicFilterPublicationRequest, context: PublicFilterConsumerContext) =>
+      readNativePublicFilterPublicationCompletion(binding, request, context));
   const meaning = structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
@@ -377,7 +419,7 @@ export function createSearchGenerationPublication(
       job.consumer,
       job.source_home,
       context,
-      job.observation ?? undefined,
+      job.observation,
     );
     add(meter, custody.cost);
     if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
@@ -409,24 +451,6 @@ export function createSearchGenerationPublication(
       !same(joined.definition.dependencyKeys, resolved.definition.dependencyKeys)
     )
       throw new Pending('source_pending');
-    // This is the canonical native Source population observation, not Search's diagnostic query status.
-    const heads = await source.readPrivacyReductionHeads({
-      kind: 'population',
-      queried: joined.queried,
-      start: null,
-      context,
-    });
-    add(meter, heads.cost);
-    if (heads.status !== 'observed')
-      throw new Pending(heads.status === 'unavailable' && heads.reason === 'deadline' ? 'deadline' : 'source_pending');
-    if (!heads.routingComplete) throw new Pending('routing_incomplete');
-    if (
-      heads.coverage !== 'all_native_homes' ||
-      heads.unacknowledged.length ||
-      heads.changed.length ||
-      heads.blocking.length
-    )
-      throw new Pending('source_pending');
     return joined.queried;
   }
   const reference = (job: Job): GenerationPublicationJob => ({ consumer: structuredClone(job.consumer), job: job.job });
@@ -444,10 +468,15 @@ export function createSearchGenerationPublication(
     )
       throw new Pending('source_pending');
   }
-  async function held(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
+  async function held(
+    job: Job,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    completion?: SearchWriterGenerationPublicationProof,
+  ) {
     guardAvailable();
     if (!job.fence) throw new Pending('source_pending');
-    const result = await writerGuard.adoptPublication(fence(job), context);
+    const result = await writerGuard.adoptPublication(fence(job), context, completion);
     add(meter, result.cost);
     if (result.status !== 'held') throw new Pending(result.reason);
     if (!same(result.fence, fence(job))) throw new Pending('incarnation_changed');
@@ -455,7 +484,8 @@ export function createSearchGenerationPublication(
   async function save(client: PoolClient, job: Job, meter: Meter) {
     const result = await client.query(
       `UPDATE search.generation_publication SET phase=$3,home=$4,after_route=$5,after_id=$6,engine_after=$7,
-       pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,revision=revision+1
+       pit=$8,fence=$9,fenced_pass=$10,observation=$11,previous_target=$12,previous_uuid=$13,pass=$14,activated_at=$15,
+       source_completion_started=$16,revision=revision+1
        WHERE partition_no=0 AND job=$1 AND revision=$2 RETURNING revision::text`,
       [
         job.job,
@@ -473,11 +503,156 @@ export function createSearchGenerationPublication(
         job.previous_uuid,
         job.pass,
         job.activated_at,
+        job.source_completion_started,
       ],
     );
     if (!result.rows[0]) throw new Pending('observation_lost');
     job.revision = result.rows[0].revision;
     meter.frontierWrites++;
+  }
+  function sourceBootstrap(job: Job) {
+    return `0:${job.job}`;
+  }
+  async function ensureOriginalPublication(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ): Promise<Readonly<{ queried: PublicFilterQueriedObservation; start: PrivacyReductionStart }> | null> {
+    if (job.observation === null) {
+      const registration = await readGenerationPublicationCustody(pool, job.consumer, job.source_home, context, null);
+      add(meter, registration.cost);
+      if ('status' in registration) throw new Pending('registration_missing');
+      const resolved = await binding.resolve(
+        { source, meaning: structuredClone(meaning), capture: publicationCapture(registration.definition.capture) },
+        context,
+      );
+      add(meter, resolved.cost);
+      if (resolved.status !== 'resolved') throw new Pending('source_pending');
+      const prepared = await advanceNativePublicFilterPreparation(
+        binding,
+        {
+          source,
+          meaning: structuredClone(meaning),
+          capture: publicationCapture(resolved.definition.capture),
+          consumer: job.consumer,
+          snapshot: 'pit',
+          bootstrap: job.job,
+        },
+        context,
+      );
+      if (!prepared) throw new Pending('source_pending');
+      add(meter, prepared.cost);
+      if (prepared.status === 'preparing') return null;
+      if (prepared.status !== 'begun') throw new Pending('source_pending');
+      if (
+        prepared.bootstrap.id !== sourceBootstrap(job) ||
+        !same(prepared.bootstrap.consumer, job.consumer) ||
+        prepared.bootstrap.snapshot !== 'pit' ||
+        !same(bindingKey(prepared.bootstrap.definition), job.binding)
+      )
+        throw new Pending('registration_missing');
+      const retained = await custodyOwner.openPit(
+        {
+          registration: registration.registration,
+          covered: prepared.bootstrap.covered,
+          keepAliveMs: 300_000,
+          generationPublication: { job: job.job, consumer: job.consumer },
+        },
+        search,
+        context,
+      );
+      add(meter, retained.cost);
+      if (retained.status !== 'retained') throw new Pending('source_pending');
+      job.observation = retained.queried.snapshot.observation;
+      await save(client, job, meter);
+    }
+    const retained = await readGenerationPublicationCustody(
+      pool,
+      job.consumer,
+      job.source_home,
+      context,
+      job.observation,
+    );
+    add(meter, retained.cost);
+    if ('status' in retained || !retained.queried) throw new Pending('source_pending');
+    const queried = retained.queried;
+    if (!('adopt' in binding) || typeof binding.adopt !== 'function') throw new Pending('source_pending');
+    const adopted = await binding.adopt({ bootstrap: sourceBootstrap(job), queried }, context);
+    add(meter, adopted.cost);
+    if (adopted.status !== 'adopted' || !same(adopted.queried, queried)) throw new Pending('source_pending');
+    const started = await readNativePublicFilterRepairStart(
+      binding,
+      { bootstrap: sourceBootstrap(job), queried },
+      context,
+    );
+    if (!started) throw new Pending('source_pending');
+    add(meter, started.cost);
+    const acquired = await custodyOwner.acquire(queried, context);
+    add(meter, acquired.cost);
+    if (acquired.status !== 'acquired') throw new Pending('source_pending');
+    try {
+      const execution = await custodyOwner.appendExecution(
+        { use: acquired.use, execution: { id: job.job, start: started.start, ownRows: [] } },
+        context,
+      );
+      add(meter, execution.cost);
+      if (execution.status !== 'appended') throw new Pending('source_pending');
+    } finally {
+      add(meter, (await custodyOwner.release(acquired.use, context)).cost);
+    }
+    const renewed = await custodyOwner.renewPit(queried, 300_000, search, context);
+    add(meter, renewed.cost);
+    if (renewed.status !== 'retained' || renewed.queried.snapshot.observation !== job.observation)
+      throw new Pending('source_pending');
+    return { queried: renewed.queried, start: started.start };
+  }
+  async function completeOriginalPublication(
+    job: Job,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ): Promise<Readonly<{
+    completion: NativePublicFilterPublicationCompletion;
+    searchSettlement: NativePublicFilterRepairSettlement;
+    original: NonNullable<Awaited<ReturnType<typeof ensureOriginalPublication>>>;
+  }>> {
+    const original = await ensureOriginalPublication(job, client, context, meter);
+    if (!original) throw new Pending('source_pending');
+    const publication: NativePublicFilterPublication = {
+      job: job.job,
+      bootstrap: sourceBootstrap(job),
+      queried: original.queried,
+      execution: job.job,
+    };
+    const resume = job.source_completion_started;
+    if (!job.source_completion_started) {
+      job.source_completion_started = true;
+      await save(client, job, meter);
+    }
+    let completion = await completeSourcePublication(resume ? { job: job.job } : publication, context);
+    add(meter, completion.cost);
+    if (resume && completion.status !== 'complete' && completion.reason === 'observation_lost') {
+      completion = await completeSourcePublication(publication, context);
+      add(meter, completion.cost);
+    }
+    if (completion.status !== 'complete') throw new Pending('source_pending');
+    if (!isVerifiedNativeGenerationPublicationCompletion(completion, publication, original.start))
+      throw new Pending('source_pending');
+    const searchSettlement = await readPublicFilterRepairSettlement(
+      pool,
+      { queried: completion.publication.queried, execution: completion.publication.execution },
+      context,
+    );
+    add(meter, searchSettlement.cost);
+    if (
+      searchSettlement.status !== 'settled' ||
+      !same(searchSettlement.queried, completion.publication.queried) ||
+      searchSettlement.execution.id !== completion.publication.execution ||
+      searchSettlement.settlement.id !== completion.settlement.id
+    )
+      throw new Pending('source_pending');
+    return { completion, searchSettlement: searchSettlement.settlement, original };
   }
   async function locked<T>(
     input: GenerationPublicationJob,
@@ -937,9 +1112,14 @@ export function createSearchGenerationPublication(
     job.fence = result.fence.fence;
     await save(client, job, meter);
   }
-  async function release(job: Job, context: PublicFilterConsumerContext, meter: Meter) {
+  async function release(
+    job: Job,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+    completion?: SearchWriterGenerationPublicationProof,
+  ) {
     if (!job.fence) return;
-    const result = await writerGuard.releasePublication(fence(job), context);
+    const result = await writerGuard.releasePublication(fence(job), context, completion);
     add(meter, result.cost);
     if (result.status !== 'released') throw new Pending(result.reason);
     job.fence = null;
@@ -978,7 +1158,6 @@ export function createSearchGenerationPublication(
     job.home = 0;
     job.after_id = null;
     job.after_route = null;
-    job.observation = null;
     job.previous_target = null;
     job.previous_uuid = null;
     // Indexed bounded invalidation: old home rows are replaced lazily as their native home is revisited.
@@ -1054,9 +1233,21 @@ export function createSearchGenerationPublication(
       return run(context, (meter) =>
         locked(input, context, meter, async (job, client) => {
           try {
+            if (job.phase !== 'active') {
+              const original = await ensureOriginalPublication(job, client, context, meter);
+              if (!original)
+                return { status: 'progress' as const, job: reference(job), cost: meter };
+            }
             await advance(job, client, context, meter);
           } catch (error) {
             if (
+              error instanceof Pending &&
+              error.reason === 'source_pending' &&
+              job.fenced_pass &&
+              (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent')
+            )
+              await save(client, job, meter);
+            else if (
               error instanceof Pending &&
               error.reason === 'source_pending' &&
               job.fence &&
@@ -1080,10 +1271,19 @@ export function createSearchGenerationPublication(
       return run(context, (meter) =>
         locked(input, context, meter, async (job, client) => {
           const preparing = () => ({ status: 'preparing' as const, job: reference(job), cost: meter });
+          if (job.phase !== 'active') {
+            const original = await ensureOriginalPublication(job, client, context, meter);
+            if (!original) return preparing();
+          }
           if (job.phase === 'active') {
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
-            await release(job, context, meter);
-            await save(client, job, meter);
+            const { completion, searchSettlement } = await completeOriginalPublication(job, client, context, meter);
+            if (job.fence) {
+              const proof = { completion, searchSettlement };
+              await held(job, context, meter, proof);
+              await release(job, context, meter, proof);
+              await save(client, job, meter);
+            }
             return { status: 'activated' as const, consumer: job.consumer, cost: meter };
           }
           if (job.phase !== 'reconciled' && job.phase !== 'fencing' && job.phase !== 'intent') return preparing();
@@ -1108,12 +1308,11 @@ export function createSearchGenerationPublication(
           }
           try {
             await held(job, context, meter);
+            const { completion, searchSettlement } = await completeOriginalPublication(job, client, context, meter);
+            const proof = { completion, searchSettlement };
             const queried = await adopt(job, context, meter, true);
             if (!queried) throw new Pending('source_pending');
-            if (!job.observation) {
-              job.observation = queried.snapshot.observation;
-              await save(client, job, meter);
-            }
+            if (queried.snapshot.observation !== job.observation) throw new Pending('observation_lost');
             if (job.phase !== 'intent') {
               job.previous_target = await aliasTarget(job, context, meter);
               job.previous_uuid = job.previous_target ? await discoveryIndexUuid(search, job.previous_target) : null;
@@ -1126,7 +1325,7 @@ export function createSearchGenerationPublication(
             const before = await aliasTarget(job, context, meter);
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
             if (before !== job.physical_target) {
-              await held(job, context, meter);
+              await held(job, context, meter, proof);
               await adopt(job, context, meter, true);
               await observedWrite(
                 () =>
@@ -1140,7 +1339,7 @@ export function createSearchGenerationPublication(
                 'Generation publication alias could not be established',
               );
             }
-            await held(job, context, meter);
+            await held(job, context, meter, proof);
             await adopt(job, context, meter, true);
             if ((await aliasTarget(job, context, meter)) !== job.physical_target) throw new Pending('source_pending');
             // Native readback precedes metadata. Lost replies replay the retained intent under the same fence.
@@ -1169,11 +1368,18 @@ export function createSearchGenerationPublication(
               job.phase = 'active';
               await save(client, job, meter);
             }
-            await release(job, context, meter);
+            await release(job, context, meter, proof);
             await save(client, job, meter);
             return { status: 'activated' as const, consumer: job.consumer, cost: meter };
           } catch (error) {
             if (
+              error instanceof Pending &&
+              error.reason === 'source_pending' &&
+              job.fenced_pass &&
+              (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent')
+            )
+              await save(client, job, meter);
+            else if (
               error instanceof Pending &&
               ['source_pending', 'routing_incomplete', 'incarnation_changed'].includes(error.reason) &&
               job.phase !== 'active'
@@ -1187,6 +1393,7 @@ export function createSearchGenerationPublication(
     async close() {
       closed = true;
       await Promise.allSettled([...pending]);
+      await custodyOwner.close();
     },
   };
   return api;

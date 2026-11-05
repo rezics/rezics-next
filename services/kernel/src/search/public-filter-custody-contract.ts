@@ -155,7 +155,13 @@ export interface PublicFilterCustody {
     | CustodyFailure
   >;
   openPit(
-    request: Readonly<{ registration: CustodyRegistration; covered: PrivacyReductionStart; keepAliveMs: number }>,
+    request: Readonly<{
+      registration: CustodyRegistration;
+      covered: PrivacyReductionStart;
+      keepAliveMs: number;
+      /** Atomically associate a generation's original retained observation with its existing job. */
+      generationPublication?: Readonly<{ job: string; consumer: PublicFilterConsumer }>;
+    }>,
     search: OpenSearch,
     context: PublicFilterConsumerContext,
   ): Promise<CustodyRetained | CustodyFailure>;

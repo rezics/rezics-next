@@ -13,7 +13,10 @@ import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { activeRelease, readRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
-import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import {
+  createPublicFilterSourceBinding,
+  readNativePublicFilterPublicationCompletion,
+} from '../semantic/public-filter-source-binding.ts';
 import { createSubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
@@ -103,7 +106,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const source = publicFilterSource(config);
   const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
   const sourceKeys = createSubjectSourceKeyPages(config.pool, config.routeKey, config.access);
-  const custody = createPublicFilterCustody(config.pool);
+  const custody = createPublicFilterCustody(config.pool, binding);
   const nativeSource = createRatedSubjectSource(config.pool, config.routeKey).source;
   const listing = subjectListingSource(config.pool);
   const owned = new Set<{ close(): Promise<void> }>();
@@ -154,6 +157,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         listing,
         ...(calendarFormat === null ? {} : { calendarFormat }),
       }),
+      completeSourcePublication: (request, context) =>
+        readNativePublicFilterPublicationCompletion(binding, request, context),
     });
   }
   const publication: SearchGenerationPublication = {
