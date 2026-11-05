@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
+import type { KernelClient } from '@rezics/client';
+import { withManagedReadDeadline } from './managed-read-deadline';
 import {
   changeNotifications,
   loadSettingsPage,
@@ -12,6 +14,36 @@ import {
 } from './preferences';
 import { notificationOriginalAllowed } from './notification-recovery';
 import { m } from '../paraglide/messages.js';
+
+export type SettingsViewer = {
+  request: Request;
+  authorization: string;
+  accountId: string;
+  client: KernelClient;
+  sessionEnv: Partial<SessionEnv>;
+  locale: string;
+};
+
+/** Resolve one private Settings read at its server boundary, including setup and session refresh. */
+export async function readSettingsViewer(): Promise<SettingsViewer | null> {
+  const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
+  await withManagedReadDeadline(() => prepareSession(request, env as Partial<SessionEnv>), request.signal);
+  const authorization = viewerCredential(request);
+  const accountId = sessionSubject(request);
+  if (!authorization || !accountId) return null;
+  const { requestLocale } = await import('../kernel/client');
+  return {
+    request,
+    authorization,
+    accountId,
+    client: kernelClient(),
+    sessionEnv: env as Partial<SessionEnv>,
+    locale: requestLocale(request) ?? 'en',
+  };
+}
 
 const escape = (value: string) =>
   value.replace(

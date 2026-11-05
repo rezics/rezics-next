@@ -46,6 +46,28 @@ Subject lookup carries a private success/failure envelope with a safe localized 
 
 **Decision:** Subject search maps native 403 `platform_closed` to closed, other native 4xx responses to refused, and malformed, deadline, transport or server failures to unavailable; valid Retry-After gates only a deliberate retry.
 
+**Decision:** Exact original acknowledgements and current-request ordering are independent. A valid replay receipt
+for the immutable original is accepted even after a newer request was read; it never lowers the latest-status floor.
+Only a readable status at that floor retires the acknowledged attempt. A stale read keeps receipt-only recovery.
+One coalesced status read may settle while a command remains in flight, without resolving its original or admitting
+a second command. Each channel retains its own deadline and viewer retirement discards both late completions.
+
+**Decision:** Verification and rename resolve the same private Settings viewer boundary, including session refresh,
+server setup, current account, native client and locale. Module setup failures enter their existing private envelopes.
+Rename still reads exactly the native profile and one exact-account viewer-actions batch independently. Verification
+status, each command and optional title lookup remain separate native calls; status never waits for a title.
+This composition adds no SQL, history scan, polling, growth allowance or exposure. Native examined rows, binds,
+buffers and nested work remain owned by Access's verification and action-read derivations; focused Web checks
+establish interaction and transport behavior, not native growth evidence.
+
+**Decision:** The chooser delegates pointer blur to its native combobox and supplies Subject IDs as native item
+values. Temporarily unmounting it preserves the parent's selected Subject; replacing the viewer clears it. Keyboard
+command completion returns to the surviving control, current withdrawal control or status region unless focus has
+already moved elsewhere. A captured local withdrawal confirmation must still match the current observation at dispatch.
+The native withdrawal endpoint currently accepts an empty body and selects the latest pending request, so atomic
+binding to that observation requires an Access producer contract before cross-client replacement is covered.
+The existing recovery and chooser files pin these repairs; no extra stories or test family is introduced.
+
 ## Profile avatar
 
 Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current `media:create` admission, independently of profile-reference `account:update` advice. Missing, malformed or wrong-viewer advice hides upload while name, biography and avatar-reference edits stay usable. One in-memory reservation intent binds the original File, avatar purpose, self container, request body, CSRF credential and idempotency key; a lost first acknowledgement retries that exact intent, and a known media id resumes it. A changed file, crop export or target mints a new intent. Uncertain reservations are retained without automatic cleanup or account-update acknowledgement. Eden supplies the Content callable at runtime; the existing reflective transport seam trusts that callable while the official [Kernel client declaration publication](../../../../services/kernel/README.md#client-declaration-output-placement) is unavailable because of unrelated producer compilation errors. Advice bodies still pass the HTTP-boundary decoder.

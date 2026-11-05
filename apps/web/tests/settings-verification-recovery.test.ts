@@ -484,3 +484,102 @@ test('setup, transport and body faults return the private current-read and comma
     setupFault = previous;
   }
 });
+
+test('an original replay acknowledges its historical request after current advice has advanced', async () => {
+  const receipt = requestRecord('original', '2026-10-30T08:00:00.000Z', 'Original statement');
+  const newer = {
+    ...requestRecord('successor', '2026-10-30T09:00:00.000Z', 'Different evidence'),
+    state: 'withdrawn' as const,
+  };
+  const current = { ...empty, verificationRequest: newer };
+  const sent: unknown[] = [];
+  let reads = 0;
+  const controller = new VerificationRecovery('alice', {
+    read: async () => {
+      reads++;
+      if (reads === 1) return empty;
+      if (reads === 3) return { ...empty, verificationRequest: receipt };
+      return current;
+    },
+    request: async (_, input) => {
+      sent.push(input);
+      return sent.length === 1
+        ? { ok: false, status: 0, message: 'Response lost' }
+        : { ok: true, verificationRequest: receipt };
+    },
+    withdraw: noCommand,
+  });
+  await controller.reload();
+  await controller.submit({ subject: 'subject-1', statement: 'Original statement', links: [] });
+  const original = controller.snapshot().attempt;
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ current, attempt: original, phase: 'uncertain' });
+  await controller.retry();
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toBe(original!.input);
+  expect(controller.snapshot()).toMatchObject({ attempt: { receipt }, phase: 'uncertain', readStatus: 'error' });
+  await controller.retry();
+  expect(sent).toHaveLength(2);
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ current, attempt: null, phase: 'review' });
+  controller.deactivate();
+});
+
+test('current-status reads settle independently while the original mutation is still in flight', async () => {
+  const receipt = requestRecord('original', '2026-10-30T08:00:00.000Z', 'Original statement');
+  const newer = requestRecord('successor', '2026-10-30T09:00:00.000Z', 'Different evidence');
+  const command = Promise.withResolvers<import('../src/settings/verification-core').VerificationCommandResult>();
+  const current = { ...empty, verificationRequest: newer, viewerActions: [] };
+  let reads = 0;
+  let commands = 0;
+  const controller = new VerificationRecovery('alice', {
+    read: async () => (++reads === 1 ? empty : current),
+    request: async () => {
+      commands++;
+      return command.promise;
+    },
+    withdraw: noCommand,
+  });
+  await controller.reload();
+  const sending = controller.submit({ subject: 'subject-1', statement: 'Original statement', links: [] });
+  const original = controller.snapshot().attempt;
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ current, attempt: original, phase: 'sending', readStatus: 'success' });
+  await controller.retry();
+  await controller.submit({ subject: 'later', statement: 'Later draft', links: [] });
+  expect(commands).toBe(1);
+  command.resolve({ ok: true, verificationRequest: receipt });
+  await sending;
+  expect(controller.snapshot()).toMatchObject({ current, attempt: null, phase: 'review', readStatus: 'success' });
+  expect(reads).toBe(3);
+  controller.deactivate();
+});
+
+test('a captured withdrawal confirmation cannot target a replacement request or changed native advice', async () => {
+  const { verificationWithdrawalObservation } = await import('../src/settings/verification-recovery');
+  let current = {
+    ...empty,
+    verificationRequest: requestRecord('original', '2026-10-30T08:00:00.000Z', 'Original statement'),
+    viewerActions: [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+  };
+  const controller = new VerificationRecovery('alice', {
+    read: async () => current,
+    request: noCommand,
+    withdraw: noCommand,
+  });
+  await controller.reload();
+  const confirmation = verificationWithdrawalObservation(controller.snapshot().current);
+  current = { ...current, verificationRequest: { ...current.verificationRequest, id: 'replacement' } };
+  await controller.reload();
+  await controller.withdraw(true, confirmation);
+  expect(controller.snapshot().attempt).toBeNull();
+  const changedAdvice = verificationWithdrawalObservation(controller.snapshot().current);
+  current = {
+    ...current,
+    viewerActions: [{ action: 'account:manage', operations: ['account.withdraw_verification'] }],
+  };
+  await controller.reload();
+  await controller.withdraw(true, changedAdvice);
+  expect(controller.snapshot().attempt).toBeNull();
+  controller.deactivate();
+});

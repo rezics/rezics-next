@@ -116,6 +116,8 @@ export class VerificationRecovery {
   };
   private listeners = new Set<() => void>();
   private epoch = 0;
+  private commandPending = false;
+  private reading: Promise<void> | null = null;
   private active = true;
   private lifetime = new AbortController();
   // Keep only ordering metadata while a fresh read hides the previous private snapshot.
@@ -138,12 +140,15 @@ export class VerificationRecovery {
     if (!this.isCurrent()) return;
     this.active = true;
     this.lifetime = new AbortController();
-    if (this.busy()) this.update({ phase: this.state.attempt ? 'uncertain' : 'loading', readStatus: 'idle' });
+    if (this.state.phase === 'sending' || this.state.readStatus === 'reading')
+      this.update({ phase: this.state.attempt ? 'uncertain' : 'loading', readStatus: 'idle' });
   }
   deactivate() {
     this.active = false;
     this.epoch++;
     this.lifetime.abort();
+    this.commandPending = false;
+    this.reading = null;
   }
   private live(epoch: number) {
     return this.active && this.isCurrent() && epoch === this.epoch;
@@ -154,7 +159,7 @@ export class VerificationRecovery {
     this.listeners.forEach((listener) => listener());
   }
   private busy() {
-    return this.state.phase === 'sending' || this.state.phase === 'reading';
+    return this.commandPending || this.state.readStatus === 'reading';
   }
   private readWaiting() {
     return this.state.readRetryAt > Date.now();
@@ -190,9 +195,10 @@ export class VerificationRecovery {
     this.update({ attempt: frozen({ kind: 'request' as const, input, requestId: null, receipt: null }) });
     await this.send(false);
   }
-  async withdraw(confirmed: boolean) {
+  async withdraw(confirmed: boolean, observation = verificationWithdrawalObservation(this.state.current)) {
     if (
       !confirmed ||
+      observation !== verificationWithdrawalObservation(this.state.current) ||
       !this.active ||
       !this.isCurrent() ||
       !this.canWrite() ||
@@ -239,6 +245,7 @@ export class VerificationRecovery {
     )
       return;
     const epoch = this.epoch;
+    this.commandPending = true;
     this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined });
     let result: VerificationCommandResult;
     try {
@@ -250,6 +257,7 @@ export class VerificationRecovery {
         this.lifetime.signal,
       );
     } catch (error) {
+      if (epoch === this.epoch) this.commandPending = false;
       const failure = verificationFailureFromException(error);
       if (this.live(epoch))
         this.update({
@@ -258,6 +266,7 @@ export class VerificationRecovery {
         });
       return;
     }
+    if (epoch === this.epoch) this.commandPending = false;
     if (!this.live(epoch) || !this.canWrite()) return;
     if (!result.ok) {
       const { ok: _ok, outcome: _outcome, ...failure } = result;
@@ -278,14 +287,15 @@ export class VerificationRecovery {
     if (
       receipt.accountId !== this.accountId ||
       (attempt.receipt && receipt.id !== attempt.receipt.id) ||
-      this.older(receipt) ||
       (attempt.kind === 'request' && !this.matchesInput(receipt, attempt.input)) ||
       (attempt.kind === 'withdraw' && (receipt.id !== attempt.requestId || receipt.state !== 'withdrawn'))
     ) {
       this.update({ phase: 'uncertain' });
       return;
     }
-    this.remember(receipt);
+    // A receipt acknowledges the original even after a newer request was read.
+    // It must never move the current-status ordering floor backwards.
+    if (!this.older(receipt)) this.remember(receipt);
     this.update({ attempt: frozen({ ...attempt, receipt }) });
     await this.readCurrent(epoch);
   }
@@ -300,16 +310,31 @@ export class VerificationRecovery {
     );
   }
   async reload() {
-    if (!this.active || !this.isCurrent() || this.busy() || this.readWaiting()) return;
+    if (!this.active || !this.isCurrent() || this.readWaiting()) return;
     await this.readCurrent(this.epoch);
   }
-  private async readCurrent(epoch: number) {
+  private readCurrent(epoch: number): Promise<void> {
+    if (this.reading) return this.reading;
+    const read = this.loadCurrent(epoch);
+    this.reading = read;
+    void read.finally(() => {
+      if (this.reading === read) this.reading = null;
+    });
+    return read;
+  }
+  private async loadCurrent(epoch: number) {
     if (!this.live(epoch)) return;
     if (this.readWaiting()) {
       if (this.state.attempt?.receipt) this.update({ phase: 'uncertain', readStatus: 'idle' });
       return;
     }
-    this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, readRetryAt: 0 });
+    this.update({
+      phase: this.commandPending ? 'sending' : 'reading',
+      readStatus: 'reading',
+      current: null,
+      failure: undefined,
+      readRetryAt: 0,
+    });
     let current: VerificationSnapshot;
     try {
       current = await withVerificationDeadline((signal) => this.io.read(this.accountId, signal), this.lifetime.signal);
@@ -324,7 +349,7 @@ export class VerificationRecovery {
       const failure = verificationFailureFromException(error);
       if (this.live(epoch))
         this.update({
-          phase: this.state.attempt ? 'uncertain' : 'unavailable',
+          phase: this.commandPending ? 'sending' : this.state.attempt ? 'uncertain' : 'unavailable',
           readStatus: 'error',
           failure,
           readRetryAt: preferenceRetryDeadline(failure?.retryAfter),
@@ -338,6 +363,7 @@ export class VerificationRecovery {
     // A validated receipt acknowledges the command; a readable current snapshot retires it at the ordering floor.
     // Without a receipt, only withdrawal's exact request identity and terminal state can resolve an attempt.
     const resolved =
+      !this.commandPending &&
       attempt &&
       (attempt.receipt ||
         (request && attempt.kind === 'withdraw' && request.id === attempt.requestId && request.state === 'withdrawn'));
@@ -345,7 +371,7 @@ export class VerificationRecovery {
       current,
       readStatus: 'success',
       attempt: resolved ? null : attempt,
-      phase: attempt ? (resolved ? 'review' : 'uncertain') : 'idle',
+      phase: this.commandPending ? 'sending' : attempt ? (resolved ? 'review' : 'uncertain') : 'idle',
       failure: undefined,
       readRetryAt: 0,
     });

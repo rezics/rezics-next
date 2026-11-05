@@ -38,17 +38,22 @@ export function serializeAccountRenameResult(result: AccountRenameResult): Accou
 /** Setup and native faults stay in this envelope; createServerFn only supplies the POST/CSRF boundary. */
 export async function runAccountRenameHandler(): Promise<AccountRenameResult> {
   try {
-    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    const { setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('cache-control', 'private, no-store');
-    const { env } = await import('cloudflare:workers');
-    const { kernelClient } = await import('../kernel/client');
-    const { loadAccountRenameRegionResult, accountRenameException } = await import('./account-rename-data');
-    const sessionEnv = env as Partial<SessionEnv>;
+    const { readSettingsViewer } = await import('./actions.server');
+    const { readAccountRenameContextResult, accountRenameException } = await import('./account-rename-data');
     try {
-      const result = await loadAccountRenameRegionResult(kernelClient(), getRequest(), sessionEnv);
+      const viewer = await readSettingsViewer();
+      if (!viewer) return { context: null };
+      const result = await readAccountRenameContextResult(
+        viewer.client,
+        viewer.authorization,
+        viewer.accountId,
+        viewer.request.signal,
+      );
       return serializeAccountRenameResult({
         ...result,
-        context: accountRenameNavigation(sessionEnv, result.context),
+        context: accountRenameNavigation(viewer.sessionEnv, result.context),
       });
     } catch (error) {
       accountRenameControlFlow(error);

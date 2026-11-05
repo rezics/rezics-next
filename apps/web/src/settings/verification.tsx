@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -311,12 +311,30 @@ export function VerificationCard({
   const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
   const isCurrent = useSettingsReadCurrent(csrfToken, true);
-  const pending = state.phase === 'sending' || state.phase === 'reading';
+  const pending = state.phase === 'sending' || state.readStatus === 'reading';
   const commandWaiting = usePreferenceRetry(state.failure, state.commandRetryAt);
   const readWaiting = usePreferenceRetry(state.failure, state.readRetryAt);
   const verification = state.current?.verificationRequest ?? null;
   const subjectTitle = state.current?.subjectTitle ?? null;
   const observation = verificationWithdrawalObservation(state.current);
+  const statusFocus = useRef<HTMLDivElement>(null);
+  const actionFocus = useRef<HTMLButtonElement | null>(null);
+  const confirmFocus = useRef<HTMLButtonElement>(null);
+  const withdrawFocus = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const trigger = actionFocus.current;
+    if (!trigger || pending) return;
+    actionFocus.current = null;
+    if (!isCurrent()) return;
+    const active = trigger.ownerDocument.activeElement;
+    // Completion must not steal focus from a later edit or navigation decision.
+    if (active !== trigger && active !== trigger.ownerDocument.body) return;
+    if (trigger.isConnected && !trigger.disabled) trigger.focus();
+    else {
+      const next = confirmation !== null && confirmation === observation ? confirmFocus.current : withdrawFocus.current;
+      (next ?? statusFocus.current)?.focus();
+    }
+  }, [state.phase, state.readStatus, confirmation, observation, pending, isCurrent]);
   const canRequest =
     canRequestVerification(state.current) && !state.attempt && !pending && !commandWaiting && !!csrfToken;
   const canWithdraw =
@@ -377,7 +395,7 @@ export function VerificationCard({
   async function withdraw() {
     if (!isCurrent() || !csrfToken || confirmation === null || confirmation !== observation || !canWithdraw) return;
     setAction({ kind: 'withdraw', subject: subjectLabel(subjectTitle, verification?.catalogueSubjectId) });
-    await controller.withdraw(true);
+    await controller.withdraw(true, confirmation);
     if (isCurrent()) setConfirmation(null);
   }
 
@@ -389,8 +407,17 @@ export function VerificationCard({
         </CardTitle>
         <CardDescription>{m.settings_verification_intro()}</CardDescription>
       </CardHeader>
-      <CardContent className="min-w-0 space-y-4">
-        <div role="status" aria-live="polite" aria-atomic="true">
+      <CardContent
+        className="min-w-0 space-y-4"
+        onKeyDownCapture={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && (event.target as HTMLElement).tagName === 'BUTTON')
+            actionFocus.current = event.target as HTMLButtonElement;
+        }}
+        onClickCapture={(event) => {
+          if (event.detail !== 0) actionFocus.current = null;
+        }}
+      >
+        <div ref={statusFocus} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true">
           {state.phase === 'loading' || state.readStatus === 'reading' ? (
             <p>{m.settings_verification_loading()}</p>
           ) : state.readStatus === 'success' && !verification ? (
@@ -522,6 +549,7 @@ export function VerificationCard({
                 <Button
                   type="button"
                   variant="destructive"
+                  ref={confirmFocus}
                   className={verificationActionClassName}
                   disabled={pending || !csrfToken}
                   onClick={() => void withdraw()}
@@ -543,6 +571,7 @@ export function VerificationCard({
               type="button"
               variant="outline"
               className={verificationActionClassName}
+              ref={withdrawFocus}
               onClick={() => setConfirmation(observation)}
             >
               {m.settings_verification_withdraw()}
@@ -652,7 +681,7 @@ export function VerificationCard({
           type="button"
           variant="outline"
           className={verificationActionClassName}
-          disabled={pending || readWaiting}
+          disabled={state.readStatus === 'reading' || readWaiting}
           onClick={() => void recover(() => controller.reload())}
         >
           {m.settings_verification_read_current()}

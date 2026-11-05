@@ -197,7 +197,6 @@ export function VerificationSubjectChooser(props: Props) {
       setPreviousOwner(owner);
     }
   }, [changed, owner]);
-  useEffect(() => () => onSelect.current(null), []);
   return (
     <VerificationSubjectChooserView
       key={`${owner}:${getLocale()}`}
@@ -281,6 +280,7 @@ export function VerificationSubjectChooserView({
             open={!disabled && open && subjects.length > 0}
             onOpenChange={setOpen}
             itemToStringLabel={(subject: VerificationSubject) => subject.title}
+            itemToStringValue={(subject: VerificationSubject) => subject.id}
             onItemHighlighted={(subject) => {
               highlighted.current = subject;
             }}
@@ -308,7 +308,6 @@ export function VerificationSubjectChooserView({
               disabled={disabled}
               aria-describedby={`${id}-help ${id}-status`}
               aria-busy={!disabled && busy}
-              onBlur={() => setOpen(false)}
               onCompositionStart={() => {
                 lookup.startComposition(episode);
                 setOpen(false);

@@ -1,14 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient, requestLocale } from '../kernel/client';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { readSubjectSuggestions, SUGGESTION_LIMIT } from '../search/suggestions';
 import { withVerificationDeadline } from './verification-request-deadline';
-import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { requestLanguages } from '../kernel/languages';
 import {
   readVerificationEligibility,
@@ -66,12 +62,11 @@ function expectedAccount(input: unknown): string {
 }
 
 async function viewer() {
-  const request = getRequest();
-  await withVerificationDeadline(() => prepareSession(request, env as Partial<SessionEnv>), request.signal);
-  const authorization = viewerCredential(request);
-  const accountId = sessionSubject(request);
-  if (!authorization || !accountId) throw new Error('Sign in is required');
-  return { request, authorization, accountId };
+  // Module setup belongs inside the same private envelope as the actual native call.
+  const { readSettingsViewer } = await import('./actions.server');
+  const current = await readSettingsViewer();
+  if (!current) throw new Error('Sign in is required');
+  return current;
 }
 
 function currentReadFailure(error: unknown): VerificationFailure {
@@ -133,13 +128,13 @@ function verificationSubjectSearchFailure(error: unknown): VerificationSearchFai
 export const readVerificationState = createServerFn({ method: 'GET' })
   .validator(expectedAccount)
   .handler(async ({ data: expectedAccountId }) => {
-    setResponseHeader('cache-control', 'private, no-store');
     try {
-      const { request, authorization, accountId } = await viewer();
+      setResponseHeader('cache-control', 'private, no-store');
+      const { request, authorization, accountId, client } = await viewer();
       if (accountId !== expectedAccountId)
         return { ok: false as const, failure: { status: 409, message: m.settings_verification_identity_changed() } };
       const { readVerification } = await import('./verification-core');
-      const status = await readVerification(kernelClient(), accountId, authorization, request.signal);
+      const status = await readVerification(client, accountId, authorization, request.signal);
       return { ok: true as const, value: { accountId, ...status, subjectTitle: null } };
     } catch (error) {
       return { ok: false as const, failure: currentReadFailure(error) };
@@ -155,17 +150,11 @@ export const readVerificationSubjectTitle = createServerFn({ method: 'GET' })
     return { accountId, subjectId };
   })
   .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
     try {
-      const { request, authorization, accountId } = await viewer();
+      setResponseHeader('cache-control', 'private, no-store');
+      const { request, authorization, accountId, client, locale } = await viewer();
       if (accountId !== data.accountId) return null;
-      return readVerificationTitle(
-        kernelClient(),
-        data.subjectId,
-        authorization,
-        requestLanguages(requestLocale(request) ?? 'en'),
-        request.signal,
-      );
+      return readVerificationTitle(client, data.subjectId, authorization, requestLanguages(locale), request.signal);
     } catch {
       return null;
     }
@@ -180,18 +169,17 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
     return query.slice(0, 100).replace(/[\uD800-\uDBFF]$/u, '');
   })
   .handler(async ({ data: query }) => {
-    setResponseHeader('cache-control', 'private, no-store');
-    if (!query.trim()) return { ok: true as const, value: [] };
     try {
-      const { request, authorization } = await viewer();
+      setResponseHeader('cache-control', 'private, no-store');
+      if (!query.trim()) return { ok: true as const, value: [] };
+      const { request, authorization, client, locale } = await viewer();
       const value = await withVerificationDeadline(async (signal) => {
-        const client = kernelClient();
         const result = await readSubjectSuggestions(
           client,
           {
             q: query,
             limit: SUGGESTION_LIMIT,
-            languages: requestLanguages(requestLocale(request) ?? 'en'),
+            languages: requestLanguages(locale),
           },
           authorization,
           signal,
@@ -246,13 +234,13 @@ export const requestVerificationAction = createServerFn({ method: 'POST' })
     return { ...parsed, accountId: expectedAccount(input) };
   })
   .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
     try {
-      const { request, authorization, accountId } = await viewer();
+      setResponseHeader('cache-control', 'private, no-store');
+      const { request, authorization, accountId, client } = await viewer();
       if (accountId !== data.accountId)
         return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
       const { requestVerification } = await import('./verification-core');
-      return requestVerification(kernelClient(), accountId, authorization, data, request.signal);
+      return requestVerification(client, accountId, authorization, data, request.signal);
     } catch (error) {
       return commandFailure(error);
     }
@@ -265,13 +253,13 @@ export const withdrawVerificationAction = createServerFn({ method: 'POST' })
     return { idempotencyKey: (input as { idempotencyKey: string }).idempotencyKey, accountId: expectedAccount(input) };
   })
   .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
     try {
-      const { request, authorization, accountId } = await viewer();
+      setResponseHeader('cache-control', 'private, no-store');
+      const { request, authorization, accountId, client } = await viewer();
       if (accountId !== data.accountId)
         return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
       const { withdrawVerification } = await import('./verification-core');
-      return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey, request.signal);
+      return withdrawVerification(client, accountId, authorization, data.idempotencyKey, request.signal);
     } catch (error) {
       return commandFailure(error);
     }

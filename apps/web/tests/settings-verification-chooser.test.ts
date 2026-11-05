@@ -290,3 +290,52 @@ test('retired retry callbacks cannot act in a later enabled episode', async () =
     search.setEnabled(false);
   }
 });
+
+test('a selected native Subject survives chooser unmount and remount under the same viewer', async () => {
+  const { dirname } = await import('node:path');
+  const { act } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { VerificationSubjectChooser } = await import('../src/settings/verification-subject-chooser');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/settings' });
+  const globals = {
+    window,
+    document: window.document,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = Object.entries(globals).map(([key, value]) => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    return [key, descriptor] as const;
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const selected: (Subject | null)[] = [];
+  try {
+    const chooser = () =>
+      createElement(VerificationSubjectChooser, {
+        selected: person,
+        onSelect: (subject) => selected.push(subject),
+      });
+    await act(async () => root.render(chooser()));
+    expect(host.textContent).toContain('Avery');
+    await act(async () => root.render(null));
+    expect(selected).toEqual([]);
+    await act(async () => root.render(chooser()));
+    expect(host.textContent).toContain('Avery');
+    expect(selected).toEqual([]);
+  } finally {
+    await act(async () => root.unmount());
+    window.happyDOM.abort();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
