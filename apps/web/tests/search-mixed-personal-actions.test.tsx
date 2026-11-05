@@ -790,7 +790,7 @@ test.each(['restart', 'throw', 'unavailable', 'empty', 'denied', 'ready'] as con
       await act(async () => refresh.resolve(settlement));
       expect(window.document.activeElement).toBe(
         outcome === 'ready'
-          ? host.querySelector('[data-discovery-personal-row] a')
+          ? host.querySelector('[data-discovery-personal-row] select')
           : outcome === 'empty'
             ? host.querySelector('section')
             : host.querySelector('[data-discovery-restart]'),
