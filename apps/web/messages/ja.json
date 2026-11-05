@@ -9391,6 +9391,8 @@
   "work_names_copied": "コピーしました",
   "work_names_copy_failed": "コピーできませんでした。テキストを選択してコピーしてください。",
   "work_names_sources": "出典",
+  "work_names_return_changed": "名称の読み取り内容が変わりました。現在の名称を表示し、保存された表示状態は復元していません。",
+  "work_names_return_restart": "保存された名称表示を利用できません。現在の名称を先頭から表示します。",
   "search_population_label": "評価の集計対象",
   "search_population_global": "全体",
   "search_population_selected": "選択中の Realm の評価",

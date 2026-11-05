@@ -9388,6 +9388,8 @@
   "work_names_copied": "已复制",
   "work_names_copy_failed": "无法复制。请选中文字后复制。",
   "work_names_sources": "来源",
+  "work_names_return_changed": "名称数据已更改。现在显示的是当前名称，未恢复先前的视图。",
+  "work_names_return_restart": "已无法使用已保存的名称视图。从头开始查看当前名称。",
   "search_population_label": "评分总体",
   "search_population_global": "全站",
   "search_population_selected": "已选的 Realm 评分总体",

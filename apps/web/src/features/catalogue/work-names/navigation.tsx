@@ -10,7 +10,9 @@ export type NamesWindow = {
   expanded: boolean;
   groups: { index: number; page: number; open: boolean }[];
 };
-export type NamesReturn = { binding: string; href: string; window: NamesWindow };
+export type NamesReturnFocus = 'terms' | 'sources';
+export type NamesReturn = { binding: string; href: string; window: NamesWindow; focus?: NamesReturnFocus | undefined };
+export type NamesReturnStatus = 'none' | 'restored' | 'changed' | 'restart';
 const integer = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 32768;
 
@@ -31,6 +33,7 @@ export function namesReturn(value: unknown, locale: string): NamesReturn | undef
       typeof candidate.href !== 'string' ||
       subjectVisitReturn(candidate.href, locale) !== candidate.href ||
       !candidate.href.endsWith('#supplied-names') ||
+      (candidate.focus !== undefined && candidate.focus !== 'terms' && candidate.focus !== 'sources') ||
       !w ||
       typeof w.query !== 'string' ||
       w.query.length > 250 ||
@@ -52,6 +55,7 @@ export function namesReturn(value: unknown, locale: string): NamesReturn | undef
         expanded: w.expanded,
         groups: w.groups.map((g) => ({ index: g.index, page: g.page, open: g.open })),
       },
+      ...(candidate.focus === undefined ? {} : { focus: candidate.focus }),
     };
   } catch {
     return;
@@ -66,6 +70,11 @@ export function namesReturnHref(href: string, locale: string): string | undefine
   } catch {
     return;
   }
+}
+
+function namesReturnFromHistory(state: unknown, locale: string): NamesReturn | undefined {
+  const value = state && typeof state === 'object' ? Reflect.get(state, 'namesReturn') : undefined;
+  return namesReturn(value, locale);
 }
 
 function selectedReturn(href: string | undefined, realm: string | null, locale: string) {
@@ -86,7 +95,7 @@ export function NamesHandoff({
   returnHref: string | undefined;
   locale: string;
   current: () => boolean;
-  children: (restored: NamesWindow | undefined) => ReactNode;
+  children: (restored: NamesWindow | undefined, status: NamesReturnStatus) => ReactNode;
 }) {
   const router = useRouter({ warn: false });
   const host = useRef<HTMLDivElement>(null);
@@ -95,29 +104,34 @@ export function NamesHandoff({
     if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
       host.current?.querySelector<HTMLElement>('summary')?.focus();
   });
-  const [restored, setRestored] = useState<NamesWindow>();
+  const [restored, setRestored] = useState<{ window?: NamesWindow; focus?: NamesReturnFocus | 'section'; status: NamesReturnStatus }>({
+    status: 'none',
+  });
   useEffect(() => {
-    const saved = namesReturn(
-      Reflect.get(router?.history.location.state ?? window.history.state ?? {}, 'namesReturn'),
+    const saved = namesReturnFromHistory(router?.history.location.state ?? window.history.state, locale);
+    const actualReturn = selectedReturn(
+      returnHref,
+      new URLSearchParams(router?.history.location.search ?? window.location.search).get('realm'),
       locale,
     );
-    if (
-      saved &&
-      binding &&
-      saved.binding === binding &&
-      saved.href ===
-        selectedReturn(
-          returnHref,
-          new URLSearchParams(router?.history.location.search ?? window.location.search).get('realm'),
-          locale,
-        ) &&
-      current()
-    )
-      setRestored(saved.window);
+    if (saved && actualReturn && saved.href === actualReturn && binding && saved.binding === binding && current()) {
+      setRestored({ window: saved.window, focus: saved.focus ?? 'terms', status: 'restored' });
+    } else if (saved && actualReturn && saved.href === actualReturn && current()) {
+      setRestored({ focus: 'section', status: 'changed' });
+    } else if ((router?.history.location.hash ?? window.location.hash) === '#supplied-names' && current()) {
+      setRestored({ focus: 'section', status: 'restart' });
+    }
     // Restoration belongs to this reading, not subsequent mutations of browser state.
   }, [binding, returnHref, locale]);
-  useEffect(() => {
-    if (restored && current()) host.current?.querySelector<HTMLAnchorElement>('[data-names-terms] a')?.focus();
+  useLayoutEffect(() => {
+    if (restored.status === 'none' || !current()) return;
+    const anchor =
+      restored.focus === 'sources'
+        ? host.current?.querySelector<HTMLAnchorElement>('[data-names-sources] a')
+        : restored.focus === 'terms'
+          ? host.current?.querySelector<HTMLAnchorElement>('[data-names-terms] a')
+          : undefined;
+    (anchor ?? host.current?.querySelector<HTMLElement>('summary'))?.focus();
   }, [restored]);
   return (
     <div
@@ -128,7 +142,10 @@ export function NamesHandoff({
       }}
       onClickCapture={(event) => {
         const anchor =
-          event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('[data-names-terms] a') : null;
+          event.target instanceof Element
+            ? event.target.closest<HTMLAnchorElement>('[data-names-terms] a, [data-names-sources] a')
+            : null;
+        const sourceVisit = !!anchor?.closest('[data-names-sources]');
         if (
           !anchor ||
           !router ||
@@ -139,11 +156,17 @@ export function NamesHandoff({
           event.metaKey ||
           event.ctrlKey ||
           event.shiftKey ||
-          event.altKey
+          event.altKey ||
+          anchor.target ||
+          anchor.hasAttribute('download')
         )
           return;
         const destination = new URL(anchor.href);
-        if (destination.origin !== window.location.origin || !destination.pathname.endsWith('/terms')) return;
+        if (
+          destination.origin !== window.location.origin ||
+          !(sourceVisit ? destination.pathname.endsWith('/sources') : destination.pathname.endsWith('/terms'))
+        )
+          return;
         const actualReturn = selectedReturn(returnHref, destination.searchParams.get('realm'), locale);
         if (!actualReturn) return;
         const root = host.current!;
@@ -151,6 +174,7 @@ export function NamesHandoff({
           {
             binding,
             href: actualReturn,
+            focus: sourceVisit ? 'sources' : 'terms',
             window: {
               query: root.querySelector<HTMLInputElement>('input[type="search"]')?.value ?? '',
               page: Number(root.querySelector('[data-names-page]')?.getAttribute('data-names-page') ?? 0),
@@ -177,7 +201,7 @@ export function NamesHandoff({
         void router.navigate({ to: to as never, state: (previous) => ({ ...previous, namesReturn: saved }) as never });
       }}
     >
-      {children(restored)}
+      {children(restored.window, restored.status)}
     </div>
   );
 }
@@ -189,10 +213,7 @@ export function NamesTermsReturn({ id, locale, via }: { id: string; locale: stri
   const safe = href?.startsWith(`/${locale}/subjects/${id}/`) && href.endsWith('#supplied-names') ? href : undefined;
   const [saved, setSaved] = useState<NamesReturn>();
   useEffect(() => {
-    const value = namesReturn(
-      Reflect.get(router?.history.location.state ?? window.history.state ?? {}, 'namesReturn'),
-      locale,
-    );
+    const value = namesReturnFromHistory(router?.history.location.state ?? window.history.state, locale);
     setSaved(value?.href === safe ? value : undefined);
   }, [safe, locale]);
   if (!safe) return null;

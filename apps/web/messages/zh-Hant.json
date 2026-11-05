@@ -9391,6 +9391,8 @@
   "work_names_copied": "已複製",
   "work_names_copy_failed": "無法複製。請選取文字後複製。",
   "work_names_sources": "來源",
+  "work_names_return_changed": "名稱資料已變更。現在顯示的是目前名稱，未還原先前的檢視。",
+  "work_names_return_restart": "已無法使用已儲存的名稱檢視。從頭開始查看目前名稱。",
   "search_population_label": "評分母體",
   "search_population_global": "全站",
   "search_population_selected": "已選擇的 Realm 評分母體",

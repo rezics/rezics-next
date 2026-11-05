@@ -23,6 +23,7 @@ export function WorkNamesView({
     <PeopleNamesView
       {...props}
       kind="work"
+      captureSourcesVisit
       locale={locale}
       sourcesHref={sourcesHref}
       termsHref={termsHref}

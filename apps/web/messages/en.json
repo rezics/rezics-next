@@ -9484,6 +9484,8 @@
   "work_names_copied": "Copied",
   "work_names_copy_failed": "Could not copy. Select the text to copy it.",
   "work_names_sources": "Sources",
+  "work_names_return_changed": "The names reading changed. Current names are shown, and the saved view was not restored.",
+  "work_names_return_restart": "The saved names view is unavailable. Current names start from the beginning.",
   "search_population_label": "Rating population",
   "search_population_global": "Global",
   "search_population_selected": "Selected Realm population",

@@ -9388,6 +9388,8 @@
   "work_names_copied": "Kopiert",
   "work_names_copy_failed": "Kopieren fehlgeschlagen. Wählen Sie den Text zum Kopieren aus.",
   "work_names_sources": "Quellen",
+  "work_names_return_changed": "Die Namensansicht hat sich geändert. Die aktuellen Namen werden angezeigt; die gespeicherte Ansicht wurde nicht wiederhergestellt.",
+  "work_names_return_restart": "Die gespeicherte Namensansicht ist nicht verfügbar. Die aktuellen Namen beginnen wieder am Anfang.",
   "search_population_label": "Bewertungsgrundlage",
   "search_population_global": "Global",
   "search_population_selected": "Gewählte Realm-Bewertungsgrundlage",

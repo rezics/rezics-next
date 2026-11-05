@@ -63,10 +63,17 @@ export function WorkNamesEntry({
     { id: subject.id, label: names.state === 'ready' ? names.selected.text : '' },
     locale,
   ).href;
-  // The existing Sources address carries the actual selected Realm.
+  // The existing Sources address carries the actual selected Realm and Context.
   const url = new URL(sourcesHref, 'https://rezics.invalid');
   url.pathname = address;
+  url.hash = '';
+  url.searchParams.delete('via');
   const returnHref = namesReturnHref(`${url.pathname}${url.search}`, locale);
+  const sourceVisitHref = withSubjectVisitReturn(
+    `${url.pathname}/sources${url.search}`,
+    returnHref ?? '',
+    locale,
+  );
   const binding = lifetime.caller
     ? JSON.stringify([
         subject.id,
@@ -93,7 +100,7 @@ export function WorkNamesEntry({
         {...{
           names,
           locale,
-          sourcesHref,
+          sourcesHref: sourceVisitHref,
           termsHref,
           returnHref,
           binding,
@@ -133,10 +140,10 @@ function WorkNamesVisit({
   const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader, termsAuthority);
   return (
     <NamesHandoff {...{ binding, returnHref, locale }} current={lifetime.current}>
-      {(restored) => (
+      {(restored, returnStatus) => (
         <WorkNamesView
           key={restored ? 'returned' : 'initial'}
-          {...{ names, locale, sourcesHref, termsHref, restored }}
+          {...{ names, locale, sourcesHref, termsHref, restored, returnStatus }}
           retired={lifetime.retired}
           current={lifetime.current}
           {...advice}
