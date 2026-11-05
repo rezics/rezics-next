@@ -154,7 +154,8 @@ export function InboxRows({
           const row = anchor.closest<HTMLElement>('[data-notice-id]');
           const noticeId = row?.dataset.noticeId;
           const item = noticeId ? page.items.find((candidate) => candidate.id === noticeId) : undefined;
-          if (!row || !noticeId || !item?.href || anchor.getAttribute('href') !== item.href) return;
+          if (!row || !noticeId || !item?.href || anchor.getAttribute('href') !== item.href || !onOpenNotice) return;
+          event.preventDefault();
           onOpenNotice?.(noticeId);
         }}
       >
@@ -811,59 +812,59 @@ export function ViewerInboxPage({
 
   const captureNoticeDeparture = (noticeId: string) => {
     const item = readable?.items.find((candidate) => candidate.id === noticeId && candidate.href);
+    if (!item?.href) return;
     const read = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey);
     if (
-      !historyKey ||
-      !item ||
-      !active.current ||
-      pageIntentRef.current !== pageIntent ||
-      !episodeOwnerCurrent() ||
-      pageQueryFetching(pageIntent) ||
-      !read ||
-      read.status !== 'success' ||
-      !read.data?.signedIn ||
-      read.data.state !== 'ready' ||
-      read.data.selection !== selection ||
-      read.data.viewer.accountId !== viewer.subject ||
-      !read.data.items.some((candidate) => candidate.id === noticeId)
-    )
-      return;
-    const responseVersion = read.dataUpdateCount;
-    const currentLocale = getLocale();
-    let departed = false;
-    armInboxReturn(router, {
-      historyKey,
-      selection,
-      cursor,
-      noticeId,
-      owner: {
-        admitDeparture: () => {
-          const current = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey);
-          if (
-            departed ||
-            !active.current ||
-            pageIntentRef.current !== pageIntent ||
-            !episodeOwnerCurrent() ||
-            getLocale() !== currentLocale ||
-            current?.status !== 'success' ||
-            current.dataUpdateCount !== responseVersion ||
-            !current.data?.signedIn ||
-            current.data.state !== 'ready' ||
-            current.data.selection !== selection ||
-            current.data.viewer.accountId !== viewer.subject ||
-            !current.data.items.some((candidate) => candidate.id === noticeId)
-          )
-            return false;
-          departed = true;
-          return true;
+      historyKey &&
+      active.current &&
+      pageIntentRef.current === pageIntent &&
+      episodeOwnerCurrent() &&
+      !pageQueryFetching(pageIntent) &&
+      read?.status === 'success' &&
+      read.data?.signedIn &&
+      read.data.state === 'ready' &&
+      read.data.selection === selection &&
+      read.data.viewer.accountId === viewer.subject &&
+      read.data.items.some((candidate) => candidate.id === noticeId)
+    ) {
+      const responseVersion = read.dataUpdateCount;
+      const currentLocale = getLocale();
+      let departed = false;
+      armInboxReturn(router, {
+        historyKey,
+        selection,
+        cursor,
+        noticeId,
+        owner: {
+          admitDeparture: () => {
+            const current = queryClient.getQueryState<InboxPage>(pageQueryOptions.queryKey);
+            if (
+              departed ||
+              !active.current ||
+              pageIntentRef.current !== pageIntent ||
+              !episodeOwnerCurrent() ||
+              getLocale() !== currentLocale ||
+              current?.status !== 'success' ||
+              current.dataUpdateCount !== responseVersion ||
+              !current.data?.signedIn ||
+              current.data.state !== 'ready' ||
+              current.data.selection !== selection ||
+              current.data.viewer.accountId !== viewer.subject ||
+              !current.data.items.some((candidate) => candidate.id === noticeId)
+            )
+              return false;
+            departed = true;
+            return true;
+          },
+          isCurrent: () =>
+            departed &&
+            getLocale() === currentLocale &&
+            viewer.isCurrent() &&
+            inboxViewerCsrfToken(queryClient, viewer) === csrfToken,
         },
-        isCurrent: () =>
-          departed &&
-          getLocale() === currentLocale &&
-          viewer.isCurrent() &&
-          inboxViewerCsrfToken(queryClient, viewer) === csrfToken,
-      },
-    });
+      });
+    }
+    void router.navigate({ href: item.href });
   };
 
   const chooseSelection = (next: InboxSelection) => {
