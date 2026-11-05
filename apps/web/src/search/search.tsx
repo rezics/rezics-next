@@ -1,4 +1,20 @@
 import { QueryTextRecovery } from './query-text-recovery';
+
+export {
+  correctSearchInput,
+  discoverySearchHref,
+  facetValuesFromSearch,
+  rangeValuesFromSearch,
+  removeSearchInput,
+  searchFormFields,
+  searchInputDependency,
+  searchInputFingerprint,
+  searchLoaderDeps,
+  searchParams,
+  searchUrlIntake,
+} from './search-params';
+export type { SearchInputIssue, SearchInputIssueReason, SearchLoaderDeps, SearchParams, SearchUrlIntake } from './search-params';
+export { SearchInputRecovery } from './search-input-recovery';
 import { useSearchWindow } from './search-window/use-search-window';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';

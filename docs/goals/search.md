@@ -41,6 +41,7 @@ Decision: scoped Search uses the verified current reader and one complete predic
 resource change retires old facet values and cursors and restarts in that scope without Global fallback.
 The query contract is [discovery-query](../../services/kernel/src/search/discovery-query.md), under the
 [universal search conditions](../search-conditions.md) authority.
+Decision: within the visit-address limit, malformed Search URLs retain each authored operand for per-value correction or explicit removal; over-budget URLs show a payload-free restart that clears the request.
 Header and Recent Realm browsing reuse the strict Search reader through the shared one-page controller; injected loaders keep their request shape and receive its AbortSignal as an optional second argument.
 Rating population pages retain the disclosed page when an opaque continuation exceeds the native 4096-character request limit, show the existing localized unavailable message, and offer a first-page restart without issuing the cursor.
 A focused Realm Retry or terminal More recovers onto a surviving current More/Retry of that owner or the named discovery region after the page commits; an unactivated load, a replaced locale/sort/reader/QueryClient owner, unmount, a superseded activation, a disposed progress controller, and a reader who has moved elsewhere do not transfer focus.
