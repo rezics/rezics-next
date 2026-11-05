@@ -2,7 +2,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id,
          :source::text AS source, :source_alias::text AS source_alias, :source_record_id::text AS source_record_id,
          :scale_min::integer AS scale_min, :scale_max::integer AS scale_max,
-         :figures::text::jsonb AS figures, :mean::numeric AS mean, :count::integer AS count, :as_of::date AS as_of,
+         :figures::nullable(text)::jsonb AS figures, :mean::numeric AS mean, :count::integer AS count, :as_of::date AS as_of,
          :licence::text AS licence, :attribution::text AS attribution,
          :transaction_id::uuid AS transaction_id, :observation_digest::text AS observation_digest, :expose_observation::boolean AS expose_observation
 )

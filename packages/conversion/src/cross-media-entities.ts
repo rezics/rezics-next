@@ -10,7 +10,6 @@ import {
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
-import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
   bangumiCharacterNameScalar,
@@ -36,9 +35,8 @@ import {
   projectBangumiCharacterMeasurements,
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
-import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './bangumi-person-birth-date.ts';
 
-export const converter_revision = 'cross-media-entities@13';
+export const converter_revision = 'cross-media-entities@14';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -758,7 +756,6 @@ type Projected = {
   maxCommands?: number;
   minimumAge?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
   characterMeasurements?: BangumiCharacterMeasurementProjection;
-  personBirthDate?: BangumiPersonBirthDate;
   ignored?: ConversionDiagnostic;
   diagnostics?: ConversionDiagnostic[];
 };
@@ -1392,7 +1389,20 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'bangumi-character') {
     const nameInput = bangumiCharacterNameScalar(own(raw, 'name', '/name'));
     const chineseInput = bangumiCharacterNameScalar(own(raw, 'name_cn', '/name_cn'));
-    const infoboxNames = parseBangumiCharacterInfoboxNames(own(raw, 'infobox', '/infobox'));
+    const infobox = own(raw, 'infobox', '/infobox');
+    const infoboxNames = parseBangumiCharacterInfoboxNames(infobox);
+    const retainedSource = own(raw, 'infobox_source', '/infobox_source') as
+      | { kind?: unknown; bytes?: unknown }
+      | undefined;
+    if (
+      infobox === undefined &&
+      retainedSource?.kind === 'over-limit' &&
+      typeof retainedSource.bytes === 'number' &&
+      Number.isSafeInteger(retainedSource.bytes) &&
+      retainedSource.bytes > bangumiCharacterNameLimits.maxInfoboxBytes
+    ) {
+      infoboxNames.source = { kind: 'over-limit', bytes: retainedSource.bytes };
+    }
     const nameFacts: { language: string; text: string }[] = [];
     const alternateNames = [...infoboxNames.alternateNames];
     const labels: Record<string, string> = Object.create(null);
@@ -1422,6 +1432,13 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       ...(nameInput.status === 'invalid' ? { name_source: nameInput } : {}),
       ...(chineseInput.status === 'invalid' ? { name_cn_source: chineseInput } : {}),
       infobox_source: infoboxNames.source,
+      // The importer reconverts this bounded projection after durable staging. A fingerprint
+      // alone cannot reproduce source aliases or physical facts under the original digest.
+      ...(infobox !== undefined &&
+      (typeof infobox !== 'string' ||
+        Buffer.byteLength(infobox, 'utf8') <= bangumiCharacterMeasurementLimits.sourceBytes)
+        ? { infobox }
+        : {}),
     };
     const characterKind = own(raw, 'type', '/type');
     if (characterKind !== undefined) normalized.type = characterKind;
@@ -1458,7 +1475,6 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   const diagnostics: ConversionDiagnostic[] = [];
   let characterMeasurements: BangumiCharacterMeasurementProjection | undefined;
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
-  let personBirthDate: BangumiPersonBirthDate | undefined;
   if (kind === 'bangumi-person') {
     type = personType(raw);
     normalized.type = own(raw, 'type', '/type');
@@ -1477,20 +1493,6 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
         diagnostics.push({ pointer: '/career', code: 'malformed_person_career' });
       }
     }
-    const year = own(raw, 'birth_year', '/birth_year');
-    const month = own(raw, 'birth_mon', '/birth_mon');
-    const day = own(raw, 'birth_day', '/birth_day');
-    if (year !== undefined) normalized.birth_year = year;
-    if (month !== undefined) normalized.birth_mon = month;
-    if (day !== undefined) normalized.birth_day = day;
-    const birth = projectBangumiPersonBirthDate({
-      profile: type,
-      birth_year: year,
-      birth_mon: month,
-      birth_day: day,
-    });
-    personBirthDate = birth.fact;
-    if (birth.diagnostic) diagnostics.push(birth.diagnostic);
   }
   if (kind === 'vndb-producer') {
     type = producerType(raw);
@@ -1564,7 +1566,6 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     identifier: expected,
     ...(minimumAge ? { minimumAge } : {}),
     ...(characterMeasurements ? { characterMeasurements } : {}),
-    ...(personBirthDate ? { personBirthDate } : {}),
     ...(diagnostics.length ? { diagnostics } : {}),
   };
 }
@@ -1659,7 +1660,7 @@ function convert(
       qualifiers: [
         {
           property: { id: 'rezics:spoilerLevel' },
-          value: { type: 'value' as const, content: name.spoilerLevel },
+          value: { type: 'value' as const, content: { amount: `+${name.spoilerLevel}`, unit: '1' } },
         },
       ],
     })),
@@ -1667,18 +1668,6 @@ function convert(
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
   if (omitOrganizationIdentifier) diagnostics.push({ pointer: '/id', code: 'unadmitted_organization_identifier' });
   const measurementCommandKeys = new Map<number, string>();
-  if (kind === 'bangumi-person' && projected.personBirthDate) {
-    const admitted =
-      projected.type === 'schema:Person' &&
-      bundledRelease.types['schema:Person']?.properties.includes('schema:birthDate') === true;
-    const statement = fact('schema:birthDate', projected.personBirthDate.time);
-    if (!admitted || checkStatementInput(statement, bundledRelease).violations.length)
-      diagnostics.push({ pointer: '/birth_day', code: 'unadmitted_person_birth_date' });
-    else {
-      measurementCommandKeys.set(facts.length, 'birthDate');
-      facts.push(statement);
-    }
-  }
   for (const measurement of projected.characterMeasurements?.measurements ?? []) {
     if (!releasedCharacterQuantity(measurement.property, measurement.quantity)) {
       diagnostics.push({ pointer: measurement.pointer, code: 'unadmitted_character_quantity' });

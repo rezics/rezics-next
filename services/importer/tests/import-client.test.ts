@@ -20,6 +20,58 @@ const generatedMutationClosure: [
 ] = [true, true, true, true];
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
+test('bulk transport retries only explicitly retryable unavailable members with their original commands', async () => {
+  const commands = [1, 2, 3].map((n) => ({
+    op: 'create' as const,
+    key: `fixture:${n}:create`,
+    source: {
+      source: 'fixture',
+      external_id: String(n),
+      record_revision: '1',
+      converter_revision: 'fixture@1',
+      digest: 'a'.repeat(64),
+      field_group: 'facts' as const,
+    },
+    subject: { type: 'schema:Book', labels: { en: 'Book' } },
+  }));
+  const requests: unknown[] = [];
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    sleep: async () => {},
+    fetch: (async (request: Request) => {
+      const body = (await request.json()) as { commands: typeof commands };
+      requests.push(body);
+      return Response.json({
+        results: body.commands.map((command) =>
+          command.key === commands[2]!.key
+            ? {
+                key: command.key,
+                status: 403,
+                problem: { type: 'about:blank', title: 'Forbidden', status: 403, code: 'forbidden', retryable: false },
+              }
+            : command.key === commands[1]!.key && requests.length === 1
+              ? {
+                  key: command.key,
+                  status: 503,
+                  problem: {
+                    type: 'about:blank',
+                    title: 'Overloaded',
+                    status: 503,
+                    code: 'overloaded',
+                    retryable: true,
+                  },
+                }
+              : { key: command.key, status: 201, value: { id: subjectId, revision: 1 } },
+        ),
+      });
+    }) as typeof fetch,
+  });
+  const result = await transport.batch({ commands });
+  expect(requests).toEqual([{ commands }, { commands: [commands[1]] }]);
+  expect(result.results.map((r) => r.status)).toEqual([201, 201, 403]);
+});
 const association: ClassificationAssociation = {
   subjectId,
   candidateId: '00000000-0000-4000-8000-000000000201',

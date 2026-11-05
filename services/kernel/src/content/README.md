@@ -3657,9 +3657,10 @@ Production lifecycle registration belongs to live maintenance.
 ## Realm Subject live lifecycle and ancestor observations
 
 `realm-subject-lifecycle.ts` is the Content producer for the existing candidate writer and census. The default Content
-effect validates each original CloudEvent against its registered schema, exact outbox slot and receipt, then releases
+effect validates each original CloudEvent against its registered schema and exact outbox slot, then releases
 the source home before reading the committed opening thread, first post, head revision and board. Revision events
-also prove that the revision row was recorded by the receipt transaction. Event `subjectIds` and the
+also require the original command receipt and prove that the revision row was recorded by that transaction.
+Internal semantic and community events do not require an idempotency receipt. Event `subjectIds` and the
 `subject_thread` projection are never membership evidence. Opening revisions for discussions and reviews are read
 from their native rows; replies do not contribute opening links.
 
@@ -3695,7 +3696,7 @@ ready population. The factory and disclosure owners remain the sole owners of th
 
 #### Live source event
 
-- **Touches:** one indexed outbox event and receipt, one current opening/revision read, one board point, at most 100
+- **Touches:** one indexed outbox event and, for opening revision events, its receipt; one current opening/revision read, one board point, at most 100
   identity mappings per released batch, one fence and at most 256 indexed candidate writes (128 current plus 128
   previous subject IDs).
 - **Bound:** subject arrays are schema-capped at 128; each identity read is capped at 100; each candidate update uses

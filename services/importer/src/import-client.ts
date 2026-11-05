@@ -333,18 +333,24 @@ export function createImportTransport(options: ImportTransportOptions) {
   const fetchOptions = (signal?: AbortSignal) => (signal === undefined ? {} : { fetch: { signal } });
 
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
+    const results: BatchWriteResult['results'] = [];
+    let indices = body.commands.map((_, index) => index);
     for (let attempt = 0; ; attempt++) {
-      const reply = await response(() => client.subjects.$batchWrite.post(body, fetchOptions(signal)), 200, signal);
+      const request = { commands: indices.map((index) => body.commands[index]!) };
+      const reply = await response(() => client.subjects.$batchWrite.post(request, fetchOptions(signal)), 200, signal);
       ensure(checkResult(reply.body).length === 0);
       const result = reply.body as BatchWriteResult;
-      ensure(result.results.length === body.commands.length);
-      result.results.forEach((item, index) => ensure(item.key === body.commands[index]!.key));
-      const contention = result.results.some((item) => {
-        const problem = 'problem' in item ? (item.problem as { code?: unknown; retryable?: unknown }) : undefined;
-        return item.status === 503 && problem?.code === 'transaction_retry_exhausted' && problem.retryable === true;
+      ensure(result.results.length === request.commands.length);
+      result.results.forEach((item, index) => {
+        ensure(item.key === request.commands[index]!.key);
+        results[indices[index]!] = item;
       });
-      if (!contention || attempt >= 2) return result;
-      // Successful peers replay their exact keys; each native attempt reauthorizes.
+      indices = indices.filter((index) => {
+        const item = results[index]!;
+        return item.status === 503 && 'problem' in item && (item.problem as { retryable?: unknown }).retryable === true;
+      });
+      if (!indices.length || attempt >= 2) return { results };
+      // Retain actual successful receipts; retry only refused members, with unchanged keys and bodies.
       await wait(100 * 2 ** attempt, signal, options.sleep);
     }
   }
