@@ -3394,7 +3394,8 @@ as required by the participant contract, while subject/account-resource grants a
   without a deleted-resource purge. Sentinel subjects do not identify an account.
 - `access.resource_role_grant`, identity/member/organization subject: [the schema](../../db/access/schema.sql) retains
   role/validity payload outside selected role mutations; no all-history account-erasure sweep.
-- `access.resource_role_grant`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.
+- `access.resource_role_grant`, other resource types: [the schema](../../db/access/schema.sql) retains role/validity
+  payload without a deleted-resource purge. Zone rows use the bounded owner port below.
 - `access.current_resource_role_key`: derived current subject/resource/role and source interval key only. Native
   source deletion cascades the current key; it adds no independent subject-erasure traversal or history retention.
 - `access.current_resource_role_due`: resource, source interval key and future boundary only, with the same source
@@ -3403,6 +3404,49 @@ as required by the participant contract, while subject/account-resource grants a
   `access.current_resource_role_install` contains only the finite technical install cut/cursor/time.
 - `access.resource_denial`, subject: [the schema](../../db/access/schema.sql) retains private reasons, scope and
   temporal ban/suspension history, without an account-erasure deadline or adopted moderation exception.
+
+### Zone grant minimization
+
+Decision: Access consumes a typed Semantic-admitted Zone branch on the same command transaction, binds a separate
+grant cursor to the original home and source revisions/generation/progress/protection revision, and distinguishes
+all grants on a dispositioned Zone from only the erased account's subject grants under its original barrier.
+
+`minimizeZoneGrantPage(tx, { admission, cursor, limit })` is the Access-owned paged port. `tx` is the active
+`CommandTransaction`; Semantic locks and rechecks the Zone parent and retains the returned `next` cursor with its
+existing cleanup CAS in that transaction. Access does not admit branches or persist another progress row. The
+opaque admission is issued by Semantic after its authentic ordinary-expiry, early-privacy, legal-order or terminal-
+account branch check. It carries the exact Zone route/id/home epoch, resource and lifecycle revisions, deletion
+generation, cleanup progress and protection revision. The terminal account-subject form also carries the exact
+erased account, original barrier version/T and captured primary-owner evidence.
+
+The `zone-disposition` admission removes all `resource_grant` and `resource_role_grant` rows for only that Zone.
+The `terminal-account-subject` admission removes only identity rows whose subject is the erased account and whose
+subject role is empty; this includes the actual owner role grant and direct/editor action grants while preserving
+organization member grants, surviving owners and grants on other resources. These are separate selections. The
+terminal account branch cannot widen its selection to every row on a Zone.
+
+Each page selects K+1 raw ordered erasure keys from one grant table, K=1–100, before terminal-subject filtering; it
+processes at most K and returns the last processed key so the lookahead remains untouched. The next call pages the
+role table after the resource-grant table. `candidateKeys` includes the lookahead, `processedKeys` excludes it, and
+the returned cursor binds the source/home, revisions, generation, progress, protection revision, branch and
+terminal barrier/evidence. A source change returns a zero-effect `rebound` cursor at the new binding. Only exhausting
+both tables returns `complete`; Semantic's existing CAS owns durable completion and no receipt or absence
+certificate is added.
+
+Grant creation/change takes the same native fence: Access checks the exact resource-initialization key, locks an
+active identity recipient when present, then locks the exact Zone parent before inserting grant rows. A missing,
+held, deleted or write-fenced Zone and a terminal identity recipient cannot receive a new Zone grant. Revocation
+still locks an existing Zone parent but remains allowed. Non-Zone grant behavior is unchanged. Parent-before-child
+ordering and the command's SERIALIZABLE transaction keep insertion, empty-page closure and the cleanup CAS in one
+native custody chain.
+
+Cost: one indexed candidate SELECT and at most one keyed DELETE per Access page; each candidate query selects at
+most K+1 keys from the existing `erasure_resource_grant_resource_id` or
+`erasure_resource_role_grant_resource_id` index. The DELETE affects at most K exact erasure keys. Role-grant deletion
+also runs the existing old-role provenance trigger once per selected row and cascades at most one matching row to
+each of `current_resource_role_key` and `current_resource_role_due`. No migration or new index is needed. Each
+Zone grant writer adds one exact resource-initialization point read; an identity addition also locks one account
+row and one Zone parent row before its existing grant mutation.
 - `access.resource_denial`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.
 - `access.resource_initialization`, resource account: [the schema](../../db/access/schema.sql) retains initialization
   after account deletion, with no child-before-parent erasure path.
