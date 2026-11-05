@@ -98,6 +98,14 @@ export class StaleCursorError extends Error {
   }
 }
 
+/** An ordinary denied read, distinct from a platform-closed gate and transport failures. */
+export class LibraryReadForbiddenError extends Error {
+  constructor() {
+    super('Kernel library read failed');
+    this.name = 'LibraryReadForbiddenError';
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -133,6 +141,7 @@ export function readLibraryResult<T>(result: LibraryResult<T>): T {
   if (isPlatformClosedProblem(status, body)) throw new PlatformClosedError(status ?? 403, body);
   if (status === 404) throw notFound();
   if (status === 409 && isRecord(body) && body.code === 'stale_cursor') throw new StaleCursorError();
+  if (status === 403) throw new LibraryReadForbiddenError();
   if (result.error || status === undefined || status >= 400 || result.data == null) {
     throw new Error('Kernel library read failed');
   }

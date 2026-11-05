@@ -9142,6 +9142,7 @@
   "library_progress_discovery_filter_value": "Valor del filtro",
   "library_progress_discovery_empty_owner": "Todavía no se han registrado sesiones de progreso.",
   "library_progress_discovery_empty_filtered": "Ninguna sesión coincide con estos filtros.",
+  "library_progress_discovery_forbidden": "Tus permisos actuales no permiten ver las sesiones de progreso.",
   "library_progress_discovery_stale": "Esta lista ha cambiado. Vuelve a la primera página para continuar.",
   "library_progress_discovery_action_unavailable": "Esta acción no está disponible para la sesión actual.",
   "library_progress_discovery_loading": "Cargando sesiones de progreso.",

@@ -9264,6 +9264,7 @@
   "library_progress_discovery_filter_value": "Filter value",
   "library_progress_discovery_empty_owner": "No progress sessions have been recorded.",
   "library_progress_discovery_empty_filtered": "No sessions match these filters.",
+  "library_progress_discovery_forbidden": "Your current permissions do not allow viewing progress sessions.",
   "library_progress_discovery_stale": "This list changed. Return to the first page to continue.",
   "library_progress_discovery_action_unavailable": "This action is unavailable for the current session.",
   "library_progress_discovery_loading": "Loading progress sessions.",
