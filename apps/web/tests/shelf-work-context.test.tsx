@@ -1,6 +1,8 @@
 import { expect, mock, spyOn, test } from 'bun:test';
-import { createElement } from 'react';
+import { createElement, createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { m } from '../src/paraglide/messages.js';
+import type { Locale } from '../src/paraglide/runtime.js';
 import { currentShelfWorkContext, prepareShelfWorkContext } from '../src/library/shelf-work-context/context';
 import {
   contextExampleRelease,
@@ -8,11 +10,31 @@ import {
   shelfExampleId,
 } from '../src/library/shelf-work-context/examples';
 import { ShelfWorkContextView } from '../src/library/shelf-work-context/view';
+import { ReceivedEntryReader } from '../src/library/received-entry-reading/view';
+import type { ShelfRow } from '../src/library/shelf-rows';
 import { shelfHref } from '../src/library/shelf-params';
+import { displayLibraryTitle } from '../src/library/title';
+import { subjectHref } from '../src/subject/subject-href';
 import * as start from '../.storybook/react-start';
 
 const html = (entry: ReturnType<typeof shelfContextExamples>[number], locale = 'en', isCurrent = () => true) =>
   renderToStaticMarkup(createElement(ShelfWorkContextView, { entry, locale, isCurrent }));
+
+function readingHtml(entry: ReturnType<typeof shelfContextExamples>[number], locale = 'en') {
+  const row: ShelfRow = { entry, conflict: false, failure: null };
+  return renderToStaticMarkup(
+    createElement(ReceivedEntryReader, {
+      id: 'entry-reading-test',
+      headingRef: createRef<HTMLHeadingElement>(),
+      row,
+      locale,
+      isCurrent: () => true,
+      progressAdmitted: true,
+      close: () => {},
+      openProgress: () => {},
+    }),
+  );
+}
 
 test('homonyms retain exact creator roles, localized destinations and partial date precision, separate from state', () => {
   const entries = shelfContextExamples('en');
@@ -111,4 +133,63 @@ test('actual label shelf list, grid and table retain context, state and progress
   } finally {
     admission.mockRestore();
   }
+});
+
+test('received Entry reading keeps supplied dates, active Progress and exact Work links in an accessible narrow and wide surface', () => {
+  for (const locale of ['en', 'zh-Hant', 'ja']) {
+    const entry = shelfContextExamples(locale)[0]!;
+    entry.createdAt = '2042-06-07T08:09:10.000Z';
+    entry.updatedAt = '2043-07-08T09:10:11.000Z';
+    entry.finishedAt = null;
+    delete entry.lastActivityAt;
+    entry.activeProgressSession = {
+      mode: 'scalar_amount',
+      unit: 'page',
+      amount: '0.50',
+      total: null,
+      completedUnitCount: 0,
+      locator: null,
+      unitLabel: 'pages',
+      unitLabelLanguage: 'en',
+    };
+    const output = readingHtml(entry, locale);
+    const options = { locale: locale as Locale };
+    const title = displayLibraryTitle(entry.subject!.label, locale).text;
+    const work = subjectHref({ id: entry.subject!.id, label: title }, locale).href;
+
+    expect(output).toContain('role="dialog"');
+    expect(output).toContain('aria-modal="false"');
+    expect(output).toContain('inset-x-0 bottom-0');
+    expect(output).toContain('sm:inset-y-0');
+    expect(output).toContain('sm:w-[min(38rem,calc(100vw-1rem))]');
+    expect(output).toContain(`href="${work}"`);
+    expect(output).toContain('data-received-entry-progress-destination');
+    expect(output).toContain(m.library_entry_reading_state_heading({}, options));
+    expect(output).toContain(m.library_entry_reading_exact_value({}, options));
+    expect(output).toContain('2042-06-07T08:09:10.000Z');
+    expect(output).toContain('2043-07-08T09:10:11.000Z');
+    expect(output).toContain(m.library_entry_reading_date_not_supplied({}, options));
+    expect(output).toContain(m.library_entry_reading_date_empty({}, options));
+    expect(output).toContain('<bdi>0.50</bdi>');
+    expect(output).toContain(m.library_entry_reading_total_unknown({}, options));
+    expect(output).toContain(m.library_entry_reading_context_heading({}, options));
+    expect(output).toContain(m.library_entry_reading_close({}, options));
+  }
+});
+
+test('an unavailable Subject keeps its state literal and has no Work or Progress destination', () => {
+  const entry = shelfContextExamples('en')[4]!;
+  entry.state = 'released-custom-state-id';
+  delete entry.stateLabel;
+  const output = readingHtml(entry);
+
+  expect(output).toContain('released-custom-state-id');
+  expect(output).toContain(m.library_entry_reading_state_unreleased());
+  expect(output).toContain(m.library_subject_unavailable());
+  expect(output).toContain(m.library_entry_reading_context_unavailable());
+  expect(output).toContain(m.library_entry_reading_work_unavailable());
+  expect(output).toContain(m.library_entry_reading_progress_destination_unavailable());
+  expect(output).not.toContain('data-received-entry-work-destination');
+  expect(output).not.toContain('data-received-entry-progress-destination');
+  expect(output).not.toContain('href=');
 });
