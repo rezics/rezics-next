@@ -408,8 +408,9 @@ export type SourceClassificationClearResult = MethodResult<ClassificationMethod<
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'accounts' | 'boards' | 'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
+  'accounts' | 'boards' | 'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'libraryImports' | 'moderation-decisions' | 'realms'
 > & {
+  libraryImports: import('./personal-vndb-import.ts').PersonalVndbImports<GeneratedKernelClient['libraryImports']>;
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
