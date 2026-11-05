@@ -257,7 +257,7 @@ test('viewer exposure retires each mounted reader observation without leaking or
     window.document.body.append(host);
     requestFor('A');
     client.setQueryData(sessionQuery.queryKey, session('A', 'csrf-A'));
-    client.setQueryData(['exposure', 'anonymous'], publicGroups);
+    client.setQueryData(['exposure', 'anonymous'], { state: 'ready', admitted: publicGroups });
     const { createRoot } = await import('react-dom/client');
     root = createRoot(host as unknown as HTMLElement);
     const render = (target: import('react-dom/client').Root, count: number, strict = false) =>
