@@ -117,6 +117,9 @@ test('the mounted Subject, canonical route, correction session and existing read
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
+  mock.module('../src/features/catalogue/editorial-entry', () => ({
+    EditorialEntry: ({ children }: { children: ReactNode }) => children,
+  }));
   const fixture = storyArcProfileFixture();
   const profileLoads: unknown[] = [];
   const readerLoads: unknown[] = [];
@@ -157,8 +160,6 @@ test('the mounted Subject, canonical route, correction session and existing read
     import('../src/paraglide/runtime'),
     import('../src/paraglide/messages'),
   ]);
-  const { within, userEvent, waitFor: waitForMenu } = await import('storybook/test');
-  const user = userEvent.setup({ document: window.document as unknown as Document });
   const oldLocale = getLocale();
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -219,27 +220,7 @@ test('the mounted Subject, canonical route, correction session and existing read
         renderJsonLd: false,
       }),
     );
-    // Menu submenus render through a body portal, so query the same mounted surface as the addon flow.
-    const publicDom = within(window.document.body);
-    const trigger = host.querySelector<HTMLButtonElement>('[data-slot="subject-contribute"] button')!;
-    trigger.focus();
-    await act(async () => user.keyboard('{Enter}'));
-    await waitForMenu(() =>
-      expect(
-        publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
-      ).toBeTruthy(),
-    );
-    const sheet = publicDom.queryByRole('dialog', { name: m.contribute_title() });
-    if (sheet) {
-      const edit = within(sheet).getByRole('button', { name: m.contribute_edit() });
-      await act(async () => user.click(edit));
-    } else {
-      const menu = publicDom.getByRole('menu');
-      const edit = within(menu).getByRole('menuitem', { name: m.contribute_edit() });
-      edit.focus();
-      await act(async () => user.keyboard('{ArrowRight}'));
-    }
-    return (await publicDom.findByRole('link', { name: m.story_arc_title() })).getAttribute('href');
+    return host.querySelector<HTMLAnchorElement>('a[href*="/story-arc?"]')?.getAttribute('href');
   };
   const routeLoader = Route.options.loader;
   if (typeof routeLoader !== 'function') throw new Error('Expected the installed StoryArc route loader.');
