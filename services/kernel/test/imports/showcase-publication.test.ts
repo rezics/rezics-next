@@ -165,8 +165,7 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
       if (table === 'entry_meta') {
         for (const id of ['v4', 'v7983']) yield { id, revision: '1', lastmod: '2026-10-25 00:00:00+00' };
       }
-      if (table === 'vn_relations')
-        yield { id: 'v4', vid: 'v7983', relation: 'preq', official: 't' };
+      if (table === 'vn_relations') yield { id: 'v4', vid: 'v7983', relation: 'preq', official: 't' };
     },
   };
   const plan = await planCrossMediaSeed(tables, {
@@ -198,7 +197,8 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
       return response;
     },
   };
-  const relationBodies = () => runtime.captures.filter((capture) => capture.body.includes('wdt:P155')).map(({ body }) => body);
+  const relationBodies = () =>
+    runtime.captures.filter((capture) => capture.body.includes('wdt:P155')).map(({ body }) => body);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
     fetch: async (input) => {
@@ -225,7 +225,12 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
       property: 'wdt:P155',
       delivery: 'acknowledged',
       publication: 'pending',
-      fields: expect.arrayContaining(['vn_relations.id', 'vn_relations.vid', 'vn_relations.relation', 'vn_relations.official']),
+      fields: expect.arrayContaining([
+        'vn_relations.id',
+        'vn_relations.vid',
+        'vn_relations.relation',
+        'vn_relations.official',
+      ]),
       citation: 'https://vndb.org/v7983',
     });
     const candidate = journal
@@ -242,7 +247,8 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
         ],
       },
     });
-    const relationSends = () => runtime.captures.filter((capture) => capture.body.includes(candidate.command.key)).length;
+    const relationSends = () =>
+      runtime.captures.filter((capture) => capture.body.includes(candidate.command.key)).length;
     const sendsBeforeReopen = relationSends();
     expect(sendsBeforeReopen).toBeGreaterThan(0);
 
@@ -308,7 +314,9 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
       targetSubjectId: relation.targetSubjectId,
     });
     const publicHolder = await publicClient.readSubject(relation.holderSubjectId!);
-    const statement = (publicHolder.subject as { statements: Record<string, BatchStatement[]> }).statements['wdt:P155']?.[0];
+    const statement = (publicHolder.subject as { statements: Record<string, BatchStatement[]> }).statements[
+      'wdt:P155'
+    ]?.[0];
     expect(statement).toMatchObject({
       value: { type: 'value', content: relation.targetSubjectId },
       references: [

@@ -2260,8 +2260,7 @@ export async function publishShowcase(input: {
       return { ...relation, publication: 'published' as const };
     const omission = uniqueOmissions.find(
       (item) =>
-        item.provider === 'vndb' &&
-        (item.sourceKey === relation.holderKey || item.sourceKey === relation.targetKey),
+        item.provider === 'vndb' && (item.sourceKey === relation.holderKey || item.sourceKey === relation.targetKey),
     );
     return {
       ...relation,

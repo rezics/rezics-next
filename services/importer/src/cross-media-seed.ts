@@ -2832,9 +2832,7 @@ export async function seedCrossMedia(
       property: edge.property,
       reason: edge.reason,
     }));
-    const vndbWorkRelationEdges = graphEdges.filter(
-      (edge) => edge.source === 'vndb' && edge.table === 'vn_relations',
-    );
+    const vndbWorkRelationEdges = graphEdges.filter((edge) => edge.source === 'vndb' && edge.table === 'vn_relations');
     const vndbWorkRelations = buildVndbWorkRelationOutcomes({
       plan: { edges: vndbWorkRelationEdges },
       evidence: graph.evidence(vndbWorkRelationEdges),
