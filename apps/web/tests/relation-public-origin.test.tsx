@@ -50,7 +50,7 @@ test('relation public intent is closed, bounded, and separate from legacy route 
   const invalid = [
     `${new URL(entry.href, 'https://site.test').search}&origin=!`,
     `${new URL(entry.href, 'https://site.test').search}&creditHandoff=${realm}`,
-    '?origin%ZZ=! ',
+    '?origin%ZZ=!',
     `?origin=${encodeURIComponent(JSON.stringify({ subject: id, context, locale: 'ja', returnHref: subject }))}`,
     `?origin=${encodeURIComponent(JSON.stringify({ subject: otherId, context, locale: 'en', returnHref: subject }))}`,
     `?origin=${encodeURIComponent(JSON.stringify({ subject: id, context, locale: 'en', returnHref: subject.replace('/en/', '/ja/') + '#connections' }))}`,
