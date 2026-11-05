@@ -52,8 +52,8 @@ test('screen overview uses its released reader label and description instead of 
 test('The default Subject reader does not describe admitted incoming editions as title-only and reports temporary dependency failure honestly with safe read recovery', async () => {
   // The recorded native default composition, with the same owner leaves as the ordinary route.
   const page = structuredClone(recordedPage) as unknown as SubjectPageData;
-  const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-  const subjectKey = Object.entries(plan.reads).find(
+  const sourcePlan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
+  const subjectKey = Object.entries(sourcePlan.reads).find(
     ([, read]) => read.kind === 'subject' && read.id === page.subject,
   )?.[0];
   if (!subjectKey) throw new Error('Expected the composition Subject read.');

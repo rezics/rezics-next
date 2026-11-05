@@ -1459,6 +1459,9 @@ function SummaryContent({
     ? undefined
     : pageText(read.subject.descriptions, value.locale, originalLanguage(read.subject));
   const { facts = null, tags = null } = value.about ?? {};
+  const documentFallbackHref =
+    viewHref(value, 'details') ??
+    subjectViewHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale, 'details');
   if (
     !selectedChoice &&
     !missing &&
@@ -1666,14 +1669,7 @@ function SummaryContent({
         {legacyUnavailable && (
           <SubjectReadingState
             locale={value.locale}
-            href={
-              viewHref(value, 'details') ??
-              subjectViewHref(
-                { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
-                value.locale,
-                'details',
-              )
-            }
+            href={documentFallbackHref}
           />
         )}
         {selectedUnavailable && (
@@ -1684,7 +1680,7 @@ function SummaryContent({
         {(missing || failed) && (
           <SubjectReadingState
             locale={value.locale}
-            href={target ? `/v1/documents/${encodeURIComponent(target.documentId)}` : ''}
+            href={documentFallbackHref}
             onRetry={onRetry}
             retryLabel={m.subject_synopsis_retry({}, options)}
             message={
