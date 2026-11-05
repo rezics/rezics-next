@@ -505,38 +505,67 @@ integration. Search's five receiving suites remain unchanged.
 
 ## Published snapshot reads and exact retention locators
 
-Decision: Keep complete Published Log costs at the existing command, public-read and retention owners; compose
-nine-axis plans from current SQL leaves and schema limits, preserve current authorization, replay and retry behavior,
-and persist the exact retention cutoff and locator through bounded page and segment continuations.
+Decision: compose each Published Log command, read and worker operation at its existing owner; reserve one immutable
+nine-axis envelope, suppress duplicate nested SQL leaves, keep Access authorization in its existing accounting
+owner, and count the bounded DBOS continuation on the segment's `engineRequests` axis.
 
-`published-log-bounds.ts` now retains exact compiled SQL and detached serialized binds for point/locked reads,
-first/next public pages, due discovery, and insert/delete/restore/purge mutations. Public-next charges both
-independently limited index streams before outer sorting and limit, including discarded candidates and each repeated
-projection. The page sentinel and all shown row projections are charged. The due SQL leaf charges every positive
-or negative candidate and its indexed EOF slot; enclosing retention bounds still own partition probes. Mutation
-terms use the published-log heap/index shape and the native-source/fact-source trigger chain, including the
-fact-head trigger's own owner-fence update.
-Schema maxima cover note escaping, IDs, state, revisions and timestamp text. The SQL executors bind each immutable
-leaf to the caller's current accounting association through `runLibraryBoundedStep`; nine-axis declarations retain
-`engineRequests`, and the eight-axis translation grants neither authority nor native execution evidence.
+`published-log-bounds.ts` retains exact SQL leaves and now composes them into publish, retract, restore, public point,
+public page, exact purge, retention page and retention segment operations. Every operation is a sum of named bounds;
+retry, replay, no-effect and successful mutation paths use branch maxima where they are exclusive. The command owner
+binds `executionPlan` through `runLibraryCommand`; public reads and durable retention workers bind through
+`runLibraryBoundedOperation`. `command/work-context.ts` carries a nested-operation frame, so a composed envelope
+reserves once and the enclosed SQL/session adapters do not reserve the same work again. Its translation drops only
+the ninth axis when passing declared native SQL/Semantic work to the existing eight-axis `CommandWorkAssociation`;
+those paths issue no Search request. The segment plan retains its separate DBOS continuation requests on the ninth
+axis. Access checks and their `AccessWorkAccounting` remain separately charged by Access. This is source accounting,
+not native receiving evidence.
 
-The existing `published-logs.ts` owners retain current account authorization before replay, original receipt bodies
-(including receipts predating CAS metadata), session/source/currentness preparation, exact owner locks and mutation
-SQL. Published contents remain independent from their source session. Public point results keep tombstones, lists
-keep partition-epoch cursors and no-refill disclosure filtering, and restore preserves the original deletion
-eligibility without reading private session values. Existing causal HTTP/native/growth suites cover the requested
-public detail/list, replay, Undo and exact expiry cases; the changed HTTP and native journeys add lost-publish-ack
-replay and both sides of the restore deadline.
+The command envelope includes current account-share and minimal account-state authorization before receipt replay,
+versioned receipt candidates, transaction controls, the existing deadline retry/recovery window, the response body,
+and the existing event fence. Publish includes preparation's session read and original/terminal Semantic disclosure,
+the fresh session comparison, snapshot insert, and its native-source/fact-source triggers. Retract includes the
+original request identity, locked row and exact revision CAS; receipt replay includes every versioned key plus the
+transitional raw key at its 255-character / 765-byte UTF-8 maximum. Restore includes its prepared row and Semantic
+disclosure, locked deletion tuple, original eligibility deadline and restore CAS. The success fence charges the
+existing write-basis, outbox, partition and receipt work. `published_log.create`, `.delete`, `.restore` and retention
+purge are not registered command-history kinds, so `recordCommandHistory` takes its existing no-declaration no-op
+path and contributes no History SQL. Old receipt response bodies remain unchanged. Snapshot fields remain independent
+of later source-session changes; Undo still reads no private session values.
 
-Complete enclosing command, public-read and retention operation plans still need their shared account/action/group,
-receipt/History/outbox, partition/floor/epoch, transaction/retry/cleanup and repeated Semantic disclosure terms bound
-at their existing operation owners. The existing command runner uses deadline-bounded contention retries; the DBOS
-page and continuation steps keep their fixed retry count. Retention keeps PAGE_BOUND=100 and SEGMENT_BOUND=100,
-retains the same cutoff and `{partition, after: {restoreUntil, route, logId}}` across its durable next locator, and
-keeps `{deletionId, revision, restoreUntil}` identical across exact locks and CAS. A segment can enqueue another
-segment, and later schedule invocations remain unbounded. Accounts keep their payload until the account erasure
-boundary. This remaining operation-level composition and its native receiving are in
-`.temp/continuation/published-log-operation-composition.md`; source declarations are not native evidence.
+The command envelope prices the existing deadline as one initial attempt plus one retry slot per 25 ms, and at most
+one writable-recovery read per 25 ms. A 5,000 ms command therefore reserves 201 attempt slots and 200 recovery
+reads. Runtime contention backoff and command deadlines are unchanged. Retention's DBOS page and continuation
+steps each keep their configured eight attempts.
+
+The detail read charges its point transaction and row plus the current owner-state/floor read. Tombstones and
+inactive owners serialize the tombstone response without Semantic disclosure; a live row repeats the existing
+original and terminal disclosure work. The public list charges its repeatable-read transaction, partition epoch and
+account-state/floor reads, the cursor input, page streams, source disclosure and serialized result. The first page
+has one ordered stream; a next page charges both independently limited streams before sorting, including discarded
+candidates and the `limit + 1` sentinel. Disclosure examines at most the shown page and never refills filtered rows.
+The cursor bound follows the existing 4096-byte sealed-token ceiling. Public reads use
+`readAccountCommandState`, which returns only the account state, fence and authentication floor used by these
+owners.
+
+Retention keeps `PUBLISHED_LOG_RETENTION_PAGE_BOUND=100` exact due-key seeks and partition probes in a page, and
+`PUBLISHED_LOG_RETENTION_SEGMENT_BOUND=100` durable page steps in a segment. Each due seek counts its positive or
+negative result and EOF slot; each eligible key includes the current time authorization, exact lock, no-effect or
+purge branch, trigger work, event fence and receipt. The scheduled cutoff and exact keyset cursor
+`{partition, after: {restoreUntil, route, logId}}` are included in each durable handoff; the current
+`{deletionId, revision, restoreUntil}` remains the purge locator across authorization, lock and CAS. Continuations
+keep the same cutoff, advance the returned exact cursor, and use `return-existing`. The current remaining deadline
+sizes each retention timeout and retry envelope; durable page/continuation steps retain their existing eight-attempt
+policy. Later scheduled sweeps remain independent and unbounded. Personal account payload remains until its actual
+account-erasure boundary. A continuation enqueue contributes one `engineRequests` per existing DBOS step attempt;
+the full segment declaration prices its bounded eight-attempt continuation step and its `return-existing` payload.
+
+Serialized SQL operands and results follow the current owners: UUID, route, revision and timestamp widths come from
+the Library/Core/Access schemas; note bytes include JSON escaping at the 1000-character limit; cursor bytes follow
+the existing seal ceiling. Mutation row/index terms include the published-log heap and index changes plus the
+native-source/fact-source trigger chain. `published-log-operation-bounds.test.ts` pins plan composition, the public
+next-page two-stream sentinel, retention's 100/100 controls and exact locator metadata, and the single enclosing
+reservation behavior. The existing HTTP/native/growth causal suites retain their public detail/list, receipt replay,
+Undo deadline, stale deletion and scale assertions. None of these declarations or tests claims native receiving.
 
 ## Private label operations
 

@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { currentCommandWorkAssociation, currentLibraryOperationAccounting } from '../command/work-context.ts';
 import sessionInsert from './progress-store-session-insert.sql';
 import sessionRead from './progress-store-session-read.sql';
 import sessionUpdate from './progress-store-session-update.sql';
@@ -377,11 +377,13 @@ export function withSessionCommandPlan<T>(plan: SessionCommandPlan, dispatch: ()
 
 /** Translation to the existing eight-axis port is explicit; no ninth-axis work is dropped. */
 export function consumeSessionWork<T>(kind: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
+  if (currentLibraryOperationAccounting()) return dispatch();
   if (enclosingSessionPlan.getStore()) return dispatch();
   return consumeNativeSessionWork(kind, total, dispatch);
 }
 
 function consumeNativeSessionWork<T>(kind: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
+  if (currentLibraryOperationAccounting()) return dispatch();
   const association = currentCommandWorkAssociation();
   const { engineRequests, ...native } = total;
   // The closed operation set contains no Search request. Search's discovery

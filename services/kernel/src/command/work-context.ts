@@ -24,6 +24,7 @@ export type CommandWorkAssociation = Readonly<{
 
 const associations = new WeakSet<object>();
 const requestFrame = new AsyncLocalStorage<CommandWorkAssociation>();
+const libraryOperationFrame = new AsyncLocalStorage<string>();
 
 export { withQueryAccounting as withNativeCommandAccounting } from '../database/pool.ts';
 
@@ -75,4 +76,15 @@ export function currentCommandWorkAssociation(): CommandWorkAssociation | undefi
   const association = requestFrame.getStore();
   if (association && !associations.has(association)) throw new TypeError('Invalid command work association');
   return association;
+}
+
+/** The enclosing Library operation owns its composed bound; nested SQL leaves do not reserve it again. */
+export function withLibraryOperationAccounting<T>(operation: string, body: () => T): T {
+  if (libraryOperationFrame.getStore()) return body();
+  return libraryOperationFrame.run(operation, body);
+}
+
+/** Executor-only lookup for the existing Library leaf adapters. */
+export function currentLibraryOperationAccounting(): string | undefined {
+  return libraryOperationFrame.getStore();
 }
