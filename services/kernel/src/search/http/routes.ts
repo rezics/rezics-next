@@ -354,7 +354,10 @@ export function searchRoutes<App>(
             return emptyRecovery ? { ...completed, emptyRecovery } : completed;
           });
         }
-        async function grouped() {
+        async function grouped(): Promise<
+          | Static<typeof releaseGroupsResponse, { PublicFigure: typeof PublicFigureSchema }>
+          | Static<typeof releaseChildrenResponse, { PublicFigure: typeof PublicFigureSchema }>
+        > {
           const check = await prepare();
           return admission.run('normal', job, async () => {
             set.headers['cache-control'] = 'private, no-store';

@@ -6,6 +6,9 @@ import { copyConditionValueSchema, copyListContextSchema } from '../../src/libra
 import { COPY_CONDITION_CHOICES, type CopyConditionValue } from '../../src/library/copy-condition.ts';
 import { statusSchema } from '../../src/library/library-export-routes.ts';
 import { libraryExportManifest, exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from '../../src/library/library-export-format.ts';
+import { MatchEvidenceSchema } from '../../src/search/http/match-evidence-schema.ts';
+import { releaseGroupsResponse } from '../../src/search/http/releases.ts';
+import { PublicFigureSchema } from '../../src/rating/public-figure-http.ts';
 import { QueryShareSchema } from '../../src/search/http/query-share-schemas.ts';
 
 test('appeal identity and context preserve unavailable states in declarations and wire schemas', () => {
@@ -50,4 +53,22 @@ test('each archive manifest retains the ordered native section tuple', () => {
     expect(Value.Check(statusSchema, status)).toBe(true);
     expect(Value.Check(statusSchema, { ...status, sections: [...manifest.sections].reverse() })).toBe(false);
   }
+});
+
+test('grouped release cards admit the native response without catalogue match evidence', () => {
+  type Group = Static<typeof releaseGroupsResponse, { PublicFigure: typeof PublicFigureSchema }>['groups'][number];
+  expectTypeOf<Extract<Group, { kind: 'release' }>['release']['matchEvidence']>()
+    .toEqualTypeOf<Static<typeof MatchEvidenceSchema> | undefined>();
+  const id = '00000000-0000-4000-8000-000000000001';
+  const card = {
+    id, type: 'release', kind: 'release', labels: {}, summary: null,
+    base: { id, kind: 'release', kindLabel: { value: 'Release', language: 'en' }, title: null, image: null, url: { id, label: null } },
+    figure: { questionId: id, populationId: id, scale: { min: 0, max: 10, displayStep: 1 }, count: 0, state: 'insufficient_data', mean: null, score: null },
+  };
+  const page = { status: 'ready', groups: [{ kind: 'release', id, release: card, workLink: 'missing' }], next: null, as_of: '2026-11-05T00:00:00Z' };
+  const references = { PublicFigure: PublicFigureSchema };
+  expect(Value.Check(references, releaseGroupsResponse, page)).toBe(true);
+  expect(Value.Check(references, releaseGroupsResponse, {
+    ...page, groups: [{ ...page.groups[0], release: { ...card, matchEvidence: { state: 'raw_engine_error' } } }],
+  })).toBe(false);
 });

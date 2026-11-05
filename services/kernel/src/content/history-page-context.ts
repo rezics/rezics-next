@@ -277,10 +277,14 @@ async function readReviewQuestions(
   return new Map(questions);
 }
 
+type HistoryActionOperand =
+  | Readonly<{ type: 'content.thread'; id: string }>
+  | Readonly<{ type: 'content.post'; id: string; sourceRevisionId: string }>;
+
 function actionReferences(
   actor: Actor,
   runtime: ReadingPageViewerActionRuntime,
-  refs: readonly Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>[],
+  refs: readonly HistoryActionOperand[],
   results: readonly Readonly<{
     type: string;
     id: string;
@@ -318,7 +322,7 @@ async function readHistoryActions(
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
   }
-  const refs: Array<Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>> = [
+  const refs: HistoryActionOperand[] = [
     { type: 'content.thread', id: thread.id },
   ];
   if ('revisionId' in head && head.availability === 'available')

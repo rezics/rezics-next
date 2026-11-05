@@ -342,7 +342,6 @@ export function libraryExportRoutes(
   deps: Omit<LibraryExportDependencies, 'access'> & { access: () => Access },
 ) {
   const service = () => createLibraryExport({ ...deps, access: deps.access() });
-  const statusView = (value: Awaited<ReturnType<ReturnType<typeof service>['get']>>): Static<typeof statusSchema> => value;
   return app
     .post(
       '/v1/libraryExports',
@@ -353,8 +352,8 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().create(actor, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), requestSignal(request, job.signal)).then(statusView),
+        return admission.run<Static<typeof statusSchema>>('normal', job, () =>
+          service().create(actor, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), requestSignal(request, job.signal)),
         );
       },
     )
@@ -367,7 +366,7 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)).then(statusView));
+        return admission.run<Static<typeof statusSchema>>('normal', job, () => service().get(actor, params.id, requestSignal(request, job.signal)));
       },
     )
     .get(
@@ -418,8 +417,8 @@ export function libraryExportRoutes(
       },
       async ({ request, actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
-          service().cancel(actor, params.id, requestSignal(request, job.signal)).then(statusView),
+        return admission.run<Static<typeof statusSchema>>('normal', job, () =>
+          service().cancel(actor, params.id, requestSignal(request, job.signal)),
         );
       },
     );

@@ -4,13 +4,17 @@ import { t } from 'elysia';
 import { createSearchService } from '../service.ts';
 import { searchHit, createCatalogueResponseAdapter } from './catalogue.ts';
 const object = { additionalProperties: false } as const;
+const releaseHit = t.Object(
+  { ...searchHit.properties, matchEvidence: t.Optional(searchHit.properties.matchEvidence) },
+  object,
+);
 const releaseSearchGroup = t.Union([
   t.Object(
     {
       kind: t.Literal('work'),
       id: t.String({ format: 'uuid' }),
-      work: searchHit,
-      releases: t.Array(searchHit, { minItems: 1, maxItems: 3 }),
+      work: releaseHit,
+      releases: t.Array(releaseHit, { minItems: 1, maxItems: 3 }),
       next: t.Union([t.String(), t.Null()]),
     },
     object,
@@ -19,7 +23,7 @@ const releaseSearchGroup = t.Union([
     {
       kind: t.Literal('release'),
       id: t.String({ format: 'uuid' }),
-      release: searchHit,
+      release: releaseHit,
       workLink: t.Union([
         t.Literal('missing'),
         t.Literal('unknown'),
@@ -43,7 +47,7 @@ export const releaseGroupsResponse = t.Object(
 export const releaseChildrenResponse = t.Object(
   {
     status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-    children: t.Array(searchHit, { maxItems: 20 }),
+    children: t.Array(releaseHit, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
   },

@@ -43,6 +43,8 @@ means no action, distinct from an absent projection. Public contract tests use t
 
 Mounted response unions use explicit schema tuples so TypeBox preserves every native state in declarations.
 Focused schema tests compare static unions with native vocabularies and check the same wire values at runtime.
+Grouped release cards retain optional match evidence: the native grouping reader supplies cards without evidence,
+while ordinary catalogue search supplies an explicit evidence state. Their mounted schemas preserve that difference.
 
 The profile admits 512 regular members, 32 MiB decoded total, 2 MiB per member, 16 relative path components and
 1024 UTF-8 path bytes. Paths must be normalized NFC, collision-free under case folding, and free of traversal,

@@ -1260,7 +1260,7 @@ export function createVndbImport(config: Config) {
               requestedBy: account.requestedBy ?? null,
             },
             nativeAdmission = await dateAdmission(actor, identity),
-            intent = await executeImportConsumptionDateIntent({
+            intent = await executeImportConsumptionDateIntent<Awaited<ReturnType<typeof sessions.patchSessionJournal>>>({
               review: reviewed,
               fields: item.fields,
               ...(previous ? { existing: previous } : {}),
