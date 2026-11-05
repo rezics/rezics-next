@@ -92,7 +92,7 @@ test('literal page/current/seal declarations retain all eight axes and repeat/ro
   const currentPoint = declareLibraryIdentityStatement(
     'planner',
     current.sql,
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.values,
+    LIBRARY_IDENTITY_SELECTED_STATEMENTS().current.values,
   )!;
   expect(currentPoint.work).toMatchObject({ nativeRows: 7, nativePoints: 7, identityMetadataRows: 1, witnessKeys: 0 });
   const sealPoint = declareLibraryIdentityStatement('planner', seal.sql, [])!;
@@ -100,7 +100,7 @@ test('literal page/current/seal declarations retain all eight axes and repeat/ro
   const commit = declareLibraryIdentityStatement('planner', 'COMMIT', [])!;
   const rollback = declareLibraryIdentityStatement('planner', 'ROLLBACK', [])!;
   const total = assembleLibraryIdentityOriginalComponents([
-    { component: LIBRARY_IDENTITY_CHECKOUT_WORK, multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CHECKOUT_WORK(), multiplicity: 1 },
     { component: page, multiplicity: 2 },
     { component: currentPoint, multiplicity: 4 }, // repeated, exhausted recheck and final fence
     { component: sealPoint, multiplicity: 4 },
@@ -127,10 +127,14 @@ test('unknown statements, unadmitted job projections, invalid multiplicities and
   expect(declareLibraryIdentityStatement('native-collection', 'COMMIT; SELECT 1', [])).toBeUndefined();
   expect(declareLibraryIdentityStatement('native-custody', 'BEGIN; SELECT 1', [])).toBeUndefined();
   expect(() =>
-    assembleLibraryIdentityOriginalComponents([{ component: { ...LIBRARY_IDENTITY_CHECKOUT_WORK }, multiplicity: 1 }]),
+    assembleLibraryIdentityOriginalComponents([
+      { component: { ...LIBRARY_IDENTITY_CHECKOUT_WORK() }, multiplicity: 1 },
+    ]),
   ).toThrow('Foreign');
   expect(() =>
-    assembleLibraryIdentityOriginalComponents([{ component: LIBRARY_IDENTITY_CHECKOUT_WORK, multiplicity: Infinity }]),
+    assembleLibraryIdentityOriginalComponents([
+      { component: LIBRARY_IDENTITY_CHECKOUT_WORK(), multiplicity: Infinity },
+    ]),
   ).toThrow('Unbounded');
   expect(LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS.map((item) => item.operand)).toEqual([
     'library-invocation-multiplicities',
@@ -138,7 +142,7 @@ test('unknown statements, unadmitted job projections, invalid multiplicities and
     'original-projection-bound',
   ]);
   expect(Object.hasOwn(installedLibraryWork, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION')).toBe(true);
-  const declaration = installedLibraryWork.IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION;
+  const declaration = installedLibraryWork.IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION();
   expect(Object.keys(declaration).sort()).toEqual(['engineRequests', 'work']);
   expect(Object.isFrozen(declaration)).toBe(true);
   expect(declaration.engineRequests).toBe(0);
@@ -147,7 +151,7 @@ test('unknown statements, unadmitted job projections, invalid multiplicities and
 });
 
 test('native custody statements share one closed nine-axis operation plan and reject wrong bindings', () => {
-  const query = nativeSourceCustodyQueries.raw.member;
+  const query = nativeSourceCustodyQueries().raw.member;
   const valid: Readonly<Record<string, unknown>> = {
     route: 0,
     account_route: 0,
@@ -187,21 +191,23 @@ test('native custody statements share one closed nine-axis operation plan and re
   expect(nativeSourceCustodyStatementBound(`${query.sql} SELECT 1`, values)).toBeUndefined();
   expect(nativeSourceCustodyOperationAllows('capturePage', query)).toBe(true);
   expect(nativeSourceCustodyOperationAllows('readAndHold', query)).toBe(false);
-  expect(Object.isFrozen(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN)).toBe(true);
-  expect(Object.isFrozen(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations.capturePage.declaration.bindings)).toBe(true);
+  expect(Object.isFrozen(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN())).toBe(true);
+  expect(Object.isFrozen(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().operations.capturePage.declaration.bindings)).toBe(
+    true,
+  );
   const capturePageUse = createNativeSourceCustodyOperationUse('capturePage');
   expect(capturePageUse.checkout()).toBe(true);
   expect(capturePageUse.checkout()).toBe(false);
   expect(capturePageUse.statement(query)).toBe(true);
   expect(capturePageUse.statement(query)).toBe(false);
   const branchUse = createNativeSourceCustodyOperationUse('capturePage');
-  expect(branchUse.statement(nativeSourceCustodyQueries.start)).toBe(true);
-  expect(branchUse.statement(nativeSourceCustodyQueries.read)).toBe(false);
+  expect(branchUse.statement(nativeSourceCustodyQueries().start)).toBe(true);
+  expect(branchUse.statement(nativeSourceCustodyQueries().read)).toBe(false);
 
-  for (const operation of Object.keys(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations) as Array<
-    keyof typeof NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations
+  for (const operation of Object.keys(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().operations) as Array<
+    keyof ReturnType<typeof NATIVE_SOURCE_CUSTODY_OPERATION_PLAN>['operations']
   >) {
-    const declaration = NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations[operation];
+    const declaration = NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().operations[operation];
     expect(Object.keys(declaration.ceiling).sort()).toEqual([...BOUND_AXES].sort());
     expect(declaration.ceiling.engineRequests).toBe(0);
     expect(declaration.cost.requestBytes + declaration.cost.projectionBytes).toBe(declaration.ceiling.bytes);
@@ -368,7 +374,7 @@ import originals from '../../src/semantic/identity-epoch-store-select-original.s
 import { nativeCollectionPartitionMetadataSQL } from '../../src/library/collection-source-native.ts';
 
 function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySelectedBodies>) {
-  const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS.page;
+  const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS().page;
   const pageStatement = declareLibraryIdentityStatement('planner', page.sql, page.values)!;
   const basePage = assembleLibraryIdentityOriginalComponents([
     { component: body.currentVerification, multiplicity: 1 },
@@ -390,7 +396,7 @@ function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySe
   });
   return assembleLibraryIdentityOriginalComponents([
     { component: baseTotal, multiplicity: 1 },
-    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP(), multiplicity: 1 },
   ]);
 }
 
@@ -430,7 +436,7 @@ test('selected Library bodies compose three current paths and one limit1 page, e
 });
 
 test('native selected projections have enforced serialized bind limits and metadata omits unconsumed addresses', () => {
-  const plan = LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan;
+  const plan = LIBRARY_IDENTITY_SELECTED_STATEMENTS().plan;
   const declared = declareLibraryIdentityStatement('planner', plan.sql, plan.values)!;
   expect(declared.work.bytes).toBe(
     Buffer.byteLength(plan.sql) + Buffer.byteLength(JSON.stringify(plan.values)) + LIBRARY_IDENTITY_PLAN_RESULT_BYTES,

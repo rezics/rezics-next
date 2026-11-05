@@ -57,7 +57,7 @@ export function createShelfCreatedDescReader(): ShelfDateReader {
       );
       const entries = rows.slice(0, query.limit).map((row) => {
         if (row.state === null || row.createdAt === null || row.updatedAt === null || row.lastActivityAt === null)
-          throw new ShelfReadUnavailableError('native entry date backfill');
+          throw new (ShelfReadUnavailableError())('native entry date backfill');
         return {
           ...row,
           state: row.state,

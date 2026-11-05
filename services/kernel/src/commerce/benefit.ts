@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { contentEditionBenefitBinding, copyContentEditionBenefit } from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
@@ -8,14 +9,21 @@ import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { CapturedContentEdition, CheckoutDecision } from './model.ts';
 
-export class ContentEditionUnavailableError extends AccessUnavailableError {
-  constructor(cause?: AccessUnavailableError) {
-    super(cause?.reason ?? 'overloaded');
-    this.message = 'Content edition sale authority is unavailable';
-    this.name = 'ContentEditionUnavailableError';
-    this.cause = cause;
-  }
+export function ContentEditionUnavailableError() {
+  return memoizedValue(
+    ContentEditionUnavailableError,
+    () =>
+      class ContentEditionUnavailableError extends AccessUnavailableError {
+        constructor(cause?: AccessUnavailableError) {
+          super(cause?.reason ?? 'overloaded');
+          this.message = 'Content edition sale authority is unavailable';
+          this.name = 'ContentEditionUnavailableError';
+          this.cause = cause;
+        }
+      },
+  );
 }
+export type ContentEditionUnavailableError = InstanceType<ReturnType<typeof ContentEditionUnavailableError>>;
 
 export const MAX_CAPTURED_EDITION_BYTES = 4096;
 
@@ -37,7 +45,7 @@ export function captureContentEditionSaleAuthority(
   editionId: string,
   authority: ContentEditionSaleAuthority | null,
 ): CapturedContentEdition {
-  if (!authority) throw new ContentEditionUnavailableError();
+  if (!authority) throw new (ContentEditionUnavailableError())();
   try {
     const benefit = copyContentEditionBenefit(authority.benefit);
     if (
@@ -47,7 +55,7 @@ export function captureContentEditionSaleAuthority(
       typeof authority.editionRevision !== 'string' ||
       authority.editionRevision.length === 0
     )
-      throw new ContentEditionUnavailableError();
+      throw new (ContentEditionUnavailableError())();
     const capture: CapturedContentEdition = {
       benefit,
       creatorAccountId: authority.creatorAccountId,
@@ -71,7 +79,7 @@ export function captureContentEditionSaleAuthority(
     encodeCapturedContentEdition(capture);
     return capture;
   } catch (error) {
-    if (error instanceof TypeError) throw new ContentEditionUnavailableError();
+    if (error instanceof TypeError) throw new (ContentEditionUnavailableError())();
     throw error;
   }
 }
@@ -101,7 +109,7 @@ export function sameCapturedContentEdition(
 }
 
 export function isContentEditionUnavailable(error: unknown): boolean {
-  return error instanceof ContentEditionUnavailableError || classifyUnavailability(error) !== undefined;
+  return error instanceof ContentEditionUnavailableError() || classifyUnavailability(error) !== undefined;
 }
 
 /** Called on released command preparation, with the actual request Actor. */
@@ -110,14 +118,14 @@ export async function captureCurrentContentEdition(
   dependencies?: SaleDependencies,
   context?: ReadContext,
 ): Promise<CapturedContentEdition> {
-  if (!dependencies || !context || routeOf(editionId) === null) throw new ContentEditionUnavailableError();
+  if (!dependencies || !context || routeOf(editionId) === null) throw new (ContentEditionUnavailableError())();
   try {
     return captureContentEditionSaleAuthority(
       editionId,
       await readContentEditionSaleAuthority(dependencies, editionId, context),
     );
   } catch (error) {
-    if (error instanceof AccessUnavailableError) throw new ContentEditionUnavailableError(error);
+    if (error instanceof AccessUnavailableError) throw new (ContentEditionUnavailableError())(error);
     throw error;
   }
 }
@@ -127,9 +135,9 @@ export async function requireCurrentContentEdition(
   dependencies?: SaleDependencies,
   context?: ReadContext,
 ): Promise<CapturedContentEdition> {
-  if (!capture) throw new ContentEditionUnavailableError();
+  if (!capture) throw new (ContentEditionUnavailableError())();
   const current = await captureCurrentContentEdition(capture.benefit.resource.id, dependencies, context);
-  if (!sameCapturedContentEdition(capture, current)) throw new ContentEditionUnavailableError();
+  if (!sameCapturedContentEdition(capture, current)) throw new (ContentEditionUnavailableError())();
   return current;
 }
 
@@ -139,7 +147,7 @@ export async function requireMechanicalContentEdition(
   dependencies: SaleDependencies,
   context: Readonly<{ deadline: number }>,
 ): Promise<CapturedContentEdition> {
-  if (!capture) throw new ContentEditionUnavailableError();
+  if (!capture) throw new (ContentEditionUnavailableError())();
   const editionId = capture.benefit.resource.id;
   let current: CapturedContentEdition;
   try {
@@ -148,10 +156,10 @@ export async function requireMechanicalContentEdition(
       await readContentEditionMechanicalSaleAuthority(dependencies, editionId, context),
     );
   } catch (error) {
-    if (error instanceof AccessUnavailableError) throw new ContentEditionUnavailableError(error);
+    if (error instanceof AccessUnavailableError) throw new (ContentEditionUnavailableError())(error);
     throw error;
   }
-  if (!sameCapturedContentEdition(capture, current)) throw new ContentEditionUnavailableError();
+  if (!sameCapturedContentEdition(capture, current)) throw new (ContentEditionUnavailableError())();
   return current;
 }
 

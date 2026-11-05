@@ -451,12 +451,14 @@
         "services/kernel/src/imports/**",
         "services/kernel/src/route/**",
         "services/kernel/src/clock.ts",
+        "services/kernel/src/memoized.ts",
         "services/kernel/db/migrations/**",
         "services/kernel/db/schema.sql"
       ],
       "publicEntries": [
         "services/kernel/src/command/receipt-key.ts",
         "services/kernel/src/clock.ts",
+        "services/kernel/src/memoized.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts"

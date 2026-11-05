@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
@@ -93,7 +94,9 @@ import readRealmBatch from './read-realm-batch.sql';
 import banCurrentManyBatch from './ban-current-many-batch.sql';
 import matchThreadTextBatch from './match-thread-text-batch.sql';
 
-const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
+function reactionKinds(): ReadonlySet<string> {
+  return memoizedValue(reactionKinds, () => new Set(REACTION_KINDS));
+}
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 /** The receipt revision for the command response currently being disclosed. */
 const replayedRevision = new AsyncLocalStorage<string>();
@@ -1655,7 +1658,7 @@ export async function withViewerReactions<T extends { readonly id: string }>(
   for (const row of rows.rows) {
     const targetId = row.targetId;
     const kind = row.kind;
-    if (targetId === null || typeof kind !== 'string' || !reactionKinds.has(kind))
+    if (targetId === null || typeof kind !== 'string' || !reactionKinds().has(kind))
       throw new TypeError('Invalid reaction kind');
     kinds.set(targetId, kind as ViewerReactionKind);
   }
@@ -1718,7 +1721,7 @@ async function readReactionCountProjection<T extends { readonly id: string }>(
     );
     for (const row of rows.rows) {
       const kind = row.kind;
-      if (typeof row.targetId !== 'string' || typeof kind !== 'string' || !reactionKinds.has(kind))
+      if (typeof row.targetId !== 'string' || typeof kind !== 'string' || !reactionKinds().has(kind))
         throw new TypeError('Invalid reaction count');
       if (!Number.isSafeInteger(row.count) || row.count < 0) throw new TypeError('Invalid reaction count');
       if (!Number.isSafeInteger(row.sourceEpoch) || row.sourceEpoch < 1) throw new TypeError('Invalid reaction count');

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { withHeaders } from '@elysia/openapi';
 import type { Pool } from 'pg';
@@ -31,8 +32,14 @@ import { readZoneCollections } from './mounted-collections.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String() }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const conditionalHeaders = t.Object({ ...headers.properties, 'if-match': t.Optional(t.String()) });
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function conditionalHeaders() {
+  return memoizedValue(conditionalHeaders, () =>
+    t.Object({ ...headers().properties, 'if-match': t.Optional(t.String()) }),
+  );
+}
 /** Keep the contract's intersected safe strings intact: Elysia's object coercion otherwise turns them
  * into empty objects. Validate original JSON and responses through the native Standard Schema port. */
 function zoneSchema<S extends TSchema>(schema: S) {
@@ -51,23 +58,25 @@ function zoneSchema<S extends TSchema>(schema: S) {
     },
   };
 }
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict', 'stale_cursor'),
-  412: problemSchema('precondition_failed'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'semantic_not_ready',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-    'dependency_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict', 'stale_cursor'),
+    412: problemSchema('precondition_failed'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'semantic_not_ready',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'dependency_unavailable',
+    ),
+  }));
+}
 function detail(operation: string, action: string, anonymous = false, write = false) {
   return {
     operationId: `zone.${operation}`,
@@ -99,9 +108,9 @@ export function zoneRoutes(
     .post(
       '/v1/zones',
       {
-        headers,
-        body: zoneSchema(ZoneCreateInputSchema),
-        response: { 201: zoneSchema(ZoneResponseSchema), ...failures },
+        headers: headers(),
+        body: zoneSchema(ZoneCreateInputSchema()),
+        response: { 201: zoneSchema(ZoneResponseSchema()), ...failures() },
         detail: { ...detail('create', 'zone:create', false, true), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
@@ -126,7 +135,7 @@ export function zoneRoutes(
           },
           closed,
         ),
-        response: { 200: zoneSchema(ZoneListSchema), ...failures },
+        response: { 200: zoneSchema(ZoneListSchema()), ...failures() },
         // The native action catalogue shares zone:read's anonymous floor with metadata. This owner
         // index independently requires an authenticated account before preparing any resource reads.
         detail: {
@@ -154,7 +163,7 @@ export function zoneRoutes(
       '/v1/zones/:id',
       {
         params,
-        response: { 200: zoneSchema(ZoneMetadataResponseSchema), ...failures },
+        response: { 200: zoneSchema(ZoneMetadataResponseSchema()), ...failures() },
         detail: detail('get', 'zone:read', true),
       },
       async ({ params, actor, admission, job, set }) => {
@@ -175,16 +184,16 @@ export function zoneRoutes(
           closed,
         ),
         response: {
-          ...failures,
+          ...failures(),
           200: t.Object(
             {
-              collections: t.Array(collectionResourceSchema, { maxItems: 100 }),
+              collections: t.Array(collectionResourceSchema(), { maxItems: 100 }),
               next: t.Union([t.String(), t.Null()]),
             },
             closed,
           ),
-          403: t.Union([failures[403], problemSchema('platform_closed')]),
-          503: withHeaders(failures[503], { 'retry-after': t.String() }),
+          403: t.Union([failures()[403], problemSchema('platform_closed')]),
+          503: withHeaders(failures()[503], { 'retry-after': t.String() }),
         },
         detail: detail('list_collections', 'zone:read', true),
       },
@@ -209,7 +218,7 @@ export function zoneRoutes(
       '/v1/zones/:id/configuration',
       {
         params,
-        response: { 200: zoneSchema(ZoneConfigurationResponseSchema), ...failures },
+        response: { 200: zoneSchema(ZoneConfigurationResponseSchema()), ...failures() },
         detail: { ...detail('get_configuration', 'zone:configure'), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ params, actor, admission, job, set }) => {
@@ -223,14 +232,14 @@ export function zoneRoutes(
       customMethod('/v1/zones/:id', 'readPage'),
       {
         params,
-        query: zoneSchema(ZonePageQuerySchema),
-        body: zoneSchema(ZonePageRequestSchema),
+        query: zoneSchema(ZonePageQuerySchema()),
+        body: zoneSchema(ZonePageRequestSchema()),
         response: {
-          ...failures,
-          403: t.Union([failures[403], problemSchema('platform_closed')]),
-          200: zoneSchema(ZonePageResponseSchema),
-          202: zoneSchema(ZonePageReadProgressSchema),
-          503: withHeaders(failures[503], { 'retry-after': t.String() }),
+          ...failures(),
+          403: t.Union([failures()[403], problemSchema('platform_closed')]),
+          200: zoneSchema(ZonePageResponseSchema()),
+          202: zoneSchema(ZonePageReadProgressSchema()),
+          503: withHeaders(failures()[503], { 'retry-after': t.String() }),
         },
         detail: detail('read_page', 'zone:read', true),
       },
@@ -260,9 +269,9 @@ export function zoneRoutes(
       '/v1/zones/:id/configuration',
       {
         params,
-        headers: conditionalHeaders,
-        body: zoneSchema(ZoneConfigureInputSchema),
-        response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
+        headers: conditionalHeaders(),
+        body: zoneSchema(ZoneConfigureInputSchema()),
+        response: { 200: zoneSchema(ZoneResponseSchema()), ...failures() },
         detail: { ...detail('configure', 'zone:configure', false, true), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
@@ -281,9 +290,9 @@ export function zoneRoutes(
       customMethod('/v1/zones/:id', 'publish'),
       {
         params,
-        headers: conditionalHeaders,
+        headers: conditionalHeaders(),
         body: zoneSchema(ZonePublishInputSchema),
-        response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
+        response: { 200: zoneSchema(ZoneResponseSchema()), ...failures() },
         detail: { ...detail('publish', 'zone:publish', false, true), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
@@ -302,8 +311,8 @@ export function zoneRoutes(
       '/v1/zones/:id',
       {
         params,
-        headers: conditionalHeaders,
-        response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
+        headers: conditionalHeaders(),
+        response: { 200: zoneSchema(ZoneResponseSchema()), ...failures() },
         detail: detail('delete', 'zone:delete', false, true),
       },
       async ({ params, headers, actor, admission, job, session, set }) => {
@@ -322,9 +331,9 @@ export function zoneRoutes(
       customMethod('/v1/zones/:id', 'restore'),
       {
         params,
-        headers: conditionalHeaders,
+        headers: conditionalHeaders(),
         body: zoneSchema(t.Object({}, closed)),
-        response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
+        response: { 200: zoneSchema(ZoneResponseSchema()), ...failures() },
         detail: detail('restore', 'zone:restore', false, true),
       },
       async ({ params, headers, actor, admission, job, session, set }) => {

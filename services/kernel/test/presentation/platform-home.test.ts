@@ -22,7 +22,7 @@ function* walk(nodes: readonly Node[]): Generator<Node> {
         yield* walk(value as Node[]);
   }
 }
-const home = () => resolveTemplate(platformProfile, { route: '/' });
+const home = () => resolveTemplate(platformProfile(), { route: '/' });
 
 test('the site home is a route page with search and a popular list per vertical', () => {
   const page = home();

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Release } from '@rezics/definitions';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
@@ -87,13 +88,20 @@ export function validReviewedPersonExpectation(
 }
 
 /** Existing native unavailable classification, with a stable internal reason for unsupported coverage. */
-export class ReviewedPersonGuardUnavailableError extends CommandUnavailableError {
-  readonly code = 'atomic_guard_unavailable';
-  constructor(partition: number) {
-    super('fenced', partition);
-    this.message = 'atomic_guard_unavailable';
-  }
+export function ReviewedPersonGuardUnavailableError() {
+  return memoizedValue(
+    ReviewedPersonGuardUnavailableError,
+    () =>
+      class ReviewedPersonGuardUnavailableError extends CommandUnavailableError {
+        readonly code = 'atomic_guard_unavailable';
+        constructor(partition: number) {
+          super('fenced', partition);
+          this.message = 'atomic_guard_unavailable';
+        }
+      },
+  );
 }
+export type ReviewedPersonGuardUnavailableError = InstanceType<ReturnType<typeof ReviewedPersonGuardUnavailableError>>;
 
 /** Caller has already authorized this original in its final read transaction. Never follows redirects. */
 export async function observeReviewedPersonIdentity(
@@ -127,14 +135,14 @@ export async function observeReviewedPersonIdentity(
     selected = await effectiveGlobalSlotFacts(tx, subject, identity.property, undefined, lockSelected);
   } catch (error) {
     if (lockSelected && error instanceof AccessUnavailableError)
-      throw new ReviewedPersonGuardUnavailableError(currentCommand(tx).partition);
+      throw new (ReviewedPersonGuardUnavailableError())(currentCommand(tx).partition);
     throw error;
   }
   // Hidden or missing selected rows cannot be filtered into an apparently agreeing identity.
   const basis = selected.basis as { selection: unknown[] } | unknown[] | null;
   const count = Array.isArray(basis) ? basis.length : (basis?.selection.length ?? 0);
   if (count === 0 || count > 32 || selected.facts.length !== count) {
-    if (lockSelected) throw new ReviewedPersonGuardUnavailableError(currentCommand(tx).partition);
+    if (lockSelected) throw new (ReviewedPersonGuardUnavailableError())(currentCommand(tx).partition);
     return null;
   }
   let strings = 0;
@@ -180,9 +188,9 @@ export async function guardReviewedPersonIdentity(
         route === null || partitionOf(route) !== partition || partitionOf(claimRoute) !== partition,
     )
   )
-    throw new ReviewedPersonGuardUnavailableError(partition);
+    throw new (ReviewedPersonGuardUnavailableError())(partition);
   const home = await readPartition(tx, partition);
-  if (home?.writeState !== 'active') throw new ReviewedPersonGuardUnavailableError(partition);
+  if (home?.writeState !== 'active') throw new (ReviewedPersonGuardUnavailableError())(partition);
   // Lock exact positive keys only. Missing claims need no gap exclusion: no effect can follow.
   for (const { endpoint, claimRoute } of [...keys].sort(
     (a, b) =>
@@ -212,7 +220,7 @@ export async function guardReviewedPersonIdentity(
       locked.pending_job ||
       locked.pending_epoch !== null
     )
-      throw new ReviewedPersonGuardUnavailableError(partition);
+      throw new (ReviewedPersonGuardUnavailableError())(partition);
   }
   for (const { endpoint } of keys) {
     const observed = await observeReviewedPersonIdentity(tx, endpoint.subject, endpoint, routeKey, release, true);

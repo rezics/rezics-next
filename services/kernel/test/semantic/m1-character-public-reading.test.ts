@@ -52,7 +52,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
   await bootstrapRelease(db.pool, bundledRelease);
-  await bootstrapProfile(db.pool, platformProfile);
+  await bootstrapProfile(db.pool, platformProfile());
   const actions = ['subject:create', 'subject:read', 'statement:propose'];
   real = await createRealAccess(db.admin, { editor: newId(0xc849) }, actions);
   for (const action of actions) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);

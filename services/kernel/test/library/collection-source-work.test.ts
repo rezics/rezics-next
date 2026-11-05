@@ -9,8 +9,10 @@ import {
 } from '../../src/library/collection-source-work-native.ts';
 import type { ScopeWorkContext } from '../../src/search/scope-work-context.ts';
 import { definition, membersPreparationRuntime } from './support/members-preparation-runtime.ts';
-const workDimensions = ({ engineRequests: _engineRequests, ...dimensions }: typeof COLLECTION_SOURCE_WORK_COST.state) =>
-  dimensions;
+const workDimensions = ({
+  engineRequests: _engineRequests,
+  ...dimensions
+}: ReturnType<typeof COLLECTION_SOURCE_WORK_COST>['state']) => dimensions;
 const footprint: WorkDimensions = {
   candidateKeys: 2,
   identityMetadataRows: 3,
@@ -177,9 +179,9 @@ test('selected Collection source refuses an undeclared context before IO and see
       },
     );
     expect(page.state.metadata.state).toBe('active');
-    expect(page.state.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST.state));
+    expect(page.state.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST().state));
     expect(page.first.subjectId).toBeNull();
-    expect(page.first.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST.seek));
+    expect(page.first.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST().seek));
     expect(page.result).toMatchObject({ kind: 'canonical_subject_prefix', candidates: [], exhausted: true });
     expect(Object.values(page.prepared.work.used).every((value) => value === 0)).toBe(true);
     expect(Object.values(page.result.work.used).every((value) => value === 0)).toBe(true);

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../../memoized.ts';
 import { CollectionDiscoverySummarySchema } from '../../collection-discovery-schema.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryUnionHit } from '../../discovery.ts';
@@ -5,26 +6,41 @@ import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
 import { closed, id, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
-const collectionKey = t.Object(
-  { owner: t.Literal('library'), kind: t.Literal('collection'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
-  closed,
-);
-export const CollectionHitSchema = t.Object(
-  {
-    key: collectionKey,
-    summary: t.Object({ kind: t.Literal('collection'), value: CollectionDiscoverySummarySchema }, closed),
-    matchEvidence: MatchEvidenceSchema,
-  },
-  closed,
-);
+function collectionKey() {
+  return memoizedValue(collectionKey, () =>
+    t.Object(
+      {
+        owner: t.Literal('library'),
+        kind: t.Literal('collection'),
+        route: t.Integer({ minimum: 0, maximum: 65535 }),
+        id,
+      },
+      closed,
+    ),
+  );
+}
+export function CollectionHitSchema() {
+  return memoizedValue(CollectionHitSchema, () =>
+    t.Object(
+      {
+        key: collectionKey(),
+        summary: t.Object({ kind: t.Literal('collection'), value: CollectionDiscoverySummarySchema() }, closed),
+        matchEvidence: MatchEvidenceSchema,
+      },
+      closed,
+    ),
+  );
+}
 
-export type CollectionHttpHit = Static<typeof CollectionHitSchema>;
+export type CollectionHttpHit = Static<ReturnType<typeof CollectionHitSchema>>;
 type CollectionHit = Extract<DiscoveryUnionHit, { summary: { kind: 'collection' } }>;
-const check = Compile(CollectionHitSchema);
+function check() {
+  return memoizedValue(check, () => Compile(CollectionHitSchema()));
+}
 
 export function admitCollectionHit(value: unknown): asserts value is CollectionHit {
   const admitted = evidenceOrDefault(value);
-  if (!check.Check(admitted)) unavailable();
+  if (!check().Check(admitted)) unavailable();
   const hit = admitted as CollectionHttpHit;
   admitIdentity(hit);
   const { key, summary, matchEvidence } = hit;

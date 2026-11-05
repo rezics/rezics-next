@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../../memoized.ts';
 import { searchContextBytes } from '../../review-context-schemas.ts';
 import { REVIEW_CONTEXT_LIMITS } from '../../review-context.ts';
 import { workContextBytes, WORK_CONTEXT_LIMITS } from '../../work-context.ts';
@@ -22,60 +23,78 @@ import { AccountHitSchema, admitAccountHit, serializeAccountHit } from './accoun
 import { CollectionHitSchema, admitCollectionHit, serializeCollectionHit } from './collection.ts';
 import { ReviewHitSchema, admitReviewHit, serializeReviewHit } from './review.ts';
 import { SpaceHitSchema, admitSpaceHit, serializeSpaceHit, admitSpaceEntries } from './space.ts';
-const count = t.Union([
-  t.Object({ kind: t.String(), value: t.Integer({ minimum: 0 }), exact: t.Literal(true) }, closed),
-  t.Object({ kind: t.String(), value: t.Integer({ minimum: 1 }), exact: t.Literal(false) }, closed),
-  t.Object({ kind: t.String(), unavailable: t.Literal(true) }, closed),
-]);
+function count() {
+  return memoizedValue(count, () =>
+    t.Union([
+      t.Object({ kind: t.String(), value: t.Integer({ minimum: 0 }), exact: t.Literal(true) }, closed),
+      t.Object({ kind: t.String(), value: t.Integer({ minimum: 1 }), exact: t.Literal(false) }, closed),
+      t.Object({ kind: t.String(), unavailable: t.Literal(true) }, closed),
+    ]),
+  );
+}
 const applicability = t.Union([t.Literal('all'), t.Literal('partial'), t.Literal('none'), t.Literal('unknown')]);
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
-export const DiscoveryPageSchema = t.Object(
-  {
-    spaceEntries: t.Optional(SpaceEntryPageSchema),
-    hits: t.Array(t.Union([SubjectHitSchema, AccountHitSchema, CollectionHitSchema, ReviewHitSchema, SpaceHitSchema]), {
-      maxItems: 100,
-    }),
-    kinds: t.Object(
+export function DiscoveryPageSchema() {
+  return memoizedValue(DiscoveryPageSchema, () =>
+    t.Object(
       {
-        values: t.Array(
-          t.Object(
-            { id: t.String(), labels: t.Record(t.String(), t.String()), icon: t.String(), count: t.Optional(count) },
-            closed,
-          ),
-          { maxItems: 8 },
+        spaceEntries: t.Optional(SpaceEntryPageSchema),
+        hits: t.Array(
+          t.Union([SubjectHitSchema(), AccountHitSchema(), CollectionHitSchema(), ReviewHitSchema(), SpaceHitSchema()]),
+          {
+            maxItems: 100,
+          },
         ),
-        omitted: t.Optional(
-          t.Array(
-            t.Object(
-              {
-                id: t.String(),
-                labels: t.Record(t.String(), t.String()),
-                state: t.Union([t.Literal('preparing'), t.Literal('unavailable')]),
-              },
-              closed,
+        kinds: t.Object(
+          {
+            values: t.Array(
+              t.Object(
+                {
+                  id: t.String(),
+                  labels: t.Record(t.String(), t.String()),
+                  icon: t.String(),
+                  count: t.Optional(count()),
+                },
+                closed,
+              ),
+              { maxItems: 8 },
             ),
-            { maxItems: 3 },
-          ),
+            omitted: t.Optional(
+              t.Array(
+                t.Object(
+                  {
+                    id: t.String(),
+                    labels: t.Record(t.String(), t.String()),
+                    state: t.Union([t.Literal('preparing'), t.Literal('unavailable')]),
+                  },
+                  closed,
+                ),
+                { maxItems: 3 },
+              ),
+            ),
+            next: continuation(),
+          },
+          closed,
         ),
-        next: continuation,
+        applicability: t.Optional(t.Object({ type: applicability, statement: applicability }, closed)),
+        next: continuation(),
+        as_of: t.String({ format: 'date-time' }),
+        freshness: t.Optional(SearchFreshnessSchema),
+        viewerFacts: t.Optional(viewerFacts()),
+        collectionFollows: t.Optional(FollowDiscoverySchema),
+        accountFollows: t.Optional(FollowDiscoverySchema),
+        emptyRecovery: t.Optional(EmptyRecoverySchema),
       },
       closed,
     ),
-    applicability: t.Optional(t.Object({ type: applicability, statement: applicability }, closed)),
-    next: continuation,
-    as_of: t.String({ format: 'date-time' }),
-    freshness: t.Optional(SearchFreshnessSchema),
-    viewerFacts: t.Optional(viewerFacts),
-    collectionFollows: t.Optional(FollowDiscoverySchema),
-    accountFollows: t.Optional(FollowDiscoverySchema),
-    emptyRecovery: t.Optional(EmptyRecoverySchema),
-  },
-  closed,
-);
+  );
+}
 
-export type DiscoveryHttpPage = Static<typeof DiscoveryPageSchema>;
+export type DiscoveryHttpPage = Static<ReturnType<typeof DiscoveryPageSchema>>;
 
-const pageCheck = Compile(DiscoveryPageSchema);
+function pageCheck() {
+  return memoizedValue(pageCheck, () => Compile(DiscoveryPageSchema()));
+}
 
 /** Each family closes its schema and native identity before page/cursor admission. */
 export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUnionHit {
@@ -104,7 +123,7 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
     ...(value as Record<string, unknown>),
     hits: (value as { hits: unknown[] }).hits.map(evidenceOrDefault),
   };
-  if (!pageCheck.Check(normalized)) unavailable();
+  if (!pageCheck().Check(normalized)) unavailable();
   const page = normalized as DiscoveryHttpPage;
   const identities = new Set<string>();
   let contextBytes = 0;

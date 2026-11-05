@@ -257,7 +257,7 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
     types: [takedownType, ...appeals.types],
     async run(event) {
       if (appeals.types.includes(event.type)) return appeals.run(event);
-      if (event.type !== takedownType || !Value.Check(CONTENT_EVENTS[takedownType], event.data))
+      if (event.type !== takedownType || !Value.Check(CONTENT_EVENTS()[takedownType], event.data))
         throw new TypeError('Invalid moderation decision event');
       const data = event.data as {
         targetKind: 'board' | 'thread' | 'post';

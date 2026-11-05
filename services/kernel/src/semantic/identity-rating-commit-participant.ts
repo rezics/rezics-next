@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
@@ -444,33 +445,42 @@ function normalizeOperand(value: unknown): IdentityRatingReviewOperand {
   return normalized;
 }
 
-export class IdentityRatingCommitUnavailableError extends VoteReviewUnavailableError {
-  readonly identityState: 'pending' | 'moved' | 'absent' | 'undisclosed' | 'unavailable' | 'foreign-control';
+export function IdentityRatingCommitUnavailableError() {
+  return memoizedValue(
+    IdentityRatingCommitUnavailableError,
+    () =>
+      class IdentityRatingCommitUnavailableError extends VoteReviewUnavailableError {
+        readonly identityState: 'pending' | 'moved' | 'absent' | 'undisclosed' | 'unavailable' | 'foreign-control';
 
-  constructor(
-    identityState: IdentityRatingCommitUnavailableError['identityState'],
-    readonly home?: number,
-  ) {
-    super(
-      identityState === 'foreign-control'
-        ? 'atomic_guard_unavailable'
-        : identityState === 'pending'
-          ? 'identity_pending'
-          : 'identity_observation_unavailable',
-    );
-    this.identityState = identityState;
-    this.name = 'IdentityRatingCommitUnavailableError';
-  }
+        constructor(
+          identityState: IdentityRatingCommitUnavailableError['identityState'],
+          readonly home?: number,
+        ) {
+          super(
+            identityState === 'foreign-control'
+              ? 'atomic_guard_unavailable'
+              : identityState === 'pending'
+                ? 'identity_pending'
+                : 'identity_observation_unavailable',
+          );
+          this.identityState = identityState;
+          this.name = 'IdentityRatingCommitUnavailableError';
+        }
+      },
+  );
 }
+export type IdentityRatingCommitUnavailableError = InstanceType<
+  ReturnType<typeof IdentityRatingCommitUnavailableError>
+>;
 
 function throwUnavailable(
   result: Exclude<IdentityRatingReviewResult, { state: 'reviewed' } | { state: 'changed' }>,
 ): never {
-  if (result.state === 'pending') throw new IdentityRatingCommitUnavailableError('pending');
-  if (result.state === 'moved') throw new IdentityRatingCommitUnavailableError('moved', result.home);
-  if (result.state === 'absent') throw new IdentityRatingCommitUnavailableError('absent');
-  if (result.state === 'undisclosed') throw new IdentityRatingCommitUnavailableError('undisclosed');
-  throw new IdentityRatingCommitUnavailableError('unavailable');
+  if (result.state === 'pending') throw new (IdentityRatingCommitUnavailableError())('pending');
+  if (result.state === 'moved') throw new (IdentityRatingCommitUnavailableError())('moved', result.home);
+  if (result.state === 'absent') throw new (IdentityRatingCommitUnavailableError())('absent');
+  if (result.state === 'undisclosed') throw new (IdentityRatingCommitUnavailableError())('undisclosed');
+  throw new (IdentityRatingCommitUnavailableError())('unavailable');
 }
 
 /** Native same-home mapping participant. Its stable core owner lock lasts to executor COMMIT/ROLLBACK. */
@@ -493,12 +503,12 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         operand.sourceHomes.some((home) => home !== command.partition) ||
         operand.controlLocators.some((locator) => locator.partition !== command.partition)
       )
-        throw new IdentityRatingCommitUnavailableError('foreign-control');
+        throw new (IdentityRatingCommitUnavailableError())('foreign-control');
 
       const client = deadlineClient(tx, deadline);
       const owner = await lockOwner.run(client, { partition_no: command.partition });
       if (!owner || owner.writeState !== 'active')
-        throw new IdentityRatingCommitUnavailableError(
+        throw new (IdentityRatingCommitUnavailableError())(
           owner?.writeState === 'moved' ? 'moved' : 'unavailable',
           command.partition,
         );
@@ -506,7 +516,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         sourceIdentities: operand.sourceIdentities,
         commandHome: command.partition,
       });
-      if (native.state === 'foreign-control') throw new IdentityRatingCommitUnavailableError('foreign-control');
+      if (native.state === 'foreign-control') throw new (IdentityRatingCommitUnavailableError())('foreign-control');
       const reviewed = classifyIdentityRatingReviewEvidence(
         operand.requestedOriginalId,
         operand.canonicalTerminalId,

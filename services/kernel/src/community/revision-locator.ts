@@ -26,7 +26,7 @@ export function createRevisionLocatorEffect(pool: Pool): Effect {
     types: [...types],
     async run(event) {
       const type = event.type as (typeof types)[number];
-      if (!types.includes(type) || !Value.Check(COMMUNITY_EVENTS[type], event.data))
+      if (!types.includes(type) || !Value.Check(COMMUNITY_EVENTS()[type], event.data))
         throw new TypeError('Invalid revision locator source payload');
       const data = event.data as { realmId?: string; spaceId?: string; revisionId: string };
       const ownerId = data.realmId ?? data.spaceId!;

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
@@ -426,7 +427,7 @@ export async function retireAgentIdentitySDKWork(
     const readiness = { binding: held.handoff.binding, writer: held.handoff.writer };
     await reserveIdentityHistoryWork(
       pool,
-      addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, AGENT_IDENTITY_HISTORY_GUARD_COST),
+      addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeWrite, AGENT_IDENTITY_HISTORY_GUARD_COST()),
       context,
     );
     await tx.query(`UPDATE core.agent_identity_work SET history_authority=$2,sdk_readiness=$3 WHERE custody_id=$1`, [
@@ -438,7 +439,7 @@ export async function retireAgentIdentitySDKWork(
       pool,
       addNativeWork(
         IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativePairWrite,
-        AGENT_IDENTITY_HISTORY_GUARD_COST,
+        AGENT_IDENTITY_HISTORY_GUARD_COST(),
         HISTORY_WORK_INVALIDATION,
         HISTORY_WORK_WAKE,
       ),
@@ -490,7 +491,7 @@ export async function retireAgentIdentitySDKWork(
     };
     await reserveIdentityHistoryWork(
       pool,
-      addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAuthoritySeal, AGENT_IDENTITY_HISTORY_GUARD_COST),
+      addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAuthoritySeal, AGENT_IDENTITY_HISTORY_GUARD_COST()),
       context,
     );
     await tx.query(`UPDATE core.agent_identity_work SET sdk_closure=$2,sdk_retirement_receipt=$3 WHERE custody_id=$1`, [
@@ -533,17 +534,23 @@ export async function lockAgentIdentityHistoryHandoff(
 // Native check: m(1), partition/domain(2), work(1), bounded roles(65), aggregate(1),
 // barrier(1), original Source wrapper/function(17), SDK current lock(4). Each physical role
 // is charged as a visible key. The outer SELECT/write is charged separately.
-export const AGENT_IDENTITY_HISTORY_GUARD_COST = unpricedIdentityHistoryWork(
-  'source-native-history-guard',
-  Object.freeze({
-    rows: 92,
-    points: 87,
-    statements: 11,
-    bytes: 40960,
-    engineRequests: 0,
-  }),
-);
-export const AGENT_IDENTITY_HISTORY_ABSENCE_COST = IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAbsence;
+export function AGENT_IDENTITY_HISTORY_GUARD_COST() {
+  return memoizedValue(AGENT_IDENTITY_HISTORY_GUARD_COST, () =>
+    unpricedIdentityHistoryWork(
+      'source-native-history-guard',
+      Object.freeze({
+        rows: 92,
+        points: 87,
+        statements: 11,
+        bytes: 40960,
+        engineRequests: 0,
+      }),
+    ),
+  );
+}
+export function AGENT_IDENTITY_HISTORY_ABSENCE_COST() {
+  return memoizedValue(AGENT_IDENTITY_HISTORY_ABSENCE_COST, () => IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeAbsence);
+}
 
 export async function lockRecordedAgentIdentityHistory(
   tx: CommandTransaction,
@@ -585,7 +592,7 @@ export async function lockRecordedAgentIdentityHistory(
     return pending('identity-history-current-authority-changed');
   await reserveIdentityHistoryWork(
     pool,
-    addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeGuardProbe, AGENT_IDENTITY_HISTORY_GUARD_COST),
+    addNativeWork(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeGuardProbe, AGENT_IDENTITY_HISTORY_GUARD_COST()),
     {
       deadline,
     },

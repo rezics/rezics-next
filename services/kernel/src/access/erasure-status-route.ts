@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -7,24 +8,28 @@ import { readManagedErasureStatus, type ManagedErasureStatus } from './erasure-s
 import { ERASURE_PARTICIPANTS } from './erasure.ts';
 
 const closed = { additionalProperties: false } as const;
-export const managedErasureStatusSchema = t.Unsafe<ManagedErasureStatus>(
-  t.Object(
-    {
-      accountId: t.String({ format: 'uuid' }),
-      state: t.Union([t.Literal('pending'), t.Literal('retention-outstanding'), t.Literal('complete')]),
-      at: t.String({ format: 'date-time' }),
-      completedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-      pendingParticipants: t.Array(t.Union(ERASURE_PARTICIPANTS[1].map((name) => t.Literal(name))), {
-        maxItems: ERASURE_PARTICIPANTS[1].length,
-        uniqueItems: true,
-      }),
-      retentionOutstanding: t.Boolean(),
-      lateItems: t.Boolean(),
-      effectsFrontier: t.Boolean(),
-    },
-    closed,
-  ),
-);
+export function managedErasureStatusSchema() {
+  return memoizedValue(managedErasureStatusSchema, () =>
+    t.Unsafe<ManagedErasureStatus>(
+      t.Object(
+        {
+          accountId: t.String({ format: 'uuid' }),
+          state: t.Union([t.Literal('pending'), t.Literal('retention-outstanding'), t.Literal('complete')]),
+          at: t.String({ format: 'date-time' }),
+          completedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+          pendingParticipants: t.Array(t.Union(ERASURE_PARTICIPANTS[1].map((name) => t.Literal(name))), {
+            maxItems: ERASURE_PARTICIPANTS[1].length,
+            uniqueItems: true,
+          }),
+          retentionOutstanding: t.Boolean(),
+          lateItems: t.Boolean(),
+          effectsFrontier: t.Boolean(),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 
 export function erasureStatusRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -35,7 +40,7 @@ export function erasureStatusRoutes(
     {
       params: t.Object({ accountId: t.String({ format: 'uuid' }) }, closed),
       response: {
-        200: managedErasureStatusSchema,
+        200: managedErasureStatusSchema(),
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden', 'platform_closed', 'account_suspended'),

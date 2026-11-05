@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { t, type Context } from 'elysia';
@@ -11,7 +12,6 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { idempotencyKeyOf } from '../http/request.ts';
-import { registerEventTypes } from '../events/catalogue.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import { strictContentSchema } from '../content/schemas.ts';
@@ -54,17 +54,23 @@ export type RecentDependencies = {
   clock?: () => Date;
 };
 const stamp = t.Object({ id, lastUsed: t.String(), revision }, closed);
-const item = t.Object(
-  {
-    ...stamp.properties,
-    entry: recentEntrySchema,
-    display: t.Union([t.Object({ name: t.String(), href: t.String(), avatar: CoverSummarySchema }, closed), t.Null()]),
-  },
-  closed,
-);
-export type RecentSearch = Static<typeof item>;
+function item() {
+  return memoizedValue(item, () =>
+    t.Object(
+      {
+        ...stamp.properties,
+        entry: recentEntrySchema,
+        display: t.Union([
+          t.Object({ name: t.String(), href: t.String(), avatar: CoverSummarySchema }, closed),
+          t.Null(),
+        ]),
+      },
+      closed,
+    ),
+  );
+}
+export type RecentSearch = Static<ReturnType<typeof item>>;
 export const RECENT_CHANGED = 'com.rezics.search.recent-changed.v1';
-registerEventTypes({ [RECENT_CHANGED]: t.Object({ accountId: id }, closed) });
 export const RECENT_DAYS = 90;
 const operation = 'GET /v1/recentSearches';
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
@@ -332,22 +338,24 @@ export async function changeRecentSearches(
   );
   return result.value;
 }
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict', 'stale_cursor'),
-  422: problemSchema('idempotency_conflict'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict', 'stale_cursor'),
+    422: problemSchema('idempotency_conflict'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
 function detail(operationId: string, write = false) {
   return {
     operationId,
@@ -387,8 +395,8 @@ export function recentSearchRoutes(
           closed,
         ),
         response: {
-          200: t.Object({ recentSearches: t.Array(item), next: t.Union([t.String(), t.Null()]), revision }, closed),
-          ...failures,
+          200: t.Object({ recentSearches: t.Array(item()), next: t.Union([t.String(), t.Null()]), revision }, closed),
+          ...failures(),
         },
         detail: detail('recent_searches.list'),
       },
@@ -399,7 +407,7 @@ export function recentSearchRoutes(
       {
         headers,
         body: strictContentSchema(t.Object({ entry: recentEntrySchema, expectedRevision: revision }, closed)),
-        response: { 200: changed, ...failures },
+        response: { 200: changed, ...failures() },
         detail: detail('recent_searches.create', true),
       },
       (ctx) => mutate(ctx, { kind: 'use', entry: ctx.body.entry }, ctx.body.expectedRevision),
@@ -410,7 +418,7 @@ export function recentSearchRoutes(
         headers,
         params: t.Object({ id }, closed),
         query: t.Object({ expectedRevision: revision }, closed),
-        response: { 200: changed, ...failures },
+        response: { 200: changed, ...failures() },
         detail: detail('recent_searches.delete', true),
       },
       (ctx) => mutate(ctx, { kind: 'remove', id: ctx.params.id }, ctx.query.expectedRevision),
@@ -420,7 +428,7 @@ export function recentSearchRoutes(
       {
         headers,
         body: strictContentSchema(t.Object({ expectedRevision: revision }, closed)),
-        response: { 200: changed, ...failures },
+        response: { 200: changed, ...failures() },
         detail: detail('recent_searches.clear', true),
       },
       (ctx) => mutate(ctx, { kind: 'clear' }, ctx.body.expectedRevision),

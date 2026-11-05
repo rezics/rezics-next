@@ -383,7 +383,7 @@ test('legacy worked example runs through fulfilment, real royalty worker, exact 
     await pool.query("SELECT type,data FROM core.outbox WHERE type LIKE 'com.rezics.commerce.payout_statement.%'")
   ).rows) {
     const schema = COMMERCE_EVENTS[row.type as keyof typeof COMMERCE_EVENTS];
-    expect(EVENT_TYPES[row.type as keyof typeof EVENT_TYPES]).toBe(schema);
+    expect(EVENT_TYPES()[row.type as keyof ReturnType<typeof EVENT_TYPES>]).toBe(schema);
     expect(Value.Check(schema, row.data)).toBe(true);
     expect(Object.keys(row.data)).toEqual(['statementId']);
     expect(Value.Check(schema, { ...row.data, amount: 850 })).toBe(false);

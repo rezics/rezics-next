@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { REVIEW_CONTEXT_LIMITS, type SearchReviewContext } from './review-context.ts';
@@ -29,42 +30,49 @@ const citation = t.Union([
     closed,
   ),
 ]);
-export const SearchReviewContextSchema = t.Unsafe<SearchReviewContext>(
-  t.Union([
-    t.Object({ state: t.Literal('unavailable') }, closed),
-    t.Object(
-      {
-        state: t.Literal('available'),
-        openingPostId: id,
-        target: t.Union([
-          t.Object(
-            {
-              state: t.Literal('available'),
-              subject: t.Object(
+export function SearchReviewContextSchema() {
+  return memoizedValue(SearchReviewContextSchema, () =>
+    t.Unsafe<SearchReviewContext>(
+      t.Union([
+        t.Object({ state: t.Literal('unavailable') }, closed),
+        t.Object(
+          {
+            state: t.Literal('available'),
+            openingPostId: id,
+            target: t.Union([
+              t.Object(
                 {
-                  ...SubjectSummarySchema.properties,
-                  type: t.String({ maxLength: 256 }),
-                  types: t.Array(t.String({ maxLength: 256 }), { maxItems: 16 }),
-                  label: t.Union([
-                    t.Object({ value: t.String({ maxLength: 1024 }), language: t.String({ maxLength: 64 }) }, closed),
-                    t.Null(),
-                  ]),
+                  state: t.Literal('available'),
+                  subject: t.Object(
+                    {
+                      ...SubjectSummarySchema.properties,
+                      type: t.String({ maxLength: 256 }),
+                      types: t.Array(t.String({ maxLength: 256 }), { maxItems: 16 }),
+                      label: t.Union([
+                        t.Object(
+                          { value: t.String({ maxLength: 1024 }), language: t.String({ maxLength: 64 }) },
+                          closed,
+                        ),
+                        t.Null(),
+                      ]),
+                    },
+                    closed,
+                  ),
                 },
                 closed,
               ),
-            },
-            closed,
-          ),
-          t.Object({ state: t.Union([t.Literal('withheld'), t.Literal('unavailable')]) }, closed),
-        ]),
-        citation,
-        language: t.Union([t.String({ maxLength: 64 }), t.Null()]),
-        spoiler: t.Boolean(),
-      },
-      closed,
+              t.Object({ state: t.Union([t.Literal('withheld'), t.Literal('unavailable')]) }, closed),
+            ]),
+            citation,
+            language: t.Union([t.String({ maxLength: 64 }), t.Null()]),
+            spoiler: t.Boolean(),
+          },
+          closed,
+        ),
+      ]),
     ),
-  ]),
-);
+  );
+}
 
 export function searchContextBytes(value: SearchReviewContext): number {
   return Buffer.byteLength(JSON.stringify(value));

@@ -30,13 +30,13 @@ export async function shelfScoreBinding(
   );
   const head = rows[0];
   if (!head?.ready)
-    throw new ShelfReadUnavailableError(
+    throw new (ShelfReadUnavailableError())(
       'personalScore: POST /v1/libraryShelfScorePreparation until ready=true (100 entries per command)',
     );
   const identity = await currentness(client, { route, accountId, question });
-  if (identity.status !== 'current') throw new ShelfReadUnavailableError(identity.reason);
+  if (identity.status !== 'current') throw new (ShelfReadUnavailableError())(identity.reason);
   if (!identity.version || identity.version.length > 256)
-    throw new ShelfReadUnavailableError('invalid Content score currentness version');
+    throw new (ShelfReadUnavailableError())('invalid Content score currentness version');
   const binding: ShelfCursorBinding['query'] = {
     scoreGeneration: head.generation,
     scoreRevision: head.revision,
@@ -136,7 +136,7 @@ export function createShelfScoreReader(): ShelfDateReader {
         parameters,
       );
       if (rows.some((row) => row.lastActivityAt === null))
-        throw new ShelfReadUnavailableError('native entry date backfill');
+        throw new (ShelfReadUnavailableError())('native entry date backfill');
       return { entries: rows.slice(0, query.limit), more: rows.length > query.limit };
     },
   };

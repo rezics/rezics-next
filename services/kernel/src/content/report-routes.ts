@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { status, t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -41,29 +42,35 @@ import {
 
 export type ReportRouteDependencies = ReportDependencies;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const privateHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const readFailures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  409: problemSchema('stale_cursor'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-};
+function privateHeaders() {
+  return memoizedValue(privateHeaders, () => ({ [SESSION_HEADER]: t.String(), 'cache-control': t.String() }));
+}
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    409: problemSchema('stale_cursor'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+  }));
+}
 
 function existingId(id: string): void {
   if (routeOf(id) === null) throw new ProblemError('not_found');
@@ -108,9 +115,9 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         response: {
           200: withHeaders(
             t.Object({ reportId: t.String(), outcome: t.Literal('dismissed') }, { additionalProperties: false }),
-            privateHeaders,
+            privateHeaders(),
           ),
-          ...writeFailures,
+          ...writeFailures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -150,8 +157,8 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
         body: strictContentSchema(ReportInputSchema),
         response: {
-          201: withHeaders(strictContentSchema(ReportReceiptSchema), { ...privateHeaders, location: t.String() }),
-          ...writeFailures,
+          201: withHeaders(strictContentSchema(ReportReceiptSchema), { ...privateHeaders(), location: t.String() }),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'report.create',
@@ -191,7 +198,10 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       '/v1/reports/me',
       {
         query: ReporterHistoryQuerySchema,
-        response: { 200: withHeaders(strictContentSchema(ReporterHistoryPageSchema), privateHeaders), ...readFailures },
+        response: {
+          200: withHeaders(strictContentSchema(ReporterHistoryPageSchema()), privateHeaders()),
+          ...readFailures(),
+        },
         detail: {
           operationId: 'report.own_history',
           'x-exposure': 'public',
@@ -227,7 +237,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       '/v1/reports/:id',
       {
         params,
-        response: { 200: withHeaders(strictContentSchema(ReportResponseSchema), privateHeaders), ...readFailures },
+        response: { 200: withHeaders(strictContentSchema(ReportResponseSchema), privateHeaders()), ...readFailures() },
         detail: {
           operationId: 'report.get',
           'x-exposure': 'public',
@@ -266,7 +276,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
   const listOptions = {
     params,
     query: ReportPageQuerySchema,
-    response: { 200: withHeaders(strictContentSchema(ReportPageResponseSchema), privateHeaders), ...readFailures },
+    response: { 200: withHeaders(strictContentSchema(ReportPageResponseSchema), privateHeaders()), ...readFailures() },
   };
   const board = created.get(
     '/v1/boards/:id/reports',
@@ -344,8 +354,8 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       ...listOptions,
       query: CatalogueReportPageQuerySchema,
       response: {
-        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders),
-        ...readFailures,
+        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders()),
+        ...readFailures(),
       },
       detail: {
         operationId: 'subject_report.list',
@@ -419,8 +429,8 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     {
       query: CatalogueReportPageQuerySchema,
       response: {
-        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders),
-        ...readFailures,
+        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders()),
+        ...readFailures(),
       },
       detail: {
         operationId: 'catalogue_report.list',

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { REVIEW_DISCOVERY_EVENTS } from './review-discovery-events.ts';
 import { DISCOVERY_EVENTS, DISCOVERY_OPERATION_EVENTS } from './discovery-events.ts';
 import { Type, type Static } from 'typebox';
@@ -29,119 +30,125 @@ const editionEvent = Type.Object(
   { additionalProperties: false },
 );
 
-export const CONTENT_EVENTS = {
-  'com.rezics.content.conversation-activity.projected.v1': Type.Object(
-    {
-      postIds: Type.Array(UUID, { maxItems: 100, minItems: 1, uniqueItems: true }),
-      sourceEpoch: Type.Integer({ minimum: 1 }),
-      sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.board.watch.changed.v1': Type.Object(
-    { accountId: UUID, boardId: UUID, watching: Type.Boolean(), revision: Type.Integer({ minimum: 1 }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.watch.removed.v1': Type.Object(
-    { accountId: UUID, kind: Type.Union([Type.Literal('thread'), Type.Literal('board')]), watchId: UUID },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.own-drafts.repaired.v1': Type.Object({}, { additionalProperties: false }),
-  'com.rezics.content.board.slow-mode.changed.v1': Type.Object(
-    { boardId: UUID, intervalSeconds: Type.Integer({ minimum: 0, maximum: 86400 }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.feed.indexed.v1': Type.Object({}, { additionalProperties: false }),
-  'com.rezics.content.feed.delivered.v1': Type.Object({}, { additionalProperties: false }),
-  'com.rezics.content.feed.erased.v1': Type.Object({}, { additionalProperties: false }),
-  'com.rezics.content.feed.expired.v1': Type.Object({}, { additionalProperties: false }),
-  'com.rezics.content.edition.creator-indexed.v1': Type.Object(
-    { editionId: UUID, creatorAccountId: UUID },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.edition.created.v1': editionEvent,
-  'com.rezics.content.edition.published.v1': editionEvent,
-  'com.rezics.content.edition.unpublished.v1': editionEvent,
-  'com.rezics.content.thread.created.v1': Type.Object(
-    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.post.created.v1': Type.Object(
-    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.post.published.v1': Type.Object(
-    { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.revision.created.v1': Type.Object(
-    {
-      threadId: UUID,
-      itemId: UUID,
-      revisionId: UUID,
-      actorId: UUID,
-      ...threadIndexFields,
-      previousSubjectIds: Type.Optional(subjectIds),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.board.created.v1': Type.Object(
-    { boardId: UUID, realmId: Type.Union([UUID, Type.Null()]), conceptId: UUID, actorId: UUID },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.authored-field.created.v1': Type.Object(
-    { id: UUID, subject: UUID, candidate: UUID, authorId: UUID },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.authored-field.erased.v1': Type.Object(
-    { id: UUID, subject: UUID, authorId: UUID },
-    { additionalProperties: false },
-  ),
-  ...MEDIA_EVENTS,
-  ...MEDIA_IMPORT_EVENTS,
-  ...MEDIA_MODERATION_EVENTS,
-  ...MODERATION_EVENTS,
-  'com.rezics.content.post.restored.v1': Type.Object(
-    { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
-    { additionalProperties: false },
-  ),
-  ...REPORT_EVENTS,
-  'com.rezics.content.reaction.changed.v1': Type.Object(
-    {
-      actorId: UUID,
-      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post'), Type.Literal('subject')]),
-      targetId: UUID,
-      previousKind: Type.Union([reactionKind, Type.Null()]),
-      kind: Type.Union([reactionKind, Type.Null()]),
-    },
-    { additionalProperties: false },
-  ),
-  ...OPERATION_EVENTS,
-  ...BOARD_EVENTS,
-  'com.rezics.content.author-item.projected.v1': Type.Object(
-    {
-      authorAccountId: UUID,
-      itemKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
-      itemId: UUID,
-      sourceEpoch: Type.Integer({ minimum: 1 }),
-      sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.content.subject-thread.projected.v1': Type.Object(
-    {
-      subjectId: UUID,
-      threadId: UUID,
-      sourceEpoch: Type.Integer({ minimum: 1 }),
-      sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
-    },
-    { additionalProperties: false },
-  ),
-  ...SOURCE_FENCE_EVENTS,
-  ...REVIEW_DISCOVERY_EVENTS,
-  ...DISCOVERY_EVENTS,
-  ...DISCOVERY_OPERATION_EVENTS,
-} as const;
+export function CONTENT_EVENTS() {
+  return memoizedValue(
+    CONTENT_EVENTS,
+    () =>
+      ({
+        'com.rezics.content.conversation-activity.projected.v1': Type.Object(
+          {
+            postIds: Type.Array(UUID, { maxItems: 100, minItems: 1, uniqueItems: true }),
+            sourceEpoch: Type.Integer({ minimum: 1 }),
+            sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.board.watch.changed.v1': Type.Object(
+          { accountId: UUID, boardId: UUID, watching: Type.Boolean(), revision: Type.Integer({ minimum: 1 }) },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.watch.removed.v1': Type.Object(
+          { accountId: UUID, kind: Type.Union([Type.Literal('thread'), Type.Literal('board')]), watchId: UUID },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.own-drafts.repaired.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.content.board.slow-mode.changed.v1': Type.Object(
+          { boardId: UUID, intervalSeconds: Type.Integer({ minimum: 0, maximum: 86400 }) },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.feed.indexed.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.content.feed.delivered.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.content.feed.erased.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.content.feed.expired.v1': Type.Object({}, { additionalProperties: false }),
+        'com.rezics.content.edition.creator-indexed.v1': Type.Object(
+          { editionId: UUID, creatorAccountId: UUID },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.edition.created.v1': editionEvent,
+        'com.rezics.content.edition.published.v1': editionEvent,
+        'com.rezics.content.edition.unpublished.v1': editionEvent,
+        'com.rezics.content.thread.created.v1': Type.Object(
+          { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.post.created.v1': Type.Object(
+          { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.post.published.v1': Type.Object(
+          { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.revision.created.v1': Type.Object(
+          {
+            threadId: UUID,
+            itemId: UUID,
+            revisionId: UUID,
+            actorId: UUID,
+            ...threadIndexFields,
+            previousSubjectIds: Type.Optional(subjectIds),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.board.created.v1': Type.Object(
+          { boardId: UUID, realmId: Type.Union([UUID, Type.Null()]), conceptId: UUID, actorId: UUID },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.authored-field.created.v1': Type.Object(
+          { id: UUID, subject: UUID, candidate: UUID, authorId: UUID },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.authored-field.erased.v1': Type.Object(
+          { id: UUID, subject: UUID, authorId: UUID },
+          { additionalProperties: false },
+        ),
+        ...MEDIA_EVENTS,
+        ...MEDIA_IMPORT_EVENTS,
+        ...MEDIA_MODERATION_EVENTS,
+        ...MODERATION_EVENTS,
+        'com.rezics.content.post.restored.v1': Type.Object(
+          { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+          { additionalProperties: false },
+        ),
+        ...REPORT_EVENTS,
+        'com.rezics.content.reaction.changed.v1': Type.Object(
+          {
+            actorId: UUID,
+            targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post'), Type.Literal('subject')]),
+            targetId: UUID,
+            previousKind: Type.Union([reactionKind, Type.Null()]),
+            kind: Type.Union([reactionKind, Type.Null()]),
+          },
+          { additionalProperties: false },
+        ),
+        ...OPERATION_EVENTS,
+        ...BOARD_EVENTS,
+        'com.rezics.content.author-item.projected.v1': Type.Object(
+          {
+            authorAccountId: UUID,
+            itemKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
+            itemId: UUID,
+            sourceEpoch: Type.Integer({ minimum: 1 }),
+            sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.content.subject-thread.projected.v1': Type.Object(
+          {
+            subjectId: UUID,
+            threadId: UUID,
+            sourceEpoch: Type.Integer({ minimum: 1 }),
+            sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
+          },
+          { additionalProperties: false },
+        ),
+        ...SOURCE_FENCE_EVENTS,
+        ...REVIEW_DISCOVERY_EVENTS,
+        ...DISCOVERY_EVENTS,
+        ...DISCOVERY_OPERATION_EVENTS,
+      }) as const,
+  );
+}
 
-export type ContentEventType = keyof typeof CONTENT_EVENTS;
-export type ContentEventData<T extends ContentEventType> = Static<(typeof CONTENT_EVENTS)[T]>;
+export type ContentEventType = keyof ReturnType<typeof CONTENT_EVENTS>;
+export type ContentEventData<T extends ContentEventType> = Static<ReturnType<typeof CONTENT_EVENTS>[T]>;

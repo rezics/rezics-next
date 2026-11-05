@@ -210,7 +210,7 @@ export function registerLibraryErasure(
       types: [TOMBSTONED],
       admit: admitFollowCountErasure,
       async run(event) {
-        if (!Value.Check(ACCESS_EVENTS[TOMBSTONED], event.data)) throw new TypeError('Invalid Library erasure event');
+        if (!Value.Check(ACCESS_EVENTS()[TOMBSTONED], event.data)) throw new TypeError('Invalid Library erasure event');
         const { accountId } = event.data as { accountId: string };
         if (event.subject !== accountId) throw new TypeError('Invalid Library erasure event address');
         if (maintenance) await maintenance.requestPurge(event);

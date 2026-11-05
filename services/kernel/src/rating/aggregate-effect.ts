@@ -384,7 +384,7 @@ export async function applyRatingChanges(pool: Pool, input: readonly RatingChang
 export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCounter, event: CloudEvent): Promise<void> {
   if (
     event.type !== VOTE_CHANGED ||
-    !Value.Check(RATING_EVENTS[VOTE_CHANGED], event.data) ||
+    !Value.Check(RATING_EVENTS()[VOTE_CHANGED], event.data) ||
     !Number.isFinite(Date.parse(event.time))
   )
     throw new TypeError('Invalid rating vote event');
@@ -432,7 +432,7 @@ export async function applyRatingSegmentPageEvent(
 ): Promise<void> {
   if (
     event.type !== SEGMENT_PAGE ||
-    !Value.Check(RATING_EVENTS[SEGMENT_PAGE], event.data) ||
+    !Value.Check(RATING_EVENTS()[SEGMENT_PAGE], event.data) ||
     !Number.isFinite(Date.parse(event.time))
   )
     throw new TypeError('Invalid rating segment page event');

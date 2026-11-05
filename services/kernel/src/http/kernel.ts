@@ -1,3 +1,4 @@
+import { initializeEventTypes } from '../events/catalogue.ts';
 import { contentViewerActionResources } from '../content/viewer-actions.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { FEED_OPERATION_DECLARATIONS } from '../content/feed-operation-declarations.ts';
@@ -371,6 +372,7 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  initializeEventTypes();
   const operationCatalogue = createOperationCatalogue([
     ...LIBRARY_OPERATION_DECLARATIONS,
     ...FEED_OPERATION_DECLARATIONS,
@@ -409,7 +411,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.realmRoleReader === undefined ? {} : { realmRoleReader: dependencies.realmRoleReader }),
   });
   const bindKernelExecution = (client: WorkClient) =>
-    bindExecutionContract(client, workExecutionPort, historyExecutionPort);
+    bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   let opened: Promise<WorkClient> | undefined;
   const workClient = (): Promise<WorkClient> => {
     if (dependencies.workClient) return Promise.resolve(bindKernelExecution(dependencies.workClient));
@@ -868,7 +870,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
   });
   const mountedViewerResources = new Map<string, ViewerActionResource>([
-    ...subjectViewerActionResources,
+    ...subjectViewerActionResources(),
     ...contentViewerActionResources,
     ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],

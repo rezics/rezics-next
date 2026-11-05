@@ -81,7 +81,7 @@ async function readWorkflowState(client: WorkContext['client'], id: string): Pro
 /** Observe only this job's native control home, releasing the snapshot before another command or engine. */
 async function readNext(pool: Pool, ref: IdentityJobRef): Promise<Next> {
   return withReadTransaction(pool, async (tx) => {
-    const job = await identityEpochStore.readJob(tx, ref);
+    const job = await identityEpochStore().readJob(tx, ref);
     if (!job) throw unavailable('Native identity job or its current owner is unavailable');
     const row = (await tx.query(control.sql, [identityJobPartition(ref)])).rows[0];
     if (!row) throw unavailable('Native identity control is unavailable');
@@ -187,7 +187,7 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
   const reconcile = DBOS.registerStep(
     async (receipt: ReceiptLocator) => {
       // The Store independently rereads the committed local record, scope and receiving effect custody.
-      await identityEpochStore.reconcileStepReceipt(context.pool, nativeReceipt(receipt));
+      await identityEpochStore().reconcileStepReceipt(context.pool, nativeReceipt(receipt));
     },
     { name: `${workflowName}.reconcile`, ...COMMAND_STEP_RETRIES },
   );
@@ -196,7 +196,7 @@ export function registerIdentityEpochCoordinator(context: WorkContext): void {
       const ref = nativeJob(job);
       // The command rechecks native ACKs and current control ownership even after a lost local result.
       await runCommand(context.pool, { partition: identityJobPartition(ref) }, (tx) =>
-        identityEpochStore.publish(tx, ref),
+        identityEpochStore().publish(tx, ref),
       );
     },
     { name: `${workflowName}.publish`, ...COMMAND_STEP_RETRIES },

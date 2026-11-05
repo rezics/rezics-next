@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './collection-source.ts';
 import {
@@ -191,18 +192,22 @@ const retirementHoldProjectionBytes = Buffer.byteLength(
 const retirementUuidProjectionBytes = Buffer.byteLength(JSON.stringify([{ capture_id: maxUuid }]));
 const retirementPlanKeyProjectionBytes = Buffer.byteLength(JSON.stringify([{ plan_key: '0'.repeat(64) }]));
 
-const rawQueries = Object.freeze({
-  member: rawMember,
-  entry: rawEntry,
-  entry_deleted: rawEntryDeleted,
-  label: rawLabel,
-  assignment: rawAssignment,
-  session: rawSession,
-  unit: rawUnit,
-  change: rawChange,
-  copy: rawCopy,
-  output: rawOutput,
-});
+function rawQueries() {
+  return memoizedValue(rawQueries, () =>
+    Object.freeze({
+      member: rawMember,
+      entry: rawEntry,
+      entry_deleted: rawEntryDeleted,
+      label: rawLabel,
+      assignment: rawAssignment,
+      session: rawSession,
+      unit: rawUnit,
+      change: rawChange,
+      copy: rawCopy,
+      output: rawOutput,
+    }),
+  );
+}
 
 /** Explicit Query names so the producer declaration does not leak pg protocol types. */
 type NativeSourceCustodyQueries = Readonly<{
@@ -251,39 +256,43 @@ type NativeSourceCustodyQueries = Readonly<{
 }>;
 
 /** The canonical SQL objects used by the native adapter and the executable plan. */
-export const nativeSourceCustodyQueries: NativeSourceCustodyQueries = Object.freeze({
-  partition: nativeIdentityPartitionQuery,
-  source: sourceQuery,
-  account: accountQuery,
-  output: outputQuery,
-  ensure: ensureQuery,
-  fences: fencesQuery,
-  read: readQuery,
-  start: startQuery,
-  advance: advanceQuery,
-  identityCapture,
-  proof: proofQuery,
-  finish: finishQuery,
-  hold: holdQuery,
-  held: heldQuery,
-  retained: retainedQuery,
-  release: releaseQuery,
-  terminalScope,
-  raw: rawQueries,
-  rawExplicitOutput,
-  retirement: Object.freeze({
-    partition: partitionQuery,
-    source: retireSource,
-    receipt: retireReceipt,
-    active: retireActive,
-    holds: retireHolds,
-    children: retireChildren,
-    proof: retireProof,
-    capture: retireCapture,
-    identityRetention,
-    nextCapture,
-  }),
-});
+export function nativeSourceCustodyQueries(): NativeSourceCustodyQueries {
+  return memoizedValue(nativeSourceCustodyQueries, () =>
+    Object.freeze({
+      partition: nativeIdentityPartitionQuery,
+      source: sourceQuery,
+      account: accountQuery,
+      output: outputQuery,
+      ensure: ensureQuery,
+      fences: fencesQuery,
+      read: readQuery,
+      start: startQuery,
+      advance: advanceQuery,
+      identityCapture,
+      proof: proofQuery,
+      finish: finishQuery,
+      hold: holdQuery,
+      held: heldQuery,
+      retained: retainedQuery,
+      release: releaseQuery,
+      terminalScope,
+      raw: rawQueries(),
+      rawExplicitOutput,
+      retirement: Object.freeze({
+        partition: partitionQuery,
+        source: retireSource,
+        receipt: retireReceipt,
+        active: retireActive,
+        holds: retireHolds,
+        children: retireChildren,
+        proof: retireProof,
+        capture: retireCapture,
+        identityRetention,
+        nextCapture,
+      }),
+    }),
+  );
+}
 
 const planLimit = (values: readonly unknown[], query: Query): number | undefined => {
   const index = query.params.indexOf('limit');
@@ -292,19 +301,25 @@ const planLimit = (values: readonly unknown[], query: Query): number | undefined
   return typeof limit === 'number' && Number.isSafeInteger(limit) && limit >= 1 && limit <= 100 ? limit : undefined;
 };
 
-const rawIdByQuery = new Map<Query, StatementId>([
-  [rawMember, 'rawMember'],
-  [rawEntry, 'rawEntry'],
-  [rawEntryDeleted, 'rawEntryDeleted'],
-  [rawLabel, 'rawLabel'],
-  [rawAssignment, 'rawAssignment'],
-  [rawSession, 'rawSession'],
-  [rawUnit, 'rawUnit'],
-  [rawChange, 'rawChange'],
-  [rawCopy, 'rawCopy'],
-  [rawOutput, 'rawOutput'],
-  [rawExplicitOutput, 'rawExplicitOutput'],
-]);
+function rawIdByQuery() {
+  return memoizedValue(
+    rawIdByQuery,
+    () =>
+      new Map<Query, StatementId>([
+        [rawMember, 'rawMember'],
+        [rawEntry, 'rawEntry'],
+        [rawEntryDeleted, 'rawEntryDeleted'],
+        [rawLabel, 'rawLabel'],
+        [rawAssignment, 'rawAssignment'],
+        [rawSession, 'rawSession'],
+        [rawUnit, 'rawUnit'],
+        [rawChange, 'rawChange'],
+        [rawCopy, 'rawCopy'],
+        [rawOutput, 'rawOutput'],
+        [rawExplicitOutput, 'rawExplicitOutput'],
+      ]),
+  );
+}
 
 const spec = (
   id: StatementId,
@@ -317,152 +332,173 @@ const spec = (
   options: Pick<StatementSpec, 'maxOverrides' | 'valid'> = {},
 ): StatementSpec => Object.freeze({ id, query, rows, points, metadata, keys, projectionBytes, ...options });
 
-const statementSpecs: readonly StatementSpec[] = Object.freeze([
-  spec('ensure', ensureQuery, 32, 2, 0, 0, 0),
-  spec('start', startQuery, 32, 1, 0, 0, 0),
-  spec('advance', advanceQuery, 32, 1, 0, 0, 0),
-  spec('read', readQuery, 16, 1, 0, 0, captureProjectionBytes),
-  spec('finish', finishQuery, 80, 3, 1, 1, receiptProjectionBytes),
-  spec('hold', holdQuery, 48, 1, 0, 0, holdProjectionBytes),
-  spec('held', heldQuery, 16, 1, 0, 0, holdProjectionBytes),
-  spec('retained', retainedQuery, 16, 1, 0, 0, retainedProjectionBytes),
-  spec('release', releaseQuery, 32, 1, 0, 0, 0),
-  spec('terminalScope', terminalScope, 48, 3, 0, 0, terminalProjectionBytes),
-  spec('retireSource', retireSource, 3, 3, 0, 3, retireSourceProjectionBytes),
-  spec('retireReceipt', retireReceipt, 1, 1, 0, 1, receiptProjectionBytes),
-  spec('retireActive', retireActive, 1, 1, 0, 1, Buffer.byteLength(JSON.stringify([{ id: maxUuid }]))),
-  spec('retireHolds', retireHolds, 80, 1, 0, 80, retirementHoldProjectionBytes * 80),
-  spec(
-    'retireChildren',
-    retireChildren,
-    (values) => {
-      const ids = values[retireChildren.params.indexOf('hold_ids')];
-      return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 ? ids.length : undefined;
-    },
-    80,
-    0,
-    (values) => {
-      const ids = values[retireChildren.params.indexOf('hold_ids')];
-      return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 ? ids.length : undefined;
-    },
-    (values) => {
-      const ids = values[retireChildren.params.indexOf('hold_ids')];
-      return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80
-        ? Buffer.byteLength(JSON.stringify(ids))
-        : undefined;
-    },
-    {
-      maxOverrides: { hold_ids: Array.from({ length: 80 }, () => maxUuid) },
-      valid: (values) => {
-        const ids = values.hold_ids;
-        return (
-          Array.isArray(ids) &&
-          ids.length >= 1 &&
-          ids.length <= 80 &&
-          ids.every((id) => typeof id === 'string' && uuid.test(id))
-        );
-      },
-    },
-  ),
-  spec('retireProofRow', retireProof, 1, 2, 0, 1, retirementUuidProjectionBytes),
-  spec('retireCaptureRow', retireCapture, 1, 2, 0, 1, retirementUuidProjectionBytes),
-  spec('identityRetention', identityRetention, 1, 1, 1, 1, retirementPlanKeyProjectionBytes),
-  spec(
-    'nextCapture',
-    nextCapture,
-    1,
-    2,
-    1,
-    1,
-    Buffer.byteLength(
-      JSON.stringify([
-        {
-          route: 65535,
-          captureId: maxUuid,
-          collectionId: maxUuid,
-          accountId: maxUuid,
-          incarnation: `${maxUuid}:9223372036854.775807`,
-          generation: maxBigint,
-          scope: maxScope,
-          ownerEpoch: maxInt,
-          receivingEpoch: maxBigint,
-          effectKey: maxEscapedText(256),
-          outputGeneration: maxUuid,
-          publicationTransactionId: maxUuid,
-          publicationPosition: maxBigint,
-          sourceGeneration: maxBigint,
+function statementSpecs(): readonly StatementSpec[] {
+  return memoizedValue(statementSpecs, () =>
+    Object.freeze([
+      spec('ensure', ensureQuery, 32, 2, 0, 0, 0),
+      spec('start', startQuery, 32, 1, 0, 0, 0),
+      spec('advance', advanceQuery, 32, 1, 0, 0, 0),
+      spec('read', readQuery, 16, 1, 0, 0, captureProjectionBytes),
+      spec('finish', finishQuery, 80, 3, 1, 1, receiptProjectionBytes),
+      spec('hold', holdQuery, 48, 1, 0, 0, holdProjectionBytes),
+      spec('held', heldQuery, 16, 1, 0, 0, holdProjectionBytes),
+      spec('retained', retainedQuery, 16, 1, 0, 0, retainedProjectionBytes),
+      spec('release', releaseQuery, 32, 1, 0, 0, 0),
+      spec('terminalScope', terminalScope, 48, 3, 0, 0, terminalProjectionBytes),
+      spec('retireSource', retireSource, 3, 3, 0, 3, retireSourceProjectionBytes),
+      spec('retireReceipt', retireReceipt, 1, 1, 0, 1, receiptProjectionBytes),
+      spec('retireActive', retireActive, 1, 1, 0, 1, Buffer.byteLength(JSON.stringify([{ id: maxUuid }]))),
+      spec('retireHolds', retireHolds, 80, 1, 0, 80, retirementHoldProjectionBytes * 80),
+      spec(
+        'retireChildren',
+        retireChildren,
+        (values) => {
+          const ids = values[retireChildren.params.indexOf('hold_ids')];
+          return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 ? ids.length : undefined;
         },
-      ]),
-    ),
-  ),
-  ...Object.entries(rawQueries).map(([driver, query]) => {
-    const id = rawIdByQuery.get(query)!;
-    return spec(
-      id,
-      query,
-      (values) => {
-        const limit = planLimit(values, query);
-        return limit === undefined ? undefined : 16 * limit + 32;
-      },
-      1,
-      0,
-      (values) => planLimit(values, query),
-      (values) => {
-        const limit = planLimit(values, query);
-        return limit === undefined ? undefined : dependencyProjectionBytes * limit;
-      },
-      {
-        maxOverrides:
-          driver === 'member'
-            ? { after: maxEscapedText(48), tie: maxUuid }
-            : driver === 'unit'
-              ? { after: maxEscapedText(128) }
-              : driver === 'change'
-                ? { after: '2147483647', tie: maxUuid }
-                : driver === 'entry'
-                  ? { after: maxUuid, tie: maxEscapedText(64) }
-                  : driver === 'entry_deleted' || driver === 'label' || driver === 'session' || driver === 'output'
-                    ? { after: maxUuid }
-                    : driver === 'assignment' || driver === 'copy'
-                      ? { after: maxUuid, tie: maxUuid }
-                      : {},
-        valid: (values) => validRawBinds(id, values),
-      },
-    );
-  }),
-  spec(
-    'rawExplicitOutput',
-    rawExplicitOutput,
-    (values) => {
-      const limit = planLimit(values, rawExplicitOutput);
-      return limit === undefined ? undefined : 16 * limit + 32;
-    },
-    1,
-    0,
-    (values) => planLimit(values, rawExplicitOutput),
-    (values) => {
-      const limit = planLimit(values, rawExplicitOutput);
-      return limit === undefined ? undefined : dependencyProjectionBytes * limit;
-    },
-    { maxOverrides: { after: maxUuid }, valid: (values) => validRawBinds('rawExplicitOutput', values) },
-  ),
-]);
-const specByQuery = new Map(statementSpecs.map((value) => [value.query, value]));
-const specById = new Map(statementSpecs.map((value) => [value.id, value]));
-const queryBySql = new Map<string, Query>();
-for (const [query] of specByQuery) queryBySql.set(query.sql, query);
+        80,
+        0,
+        (values) => {
+          const ids = values[retireChildren.params.indexOf('hold_ids')];
+          return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 ? ids.length : undefined;
+        },
+        (values) => {
+          const ids = values[retireChildren.params.indexOf('hold_ids')];
+          return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80
+            ? Buffer.byteLength(JSON.stringify(ids))
+            : undefined;
+        },
+        {
+          maxOverrides: { hold_ids: Array.from({ length: 80 }, () => maxUuid) },
+          valid: (values) => {
+            const ids = values.hold_ids;
+            return (
+              Array.isArray(ids) &&
+              ids.length >= 1 &&
+              ids.length <= 80 &&
+              ids.every((id) => typeof id === 'string' && uuid.test(id))
+            );
+          },
+        },
+      ),
+      spec('retireProofRow', retireProof, 1, 2, 0, 1, retirementUuidProjectionBytes),
+      spec('retireCaptureRow', retireCapture, 1, 2, 0, 1, retirementUuidProjectionBytes),
+      spec('identityRetention', identityRetention, 1, 1, 1, 1, retirementPlanKeyProjectionBytes),
+      spec(
+        'nextCapture',
+        nextCapture,
+        1,
+        2,
+        1,
+        1,
+        Buffer.byteLength(
+          JSON.stringify([
+            {
+              route: 65535,
+              captureId: maxUuid,
+              collectionId: maxUuid,
+              accountId: maxUuid,
+              incarnation: `${maxUuid}:9223372036854.775807`,
+              generation: maxBigint,
+              scope: maxScope,
+              ownerEpoch: maxInt,
+              receivingEpoch: maxBigint,
+              effectKey: maxEscapedText(256),
+              outputGeneration: maxUuid,
+              publicationTransactionId: maxUuid,
+              publicationPosition: maxBigint,
+              sourceGeneration: maxBigint,
+            },
+          ]),
+        ),
+      ),
+      ...Object.entries(rawQueries()).map(([driver, query]) => {
+        const id = rawIdByQuery().get(query)!;
+        return spec(
+          id,
+          query,
+          (values) => {
+            const limit = planLimit(values, query);
+            return limit === undefined ? undefined : 16 * limit + 32;
+          },
+          1,
+          0,
+          (values) => planLimit(values, query),
+          (values) => {
+            const limit = planLimit(values, query);
+            return limit === undefined ? undefined : dependencyProjectionBytes * limit;
+          },
+          {
+            maxOverrides:
+              driver === 'member'
+                ? { after: maxEscapedText(48), tie: maxUuid }
+                : driver === 'unit'
+                  ? { after: maxEscapedText(128) }
+                  : driver === 'change'
+                    ? { after: '2147483647', tie: maxUuid }
+                    : driver === 'entry'
+                      ? { after: maxUuid, tie: maxEscapedText(64) }
+                      : driver === 'entry_deleted' || driver === 'label' || driver === 'session' || driver === 'output'
+                        ? { after: maxUuid }
+                        : driver === 'assignment' || driver === 'copy'
+                          ? { after: maxUuid, tie: maxUuid }
+                          : {},
+            valid: (values) => validRawBinds(id, values),
+          },
+        );
+      }),
+      spec(
+        'rawExplicitOutput',
+        rawExplicitOutput,
+        (values) => {
+          const limit = planLimit(values, rawExplicitOutput);
+          return limit === undefined ? undefined : 16 * limit + 32;
+        },
+        1,
+        0,
+        (values) => planLimit(values, rawExplicitOutput),
+        (values) => {
+          const limit = planLimit(values, rawExplicitOutput);
+          return limit === undefined ? undefined : dependencyProjectionBytes * limit;
+        },
+        { maxOverrides: { after: maxUuid }, valid: (values) => validRawBinds('rawExplicitOutput', values) },
+      ),
+    ]),
+  );
+}
+function specByQuery() {
+  return memoizedValue(specByQuery, () => new Map(statementSpecs().map((value) => [value.query, value])));
+}
+function specById() {
+  return memoizedValue(specById, () => new Map(statementSpecs().map((value) => [value.id, value])));
+}
 
-const basisQueries: readonly Query[] = Object.freeze([
-  nativeIdentityPartitionQuery,
-  accountQuery,
-  sourceQuery,
-  outputQuery,
-  fencesQuery,
-  identityCapture,
-  proofQuery,
-]);
-const basisQuerySet = new Set(basisQueries);
-for (const query of basisQueries) queryBySql.set(query.sql, query);
+function basisQueries(): readonly Query[] {
+  return memoizedValue(basisQueries, () =>
+    Object.freeze([
+      nativeIdentityPartitionQuery,
+      accountQuery,
+      sourceQuery,
+      outputQuery,
+      fencesQuery,
+      identityCapture,
+      proofQuery,
+    ]),
+  );
+}
+function basisQuerySet() {
+  return memoizedValue(basisQuerySet, () => new Set(basisQueries()));
+}
+function queryBySql() {
+  return memoizedValue(queryBySql, () =>
+    (() => {
+      const result = new Map<string, Query>();
+      for (const [query] of specByQuery()) result.set(query.sql, query);
+      for (const query of basisQueries()) result.set(query.sql, query);
+      return result;
+    })(),
+  );
+}
 
 type StatementCounts = Readonly<Partial<Record<StatementId, number>>>;
 type OperationDefinition = Readonly<{
@@ -843,17 +879,27 @@ function maximumCostFor(specification: StatementSpec): CostDetail {
   return cost;
 }
 
-const basisMaximumByQuery = new Map<Query, CostDetail>();
-for (const query of basisQueries) {
-  const values = maxValues(query);
-  if (!values) throw new TypeError(`Unbounded native source custody basis binds: ${query.sql}`);
-  const cost = basisCost(query, values);
-  if (!cost) throw new TypeError(`Unproved native source custody basis: ${query.sql}`);
-  basisMaximumByQuery.set(query, cost);
+function basisMaximumByQuery() {
+  return memoizedValue(basisMaximumByQuery, () =>
+    (() => {
+      const result = new Map<Query, CostDetail>();
+      for (const query of basisQueries()) {
+        const values = maxValues(query);
+        if (!values) throw new TypeError(`Unbounded native source custody basis binds: ${query.sql}`);
+        const cost = basisCost(query, values);
+        if (!cost) throw new TypeError(`Unproved native source custody basis: ${query.sql}`);
+        result.set(query, cost);
+      }
+      return result;
+    })(),
+  );
 }
-const statementMaximumByQuery = new Map(
-  statementSpecs.map((specification) => [specification.query, maximumCostFor(specification).bound]),
-);
+function statementMaximumByQuery() {
+  return memoizedValue(
+    statementMaximumByQuery,
+    () => new Map(statementSpecs().map((specification) => [specification.query, maximumCostFor(specification).bound])),
+  );
+}
 
 function maximumCost(...costs: readonly CostDetail[]): CostDetail {
   return costs.reduce((largest, candidate) => (candidate.bound.bytes > largest.bound.bytes ? candidate : largest));
@@ -872,35 +918,43 @@ function sumCostDetails(...costs: readonly CostDetail[]): Readonly<{
   return Object.freeze({ bound, requestBytes, projectionBytes });
 }
 
-const basisStatementQueries: Readonly<Record<string, Query>> = Object.freeze({
-  identityPartition: nativeIdentityPartitionQuery,
-  account: accountQuery,
-  source: sourceQuery,
-  output: outputQuery,
-  fences: fencesQuery,
-  identityCapture,
-  proof: proofQuery,
-});
+function basisStatementQueries(): Readonly<Record<string, Query>> {
+  return memoizedValue(basisStatementQueries, () =>
+    Object.freeze({
+      identityPartition: nativeIdentityPartitionQuery,
+      account: accountQuery,
+      source: sourceQuery,
+      output: outputQuery,
+      fences: fencesQuery,
+      identityCapture,
+      proof: proofQuery,
+    }),
+  );
+}
 const maximumStatementCost = (id: StatementId): CostDetail => {
-  const basisQuery = basisStatementQueries[id];
-  if (basisQuery) return basisMaximumByQuery.get(basisQuery)!;
-  const specification = specById.get(id);
+  const basisQuery = basisStatementQueries()[id];
+  if (basisQuery) return basisMaximumByQuery().get(basisQuery)!;
+  const specification = specById().get(id);
   if (!specification) throw new TypeError(`Missing native source custody cost: ${id}`);
   return maximumCostFor(specification);
 };
 const maximumStatement = (id: StatementId) => maximumStatementCost(id).bound;
 
-const checkoutBound = declareBound({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 1,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 0,
-  engineRequests: 0,
-});
+function checkoutBound() {
+  return memoizedValue(checkoutBound, () =>
+    declareBound({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 1,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+      engineRequests: 0,
+    }),
+  );
+}
 
 function maximumBound(...bounds: readonly Bound[]): Bound {
   if (!bounds.length) return zeroBound();
@@ -937,7 +991,7 @@ function choiceCost(statements: StatementCounts, maximum: number): CostDetail {
 function operationCost(definition: OperationDefinition): CostDetail {
   const costs: CostDetail[] = [];
   if (definition.checkout)
-    costs.push(repeatCost({ bound: checkoutBound, requestBytes: 0, projectionBytes: 0 }, definition.checkout));
+    costs.push(repeatCost({ bound: checkoutBound(), requestBytes: 0, projectionBytes: 0 }, definition.checkout));
   for (const [id, multiplicity] of Object.entries(definition.fixed))
     costs.push(repeatCost(maximumStatementCost(id as StatementId), multiplicity!));
   for (const [id, multiplicity] of Object.entries(definition.optional))
@@ -974,29 +1028,40 @@ const operationDeclarations = Object.freeze(
     ]),
   ) as Record<CustodyOperation, ReturnType<typeof operationDeclaration>>,
 );
-const operationCompositions = Object.freeze(
-  Object.fromEntries(
-    Object.entries(operationDefinitions).map(([operation, definition]) => [operation, operationCost(definition)]),
-  ) as Record<CustodyOperation, CostDetail>,
-);
-const operationCosts = Object.freeze(
-  Object.fromEntries(
-    Object.entries(operationCompositions).map(([operation, cost]) => [
-      operation,
-      Object.freeze({ requestBytes: cost.requestBytes, projectionBytes: cost.projectionBytes }),
-    ]),
-  ) as Record<CustodyOperation, Readonly<{ requestBytes: number; projectionBytes: number }>>,
-);
-const operationBounds = Object.freeze(
-  Object.fromEntries(
-    Object.entries(operationCompositions).map(([operation, cost]) => [operation, cost.bound]),
-  ) as Record<CustodyOperation, Bound>,
-);
-const retirementPageBound = sumBounds(maximumStatement('nextCapture'), operationBounds.retireCapture);
-for (const operation of Object.keys(operationCompositions) as CustodyOperation[]) {
-  const cost = operationCompositions[operation];
-  if (cost.requestBytes + cost.projectionBytes !== cost.bound.bytes)
-    throw new TypeError(`Native source custody byte decomposition mismatch: ${operation}`);
+function operationCompositions() {
+  return memoizedValue(operationCompositions, () =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(operationDefinitions).map(([operation, definition]) => [operation, operationCost(definition)]),
+      ) as Record<CustodyOperation, CostDetail>,
+    ),
+  );
+}
+function operationCosts() {
+  return memoizedValue(operationCosts, () =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(operationCompositions()).map(([operation, cost]) => [
+          operation,
+          Object.freeze({ requestBytes: cost.requestBytes, projectionBytes: cost.projectionBytes }),
+        ]),
+      ) as Record<CustodyOperation, Readonly<{ requestBytes: number; projectionBytes: number }>>,
+    ),
+  );
+}
+function operationBounds() {
+  return memoizedValue(operationBounds, () =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(operationCompositions()).map(([operation, cost]) => [operation, cost.bound]),
+      ) as Record<CustodyOperation, Bound>,
+    ),
+  );
+}
+function retirementPageBound() {
+  return memoizedValue(retirementPageBound, () =>
+    sumBounds(maximumStatement('nextCapture'), operationBounds().retireCapture),
+  );
 }
 
 function deepFreezeOperation<T extends Record<string, unknown>>(value: T): Readonly<T> {
@@ -1008,122 +1073,134 @@ function deepFreezeOperation<T extends Record<string, unknown>>(value: T): Reado
 }
 
 /** Closed operation-to-statement bindings and finite maxima for the actual custody adapter. */
-export const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN = deepFreezeOperation({
-  version: 1 as const,
-  owner: 'Library' as const,
-  operations: {
-    capturePage: {
-      declaration: operationDeclarations.capturePage,
-      ceiling: operationBounds.capturePage,
-      cost: operationCosts.capturePage,
-    },
-    finishCapture: {
-      declaration: operationDeclarations.finishCapture,
-      ceiling: operationBounds.finishCapture,
-      cost: operationCosts.finishCapture,
-    },
-    readAndHold: {
-      declaration: operationDeclarations.readAndHold,
-      ceiling: operationBounds.readAndHold,
-      cost: operationCosts.readAndHold,
-    },
-    revalidateHold: {
-      declaration: operationDeclarations.revalidateHold,
-      ceiling: operationBounds.revalidateHold,
-      cost: operationCosts.revalidateHold,
-    },
-    releaseHold: {
-      declaration: operationDeclarations.releaseHold,
-      ceiling: operationBounds.releaseHold,
-      cost: operationCosts.releaseHold,
-    },
-    retireCapture: {
-      declaration: operationDeclarations.retireCapture,
-      ceiling: operationBounds.retireCapture,
-      cost: operationCosts.retireCapture,
-    },
-  },
-  captureStepCeiling: maximumBound(operationBounds.capturePage, operationBounds.finishCapture),
-  retirementPageCeiling: retirementPageBound,
-  statementAxes: BOUND_AXES,
-  compatibilityReceiptAxes: Object.freeze([
-    'candidateKeys',
-    'nativeRows',
-    'identityMetadataRows',
-    'emptySeeks',
-    'nativePoints',
-    'witnessKeys',
-    'statements',
-    'bytes',
-  ] as const),
-  projections: {
-    captureRecordBytes: captureProjectionBytes,
-    rawDependencyBytes: dependencyProjectionBytes,
-    receiptBytes: receiptProjectionBytes,
-    holdBytes: holdProjectionBytes,
-    retainedHoldBytes: retainedProjectionBytes,
-    terminalOwnerBytes: terminalProjectionBytes,
-    retirementSourceBytes: retireSourceProjectionBytes,
-    retirementHoldBytes: retirementHoldProjectionBytes,
-    retirementPlanKeyBytes: retirementPlanKeyProjectionBytes,
-  },
-  nonSql: Object.freeze({
-    authorization: 'Existing native command and Source/Accounts admission remain authoritative.',
-    currentness: 'Current command resources, exact owner and immutable deadline are revalidated before dispatch.',
-    timeout: 'Checkout and query timeout use the current deadline; they add no SQL or result projection.',
-    engineRequests: 'Zero: every declared statement dispatches native SQL.',
-  }),
-});
+export function NATIVE_SOURCE_CUSTODY_OPERATION_PLAN() {
+  return memoizedValue(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN, () =>
+    deepFreezeOperation({
+      version: 1 as const,
+      owner: 'Library' as const,
+      operations: {
+        capturePage: {
+          declaration: operationDeclarations.capturePage,
+          ceiling: operationBounds().capturePage,
+          cost: operationCosts().capturePage,
+        },
+        finishCapture: {
+          declaration: operationDeclarations.finishCapture,
+          ceiling: operationBounds().finishCapture,
+          cost: operationCosts().finishCapture,
+        },
+        readAndHold: {
+          declaration: operationDeclarations.readAndHold,
+          ceiling: operationBounds().readAndHold,
+          cost: operationCosts().readAndHold,
+        },
+        revalidateHold: {
+          declaration: operationDeclarations.revalidateHold,
+          ceiling: operationBounds().revalidateHold,
+          cost: operationCosts().revalidateHold,
+        },
+        releaseHold: {
+          declaration: operationDeclarations.releaseHold,
+          ceiling: operationBounds().releaseHold,
+          cost: operationCosts().releaseHold,
+        },
+        retireCapture: {
+          declaration: operationDeclarations.retireCapture,
+          ceiling: operationBounds().retireCapture,
+          cost: operationCosts().retireCapture,
+        },
+      },
+      captureStepCeiling: maximumBound(operationBounds().capturePage, operationBounds().finishCapture),
+      retirementPageCeiling: retirementPageBound(),
+      statementAxes: BOUND_AXES,
+      compatibilityReceiptAxes: Object.freeze([
+        'candidateKeys',
+        'nativeRows',
+        'identityMetadataRows',
+        'emptySeeks',
+        'nativePoints',
+        'witnessKeys',
+        'statements',
+        'bytes',
+      ] as const),
+      projections: {
+        captureRecordBytes: captureProjectionBytes,
+        rawDependencyBytes: dependencyProjectionBytes,
+        receiptBytes: receiptProjectionBytes,
+        holdBytes: holdProjectionBytes,
+        retainedHoldBytes: retainedProjectionBytes,
+        terminalOwnerBytes: terminalProjectionBytes,
+        retirementSourceBytes: retireSourceProjectionBytes,
+        retirementHoldBytes: retirementHoldProjectionBytes,
+        retirementPlanKeyBytes: retirementPlanKeyProjectionBytes,
+      },
+      nonSql: Object.freeze({
+        authorization: 'Existing native command and Source/Accounts admission remain authoritative.',
+        currentness: 'Current command resources, exact owner and immutable deadline are revalidated before dispatch.',
+        timeout: 'Checkout and query timeout use the current deadline; they add no SQL or result projection.',
+        engineRequests: 'Zero: every declared statement dispatches native SQL.',
+      }),
+    }),
+  );
+}
 
 export type NativeSourceCustodyOperation = CustodyOperation;
-export const NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND = retirementPageBound;
+export function NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND() {
+  return memoizedValue(NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND, () => retirementPageBound());
+}
 
-const operationBindings = new Map<Query, StatementId | 'identityPartition' | 'control'>([
-  [nativeIdentityPartitionQuery, 'identityPartition'],
-  [partitionQuery, 'identityPartition'],
-  [accountQuery, 'account'],
-  [sourceQuery, 'source'],
-  [outputQuery, 'output'],
-  [ensureQuery, 'ensure'],
-  [fencesQuery, 'fences'],
-  [readQuery, 'read'],
-  [startQuery, 'start'],
-  [advanceQuery, 'advance'],
-  [finishQuery, 'finish'],
-  [proofQuery, 'proof'],
-  [holdQuery, 'hold'],
-  [heldQuery, 'held'],
-  [retainedQuery, 'retained'],
-  [releaseQuery, 'release'],
-  [retireSource, 'retireSource'],
-  [retireReceipt, 'retireReceipt'],
-  [retireActive, 'retireActive'],
-  [retireHolds, 'retireHolds'],
-  [retireChildren, 'retireChildren'],
-  [retireProof, 'retireProofRow'],
-  [retireCapture, 'retireCaptureRow'],
-  [identityRetention, 'identityRetention'],
-  [nextCapture, 'nextCapture'],
-  [terminalScope, 'terminalScope'],
-  [rawAssignment, 'rawAssignment'],
-  [rawChange, 'rawChange'],
-  [rawCopy, 'rawCopy'],
-  [rawEntry, 'rawEntry'],
-  [rawEntryDeleted, 'rawEntryDeleted'],
-  [rawExplicitOutput, 'rawExplicitOutput'],
-  [rawLabel, 'rawLabel'],
-  [rawMember, 'rawMember'],
-  [rawOutput, 'rawOutput'],
-  [rawSession, 'rawSession'],
-  [rawUnit, 'rawUnit'],
-]);
+function operationBindings() {
+  return memoizedValue(
+    operationBindings,
+    () =>
+      new Map<Query, StatementId | 'identityPartition' | 'control'>([
+        [nativeIdentityPartitionQuery, 'identityPartition'],
+        [partitionQuery, 'identityPartition'],
+        [accountQuery, 'account'],
+        [sourceQuery, 'source'],
+        [outputQuery, 'output'],
+        [ensureQuery, 'ensure'],
+        [fencesQuery, 'fences'],
+        [readQuery, 'read'],
+        [startQuery, 'start'],
+        [advanceQuery, 'advance'],
+        [finishQuery, 'finish'],
+        [proofQuery, 'proof'],
+        [holdQuery, 'hold'],
+        [heldQuery, 'held'],
+        [retainedQuery, 'retained'],
+        [releaseQuery, 'release'],
+        [retireSource, 'retireSource'],
+        [retireReceipt, 'retireReceipt'],
+        [retireActive, 'retireActive'],
+        [retireHolds, 'retireHolds'],
+        [retireChildren, 'retireChildren'],
+        [retireProof, 'retireProofRow'],
+        [retireCapture, 'retireCaptureRow'],
+        [identityRetention, 'identityRetention'],
+        [nextCapture, 'nextCapture'],
+        [terminalScope, 'terminalScope'],
+        [rawAssignment, 'rawAssignment'],
+        [rawChange, 'rawChange'],
+        [rawCopy, 'rawCopy'],
+        [rawEntry, 'rawEntry'],
+        [rawEntryDeleted, 'rawEntryDeleted'],
+        [rawExplicitOutput, 'rawExplicitOutput'],
+        [rawLabel, 'rawLabel'],
+        [rawMember, 'rawMember'],
+        [rawOutput, 'rawOutput'],
+        [rawSession, 'rawSession'],
+        [rawUnit, 'rawUnit'],
+      ]),
+  );
+}
 
 /** Rejects a recognized statement when it is not bound to this native operation. */
 export function nativeSourceCustodyOperationAllows(operation: CustodyOperation, query: Query): boolean {
-  const statement = controlSQL.includes(query.sql as ControlSQL) ? 'control' : operationBindings.get(query);
+  const statement = controlSQL.includes(query.sql as ControlSQL) ? 'control' : operationBindings().get(query);
   return (
     statement !== undefined &&
-    NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations[operation].declaration.bindings.includes(statement)
+    NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().operations[operation].declaration.bindings.includes(statement)
   );
 }
 
@@ -1151,7 +1228,7 @@ export function createNativeSourceCustodyOperationUse(operation: CustodyOperatio
         const sql = query.sql as ControlSQL;
         return consume(`control:${sql}`, definition.controls[sql] ?? 0);
       }
-      const id = operationBindings.get(query);
+      const id = operationBindings().get(query);
       if (!id || id === 'control') return false;
       const fixed = definition.fixed[id];
       if (fixed !== undefined) return consume(`statement:${id}`, fixed);
@@ -1176,28 +1253,33 @@ export function createNativeSourceCustodyOperationUse(operation: CustodyOperatio
 }
 
 export function nativeSourceCustodyOperationBound(operation: CustodyOperation): Bound {
-  return NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations[operation].ceiling;
+  return NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().operations[operation].ceiling;
 }
 
 /** The Source-selected effect step invokes one raw page or its terminal finish path. */
-export const NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND = NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.captureStepCeiling;
+export function NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND() {
+  return memoizedValue(
+    NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND,
+    () => NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().captureStepCeiling,
+  );
+}
 
 function convertedCost(query: Query, values: readonly unknown[]): CostDetail | undefined {
-  if (basisQuerySet.has(query)) {
+  if (basisQuerySet().has(query)) {
     const cost = basisCost(query, values);
-    const ceiling = basisMaximumByQuery.get(query)?.bound;
+    const ceiling = basisMaximumByQuery().get(query)?.bound;
     return cost && ceiling && withinCeiling(cost.bound, ceiling) ? cost : undefined;
   }
-  const specification = specByQuery.get(query);
+  const specification = specByQuery().get(query);
   if (!specification) return undefined;
   const cost = statementCost(specification, values);
-  const ceiling = statementMaximumByQuery.get(query);
+  const ceiling = statementMaximumByQuery().get(query);
   return cost && ceiling && withinCeiling(cost.bound, ceiling) ? cost : undefined;
 }
 
 /** Exact runtime query-object pricing. Unknown SQL has no compatibility estimate. */
 export function nativeSourceCustodyExecutionBound(query: Query, values: readonly unknown[]): Bound | undefined {
-  if (basisQuerySet.has(query) || specByQuery.has(query)) return convertedCost(query, values)?.bound;
+  if (basisQuerySet().has(query) || specByQuery().has(query)) return convertedCost(query, values)?.bound;
   const control = controlCost(query.sql, values);
   return control?.bound;
 }
@@ -1206,7 +1288,7 @@ export function nativeSourceCustodyExecutionBound(query: Query, values: readonly
 export function nativeSourceCustodyStatementBound(sql: string, values: readonly unknown[]): Bound | undefined {
   const control = controlCost(sql, values);
   if (control) return control.bound;
-  const query = queryBySql.get(sql);
+  const query = queryBySql().get(sql);
   return query ? convertedCost(query, values)?.bound : undefined;
 }
 

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { AccessWorkAccounting, type AccessWork, type AccessWorkSink } from '../access/work.ts';
@@ -122,41 +123,45 @@ const pointBound = (values: Partial<WorkDimensions>): WorkDimensions => ({
   ...values,
 });
 
-const bounds = Object.freeze({
-  resolve: pointBound({
-    candidateKeys: 16,
-    nativeRows: 512,
-    emptySeeks: 16,
-    nativePoints: 256,
-    statements: 256,
-    bytes: 512 * 1024,
-  }),
-  current: pointBound({
-    candidateKeys: 16,
-    nativeRows: 512,
-    emptySeeks: 16,
-    nativePoints: 256,
-    statements: 256,
-    bytes: 512 * 1024,
-  }),
-  subject: pointBound({
-    candidateKeys: 8,
-    nativeRows: 128,
-    emptySeeks: 8,
-    nativePoints: 64,
-    statements: 64,
-    bytes: 256 * 1024,
-  }),
-  candidate: pointBound({
-    candidateKeys: 128,
-    nativeRows: 4096,
-    emptySeeks: 128,
-    nativePoints: 1024,
-    witnessKeys: 1024,
-    statements: 1024,
-    bytes: 1024 * 1024,
-  }),
-});
+function bounds() {
+  return memoizedValue(bounds, () =>
+    Object.freeze({
+      resolve: pointBound({
+        candidateKeys: 16,
+        nativeRows: 512,
+        emptySeeks: 16,
+        nativePoints: 256,
+        statements: 256,
+        bytes: 512 * 1024,
+      }),
+      current: pointBound({
+        candidateKeys: 16,
+        nativeRows: 512,
+        emptySeeks: 16,
+        nativePoints: 256,
+        statements: 256,
+        bytes: 512 * 1024,
+      }),
+      subject: pointBound({
+        candidateKeys: 8,
+        nativeRows: 128,
+        emptySeeks: 8,
+        nativePoints: 64,
+        statements: 64,
+        bytes: 256 * 1024,
+      }),
+      candidate: pointBound({
+        candidateKeys: 128,
+        nativeRows: 4096,
+        emptySeeks: 128,
+        nativePoints: 1024,
+        witnessKeys: 1024,
+        statements: 1024,
+        bytes: 1024 * 1024,
+      }),
+    }),
+  );
+}
 
 /**
  * Compose the finite Content Realm census, current disclosure and live lifecycle for one actual reader.
@@ -174,10 +179,10 @@ export function createRealmSubjectSearchSource(input: {
   const lifecycle = createRealmSubjectLifecycle({ pool: input.pool });
 
   const disclosure: RealmSubjectDisclosure = {
-    bounds,
+    bounds: bounds(),
     async resolve(realm, context) {
       try {
-        const result = await withDisclosureWork(reader, context.work, bounds.resolve, (native) =>
+        const result = await withDisclosureWork(reader, context.work, bounds().resolve, (native) =>
           observeRealmSubjectParent(dependencies, realm, native),
         );
         if (!result) return { state: 'concealed' };
@@ -196,7 +201,7 @@ export function createRealmSubjectSearchSource(input: {
       const retained = parents.get(dependency);
       if (!retained || retained.realm !== realm) return 'changed';
       try {
-        const after = await withDisclosureWork(reader, context.work, bounds.current, (native) =>
+        const after = await withDisclosureWork(reader, context.work, bounds().current, (native) =>
           observeRealmSubjectParent(dependencies, realm, native),
         );
         if (!after) return 'concealed';
@@ -215,7 +220,7 @@ export function createRealmSubjectSearchSource(input: {
     async candidates(candidates, dependency, context) {
       const realm = parents.get(dependency);
       if (!realm || candidates.length < 1 || candidates.length > 8) return candidates.map(() => 'unknown');
-      const prepared = await withDisclosureWork(reader, context.work, bounds.candidate, async (native) => {
+      const prepared = await withDisclosureWork(reader, context.work, bounds().candidate, async (native) => {
         const exact = await prepareRealmSubjectDisclosure(
           dependencies,
           {
@@ -237,7 +242,7 @@ export function createRealmSubjectSearchSource(input: {
     async subject(subject, dependency, context) {
       if (!parents.has(dependency)) return { state: 'unknown' };
       try {
-        const value = await withDisclosureWork(reader, context.work, bounds.subject, (native) =>
+        const value = await withDisclosureWork(reader, context.work, bounds().subject, (native) =>
           observeRealmSubjectSubject(dependencies, subject, native),
         );
         return value ? { state: 'readable', terminal: subject } : { state: 'withheld' };

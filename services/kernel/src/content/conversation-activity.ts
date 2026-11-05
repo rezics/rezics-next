@@ -288,7 +288,7 @@ function targets(event: CloudEvent): Targets {
   if (!sourceTypes.includes(event.type as (typeof sourceTypes)[number]))
     throw new TypeError('Unsupported conversation activity event');
   const type = event.type as (typeof sourceTypes)[number];
-  if (!Value.Check(CONTENT_EVENTS[type], event.data)) throw new TypeError('Invalid conversation activity payload');
+  if (!Value.Check(CONTENT_EVENTS()[type], event.data)) throw new TypeError('Invalid conversation activity payload');
   const data = event.data as Record<string, unknown>;
   if (type === 'com.rezics.content.moderation.erasure.v1')
     return { postIds: data.postIds as string[], threadId: data.threadId as string, contributedAt: null };

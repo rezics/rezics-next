@@ -399,7 +399,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     throw unavailable('Terminal detachment lacks an immutable admitted remainder terminal');
   if (saved.intent.kind === 'unmerge') {
     const undo = await withReadTransaction(pool, (tx) =>
-      identityEpochStore.readJob(tx, saved.intent.kind === 'unmerge' ? saved.intent.undoJob : job),
+      identityEpochStore().readJob(tx, saved.intent.kind === 'unmerge' ? saved.intent.undoJob : job),
     );
     if (
       !undo ||
@@ -451,7 +451,7 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
           outputs.push({ terminal, home: input.control_partition, generation: randomUUID(), count: 0 });
       }
       const original = saved.intent.original;
-      const source = await identityEpochStore.readMapping(pool, original);
+      const source = await identityEpochStore().readMapping(pool, original);
       if (source.state !== 'pending' || source.job.jobId !== job.jobId || source.job.epoch !== job.epoch)
         throw unavailable();
       const destination = saved.intent.kind === 'unmerge' ? original : saved.intent.terminal;
@@ -770,7 +770,7 @@ async function effectGate(
   transactionId: string,
 ) {
   await gate(tx, job, destination, original, previous, saved.scope_digest, measured, transactionId);
-  await identityEpochStore.admitHomeEffect(tx, { kind: 'structural', original, destination, job });
+  await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', original, destination, job });
 }
 async function apply(
   tx: CommandTransaction,
@@ -1621,7 +1621,7 @@ async function admitGroupEffect(
     )
   ).rows[0];
   if (!group) throw stale();
-  await identityEpochStore.admitHomeEffect(tx, {
+  await identityEpochStore().admitHomeEffect(tx, {
     kind: 'structural',
     job,
     original: input.terminal,

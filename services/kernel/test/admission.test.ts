@@ -118,7 +118,7 @@ test('health checks use the reserved permits while resource work is saturated', 
 });
 
 test('a request carries a deadline two seconds from its arrival and its client signal', async () => {
-  expect(REQUEST_DEADLINE_MS).toBe(2000);
+  expect(REQUEST_DEADLINE_MS()).toBe(2000);
   const seen: { deadline: number; aborted: boolean }[] = [];
   const app = createApp({ pool }).get('/probe/deadline', ({ job }) => {
     seen.push({ deadline: job.deadline, aborted: job.signal?.aborted ?? true });

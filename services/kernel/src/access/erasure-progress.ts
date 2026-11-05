@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { prepareLiveCopyDiscovery } from './live-copy-erasure.ts';
 import type { Pool } from 'pg';
 import { defineQuery } from 'reylo';
@@ -7,17 +8,21 @@ import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import checkpointStatement from './erasure-page.sql';
 
 // Migration compatibility is verified at deployment; discovery never probes catalogs.
-const checkpoint = defineQuery<
-  (typeof checkpointStatement)['~reylo']['input'],
-  (typeof checkpointStatement)['~reylo']['element'],
-  typeof checkpointStatement.cardinality,
-  'postgres'
->({
-  dialect: checkpointStatement.dialect,
-  sql: checkpointStatement.raw,
-  params: checkpointStatement.params,
-  cardinality: checkpointStatement.cardinality,
-});
+function checkpoint() {
+  return memoizedValue(checkpoint, () =>
+    defineQuery<
+      (typeof checkpointStatement)['~reylo']['input'],
+      (typeof checkpointStatement)['~reylo']['element'],
+      typeof checkpointStatement.cardinality,
+      'postgres'
+    >({
+      dialect: checkpointStatement.dialect,
+      sql: checkpointStatement.raw,
+      params: checkpointStatement.params,
+      cardinality: checkpointStatement.cardinality,
+    }),
+  );
+}
 
 type Routing = 'owner' | 'zero' | 'partitions';
 /** Scalar roles only. Typed JSON/delegation and HMAC associations have separate producer slices.
@@ -302,7 +307,7 @@ export async function discoverErasurePage(
         accountId,
       ]);
       if (!obligation.rowCount) throw new LifecycleDeniedError();
-      const progress = await checkpoint.run(tx, {
+      const progress = await checkpoint().run(tx, {
         route,
         account_id: accountId,
         store,

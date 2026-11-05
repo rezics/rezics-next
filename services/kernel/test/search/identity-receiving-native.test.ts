@@ -65,7 +65,7 @@ async function originals(route: number) {
 async function admitted(original: string, terminal: string) {
   const actor = await f.actor();
   const key = randomUUID();
-  const job = await store.prepareAdmission(
+  const job = await store().prepareAdmission(
     f.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -82,11 +82,11 @@ async function admitted(original: string, terminal: string) {
   for (let attempt = 0; attempt < 128; attempt++) {
     if ((await stepIdentityEpochAdmission(f.pool, job)).state === 'pending') break;
   }
-  expect((await store.readJob(f.pool, job))?.state).toBe('pending');
+  expect((await store().readJob(f.pool, job))?.state).toBe('pending');
   for (let attempt = 0; attempt < 128; attempt++) {
     if ((await stepIdentityEpochMapping(f.pool, job)).state === 'complete') break;
   }
-  expect((await store.readJob(f.pool, job))?.mapping?.state).toBe('complete');
+  expect((await store().readJob(f.pool, job))?.mapping?.state).toBe('complete');
   return job;
 }
 
@@ -156,7 +156,7 @@ test('the fixed Search participant uses genuine native original receiving custod
   const replay = await complete(job);
   expect(replay.receipt).toEqual(progress.receipt);
   expect(await records(job)).toEqual(saved);
-  const state = await store.readJob(f.pool, job);
+  const state = await store().readJob(f.pool, job);
   expect(state?.state).toBe('pending');
   expect(state?.participants['library-private-follow-counts']).toBeNull();
   // Search completion never manufactures the independent Library ACK or whole-job publication.
@@ -249,7 +249,7 @@ test('missing common applied registration rolls back the actual native final set
   // Interrupt the real common record after owner application, rather than supplying a success callback.
   await interruptNativeStatement(f, /INSERT INTO semantic\.identity_epoch_receiving_effect/i, () => complete(job));
   expect((await records(job)).every((row) => row.applied_transaction_id === null)).toBe(true);
-  expect((await store.readJob(f.pool, job))?.participants['search-canonical-index']).toBeNull();
+  expect((await store().readJob(f.pool, job))?.participants['search-canonical-index']).toBeNull();
   await complete(job);
   expect((await records(job)).every((row) => row.same_applied_transaction === true)).toBe(true);
 });
@@ -284,7 +284,7 @@ test('lost original dispatch remains draining after actual refresh and cannot pr
     } catch (error) {
       expect(error).toMatchObject({ code: 'identity_epoch_unavailable' });
     }
-    expect((await store.readJob(f.pool, job))?.participants['search-canonical-index']).toBeNull();
+    expect((await store().readJob(f.pool, job))?.participants['search-canonical-index']).toBeNull();
   }
   const after = await f.admin.query(
     `SELECT writer_token,dispatch_state FROM search.identity_writer
@@ -292,7 +292,7 @@ test('lost original dispatch remains draining after actual refresh and cannot pr
     [subjectPartition(original), index, original],
   );
   expect(after.rows).toEqual(before.rows);
-  expect((await store.readJob(f.pool, job))?.state).toBe('pending');
+  expect((await store().readJob(f.pool, job))?.state).toBe('pending');
 });
 
 test('fixed Search progresses past released scopes through OLD and NEW without losing native applied replay', async () => {

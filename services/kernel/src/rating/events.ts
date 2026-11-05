@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { Type, type Static } from 'typebox';
 import {
   MAX_RATING_CHANGE_PAGE,
@@ -6,7 +7,11 @@ import {
 } from './question-scale.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
-const units = Type.Union([Type.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }), Type.Null()]);
+function units() {
+  return memoizedValue(units, () =>
+    Type.Union([Type.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }), Type.Null()]),
+  );
+}
 
 export const POPULATION_TOTAL_DELIVERY = 'com.rezics.rating.population-total.delivery.v1';
 export const CLASSIFICATION_BALLOT_CHANGED = 'com.rezics.rating.classification-ballot.changed.v1';
@@ -37,29 +42,33 @@ const classificationCleanup = Type.Object(
   { actorId: Type.String({ pattern: UUID }), generation: classificationRevision },
   { additionalProperties: false },
 );
-const populationTotalDelivery = Type.Union([
-  Type.Object(
-    {
-      ...deliveryAddress,
-      action: Type.Literal('deliver'),
-      deltas: Type.Array(
-        Type.Object(
-          {
-            questionId: Type.String({ pattern: UUID }),
-            shard: Type.Integer({ minimum: 0, maximum: 15 }),
-            count: signed,
-            sum: signed,
-          },
-          { additionalProperties: false },
-        ),
-        { minItems: 1, maxItems: MAX_RATING_POPULATION_DELIVERY_DELTAS },
+function populationTotalDelivery() {
+  return memoizedValue(populationTotalDelivery, () =>
+    Type.Union([
+      Type.Object(
+        {
+          ...deliveryAddress,
+          action: Type.Literal('deliver'),
+          deltas: Type.Array(
+            Type.Object(
+              {
+                questionId: Type.String({ pattern: UUID }),
+                shard: Type.Integer({ minimum: 0, maximum: 15 }),
+                count: signed,
+                sum: signed,
+              },
+              { additionalProperties: false },
+            ),
+            { minItems: 1, maxItems: MAX_RATING_POPULATION_DELIVERY_DELTAS },
+          ),
+        },
+        { additionalProperties: false },
       ),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object({ ...deliveryAddress, action: Type.Literal('received') }, { additionalProperties: false }),
-]);
-export type PopulationTotalEvent = Static<typeof populationTotalDelivery>;
+      Type.Object({ ...deliveryAddress, action: Type.Literal('received') }, { additionalProperties: false }),
+    ]),
+  );
+}
+export type PopulationTotalEvent = Static<ReturnType<typeof populationTotalDelivery>>;
 export type PopulationTotalDelivery = Extract<PopulationTotalEvent, { action: 'deliver' }>;
 
 export const RATING_IDENTITY_WORK = 'com.rezics.rating.identity-work.changed.v1';
@@ -79,227 +88,233 @@ const identityPage = Type.Object(
 );
 export type RatingIdentityPageEvent = Static<typeof identityPage>;
 
-export const RATING_EVENTS = {
-  'com.rezics.rating.source_classification.changed.v1': Type.Object(
-    {
-      subjectId: Type.String({ pattern: UUID }),
-      associationKey: Type.String({ pattern: '^[0-9a-f]{64}$' }),
-      observationDigest: Type.String({ pattern: '^[0-9a-f]{64}$' }),
-      state: Type.Union([Type.Literal('published'), Type.Literal('cleared')]),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.question.label-changed.v1': Type.Object(
-    {
-      questionId: Type.String({ pattern: UUID }),
-      realmId: Type.String({ pattern: UUID }),
-      labelRevision: Type.Integer({ minimum: 2, maximum: 2_147_483_647 }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.question.created.v1': Type.Object(
-    {
-      questionId: Type.String({ pattern: UUID }),
-      realmId: Type.String({ pattern: UUID }),
-      ownerId: Type.String({ pattern: UUID }),
-      revision: Type.Literal(1),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.question.lifecycle-changed.v1': Type.Object(
-    {
-      questionId: Type.String({ pattern: UUID }),
-      realmId: Type.String({ pattern: UUID }),
-      state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
-      revision: Type.Integer({ minimum: 2, maximum: 2_147_483_647 }),
-      generation: serial,
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.realm_rank.changed.v1': Type.Object(
-    {
-      questionId: Type.String({ pattern: UUID }),
-      populationId: Type.String({ pattern: UUID }),
-      subjectId: Type.String({ pattern: UUID }),
-      revision: serial,
-      lifecycleState: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
-      lifecycleRevision: Type.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-    },
-    { additionalProperties: false },
-  ),
-  [RATING_IDENTITY_PAGE]: identityPage,
-  [RATING_IDENTITY_WORK]: Type.Object(
-    {
-      voterId: Type.String({ pattern: UUID }),
-      workId: Type.String({ pattern: UUID }),
-      generation: serial,
-      action: Type.Union([
-        Type.Literal('admit'),
-        Type.Literal('select'),
-        Type.Literal('cancel'),
-        Type.Literal('invalidate'),
-      ]),
-    },
-    { additionalProperties: false },
-  ),
-  [POPULATION_TOTAL_DELIVERY]: populationTotalDelivery,
-  [CLASSIFICATION_BALLOT_CHANGED]: classificationChanged,
-  [CLASSIFICATION_BALLOT_CLEANUP]: classificationCleanup,
-  [CLASSIFICATION_AGGREGATE_CHANGED]: Type.Object(
-    {
-      subjectId: Type.String({ pattern: UUID }),
-      associationId: Type.String({ pattern: UUID }),
-      generation: classificationRevision,
-      asOf: Type.String({ format: 'date-time' }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.erasure-page.applied.v1': Type.Object(
-    { voterId: Type.String({ pattern: UUID }), pageId: Type.String({ pattern: UUID }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.voter-realm.changed.v1': Type.Object(
-    { voterId: Type.String({ pattern: UUID }), realmId: Type.String({ pattern: UUID }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.vote.changed.v1': Type.Object(
-    {
-      voterId: Type.String({ pattern: UUID }),
-      questionId: Type.String({ pattern: UUID }),
-      targetId: Type.String({ pattern: UUID }),
-      aggregateTargetId: Type.Optional(Type.String({ pattern: UUID })),
-      previous: units,
-      units,
-      revision: Type.Integer({ minimum: 1 }),
-      populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.aggregate.applied.v1': Type.Object(
-    { applied: Type.Integer({ minimum: 1 }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.prior_epoch.work.v1': Type.Object(
-    {
-      action: Type.Union([Type.Literal('check'), Type.Literal('mark'), Type.Literal('advance')]),
-      questionId: Type.String({ pattern: UUID }),
-      populationId: Type.String({ pattern: UUID }),
-      generation: Type.String({ pattern: '^(0|[1-9][0-9]*)$' }),
-      subjects: Type.Integer({ minimum: 0, maximum: 500 }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.public_figure.changed.v1': Type.Object(
-    {
-      questionId: Type.String({ pattern: UUID }),
-      populationId: Type.String({ pattern: UUID }),
-      subjectId: Type.String({ pattern: UUID }),
-      count: Type.Integer({ minimum: 0 }),
-      mean: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
-      score: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
-      m: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
-      C: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
-      priorEpoch: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
-      revision: Type.String({ pattern: '^[1-9][0-9]*$' }),
-      asOf: Type.Union([Type.String(), Type.Null()]),
-      position: Type.String({ pattern: '^[1-9][0-9]*$' }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.segment.page.v1': Type.Union([
-    Type.Object(
-      {
-        voterId: Type.String({ pattern: UUID }),
-        direction: Type.Literal('rekey'),
-        at: Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?[+-]\\d{2}$' }),
-        allowMissing: Type.Boolean(),
-        votes: Type.Array(
+export function RATING_EVENTS() {
+  return memoizedValue(
+    RATING_EVENTS,
+    () =>
+      ({
+        'com.rezics.rating.source_classification.changed.v1': Type.Object(
+          {
+            subjectId: Type.String({ pattern: UUID }),
+            associationKey: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+            observationDigest: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+            state: Type.Union([Type.Literal('published'), Type.Literal('cleared')]),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.question.label-changed.v1': Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            realmId: Type.String({ pattern: UUID }),
+            labelRevision: Type.Integer({ minimum: 2, maximum: 2_147_483_647 }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.question.created.v1': Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            realmId: Type.String({ pattern: UUID }),
+            ownerId: Type.String({ pattern: UUID }),
+            revision: Type.Literal(1),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.question.lifecycle-changed.v1': Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            realmId: Type.String({ pattern: UUID }),
+            state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
+            revision: Type.Integer({ minimum: 2, maximum: 2_147_483_647 }),
+            generation: serial,
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.realm_rank.changed.v1': Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            populationId: Type.String({ pattern: UUID }),
+            subjectId: Type.String({ pattern: UUID }),
+            revision: serial,
+            lifecycleState: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
+            lifecycleRevision: Type.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+          },
+          { additionalProperties: false },
+        ),
+        [RATING_IDENTITY_PAGE]: identityPage,
+        [RATING_IDENTITY_WORK]: Type.Object(
+          {
+            voterId: Type.String({ pattern: UUID }),
+            workId: Type.String({ pattern: UUID }),
+            generation: serial,
+            action: Type.Union([
+              Type.Literal('admit'),
+              Type.Literal('select'),
+              Type.Literal('cancel'),
+              Type.Literal('invalidate'),
+            ]),
+          },
+          { additionalProperties: false },
+        ),
+        [POPULATION_TOTAL_DELIVERY]: populationTotalDelivery(),
+        [CLASSIFICATION_BALLOT_CHANGED]: classificationChanged,
+        [CLASSIFICATION_BALLOT_CLEANUP]: classificationCleanup,
+        [CLASSIFICATION_AGGREGATE_CHANGED]: Type.Object(
+          {
+            subjectId: Type.String({ pattern: UUID }),
+            associationId: Type.String({ pattern: UUID }),
+            generation: classificationRevision,
+            asOf: Type.String({ format: 'date-time' }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.erasure-page.applied.v1': Type.Object(
+          { voterId: Type.String({ pattern: UUID }), pageId: Type.String({ pattern: UUID }) },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.voter-realm.changed.v1': Type.Object(
+          { voterId: Type.String({ pattern: UUID }), realmId: Type.String({ pattern: UUID }) },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.vote.changed.v1': Type.Object(
+          {
+            voterId: Type.String({ pattern: UUID }),
+            questionId: Type.String({ pattern: UUID }),
+            targetId: Type.String({ pattern: UUID }),
+            aggregateTargetId: Type.Optional(Type.String({ pattern: UUID })),
+            previous: units(),
+            units: units(),
+            revision: Type.Integer({ minimum: 1 }),
+            populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.aggregate.applied.v1': Type.Object(
+          { applied: Type.Integer({ minimum: 1 }) },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.prior_epoch.work.v1': Type.Object(
+          {
+            action: Type.Union([Type.Literal('check'), Type.Literal('mark'), Type.Literal('advance')]),
+            questionId: Type.String({ pattern: UUID }),
+            populationId: Type.String({ pattern: UUID }),
+            generation: Type.String({ pattern: '^(0|[1-9][0-9]*)$' }),
+            subjects: Type.Integer({ minimum: 0, maximum: 500 }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.public_figure.changed.v1': Type.Object(
+          {
+            questionId: Type.String({ pattern: UUID }),
+            populationId: Type.String({ pattern: UUID }),
+            subjectId: Type.String({ pattern: UUID }),
+            count: Type.Integer({ minimum: 0 }),
+            mean: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
+            score: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
+            m: Type.Union([Type.Number({ minimum: 0, maximum: 10 }), Type.Null()]),
+            C: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+            priorEpoch: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+            revision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+            asOf: Type.Union([Type.String(), Type.Null()]),
+            position: Type.String({ pattern: '^[1-9][0-9]*$' }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.segment.page.v1': Type.Union([
           Type.Object(
             {
-              questionId: Type.String({ pattern: UUID }),
-              targetId: Type.String({ pattern: UUID }),
-              countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
-              units,
-              revision: Type.Integer({ minimum: 1 }),
-              populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
-              changedAt: Type.String(),
+              voterId: Type.String({ pattern: UUID }),
+              direction: Type.Literal('rekey'),
+              at: Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?[+-]\\d{2}$' }),
+              allowMissing: Type.Boolean(),
+              votes: Type.Array(
+                Type.Object(
+                  {
+                    questionId: Type.String({ pattern: UUID }),
+                    targetId: Type.String({ pattern: UUID }),
+                    countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
+                    units: units(),
+                    revision: Type.Integer({ minimum: 1 }),
+                    populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
+                    changedAt: Type.String(),
+                  },
+                  { additionalProperties: false },
+                ),
+                { maxItems: MAX_RATING_CHANGE_PAGE },
+              ),
             },
             { additionalProperties: false },
           ),
-          { maxItems: MAX_RATING_CHANGE_PAGE },
-        ),
-      },
-      { additionalProperties: false },
-    ),
-    Type.Object(
-      {
-        voterId: Type.String({ pattern: UUID }),
-        direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
-        erasurePageId: Type.Optional(Type.String({ pattern: UUID })),
-        votes: Type.Array(
           Type.Object(
             {
-              questionId: Type.String({ pattern: UUID }),
-              targetId: Type.String({ pattern: UUID }),
-              countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
-              changedAt: Type.Optional(Type.String()),
-              units,
-              revision: Type.Integer({ minimum: 1 }),
-              populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
+              voterId: Type.String({ pattern: UUID }),
+              direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
+              erasurePageId: Type.Optional(Type.String({ pattern: UUID })),
+              votes: Type.Array(
+                Type.Object(
+                  {
+                    questionId: Type.String({ pattern: UUID }),
+                    targetId: Type.String({ pattern: UUID }),
+                    countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
+                    changedAt: Type.Optional(Type.String()),
+                    units: units(),
+                    revision: Type.Integer({ minimum: 1 }),
+                    populations: Type.Array(Type.String({ pattern: UUID }), { maxItems: 101, uniqueItems: true }),
+                  },
+                  { additionalProperties: false },
+                ),
+                { maxItems: MAX_RATING_CHANGE_PAGE },
+              ),
             },
             { additionalProperties: false },
           ),
-          { maxItems: MAX_RATING_CHANGE_PAGE },
-        ),
-      },
-      { additionalProperties: false },
-    ),
-    Type.Object(
-      {
-        voterId: Type.String({ pattern: UUID }),
-        realmId: Type.String({ pattern: UUID }),
-        direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
-        votes: Type.Array(
           Type.Object(
             {
-              questionId: Type.String({ pattern: UUID }),
-              targetId: Type.String({ pattern: UUID }),
-              countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
-              changedAt: Type.Optional(Type.String()),
-              units,
-              revision: Type.Integer({ minimum: 1 }),
+              voterId: Type.String({ pattern: UUID }),
+              realmId: Type.String({ pattern: UUID }),
+              direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
+              votes: Type.Array(
+                Type.Object(
+                  {
+                    questionId: Type.String({ pattern: UUID }),
+                    targetId: Type.String({ pattern: UUID }),
+                    countedTargetId: Type.Optional(Type.Union([Type.String({ pattern: UUID }), Type.Null()])),
+                    changedAt: Type.Optional(Type.String()),
+                    units: units(),
+                    revision: Type.Integer({ minimum: 1 }),
+                  },
+                  { additionalProperties: false },
+                ),
+                { maxItems: MAX_RATING_CHANGE_PAGE },
+              ),
             },
             { additionalProperties: false },
           ),
-          { maxItems: MAX_RATING_CHANGE_PAGE },
+        ]),
+        'com.rezics.rating.eligibility.changed.v1': Type.Object(
+          { voterId: Type.String({ pattern: UUID }) },
+          { additionalProperties: false },
         ),
-      },
-      { additionalProperties: false },
-    ),
-  ]),
-  'com.rezics.rating.eligibility.changed.v1': Type.Object(
-    { voterId: Type.String({ pattern: UUID }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.population.pending.v1': Type.Object(
-    { populationId: Type.String({ pattern: UUID }), pendingJobs: Type.Integer({ minimum: 0 }) },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.source_statistic.changed.v1': Type.Object(
-    {
-      subjectId: Type.String({ pattern: UUID }),
-      source: Type.Union([Type.Literal('vndb'), Type.Literal('bangumi')]),
-      observationDigest: Type.Optional(Type.String({ pattern: '^[0-9a-f]{64}$' })),
-      sourceRecordId: Type.String({ minLength: 1, maxLength: 1024 }),
-    },
-    { additionalProperties: false },
-  ),
-  'com.rezics.rating.subject-merge.page.v1': Type.Object(
-    {
-      id: Type.String({ pattern: UUID }),
-      survivor: Type.String({ pattern: UUID }),
-      voters: Type.Integer({ minimum: 0, maximum: 100 }),
-    },
-    { additionalProperties: false },
-  ),
-} as const;
+        'com.rezics.rating.population.pending.v1': Type.Object(
+          { populationId: Type.String({ pattern: UUID }), pendingJobs: Type.Integer({ minimum: 0 }) },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.source_statistic.changed.v1': Type.Object(
+          {
+            subjectId: Type.String({ pattern: UUID }),
+            source: Type.Union([Type.Literal('vndb'), Type.Literal('bangumi')]),
+            observationDigest: Type.Optional(Type.String({ pattern: '^[0-9a-f]{64}$' })),
+            sourceRecordId: Type.String({ minLength: 1, maxLength: 1024 }),
+          },
+          { additionalProperties: false },
+        ),
+        'com.rezics.rating.subject-merge.page.v1': Type.Object(
+          {
+            id: Type.String({ pattern: UUID }),
+            survivor: Type.String({ pattern: UUID }),
+            voters: Type.Integer({ minimum: 0, maximum: 100 }),
+          },
+          { additionalProperties: false },
+        ),
+      }) as const,
+  );
+}

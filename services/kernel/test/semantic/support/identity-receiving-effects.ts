@@ -18,7 +18,7 @@ export async function admittedReceivingJob(f: EpochFixture, options: { pending?:
   const library = await libraryCutoverInput(f, [original, terminal]);
   const actor = await f.actor();
   const key = randomUUID();
-  const job = await store.prepareAdmission(
+  const job = await store().prepareAdmission(
     f.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -37,7 +37,7 @@ export async function admittedReceivingJob(f: EpochFixture, options: { pending?:
     if (progress.state === 'pending') break;
     expect(progress.state).toBe('preparing');
   }
-  expect((await store.readJob(f.pool, job))?.state).toBe(options.pending === false ? 'preparing' : 'pending');
+  expect((await store().readJob(f.pool, job))?.state).toBe(options.pending === false ? 'preparing' : 'pending');
   const members = async () =>
     (
       await f.admin.query(

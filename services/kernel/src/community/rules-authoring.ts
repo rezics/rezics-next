@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
@@ -27,56 +28,63 @@ export const RulesAuthoringQuerySchema = t.Object(
   closed,
 );
 
-export const RulesAuthoringPageSchema = t.Object(
-  {
-    realm: t.Object({ realmId: id, head: id }, closed),
-    current: t.Union([
-      t.Object({ state: t.Literal('none'), reference: t.Null() }, closed),
-      t.Object(
-        {
-          state: t.Literal('available'),
-          reference,
-          title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
-          authorId: id,
-          threadId: id,
-          boardId: id,
-          boardTitle: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
-          mediaIds: t.Array(id, { maxItems: 32 }),
-          body: DocumentSnapshotSchema,
-          language: t.Union([t.String({ maxLength: 128 }), t.Null()]),
-          licence: t.String({ maxLength: 256 }),
-          sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
-          currentRevision: t.Boolean(),
-        },
-        closed,
-      ),
-      t.Object({ state: t.Literal('erased'), reference }, closed),
-      t.Object({ state: t.Literal('concealed'), reference }, closed),
-      t.Object({ state: t.Literal('unavailable'), reference: t.Union([reference, t.Null()]) }, closed),
-    ]),
-    destinations: t.Union([
-      t.Object(
-        {
-          state: t.Literal('available'),
-          items: t.Array(
-            t.Object(
-              { boardId: id, title: t.Union([t.String({ maxLength: 1024 }), t.Null()]), create: actionState },
-              closed,
-            ),
-            { maxItems: 20 },
+export function RulesAuthoringPageSchema() {
+  return memoizedValue(RulesAuthoringPageSchema, () =>
+    t.Object(
+      {
+        realm: t.Object({ realmId: id, head: id }, closed),
+        current: t.Union([
+          t.Object({ state: t.Literal('none'), reference: t.Null() }, closed),
+          t.Object(
+            {
+              state: t.Literal('available'),
+              reference,
+              title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+              authorId: id,
+              threadId: id,
+              boardId: id,
+              boardTitle: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+              mediaIds: t.Array(id, { maxItems: 32 }),
+              body: DocumentSnapshotSchema,
+              language: t.Union([t.String({ maxLength: 128 }), t.Null()]),
+              licence: t.String({ maxLength: 256 }),
+              sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+              currentRevision: t.Boolean(),
+            },
+            closed,
           ),
-          next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
-        },
-        closed,
-      ),
-      t.Object({ state: t.Literal('denied'), items: t.Array(t.Never(), { maxItems: 0 }), next: t.Null() }, closed),
-      t.Object({ state: t.Literal('unavailable'), items: t.Array(t.Never(), { maxItems: 0 }), next: t.Null() }, closed),
-    ]),
-    actions: t.Object({ attach: actionState, create: actionState, edit: actionState }, closed),
-  },
-  closed,
-);
-export type RulesAuthoringPage = Static<typeof RulesAuthoringPageSchema>;
+          t.Object({ state: t.Literal('erased'), reference }, closed),
+          t.Object({ state: t.Literal('concealed'), reference }, closed),
+          t.Object({ state: t.Literal('unavailable'), reference: t.Union([reference, t.Null()]) }, closed),
+        ]),
+        destinations: t.Union([
+          t.Object(
+            {
+              state: t.Literal('available'),
+              items: t.Array(
+                t.Object(
+                  { boardId: id, title: t.Union([t.String({ maxLength: 1024 }), t.Null()]), create: actionState },
+                  closed,
+                ),
+                { maxItems: 20 },
+              ),
+              next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+            },
+            closed,
+          ),
+          t.Object({ state: t.Literal('denied'), items: t.Array(t.Never(), { maxItems: 0 }), next: t.Null() }, closed),
+          t.Object(
+            { state: t.Literal('unavailable'), items: t.Array(t.Never(), { maxItems: 0 }), next: t.Null() },
+            closed,
+          ),
+        ]),
+        actions: t.Object({ attach: actionState, create: actionState, edit: actionState }, closed),
+      },
+      closed,
+    ),
+  );
+}
+export type RulesAuthoringPage = Static<ReturnType<typeof RulesAuthoringPageSchema>>;
 export type RulesAuthoringDependencies = Pick<RealmDependencies, 'pool' | 'access' | 'clock'> & {
   tokens: import('../tokens/seal.ts').KeyRing;
 };

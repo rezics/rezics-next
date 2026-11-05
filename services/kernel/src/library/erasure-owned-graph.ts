@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { normalizeCommandKey, noEffect, runCommand, type CommandResult } from '../command/command.ts';
@@ -79,7 +80,7 @@ export const OWNED_PHASES = [
   'copy_loan',
   'copy_loan_generation',
 ] as const;
-const childQueries: {
+function childQueries(): {
   units: typeof units;
   changes: typeof changes;
   members: typeof members;
@@ -89,20 +90,22 @@ const childQueries: {
   sessionDelete: typeof sessionDelete;
   collectionDelete: typeof collectionDelete;
   collectionRetain: typeof collectionRetain;
-} = {
-  units,
-  changes,
-  members,
-  canonicalFacts,
-  canonicalState,
-  collectionHistory,
-  sessionDelete,
-  collectionDelete,
-  collectionRetain,
-};
+} {
+  return memoizedValue(childQueries, () => ({
+    units,
+    changes,
+    members,
+    canonicalFacts,
+    canonicalState,
+    collectionHistory,
+    sessionDelete,
+    collectionDelete,
+    collectionRetain,
+  }));
+}
 type Kind =
-  | keyof typeof ownedQueries
-  | keyof typeof childQueries
+  | keyof ReturnType<typeof ownedQueries>
+  | keyof ReturnType<typeof childQueries>
   | 'native_source_capture'
   | 'sessions'
   | 'collections'
@@ -441,7 +444,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         removed =
           (await tx.query(`DELETE FROM library.vndb_import WHERE route=$1 AND account_id=$2`, [route, accountId]))
             .rowCount ?? 0;
-      } else if (kind in childQueries) {
+      } else if (kind in childQueries()) {
         if (parent === null) throw new TypeError('Graph child requires an exact parent');
         // Fixed dispatch, never runtime SQL construction or a table-name query API.
         const query = { ...args, parent_id: parent };
@@ -477,9 +480,9 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
             throw new TypeError('Invalid graph child');
         }
       } else {
-        if (!(kind in ownedQueries)) throw new TypeError('Invalid graph namespace');
+        if (!(kind in ownedQueries())) throw new TypeError('Invalid graph namespace');
         // All fixed owner statements have exactly the same typed integer/uuid input.
-        const ownerResult = await ownedQueries[kind as keyof typeof ownedQueries].run(tx, args);
+        const ownerResult = await ownedQueries()[kind as keyof ReturnType<typeof ownedQueries>].run(tx, args);
         removed = Array.isArray(ownerResult) ? ownerResult.length : ownerResult == null ? 0 : 1;
         if (kind === 'bulk_target' && removed < 100) {
           // Keep the installed Accounts phase and its 100-row budget, disposing empty roots too.

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { sourceClassificationRoutes } from './source-classification-routes.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
@@ -89,11 +90,17 @@ const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 import { parseVoteObservation } from './vote-observation.ts';
 
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const voteHeaders = t.Object({
-  ...headers.properties,
-  'x-rating-observation': t.Optional(t.String({ maxLength: 2048 })),
-});
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function voteHeaders() {
+  return memoizedValue(voteHeaders, () =>
+    t.Object({
+      ...headers().properties,
+      'x-rating-observation': t.Optional(t.String({ maxLength: 2048 })),
+    }),
+  );
+}
 function voteObservation(value: string | undefined) {
   try {
     const observation = parseVoteObservation(value);
@@ -103,27 +110,35 @@ function voteObservation(value: string | undefined) {
   }
 }
 const bearer = [{ bearerAuth: [] }];
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
-const aggregateFailures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
-const ownClassificationPageFailures = {
-  ...aggregateFailures,
-  409: problemSchema('stale_cursor'),
-};
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
+function aggregateFailures() {
+  return memoizedValue(aggregateFailures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
+function ownClassificationPageFailures() {
+  return memoizedValue(ownClassificationPageFailures, () => ({
+    ...aggregateFailures(),
+    409: problemSchema('stale_cursor'),
+  }));
+}
 
 function detail(operationId: string, write = false) {
   return {
@@ -131,7 +146,7 @@ function detail(operationId: string, write = false) {
     'x-action': VOTE_SCOPE,
     'x-exposure': 'gate:personal_library',
     security: bearer,
-    ...(write ? { 'x-rate-limit': writeRate } : {}),
+    ...(write ? { 'x-rate-limit': writeRate() } : {}),
   };
 }
 
@@ -165,7 +180,7 @@ function classificationDetail(
     'x-exposure': options.personal ? 'gate:personal_library' : 'public',
     'x-resource-types': ['semantic.subject'],
     security: options.publicRead ? [{ bearerAuth: [] }, {}] : bearer,
-    ...(options.write ? { 'x-rate-limit': writeRate } : {}),
+    ...(options.write ? { 'x-rate-limit': writeRate() } : {}),
   };
 }
 
@@ -239,7 +254,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/me/rating-votes',
       {
         query: OwnVotesPageQuerySchema,
-        response: { 200: OwnVotesPageSchema, ...aggregateFailures },
+        response: { 200: OwnVotesPageSchema(), ...aggregateFailures() },
         detail: detail('rating.own_votes_page'),
       },
       async ({ actor, query, admission, job, set }) => {
@@ -254,7 +269,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/me/classification-assessments',
       {
         query: ClassificationBallotOwnPageQuerySchema,
-        response: { 200: ClassificationBallotOwnPageSchema, ...ownClassificationPageFailures },
+        response: { 200: ClassificationBallotOwnPageSchema(), ...ownClassificationPageFailures() },
         detail: classificationDetail('classification_ballot.own_page', CLASSIFICATION_BALLOT_READ_OWN, {
           personal: true,
         }),
@@ -288,7 +303,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             etag: t.String(),
             'cache-control': t.Literal('no-cache'),
           }),
-          ...aggregateFailures,
+          ...aggregateFailures(),
         },
         detail: publicReadDetail('rating.figure_get', 'subject:read'),
       },
@@ -315,7 +330,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           },
           closed,
         ),
-        response: { 200: RatingAggregateResponseSchema, ...aggregateFailures },
+        response: { 200: RatingAggregateResponseSchema, ...aggregateFailures() },
         detail: {
           ...publicReadDetail('rating.aggregate_get', 'subject:read'),
           'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'],
@@ -356,7 +371,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ id }, closed),
         query: t.Object({ question: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed),
-        response: { 200: RatingPopulationPageResponseSchema, ...aggregateFailures },
+        response: { 200: RatingPopulationPageResponseSchema, ...aggregateFailures() },
         detail: {
           ...publicReadDetail('rating.populations_get', 'subject:read'),
           'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'],
@@ -418,11 +433,11 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/ratings/:questionId/vote',
       {
         params: t.Object({ id, questionId: id }, closed),
-        headers: voteHeaders,
-        body: RatingVoteInputSchema,
+        headers: voteHeaders(),
+        body: RatingVoteInputSchema(),
         response: {
           200: withHeaders(RatingVoteResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          ...failures(),
         },
         detail: detail('rating.vote_put', true),
       },
@@ -452,10 +467,10 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/ratings/:questionId/vote',
       {
         params: t.Object({ id, questionId: id }, closed),
-        headers: voteHeaders,
+        headers: voteHeaders(),
         response: {
           204: withHeaders(t.Void(), { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          ...failures(),
         },
         detail: detail('rating.vote_delete', true),
       },
@@ -484,7 +499,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/ratings/:questionId/vote',
       {
         params: t.Object({ id, questionId: id }, closed),
-        response: { 200: RatingVoteResponseSchema, ...failures },
+        response: { 200: RatingVoteResponseSchema, ...failures() },
         detail: detail('rating.vote_get'),
       },
       async ({ actor, params, admission, job }) => {
@@ -501,9 +516,9 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ id, associationId: id }, closed),
         query: ClassificationBallotMutationQuerySchema,
-        headers,
-        body: ClassificationBallotInputSchema,
-        response: { 200: ClassificationBallotSetResponseSchema, ...failures },
+        headers: headers(),
+        body: ClassificationBallotInputSchema(),
+        response: { 200: ClassificationBallotSetResponseSchema, ...failures() },
         detail: classificationDetail('classification_ballot.set', CLASSIFICATION_BALLOT_SET, { write: true }),
       },
       async ({ actor, params, body, query, headers, admission, job }) => {
@@ -532,8 +547,8 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ id, associationId: id }, closed),
         query: ClassificationBallotMutationQuerySchema,
-        headers,
-        response: { 204: t.Void(), ...failures },
+        headers: headers(),
+        response: { 204: t.Void(), ...failures() },
         detail: classificationDetail('classification_ballot.clear', CLASSIFICATION_BALLOT_SET, { write: true }),
       },
       async ({ actor, params, query, headers, admission, job, set }) => {
@@ -551,7 +566,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/classification-associations/:associationId/assessment',
       {
         params: t.Object({ id, associationId: id }, closed),
-        response: { 200: ClassificationBallotOwnResponseSchema, ...failures },
+        response: { 200: ClassificationBallotOwnResponseSchema, ...failures() },
         detail: classificationDetail('classification_ballot.read_own', CLASSIFICATION_BALLOT_READ_OWN),
       },
       async ({ actor, params, admission, job }) => {
@@ -565,7 +580,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/classification-associations/:associationId/aggregate',
       {
         params: t.Object({ id, associationId: id }, closed),
-        response: { 200: ClassificationBallotAggregateResponseSchema, ...aggregateFailures },
+        response: { 200: ClassificationBallotAggregateResponseSchema, ...aggregateFailures() },
         detail: classificationDetail('classification_ballot.read_aggregate', CLASSIFICATION_BALLOT_READ_AGGREGATE, {
           publicRead: true,
         }),
@@ -588,7 +603,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             if (!['selectedQuestionId', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
-        response: { 200: QuestionManagementResponseSchema, ...aggregateFailures, 409: problemSchema('conflict') },
+        response: { 200: QuestionManagementResponseSchema(), ...aggregateFailures(), 409: problemSchema('conflict') },
         detail: {
           ...publicReadDetail('rating.question_management', 'realm:read'),
           'x-resource-types': ['community.realm'],
@@ -610,18 +625,18 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/realms/:realmId/rating-questions',
       {
         params: t.Object({ realmId: id }, closed),
-        headers,
-        body: RatingQuestionCreateInputSchema,
+        headers: headers(),
+        body: RatingQuestionCreateInputSchema(),
         response: {
           201: withHeaders(RatingQuestionResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'rating.question_create',
           'x-action': 'realm:manage',
           'x-exposure': 'public',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: bearer,
         },
       },
@@ -648,18 +663,18 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/rating-questions/:questionId/label',
       {
         params: t.Object({ questionId: id }, closed),
-        headers,
-        body: RatingQuestionLabelInputSchema,
+        headers: headers(),
+        body: RatingQuestionLabelInputSchema(),
         response: {
           200: withHeaders(RatingQuestionLabelResultSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'rating.question_label_put',
           'x-action': 'realm:manage',
           'x-exposure': 'public',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: bearer,
         },
       },
@@ -685,18 +700,18 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/rating-questions/:questionId/$retire',
       {
         params: t.Object({ questionId: id }, closed),
-        headers,
-        body: RatingQuestionLifecycleInputSchema,
+        headers: headers(),
+        body: RatingQuestionLifecycleInputSchema(),
         response: {
-          200: withHeaders(RatingQuestionLifecycleResultSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          200: withHeaders(RatingQuestionLifecycleResultSchema(), { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures(),
         },
         detail: {
           operationId: 'rating.question_retire',
           'x-action': 'realm:manage',
           'x-exposure': 'public',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: bearer,
         },
       },
@@ -722,18 +737,18 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/rating-questions/:questionId/$restore',
       {
         params: t.Object({ questionId: id }, closed),
-        headers,
-        body: RatingQuestionLifecycleInputSchema,
+        headers: headers(),
+        body: RatingQuestionLifecycleInputSchema(),
         response: {
-          200: withHeaders(RatingQuestionLifecycleResultSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
-          ...failures,
+          200: withHeaders(RatingQuestionLifecycleResultSchema(), { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures(),
         },
         detail: {
           operationId: 'rating.question_restore',
           'x-action': 'realm:manage',
           'x-exposure': 'public',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: bearer,
         },
       },
@@ -766,7 +781,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             if (!['limit', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
-        response: { 200: RatingQuestionLabelHistorySchema, ...aggregateFailures, 409: problemSchema('stale_cursor') },
+        response: { 200: RatingQuestionLabelHistorySchema, ...aggregateFailures(), 409: problemSchema('stale_cursor') },
         detail: {
           ...publicReadDetail('rating.question_label_history', 'realm:read'),
           'x-resource-types': ['community.realm'],
@@ -795,7 +810,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           { questionId: id, labelRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_647, multipleOf: 1 }) },
           closed,
         ),
-        response: { 200: RatingQuestionLabelSchema, ...aggregateFailures },
+        response: { 200: RatingQuestionLabelSchema, ...aggregateFailures() },
         detail: {
           ...publicReadDetail('rating.question_label_get', 'realm:read'),
           'x-resource-types': ['community.realm'],
@@ -820,7 +835,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             if (!['limit', 'cursor', 'realm'].includes(name) || parameters.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
-        response: { 200: RatingQuestionDirectoryResponseSchema, ...aggregateFailures },
+        response: { 200: RatingQuestionDirectoryResponseSchema(), ...aggregateFailures() },
         detail: {
           ...publicReadDetail('rating.question_list', 'definitions:read'),
           'x-resource-types': ['community.realm', 'semantic.context'],
@@ -892,7 +907,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/rating-questions/:questionId',
       {
         params: t.Object({ questionId: id }, closed),
-        response: { 200: RatingQuestionResponseSchema, ...failures },
+        response: { 200: RatingQuestionResponseSchema, ...failures() },
         detail: {
           ...publicReadDetail('rating.question_get', 'definitions:read'),
           'x-resource-types': ['community.realm', 'semantic.context'],

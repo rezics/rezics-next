@@ -257,7 +257,7 @@ test('small samples disclose no numeric fields and published fractions use suppo
 
 test('classification ballot and aggregate events have registered schemas separate from native ratings', () => {
   expect(
-    Value.Check(EVENT_TYPES[CLASSIFICATION_BALLOT_CHANGED]!, {
+    Value.Check(EVENT_TYPES()[CLASSIFICATION_BALLOT_CHANGED]!, {
       actorId: '00000000-0000-8000-8000-000000000001',
       subjectId: '00000000-0000-8000-8000-000000000002',
       associationId: '00000000-0000-8000-8000-000000000003',
@@ -269,7 +269,7 @@ test('classification ballot and aggregate events have registered schemas separat
       eligible: true,
     }),
   ).toBe(true);
-  expect(EVENT_TYPES[CLASSIFICATION_AGGREGATE_CHANGED]).toBeDefined();
+  expect(EVENT_TYPES()[CLASSIFICATION_AGGREGATE_CHANGED]).toBeDefined();
 });
 
 test('mounted classification ballots stay private and converge through the durable worker under current disclosure', async () => {

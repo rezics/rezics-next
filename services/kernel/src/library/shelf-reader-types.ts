@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { ShelfTypeKeys } from './shelf-contract.ts';
 import { applyShelfTypeDigest, sha256ShelfTypeDigest, type ShelfTypeDigest } from './shelf-type-keys.ts';
 import root from './shelf-reader-type-root.sql';
@@ -18,7 +19,7 @@ export function createShelfTypeLookup(digest: ShelfTypeDigest = sha256ShelfTypeD
     if (found === null) return null;
     async function matches(typeId: string) {
       const value = await equal.run(query, { route, account_id: accountId, type_id: typeId, full_type: fullType });
-      if (!value) throw new ShelfReadUnavailableError('complete private type dictionary');
+      if (!value) throw new (ShelfReadUnavailableError())('complete private type dictionary');
       return value.equal;
     }
     if (await matches(found.typeId)) return found.typeId;
@@ -40,4 +41,6 @@ export function createShelfTypeLookup(digest: ShelfTypeDigest = sha256ShelfTypeD
   };
 }
 
-export const lookupShelfType = createShelfTypeLookup();
+export function lookupShelfType() {
+  return memoizedValue(lookupShelfType, () => createShelfTypeLookup());
+}

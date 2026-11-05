@@ -5,11 +5,8 @@ import locatePublicationCandidate from './moderation-read-live-candidate.sql';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+import { declareCommandHistory } from '../history/record.ts';
 
-registerCommandHistoryKind('subject.batch_create', 3021);
-registerCommandHistoryKind('subject.batch_propose', 3025);
-registerCommandHistoryKind('subject.batch_retract', 3026);
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';

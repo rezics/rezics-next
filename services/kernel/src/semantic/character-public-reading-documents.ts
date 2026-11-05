@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { MAX_PAGE_DOCUMENTS, pageDocumentReferences } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { serializeDocument } from '@rezics/document';
@@ -8,11 +9,17 @@ import type { AnchoredPosition, ReadContext } from '../content/model.ts';
 import type { Item } from './item.ts';
 
 /** Preview limits apply before body transfer and again to the complete retained DTO. */
-export const characterDocumentBounds = {
-  documents: MAX_PAGE_DOCUMENTS,
-  sourceBytes: 262_144,
-  responseBytes: 1_048_576,
-} as const;
+export function characterDocumentBounds() {
+  return memoizedValue(
+    characterDocumentBounds,
+    () =>
+      ({
+        documents: MAX_PAGE_DOCUMENTS,
+        sourceBytes: 262_144,
+        responseBytes: 1_048_576,
+      }) as const,
+  );
+}
 
 export type CharacterDocumentRelease = {
   types?: Record<string, { bases?: readonly string[]; properties?: readonly string[] }>;
@@ -45,14 +52,14 @@ export async function readCharacterPublicDocuments(
 ): Promise<{ documents: Record<string, PublicDocumentView>; anchors: AnchoredPosition[] } | undefined> {
   if (subject.type !== 'wd:Q95074') return;
   const properties = characterDocumentProperties(release, subject.type, Object.keys(subject.statements));
-  const references = pageDocumentReferences(subject, properties, locale).slice(0, characterDocumentBounds.documents);
+  const references = pageDocumentReferences(subject, properties, locale).slice(0, characterDocumentBounds().documents);
   const documents: Record<string, PublicDocumentView> = {};
   const anchors: AnchoredPosition[] = [];
   // Serial native reads release their homes before opening the next source home.
   // No Subject read, candidate scan or historical selection is performed here.
   let bytes = 2; // JSON object braces; each admitted entry also charges its key and separator.
   for (const reference of references) {
-    const result = await readDocument(dependencies, reference.document, context, characterDocumentBounds.sourceBytes);
+    const result = await readDocument(dependencies, reference.document, context, characterDocumentBounds().sourceBytes);
     if (!result) continue;
     anchors.push(...result.anchors);
     const document = result.document;
@@ -67,7 +74,7 @@ export async function readCharacterPublicDocuments(
       continue;
     const canonical = serializeDocument(document.body);
     if (
-      Buffer.byteLength(canonical) > characterDocumentBounds.sourceBytes ||
+      Buffer.byteLength(canonical) > characterDocumentBounds().sourceBytes ||
       createHash('sha256').update(canonical).digest('hex') !== reference.digest
     )
       continue;
@@ -75,7 +82,7 @@ export async function readCharacterPublicDocuments(
     const entryBytes =
       Buffer.byteLength(JSON.stringify(reference.candidate)) + 1 + Buffer.byteLength(JSON.stringify(view));
     const separator = Object.keys(documents).length ? 1 : 0;
-    if (bytes + separator + entryBytes > characterDocumentBounds.responseBytes) continue;
+    if (bytes + separator + entryBytes > characterDocumentBounds().responseBytes) continue;
     bytes += separator + entryBytes;
     documents[reference.candidate] = view;
   }

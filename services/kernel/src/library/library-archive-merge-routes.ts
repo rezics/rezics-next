@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bodyBytes } from '../http/body.ts';
@@ -30,152 +31,168 @@ const coverage = t.Array(
   ),
 );
 const uploadState = t.Union([t.Literal('ready'), t.Literal('cancelled'), t.Literal('expired')]);
-const statusSchema = t.Object(
-  {
-    uploadId: id,
-    createdAt: text,
-    expiresAt: text,
-    state: uploadState,
-    rows: t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.records }),
-    recordBytes: t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.recordBytes }),
-    coverage,
-  },
-  closed,
-);
-const pageQuery = t.Object(
-  {
-    after: t.Optional(t.Integer({ minimum: -1, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.records - 1, default: -1 })),
-    limit: t.Optional(t.Integer({ minimum: 1, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.page, default: 50 })),
-  },
-  closed,
-);
-const ordinal = t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.records - 1 });
+function statusSchema() {
+  return memoizedValue(statusSchema, () =>
+    t.Object(
+      {
+        uploadId: id,
+        createdAt: text,
+        expiresAt: text,
+        state: uploadState,
+        rows: t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS().records }),
+        recordBytes: t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS().recordBytes }),
+        coverage,
+      },
+      closed,
+    ),
+  );
+}
+function pageQuery() {
+  return memoizedValue(pageQuery, () =>
+    t.Object(
+      {
+        after: t.Optional(t.Integer({ minimum: -1, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS().records - 1, default: -1 })),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS().page, default: 50 })),
+      },
+      closed,
+    ),
+  );
+}
+function ordinal() {
+  return memoizedValue(ordinal, () => t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS().records - 1 }));
+}
 const reviewRevision = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 const fieldChoice = t.Union([t.Literal('preserve'), t.Literal('set'), t.Literal('clear')]);
-const reviewItem = t.Union([
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('entry'),
-      subjectId: id,
-      action: t.Literal('preserve'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('entry'),
-      subjectId: id,
-      stateId: t.String({ minLength: 1, maxLength: 64 }),
-      action: t.Union([t.Literal('create'), t.Literal('update')]),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('label'),
-      target: t.Union([
-        t.Object({ mode: t.Literal('existing'), labelId: id }, closed),
-        t.Object({ mode: t.Literal('create') }, closed),
-      ]),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('assignment'),
-      subjectId: id,
-      action: t.Union([t.Literal('assign'), t.Literal('preserve')]),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('annotation'),
-      subjectId: id,
-      incarnationId: id,
-      fields: t.Object({ note: t.Optional(fieldChoice), priority: t.Optional(fieldChoice) }, closed),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('journal'),
-      subjectId: id,
-      sessionId: id,
-      fields: t.Object(
+function reviewItem() {
+  return memoizedValue(reviewItem, () =>
+    t.Union([
+      t.Object(
         {
-          startDate: t.Optional(fieldChoice),
-          finishDate: t.Optional(fieldChoice),
-          reflection: t.Optional(fieldChoice),
-          assessment: t.Optional(fieldChoice),
+          ordinal: ordinal(),
+          kind: t.Literal('entry'),
+          subjectId: id,
+          action: t.Literal('preserve'),
         },
         closed,
       ),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('observation'),
-      subjectId: id,
-      provider: t.String({ minLength: 1, maxLength: 64 }),
-      recordId: t.String({ minLength: 1 }),
-      action: t.Literal('admit'),
-      fields: t.Object(
+      t.Object(
         {
-          privacy: t.Union([t.Literal('set'), t.Literal('clear')]),
-          sourceCreated: t.Union([t.Literal('set'), t.Literal('clear')]),
-          sourceUpdated: t.Union([t.Literal('set'), t.Literal('clear')]),
+          ordinal: ordinal(),
+          kind: t.Literal('entry'),
+          subjectId: id,
+          stateId: t.String({ minLength: 1, maxLength: 64 }),
+          action: t.Union([t.Literal('create'), t.Literal('update')]),
         },
         closed,
       ),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ordinal,
-      kind: t.Literal('observation'),
-      subjectId: id,
-      provider: t.String({ minLength: 1, maxLength: 64 }),
-      recordId: t.String({ minLength: 1 }),
-      action: t.Literal('correct'),
-      revision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
-      fields: t.Object(
+      t.Object(
         {
-          privacy: t.Optional(fieldChoice),
-          sourceCreated: t.Optional(fieldChoice),
-          sourceUpdated: t.Optional(fieldChoice),
+          ordinal: ordinal(),
+          kind: t.Literal('label'),
+          target: t.Union([
+            t.Object({ mode: t.Literal('existing'), labelId: id }, closed),
+            t.Object({ mode: t.Literal('create') }, closed),
+          ]),
         },
         closed,
       ),
-    },
-    closed,
-  ),
-]);
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
+      t.Object(
+        {
+          ordinal: ordinal(),
+          kind: t.Literal('assignment'),
+          subjectId: id,
+          action: t.Union([t.Literal('assign'), t.Literal('preserve')]),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ordinal: ordinal(),
+          kind: t.Literal('annotation'),
+          subjectId: id,
+          incarnationId: id,
+          fields: t.Object({ note: t.Optional(fieldChoice), priority: t.Optional(fieldChoice) }, closed),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ordinal: ordinal(),
+          kind: t.Literal('journal'),
+          subjectId: id,
+          sessionId: id,
+          fields: t.Object(
+            {
+              startDate: t.Optional(fieldChoice),
+              finishDate: t.Optional(fieldChoice),
+              reflection: t.Optional(fieldChoice),
+              assessment: t.Optional(fieldChoice),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ordinal: ordinal(),
+          kind: t.Literal('observation'),
+          subjectId: id,
+          provider: t.String({ minLength: 1, maxLength: 64 }),
+          recordId: t.String({ minLength: 1 }),
+          action: t.Literal('admit'),
+          fields: t.Object(
+            {
+              privacy: t.Union([t.Literal('set'), t.Literal('clear')]),
+              sourceCreated: t.Union([t.Literal('set'), t.Literal('clear')]),
+              sourceUpdated: t.Union([t.Literal('set'), t.Literal('clear')]),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ordinal: ordinal(),
+          kind: t.Literal('observation'),
+          subjectId: id,
+          provider: t.String({ minLength: 1, maxLength: 64 }),
+          recordId: t.String({ minLength: 1 }),
+          action: t.Literal('correct'),
+          revision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
+          fields: t.Object(
+            {
+              privacy: t.Optional(fieldChoice),
+              sourceCreated: t.Optional(fieldChoice),
+              sourceUpdated: t.Optional(fieldChoice),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+    ]),
+  );
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
 
 function detail(operationId: string, action: 'library_entry:read' | 'library_entry:update', write = false) {
   return {
@@ -202,11 +219,11 @@ export function libraryArchiveMergeRoutes(
         // Ingress supplies bytes, not the parsed envelope. The decoder validates those
         // bytes after owner admission. Clients can send the original JSON text or an envelope.
         body: t.Unsafe<string | { manifest: Record<string, unknown>; records: Record<string, unknown>[] }>(t.Any()),
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema(), ...failures() },
         detail: {
           ...detail('library_archive_merge.upload', 'library_entry:update', true),
           'x-body-mode': 'raw',
-          'x-body-limit': LIBRARY_ARCHIVE_MERGE_LIMITS.uploadBytes,
+          'x-body-limit': LIBRARY_ARCHIVE_MERGE_LIMITS().uploadBytes,
           requestBody: {
             required: true,
             content: {
@@ -237,7 +254,7 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges/:id',
       {
         params: t.Object({ id }, closed),
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema(), ...failures() },
         detail: detail('library_archive_merge.get', 'library_entry:read'),
       },
       async ({ actor, params, admission, job, set }) => {
@@ -249,7 +266,7 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges/:id/preview',
       {
         params: t.Object({ id }, closed),
-        query: pageQuery,
+        query: pageQuery(),
         response: {
           200: t.Object(
             {
@@ -258,20 +275,20 @@ export function libraryArchiveMergeRoutes(
               coverage,
               records: t.Array(
                 t.Object({
-                  ordinal,
+                  ordinal: ordinal(),
                   section: text,
                   evidence: object,
                   status: text,
                   review: t.Union([object, t.Null()]),
                   reviewRevision: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
                 }),
-                { maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.page },
+                { maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS().page },
               ),
               next: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_archive_merge.preview', 'library_entry:read'),
       },
@@ -287,15 +304,15 @@ export function libraryArchiveMergeRoutes(
       {
         params: t.Object({ id }, closed),
         body: t.Object(
-          { items: t.Array(reviewItem, { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.reviewItems }) },
+          { items: t.Array(reviewItem(), { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS().reviewItems }) },
           closed,
         ),
         response: {
           200: t.Object(
-            { uploadId: id, reviewed: t.Array(t.Object({ ordinal, status: text, reviewRevision }, closed)) },
+            { uploadId: id, reviewed: t.Array(t.Object({ ordinal: ordinal(), status: text, reviewRevision }, closed)) },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_archive_merge.review', 'library_entry:update', true),
       },
@@ -312,9 +329,9 @@ export function libraryArchiveMergeRoutes(
         params: t.Object({ id }, closed),
         body: t.Object(
           {
-            items: t.Array(t.Object({ ordinal, reviewRevision }, closed), {
+            items: t.Array(t.Object({ ordinal: ordinal(), reviewRevision }, closed), {
               minItems: 1,
-              maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems,
+              maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS().applyItems,
             }),
           },
           closed,
@@ -323,11 +340,13 @@ export function libraryArchiveMergeRoutes(
           200: t.Object(
             {
               uploadId: id,
-              applied: t.Array(t.Object({ ordinal, status: text, result: t.Union([object, t.Null()]) }, closed)),
+              applied: t.Array(
+                t.Object({ ordinal: ordinal(), status: text, result: t.Union([object, t.Null()]) }, closed),
+              ),
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_archive_merge.apply', 'library_entry:update', true),
       },
@@ -340,21 +359,24 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges/:id/results',
       {
         params: t.Object({ id }, closed),
-        query: pageQuery,
+        query: pageQuery(),
         response: {
           200: t.Object(
             {
               uploadId: id,
               state: uploadState,
               results: t.Array(
-                t.Object({ ordinal, section: text, status: text, result: t.Union([object, t.Null()]) }, closed),
-                { maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.page },
+                t.Object(
+                  { ordinal: ordinal(), section: text, status: text, result: t.Union([object, t.Null()]) },
+                  closed,
+                ),
+                { maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS().page },
               ),
               next: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_archive_merge.results', 'library_entry:read'),
       },
@@ -369,7 +391,7 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges/:id',
       {
         params: t.Object({ id }, closed),
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema(), ...failures() },
         detail: detail('library_archive_merge.cancel', 'library_entry:update', true),
       },
       async ({ actor, params, admission, job, set }) => {
@@ -383,7 +405,7 @@ export function libraryArchiveMergeRoutes(
         params: t.Object({ id }, closed),
         response: {
           200: t.Object({ uploadId: id, removed: t.Integer({ minimum: 0 }), complete: t.Boolean() }, closed),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_archive_merge.prune', 'library_entry:update', true),
       },

@@ -64,16 +64,16 @@ test('History association has no public structural identity or synthetic transac
   ).rejects.toThrow('forged-association');
 });
 test('The finite local original reserves disjoint cleanup and rejects unknown or overflowing child prices', () => {
-  for (const axis of SELECTED_AXES) {
-    expect(Number.isSafeInteger(SELECTED_LOCAL_DECLARATION[axis])).toBe(true);
-    expect(SELECTED_LOCAL_DECLARATION[axis]).toBeGreaterThanOrEqual(SELECTED_CLEANUP_DECLARATION[axis]);
+  for (const axis of SELECTED_AXES()) {
+    expect(Number.isSafeInteger(SELECTED_LOCAL_DECLARATION()[axis])).toBe(true);
+    expect(SELECTED_LOCAL_DECLARATION()[axis]).toBeGreaterThanOrEqual(SELECTED_CLEANUP_DECLARATION()[axis]);
   }
-  expect(SELECTED_CLEANUP_DECLARATION.statements).toBe(
-    SELECTED_COST.release.statements + 3 * SELECTED_COST.rollback.statements,
+  expect(SELECTED_CLEANUP_DECLARATION().statements).toBe(
+    SELECTED_COST().release.statements + 3 * SELECTED_COST().rollback.statements,
   );
-  expect(() => sumSelectedCost({ ...SELECTED_COST.hold, bytes: NaN })).toThrow();
-  expect(() => sumSelectedCost({ ...SELECTED_COST.hold, bytes: Number.MAX_SAFE_INTEGER }, SELECTED_COST.hold)).toThrow(
-    'overflow',
-  );
-  expect(() => sumSelectedCost({ ...SELECTED_COST.hold, engineRequests: undefined } as never)).toThrow();
+  expect(() => sumSelectedCost()({ ...SELECTED_COST().hold, bytes: NaN })).toThrow();
+  expect(() =>
+    sumSelectedCost()({ ...SELECTED_COST().hold, bytes: Number.MAX_SAFE_INTEGER }, SELECTED_COST().hold),
+  ).toThrow('overflow');
+  expect(() => sumSelectedCost()({ ...SELECTED_COST().hold, engineRequests: undefined } as never)).toThrow();
 });

@@ -65,7 +65,7 @@ afterAll(async () => {
 });
 
 test('a vote change publishes one figure event for each affected population, with mean only at or above the threshold', async () => {
-  expect(EVENT_TYPES[figureEvent]).toBeDefined();
+  expect(EVENT_TYPES()[figureEvent]).toBeDefined();
   const targetId = newId(route);
   const realmId = newId(0x5321);
   const populations = [GLOBAL_CONTEXT.id, realmId];

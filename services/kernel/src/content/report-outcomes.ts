@@ -266,7 +266,7 @@ export function createReportOutcomeEffect(pool: Pool): Effect {
     types: [takedown, resolved, projected, subjectVisibility],
     async run(event) {
       if (event.type === subjectVisibility) {
-        if (!Value.Check(EVENT_TYPES[subjectVisibility], event.data))
+        if (!Value.Check(EVENT_TYPES()[subjectVisibility], event.data))
           throw new TypeError('Invalid Subject visibility event');
         const data = event.data as { id: string; visibility: string; security_revision: number };
         if (event.subject !== data.id || !Number.isFinite(Date.parse(event.time)))
@@ -297,7 +297,7 @@ export function createReportOutcomeEffect(pool: Pool): Effect {
       }
       if (
         ![takedown, resolved, projected].includes(event.type) ||
-        !Value.Check(CONTENT_EVENTS[event.type as keyof typeof CONTENT_EVENTS], event.data)
+        !Value.Check(CONTENT_EVENTS()[event.type as keyof ReturnType<typeof CONTENT_EVENTS>], event.data)
       )
         throw new TypeError('Invalid report outcome event');
       const data = event.data as {

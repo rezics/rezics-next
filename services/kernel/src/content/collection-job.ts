@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, runCommand } from '../command/command.ts';
@@ -10,21 +11,27 @@ import selectCandidates from './select-collectable-media.sql';
 import fenceCollection from './fence-collection.sql';
 import finishCollection from './finish-collection.sql';
 
-const ROUTES_PER_PARTITION = ROUTES / PARTITIONS;
+function ROUTES_PER_PARTITION() {
+  return memoizedValue(ROUTES_PER_PARTITION, () => ROUTES / PARTITIONS);
+}
 const MAX_BATCH_SIZE = 100;
 const SELECTION_BRANCHES = 2;
 /** SQL bounds each branch before the host merges exact routes. Deletion and
  * the two command phases run sequentially for at most one selected batch.
  */
-export const COLLECTION_BOUNDS = Object.freeze({
-  routes: ROUTES_PER_PARTITION,
-  batch: MAX_BATCH_SIZE,
-  selectedCandidates: ROUTES_PER_PARTITION * SELECTION_BRANCHES * MAX_BATCH_SIZE,
-  bufferedCandidates: (1 + SELECTION_BRANCHES) * MAX_BATCH_SIZE,
-  commands: 2 * MAX_BATCH_SIZE,
-  prefixes: MAX_BATCH_SIZE,
-  concurrency: 1,
-});
+export function COLLECTION_BOUNDS() {
+  return memoizedValue(COLLECTION_BOUNDS, () =>
+    Object.freeze({
+      routes: ROUTES_PER_PARTITION(),
+      batch: MAX_BATCH_SIZE,
+      selectedCandidates: ROUTES_PER_PARTITION() * SELECTION_BRANCHES * MAX_BATCH_SIZE,
+      bufferedCandidates: (1 + SELECTION_BRANCHES) * MAX_BATCH_SIZE,
+      commands: 2 * MAX_BATCH_SIZE,
+      prefixes: MAX_BATCH_SIZE,
+      concurrency: 1,
+    }),
+  );
+}
 
 export type CollectionOutcome = Readonly<{
   partition: number;
@@ -63,8 +70,8 @@ export function createCollectionJob(
       const time = await readTime.run(client, { at: configured?.toISOString() ?? '' });
       if (!time) throw new TypeError('No authoritative database time');
       const candidates: Candidate[] = [];
-      for (let offset = 0; offset < ROUTES_PER_PARTITION; offset++) {
-        const route = partition * ROUTES_PER_PARTITION + offset;
+      for (let offset = 0; offset < ROUTES_PER_PARTITION(); offset++) {
+        const route = partition * ROUTES_PER_PARTITION() + offset;
         candidates.push(
           ...(await selectCandidates.run(client, {
             route,

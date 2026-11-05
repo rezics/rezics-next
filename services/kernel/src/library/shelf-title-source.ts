@@ -57,7 +57,7 @@ export async function currentShelfTitleBasis(
   viewer: AccountActor,
 ): Promise<string> {
   if (!source)
-    throw new ShelfReadUnavailableError('Content shelfTitleInputs.observe complete-source producer installation');
+    throw new (ShelfReadUnavailableError())('Content shelfTitleInputs.observe complete-source producer installation');
   const current = await source.basis(owner, languages, viewer);
   if (
     current.status !== 'current' ||
@@ -65,7 +65,7 @@ export async function currentShelfTitleBasis(
     !current.version ||
     current.version.length > 256
   )
-    throw new ShelfReadUnavailableError(
+    throw new (ShelfReadUnavailableError())(
       'Content complete whole-source title/disclosure/redirect/identity/source-owner observation',
     );
   return current.version;

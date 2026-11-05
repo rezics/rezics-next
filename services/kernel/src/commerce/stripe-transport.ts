@@ -1,10 +1,13 @@
+import { memoizedValue } from '../memoized.ts';
 import { Buffer } from 'node:buffer';
 import { MAX_ORDER_TRANSACTIONS, StripeUnavailableError } from './model.ts';
 
 // Derived from the existing webhook body limit, snapshot cap and effects worker concurrency.
 const BODY_BYTES = 256 * 1024;
 const HEADER_BYTES = BODY_BYTES / 16;
-const MAX_CONTAINERS = MAX_ORDER_TRANSACTIONS * 16;
+function MAX_CONTAINERS() {
+  return memoizedValue(MAX_CONTAINERS, () => MAX_ORDER_TRANSACTIONS * 16);
+}
 const MAX_DEPTH = 16;
 const CAPACITY = 8;
 let unsettledOperations = 0;
@@ -88,8 +91,8 @@ export function stripeTransport(options: {
         limit(inputBytes > HEADER_BYTES);
       }
       if (!item || typeof item !== 'object') continue;
-      if (input) limit(++inputContainers > MAX_CONTAINERS);
-      else limit(++containers > MAX_CONTAINERS);
+      if (input) limit(++inputContainers > MAX_CONTAINERS());
+      else limit(++containers > MAX_CONTAINERS());
       if (!input && !Array.isArray(item) && 'fee_details' in item) {
         const fees = item.fee_details;
         limit(!Array.isArray(fees));

@@ -292,7 +292,9 @@ test('the account releases its own verification through the same workflow and bo
   ]);
   expect(events.rows).toHaveLength(1);
   expect(events.rows[0].data).toEqual(decision);
-  expect(Value.Check(EVENT_TYPES['com.rezics.access.agent-verification.reversed.v1']!, events.rows[0].data)).toBe(true);
+  expect(Value.Check(EVENT_TYPES()['com.rezics.access.agent-verification.reversed.v1']!, events.rows[0].data)).toBe(
+    true,
+  );
 });
 
 test('governance reverses a verification, preserves its reason and allows a new reviewed application', async () => {
@@ -658,7 +660,9 @@ test('original in-flight reversal recovers real original custody with a distinct
   expect(await pointer(subject)).toHaveLength(1);
   expect((await accountState(account.id)).pending_agent_receipt_id).toBe(original.transactionId);
   const job = await deliverAccountIdentity(pool, receipt);
-  const { identityEpochStore, identityJobPartition } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { identityEpochStore: identityEpochStoreGetter, identityJobPartition } =
+    await import('../../src/semantic/identity-epoch-store.ts');
+  const identityEpochStore = identityEpochStoreGetter();
   const published = (
     await runCommand(pool, { partition: identityJobPartition(job) }, async (tx) =>
       noEffect(await identityEpochStore.readJob(tx, job)),
@@ -1327,7 +1331,8 @@ test('original reversal SDK custody binds the existing exact source and rejects 
 });
 
 test('accepted original reversal Source recovers without the old Accounts verification source and keeps its current job distinct from prior undo', async () => {
-  const { identityEpochStore: store } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { identityEpochStore: storeGetter } = await import('../../src/semantic/identity-epoch-store.ts');
+  const store = storeGetter();
   const { stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
   const { readOriginalAccountAgentIdentity } = await import('../../src/semantic/account-agent-identity-recovery.ts');
   const { account, subject, token } = await verified();
@@ -1882,7 +1887,8 @@ test('Native Account identity technical receiver retains indispensable accepted 
   const { acceptAccountIdentityTechnicalSource, verifyAccountIdentityTechnicalSource, readAccountIdentitySource } =
     await import('../../src/access/agent-verification-identity.ts');
   const { readAccountIdentityUndo } = await import('../../src/semantic/identity-epoch-binding.ts');
-  const { identityEpochStore } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { identityEpochStore: identityEpochStoreGetter } = await import('../../src/semantic/identity-epoch-store.ts');
+  const identityEpochStore = identityEpochStoreGetter();
   const { account, original, reference } = await acceptedTechnicalFixture();
   const accepted = await runCommand(pool, { partition: original.source.partition }, async (tx) => {
     const receipt = await acceptAccountIdentityTechnicalSource(tx, reference);
@@ -3322,8 +3328,12 @@ test('default native identity cleanup refuses incomplete copies then minimizes t
   const { enqueueAgentIdentityVerification, enqueueAgentIdentityReversal, agentIdentityRetirementReadiness } =
     await import('../../src/history/agent-identity-work.ts');
   const { reverseDeletedAccountAgent } = await import('../../src/access/agent-verification.ts');
-  const { openNativeErasure, advanceNativeErasure, NATIVE_ERASURE_GROUPS } =
-    await import('../../src/access/erasure-native.ts');
+  const {
+    openNativeErasure,
+    advanceNativeErasure,
+    NATIVE_ERASURE_GROUPS: NATIVE_ERASURE_GROUPSGetter,
+  } = await import('../../src/access/erasure-native.ts');
+  const NATIVE_ERASURE_GROUPS = NATIVE_ERASURE_GROUPSGetter();
   const { admitSharedHistory, advanceSharedHistory } = await import('../../src/access/shared-history.ts');
   const { HistoryRegistry } = await import('../../src/history/registry.ts');
   const { readAccountIdentityUndo } = await import('../../src/semantic/identity-epoch-binding.ts');
@@ -3695,8 +3705,11 @@ test('SDK identity observations reject an ended explicit token and a foreign Acc
 
 test('recovery snapshot controls and direct Account preparation spend the inherited original balance before their SQL', async () => {
   const owner = await import('../../src/semantic/identity-source-consumer-maintenance.ts');
-  const { readAgentIdentityRecoveryInventory, AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST } =
-    await import('../../src/history/agent-identity-inventory.ts');
+  const {
+    readAgentIdentityRecoveryInventory,
+    AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST: AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COSTGetter,
+  } = await import('../../src/history/agent-identity-inventory.ts');
+  const AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST = AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COSTGetter();
   const { prepareAgentIdentityRetention } = await import('../../src/access/agent-verification-identity-retention.ts');
   const key = { route: 0, accountId: newId(0), direction: 'account-agent.verify' as const, receiptId: randomUUID() };
   const barrier = { accountRoute: 0, accountId: key.accountId, version: 1, at: new Date().toISOString() };

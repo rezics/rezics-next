@@ -27,7 +27,7 @@ export type CoverVerifyContext = ResourceEligibilityVerifyContext<unknown> &
 
 const dependency = 'Content cover prepared subject and anonymous Access work at admitted native time';
 const unavailable = (): never => {
-  throw new AccessWorkUnavailableError(dependency);
+  throw new (AccessWorkUnavailableError())(dependency);
 };
 function sum(left: AccessWork, right: AccessWork): AccessWork {
   const value = Object.fromEntries(ACCESS_WORK_AXES.map((axis) => [axis, left[axis] + right[axis]])) as AccessWork;

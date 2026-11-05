@@ -368,23 +368,23 @@ test('Collection add, move and repair-begin declare complete nine-axis actor com
   for (const kind of Object.values(COLLECTION_ORDER_COMMAND_KINDS)) {
     expect(Object.hasOwn(COMMAND_HISTORY_KINDS, kind)).toBe(false);
   }
-  expect(COLLECTION_ORDER_DECLARATION.limits.commandHistoryWrites).toBe(0);
-  const edit = COLLECTION_ORDER_DECLARATION.paths.edit;
-  const begin = COLLECTION_ORDER_DECLARATION.paths.begin;
+  expect(COLLECTION_ORDER_DECLARATION().limits.commandHistoryWrites).toBe(0);
+  const edit = COLLECTION_ORDER_DECLARATION().paths.edit;
+  const begin = COLLECTION_ORDER_DECLARATION().paths.begin;
   expect(edit.status).toBe('complete-static-no-admission');
   expect(begin.status).toBe('complete-static-no-admission');
   const snapshot = {
     edit: { ...edit.cost },
     begin: { ...begin.cost },
-    failedAddAndBegin: { ...COLLECTION_ORDER_DECLARATION.terms.failedAddAndBegin },
-    retryAdd: { ...COLLECTION_ORDER_DECLARATION.terms.retryAdd },
+    failedAddAndBegin: { ...COLLECTION_ORDER_DECLARATION().terms.failedAddAndBegin },
+    retryAdd: { ...COLLECTION_ORDER_DECLARATION().terms.retryAdd },
   };
   for (const scale of [64, 512, 4096]) {
     void scale;
     expect(edit.cost).toEqual(snapshot.edit);
     expect(begin.cost).toEqual(snapshot.begin);
-    expect(COLLECTION_ORDER_DECLARATION.terms.failedAddAndBegin).toEqual(snapshot.failedAddAndBegin);
-    expect(COLLECTION_ORDER_DECLARATION.terms.retryAdd).toEqual(snapshot.retryAdd);
+    expect(COLLECTION_ORDER_DECLARATION().terms.failedAddAndBegin).toEqual(snapshot.failedAddAndBegin);
+    expect(COLLECTION_ORDER_DECLARATION().terms.retryAdd).toEqual(snapshot.retryAdd);
   }
   for (const axis of BOUND_AXES) {
     expect(edit.cost[axis]).toBe(edit.ceiling[axis]);
@@ -395,19 +395,19 @@ test('Collection add, move and repair-begin declare complete nine-axis actor com
   expect(edit.cost.engineRequests).toBe(0);
   expect(begin.cost.engineRequests).toBe(0);
   expect(
-    withinCeiling(COLLECTION_ORDER_DECLARATION.terms.failedAddAndBegin, sumBounds(edit.ceiling, begin.ceiling)),
+    withinCeiling(COLLECTION_ORDER_DECLARATION().terms.failedAddAndBegin, sumBounds(edit.ceiling, begin.ceiling)),
   ).toBe(true);
-  expect(withinCeiling(COLLECTION_ORDER_DECLARATION.terms.retryAdd, edit.ceiling)).toBe(true);
-  expect(withinCeiling(COLLECTION_ORDER_DECLARATION.terms.retryMove, edit.ceiling)).toBe(true);
-  expect(COLLECTION_ORDER_DECLARATION.terms.addFailed.nativeRows).toBeGreaterThan(0);
-  expect(COLLECTION_ORDER_DECLARATION.terms.beginReuse.nativeRows).toBeGreaterThan(0);
+  expect(withinCeiling(COLLECTION_ORDER_DECLARATION().terms.retryAdd, edit.ceiling)).toBe(true);
+  expect(withinCeiling(COLLECTION_ORDER_DECLARATION().terms.retryMove, edit.ceiling)).toBe(true);
+  expect(COLLECTION_ORDER_DECLARATION().terms.addFailed.nativeRows).toBeGreaterThan(0);
+  expect(COLLECTION_ORDER_DECLARATION().terms.beginReuse.nativeRows).toBeGreaterThan(0);
 });
 
 test('Collection order rejects unsafe declarations and out-of-domain repair steps before dispatch', async () => {
   const ceilings = [
-    COLLECTION_ORDER_DECLARATION.paths.edit.ceiling,
-    COLLECTION_ORDER_DECLARATION.paths.begin.ceiling,
-    COLLECTION_ORDER_DECLARATION.paths.page.ceiling,
+    COLLECTION_ORDER_DECLARATION().paths.edit.ceiling,
+    COLLECTION_ORDER_DECLARATION().paths.begin.ceiling,
+    COLLECTION_ORDER_DECLARATION().paths.page.ceiling,
   ];
   let usefulDispatches = 0;
   const dispatch = () => {

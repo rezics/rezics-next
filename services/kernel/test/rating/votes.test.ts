@@ -100,7 +100,7 @@ afterAll(async () => {
 });
 
 test('one account has one current vote per question and target in its own partition with an increasing revision', async () => {
-  expect(EVENT_TYPES[eventType]).toBeDefined();
+  expect(EVENT_TYPES()[eventType]).toBeDefined();
   const first = await commands.putVote(
     voter,
     { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 7 },

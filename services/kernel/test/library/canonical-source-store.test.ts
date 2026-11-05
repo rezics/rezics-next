@@ -660,11 +660,11 @@ test('pending group fits the shared encrypted cursor without permissions or a se
 });
 
 test('canonical Source plan refuses overflow, engine requests and oversized statement parameters', () => {
-  expect(CANONICAL_SOURCE_DECLARATION.status).toBe('complete');
-  expect(CANONICAL_SOURCE_DECLARATION.repair.engineRequests).toBe(0);
-  expect(CANONICAL_SOURCE_DECLARATION.repair.candidateKeys).toBeLessThanOrEqual(CANONICAL_SOURCE_RAW_KEY_LIMIT);
+  expect(CANONICAL_SOURCE_DECLARATION().status).toBe('complete');
+  expect(CANONICAL_SOURCE_DECLARATION().repair.engineRequests).toBe(0);
+  expect(CANONICAL_SOURCE_DECLARATION().repair.candidateKeys).toBeLessThanOrEqual(CANONICAL_SOURCE_RAW_KEY_LIMIT);
   expect(() => canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT + 1)).toThrow(RangeError);
-  expect(() => repeatBound(CANONICAL_SOURCE_DECLARATION.repair, Number.MAX_SAFE_INTEGER)).toThrow(TypeError);
+  expect(() => repeatBound(CANONICAL_SOURCE_DECLARATION().repair, Number.MAX_SAFE_INTEGER)).toThrow(TypeError);
   expect(() =>
     canonicalSourceWorkDimensions(
       declareBound({
@@ -680,9 +680,9 @@ test('canonical Source plan refuses overflow, engine requests and oversized stat
       }),
     ),
   ).toThrow(TypeError);
-  expect(() => assertCanonicalSourceStatement(CANONICAL_SOURCE_STATEMENTS.seek, ['x'.repeat(8_000), 1, 2, 3])).toThrow(
-    TypeError,
-  );
+  expect(() =>
+    assertCanonicalSourceStatement(CANONICAL_SOURCE_STATEMENTS().seek, ['x'.repeat(8_000), 1, 2, 3]),
+  ).toThrow(TypeError);
 });
 
 test('exact raw-limit window resumes durably and source mutation before the next generation CAS is basis_changed', async () => {

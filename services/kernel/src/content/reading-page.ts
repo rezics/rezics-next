@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readViewerActions, type ViewerActionBindings } from '../access/viewer-actions.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
@@ -49,11 +50,16 @@ const READING_CARD_IDENTITY_LIMIT = READING_CARD_REFERENCE_LIMIT * 3;
 const READING_CARD_ACTION_REFERENCE_LIMIT = READING_CARD_REFERENCE_LIMIT * 3;
 const READING_CARD_ENVELOPE_BYTES = 8 * 1024 * 1024;
 // A JSON string can expand a source byte to six bytes when controls are escaped.
-export const READING_PAGE_RESPONSE_BYTES =
-  READING_PAGE_IDENTITY_LIMIT * MAX_DOCUMENT_BYTES * 6 +
-  READING_PAGE_IDENTITY_LIMIT * MAX_AUTHOR_DISPLAY_BYTES +
-  MAX_OTHER_ENVELOPE_BYTES +
-  MAX_DOCUMENT_MEDIA_ENVELOPE_BYTES;
+export function READING_PAGE_RESPONSE_BYTES() {
+  return memoizedValue(
+    READING_PAGE_RESPONSE_BYTES,
+    () =>
+      READING_PAGE_IDENTITY_LIMIT * MAX_DOCUMENT_BYTES * 6 +
+      READING_PAGE_IDENTITY_LIMIT * MAX_AUTHOR_DISPLAY_BYTES +
+      MAX_OTHER_ENVELOPE_BYTES +
+      MAX_DOCUMENT_MEDIA_ENVELOPE_BYTES,
+  );
+}
 
 const ReactionFreshnessSchema = t.Union([
   t.Object({ epoch: t.Integer({ minimum: 0 }), position: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) }, closed),
@@ -107,7 +113,11 @@ const SafeWithheldEntrySchema = t.Object(
   },
   closed,
 );
-const ReadingEntrySchema = t.Union([ItemViewSchema, ErasedPlaceholderSchema, SafeWithheldEntrySchema]);
+function ReadingEntrySchema() {
+  return memoizedValue(ReadingEntrySchema, () =>
+    t.Union([ItemViewSchema(), ErasedPlaceholderSchema, SafeWithheldEntrySchema]),
+  );
+}
 const OperationStateSchema = t.Union([
   t.Literal('available'),
   t.Literal('sign_in_required'),
@@ -135,100 +145,107 @@ export const ReadingPageQuerySchema = t.Object(
   { cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })) },
   closed,
 );
-export const ReadingPageResponseSchema = t.Object(
-  {
-    target: t.Object(
+export function ReadingPageResponseSchema() {
+  return memoizedValue(ReadingPageResponseSchema, () =>
+    t.Object(
       {
-        threadId: t.String({ format: 'uuid' }),
-        boardId: t.String({ format: 'uuid' }),
-        boardSecurityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
-      },
-      closed,
-    ),
-    viewer: t.Union([
-      t.Object({ kind: t.Literal('anonymous') }, closed),
-      t.Object({ kind: t.Literal('account'), id: t.String({ format: 'uuid' }) }, closed),
-    ]),
-    query: t.Object({ cursor: t.Union([t.String(), t.Null()]), limit: t.Literal(READING_PAGE_REPLY_LIMIT) }, closed),
-    thread: ThreadViewSchema,
-    conversationActivity: ReadingPageActivitySchema,
-    documentMedia: ReadingPageDocumentMediaSchema,
-    replies: t.Object(
-      {
-        items: t.Array(ReadingEntrySchema, { maxItems: READING_PAGE_REPLY_LIMIT }),
-        next: t.Union([t.String(), t.Null()]),
-      },
-      closed,
-    ),
-    authors: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        items: t.Array(AuthorSchema, { maxItems: READING_PAGE_IDENTITY_LIMIT }),
-      },
-      closed,
-    ),
-    mentions: t.Optional(ReadingPageMentionsSchema),
-    actions: t.Object(
-      {
-        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        retryable: t.Boolean(),
-        references: t.Array(
+        target: t.Object(
+          {
+            threadId: t.String({ format: 'uuid' }),
+            boardId: t.String({ format: 'uuid' }),
+            boardSecurityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+          },
+          closed,
+        ),
+        viewer: t.Union([
+          t.Object({ kind: t.Literal('anonymous') }, closed),
+          t.Object({ kind: t.Literal('account'), id: t.String({ format: 'uuid' }) }, closed),
+        ]),
+        query: t.Object(
+          { cursor: t.Union([t.String(), t.Null()]), limit: t.Literal(READING_PAGE_REPLY_LIMIT) },
+          closed,
+        ),
+        thread: ThreadViewSchema(),
+        conversationActivity: ReadingPageActivitySchema,
+        documentMedia: ReadingPageDocumentMediaSchema(),
+        replies: t.Object(
+          {
+            items: t.Array(ReadingEntrySchema(), { maxItems: READING_PAGE_REPLY_LIMIT }),
+            next: t.Union([t.String(), t.Null()]),
+          },
+          closed,
+        ),
+        authors: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            items: t.Array(AuthorSchema, { maxItems: READING_PAGE_IDENTITY_LIMIT }),
+          },
+          closed,
+        ),
+        mentions: t.Optional(ReadingPageMentionsSchema),
+        actions: t.Object(
+          {
+            state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            retryable: t.Boolean(),
+            references: t.Array(
+              t.Object(
+                {
+                  type: t.Union([t.Literal('content.thread'), t.Literal('content.post')]),
+                  id: t.String({ format: 'uuid' }),
+                  sourceRevisionId: t.Optional(t.String({ format: 'uuid' })),
+                  state: t.Union([t.Literal('current'), t.Literal('withheld')]),
+                  operations: t.Array(OperationSchema, { maxItems: 256 }),
+                },
+                closed,
+              ),
+              { maxItems: READING_PAGE_REFERENCE_LIMIT },
+            ),
+            reply: t.Object({ state: ReplyStateSchema }, closed),
+          },
+          closed,
+        ),
+        watch: t.Union([
+          t.Object({ state: t.Literal('current'), watching: t.Boolean() }, closed),
+          t.Object({ state: t.Literal('sign_in_required') }, closed),
+          t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
+        ]),
+        slowMode: t.Union([
           t.Object(
             {
-              type: t.Union([t.Literal('content.thread'), t.Literal('content.post')]),
-              id: t.String({ format: 'uuid' }),
-              sourceRevisionId: t.Optional(t.String({ format: 'uuid' })),
-              state: t.Union([t.Literal('current'), t.Literal('withheld')]),
-              operations: t.Array(OperationSchema, { maxItems: 256 }),
+              state: t.Literal('current'),
+              intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
+              retryAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+              nextEligibleAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+              canChange: t.Boolean(),
+              exempt: t.Boolean(),
+              admissionState: t.Union([t.Literal('ready'), t.Literal('interval'), t.Literal('pending')]),
+              retryAfterSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
             },
             closed,
           ),
-          { maxItems: READING_PAGE_REFERENCE_LIMIT },
+          t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
+        ]),
+        currentness: t.Object(
+          {
+            source: t.Literal('current'),
+            place: t.Literal('current'),
+            reactions: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            authors: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            actions: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+            watch: t.Union([t.Literal('current'), t.Literal('sign_in_required'), t.Literal('unavailable')]),
+            slowMode: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+          },
+          closed,
         ),
-        reply: t.Object({ state: ReplyStateSchema }, closed),
+        reactionsAsOf: ReactionFreshnessSchema,
+        reviewContext: t.Optional(ReadingPageReviewContextSchema()),
+        authorErasure: t.Optional(t.Object({ authorId: t.String({ format: 'uuid' }), mayErase: t.Boolean() }, closed)),
       },
       closed,
     ),
-    watch: t.Union([
-      t.Object({ state: t.Literal('current'), watching: t.Boolean() }, closed),
-      t.Object({ state: t.Literal('sign_in_required') }, closed),
-      t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
-    ]),
-    slowMode: t.Union([
-      t.Object(
-        {
-          state: t.Literal('current'),
-          intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
-          retryAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-          nextEligibleAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-          canChange: t.Boolean(),
-          exempt: t.Boolean(),
-          admissionState: t.Union([t.Literal('ready'), t.Literal('interval'), t.Literal('pending')]),
-          retryAfterSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
-        },
-        closed,
-      ),
-      t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
-    ]),
-    currentness: t.Object(
-      {
-        source: t.Literal('current'),
-        place: t.Literal('current'),
-        reactions: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        authors: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        actions: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-        watch: t.Union([t.Literal('current'), t.Literal('sign_in_required'), t.Literal('unavailable')]),
-        slowMode: t.Union([t.Literal('current'), t.Literal('unavailable')]),
-      },
-      closed,
-    ),
-    reactionsAsOf: ReactionFreshnessSchema,
-    reviewContext: t.Optional(ReadingPageReviewContextSchema),
-    authorErasure: t.Optional(t.Object({ authorId: t.String({ format: 'uuid' }), mayErase: t.Boolean() }, closed)),
-  },
-  closed,
-);
+  );
+}
 
 export type ReadingPageViewerActionRuntime = Readonly<{
   access: Access;
@@ -1426,7 +1443,7 @@ export async function readContentReadingPage(
   if (
     identityIds.length > READING_PAGE_IDENTITY_LIMIT ||
     responseBytes(boundedEnvelope) + identityIds.length * MAX_AUTHOR_DISPLAY_BYTES + MAX_REACTION_BYTES >
-      READING_PAGE_RESPONSE_BYTES
+      READING_PAGE_RESPONSE_BYTES()
   )
     throw new ProblemError('content_too_large');
   if (!(actionRuntime && catalogueReady)) actionState = 'unavailable';
@@ -1608,7 +1625,7 @@ export async function readContentReadingPage(
     replyState = 'unavailable';
   }
 
-  const output: Static<typeof ReadingPageResponseSchema> = {
+  const output: Static<ReturnType<typeof ReadingPageResponseSchema>> = {
     target: { threadId, boardId: thread.boardId, boardSecurityRevision: finalBoard.value.securityRevision },
     viewer:
       actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
@@ -1640,7 +1657,7 @@ export async function readContentReadingPage(
     ...(reviewContext ? { reviewContext } : {}),
     ...(erasure ? { authorErasure: { authorId: erasure.authorId, mayErase: erasure.mayErase } } : {}),
   };
-  if (responseBytes(output) > READING_PAGE_RESPONSE_BYTES) throw new ProblemError('content_too_large');
+  if (responseBytes(output) > READING_PAGE_RESPONSE_BYTES()) throw new ProblemError('content_too_large');
   return {
     value: output,
     anchors: [

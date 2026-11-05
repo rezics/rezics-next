@@ -22,7 +22,7 @@ import {
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
 import type { AccountReference } from '../history/locator.ts';
-import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+import { declareCommandHistory } from '../history/record.ts';
 import {
   declareCommandRecordSources,
   recordHistorySourceKey,
@@ -35,19 +35,17 @@ import {
 } from './record-purge-authority.ts';
 
 // Permanent owner-assigned codec IDs; existing receipt command strings remain unchanged.
-const resourceHistoryCommands = {
-  'context.create': 3000,
-  'context:delete': 3001,
-  'context:restore': 3002,
-  'definitions.extension.publish': 3003,
-  'definitions.extension.activate': 3004,
-  'zone.create': 3010,
-  'zone.configure': 3011,
-  'zone.publish': 3012,
-  'zone.delete': 3013,
-  'zone.restore': 3014,
-} as const;
-for (const [kind, id] of Object.entries(resourceHistoryCommands)) registerCommandHistoryKind(kind, id);
+type ResourceHistoryCommand =
+  | 'context.create'
+  | 'context:delete'
+  | 'context:restore'
+  | 'definitions.extension.publish'
+  | 'definitions.extension.activate'
+  | 'zone.create'
+  | 'zone.configure'
+  | 'zone.publish'
+  | 'zone.delete'
+  | 'zone.restore';
 
 type Locator = Readonly<{
   reference: NativeRecordPurgeReference;
@@ -437,7 +435,7 @@ async function lockNativeResource(tx: CommandTransaction, ref: RecordHistorySour
 export async function enrollResourceRecordSources(
   tx: CommandTransaction,
   sources: readonly Exclude<RecordHistorySourceReference, { kind: 'contribution' }>[],
-  options: Readonly<{ kind: keyof typeof resourceHistoryCommands; birth?: boolean; events?: 0 | 1 }>,
+  options: Readonly<{ kind: ResourceHistoryCommand; birth?: boolean; events?: 0 | 1 }>,
 ): Promise<void> {
   declareCommandRecordSources(tx, sources);
   const accounts: AccountReference[] = [];

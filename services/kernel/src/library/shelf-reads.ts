@@ -212,12 +212,12 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         const client = deadlineClient(connection, deadline);
         const partition = await admitted(client);
         if (!deps.generation)
-          throw new ShelfReadUnavailableError(
+          throw new (ShelfReadUnavailableError())(
             'ShelfMaintenanceOps.initialize and native RR gate/current-generation reader',
           );
         const state = await deps.generation(client, { route, accountId: account.accountId });
         if (state.readiness !== 'ready' || state.activeGeneration === null || state.epoch < 0n)
-          throw new ShelfReadUnavailableError('native complete shelf generation');
+          throw new (ShelfReadUnavailableError())('native complete shelf generation');
         return read(client, route, account.accountId, partition.epoch, {
           generationId: state.activeGeneration,
           ownerEpoch: state.epoch.toString(10),
@@ -328,7 +328,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
             !validShelfTitleSeek(result.after.key) ||
             result.entries.some((entry) => entry.titleCoverage === undefined))
         )
-          throw new ShelfReadUnavailableError('native title page coverage and seek');
+          throw new (ShelfReadUnavailableError())('native title page coverage and seek');
         const key =
           query.orderBy === 'title'
             ? result.after?.key
@@ -359,7 +359,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         titleBasis !== null &&
         titleBasis !== (await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account))
       )
-        throw new ShelfReadUnavailableError('unchanged current title/disclosure basis');
+        throw new (ShelfReadUnavailableError())('unchanged current title/disclosure basis');
       return pageResult;
     },
     async summary(actor, raw) {

@@ -2073,11 +2073,14 @@ for (const end of ['unavailable', 'failure'] as const) {
 
 test('owned literal catalogue prices complete bounded projections and exact operands, refusing comments and the unbounded ordinary published query', async () => {
   const {
-    IDENTITY_SOURCE_LOCAL_SQL: sql,
-    IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: prices,
-    IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS: mutations,
+    IDENTITY_SOURCE_LOCAL_SQL: sqlGetter,
+    IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: pricesGetter,
+    IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS: mutationsGetter,
     identitySourceCustodyFootprint: footprint,
   } = await import('../../src/semantic/identity-source-consumer-custody.ts');
+  const sql = sqlGetter();
+  const prices = pricesGetter();
+  const mutations = mutationsGetter();
   const { identityReceiptKey, serializeIdentityValue: json } =
     await import('../../src/semantic/identity-epoch-store.ts');
   const id = randomUUID();
@@ -2118,8 +2121,9 @@ test('local component arithmetic preserves exact Core cleanup and exposes event 
   const { readIdentitySourceOriginalCostDisposition: read } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { COMMAND_DISPATCH_ALLOWANCE: command } = await import('../../src/command/dispatch-lifetime.ts');
-  const { IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: reads, IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS: wider } =
+  const { IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: readsGetter, IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS: wider } =
     await import('../../src/semantic/identity-source-consumer-custody.ts');
+  const reads = readsGetter();
   const total = compose([
     { name: 'Core.effect', calls: 1, declaration: command.effect },
     { name: 'Core.cleanup', calls: 1, declaration: command.cleanup },

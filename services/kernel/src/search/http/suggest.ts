@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { SubjectSummarySchema } from '../../semantic/http/summaries.ts';
 import { t } from 'elysia';
 
@@ -91,17 +92,22 @@ const workContext = t.Union([
     object,
   ),
 ]);
-const result = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    type: t.String(),
-    labels: t.Record(t.String(), t.String()),
-    summary: t.Union([SubjectSummarySchema, t.Null()]),
-    workContext: t.Optional(workContext),
-  },
-  object,
-);
-export const suggestResponse = t.Object(
-  { subjects: t.Array(result, { maxItems: 10 }), as_of: t.String({ format: 'date-time' }) },
-  object,
-);
+function result() {
+  return memoizedValue(result, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        type: t.String(),
+        labels: t.Record(t.String(), t.String()),
+        summary: t.Union([SubjectSummarySchema, t.Null()]),
+        workContext: t.Optional(workContext),
+      },
+      object,
+    ),
+  );
+}
+export function suggestResponse() {
+  return memoizedValue(suggestResponse, () =>
+    t.Object({ subjects: t.Array(result(), { maxItems: 10 }), as_of: t.String({ format: 'date-time' }) }, object),
+  );
+}

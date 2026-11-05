@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
@@ -22,16 +23,20 @@ const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const ordinal = t.Integer({ minimum: 0, maximum: 199 });
 const params = t.Object({ importId: id }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
 function detail(operation: string) {
   return {
     operationId: `library_import_anilist.${operation}`,
@@ -74,7 +79,7 @@ export function aniListImportRoutes(
         beforeHandle: ({ set }) => {
           set.headers['Cache-Control'] = 'private, no-store';
         },
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             upload: t.String({ maxLength: 1048576 }),
@@ -84,7 +89,7 @@ export function aniListImportRoutes(
           },
           closed,
         ),
-        response: { 200: t.Object({ id, count: t.Integer() }, closed), ...failures },
+        response: { 200: t.Object({ id, count: t.Integer() }, closed), ...failures() },
         detail: detail('preview'),
       },
       ({ actor, body, headers }) =>
@@ -105,7 +110,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['page']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('page'),
       },
@@ -118,7 +123,7 @@ export function aniListImportRoutes(
           set.headers['Cache-Control'] = 'private, no-store';
         },
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             ordinal,
@@ -175,7 +180,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['review']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('review'),
       },
@@ -206,7 +211,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['apply']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('apply'),
       },
@@ -220,7 +225,7 @@ export function aniListImportRoutes(
           set.headers['Cache-Control'] = 'private, no-store';
         },
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             ordinal,
@@ -235,7 +240,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewConsumptionDates']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: { ...detail('dates_review'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
       },
@@ -276,7 +281,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyConsumptionDates']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: { ...detail('dates_apply'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
       },
@@ -290,15 +295,15 @@ export function aniListImportRoutes(
           set.headers['Cache-Control'] = 'private, no-store';
         },
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ ordinal, sourceReviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
         response: {
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewMetadata']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
-        detail: { ...detail('metadata_review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes },
       },
       ({ actor, params, body, headers }) =>
         command(() =>
@@ -323,7 +328,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['metadata']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('metadata'),
       },
@@ -352,7 +357,7 @@ export function aniListImportRoutes(
                 },
                 closed,
               ),
-              { minItems: 1, maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields },
+              { minItems: 1, maxItems: ENTRY_IMPORT_METADATA_LIMITS().fields },
             ),
           },
           closed,
@@ -361,9 +366,9 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyMetadata']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
-        detail: { ...detail('metadata_apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes },
       },
       ({ actor, params, body, request }) =>
         command(() =>
@@ -377,7 +382,7 @@ export function aniListImportRoutes(
           set.headers['Cache-Control'] = 'private, no-store';
         },
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             ordinal,
@@ -402,7 +407,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewLabels']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('review_labels'),
       },
@@ -433,7 +438,7 @@ export function aniListImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyLabels']>>>(
             t.Object({}, { additionalProperties: true }),
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('apply_labels'),
       },
@@ -447,9 +452,9 @@ export function aniListImportRoutes(
           set.headers['Cache-Control'] = 'private, no-store';
         },
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ remove: t.Optional(t.Boolean()) }, closed),
-        response: { 200: t.Object({ cancelled: t.Boolean() }, closed), ...failures },
+        response: { 200: t.Object({ cancelled: t.Boolean() }, closed), ...failures() },
         detail: detail('cancel'),
       },
       ({ actor, params, body, headers }) =>

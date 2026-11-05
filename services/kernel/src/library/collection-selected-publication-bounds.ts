@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Static bounds for the retained finite selected-set publication command. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-native.ts';
@@ -12,7 +13,9 @@ import { WORK_EXECUTION_ATTEMPT_BOUND } from '../work/selected-runtime-cost.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 
 export const COLLECTION_SELECTED_PUBLICATION_LIMIT = 100;
-export const COLLECTION_SELECTED_PUBLICATION_ATTEMPTS = WORK_EXECUTION_ATTEMPT_BOUND;
+export function COLLECTION_SELECTED_PUBLICATION_ATTEMPTS() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_ATTEMPTS, () => WORK_EXECUTION_ATTEMPT_BOUND);
+}
 
 const cost = (values: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...values, engineRequests: 0 });
 
@@ -22,69 +25,101 @@ function maximumBounds(...values: readonly Bound[]): Bound {
 }
 
 /** Existing native resolveSubject ceiling, paid for every selected ID and each complete closure original. */
-export const COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST = cost({
-  candidateKeys: 1,
-  nativeRows: 8192,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 128,
-  witnessKeys: 0,
-  statements: 128,
-  bytes: 1024 * 1024,
-});
+export function COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST, () =>
+    cost({
+      candidateKeys: 1,
+      nativeRows: 8192,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 128,
+      witnessKeys: 0,
+      statements: 128,
+      bytes: 1024 * 1024,
+    }),
+  );
+}
 
-const scopeCurrentness = cost({
-  candidateKeys: 0,
-  nativeRows: 32,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 2,
-  witnessKeys: 0,
-  statements: 6,
-  bytes: 16 * 1024,
-});
-const commandAdmission = cost({
-  candidateKeys: 0,
-  nativeRows: 8,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 2,
-  witnessKeys: 0,
-  statements: 2,
-  bytes: 2048,
-});
-const privateAuthority = cost({
-  candidateKeys: 0,
-  nativeRows: 8192,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 128,
-  witnessKeys: 0,
-  statements: 128,
-  bytes: 1024 * 1024,
-});
-const compareHeaderRule = cost({
-  candidateKeys: 0,
-  nativeRows: 64,
-  identityMetadataRows: 0,
-  emptySeeks: 2,
-  nativePoints: 8,
-  witnessKeys: 0,
-  statements: 2,
-  bytes: 65536,
-});
+function scopeCurrentness() {
+  return memoizedValue(scopeCurrentness, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 2,
+      witnessKeys: 0,
+      statements: 6,
+      bytes: 16 * 1024,
+    }),
+  );
+}
+function commandAdmission() {
+  return memoizedValue(commandAdmission, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 8,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 2,
+      witnessKeys: 0,
+      statements: 2,
+      bytes: 2048,
+    }),
+  );
+}
+function privateAuthority() {
+  return memoizedValue(privateAuthority, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 8192,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 128,
+      witnessKeys: 0,
+      statements: 128,
+      bytes: 1024 * 1024,
+    }),
+  );
+}
+function compareHeaderRule() {
+  return memoizedValue(compareHeaderRule, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 64,
+      identityMetadataRows: 0,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 0,
+      statements: 2,
+      bytes: 65536,
+    }),
+  );
+}
 
-const sourcePrepare = COLLECTION_SOURCE_WORK_COST.state;
-const sourceMembership = sumBounds(
-  repeatBound(sourcePrepare, 2),
-  COLLECTION_SOURCE_WORK_COST.group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
-  repeatBound(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST, COLLECTION_SOURCE_WORK_GROUP_LIMIT),
-);
-const closureAndOwnerFacts = sumBounds(
-  MEMBERS_PREPARATION_SOURCE_COST,
-  COLLECTION_SOURCE_WORK_COST.group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
-);
-const ownerFilterMatch = MEMBERS_PREPARATION_SOURCE_COST;
+function sourcePrepare() {
+  return memoizedValue(sourcePrepare, () => COLLECTION_SOURCE_WORK_COST().state);
+}
+function sourceMembership() {
+  return memoizedValue(sourceMembership, () =>
+    sumBounds(
+      repeatBound(sourcePrepare(), 2),
+      COLLECTION_SOURCE_WORK_COST().group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+      repeatBound(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(), COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+    ),
+  );
+}
+function closureAndOwnerFacts() {
+  return memoizedValue(closureAndOwnerFacts, () =>
+    sumBounds(
+      MEMBERS_PREPARATION_SOURCE_COST(),
+      COLLECTION_SOURCE_WORK_COST().group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
+    ),
+  );
+}
+function ownerFilterMatch() {
+  return memoizedValue(ownerFilterMatch, () => MEMBERS_PREPARATION_SOURCE_COST());
+}
 function canonicalDeduplicationFor(selectionCount: number) {
   return cost({
     candidateKeys: selectionCount,
@@ -97,28 +132,42 @@ function canonicalDeduplicationFor(selectionCount: number) {
     bytes: Math.ceil((16 * 1024 * selectionCount) / COLLECTION_SELECTED_PUBLICATION_LIMIT),
   });
 }
-const positiveMembership = sumBounds(
-  sourceMembership,
-  repeatBound(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT),
-  closureAndOwnerFacts,
-  ownerFilterMatch,
-);
-const negativeMembership = sourceMembership;
-const selectedBranch = sumBounds(
-  COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
-  maximumBounds(positiveMembership, negativeMembership),
-);
+function positiveMembership() {
+  return memoizedValue(positiveMembership, () =>
+    sumBounds(
+      sourceMembership(),
+      repeatBound(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST(), OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT),
+      closureAndOwnerFacts(),
+      ownerFilterMatch(),
+    ),
+  );
+}
+function negativeMembership() {
+  return memoizedValue(negativeMembership, () => sourceMembership());
+}
+function selectedBranch() {
+  return memoizedValue(selectedBranch, () =>
+    sumBounds(
+      COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST(),
+      maximumBounds(positiveMembership(), negativeMembership()),
+    ),
+  );
+}
 
-const nativeOutputMetadata = cost({
-  candidateKeys: 0,
-  nativeRows: 2048,
-  identityMetadataRows: 0,
-  emptySeeks: 32,
-  nativePoints: 128,
-  witnessKeys: 0,
-  statements: 64,
-  bytes: 65536,
-});
+function nativeOutputMetadata() {
+  return memoizedValue(nativeOutputMetadata, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 2048,
+      identityMetadataRows: 0,
+      emptySeeks: 32,
+      nativePoints: 128,
+      witnessKeys: 0,
+      statements: 64,
+      bytes: 65536,
+    }),
+  );
+}
 function nativeOutputRows(selectionCount: number) {
   return cost({
     candidateKeys: selectionCount,
@@ -131,113 +180,157 @@ function nativeOutputRows(selectionCount: number) {
     bytes: 512 * selectionCount,
   });
 }
-const outputActivation = cost({
-  candidateKeys: 0,
-  nativeRows: 256,
-  identityMetadataRows: 0,
-  emptySeeks: 8,
-  nativePoints: 32,
-  witnessKeys: 0,
-  statements: 32,
-  bytes: 32768,
-});
-const metadataHistory = cost({
-  candidateKeys: 0,
-  nativeRows: 128,
-  identityMetadataRows: 0,
-  emptySeeks: 4,
-  nativePoints: 32,
-  witnessKeys: 0,
-  statements: 24,
-  bytes: 32768,
-});
-const historyEventCommit = cost({
-  candidateKeys: 0,
-  nativeRows: 128,
-  identityMetadataRows: 0,
-  emptySeeks: 8,
-  nativePoints: 32,
-  witnessKeys: 0,
-  statements: 32,
-  bytes: 65536,
-});
-const receiptLookup = cost({
-  candidateKeys: 0,
-  nativeRows: 16,
-  identityMetadataRows: 0,
-  emptySeeks: 1,
-  nativePoints: 2,
-  witnessKeys: 0,
-  statements: 2,
-  bytes: 8192,
-});
-const receiptWrite = cost({
-  candidateKeys: 0,
-  nativeRows: 32,
-  identityMetadataRows: 0,
-  emptySeeks: 2,
-  nativePoints: 8,
-  witnessKeys: 0,
-  statements: 8,
-  bytes: 16384,
-});
-const serialization = cost({
-  candidateKeys: 0,
-  nativeRows: 32,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 65536,
-});
-const events = cost({
-  candidateKeys: 0,
-  nativeRows: 32,
-  identityMetadataRows: 0,
-  emptySeeks: 2,
-  nativePoints: 8,
-  witnessKeys: 0,
-  statements: 8,
-  bytes: 16384,
-});
-const rollback = cost({
-  candidateKeys: 0,
-  nativeRows: 64,
-  identityMetadataRows: 0,
-  emptySeeks: 4,
-  nativePoints: 16,
-  witnessKeys: 0,
-  statements: 16,
-  bytes: 32768,
-});
+function outputActivation() {
+  return memoizedValue(outputActivation, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 256,
+      identityMetadataRows: 0,
+      emptySeeks: 8,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 32,
+      bytes: 32768,
+    }),
+  );
+}
+function metadataHistory() {
+  return memoizedValue(metadataHistory, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 128,
+      identityMetadataRows: 0,
+      emptySeeks: 4,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 24,
+      bytes: 32768,
+    }),
+  );
+}
+function historyEventCommit() {
+  return memoizedValue(historyEventCommit, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 128,
+      identityMetadataRows: 0,
+      emptySeeks: 8,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 32,
+      bytes: 65536,
+    }),
+  );
+}
+function receiptLookup() {
+  return memoizedValue(receiptLookup, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 16,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 2,
+      witnessKeys: 0,
+      statements: 2,
+      bytes: 8192,
+    }),
+  );
+}
+function receiptWrite() {
+  return memoizedValue(receiptWrite, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 0,
+      statements: 8,
+      bytes: 16384,
+    }),
+  );
+}
+function serialization() {
+  return memoizedValue(serialization, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 65536,
+    }),
+  );
+}
+function events() {
+  return memoizedValue(events, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 0,
+      statements: 8,
+      bytes: 16384,
+    }),
+  );
+}
+function rollback() {
+  return memoizedValue(rollback, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 64,
+      identityMetadataRows: 0,
+      emptySeeks: 4,
+      nativePoints: 16,
+      witnessKeys: 0,
+      statements: 16,
+      bytes: 32768,
+    }),
+  );
+}
 
-const binder = sumBounds(
-  sourcePrepare,
-  privateAuthority,
-  MEMBERS_PREPARATION_SOURCE_COST,
-  scopeCurrentness,
-  commandAdmission,
-);
-const preparationFixed = sumBounds(
-  repeatBound(sourcePrepare, 2),
-  repeatBound(scopeCurrentness, 2),
-  MEMBERS_PREPARATION_SOURCE_COST,
-  privateAuthority,
-);
-const preReceipt = sumBounds(compareHeaderRule, privateAuthority, sourcePrepare, scopeCurrentness, commandAdmission);
+function binder() {
+  return memoizedValue(binder, () =>
+    sumBounds(
+      sourcePrepare(),
+      privateAuthority(),
+      MEMBERS_PREPARATION_SOURCE_COST(),
+      scopeCurrentness(),
+      commandAdmission(),
+    ),
+  );
+}
+function preparationFixed() {
+  return memoizedValue(preparationFixed, () =>
+    sumBounds(
+      repeatBound(sourcePrepare(), 2),
+      repeatBound(scopeCurrentness(), 2),
+      MEMBERS_PREPARATION_SOURCE_COST(),
+      privateAuthority(),
+    ),
+  );
+}
+function preReceipt() {
+  return memoizedValue(preReceipt, () =>
+    sumBounds(compareHeaderRule(), privateAuthority(), sourcePrepare(), scopeCurrentness(), commandAdmission()),
+  );
+}
 function nativeTransactionFor(selectionCount: number) {
   return sumBounds(
-    nativeOutputMetadata,
+    nativeOutputMetadata(),
     nativeOutputRows(selectionCount),
-    outputActivation,
-    metadataHistory,
-    historyEventCommit,
-    receiptLookup,
-    receiptWrite,
-    serialization,
-    events,
-    rollback,
+    outputActivation(),
+    metadataHistory(),
+    historyEventCommit(),
+    receiptLookup(),
+    receiptWrite(),
+    serialization(),
+    events(),
+    rollback(),
   );
 }
 
@@ -281,51 +374,51 @@ export function collectionSelectedPublicationPlan(selectionCount: number): Colle
     selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT
   )
     throw new RangeError('Invalid selected publication count');
-  const branches = repeatBound(selectedBranch, selectionCount);
+  const branches = repeatBound(selectedBranch(), selectionCount);
   const canonicalDeduplication = canonicalDeduplicationFor(selectionCount);
-  const preparation = sumBounds(preparationFixed, canonicalDeduplication, branches);
+  const preparation = sumBounds(preparationFixed(), canonicalDeduplication, branches);
   const nativeTransaction = nativeTransactionFor(selectionCount);
-  const perAttempt = sumBounds(binder, preparation, preReceipt, nativeTransaction);
+  const perAttempt = sumBounds(binder(), preparation, preReceipt(), nativeTransaction);
   const maxAttempt = sumBounds(
-    binder,
-    preparationFixed,
+    binder(),
+    preparationFixed(),
     canonicalDeduplicationFor(COLLECTION_SELECTED_PUBLICATION_LIMIT),
-    repeatBound(selectedBranch, COLLECTION_SELECTED_PUBLICATION_LIMIT),
-    preReceipt,
+    repeatBound(selectedBranch(), COLLECTION_SELECTED_PUBLICATION_LIMIT),
+    preReceipt(),
     nativeTransactionFor(COLLECTION_SELECTED_PUBLICATION_LIMIT),
   );
-  const ceiling = repeatBound(maxAttempt, COLLECTION_SELECTED_PUBLICATION_ATTEMPTS);
+  const ceiling = repeatBound(maxAttempt, COLLECTION_SELECTED_PUBLICATION_ATTEMPTS());
   if (!withinCeiling(perAttempt, ceiling)) throw new TypeError('Selected publication exceeds its native ceiling');
   return Object.freeze({
     selectionCount,
     terms: Object.freeze({
-      binding: binder,
+      binding: binder(),
       selectedBranches: branches,
-      selectedBranch,
-      positiveMembership,
-      negativeMembership,
-      sourceMembership,
-      closureAndOwnerFacts,
-      ownerFilterMatch,
-      scopeCurrentness,
-      sourcePreparation: sourcePrepare,
+      selectedBranch: selectedBranch(),
+      positiveMembership: positiveMembership(),
+      negativeMembership: negativeMembership(),
+      sourceMembership: sourceMembership(),
+      closureAndOwnerFacts: closureAndOwnerFacts(),
+      ownerFilterMatch: ownerFilterMatch(),
+      scopeCurrentness: scopeCurrentness(),
+      sourcePreparation: sourcePrepare(),
       canonicalDeduplication,
-      ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST, privateAuthority),
+      ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST(), privateAuthority()),
       preparation,
-      preReceipt,
-      compareHeaderRule,
-      privateAuthority,
+      preReceipt: preReceipt(),
+      compareHeaderRule: compareHeaderRule(),
+      privateAuthority: privateAuthority(),
       nativeTransaction,
       outputReservation: nativeTransaction,
-      receiptLookup,
-      receiptWrite,
-      serialization,
-      rollback,
+      receiptLookup: receiptLookup(),
+      receiptWrite: receiptWrite(),
+      serialization: serialization(),
+      rollback: rollback(),
       retries: ceiling,
     }),
     perAttempt,
     ceiling,
-    bindingWork: nativeWorkDimensions(binder),
+    bindingWork: nativeWorkDimensions(binder()),
   });
 }
 
@@ -364,5 +457,9 @@ export function collectionSelectedPublicationOutputReservation(selectionCount: n
     throw new RangeError('Invalid selected publication count');
   return nativeTransactionFor(selectionCount);
 }
-export const COLLECTION_SELECTED_PUBLICATION_SOURCE_PREPARATION = sourcePrepare;
-export const COLLECTION_SELECTED_PUBLICATION_SOURCE_MEMBERSHIP = sourceMembership;
+export function COLLECTION_SELECTED_PUBLICATION_SOURCE_PREPARATION() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_SOURCE_PREPARATION, () => sourcePrepare());
+}
+export function COLLECTION_SELECTED_PUBLICATION_SOURCE_MEMBERSHIP() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_SOURCE_MEMBERSHIP, () => sourceMembership());
+}

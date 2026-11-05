@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -25,7 +26,9 @@ import { SourceFenceQuerySchema, SourceFenceResponseSchema, strictContentSchema 
 import { readFences } from './source-fences.ts';
 
 type Dependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
-const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
+function root() {
+  return memoizedValue(root, () => Object.freeze({ route: 0, id: GLOBAL_CONTEXT }));
+}
 
 /** Each boundary owns one independently anchored read-only checkout. Preparation
  * and any other partition read happen only after that connection is released.
@@ -61,12 +64,12 @@ async function snapshot<T>(
 async function authorizeRoot(dependencies: Dependencies, actor: Actor, deadline: number) {
   // No anonymous eligibility or synthetic tuple UUID: the sole seeded Context
   // supplies authority, using the mounted protected action and normal formula.
-  const check = await accessCheck(dependencies.access, actor, 'source_fence:read', root, {
+  const check = await accessCheck(dependencies.access, actor, 'source_fence:read', root(), {
     pool: dependencies.pool,
     deadline,
   });
   return snapshot(dependencies.pool, 0, deadline, async (client) => {
-    const current = await readContext.run(client, { route: root.route, context_id: root.id });
+    const current = await readContext.run(client, { route: root().route, context_id: root().id });
     // Access obtains authoritative database time on this root's own client.
     if (current?.kind !== 'global' || !(await check(client))) throw new ProblemError('forbidden');
   });

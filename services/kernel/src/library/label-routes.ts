@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -27,40 +28,48 @@ const labelResult = t.Object({ label: identity }, closed);
 const assignmentResult = t.Object({ assignment: identity }, closed);
 const deleted = t.Object({ deleted: t.Literal(true) }, closed);
 const params = t.Object({ id }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
 const page = {
   cursor: t.Optional(t.String({ maxLength: 4096 })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 };
 const assignmentFields = { id, labelId: id, subjectId: id, revision: identity.properties.revision };
 const next = t.Union([t.String(), t.Null()]);
-const assignmentPage = t.Union([
-  t.Object({ assignments: t.Array(t.Object(assignmentFields, closed)), next }, closed),
-  t.Object(
-    {
-      assignments: t.Array(t.Object({ ...assignmentFields, label: t.Object({ name: t.String() }, closed) }, closed)),
-      next,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      assignments: t.Array(
-        t.Object(
-          {
-            ...assignmentFields,
-            ...t.Required(t.Object(subjectFields)).properties,
-            libraryEntry: t.Union([libraryEntryTileSchema, t.Null()]),
-          },
-          closed,
-        ),
+function assignmentPage() {
+  return memoizedValue(assignmentPage, () =>
+    t.Union([
+      t.Object({ assignments: t.Array(t.Object(assignmentFields, closed)), next }, closed),
+      t.Object(
+        {
+          assignments: t.Array(
+            t.Object({ ...assignmentFields, label: t.Object({ name: t.String() }, closed) }, closed),
+          ),
+          next,
+        },
+        closed,
       ),
-      next,
-      label: t.Object({ id, name: t.String(), revision: identity.properties.revision }, closed),
-    },
-    closed,
-  ),
-]);
+      t.Object(
+        {
+          assignments: t.Array(
+            t.Object(
+              {
+                ...assignmentFields,
+                ...t.Required(t.Object(subjectFields())).properties,
+                libraryEntry: t.Union([libraryEntryTileSchema(), t.Null()]),
+              },
+              closed,
+            ),
+          ),
+          next,
+          label: t.Object({ id, name: t.String(), revision: identity.properties.revision }, closed),
+        },
+        closed,
+      ),
+    ]),
+  );
+}
 const expected = t.Object({ subjectId: id, assignmentId: id, revision }, closed);
 const reviewAssignment = t.Union([t.Object({ ...identity.properties, effective: t.Boolean() }, closed), t.Null()]);
 const reviewLabel = t.Object({ ...identity.properties, name: t.String() }, closed);
@@ -116,31 +125,33 @@ const consolidationResult = t.Object(
   },
   closed,
 );
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  409: problemSchema(
-    'conflict',
-    'stale_cursor',
-    'library_label_capacity',
-    'library_label_restore_stale',
-    'library_label_restore_expired',
-    'library_label_restore_occupied',
-    'library_label_restore_capacity',
-  ),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'index_not_ready',
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-    'semantic_not_ready',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    409: problemSchema(
+      'conflict',
+      'stale_cursor',
+      'library_label_capacity',
+      'library_label_restore_stale',
+      'library_label_restore_expired',
+      'library_label_restore_occupied',
+      'library_label_restore_capacity',
+    ),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'index_not_ready',
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'semantic_not_ready',
+    ),
+  }));
+}
 function detail(operation: string, action = 'library_entry:update', write = true) {
   return {
     operationId: `library_label.${operation}`,
@@ -204,7 +215,7 @@ export function personalLabelRoutes(
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('list', 'library_entry:list', false),
       },
@@ -216,10 +227,10 @@ export function personalLabelRoutes(
     .post(
       '/v1/libraryLabels',
       {
-        headers,
+        headers: headers(),
         body: t.Object({ name: t.String() }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 201: labelResult, ...failures },
+        response: { 201: labelResult, ...failures() },
         detail: detail('create'),
       },
       async ({ actor, body, headers, admission, job, session, set }) => {
@@ -235,10 +246,10 @@ export function personalLabelRoutes(
       '/v1/libraryLabels/:id',
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ name: t.String(), revision }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: labelResult, ...failures },
+        response: { 200: labelResult, ...failures() },
         detail: detail('rename'),
       },
       async ({ actor, params, body, headers, admission, job, session }) => {
@@ -255,10 +266,10 @@ export function personalLabelRoutes(
       '/v1/libraryLabels/:id',
       {
         params,
-        headers,
+        headers: headers(),
         query: t.Object({ revision }, closed),
         transform: ({ request }) => queryFields(request, ['revision']),
-        response: { 200: deleted, ...failures },
+        response: { 200: deleted, ...failures() },
         detail: { ...detail('delete'), responses: undoHeader('Library-Label-Revision') },
       },
       async ({ actor, params, query, headers, admission, job, session, set }) => {
@@ -275,10 +286,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'restore'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ revision }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: labelResult, ...failures },
+        response: { 200: labelResult, ...failures() },
         detail: detail('restore'),
       },
       async ({ actor, params, body, headers, admission, job, session }) => {
@@ -294,10 +305,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'assign'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ subjectId: id }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: assignmentResult, ...failures },
+        response: { 200: assignmentResult, ...failures() },
         detail: detail('assign'),
       },
       async ({ actor, params, body, headers, admission, job, session }) => {
@@ -313,10 +324,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'unassign'),
       {
         params,
-        headers,
+        headers: headers(),
         body: expected,
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: deleted, ...failures },
+        response: { 200: deleted, ...failures() },
         detail: { ...detail('unassign'), responses: undoHeader('Library-Label-Assignment-Revision') },
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -333,10 +344,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'restoreAssignment'),
       {
         params,
-        headers,
+        headers: headers(),
         body: expected,
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: assignmentResult, ...failures },
+        response: { 200: assignmentResult, ...failures() },
         detail: detail('assignment_restore'),
       },
       async ({ actor, params, body, headers, admission, job, session }) => {
@@ -354,8 +365,8 @@ export function personalLabelRoutes(
         query: t.Object({ ...page, ...viewQuery, labelId: t.Optional(id), subjectId: t.Optional(id) }, closed),
         transform: ({ request }) => queryFields(request, ['labelId', 'subjectId', 'cursor', 'limit', 'view']),
         response: {
-          200: assignmentPage,
-          ...failures,
+          200: assignmentPage(),
+          ...failures(),
         },
         detail: {
           ...detail('assignment_list', 'library_entry:read', false),
@@ -414,7 +425,7 @@ export function personalLabelRoutes(
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: {
           ...detail('consolidation_review', 'library_entry:read', false),
@@ -434,7 +445,7 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'confirmConsolidation'),
       {
         params,
-        headers,
+        headers: headers(),
         body: confirmationEvidence,
         transform: ({ request }) => queryFields(request, []),
         response: {
@@ -447,7 +458,7 @@ export function personalLabelRoutes(
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('consolidation_confirm'),
       },
@@ -466,10 +477,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'applyConsolidation'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ confirmationId: id }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: consolidationResult, ...failures },
+        response: { 200: consolidationResult, ...failures() },
         detail: detail('consolidation_apply'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -486,10 +497,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'retryConsolidation'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ confirmationId: id, item: t.Integer({ minimum: 0, maximum: 15 }) }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: consolidationResult, ...failures },
+        response: { 200: consolidationResult, ...failures() },
         detail: detail('consolidation_retry'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -506,10 +517,10 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'cancelConsolidation'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ confirmationId: id }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: consolidationResult, ...failures },
+        response: { 200: consolidationResult, ...failures() },
         detail: detail('consolidation_cancel'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -527,7 +538,7 @@ export function personalLabelRoutes(
       {
         params: t.Object({ id, confirmationId: id }, closed),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: consolidationResult, ...failures },
+        response: { 200: consolidationResult, ...failures() },
         detail: detail('consolidation_result', 'library_entry:read', false),
       },
       async ({ actor, params, admission, job, set }) => {

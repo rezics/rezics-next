@@ -166,7 +166,7 @@ test('responsibility blocks close, identifies its operated account, and release 
     await commands.tombstone(await context(owner), { accountId: org, key: key() });
     throw new Error('close unexpectedly succeeded');
   } catch (error) {
-    expect(error).toBeInstanceOf(OrganizationCloseBlockedError);
+    expect(error).toBeInstanceOf(OrganizationCloseBlockedError());
     expect((error as OrganizationCloseBlockedError).blocker).toEqual({
       purpose: 'operator',
       relatedAccountId: automated,

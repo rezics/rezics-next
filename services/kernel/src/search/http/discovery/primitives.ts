@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../../memoized.ts';
 import { t } from 'elysia';
 import { LIST_CURSOR_BOUNDS } from '../../../tokens/list-cursor.ts';
 import { routeOf } from '../../../route/route.ts';
@@ -7,10 +8,11 @@ import type { MatchEvidence } from '../../match-evidence.ts';
 export const closed = { additionalProperties: false } as const;
 export const id = t.String({ format: 'uuid' });
 export const nullableText = t.Union([t.String(), t.Null()]);
-export const continuation = t.Union([
-  t.String({ minLength: 1, maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength }),
-  t.Null(),
-]);
+export function continuation() {
+  return memoizedValue(continuation, () =>
+    t.Union([t.String({ minLength: 1, maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength }), t.Null()]),
+  );
+}
 export const key = <Owner extends 'semantic' | 'accounts'>(owner: Owner) =>
   t.Object(
     {

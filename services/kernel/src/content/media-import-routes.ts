@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -20,21 +21,25 @@ import { recordOwnMediaReservation } from './own-media.ts';
 
 /** Supplied by trusted runtime composition. Missing configuration fails closed. */
 export type MediaImportRouteDependencies = ContentCommandDependencies & { fetchConfig?: MediaImportFetchConfig };
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
 const security = [{ bearerAuth: [] }];
-const uploadRate = defineRateLimit({ family: 'upload', units: 1 });
+function uploadRate() {
+  return memoizedValue(uploadRate, () => defineRateLimit({ family: 'upload', units: 1 }));
+}
 
 async function importOperation<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -75,10 +80,10 @@ export function mediaImportRoutes(
       customMethod('/v1/media', 'importFromUrl'),
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
-        body: MediaImportInputSchema,
+        body: MediaImportInputSchema(),
         response: {
-          202: withHeaders(MediaImportReceiptSchema, { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          202: withHeaders(MediaImportReceiptSchema(), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
           403: problemSchema('forbidden'),
           409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict', 'too_many_events'),
@@ -97,7 +102,7 @@ export function mediaImportRoutes(
           'x-exposure': 'public',
           'x-action': 'media:import_from_url',
           'x-resource-types': ['content.media'],
-          'x-rate-limit': uploadRate,
+          'x-rate-limit': uploadRate(),
           security,
         },
       },
@@ -135,7 +140,7 @@ export function mediaImportRoutes(
       customMethod('/v1/media/:id', 'importStatus'),
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        response: { 200: MediaImportPollSchema, ...failures },
+        response: { 200: MediaImportPollSchema(), ...failures() },
         detail: {
           operationId: 'media.import_status',
           'x-exposure': 'public',

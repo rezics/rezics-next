@@ -81,7 +81,7 @@ test('native static configured pages are public while direct targets and source-
   for (const who of ['anonymous', 'owner', 'editor'] as const) {
     const result = await f.read(staticZone.id, who);
     expect(result.status, JSON.stringify(result.body)).toBe(200);
-    expect(Compile(ZonePageResponseSchema).Check(result.body)).toBe(true);
+    expect(Compile(ZonePageResponseSchema()).Check(result.body)).toBe(true);
     expect(result.body.document).toEqual(body.configuration.pages[0]!.document);
     expect(result.body.reads).toEqual({});
     closed(await f.read(staticZone.id, who, { subject: newId(0x7111) }));

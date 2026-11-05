@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Committed pre-Type inputs. Raw originals are never votes or disclosure evidence. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -33,7 +34,9 @@ export {
   COLLECTION_KIND_INPUT_RAW_LIMIT,
   collectionKindInputWork,
 } from './collection-kind-input-bounds.ts';
-const quantum = COLLECTION_KIND_INPUT_QUANTUM;
+function quantum() {
+  return memoizedValue(quantum, () => COLLECTION_KIND_INPUT_QUANTUM);
+}
 type Progress = Readonly<{ driver: CanonicalRawKey['driver'] | 'done'; after: CanonicalRawKey | null }>;
 export type CollectionKindRawInputBody = Readonly<{
   format: 1;
@@ -60,7 +63,9 @@ export type CollectionKindInputBinding = Readonly<{
 }>;
 type State = NonNullable<(typeof readState)['~reylo']['element']>;
 type Row = (typeof readInput)['~reylo']['element'];
-const terms = COLLECTION_KIND_INPUT_TERMS;
+function terms() {
+  return memoizedValue(terms, () => COLLECTION_KIND_INPUT_TERMS());
+}
 function immutable<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     for (const child of Object.values(value)) immutable(child);
@@ -84,7 +89,7 @@ function parse(row: Row): CollectionKindRawInputBody {
     value.format !== 1 ||
     value.preparation.version !== row.version ||
     value.preparation.predecessor !== row.predecessor ||
-    value.rows.length > quantum ||
+    value.rows.length > quantum() ||
     value.exhausted !== (value.after.driver === 'done')
   )
     throw new ProblemError('dependency_unavailable');
@@ -153,7 +158,7 @@ export async function resolveCollectionKindRawInput(
     )
       throw new ProblemError('semantic_not_ready');
   }
-  const state = await invokeCollectionKindInput(work, terms.state, () =>
+  const state = await invokeCollectionKindInput(work, terms().state, () =>
     readState.run(tx, {
       route: locator.route,
       origin_id: originId,
@@ -165,7 +170,7 @@ export async function resolveCollectionKindRawInput(
   current();
   if (!state) return { status: 'unavailable', reason: 'Collection Kind original, consent or preparation changed' };
   const key = { route: locator.route, origin_id: originId, preparation_id: locator.preparationId };
-  const rows = await invokeCollectionKindInput(work, terms.read, () => readInput.run(tx, key));
+  const rows = await invokeCollectionKindInput(work, terms().read, () => readInput.run(tx, key));
   current();
   if (rows.length > 1) throw new ProblemError('dependency_unavailable');
   const previous = rows[0];
@@ -175,7 +180,7 @@ export async function resolveCollectionKindRawInput(
   // Structural reads only: actual Source producer owns all population decisions.
   const read = await work.compose(
     (allowance) => readNativeCollectionMetadata(held.pool, locator, { tx, allowance, deadline: held.deadline }),
-    collectionKindInputWorkDimensions(terms.sourceMetadata),
+    collectionKindInputWorkDimensions(terms().sourceMetadata),
   );
   current();
   const metadata = read.metadata;
@@ -223,13 +228,13 @@ export async function resolveCollectionKindRawInput(
         deadline: held.deadline,
         driver,
         after: before.after,
-        limit: quantum,
+        limit: quantum(),
       }),
-    collectionKindInputWorkDimensions(terms.sourcePage),
+    collectionKindInputWorkDimensions(terms().sourcePage),
   );
   current();
   const index = sequence.indexOf(driver);
-  if (index < 0 || page.rows.length > quantum || (!page.exhausted && isDeepStrictEqual(before.after, page.after)))
+  if (index < 0 || page.rows.length > quantum() || (!page.exhausted && isDeepStrictEqual(before.after, page.after)))
     throw new ProblemError('dependency_unavailable');
   const next = sequence[index + 1];
   const after: Progress = page.exhausted
@@ -261,7 +266,7 @@ export async function resolveCollectionKindRawInput(
   const inputId = digest(encoded);
   if (encodedBytes(inputId, body) > COLLECTION_KIND_INPUT_BYTE_LIMIT)
     return { status: 'unavailable', reason: 'Collection Kind complete raw input/progress envelope exceeds 4096 bytes' };
-  await invokeCollectionKindInput(work, terms.insert, () =>
+  await invokeCollectionKindInput(work, terms().insert, () =>
     insertInput.run(tx, {
       ...key,
       version: state.version,
@@ -271,7 +276,7 @@ export async function resolveCollectionKindRawInput(
     }),
   );
   current();
-  const adopted = await invokeCollectionKindInput(work, terms.read, () => readInput.run(tx, key));
+  const adopted = await invokeCollectionKindInput(work, terms().read, () => readInput.run(tx, key));
   current();
   const exact = adopted.find((row) => row.version === state.version);
   if (
@@ -282,7 +287,7 @@ export async function resolveCollectionKindRawInput(
   )
     throw new ProblemError('dependency_unavailable');
   if (previous)
-    await invokeCollectionKindInput(work, terms.retire, () =>
+    await invokeCollectionKindInput(work, terms().retire, () =>
       retireInput.run(tx, { route: locator.route, origin_id: originId, input_id: previous.inputId }),
     );
   current();

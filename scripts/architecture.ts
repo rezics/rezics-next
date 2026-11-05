@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { parseSync, visitorKeys, type Node, type Program } from 'oxc-parser';
 
 export type ModuleKind = 'contract' | 'core' | 'application' | 'adapter' | 'composition root' | 'UI/transport library';
 
@@ -795,6 +796,333 @@ export function changedGraph(
   return graph;
 }
 
+/** A repository binding evaluated while importing a file, rather than when using it. */
+export interface LoadTimeRead {
+  file: string;
+  initializer: string;
+  binding: string;
+  specifier: string;
+  line: number;
+  column: number;
+}
+
+function syntaxChildren(node: Node): Node[] {
+  const fields = node as unknown as Record<string, unknown>;
+  return (visitorKeys[node.type] ?? [])
+    .filter((key) => !['typeAnnotation', 'typeArguments', 'typeParameters', 'returnType', 'implements'].includes(key))
+    .flatMap((key) => {
+      const value = fields[key];
+      return (Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []) as Node[];
+    });
+}
+
+function runtimeExpression(node: Node): Node {
+  switch (node.type) {
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+    case 'TSTypeAssertion':
+    case 'ParenthesizedExpression':
+      return runtimeExpression(node.expression);
+    default:
+      return node;
+  }
+}
+
+function declarationNode(node: Node): Node | null {
+  if (node.type === 'ExportNamedDeclaration') return node.declaration;
+  if (node.type === 'ExportDefaultDeclaration') return node.declaration;
+  return node;
+}
+
+/** Literal leaves contain data only: no runtime imports, functions, getters or constructor calls. */
+function literalLeaf(program: Program): boolean {
+  const literal = (input: Node): boolean => {
+    const node = runtimeExpression(input);
+    switch (node.type) {
+      case 'Literal':
+        return true;
+      case 'UnaryExpression':
+        return literal(node.argument);
+      case 'BinaryExpression':
+        return literal(node.left) && literal(node.right);
+      case 'ArrayExpression':
+        return node.elements.every((item) => item === null || literal(item));
+      case 'ObjectExpression':
+        return node.properties.every(
+          (property) =>
+            property.type === 'Property' &&
+            !property.computed &&
+            property.kind === 'init' &&
+            !property.method &&
+            literal(property.value),
+        );
+      // Freezing a literal does not introduce a dependency on another module's initialization.
+      case 'CallExpression':
+        return (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' &&
+          node.callee.object.name === 'Object' &&
+          !node.callee.computed &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'freeze' &&
+          node.arguments.length === 1 &&
+          literal(node.arguments[0]!)
+        );
+      default:
+        return false;
+    }
+  };
+  return program.body.every((statement) => {
+    if (statement.type === 'ImportDeclaration')
+      return (
+        statement.importKind === 'type' ||
+        (statement.specifiers.length > 0 &&
+          statement.specifiers.every((item) => item.type === 'ImportSpecifier' && item.importKind === 'type'))
+      );
+    if (statement.type === 'ExportNamedDeclaration' && statement.source) return statement.exportKind === 'type';
+    const node = declarationNode(statement);
+    if (!node) return true;
+    if (node.type === 'VariableDeclaration')
+      return node.kind === 'const' && node.declarations.every((item) => item.init !== null && literal(item.init));
+    if (statement.type === 'ExportDefaultDeclaration') return literal(node);
+    return (
+      node.type === 'TSInterfaceDeclaration' || node.type === 'TSTypeAliasDeclaration' || node.type === 'EmptyStatement'
+    );
+  });
+}
+
+/**
+ * Inspect executable syntax without importing production code. Function bodies and instance fields
+ * are deferred; local functions invoked by an initializer and class static initializers are eager.
+ * External packages are outside the repository graph; workspace packages are resolved normally.
+ */
+export function findLoadTimeReads(
+  root: string,
+  graph: ArchitectureGraph,
+  sourceFiles: readonly string[] = Object.keys(graph.hashes),
+): LoadTimeRead[] {
+  const programs = new Map<string, Program>();
+  const leaves = new Set<string>();
+  const relevantFiles = new Set(sourceFiles);
+  for (const source of sourceFiles)
+    for (const edge of graph.imports[source] ?? []) for (const target of edge.targets) relevantFiles.add(target);
+  for (const file of relevantFiles) {
+    if (extname(file) === '.json') leaves.add(file);
+    if (!CODE_EXTENSIONS.has(extname(file)) || file.endsWith('.d.ts')) continue;
+    const parsed = parseSync(file, readFileSync(join(root, file), 'utf8'));
+    if (parsed.errors.length) throw new Error(`${file}: ${parsed.errors[0]!.message}`);
+    programs.set(file, parsed.program);
+    if (literalLeaf(parsed.program)) leaves.add(file);
+  }
+  const reads: LoadTimeRead[] = [];
+  for (const file of sourceFiles) {
+    const program = programs.get(file);
+    if (!program) continue;
+    const imports = new Map<string, string>();
+    const functions = new Map<string, Node>();
+    const values = new Map<string, Node>();
+    for (const statement of program.body) {
+      if (statement.type === 'ImportDeclaration' && statement.importKind !== 'type') {
+        const specifier = String(statement.source.value);
+        const targets = graph.imports[file]?.find((edge) => edge.specifier === specifier)?.targets ?? [];
+        if (targets.length === 0 || targets.every((target) => leaves.has(target))) continue;
+        for (const binding of statement.specifiers) {
+          if (binding.type !== 'ImportSpecifier' || binding.importKind !== 'type')
+            imports.set(binding.local.name, specifier);
+        }
+      }
+      const node = declarationNode(statement);
+      if (node?.type === 'FunctionDeclaration' && node.id) functions.set(node.id.name, node);
+      if (node?.type === 'VariableDeclaration') {
+        for (const item of node.declarations) {
+          if (item.id.type === 'Identifier' && item.init) {
+            const init = runtimeExpression(item.init);
+            values.set(item.id.name, init);
+            if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+              functions.set(item.id.name, init);
+          }
+        }
+      }
+    }
+    if (imports.size === 0) continue;
+    const source = readFileSync(join(root, file), 'utf8');
+    const seen = new Set<string>();
+    const activeCalls = new Set<Node>();
+    const activeValues = new Set<Node>();
+    let initializer = '';
+    const report = (node: Node & { name: string }): void => {
+      const specifier = imports.get(node.name);
+      if (!specifier) return;
+      const key = `${initializer}:${node.start}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const before = source.slice(0, node.start);
+      reads.push({
+        file,
+        initializer,
+        binding: node.name,
+        specifier,
+        line: before.split('\n').length,
+        column: node.start - before.lastIndexOf('\n'),
+      });
+    };
+    const bindNames = (node: Node, names: Set<string>): void => {
+      if (node.type === 'Identifier') names.add(node.name);
+      else if (node.type === 'AssignmentPattern') bindNames(node.left, names);
+      else if (node.type === 'Property') bindNames(node.value, names);
+      else for (const child of syntaxChildren(node)) bindNames(child, names);
+    };
+    const invoke = (node: Node, shadowed: Set<string>): void => {
+      if (activeCalls.has(node)) return;
+      activeCalls.add(node);
+      const local = new Set(shadowed);
+      if (
+        node.type === 'FunctionDeclaration' ||
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression'
+      ) {
+        for (const parameter of node.params) bindNames(parameter, local);
+        const collectLocals = (child: Node): void => {
+          if (child.type === 'FunctionDeclaration') {
+            if (child.id) local.add(child.id.name);
+            return;
+          }
+          if (child.type === 'FunctionExpression' || child.type === 'ArrowFunctionExpression') return;
+          if (child.type === 'VariableDeclarator') bindNames(child.id, local);
+          for (const next of syntaxChildren(child)) collectLocals(next);
+        };
+        if (node.body) collectLocals(node.body);
+        for (const parameter of node.params) walk(parameter, local);
+        if (node.body) walk(node.body, local);
+      }
+      activeCalls.delete(node);
+    };
+    const walk = (input: Node, shadowed = new Set<string>()): void => {
+      const node = runtimeExpression(input);
+      switch (node.type) {
+        case 'Identifier':
+          if (!shadowed.has(node.name)) {
+            report(node);
+            const value = values.get(node.name);
+            if (value && !activeValues.has(value)) {
+              activeValues.add(value);
+              walk(value, shadowed);
+              activeValues.delete(value);
+            }
+          }
+          return;
+        case 'ImportDeclaration':
+        case 'ExportAllDeclaration':
+        case 'ExportSpecifier':
+        case 'FunctionDeclaration':
+        case 'FunctionExpression':
+        case 'ArrowFunctionExpression':
+          return;
+        case 'ExportNamedDeclaration':
+          if (node.declaration) walk(node.declaration, shadowed);
+          return;
+        case 'MemberExpression':
+          walk(node.object, shadowed);
+          if (node.computed) walk(node.property, shadowed);
+          return;
+        case 'Property':
+          if (node.computed) walk(node.key, shadowed);
+          if (node.kind === 'init') walk(node.value, shadowed);
+          return;
+        case 'MethodDefinition':
+          if (node.computed) walk(node.key, shadowed);
+          return;
+        case 'PropertyDefinition':
+        case 'AccessorProperty':
+          if (node.computed) walk(node.key, shadowed);
+          if (node.static && node.value) walk(node.value, shadowed);
+          return;
+        case 'VariableDeclarator':
+          if (node.init) walk(node.init, shadowed);
+          if (node.id.type !== 'Identifier') walk(node.id, shadowed);
+          return;
+        case 'ClassDeclaration':
+        case 'ClassExpression':
+          if (node.superClass) walk(node.superClass, shadowed);
+          for (const decorator of node.decorators) walk(decorator, shadowed);
+          walk(node.body, shadowed);
+          return;
+        case 'CallExpression':
+        case 'NewExpression': {
+          walk(node.callee, shadowed);
+          for (const argument of node.arguments) walk(argument, shadowed);
+          if (
+            node.type === 'CallExpression' &&
+            node.callee.type === 'MemberExpression' &&
+            !node.callee.computed &&
+            node.callee.property.type === 'Identifier' &&
+            [
+              'map',
+              'flatMap',
+              'filter',
+              'reduce',
+              'reduceRight',
+              'forEach',
+              'some',
+              'every',
+              'find',
+              'findIndex',
+              'sort',
+              'from',
+            ].includes(node.callee.property.name)
+          ) {
+            for (const argument of node.arguments) {
+              const callback = runtimeExpression(argument);
+              if (callback.type === 'ArrowFunctionExpression' || callback.type === 'FunctionExpression')
+                invoke(callback, shadowed);
+              else if (callback.type === 'Identifier' && !shadowed.has(callback.name)) {
+                const fn = functions.get(callback.name);
+                if (fn) invoke(fn, shadowed);
+              }
+            }
+          }
+          const callee = runtimeExpression(node.callee);
+          if (callee.type === 'Identifier' && !shadowed.has(callee.name)) {
+            const fn = functions.get(callee.name);
+            if (fn) invoke(fn, shadowed);
+          } else if (callee.type === 'FunctionExpression' || callee.type === 'ArrowFunctionExpression') {
+            invoke(callee, shadowed);
+          }
+          return;
+        }
+        case 'IfStatement':
+          // A process entry point is invoked explicitly, and is never run by importing the module.
+          if (source.slice(node.test.start, node.test.end) === 'import.meta.main') return;
+          break;
+      }
+      if (
+        node.type.startsWith('TS') &&
+        node.type !== 'TSEnumDeclaration' &&
+        node.type !== 'TSEnumMember' &&
+        node.type !== 'TSModuleDeclaration' &&
+        node.type !== 'TSModuleBlock' &&
+        node.type !== 'TSParameterProperty'
+      )
+        return;
+      for (const child of syntaxChildren(node)) walk(child, shadowed);
+    };
+    for (const statement of program.body) {
+      const node = declarationNode(statement);
+      if (node?.type === 'VariableDeclaration') {
+        for (const item of node.declarations) {
+          initializer = source.slice(item.id.start, item.id.end);
+          walk(item);
+        }
+      } else {
+        initializer = node?.type ?? statement.type;
+        walk(statement);
+      }
+    }
+  }
+  return reads;
+}
+
 function moduleForFile(path: string, manifest: ArchitectureManifest): ArchitectureModule[] {
   return manifest.modules.filter((module) => matchesAny(path, module.paths) && !matchesAny(path, module.excludes));
 }
@@ -1087,6 +1415,17 @@ export function auditArchitecture(
     } else {
       ownerByFile.set(file, owners[0]!);
     }
+  }
+  const kernelFiles = files.filter((file) => file.startsWith('services/kernel/src/'));
+  for (const read of findLoadTimeReads(root, graph, kernelFiles)) {
+    const owner = ownerByFile.get(read.file);
+    if (owner)
+      add(
+        owner.id,
+        'rule 9',
+        read.file,
+        `load-time initializer ${read.initializer} reads ${read.binding} from ${read.specifier} at ${read.line}:${read.column}`,
+      );
   }
   for (const parseError of graph.parseErrors) errors.push(`parser: ${parseError}`);
   errors.push(...validateBaseline(baseline));

@@ -243,7 +243,7 @@ async function prepareSelection(
         async function resolveCurrent(originalId: string) {
           // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
           // Source membership may return after one positive alias; it does not authorize the remaining closure.
-          const disclosure = work.reserve(nativeWorkDimensions(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST));
+          const disclosure = work.reserve(nativeWorkDimensions(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST()));
           disclosure.dispatch();
           let resolved;
           try {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -80,12 +81,19 @@ import {
  * Neither clock nor timestamps come from JSON. Coordination holds have NO
  * expiry: only a durable workflow may resolve them.
  */
-export class OrganizationCloseBlockedError extends LifecycleDeniedError {
-  constructor(readonly blocker: { purpose: string; relatedAccountId: string }) {
-    super();
-    this.message = `Organization close blocked by ${blocker.purpose}: ${blocker.relatedAccountId}`;
-  }
+export function OrganizationCloseBlockedError() {
+  return memoizedValue(
+    OrganizationCloseBlockedError,
+    () =>
+      class OrganizationCloseBlockedError extends LifecycleDeniedError {
+        constructor(readonly blocker: { purpose: string; relatedAccountId: string }) {
+          super();
+          this.message = `Organization close blocked by ${blocker.purpose}: ${blocker.relatedAccountId}`;
+        }
+      },
+  );
 }
+export type OrganizationCloseBlockedError = InstanceType<ReturnType<typeof OrganizationCloseBlockedError>>;
 export const REGISTRATION_TTL_MS = 30 * 60 * 1000;
 export const HANDLE_REDIRECT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const HANDLE_CHANGE_LIMIT = 5;
@@ -1781,7 +1789,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           requireAllowed(account.state === 'active');
           const holds = await holdsRead.run(tx, { route, account_id: input.accountId });
           if (account.kind === 'organization' && holds?.held && holds.purpose && holds.relatedAccountId)
-            throw new OrganizationCloseBlockedError({
+            throw new (OrganizationCloseBlockedError())({
               purpose: holds.purpose,
               relatedAccountId: holds.relatedAccountId,
             });

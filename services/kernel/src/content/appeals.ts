@@ -531,7 +531,7 @@ export function createAppealEffect(pool: Pool): Effect {
     async run(event) {
       if (
         (event.type !== createdType && event.type !== resolvedType) ||
-        !Value.Check(CONTENT_EVENTS[event.type], event.data)
+        !Value.Check(CONTENT_EVENTS()[event.type], event.data)
       )
         throw new TypeError('Invalid appeal event');
       const { appealId } = event.data as { appealId: string };

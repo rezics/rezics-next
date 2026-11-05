@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Immutable nine-axis declarations for the existing Collection metadata journal SQL. */
 import { declareBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';
@@ -25,17 +26,21 @@ export type CollectionMetadataSnapshotInput = Readonly<{
 export type CollectionMetadataFieldInput = 'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId';
 type QueryClient = Pick<PoolClient, 'query'>;
 
-const ZERO = declareBound({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 0,
-  engineRequests: 0,
-});
+function ZERO() {
+  return memoizedValue(ZERO, () =>
+    declareBound({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+      engineRequests: 0,
+    }),
+  );
+}
 type SqlShape = Readonly<{
   candidateKeys: number;
   examinedRows: number;
@@ -164,7 +169,7 @@ function sqlPlan<Input>(
     kind,
     input: frozenInput,
     total,
-    withinExistingCeiling: withinCeiling(total, COLLECTION_PUBLICATION_STEP_CEILING),
+    withinExistingCeiling: withinCeiling(total, COLLECTION_PUBLICATION_STEP_CEILING()),
   });
 }
 
@@ -268,7 +273,7 @@ export function collectionMetadataHistoryCapturePlan(input: {
       input: frozenInput,
       changedFields,
       leaves: Object.freeze({}),
-      total: ZERO,
+      total: ZERO(),
       withinExistingCeiling: true,
     });
 
@@ -386,7 +391,7 @@ export function collectionMetadataHistoryCapturePlan(input: {
     changedFields,
     leaves: Object.freeze({ owner: ownerPlan, append: appendPlan, prune: prunePlan, pruned: prunedPlan }),
     total,
-    withinExistingCeiling: withinCeiling(total, COLLECTION_PUBLICATION_STEP_CEILING),
+    withinExistingCeiling: withinCeiling(total, COLLECTION_PUBLICATION_STEP_CEILING()),
   });
 }
 

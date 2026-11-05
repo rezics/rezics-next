@@ -167,7 +167,7 @@ test('A committed scope receipt resolves an ordinary completed repair and its ex
   const s = await ordinaryRegistration([original]);
   const actor = await f.actor();
   const request = randomUUID();
-  const job = await identityEpochStore.prepareAdmission(
+  const job = await identityEpochStore().prepareAdmission(
     f.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -772,7 +772,7 @@ test('association admission belongs to the original Pool, episode, deadline and 
     escaped = prepayIdentityScopeNativeAssociation(f.pool, context.deadline);
     const charged = original.receipt();
     expect(charged.reservationId).toBe(before.reservationId);
-    const expectedRows = Object.values(identityScopeNativeAssociationPrices).reduce((n, p) => n + p.nativeRows, 0);
+    const expectedRows = Object.values(identityScopeNativeAssociationPrices()).reduce((n, p) => n + p.nativeRows, 0);
     expect(charged.used.nativeRows - before.used.nativeRows).toBe(expectedRows);
     await runCommand(f.pool, { partition: address.partition, deadline: escaped.deadline }, async (tx) => {
       expect(() => bindIdentityScopeNativeAssociation(tx, { ...escaped! })).toThrow();
@@ -855,9 +855,9 @@ test('ready association reads and writer prices remain literal under unrelated r
   expect(associationSQL.sql).not.toMatch(/OFFSET|ORDER BY|count\(\*\)/i);
   expect(associationInsertSQL.sql).toContain('FOR UPDATE OF s');
   expect(associationInsertSQL.sql).toContain('a.transaction_id=n.transaction_id');
-  expect(identityScopeNativeAssociationPrices.association.nativeRows).toBe(8);
-  expect(identityScopeNativeAssociationPrices.event.nativeRows).toBe(2);
-  for (const p of Object.values(identityScopeNativeAssociationPrices)) {
+  expect(identityScopeNativeAssociationPrices().association.nativeRows).toBe(8);
+  expect(identityScopeNativeAssociationPrices().event.nativeRows).toBe(2);
+  for (const p of Object.values(identityScopeNativeAssociationPrices())) {
     expect(Object.keys(p)).toHaveLength(8);
     expect(p.bytes).toBeGreaterThan(0);
     expect(p.statements).toBeGreaterThan(0);

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -39,17 +40,23 @@ export type SourceClassificationRouteDependencies = {
 };
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
-const sessionHeaders = { [SESSION_HEADER]: t.Optional(t.String()) };
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
+function sessionHeaders() {
+  return memoizedValue(sessionHeaders, () => ({ [SESSION_HEADER]: t.Optional(t.String()) }));
+}
 function detail(operationId: string, write = false) {
   return {
     operationId,
@@ -112,8 +119,8 @@ export function sourceClassificationRoutes(
       customMethod('/v1/subjects/:id/source-classifications', 'read'),
       {
         params,
-        body: SourceClassificationBatchInputSchema,
-        response: { 200: SourceClassificationBatchSchema, ...failures },
+        body: SourceClassificationBatchInputSchema(),
+        response: { 200: SourceClassificationBatchSchema(), ...failures() },
         detail: detail('rating.source_classifications_read'),
       },
       async ({ actor, params, body, admission, job, request, set }) => {
@@ -160,9 +167,9 @@ export function sourceClassificationRoutes(
       customMethod('/v1/subjects/:id/source-classifications', 'put'),
       {
         params,
-        headers,
-        body: SourceClassificationPutInputSchema,
-        response: { 200: withHeaders(SourceClassificationPutSchema, sessionHeaders), ...failures },
+        headers: headers(),
+        body: SourceClassificationPutInputSchema(),
+        response: { 200: withHeaders(SourceClassificationPutSchema(), sessionHeaders()), ...failures() },
         detail: detail('rating.source_classification_put', true),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -188,9 +195,9 @@ export function sourceClassificationRoutes(
       customMethod('/v1/subjects/:id/source-classifications', 'clear'),
       {
         params,
-        headers,
-        body: SourceClassificationClearInputSchema,
-        response: { 200: withHeaders(SourceClassificationClearResultSchema, sessionHeaders), ...failures },
+        headers: headers(),
+        body: SourceClassificationClearInputSchema(),
+        response: { 200: withHeaders(SourceClassificationClearResultSchema, sessionHeaders()), ...failures() },
         detail: detail('rating.source_classification_clear', true),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {

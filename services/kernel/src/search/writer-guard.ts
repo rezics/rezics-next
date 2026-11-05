@@ -1738,7 +1738,11 @@ export async function fenceSearchIdentityWriter(
   const partition = subjectPartition(options.original);
   const { incarnation } = await readSearchWriterPhysicalTarget(options.search, options.index);
   const result = await runCommand(pool, { partition }, async (tx, context) => {
-    await identityEpochStore.admitHomeEffect(tx, { kind: 'structural', job: options.job, original: options.original });
+    await identityEpochStore().admitHomeEffect(tx, {
+      kind: 'structural',
+      job: options.job,
+      original: options.original,
+    });
     const receipt = await native(tx, context.transactionId);
     const previous = (
       await tx.query(

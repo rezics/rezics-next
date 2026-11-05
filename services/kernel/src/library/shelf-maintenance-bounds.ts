@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Library-owned declarations. A declaration prices dispatch; it is never run authority. */
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { Pool, PoolClient, QueryResult } from 'pg';
@@ -176,139 +177,192 @@ const seek = (projection: unknown, n = P, revisits = 2, points = 1): Shape => ({
 const mutate = (indexes = 1): Shape => point(null, 2 + 2 * indexes, 1 + 2 * indexes);
 const add = (shape: Shape, work: Bound): Shape => ({ ...shape, nested: sumBounds(shape.nested, work) });
 // Per old/new owner: native fence INSERT/conflict UPDATE touches heap and its two indexes.
-const nativeFence = repeatBound(shelfCost({ nativeRows: 6, nativePoints: 5, statements: 1, emptySeeks: 1 }), 2);
+function nativeFence() {
+  return memoizedValue(nativeFence, () =>
+    repeatBound(shelfCost({ nativeRows: 6, nativePoints: 5, statements: 1, emptySeeks: 1 }), 2),
+  );
+}
 // Entry's BEFORE profile fence (INSERT/lock/four indexed EOF probes/possible phase UPDATE),
 // fact head, title population, score head, score sync (entry + unique vote + eight score indexes).
 // Activity refresh runs twice; each reads three entry/head points, one live-session EXISTS and one index UPDATE.
-const profileFence = shelfCost({ nativeRows: 16, nativePoints: 14, statements: 7, emptySeeks: 6 });
-const activityRefresh = repeatBound(shelfCost({ nativeRows: 14, nativePoints: 13, statements: 6, emptySeeks: 5 }), 2);
-const entryEffects = sumBounds(
-  profileFence,
-  nativeFence,
-  activityRefresh,
-  repeatBound(shelfCost({ nativeRows: 4, nativePoints: 3, statements: 1, emptySeeks: 1 }), 3),
-  shelfCost({ nativeRows: 2 + 2 + 2 * 9, nativePoints: 2 + 1 + 2 * 9, statements: 1, emptySeeks: 2 }),
-);
+function profileFence() {
+  return memoizedValue(profileFence, () =>
+    shelfCost({ nativeRows: 16, nativePoints: 14, statements: 7, emptySeeks: 6 }),
+  );
+}
+function activityRefresh() {
+  return memoizedValue(activityRefresh, () =>
+    repeatBound(shelfCost({ nativeRows: 14, nativePoints: 13, statements: 6, emptySeeks: 5 }), 2),
+  );
+}
+function entryEffects() {
+  return memoizedValue(entryEffects, () =>
+    sumBounds(
+      profileFence(),
+      nativeFence(),
+      activityRefresh(),
+      repeatBound(shelfCost({ nativeRows: 4, nativePoints: 3, statements: 1, emptySeeks: 1 }), 3),
+      shelfCost({ nativeRows: 2 + 2 + 2 * 9, nativePoints: 2 + 1 + 2 * 9, statements: 1, emptySeeks: 2 }),
+    ),
+  );
+}
 // Session UPDATE fires the statistics old/new deltas even when only last_changed_at changes.
 // Current progress has one primary + at most seven additional measures, with old/new projection effects.
-const statisticDelta = shelfCost({ nativeRows: 20, nativePoints: 17, statements: 6, emptySeeks: 5 });
-const progressMeasure = shelfCost({ nativeRows: 24, nativePoints: 20, statements: 8, emptySeeks: 6 });
-const sessionEffects = sumBounds(
-  profileFence,
-  nativeFence,
-  repeatBound(statisticDelta, 2),
-  repeatBound(progressMeasure, 2 * (1 + 7)),
-  // Assessment, reported-year and reading-insights initializers: old/new branches and owner revisions.
-  repeatBound(shelfCost({ nativeRows: 32, nativePoints: 28, statements: 12, emptySeeks: 8 }), 3),
-  shelfCost({ nativeRows: 4, nativePoints: 3, statements: 1, emptySeeks: 1 }),
-);
+function statisticDelta() {
+  return memoizedValue(statisticDelta, () =>
+    shelfCost({ nativeRows: 20, nativePoints: 17, statements: 6, emptySeeks: 5 }),
+  );
+}
+function progressMeasure() {
+  return memoizedValue(progressMeasure, () =>
+    shelfCost({ nativeRows: 24, nativePoints: 20, statements: 8, emptySeeks: 6 }),
+  );
+}
+function sessionEffects() {
+  return memoizedValue(sessionEffects, () =>
+    sumBounds(
+      profileFence(),
+      nativeFence(),
+      repeatBound(statisticDelta(), 2),
+      repeatBound(progressMeasure(), 2 * (1 + 7)),
+      // Assessment, reported-year and reading-insights initializers: old/new branches and owner revisions.
+      repeatBound(shelfCost({ nativeRows: 32, nativePoints: 28, statements: 12, emptySeeks: 8 }), 3),
+      shelfCost({ nativeRows: 4, nativePoints: 3, statements: 1, emptySeeks: 1 }),
+    ),
+  );
+}
 
-const definitions = [
-  // A transition has four old and four new contributions before aggregation. Never price only
-  // distinct returned counters: every discarded contribution and index probe still belongs here.
-  [counterDelta, { ...point(null, 8 * (2 + 2 + 4), 8 * (1 + 4)), candidates: 8 }],
-  [counterInitialize, mutate()],
-  [counterRead, point({ fenceId: U, epoch: D, state: 'initializing', ready: false, generationId: U })],
-  [counterComplete, mutate()],
-  [
-    headEnsure,
-    { ...add(mutate(), activityRefresh), results: 1, resultBytes: row({ lastChangedAt: T, lastCompletedAt: T }) },
-  ],
-  [headTouch, add(mutate(), activityRefresh)],
-  [entryRaise, add(mutate(20), entryEffects)],
-  [gateEnsure, mutate()],
-  [gateRead, point(gateRow)],
-  [gateLock, point(gateRow)],
-  [gateShare, point(gateRow)],
-  [gateSave, mutate()],
-  [inputs, point({ entries: false, collections: false, sessions: false }, 6, 3)],
-  [runRead, { ...point(runRow), resultBytes: row(runRow) + cursorBytes }],
-  [runLock, { ...point(runRow), resultBytes: row(runRow) + cursorBytes }],
-  [runCreate, mutate(2)],
-  [stepRead, { ...point(stepRow), resultBytes: row(stepRow) + 2 * cursorBytes }],
-  [stepSave, add(mutate(2), shelfCost({ nativeRows: 1, nativePoints: 1, emptySeeks: 1 }))],
-  [stepBind, mutate(2)],
-  [advance, { ...mutate(2), results: 1, resultBytes: row({ sequence: D }) }],
-  [cancel, mutate(2)],
-  [ack, mutate(2)],
-  [
-    runnable,
-    seek({ route: 65535, accountId: U, runId: U, epoch: D, sequence: D, segment: I, kind: 'backfill', attempt: D }),
-  ],
-  [authorizedCollection, point({ id: U })],
-  [entries, { ...point({ subjectId: U, incarnationId: U, transactionId: U, typeId: U }, 2), candidates: 1 }],
-  [sessionScratch, mutate()],
-  [
-    sessions,
-    add(
-      seek({ id: U }, P, 2 + 2 + 2 * 21, 1 + P * 3),
-      sumBounds(repeatBound(sessionEffects, P), shelfCost({ nativeRows: 4 * P, statements: 1 })),
-    ),
-  ],
-  [headInputs, seek({ id: U }, P, 2 + 4, 1 + P * 3)],
-  [heads, add(seek({ id: U }, P, 2 + 4, 1 + P * 3), repeatBound(activityRefresh, P))],
-  [
-    entryBackfill,
-    add(
-      seek(
-        { subjectId: U, incarnationId: U, revision: I, transactionId: U },
-        P,
-        2 + 1 + 2 + 2 * 20,
-        1 + P * (1 + 2 * 20),
-      ),
-      repeatBound(entryEffects, P),
-    ),
-  ],
-  [stampIncarnation, { ...add(mutate(20), entryEffects), results: 1, resultBytes: row({ incarnationId: U }) }],
-  [sourceAttach, { ...add(mutate(20), entryEffects), results: 1, resultBytes: row({ subject_id: U }) }],
-  // Four contributions per Entry, including discarded duplicates before GROUP BY, and conflict writes.
-  [countEntries, { ...seek({ id: U }, P, 2 + 4 + 4 * 4 + 1, 1 + 4 * P * (1 + 2 * 2)), candidates: P + 4 * P }],
-  [countCollections, add(seek({ id: U }, P, 2, 1), shelfCost({ nativeRows: 4, nativePoints: 3, emptySeeks: 1 }))],
-  [validate, { ...point({ id: U, valid: false }, 3, 2), candidates: 1 }],
-  [retireCounts, seek({ removed: false }, P, 2 + 3, 1 + P * 3)],
-  [retireReservations, seek({ removed: false }, P, 2 + 4, 1 + P * 3)],
-  [scratchSessions, seek({ removed: false }, P, 2 + 3, 1 + P * 2)],
-  [scratchHeads, seek({ removed: false }, P, 2 + 3, 1 + P * 2)],
-  [scratchSources, seek({ removed: false }, P, 2 + 3, 1 + P * 2)],
-  [scratchSteps, seek({ removed: false }, P, 2 + 2 + 2 * 2, 1 + P * 5)],
-  [sourceRead, point(sourceRow)],
-  [sourceSave, mutate()],
-  [sourceProgress, mutate()],
-  [sourceReset, { ...mutate(2), rows: 10, points: 8 }],
-  [reservationBind, { ...mutate(2), results: 1, resultBytes: row({ reservation_id: U }) }],
-  [reservationCheck, point({ reservation_id: U })],
-  [accountShare, point({ state: 'active', fenced: false })],
-  [sessionPage, seek(sessionRow)],
-  // owned point + child seek/LIMIT + materialization/aggregate; one logical result, never one examined row.
-  [
-    historyPage,
-    { ...seek(null, P, 3, 2), results: 1, resultBytes: row({ owned: false, count: P, after: D, lastChangedAt: T }) },
-  ],
-  [typeRoot, { ...point({ nodeId: U, typeId: U, equal: false }, 3, 2), candidates: 1 }],
-  [typeEdge, { ...point({ nodeId: U, typeId: U }, 2), candidates: 1 }],
-  [typeValue, point({ typeId: U })],
-  [typeInsertValue, { ...mutate(), results: 1, resultBytes: row({ typeId: U }) }],
-  // NOT EXISTS, unique conflicts and deferred node/value FK probes.
-  [typeInsertRoot, { ...point({ root_node_id: U }, 12, 10), candidates: 1 }],
-  [typeInsertEdge, point(null, 12, 10)],
-  [typeReserve, point(null, 12, 10)],
-  [
-    typeReservation,
-    point({ reservationId: U, nodeId: U, offset: D, length: D, candidateId: U, fenceId: U, generationId: U }),
-  ],
-  // pg bytea JSON representation is at most four characters per byte plus its fixed framing.
-  [
-    typeChunk,
-    { ...point(null), results: 1, resultBytes: row({ chunk: '' }) + 4 * SHELF_MAINTENANCE_LIMITS.stagingBytes },
-  ],
-  [typeProgress, { ...mutate(2), results: 1, resultBytes: row({ reservation_id: U }) }],
-  [rootSize, point({ bytes: D }, 2, 2)],
-  [retirementSize, { ...seek(null, P, 1), results: 1, resultBytes: row({ bytes: D }) }],
-  [typePublish, point({ typeId: U }, 24, 20)],
-  [typeFinish, mutate(2)],
-] as const;
+function definitions() {
+  return memoizedValue(
+    definitions,
+    () =>
+      [
+        // A transition has four old and four new contributions before aggregation. Never price only
+        // distinct returned counters: every discarded contribution and index probe still belongs here.
+        [counterDelta, { ...point(null, 8 * (2 + 2 + 4), 8 * (1 + 4)), candidates: 8 }],
+        [counterInitialize, mutate()],
+        [counterRead, point({ fenceId: U, epoch: D, state: 'initializing', ready: false, generationId: U })],
+        [counterComplete, mutate()],
+        [
+          headEnsure,
+          {
+            ...add(mutate(), activityRefresh()),
+            results: 1,
+            resultBytes: row({ lastChangedAt: T, lastCompletedAt: T }),
+          },
+        ],
+        [headTouch, add(mutate(), activityRefresh())],
+        [entryRaise, add(mutate(20), entryEffects())],
+        [gateEnsure, mutate()],
+        [gateRead, point(gateRow)],
+        [gateLock, point(gateRow)],
+        [gateShare, point(gateRow)],
+        [gateSave, mutate()],
+        [inputs, point({ entries: false, collections: false, sessions: false }, 6, 3)],
+        [runRead, { ...point(runRow), resultBytes: row(runRow) + cursorBytes }],
+        [runLock, { ...point(runRow), resultBytes: row(runRow) + cursorBytes }],
+        [runCreate, mutate(2)],
+        [stepRead, { ...point(stepRow), resultBytes: row(stepRow) + 2 * cursorBytes }],
+        [stepSave, add(mutate(2), shelfCost({ nativeRows: 1, nativePoints: 1, emptySeeks: 1 }))],
+        [stepBind, mutate(2)],
+        [advance, { ...mutate(2), results: 1, resultBytes: row({ sequence: D }) }],
+        [cancel, mutate(2)],
+        [ack, mutate(2)],
+        [
+          runnable,
+          seek({
+            route: 65535,
+            accountId: U,
+            runId: U,
+            epoch: D,
+            sequence: D,
+            segment: I,
+            kind: 'backfill',
+            attempt: D,
+          }),
+        ],
+        [authorizedCollection, point({ id: U })],
+        [entries, { ...point({ subjectId: U, incarnationId: U, transactionId: U, typeId: U }, 2), candidates: 1 }],
+        [sessionScratch, mutate()],
+        [
+          sessions,
+          add(
+            seek({ id: U }, P, 2 + 2 + 2 * 21, 1 + P * 3),
+            sumBounds(repeatBound(sessionEffects(), P), shelfCost({ nativeRows: 4 * P, statements: 1 })),
+          ),
+        ],
+        [headInputs, seek({ id: U }, P, 2 + 4, 1 + P * 3)],
+        [heads, add(seek({ id: U }, P, 2 + 4, 1 + P * 3), repeatBound(activityRefresh(), P))],
+        [
+          entryBackfill,
+          add(
+            seek(
+              { subjectId: U, incarnationId: U, revision: I, transactionId: U },
+              P,
+              2 + 1 + 2 + 2 * 20,
+              1 + P * (1 + 2 * 20),
+            ),
+            repeatBound(entryEffects(), P),
+          ),
+        ],
+        [stampIncarnation, { ...add(mutate(20), entryEffects()), results: 1, resultBytes: row({ incarnationId: U }) }],
+        [sourceAttach, { ...add(mutate(20), entryEffects()), results: 1, resultBytes: row({ subject_id: U }) }],
+        // Four contributions per Entry, including discarded duplicates before GROUP BY, and conflict writes.
+        [countEntries, { ...seek({ id: U }, P, 2 + 4 + 4 * 4 + 1, 1 + 4 * P * (1 + 2 * 2)), candidates: P + 4 * P }],
+        [countCollections, add(seek({ id: U }, P, 2, 1), shelfCost({ nativeRows: 4, nativePoints: 3, emptySeeks: 1 }))],
+        [validate, { ...point({ id: U, valid: false }, 3, 2), candidates: 1 }],
+        [retireCounts, seek({ removed: false }, P, 2 + 3, 1 + P * 3)],
+        [retireReservations, seek({ removed: false }, P, 2 + 4, 1 + P * 3)],
+        [scratchSessions, seek({ removed: false }, P, 2 + 3, 1 + P * 2)],
+        [scratchHeads, seek({ removed: false }, P, 2 + 3, 1 + P * 2)],
+        [scratchSources, seek({ removed: false }, P, 2 + 3, 1 + P * 2)],
+        [scratchSteps, seek({ removed: false }, P, 2 + 2 + 2 * 2, 1 + P * 5)],
+        [sourceRead, point(sourceRow)],
+        [sourceSave, mutate()],
+        [sourceProgress, mutate()],
+        [sourceReset, { ...mutate(2), rows: 10, points: 8 }],
+        [reservationBind, { ...mutate(2), results: 1, resultBytes: row({ reservation_id: U }) }],
+        [reservationCheck, point({ reservation_id: U })],
+        [accountShare, point({ state: 'active', fenced: false })],
+        [sessionPage, seek(sessionRow)],
+        // owned point + child seek/LIMIT + materialization/aggregate; one logical result, never one examined row.
+        [
+          historyPage,
+          {
+            ...seek(null, P, 3, 2),
+            results: 1,
+            resultBytes: row({ owned: false, count: P, after: D, lastChangedAt: T }),
+          },
+        ],
+        [typeRoot, { ...point({ nodeId: U, typeId: U, equal: false }, 3, 2), candidates: 1 }],
+        [typeEdge, { ...point({ nodeId: U, typeId: U }, 2), candidates: 1 }],
+        [typeValue, point({ typeId: U })],
+        [typeInsertValue, { ...mutate(), results: 1, resultBytes: row({ typeId: U }) }],
+        // NOT EXISTS, unique conflicts and deferred node/value FK probes.
+        [typeInsertRoot, { ...point({ root_node_id: U }, 12, 10), candidates: 1 }],
+        [typeInsertEdge, point(null, 12, 10)],
+        [typeReserve, point(null, 12, 10)],
+        [
+          typeReservation,
+          point({ reservationId: U, nodeId: U, offset: D, length: D, candidateId: U, fenceId: U, generationId: U }),
+        ],
+        // pg bytea JSON representation is at most four characters per byte plus its fixed framing.
+        [
+          typeChunk,
+          { ...point(null), results: 1, resultBytes: row({ chunk: '' }) + 4 * SHELF_MAINTENANCE_LIMITS.stagingBytes },
+        ],
+        [typeProgress, { ...mutate(2), results: 1, resultBytes: row({ reservation_id: U }) }],
+        [rootSize, point({ bytes: D }, 2, 2)],
+        [retirementSize, { ...seek(null, P, 1), results: 1, resultBytes: row({ bytes: D }) }],
+        [typePublish, point({ typeId: U }, 24, 20)],
+        [typeFinish, mutate(2)],
+      ] as const,
+  );
+}
 const normalize = (sql: string) => sql.replace(/\s+/g, ' ').trim();
-const shapes = new Map(definitions.map(([query, shape]) => [normalize(query.sql), shape]));
+function shapes() {
+  return memoizedValue(shapes, () => new Map(definitions().map(([query, shape]) => [normalize(query.sql), shape])));
+}
 const controls = new Set([
   'BEGIN',
   'BEGIN ISOLATION LEVEL SERIALIZABLE',
@@ -332,7 +386,7 @@ export function shelfMaintenanceStatementPlan(
   values: readonly unknown[],
   valueBytes = 0,
 ): ShelfMaintenanceStatementPlan | undefined {
-  const shape = shapes.get(normalize(sql));
+  const shape = shapes().get(normalize(sql));
   const control = controls.has(sql.trim()) || /^SET LOCAL statement_timeout = '[0-9]+ms'$/.test(sql);
   if (!shape && !control) return undefined;
   const serializedBinds = json(values);
@@ -495,7 +549,7 @@ export function shelfMaintenanceOperation(
 
 export function shelfMaintenanceEnqueuePlan(input: unknown): ShelfMaintenanceOperation {
   // Existing SDK status/input/guard SQL and trigger effects; retain the original serialized locator too.
-  return shelfMaintenanceOperation('recovery', input, [SELECTED_COST.enqueue, shelfCost({ bytes: size(input) })]);
+  return shelfMaintenanceOperation('recovery', input, [SELECTED_COST().enqueue, shelfCost({ bytes: size(input) })]);
 }
 
 /** Core's complete one-attempt scaffold, disjoint from Access (which uses its own native sink) and
@@ -684,7 +738,7 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
 export function runShelfMaintenanceStep<T>(input: unknown, dispatch: () => Promise<T>): Promise<T> {
   const declaration = shelfMaintenanceOperation('page', input, [
     repeatBound(
-      sumBounds(SELECTED_COST.continuation, shelfCost({ bytes: size(input) })),
+      sumBounds(SELECTED_COST().continuation, shelfCost({ bytes: size(input) })),
       COMMAND_STEP_RETRIES.maxAttempts,
     ),
   ]);
@@ -693,26 +747,30 @@ export function runShelfMaintenanceStep<T>(input: unknown, dispatch: () => Promi
 
 /** Closed executable composition: dynamic byte operands are bound by their native size points, not
  * population constants. Limits describe invocation multiplicity; no operation can buy another frame. */
-export const SHELF_MAINTENANCE_OPERATIONS = Object.freeze({
-  request: Object.freeze({ command: shelfMaintenanceCommandPlan, query: shelfMaintenanceStatementPlan }),
-  status: Object.freeze({ query: shelfMaintenanceStatementPlan }),
-  page: Object.freeze({
-    command: shelfMaintenanceCommandPlan,
-    source: shelfMaintenanceSourceExecution,
-    query: shelfMaintenanceStatementPlan,
-    allocator: withShelfMaintenanceAllocator,
-    conflictReconciliations: 1,
-  }),
-  recovery: Object.freeze({
-    limit: P,
-    query: shelfMaintenanceStatementPlan,
-    enqueue: shelfMaintenanceEnqueuePlan,
-    command: shelfMaintenanceCommandPlan,
-  }),
-  segment: Object.freeze({
-    pages: SHELF_MAINTENANCE_LIMITS.segment,
-    attempts: COMMAND_STEP_RETRIES.maxAttempts,
-    step: runShelfMaintenanceStep,
-    enqueue: shelfMaintenanceEnqueuePlan,
-  }),
-});
+export function SHELF_MAINTENANCE_OPERATIONS() {
+  return memoizedValue(SHELF_MAINTENANCE_OPERATIONS, () =>
+    Object.freeze({
+      request: Object.freeze({ command: shelfMaintenanceCommandPlan, query: shelfMaintenanceStatementPlan }),
+      status: Object.freeze({ query: shelfMaintenanceStatementPlan }),
+      page: Object.freeze({
+        command: shelfMaintenanceCommandPlan,
+        source: shelfMaintenanceSourceExecution,
+        query: shelfMaintenanceStatementPlan,
+        allocator: withShelfMaintenanceAllocator,
+        conflictReconciliations: 1,
+      }),
+      recovery: Object.freeze({
+        limit: P,
+        query: shelfMaintenanceStatementPlan,
+        enqueue: shelfMaintenanceEnqueuePlan,
+        command: shelfMaintenanceCommandPlan,
+      }),
+      segment: Object.freeze({
+        pages: SHELF_MAINTENANCE_LIMITS.segment,
+        attempts: COMMAND_STEP_RETRIES.maxAttempts,
+        step: runShelfMaintenanceStep,
+        enqueue: shelfMaintenanceEnqueuePlan,
+      }),
+    }),
+  );
+}

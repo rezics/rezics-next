@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { CoverCreditSchema, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -22,7 +23,9 @@ export type DocumentImagePresentation = Readonly<{
 export type DocumentMediaPage = Readonly<{ images: readonly DocumentImagePresentation[] }>;
 
 type Row = NonNullable<Awaited<ReturnType<typeof authorizeMediaDerivative>>>;
-const credit = Compile(CoverCreditSchema);
+function credit() {
+  return memoizedValue(credit, () => Compile(CoverCreditSchema));
+}
 const digest = /^[0-9a-f]{64}$/;
 const positive = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 
@@ -40,7 +43,7 @@ function presentation(row: Row): DocumentImagePresentation | null {
     !positive(row.variant_width) ||
     !positive(row.variant_height) ||
     row.variant_media_type !== `image/${row.variant_format}` ||
-    (row.credit !== null && !credit.Check(row.credit))
+    (row.credit !== null && !credit().Check(row.credit))
   )
     return null;
   return {

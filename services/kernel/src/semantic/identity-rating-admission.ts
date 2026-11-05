@@ -23,7 +23,7 @@ export async function readIdentityRatingEpochs(pool: Pool, homes: readonly numbe
       pool,
       async (client) => {
         await partitionReadClient(client, partition);
-        return identityEpochStore.readEpoch(client, partition);
+        return identityEpochStore().readEpoch(client, partition);
       },
       deadline,
     );
@@ -55,7 +55,7 @@ export async function admitIdentityRatingEffect(
     resolvedTargetId: string;
     expectedEpochs?: readonly VoteReviewEpoch[];
   }>,
-  readEpoch: IdentityRatingEpochReader = (transaction, home) => identityEpochStore.readEpoch(transaction, home),
+  readEpoch: IdentityRatingEpochReader = (transaction, home) => identityEpochStore().readEpoch(transaction, home),
 ): Promise<IdentityRatingAdmissionResult> {
   const requestedRoute = routeOf(input.requestedTargetId);
   const resolvedRoute = routeOf(input.resolvedTargetId);

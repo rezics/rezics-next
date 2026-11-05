@@ -610,7 +610,7 @@ export function createRatingSegmentJobEffect(pool: Pool, client: WorkContext['cl
     types: [REALM_CHANGED, 'com.rezics.rating.eligibility.changed.v1', COUNTER_CHANGED],
     async run(event: CloudEvent) {
       let job: RatingSegmentJob | null;
-      if (event.type === COUNTER_CHANGED && Value.Check(ACCESS_EVENTS[COUNTER_CHANGED], event.data)) {
+      if (event.type === COUNTER_CHANGED && Value.Check(ACCESS_EVENTS()[COUNTER_CHANGED], event.data)) {
         const { accountId, at } = event.data as { accountId: string; at: string };
         const voterRoute = routeOf(accountId);
         if (voterRoute === null || event.subject !== accountId) throw new TypeError('Invalid rating re-key event');
@@ -624,12 +624,12 @@ export function createRatingSegmentJobEffect(pool: Pool, client: WorkContext['cl
           at,
           populations: [GLOBAL_CONTEXT.id, ...realms.map(({ realmId }) => realmId)],
         };
-      } else if (event.type === REALM_CHANGED && Value.Check(RATING_EVENTS[REALM_CHANGED], event.data)) {
+      } else if (event.type === REALM_CHANGED && Value.Check(RATING_EVENTS()[REALM_CHANGED], event.data)) {
         const { voterId, realmId } = event.data as { voterId: string; realmId: string };
         job = await readRatingSegmentJob(pool, { voterId, realmId });
       } else if (
         event.type === 'com.rezics.rating.eligibility.changed.v1' &&
-        Value.Check(RATING_EVENTS['com.rezics.rating.eligibility.changed.v1'], event.data)
+        Value.Check(RATING_EVENTS()['com.rezics.rating.eligibility.changed.v1'], event.data)
       ) {
         const { voterId } = event.data as { voterId: string };
         job = await readRatingEligibilityJob(pool, { voterId });

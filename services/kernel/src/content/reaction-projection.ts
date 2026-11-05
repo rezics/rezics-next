@@ -36,7 +36,7 @@ function route(id: string): number {
 }
 
 function parse(event: CloudEvent): Change {
-  if (event.type !== changed || !Value.Check(CONTENT_EVENTS[changed], event.data))
+  if (event.type !== changed || !Value.Check(CONTENT_EVENTS()[changed], event.data))
     throw new TypeError('Invalid reaction count source event');
   const data = event.data as ContentEventData<typeof changed>;
   const source = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);

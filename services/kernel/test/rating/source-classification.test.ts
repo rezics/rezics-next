@@ -70,8 +70,8 @@ test('immutable replay, explicit CAS, stale and rebound observations use indepen
 });
 
 test('mounted commands retain canonical release identities, exact CAS and both source mutation states', () => {
-  const put = Compile(SourceClassificationPutInputSchema);
-  const clear = Compile(SourceClassificationClearInputSchema);
+  const put = Compile(SourceClassificationPutInputSchema());
+  const clear = Compile(SourceClassificationClearInputSchema());
   const input = { association, value, expectedObservation: null };
   expect(put.Check(input)).toBe(true);
   expect(put.Check({ ...input, association: { ...association, release: 'a'.repeat(64) } })).toBe(false);
@@ -89,7 +89,7 @@ test('mounted commands retain canonical release identities, exact CAS and both s
   };
   expect(clear.Check({ ...input, value: cleared })).toBe(true);
   const mutation = Compile(SourceClassificationClearResultSchema);
-  const states = SourceClassificationPutSchema.properties.state;
+  const states = SourceClassificationPutSchema().properties.state;
   for (const state of ['published', 'cleared']) {
     expect(mutation.Check({ state, observationDigest: observation.digest })).toBe(true);
     expect(Compile(states).Check(state)).toBe(true);

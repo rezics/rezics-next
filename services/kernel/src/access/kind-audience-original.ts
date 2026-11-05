@@ -198,7 +198,7 @@ export function createKindAudienceOriginal(
       actual.audience !== expected.audience ||
       actual.at !== expected.at
     )
-      throw new AccessWorkUnavailableError('Collection Kind original authentication changed during invocation');
+      throw new (AccessWorkUnavailableError())('Collection Kind original authentication changed during invocation');
   }
   function operation<I extends object, R extends Readonly<{ work: WorkReceipt }>>(
     bound: (input: I) => KindAudienceWorkDeclaration | undefined,
@@ -209,7 +209,8 @@ export function createKindAudienceOriginal(
       bound,
       async run(input) {
         const declaration = bound(input);
-        if (!declaration) throw new AccessWorkUnavailableError('Collection Kind audience original admitted operation');
+        if (!declaration)
+          throw new (AccessWorkUnavailableError())('Collection Kind audience original admitted operation');
         const result = await run(input, declaration);
         receipts.set(result, {
           input,
@@ -262,7 +263,7 @@ export function createKindAudienceOriginal(
   ) {
     const current = frame(input.context, allowance);
     const identity = original(input);
-    if (!current || !identity) throw new AccessWorkUnavailableError('Collection Kind original frame');
+    if (!current || !identity) throw new (AccessWorkUnavailableError())('Collection Kind original frame');
     // Hold native overhead and the original Access invocation separately in the SAME frame.
     // The Access bridge is included in source above exactly once, never paid a second time.
     const overhead = { ...bound.source };
@@ -380,9 +381,9 @@ export function createKindAudienceOriginal(
     bound: KindAudienceWorkDeclaration,
   ) {
     const held = localRequest(input);
-    if (!held) throw new AccessWorkUnavailableError('Collection Kind live Source original');
+    if (!held) throw new (AccessWorkUnavailableError())('Collection Kind live Source original');
     const time = commandTime(input.work.tx);
-    if (!time) throw new AccessWorkUnavailableError('Collection Kind Source time');
+    if (!time) throw new (AccessWorkUnavailableError())('Collection Kind Source time');
     // Reserve before the exact literal on the already checked-out live home.
     // Native query suppresses only duplicate instrumentation of this one query.
     const reservation = held.native.reserve(bound.source);
@@ -404,7 +405,7 @@ export function createKindAudienceOriginal(
     }
     assertOriginal(held.originalRequest, held.identity);
     if (!localRequest(input) || commandTime(input.work.tx) !== time)
-      throw new AccessWorkUnavailableError('Collection Kind Source invocation ended');
+      throw new (AccessWorkUnavailableError())('Collection Kind Source invocation ended');
     return { row, work: Object.freeze({ reservationId: input.allowance.reservationId, used: bound.source }) };
   }
   function matches(row: OriginRow | null | undefined, identity: Original, source?: SourceRow): boolean {
@@ -477,7 +478,7 @@ export function createKindAudienceOriginal(
       },
       async (input, _bound) => {
         const held = localRequest(input);
-        if (!held) throw new AccessWorkUnavailableError('Collection Kind original input frame');
+        if (!held) throw new (AccessWorkUnavailableError())('Collection Kind original input frame');
         const before = held.native.receipt().used;
         const localDeclaration = localBound(input, input.origin.id)!;
         const result = await local(input, input.origin.id, localDeclaration);
@@ -497,7 +498,7 @@ export function createKindAudienceOriginal(
           held.native,
         );
         assertOriginal(held.originalRequest, held.identity);
-        if (!localRequest(input)) throw new AccessWorkUnavailableError('Collection Kind input invocation ended');
+        if (!localRequest(input)) throw new (AccessWorkUnavailableError())('Collection Kind input invocation ended');
         const after = held.native.receipt().used;
         const used = { ...zero };
         for (const axis of axes) used[axis] = after[axis] - before[axis];
@@ -540,7 +541,7 @@ export function createKindAudienceOriginal(
       },
       async (input, bound) => {
         const live = fresh(input.request);
-        if (!live) throw new AccessWorkUnavailableError('Collection Kind fresh original');
+        if (!live) throw new (AccessWorkUnavailableError())('Collection Kind fresh original');
         const result = await detached(
           input.origin.locator,
           live,

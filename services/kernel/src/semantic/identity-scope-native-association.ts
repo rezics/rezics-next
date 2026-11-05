@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import {
@@ -54,26 +55,30 @@ const price = (rows: number, statements: number, bytes: number): WorkDimensions 
  * observation operations retain their existing admission; this pays every added
  * native component/association/event plus both terminal alternatives before IO.
  */
-export const identityScopeNativeAssociationPrices = Object.freeze({
-  native: price(2, 1, Buffer.byteLength(native.sql) + 256 + 64),
-  association: price(8, 1, Buffer.byteLength(insert.sql) + 6656 + 64),
-  event: price(2, 1, Buffer.byteLength(fence.sql) + 2048 + 64),
-  // time point, checkout, BEGIN, lock timeout, two statement timeouts, COMMIT,
-  // ROLLBACK. Both terminals stay charged on success as well as rollback.
-  control: Object.freeze({
-    ...price(
-      1,
-      7,
-      Buffer.byteLength(time.sql) +
-        Buffer.byteLength('BEGIN ISOLATION LEVEL SERIALIZABLE') +
-        Buffer.byteLength("SET LOCAL lock_timeout = '200ms'") +
-        2 * Buffer.byteLength("SET LOCAL statement_timeout = '9999999999999999ms'") +
-        Buffer.byteLength('COMMITROLLBACK') +
-        128,
-    ),
-    nativePoints: 2,
-  }),
-});
+export function identityScopeNativeAssociationPrices() {
+  return memoizedValue(identityScopeNativeAssociationPrices, () =>
+    Object.freeze({
+      native: price(2, 1, Buffer.byteLength(native.sql) + 256 + 64),
+      association: price(8, 1, Buffer.byteLength(insert.sql) + 6656 + 64),
+      event: price(2, 1, Buffer.byteLength(fence.sql) + 2048 + 64),
+      // time point, checkout, BEGIN, lock timeout, two statement timeouts, COMMIT,
+      // ROLLBACK. Both terminals stay charged on success as well as rollback.
+      control: Object.freeze({
+        ...price(
+          1,
+          7,
+          Buffer.byteLength(time.sql) +
+            Buffer.byteLength('BEGIN ISOLATION LEVEL SERIALIZABLE') +
+            Buffer.byteLength("SET LOCAL lock_timeout = '200ms'") +
+            2 * Buffer.byteLength("SET LOCAL statement_timeout = '9999999999999999ms'") +
+            Buffer.byteLength('COMMITROLLBACK') +
+            128,
+        ),
+        nativePoints: 2,
+      }),
+    }),
+  );
+}
 
 /** Admission from the CURRENT original only, before starting the narrow command.
  * No allowance, configuration, or caller-created work object is accepted here.
@@ -88,7 +93,7 @@ export function prepayIdentityScopeNativeAssociation(
   if (!context || !work || !Number.isSafeInteger(effective) || effective <= Date.now())
     throw new ProblemError('dependency_unavailable');
   const total = { ...zero };
-  for (const cost of Object.values(identityScopeNativeAssociationPrices))
+  for (const cost of Object.values(identityScopeNativeAssociationPrices()))
     for (const axis of Object.keys(total) as (keyof WorkDimensions)[]) total[axis] += cost[axis];
   const reserved = work.reserve(total);
   reserved.dispatch();

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, QueryResultRow } from 'pg';
 import {
@@ -65,18 +66,22 @@ function finite(value: WorkDimensions): WorkDimensions {
 
 /** Structural upper bounds, never runtime prices or admission authority. Byte
  * bounds include SQL and bytea hex transport. Foreign body/representation add. */
-export const PUBLISHER_COMMAND_COST = Object.freeze({
-  // Includes the ordinary executor's two BEGINs, timeout controls, time, empty
-  // event fence, absent-source finalization and COMMIT, plus one failure rollback.
-  controls: cost(2, 1, 9, 8192, 1),
-  // Six payload passes: two for SQL wire transport, three Core digest inputs
-  // and one Core defensive copy. Semantic encoding/decoding adds separately.
-  association: cost(4, 8, 3, 6 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 16384, 2),
-  resolution: cost(1, 1, 1, 4 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 4096, 1),
-  cleanup: cost(200, 300, 1, 32768, 1),
-});
+export function PUBLISHER_COMMAND_COST() {
+  return memoizedValue(PUBLISHER_COMMAND_COST, () =>
+    Object.freeze({
+      // Includes the ordinary executor's two BEGINs, timeout controls, time, empty
+      // event fence, absent-source finalization and COMMIT, plus one failure rollback.
+      controls: cost(2, 1, 9, 8192, 1),
+      // Six payload passes: two for SQL wire transport, three Core digest inputs
+      // and one Core defensive copy. Semantic encoding/decoding adds separately.
+      association: cost(4, 8, 3, 6 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 16384, 2),
+      resolution: cost(1, 1, 1, 4 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 4096, 1),
+      cleanup: cost(200, 300, 1, 32768, 1),
+    }),
+  );
+}
 export function publisherCommandWork(body: WorkDimensions): WorkDimensions {
-  return finite(sum(PUBLISHER_COMMAND_COST.controls, PUBLISHER_COMMAND_COST.association, finite(body)));
+  return finite(sum(PUBLISHER_COMMAND_COST().controls, PUBLISHER_COMMAND_COST().association, finite(body)));
 }
 
 const columns = 'original_key, input_digest, result_digest, result_bytes, epoch, position, transaction_id';
@@ -280,7 +285,7 @@ export async function cleanupPublisherResults(pool: Pool, deadline: number, limi
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError('Invalid publisher cleanup limit');
   const options: Options = { partition: 0, deadline };
   return scopes.run(
-    { pool, options, work: PUBLISHER_COMMAND_COST.cleanup, claimed: false },
+    { pool, options, work: PUBLISHER_COMMAND_COST().cleanup, claimed: false },
     async () =>
       (
         await withSingleCommandAttempt(() =>

@@ -345,7 +345,7 @@ test('an account follows, unfollows and refollows a readable subject in its own 
       data: { targetId: subjectId },
     });
   }
-  const schema = EVENT_TYPES[FOLLOW_EVENT];
+  const schema = EVENT_TYPES()[FOLLOW_EVENT];
   expect(Value.Check(schema, { targetId: subjectId })).toBe(true);
   expect(Value.Check(schema, { targetId: subjectId, state: 'following' })).toBe(false);
   expect(Value.Check(schema, {})).toBe(false);

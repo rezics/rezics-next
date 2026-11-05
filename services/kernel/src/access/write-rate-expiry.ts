@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { defineQuery } from 'reylo';
 import type { AccessClient } from '../request/access.ts';
@@ -8,30 +9,38 @@ import admissionStatement from './write-rate-expiry-admission.sql';
 
 // As with the spend primitive, schema compatibility is checked at build/deploy;
 // catalog freshness probes must not add statements to an expiry batch.
-const expire = defineQuery<
-  (typeof statement)['~reylo']['input'],
-  (typeof statement)['~reylo']['element'],
-  typeof statement.cardinality,
-  'postgres'
->({ dialect: statement.dialect, sql: statement.raw, params: statement.params, cardinality: statement.cardinality });
-const admit = defineQuery<
-  (typeof admissionStatement)['~reylo']['input'],
-  (typeof admissionStatement)['~reylo']['element'],
-  typeof admissionStatement.cardinality,
-  'postgres'
->({
-  dialect: admissionStatement.dialect,
-  sql: admissionStatement.raw,
-  params: admissionStatement.params,
-  cardinality: admissionStatement.cardinality,
-});
+function expire() {
+  return memoizedValue(expire, () =>
+    defineQuery<
+      (typeof statement)['~reylo']['input'],
+      (typeof statement)['~reylo']['element'],
+      typeof statement.cardinality,
+      'postgres'
+    >({ dialect: statement.dialect, sql: statement.raw, params: statement.params, cardinality: statement.cardinality }),
+  );
+}
+function admit() {
+  return memoizedValue(admit, () =>
+    defineQuery<
+      (typeof admissionStatement)['~reylo']['input'],
+      (typeof admissionStatement)['~reylo']['element'],
+      typeof admissionStatement.cardinality,
+      'postgres'
+    >({
+      dialect: admissionStatement.dialect,
+      sql: admissionStatement.raw,
+      params: admissionStatement.params,
+      cardinality: admissionStatement.cardinality,
+    }),
+  );
+}
 
 /** Internal primitive: one route, one native statement, at most 1000 counter and chunk ledger deletions combined.
  * Only the registered effect below admits maintenance against local ownership.
  */
 export async function expireWriteRateCounters(client: AccessClient, route: number): Promise<number> {
   partitionOf(route);
-  return (await expire.run(client, { route })).length;
+  return (await expire().run(client, { route })).length;
 }
 
 const workflowName = 'accounts.write-rate-expiry';
@@ -57,7 +66,7 @@ export const accountsWorkModule: WorkModule = {
         try {
           await connection.query('BEGIN');
           // The share lock fences ownership changes until this one batch commits.
-          const owner = await admit.run(connection, { partition_no: partition });
+          const owner = await admit().run(connection, { partition_no: partition });
           const removed =
             owner !== null && owner.node === node && owner.writeState === 'active'
               ? await expireWriteRateCounters(connection, route)

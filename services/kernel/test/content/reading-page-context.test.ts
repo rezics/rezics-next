@@ -44,7 +44,7 @@ test('native reading page keeps current reviewed work independent from exact zer
     const page = await f.call('GET', `/v1/threads/${thread.id}/reading-page`);
     expect(page.response.status, page.text).toBe(200);
     const context = page.value.reviewContext;
-    expect(Compile(ReadingPageReviewContextSchema).Check(context)).toBe(true);
+    expect(Compile(ReadingPageReviewContextSchema()).Check(context)).toBe(true);
     expect(context).toEqual({
       source: { threadId: thread.id, postId: thread.firstPost.id, revisionId: thread.firstPost.revisionId },
       target: { state: 'available', subject: { id: f.subjectId, kind: 'schema:Book', label: expect.anything() } },
@@ -70,7 +70,7 @@ test('native reading page keeps current reviewed work independent from exact zer
     // Unknown historical metadata does not accept a current question label or scale.
     const substituted = structuredClone(context);
     substituted.citations.items[0].citation.metadata = { state: 'available', label: f.question.label };
-    expect(Compile(ReadingPageReviewContextSchema).Check(substituted)).toBe(false);
+    expect(Compile(ReadingPageReviewContextSchema()).Check(substituted)).toBe(false);
 
     const dependencies = {
       pool: f.system.database.pool,

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
@@ -19,8 +20,10 @@ import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 
 const closed = { additionalProperties: false } as const;
-const id = t.String({ format: 'uuid' }),
-  row = t.Integer({ minimum: 0, maximum: MAL_LIMITS.rows - 1 });
+const id = t.String({ format: 'uuid' });
+function row() {
+  return memoizedValue(row, () => t.Integer({ minimum: 0, maximum: MAL_LIMITS.rows - 1 }));
+}
 const progressSelection = t.Optional(
   t.Object(
     {
@@ -43,40 +46,48 @@ const progressSelection = t.Optional(
     closed,
   ),
 );
-const scoreSelection = t.Optional(
-  t.Union([
-    t.Object(
-      {
-        action: t.Literal('adopt'),
-        questionId: t.Literal(STANDARD_QUESTION_ID),
-        questionRevision: t.Literal(1),
-        units: t.Integer({ minimum: 0, maximum: 20 }),
-        replaceCurrent: t.Optional(t.Boolean()),
-      },
-      closed,
+function scoreSelection() {
+  return memoizedValue(scoreSelection, () =>
+    t.Optional(
+      t.Union([
+        t.Object(
+          {
+            action: t.Literal('adopt'),
+            questionId: t.Literal(STANDARD_QUESTION_ID),
+            questionRevision: t.Literal(1),
+            units: t.Integer({ minimum: 0, maximum: 20 }),
+            replaceCurrent: t.Optional(t.Boolean()),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            action: t.Literal('clear'),
+            questionId: t.Literal(STANDARD_QUESTION_ID),
+            questionRevision: t.Literal(1),
+          },
+          closed,
+        ),
+      ]),
     ),
-    t.Object(
-      {
-        action: t.Literal('clear'),
-        questionId: t.Literal(STANDARD_QUESTION_ID),
-        questionRevision: t.Literal(1),
-      },
-      closed,
-    ),
-  ]),
-);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+  );
+}
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
 const params = t.Object({ id }, closed);
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
+  }));
+}
 const detail = (name: string) => ({
   operationId: `library_mal.${name}`,
   'x-action': 'library_entry:update',
@@ -121,9 +132,9 @@ export function malImportRoutes(
     .post(
       customMethod('/v1/libraryImports/mal', 'preview'),
       {
-        headers,
+        headers: headers(),
         body: t.Object({ xml: t.String({ maxLength: MAL_LIMITS.bytes }) }, closed),
-        response: { 200: result, ...failures },
+        response: { 200: result, ...failures() },
         detail: { ...detail('preview'), 'x-body-limit': MAL_LIMITS.wireBytes },
       },
       async ({ actor, body, headers, job, admission, session, set }) =>
@@ -142,7 +153,7 @@ export function malImportRoutes(
       {
         params,
         query: t.Object({ after: t.Optional(t.Integer({ minimum: 0, maximum: MAL_LIMITS.rows })) }, closed),
-        response: { 200: t.Unsafe<Page>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Page>(t.Any()), ...failures() },
         detail: detail('page'),
       },
       async ({ actor, params, query, job, admission, set }) =>
@@ -155,7 +166,7 @@ export function malImportRoutes(
       '/v1/libraryImports/mal/:id/source',
       {
         params,
-        response: { 200: t.Object({ xml: t.String() }, closed), ...failures },
+        response: { 200: t.Object({ xml: t.String() }, closed), ...failures() },
         detail: detail('source'),
       },
       async ({ actor, params, job, admission, set }) =>
@@ -168,15 +179,15 @@ export function malImportRoutes(
       '/v1/libraryImports/mal/:id/review',
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
-            row,
+            row: row(),
             target: t.Union([id, t.Null()]),
             skip: t.Boolean(),
             replace: t.Boolean(),
             progress: progressSelection,
-            score: scoreSelection,
+            score: scoreSelection(),
             labels: t.Optional(
               t.Array(
                 t.Object(
@@ -195,7 +206,7 @@ export function malImportRoutes(
           },
           closed,
         ),
-        response: { 200: result, ...failures },
+        response: { 200: result, ...failures() },
         detail: detail('review'),
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
@@ -219,7 +230,7 @@ export function malImportRoutes(
             rows: t.Array(
               t.Object(
                 {
-                  row,
+                  row: row(),
                   version: t.String({ minLength: 1, maxLength: 1024 }),
                   fields: t.Array(t.String({ maxLength: 128 }), { maxItems: 64, uniqueItems: true }),
                 },
@@ -230,7 +241,7 @@ export function malImportRoutes(
           },
           closed,
         ),
-        response: { 200: t.Unsafe<Applied>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Applied>(t.Any()), ...failures() },
         detail: detail('apply'),
       },
       async ({ actor, params, body, request, job, admission, session, set }) =>
@@ -246,13 +257,13 @@ export function malImportRoutes(
       '/v1/libraryImports/mal/:id/metadata/review',
       {
         params,
-        headers,
-        body: t.Object({ row, sourceReviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
+        headers: headers(),
+        body: t.Object({ row: row(), sourceReviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
         response: {
           200: t.Object({ id, reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
-          ...failures,
+          ...failures(),
         },
-        detail: { ...detail('metadata_review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes },
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
@@ -273,11 +284,11 @@ export function malImportRoutes(
     .get(
       '/v1/libraryImports/mal/:id/metadata/:row',
       {
-        params: t.Object({ id, row }, closed),
+        params: t.Object({ id, row: row() }, closed),
         query: t.Object({ reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
         response: {
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['metadata']>>>(t.Any()),
-          ...failures,
+          ...failures(),
         },
         detail: detail('metadata'),
       },
@@ -295,7 +306,7 @@ export function malImportRoutes(
         params,
         body: t.Object(
           {
-            row,
+            row: row(),
             reviewToken: t.String({ minLength: 1, maxLength: 128 }),
             fields: t.Array(
               t.Object(
@@ -308,16 +319,16 @@ export function malImportRoutes(
                 },
                 closed,
               ),
-              { minItems: 1, maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields },
+              { minItems: 1, maxItems: ENTRY_IMPORT_METADATA_LIMITS().fields },
             ),
           },
           closed,
         ),
         response: {
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['applyMetadata']>>>(t.Any()),
-          ...failures,
+          ...failures(),
         },
-        detail: { ...detail('metadata_apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes },
       },
       async ({ actor, params, body, request, job, admission, session, set }) =>
         safe(async () => {
@@ -340,18 +351,18 @@ export function malImportRoutes(
       '/v1/libraryImports/mal/:id/dates/review',
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
-            row,
+            row: row(),
             occurrenceId: id,
             startAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
             finishAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
           },
           closed,
         ),
-        response: { 200: result, ...failures },
-        detail: { ...detail('dates_review'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
+        response: { 200: result, ...failures() },
+        detail: { ...detail('dates_review'), 'x-body-limit': MAL_DATE_LIMITS().requestBytes },
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
@@ -373,23 +384,23 @@ export function malImportRoutes(
             rows: t.Array(
               t.Object(
                 {
-                  row,
+                  row: row(),
                   version: t.String({ minLength: 1, maxLength: 1024 }),
                   fields: t.Array(t.Union([t.Literal('startDate'), t.Literal('finishDate')]), {
                     minItems: 1,
-                    maxItems: MAL_DATE_LIMITS.fields,
+                    maxItems: MAL_DATE_LIMITS().fields,
                     uniqueItems: true,
                   }),
                 },
                 closed,
               ),
-              { minItems: 1, maxItems: MAL_DATE_LIMITS.rows, uniqueItems: true },
+              { minItems: 1, maxItems: MAL_DATE_LIMITS().rows, uniqueItems: true },
             ),
           },
           closed,
         ),
-        response: { 200: t.Unsafe<DateApplied>(t.Any()), ...failures },
-        detail: { ...detail('dates_apply'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
+        response: { 200: t.Unsafe<DateApplied>(t.Any()), ...failures() },
+        detail: { ...detail('dates_apply'), 'x-body-limit': MAL_DATE_LIMITS().requestBytes },
       },
       async ({ actor, params, body, request, job, admission, session, set }) =>
         safe(async () => {
@@ -406,9 +417,9 @@ export function malImportRoutes(
       '/v1/libraryImports/mal/:id/cancel',
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({}, closed),
-        response: { 200: result, ...failures },
+        response: { 200: result, ...failures() },
         detail: detail('cancel'),
       },
       async ({ actor, params, headers, job, admission, session, set }) =>
@@ -425,8 +436,8 @@ export function malImportRoutes(
       '/v1/libraryImports/mal/:id',
       {
         params,
-        headers,
-        response: { 200: result, ...failures },
+        headers: headers(),
+        response: { 200: result, ...failures() },
         detail: detail('delete'),
       },
       async ({ actor, params, headers, job, admission, session, set }) =>

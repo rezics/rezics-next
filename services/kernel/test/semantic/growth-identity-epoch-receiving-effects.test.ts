@@ -18,7 +18,7 @@ afterAll(async () => {
 test('native receiving receipt custody replay stays bounded across unrelated source history', async () => {
   const input = await admittedReceivingJob(f);
   const progress = await completeReceivingParticipant(f, input.job);
-  await store.reconcileStepReceipt(db.pool, progress.receipt);
+  await store().reconcileStepReceipt(db.pool, progress.receipt);
   const report = await checkGrowth(db, {
     name: 'native receiving receipt custody replay',
     scales: [64, 512, 4096],
@@ -30,7 +30,7 @@ test('native receiving receipt custody replay stays bounded across unrelated sou
       for (let row = previous; row < scale; row++) await f.create('Unrelated receiving history', 0x8c10);
     },
     async operation(database) {
-      expect(await store.reconcileStepReceipt(database.pool, progress.receipt)).toEqual(progress);
+      expect(await store().reconcileStepReceipt(database.pool, progress.receipt)).toEqual(progress);
     },
   });
   expect(report.samples).toHaveLength(3);

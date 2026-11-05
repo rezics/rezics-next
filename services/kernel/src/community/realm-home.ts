@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -79,20 +80,28 @@ const currentViewer = t.Object(
   },
   closed,
 );
-export const RealmHomeQuerySchema = t.Pick(RealmHomePublicationQuerySchema, ['languages'], closed);
-export const RealmHomePresentationSchema = t.Omit(CommunityPresentationSchema, ['join'], closed);
-export const RealmHomePageSchema = t.Object(
-  {
-    realm: RealmSchema,
-    space: SpaceSchema,
-    presentation: RealmHomePresentationSchema,
-    boards: RealmHomeBoardPageSchema,
-    publications: RealmHomePublicationPageSchema,
-    viewer: t.Union([t.Object({ state: t.Literal('anonymous') }, closed), currentViewer]),
-    actions: t.Union([t.Object({ state: t.Literal('sign-in') }, closed), realmViewerActionsSchema]),
-  },
-  closed,
-);
+export function RealmHomeQuerySchema() {
+  return memoizedValue(RealmHomeQuerySchema, () => t.Pick(RealmHomePublicationQuerySchema, ['languages'], closed));
+}
+export function RealmHomePresentationSchema() {
+  return memoizedValue(RealmHomePresentationSchema, () => t.Omit(CommunityPresentationSchema(), ['join'], closed));
+}
+export function RealmHomePageSchema() {
+  return memoizedValue(RealmHomePageSchema, () =>
+    t.Object(
+      {
+        realm: RealmSchema(),
+        space: SpaceSchema,
+        presentation: RealmHomePresentationSchema(),
+        boards: RealmHomeBoardPageSchema(),
+        publications: RealmHomePublicationPageSchema(),
+        viewer: t.Union([t.Object({ state: t.Literal('anonymous') }, closed), currentViewer]),
+        actions: t.Union([t.Object({ state: t.Literal('sign-in') }, closed), realmViewerActionsSchema]),
+      },
+      closed,
+    ),
+  );
+}
 
 /** The native container witness binds identity/presentation and both shelves.
  * Fresh Realm and Space decisions run outside one another's preparation; the
@@ -219,7 +228,7 @@ export function createRealmHomeBoardReader(deps: RealmHomeDependencies) {
   };
 }
 
-export function realmHomeResponse(page: RealmHomePage): Static<typeof RealmHomePageSchema> {
+export function realmHomeResponse(page: RealmHomePage): Static<ReturnType<typeof RealmHomePageSchema>> {
   // Serialize through the same ordinary Realm/Space and native shelf models.
   // Join is deliberately absent from the presentation wire projection.
   const presentation = communityPresentationResponse({

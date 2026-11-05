@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { authorizedContextMetadata, contextNativeActions } from './context-lifecycle-read.ts';
 import { ContextDirectoryPreparingError } from './context-directory.ts';
 import {
@@ -36,13 +37,19 @@ function subjectViewerActionResource(type?: string): ViewerActionResource {
 }
 
 /** Register generic Subject disclosure and the released catalogue, including namespaced Types. */
-export const subjectViewerActionResources: ViewerActionResources = new Map([
-  ['semantic.subject', subjectViewerActionResource()],
-  ...Object.keys(bundledRelease.types).map((type): [string, ViewerActionResource] => [
-    type,
-    subjectViewerActionResource(type),
-  ]),
-]);
+export function subjectViewerActionResources(): ViewerActionResources {
+  return memoizedValue(
+    subjectViewerActionResources,
+    () =>
+      new Map([
+        ['semantic.subject', subjectViewerActionResource()],
+        ...Object.keys(bundledRelease.types).map((type): [string, ViewerActionResource] => [
+          type,
+          subjectViewerActionResource(type),
+        ]),
+      ]),
+  );
+}
 
 /** Native Context resolver shares the exact directory lifecycle reader; candidates and creators never grant. */
 export const contextViewerActionResource: ViewerActionResource = {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { FeedViewerPersonalActionsSchema } from './feed-viewer-schema.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
@@ -83,7 +84,9 @@ export type FeedReactionTarget = Readonly<{
   targetId: ReactionTarget['targetId'];
 }>;
 export type FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>;
-const reactionKind = t.Union(REACTION_KINDS.map((kind) => t.Literal(kind)));
+function reactionKind() {
+  return memoizedValue(reactionKind, () => t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
+}
 const reactionTarget = t.Unsafe<FeedReactionTarget>(
   t.Object({ targetKind: t.Union([t.Literal('thread'), t.Literal('post')]), targetId: uuid }, closed),
 );
@@ -113,19 +116,23 @@ const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
 export type FeedReactionAdvice =
   | Readonly<{ target: FeedReactionTarget; state: 'current'; allowed: readonly ViewerReactionKind[] }>
   | Readonly<{ target: FeedReactionTarget; state: 'sign_in' | 'unavailable' }>;
-const reactionAdvice = t.Unsafe<FeedReactionAdvice>(
-  t.Union([
-    t.Object(
-      {
-        target: reactionTarget,
-        state: t.Literal('current'),
-        allowed: t.Array(reactionKind, { maxItems: REACTION_KINDS.length, uniqueItems: true }),
-      },
-      closed,
+function reactionAdvice() {
+  return memoizedValue(reactionAdvice, () =>
+    t.Unsafe<FeedReactionAdvice>(
+      t.Union([
+        t.Object(
+          {
+            target: reactionTarget,
+            state: t.Literal('current'),
+            allowed: t.Array(reactionKind(), { maxItems: REACTION_KINDS.length, uniqueItems: true }),
+          },
+          closed,
+        ),
+        t.Object({ target: reactionTarget, state: t.Union([t.Literal('sign_in'), t.Literal('unavailable')]) }, closed),
+      ]),
     ),
-    t.Object({ target: reactionTarget, state: t.Union([t.Literal('sign_in'), t.Literal('unavailable')]) }, closed),
-  ]),
-);
+  );
+}
 /** Feed-local only: Semantic summaries and public Search caches carry no viewer slot. */
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 export type FeedSubjectReactionKind = (typeof subjectReactionKinds)[number];
@@ -163,10 +170,11 @@ export const FeedSubjectReactionsSchema = t.Object(
   closed,
 );
 export type FeedSubjectReactions = Static<typeof FeedSubjectReactionsSchema>;
-const feedSubjectSummary = t.Object(
-  { ...SubjectSummarySchema.properties, subjectReactions: t.Optional(FeedSubjectReactionsSchema) },
-  closed,
-);
+function feedSubjectSummary() {
+  return memoizedValue(feedSubjectSummary, () =>
+    t.Object({ ...SubjectSummarySchema.properties, subjectReactions: t.Optional(FeedSubjectReactionsSchema) }, closed),
+  );
+}
 
 export type FeedContentSummary = {
   author?: FeedAuthor;
@@ -207,72 +215,93 @@ const conversationActivity = t.Unsafe<FeedConversationActivity>(
   ]),
 );
 type FeedPostContentSummary = FeedContentSummary & { parentContext?: FeedParentContext };
-const contentSummaryFields = {
-  author: t.Optional(FeedAuthorSchema),
-  excerpt: t.Optional(t.String({ maxLength: 160 })),
-  reviewContext: t.Optional(FeedReviewContextSchema),
-  conversationActivity: t.Optional(conversationActivity),
-  reactionTarget: t.Optional(reactionTarget),
-  reactions: t.Optional(reactionCounts),
-  viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
-  reactionAdvice: t.Optional(reactionAdvice),
-};
-const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummary>(
-  t.Object(
-    {
-      ...contentSummaryFields,
-      id: uuid,
-      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-      title: nullable,
-      createdAt: t.String(),
-    },
-    closed,
-  ),
-);
-const postSummary = t.Unsafe<
-  Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedPostContentSummary
->(
-  t.Object(
-    {
-      ...contentSummaryFields,
-      id: uuid,
-      threadId: uuid,
-      createdAt: t.String(),
-      title: nullable,
-      parentContext: t.Optional(FeedParentContextSchema),
-    },
-    closed,
-  ),
-);
+function contentSummaryFields() {
+  return memoizedValue(contentSummaryFields, () => ({
+    author: t.Optional(FeedAuthorSchema),
+    excerpt: t.Optional(t.String({ maxLength: 160 })),
+    reviewContext: t.Optional(FeedReviewContextSchema),
+    conversationActivity: t.Optional(conversationActivity),
+    reactionTarget: t.Optional(reactionTarget),
+    reactions: t.Optional(reactionCounts),
+    viewerReaction: t.Optional(t.Union([reactionKind(), t.Null()])),
+    reactionAdvice: t.Optional(reactionAdvice()),
+  }));
+}
+function threadSummary() {
+  return memoizedValue(threadSummary, () =>
+    t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummary>(
+      t.Object(
+        {
+          ...contentSummaryFields(),
+          id: uuid,
+          kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+          title: nullable,
+          createdAt: t.String(),
+        },
+        closed,
+      ),
+    ),
+  );
+}
+function postSummary() {
+  return memoizedValue(postSummary, () =>
+    t.Unsafe<Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedPostContentSummary>(
+      t.Object(
+        {
+          ...contentSummaryFields(),
+          id: uuid,
+          threadId: uuid,
+          createdAt: t.String(),
+          title: nullable,
+          parentContext: t.Optional(FeedParentContextSchema),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' | 'description'>>(
   t.Object({ id: uuid, title: t.String(), description: nullable }, closed),
 );
-const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(CollectionDiscoverySummarySchema);
-const discoveryReviewSummary = t.Unsafe<
-  PublicReviewDiscoverySummary &
-    Pick<
-      FeedContentSummary,
-      'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext' | 'conversationActivity' | 'reactionAdvice'
-    >
->(
-  t.Object(
-    {
-      id: uuid,
-      kind: t.Literal('review'),
-      title: nullable,
-      author: t.Optional(t.Object({ displayName: nullable, handle: nullable }, closed)),
-      excerpt: t.Optional(t.String({ maxLength: 640 })),
-      subject: t.Optional(t.Union([t.Object({ id: uuid, title: nullable }, closed), t.Null()])),
-      reviewContext: t.Optional(FeedReviewContextSchema),
-      conversationActivity: t.Optional(conversationActivity),
-      reactionTarget: t.Optional(reactionTarget),
-      reactions: t.Optional(reactionCounts),
-      viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
-      reactionAdvice: t.Optional(reactionAdvice),
-    },
-    closed,
-  ),
-);
+function discoveryCollectionSummary() {
+  return memoizedValue(discoveryCollectionSummary, () =>
+    t.Unsafe<PublicCollectionDiscoverySummary>(CollectionDiscoverySummarySchema()),
+  );
+}
+function discoveryReviewSummary() {
+  return memoizedValue(discoveryReviewSummary, () =>
+    t.Unsafe<
+      PublicReviewDiscoverySummary &
+        Pick<
+          FeedContentSummary,
+          | 'reactionTarget'
+          | 'reactions'
+          | 'viewerReaction'
+          | 'reviewContext'
+          | 'conversationActivity'
+          | 'reactionAdvice'
+        >
+    >(
+      t.Object(
+        {
+          id: uuid,
+          kind: t.Literal('review'),
+          title: nullable,
+          author: t.Optional(t.Object({ displayName: nullable, handle: nullable }, closed)),
+          excerpt: t.Optional(t.String({ maxLength: 640 })),
+          subject: t.Optional(t.Union([t.Object({ id: uuid, title: nullable }, closed), t.Null()])),
+          reviewContext: t.Optional(FeedReviewContextSchema),
+          conversationActivity: t.Optional(conversationActivity),
+          reactionTarget: t.Optional(reactionTarget),
+          reactions: t.Optional(reactionCounts),
+          viewerReaction: t.Optional(t.Union([reactionKind(), t.Null()])),
+          reactionAdvice: t.Optional(reactionAdvice()),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 const discoverySpaceSummary = t.Unsafe<PublicSpaceDiscoverySummary>(
   t.Object(
     {
@@ -319,129 +348,137 @@ const semanticKey = t.Object(
   },
   closed,
 );
-export const FeedItemSchema = t.Union([
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('discovery'),
-      key: semanticKey,
-      summary: feedSubjectSummary,
-      destination: destination('subject'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('discovery'),
-      key: key('accounts', 'account'),
-      summary: accountSummary,
-      destination: destination('account'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('discovery'),
-      key: key('commerce', 'collection'),
-      summary: discoveryCollectionSummary,
-      destination: destination('collection'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('discovery'),
-      key: key('content', 'review'),
-      summary: discoveryReviewSummary,
-      destination: destination('thread'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('discovery'),
-      key: key('content', 'space'),
-      summary: discoverySpaceSummary,
-      destination: spaceDestination,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('continue'),
-      key: semanticKey,
-      summary: feedSubjectSummary,
-      destination: destination('subject'),
-      continue: continuePageSchema.properties.subjects.items,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('following'),
-      key: semanticKey,
-      summary: feedSubjectSummary,
-      destination: destination('subject'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('following'),
-      key: key('content', 'thread'),
-      summary: threadSummary,
-      destination: destination('thread'),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('following'),
-      key: key('content', 'post'),
-      summary: postSummary,
-      destination: postDestination,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...common,
-      source: t.Literal('following'),
-      key: key('library', 'collection'),
-      summary: collectionSummary,
-      destination: destination('collection'),
-    },
-    closed,
-  ),
-]);
+export function FeedItemSchema() {
+  return memoizedValue(FeedItemSchema, () =>
+    t.Union([
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('discovery'),
+          key: semanticKey,
+          summary: feedSubjectSummary(),
+          destination: destination('subject'),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('discovery'),
+          key: key('accounts', 'account'),
+          summary: accountSummary,
+          destination: destination('account'),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('discovery'),
+          key: key('commerce', 'collection'),
+          summary: discoveryCollectionSummary(),
+          destination: destination('collection'),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('discovery'),
+          key: key('content', 'review'),
+          summary: discoveryReviewSummary(),
+          destination: destination('thread'),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('discovery'),
+          key: key('content', 'space'),
+          summary: discoverySpaceSummary,
+          destination: spaceDestination,
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('continue'),
+          key: semanticKey,
+          summary: feedSubjectSummary(),
+          destination: destination('subject'),
+          continue: continuePageSchema().properties.subjects.items,
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('following'),
+          key: semanticKey,
+          summary: feedSubjectSummary(),
+          destination: destination('subject'),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('following'),
+          key: key('content', 'thread'),
+          summary: threadSummary(),
+          destination: destination('thread'),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('following'),
+          key: key('content', 'post'),
+          summary: postSummary(),
+          destination: postDestination,
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...common,
+          source: t.Literal('following'),
+          key: key('library', 'collection'),
+          summary: collectionSummary,
+          destination: destination('collection'),
+        },
+        closed,
+      ),
+    ]),
+  );
+}
 export const FeedSourceStateSchema = t.Union([
   t.Literal('ready'),
   t.Literal('preparing'),
   t.Literal('unavailable'),
   t.Literal('not_requested'),
 ]);
-export const FeedPageSchema = t.Object(
-  {
-    feedItems: t.Array(FeedItemSchema, { maxItems: 20 }),
-    viewerPersonalActions: t.Optional(FeedViewerPersonalActionsSchema),
-    next: nullable,
-    asOf: t.String({ format: 'date-time' }),
-    reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),
-    sources: t.Object(
-      { discovery: FeedSourceStateSchema, following: FeedSourceStateSchema, continue: FeedSourceStateSchema },
+export function FeedPageSchema() {
+  return memoizedValue(FeedPageSchema, () =>
+    t.Object(
+      {
+        feedItems: t.Array(FeedItemSchema(), { maxItems: 20 }),
+        viewerPersonalActions: t.Optional(FeedViewerPersonalActionsSchema()),
+        next: nullable,
+        asOf: t.String({ format: 'date-time' }),
+        reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),
+        sources: t.Object(
+          { discovery: FeedSourceStateSchema, following: FeedSourceStateSchema, continue: FeedSourceStateSchema },
+          closed,
+        ),
+      },
       closed,
     ),
-  },
-  closed,
-);
-export type FeedItem = Static<typeof FeedItemSchema>;
-export type FeedPage = Static<typeof FeedPageSchema>;
+  );
+}
+export type FeedItem = Static<ReturnType<typeof FeedItemSchema>>;
+export type FeedPage = Static<ReturnType<typeof FeedPageSchema>>;
 export type FeedSourceState = Static<typeof FeedSourceStateSchema>;

@@ -340,7 +340,7 @@ export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposal
     noteField.value.length === 0 ||
     !noteField.value.isWellFormed() ||
     noteField.value.includes('\u0000') ||
-    Buffer.byteLength(noteField.value) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+    Buffer.byteLength(noteField.value) > ENTRY_IMPORT_METADATA_LIMITS().noteBytes
   )
     note = {
       state: noteField.value.length === 0 ? 'empty' : 'unsupported',
@@ -377,7 +377,7 @@ export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposal
         : null;
     privacy = meaning
       ? { state: 'value', sourceField: 'private', sourceValue: raw, value: { status: 'known', meaning } }
-      : token.length <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(raw)
+      : token.length <= ENTRY_IMPORT_METADATA_LIMITS().privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(raw)
         ? { state: 'unknown', sourceField: 'private', sourceValue: raw, value: { status: 'unknown', sourceValue: raw } }
         : {
             state: 'unsupported',

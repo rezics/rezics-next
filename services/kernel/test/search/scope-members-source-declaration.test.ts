@@ -13,7 +13,7 @@ import { MEMBERS_SELECTED_CHILDREN } from '../../src/library/members-preparation
 import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
 
 test('the selected Members Source has a complete static bound for the declared call paths', () => {
-  expect(MEMBERS_PREPARATION_SOURCE_AXES).toEqual([
+  expect(MEMBERS_PREPARATION_SOURCE_AXES()).toEqual([
     'candidateKeys',
     'nativeRows',
     'identityMetadataRows',
@@ -24,18 +24,18 @@ test('the selected Members Source has a complete static bound for the declared c
     'bytes',
     'engineRequests',
   ]);
-  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.status).toBe('complete');
-  expect(isBound(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost)).toBe(true);
-  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost).toEqual(MEMBERS_PREPARATION_SOURCE_COST);
-  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost).toEqual(
-    sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS)),
+  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION().status).toBe('complete');
+  expect(isBound(MEMBERS_PREPARATION_SOURCE_DECLARATION().cost)).toBe(true);
+  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION().cost).toEqual(MEMBERS_PREPARATION_SOURCE_COST());
+  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION().cost).toEqual(
+    sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS())),
   );
-  expect(MEMBERS_PREPARATION_SOURCE_TERMS.collectionState).toEqual(
-    repeatBound(COLLECTION_SOURCE_WORK_COST.state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
+  expect(MEMBERS_PREPARATION_SOURCE_TERMS().collectionState).toEqual(
+    repeatBound(COLLECTION_SOURCE_WORK_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
   );
   expect(MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots).toBe(8);
   expect(MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.membersSnapshots).toBe(4);
-  expect(MEMBERS_SELECTED_CHILDREN.source).toEqual(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost);
+  expect(MEMBERS_SELECTED_CHILDREN().source).toEqual(MEMBERS_PREPARATION_SOURCE_DECLARATION().cost);
   expect(MEMBERS_DEFINITION_QUERY_BOUNDS.releaseProjection).toEqual({
     maxExpandedVarlenaBytes: 1024 ** 3,
     byteMultiplier: 6,
@@ -44,7 +44,7 @@ test('the selected Members Source has a complete static bound for the declared c
 });
 
 test('activated public output plans are independent of the selected Members Source cost declaration', () => {
-  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.engineRequests).toBe(0);
-  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING).not.toEqual(MEMBERS_PREPARATION_SOURCE_COST);
-  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.nativeRows).not.toBe(MEMBERS_PREPARATION_SOURCE_COST.nativeRows);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING().engineRequests).toBe(0);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING()).not.toEqual(MEMBERS_PREPARATION_SOURCE_COST());
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING().nativeRows).not.toBe(MEMBERS_PREPARATION_SOURCE_COST().nativeRows);
 });

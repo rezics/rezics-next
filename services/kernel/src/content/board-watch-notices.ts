@@ -32,7 +32,7 @@ type Work = {
 };
 
 function sourceInput(event: CloudEvent): Input {
-  if (event.type !== published || !Value.Check(CONTENT_EVENTS[published], event.data))
+  if (event.type !== published || !Value.Check(CONTENT_EVENTS()[published], event.data))
     throw new TypeError('Invalid board-watch publication event');
   const source = event.data as Source;
   const route = routeOf(source.itemId);

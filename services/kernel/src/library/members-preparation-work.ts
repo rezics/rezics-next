@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { authoritativeTimeValue, commandTime } from '../command/command.ts';
@@ -75,21 +76,23 @@ const nativeCost = (cost: Readonly<WorkDimensions>) => ({ ...cost, engineRequest
  * The complete Source child is declared before registration; the declaration permits dispatch but
  * never substitutes for same-client Source, Scope, owner and episode checks.
  */
-export const MEMBERS_SELECTED_CHILDREN: SelectedChildren = {
-  source: MEMBERS_PREPARATION_SOURCE_COST,
-  native: [
-    { sql: step.sql, limit: 4, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.step) },
-    { sql: sourceMetadata.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.sourceMetadata) },
-    { sql: ownerFence.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.ownerFence) },
-    { sql: original.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.originalRead) },
-    { sql: selected.sql, limit: 2, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.selectedAssociation) },
-    { sql: apply.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.apply) },
-    { sql: drainResults.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.resultDrain) },
-    { sql: reset.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.reset) },
-    { sql: repair.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.repair) },
-    { sql: failure.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.failure) },
-  ],
-};
+export function MEMBERS_SELECTED_CHILDREN(): SelectedChildren {
+  return memoizedValue(MEMBERS_SELECTED_CHILDREN, () => ({
+    source: MEMBERS_PREPARATION_SOURCE_COST(),
+    native: [
+      { sql: step.sql, limit: 4, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.step) },
+      { sql: sourceMetadata.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.sourceMetadata) },
+      { sql: ownerFence.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.ownerFence) },
+      { sql: original.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.originalRead) },
+      { sql: selected.sql, limit: 2, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.selectedAssociation) },
+      { sql: apply.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.apply) },
+      { sql: drainResults.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.resultDrain) },
+      { sql: reset.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.reset) },
+      { sql: repair.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.repair) },
+      { sql: failure.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.failure) },
+    ],
+  }));
+}
 
 const REPAIR_CHECKPOINT = '{"repair":true}';
 
@@ -560,7 +563,7 @@ export async function registerMembersPreparationWork(context: WorkContext): Prom
   if (!runtime) throw new ProblemError('dependency_unavailable', { detail: 'Members selected runtime is unavailable' });
   const prepare = runtime.registerMembersStep(
     (invocation, locator) => runMembersPreparationStep(deps, invocation, locator),
-    MEMBERS_SELECTED_CHILDREN,
+    MEMBERS_SELECTED_CHILDREN(),
   );
   const drain = DBOS.registerStep((locator: PreparationLocator) => cleanupEpisode(deps, locator), {
     name: 'library.membersPreparation.cleanup',

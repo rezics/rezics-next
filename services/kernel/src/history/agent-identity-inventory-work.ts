@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import type { CommandTransaction } from '../command/command.ts';
@@ -201,62 +202,69 @@ const sdkWork = Object.freeze({
 /** The Accounts subdeclaration is deliberately separate from Semantic's complete
  * original declaration. Its missing operands cannot be added as zero or as null
  * totals. Per-call terms below compose cumulatively in the ONE original ledger. */
-export const IDENTITY_HISTORY_ACCOUNTS_DECLARATION = Object.freeze({
-  version: 1,
-  interface: 'withPrepaidAgentIdentityHistoryUnit',
-  sourceReceiver: 'withPrepaidIdentitySourceConsumerMaintenance',
-  axes: Object.freeze([
-    'candidateKeys',
-    'nativeRows',
-    'identityMetadataRows',
-    'nativePoints',
-    'witnessKeys',
-    'statements',
-    'bytes',
-    'emptySeeks',
-  ] as const),
-  engineRequests: 0,
-  selectedCommand: COMMAND_DISPATCH_ALLOWANCE,
-  // Per invocation of the owning local body; early returns reduce reached sites.
-  // Source's complete schedule/repeats remain a separate missing composition term.
-  selectedCommandCalls: Object.freeze({
-    retirement: 8,
-    physicalMinimization: 3,
-    physicalFenceReceiving: 4, // two fence observations, before/after each
-    selectedContinuation: 1, // pending scheduler update OR final cursor/receiving
-  }),
-  local: Object.freeze(
-    Object.fromEntries(
-      Object.entries(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK).map(([name, amount]) => [name, declarations.get(amount)!]),
-    ),
-  ),
-  sdk: Object.freeze(
-    Object.fromEntries(Object.entries(sdkWork).map(([name, amount]) => [name, declarations.get(amount)!])),
-  ),
-  multiplicities: Object.freeze({
-    mapping: 'one initial lookup; every receiving binding repeats its own mapping',
-    receivingBinding: 'one initial; one per retirement receiver; two per released fence observation',
-    readiness: 'one per registered identity owner readiness call',
-    nativeInventory:
-      'one initial and one per final current-cut recheck; at most three copies, 64 roles each plus sentinel',
-    recoveryInventory: 'one per initial/repeated recovery cut; exactly two copies, 64 roles each plus sentinel',
-    sdkWriterObservation: 'two retirement observations; one before physical deletion',
-    sdkRetire: 'at most one single attempt; rollback+begin+settings+lock+retire+commit',
-    sdkDelete: 'at most one single attempt; rollback+begin+settings+lock+four deletes+commit',
-    physical: 'two inspections; eight LIMIT+1 probes per inspection; limits 1,1,1,64,8,64,0,0',
-    commands:
-      'one selectedCommand.total per reached selected noEffect command, atomically including disjoint cleanup before checkout; independent commands use local.command instead',
-    progress: 'one held selected job/barrier and cursor update, followed by original producer progress control',
-  }),
-  missingTerms: Object.freeze([
-    'SourceHistoryNativeAllReachedCalls: original source, accepted recovery, custody, native handoff and final verification',
-    'LibraryAllReachedCalls: successful page/current/locked-plan/seal/fence and cleanup on the exact original ledger',
-    'SourceHistoryNativeGuard: core.check_agent_identity_history nested Source native function',
-    'RecoveryFinalReceiving: disjoint local/Source composition of the two serializer current receiving verifiers',
-    'RecoveryReceivingEnrollment: released Search owner enrollment and same-home current verification',
-    'SDKPhysicalWriterClosure: independent homes and non-FK physical participants',
-  ]),
-});
+export function IDENTITY_HISTORY_ACCOUNTS_DECLARATION() {
+  return memoizedValue(IDENTITY_HISTORY_ACCOUNTS_DECLARATION, () =>
+    Object.freeze({
+      version: 1,
+      interface: 'withPrepaidAgentIdentityHistoryUnit',
+      sourceReceiver: 'withPrepaidIdentitySourceConsumerMaintenance',
+      axes: Object.freeze([
+        'candidateKeys',
+        'nativeRows',
+        'identityMetadataRows',
+        'nativePoints',
+        'witnessKeys',
+        'statements',
+        'bytes',
+        'emptySeeks',
+      ] as const),
+      engineRequests: 0,
+      selectedCommand: COMMAND_DISPATCH_ALLOWANCE,
+      // Per invocation of the owning local body; early returns reduce reached sites.
+      // Source's complete schedule/repeats remain a separate missing composition term.
+      selectedCommandCalls: Object.freeze({
+        retirement: 8,
+        physicalMinimization: 3,
+        physicalFenceReceiving: 4, // two fence observations, before/after each
+        selectedContinuation: 1, // pending scheduler update OR final cursor/receiving
+      }),
+      local: Object.freeze(
+        Object.fromEntries(
+          Object.entries(IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK).map(([name, amount]) => [
+            name,
+            declarations.get(amount)!,
+          ]),
+        ),
+      ),
+      sdk: Object.freeze(
+        Object.fromEntries(Object.entries(sdkWork).map(([name, amount]) => [name, declarations.get(amount)!])),
+      ),
+      multiplicities: Object.freeze({
+        mapping: 'one initial lookup; every receiving binding repeats its own mapping',
+        receivingBinding: 'one initial; one per retirement receiver; two per released fence observation',
+        readiness: 'one per registered identity owner readiness call',
+        nativeInventory:
+          'one initial and one per final current-cut recheck; at most three copies, 64 roles each plus sentinel',
+        recoveryInventory: 'one per initial/repeated recovery cut; exactly two copies, 64 roles each plus sentinel',
+        sdkWriterObservation: 'two retirement observations; one before physical deletion',
+        sdkRetire: 'at most one single attempt; rollback+begin+settings+lock+retire+commit',
+        sdkDelete: 'at most one single attempt; rollback+begin+settings+lock+four deletes+commit',
+        physical: 'two inspections; eight LIMIT+1 probes per inspection; limits 1,1,1,64,8,64,0,0',
+        commands:
+          'one selectedCommand.total per reached selected noEffect command, atomically including disjoint cleanup before checkout; independent commands use local.command instead',
+        progress: 'one held selected job/barrier and cursor update, followed by original producer progress control',
+      }),
+      missingTerms: Object.freeze([
+        'SourceHistoryNativeAllReachedCalls: original source, accepted recovery, custody, native handoff and final verification',
+        'LibraryAllReachedCalls: successful page/current/locked-plan/seal/fence and cleanup on the exact original ledger',
+        'SourceHistoryNativeGuard: core.check_agent_identity_history nested Source native function',
+        'RecoveryFinalReceiving: disjoint local/Source composition of the two serializer current receiving verifiers',
+        'RecoveryReceivingEnrollment: released Search owner enrollment and same-home current verification',
+        'SDKPhysicalWriterClosure: independent homes and non-FK physical participants',
+      ]),
+    }),
+  );
+}
 
 /** Preserve the executor's exact transaction object and its private resource
  * association. Only its query closure changes; no cast creates native authority.

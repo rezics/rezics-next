@@ -369,7 +369,7 @@ test('the actual original finite frame refuses unfunded deferred capture and ato
           f.pool,
           { ...context, ceiling: bound, allowance },
           declaration,
-          commonSearchReceivingStatements,
+          commonSearchReceivingStatements(),
           async () => {
             const tx = await f.pool.connect();
             try {
@@ -583,7 +583,7 @@ test('an empty capture queue has an exact original-frame receipt and conveys no 
         f.pool,
         { ...context, ceiling: bound, allowance },
         declaration,
-        commonSearchReceivingStatements,
+        commonSearchReceivingStatements(),
         async () => {
           const tx = await f.pool.connect();
           try {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { decodeRecordedMoneyUnit, sameMoneyUnit } from '@rezics/money';
@@ -29,21 +30,25 @@ function recordedStripeUnit(value: unknown): StripeMoneyUnit | null {
  * The financial participant owns the fence and the pending financial retention decision;
  * these bounded buyer-home queries supply its minimization and probe surface, not an acknowledgement.
  */
-export const moneyObservationOwnership: Readonly<{
+export function moneyObservationOwnership(): Readonly<{
   participant: 'commerce';
   store: 'commerce.money_observation';
   ownerKeys: readonly ['route', 'buyer_account_id'];
   page: typeof erasurePage;
   minimize: typeof erasureDelete;
   retainedFields: readonly [];
-}> = Object.freeze({
-  participant: 'commerce',
-  store: 'commerce.money_observation',
-  ownerKeys: ['route', 'buyer_account_id'] as const,
-  page: erasurePage,
-  minimize: erasureDelete,
-  retainedFields: [] as const,
-});
+}> {
+  return memoizedValue(moneyObservationOwnership, () =>
+    Object.freeze({
+      participant: 'commerce',
+      store: 'commerce.money_observation',
+      ownerKeys: ['route', 'buyer_account_id'] as const,
+      page: erasurePage,
+      minimize: erasureDelete,
+      retainedFields: [] as const,
+    }),
+  );
+}
 
 export type MoneyObservation = Readonly<{
   object_id: string;
