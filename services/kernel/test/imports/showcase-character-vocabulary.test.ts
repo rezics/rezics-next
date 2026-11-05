@@ -186,9 +186,11 @@ test('selected character traits and appearances use current adopted vocabulary a
         taxonomies: [appearanceRoleTaxonomy],
       });
     const sourceKeyId = (key: string) =>
-      journal.acknowledgedCommands().find((ack) =>
-        ack.command.op === 'create' && ack.command.source.external_id === showcaseVocabularyExternalId(key),
-      )?.subjectId;
+      journal
+        .acknowledgedCommands()
+        .find(
+          (ack) => ack.command.op === 'create' && ack.command.source.external_id === showcaseVocabularyExternalId(key),
+        )?.subjectId;
     await prepareRoles('schemes');
     const roleSchemeId = sourceKeyId(appearanceRoleTaxonomy)!;
     await editor.adoptSubject(roleSchemeId, 'schema:url', appearanceRoleSchemeUri, GLOBAL_CONTEXT);
@@ -196,7 +198,12 @@ test('selected character traits and appearances use current adopted vocabulary a
     const roleMainId = sourceKeyId(`${appearanceRoleTaxonomy}:main`)!;
     await editor.adoptSubject(roleMainId, 'schema:url', appearanceRoleConceptUri('main'), GLOBAL_CONTEXT);
     await editor.adoptSubject(roleMainId, 'skos:inScheme', roleSchemeId, GLOBAL_CONTEXT);
-    const currentVocabulary = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port: vocabularyPort, journal });
+    const currentVocabulary = await readShowcaseCharacterVocabulary({
+      tables,
+      selectedPlan: selected,
+      port: vocabularyPort,
+      journal,
+    });
     const profile = profileFromCharacterVocabularyBindings(currentVocabulary);
     expect(profile?.traits).toBeUndefined();
     expect(profile?.roles?.concepts).toEqual([{ code: 'main', id: roleMainId }]);
@@ -205,11 +212,16 @@ test('selected character traits and appearances use current adopted vocabulary a
       profile,
       roleTaxonomyRequirements,
     );
-    const reviewedTraits = await prepareShowcaseVndbTraits(vocabulary.plan, vocabulary.plan, runtime.importTransport as CrossMediaPort, {
-      'vndb-character-traits-scheme': ids.get('trait-scheme')!,
-      'vndb-character-traits-i23': ids.get('trait-i23')!,
-      'vndb-character-traits-i30': ids.get('trait-i30')!,
-    });
+    const reviewedTraits = await prepareShowcaseVndbTraits(
+      vocabulary.plan,
+      vocabulary.plan,
+      runtime.importTransport as CrossMediaPort,
+      {
+        'vndb-character-traits-scheme': ids.get('trait-scheme')!,
+        'vndb-character-traits-i23': ids.get('trait-i23')!,
+        'vndb-character-traits-i30': ids.get('trait-i30')!,
+      },
+    );
     expect(reviewedTraits.traits.map((row) => row.tid)).toEqual(['i23']);
     const bindings: SourceVocabularyBindings = {
       releaseDigest: bundledDigest,

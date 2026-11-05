@@ -3189,9 +3189,8 @@ export async function runCrossMediaSeedCli(
   let vndbCharacterProfileVocabularyRequirements: Awaited<
     ReturnType<typeof prepareShowcaseVndbCharacterProfileVocabulary>
   >['requirements'] = [];
-  let characterVocabularyRequirements: Awaited<
-    ReturnType<typeof prepareShowcaseCharacterVocabulary>
-  >['requirements'] = [];
+  let characterVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseCharacterVocabulary>>['requirements'] =
+    [];
   let vndbCreditVocabularyRequirements: Awaited<
     ReturnType<typeof prepareShowcaseVndbCreditVocabulary>
   >['requirements'] = [];
@@ -3297,7 +3296,10 @@ export async function runCrossMediaSeedCli(
       const reviewedTraits = await prepareShowcaseVndbTraits(plan, characterVocabulary.plan, port, reviewedSubjects);
       reviewedCharacterTraitBindings = reviewedTraits.bindings;
       reviewedCharacterTraitAdmission = reviewedTraits.vocabularyAdmission;
-      characterRoleAdmission = vndbCharacterVocabularyAdmission(roleBindings, { ...characterVocabulary.plan, traits: [] });
+      characterRoleAdmission = vndbCharacterVocabularyAdmission(roleBindings, {
+        ...characterVocabulary.plan,
+        traits: [],
+      });
       characterAdmissions.push(reviewedCharacterTraitAdmission);
       characterAdmissions.push(characterRoleAdmission);
       vndbBindings = {

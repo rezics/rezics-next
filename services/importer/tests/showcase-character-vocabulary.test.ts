@@ -184,10 +184,7 @@ test('default seed publishes selected trait and role vocabulary without a UUID f
       stage: 'concepts',
       taxonomies: [appearanceRoleTaxonomy],
     });
-    expect(roleOnly.requirements.map((item) => item.sourceKey)).toEqual([
-      'vndb.char_role',
-      'vndb.char_role:main',
-    ]);
+    expect(roleOnly.requirements.map((item) => item.sourceKey)).toEqual(['vndb.char_role', 'vndb.char_role:main']);
     expect(JSON.stringify(commands)).not.toContain('character-trait');
     const roleProfile = profileFromCharacterVocabularyBindings(roleOnly.bindings);
     expect(roleProfile?.roles?.concepts.map((item) => item.code)).toEqual(['main']);
