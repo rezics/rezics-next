@@ -52,7 +52,10 @@ function VisitSession({
     ...personalRead,
     queryKey: visit.key,
     queryFn: ({ signal }) => {
-      const movement = navigation?.request(props.mode === 'directory' ? props.input.cursor : undefined, firstRead.current);
+      const movement = navigation?.request(
+        props.mode === 'directory' ? props.input.cursor : undefined,
+        firstRead.current,
+      );
       firstRead.current = false;
       return visit.read<DirectoryWorkspace | Result<Actions> | Result<Workspace>>(
         signal,
@@ -230,11 +233,6 @@ export function ContextRouteError() {
 function DirectoryComposition(props: Mode & AdmissionProps) {
   const navigation = useMemo(() => new DirectoryWindowNavigation(), []);
   useLayoutEffect(() => () => navigation.dispose(), [navigation]);
-  return () => {
-      stop();
-      navigation.dispose();
-    };
-  }, [navigation, props.admissions, props.admission]);
   return (
     <VisitSession
       key={JSON.stringify(props.mode === 'directory' ? props.input : props.mode)}
