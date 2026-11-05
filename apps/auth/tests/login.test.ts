@@ -149,6 +149,8 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
           hydrated: await page.locator('html').getAttribute('data-hydrated'),
           alerts: await page.getByRole('alert').allTextContents(),
           status: await page.getByRole('status').allTextContents(),
+          browserRoutes: urls.map((value) => new URL(value).pathname),
+          issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
         })}`,
         { cause },
       );
@@ -206,7 +208,18 @@ async function submit(page: Page) {
   await controls.address.fill(email);
   await controls.secret.fill(password);
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin').catch((cause) => {
+      throw new Error(
+        `Sign-in response missing: ${JSON.stringify({
+          url: page.url(),
+          alerts: await page.getByRole('alert').allTextContents(),
+          status: await page.getByRole('status').allTextContents(),
+          browserUrl: page.url(),
+          issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+        })}`,
+        { cause },
+      );
+    }),
     controls.submit.click(),
   ]);
   return controls;
