@@ -22,13 +22,14 @@
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--max-ms <n>] [--gate] <workspace> -- <command...>
 //
-// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot, performance: true, dependencyArtifactBudgetBytes, freeDiskFloorBytes }] }.
+// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, memoryPerRunGiB, cpuQuotaPercent, slots, processorsPerSlot, performance: true, dependencyArtifactBudgetBytes, freeDiskFloorBytes }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
-// Admission depends on free slots, held memory reservations, slice headroom that counts inactive file cache, and free disk.
-// Each run has a nested slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average
-// cores and peak memory.
+// Admission depends on free slots, held memory reservations, per-run MemoryMax packing, slice headroom that counts
+// inactive file cache, and free disk. Each run has a nested slice shared with its containers, MemoryMax (default 6 GiB,
+// host memoryPerRunGiB) and MemorySwapMax 0; its cpu.stat and memory.peak report CPU seconds, average cores and peak
+// memory. A host with memoryMaxGiB 28 and 6 GiB per run therefore takes at most 4 concurrent runs.
 import { createHash, randomUUID } from 'node:crypto';
 import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
@@ -226,6 +227,8 @@ export type Host = {
   address: string;
   identity: string;
   memoryMaxGiB: number;
+  /** Hard per-run MemoryMax in GiB. Omitted: CHECK_RUN_MEMORY_GIB. */
+  memoryPerRunGiB?: number;
   cpuQuotaPercent: number;
   slots: number;
   fallback?: boolean;
@@ -776,7 +779,22 @@ const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 5_000;
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
+/** Hard per-run MemoryMax and MemorySwapMax=0 when a host omits memoryPerRunGiB. */
+export const CHECK_RUN_MEMORY_GIB = 6;
 export const CHECK_SLOT_PROCESSORS = 2;
+
+export function hostMemoryPerRunGiB(host: Pick<Host, 'memoryPerRunGiB'>): number {
+  return host.memoryPerRunGiB ?? CHECK_RUN_MEMORY_GIB;
+}
+
+/** Concurrent slot units a host can admit: slots, processors, and floor(memoryMaxGiB / memoryPerRunGiB). */
+export function hostAdmittedRunCapacity(host: Host, sliceProcessors: number): number {
+  const processorSlots = Math.floor(
+    Math.min(sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot,
+  );
+  const memoryRuns = Math.max(1, Math.floor(host.memoryMaxGiB / hostMemoryPerRunGiB(host)));
+  return Math.min(host.slots, processorSlots, memoryRuns);
+}
 export const CHECK_HOST_MIN_AVAILABLE_BYTES = 4 * 2 ** 30;
 export const CHECK_HOST_MIN_TMP_BYTES = 4 * 2 ** 30;
 export const CHECK_HOST_MIN_TMP_INODES = 65_536;
@@ -926,6 +944,7 @@ export function readHosts(file: string): Host[] {
   return parsed.hosts.map((entry: Record<string, unknown>, index) => {
     const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback, performance } = entry;
     const processorsPerSlot = entry.processorsPerSlot === undefined ? CHECK_SLOT_PROCESSORS : entry.processorsPerSlot;
+    const memoryPerRunGiB = entry.memoryPerRunGiB === undefined ? CHECK_RUN_MEMORY_GIB : entry.memoryPerRunGiB;
     const dependencyArtifactBudgetBytes = entry.dependencyArtifactBudgetBytes;
     const freeDiskFloorBytes = entry.freeDiskFloorBytes;
     // An address starting with a dash would be read as an ssh option.
@@ -935,6 +954,9 @@ export function readHosts(file: string): Host[] {
       throw new Error(`host ${index}: name is required`);
     if (typeof identity !== 'string' || !identity) throw new Error(`host ${name}: identity is required`);
     if (typeof memoryMaxGiB !== 'number' || !(memoryMaxGiB > 0)) throw new Error(`host ${name}: bad memoryMaxGiB`);
+    if (typeof memoryPerRunGiB !== 'number' || !(memoryPerRunGiB > 0))
+      throw new Error(`host ${name}: bad memoryPerRunGiB`);
+    if (memoryPerRunGiB > memoryMaxGiB) throw new Error(`host ${name}: memoryPerRunGiB exceeds memoryMaxGiB`);
     if (typeof cpuQuotaPercent !== 'number' || !(cpuQuotaPercent > 0))
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
@@ -959,6 +981,7 @@ export function readHosts(file: string): Host[] {
       address,
       identity,
       memoryMaxGiB,
+      memoryPerRunGiB,
       cpuQuotaPercent,
       slots: slots as number,
       ...(fallback ? { fallback: true } : {}),
@@ -2815,6 +2838,48 @@ def preparation_log_tail(root):
     return raw.decode(errors='replace').encode()[-8192:].decode(errors='ignore')
 
 
+TEST_FILE = re.compile(b'(?:^|[\\n\\r])((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+[.](?:test|spec)[.][cm]?[jt]sx?):')
+
+
+def remember_test_file(root, block, last):
+    found = last
+    for match in TEST_FILE.finditer(block):
+        found = match.group(1).decode('ascii', 'ignore')
+    if found and found != last:
+        try:
+            durable(root / '.last-test-file', found[:512])
+        except OSError:
+            pass
+    return found
+
+
+def oom_kill_count(path):
+    try:
+        for line in (path / 'memory.events').read_text().splitlines():
+            if line.startswith('oom_kill '):
+                value = int(line.split()[1])
+                if value > 0:
+                    return value
+    except (OSError, ValueError, IndexError):
+        pass
+    return 0
+
+
+def memory_limit_message(root):
+    limit = os.environ.get('REZICS_CHECK_MEMORY_PER_RUN_GIB') or '6'
+    running = ''
+    try:
+        running = (root / '.last-test-file').read_text().strip()[:512]
+    except OSError:
+        pass
+    message = 'remote-check: check exceeded its memory limit (' + limit + ' GiB)'
+    if running:
+        message += ' while running ' + running
+    else:
+        message += ' while running the check command'
+    return message
+
+
 def supervise():
     limit_ms, host, run, directory = sys.argv[2:6]
     root = Path(directory)
@@ -2842,6 +2907,7 @@ def supervise():
     for sig in [signal.SIGHUP, signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
     tail = bytearray()
+    last_test = None
     packages = []
     observed = []
     failure = None
@@ -2869,6 +2935,7 @@ def supervise():
         for event, unused in selected.select(0.02):
             block = os.read(event.fileobj.fileno(), 65536)
             if block:
+                last_test = remember_test_file(root, block, last_test)
                 if not preparation_done:
                     tail.extend(block)
                     del tail[:-8192]
@@ -3159,7 +3226,9 @@ def lifetime():
         except Exception:
             pass  # Observation cannot change a command's verdict, custody or lifetime.
         if reason is None:
-            if (now - started) * 1000 >= limit_ms:
+            if resources is not None and resources.path is not None and oom_kill_count(resources.path) > 0:
+                reason = 'memory-limit'
+            elif (now - started) * 1000 >= limit_ms:
                 reason = 'run-lifetime'
             elif interrupted:
                 reason = 'abort'
@@ -3191,7 +3260,16 @@ def lifetime():
         time.sleep(0.01)
     try: resources.finish()
     except Exception: pass
-    if reason:
+    if reason == 'memory-limit':
+        clean_run_resources(run)
+        if not (root / '.memory-limit-reported').exists():
+            emit_nonblocking(memory_limit_message(root))
+            try:
+                (root / '.memory-limit-reported').write_text('')
+            except OSError:
+                pass
+        code = 137
+    elif reason:
         # Containers started by a daemon are outside this process tree, but retain exact run labels and cgroup custody.
         clean_run_resources(run)
         elapsed = round((time.monotonic() - started) * 1000)
@@ -3519,6 +3597,49 @@ finally: os.close(descriptor)
  * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
  * starts is the one that adds the slice, whatever the workspace is.
  */
+function runMemoryLimitShell(directory: string, memoryPerRunGiB: number): string {
+  const lastTestFile = quote(`${directory}/.last-test-file`);
+  const reported = quote(`${directory}/.memory-limit-reported`);
+  const bytes = Math.round(memoryPerRunGiB * 2 ** 30);
+  return `apply_run_memory_limit() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+  case "$slice_cgroup" in /*)
+    printf '%s\\n' ${bytes} > "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true
+    printf '0\\n' > "/sys/fs/cgroup$slice_cgroup/memory.swap.max" 2>/dev/null || true
+    ;;
+  esac
+}
+run_memory_killed() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
+  case "$slice_cgroup" in /*)
+    oom_kill=$(awk '$1 == "oom_kill" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.events" 2>/dev/null || true)
+    case "$oom_kill" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$oom_kill" -gt 0 ]
+    ;;
+  *) return 1 ;;
+  esac
+}
+report_run_memory_kill() {
+  running_file=
+  if [ -r ${lastTestFile} ]; then running_file=$(tr -d '\\n' < ${lastTestFile}); fi
+  if [ -z "$running_file" ]; then
+    for arg in "$@"; do
+      case "$arg" in *.test.ts|*.test.tsx|*.test.js|*.test.mjs|*.test.cjs|*.test.jsx|*.spec.ts|*.spec.tsx|*.spec.js|*.spec.mjs|*.spec.cjs|*.spec.jsx)
+        running_file=$arg
+        ;;
+      esac
+    done
+  fi
+  if [ -n "$running_file" ]; then
+    printf 'remote-check: check exceeded its memory limit (${memoryPerRunGiB} GiB) while running %s\\n' "$running_file" >&2
+  else
+    printf 'remote-check: check exceeded its memory limit (${memoryPerRunGiB} GiB) while running the check command\\n' >&2
+  fi
+  : > ${reported}
+}
+apply_run_memory_limit`;
+}
+
 export function runScript(
   id: string,
   directory: string,
@@ -3540,6 +3661,7 @@ export function runScript(
   prepare: { cwd: string; command: string[] }[] = [],
   expectedSourceSha256?: string,
   artifactBudgetBytes?: number,
+  memoryPerRunGiB = CHECK_RUN_MEMORY_GIB,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
@@ -3604,6 +3726,8 @@ export function runScript(
 export TMPDIR=${quote(`${directory}/.temp/tmp`)} TMP=${quote(`${directory}/.temp/tmp`)} TEMP=${quote(`${directory}/.temp/tmp`)}
 export NODE_DISABLE_COMPILE_CACHE=1
 unset NODE_COMPILE_CACHE
+export REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
+${runMemoryLimitShell(directory, memoryPerRunGiB)}
 ${artifactBudgetBytes === undefined ? '' : `export REMOTE_CHECK_ARTIFACT_BUDGET_BYTES=${quote(String(artifactBudgetBytes))}\n`}
 preparation_phase() {
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} "$1"
@@ -3691,10 +3815,14 @@ host=$REMOTE_CHECK_HOST
         slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
         progress_pid=
         command_pid=
+        oom_watch_pid=
         stop_progress() {
           [ -z "$progress_pid" ] || kill "$progress_pid" 2>/dev/null || true
           [ -z "$progress_pid" ] || wait "$progress_pid" 2>/dev/null || true
           progress_pid=
+          [ -z "$oom_watch_pid" ] || kill "$oom_watch_pid" 2>/dev/null || true
+          [ -z "$oom_watch_pid" ] || wait "$oom_watch_pid" 2>/dev/null || true
+          oom_watch_pid=
         }
         trap 'stop_progress' EXIT
         trap 'stop_progress; if [ -n "$command_pid" ]; then kill "$command_pid" 2>/dev/null || true; wait "$command_pid" 2>/dev/null || true; fi' HUP INT TERM
@@ -3732,10 +3860,26 @@ host=$REMOTE_CHECK_HOST
         ${fixedLifecycleExecution(command) ? `export REZICS_LIFECYCLE_REMOTE_RUN=${quote(id)}` : ''}
         "$@" &
         command_pid=$!
+        (
+          while kill -0 "$command_pid" 2>/dev/null; do
+            if run_memory_killed; then
+              kill "$command_pid" 2>/dev/null || true
+              break
+            fi
+            /bin/sleep 0.2
+          done
+        ) &
+        oom_watch_pid=$!
         wait "$command_pid"
         code=$?
         command_pid=
         stop_progress
+        if run_memory_killed || [ -e ${quote(`${directory}/.memory-limit-reported`)} ]; then
+          if [ ! -e ${quote(`${directory}/.memory-limit-reported`)} ]; then
+            report_run_memory_kill "$@"
+          fi
+          code=137
+        fi
         trap - EXIT HUP INT TERM
         command_finished=$(date +%s%N)
         awk -v elapsed="$((command_finished - command_started))" -v host="$host" 'BEGIN { printf "remote-check: command %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
@@ -3766,7 +3910,7 @@ host=$REMOTE_CHECK_HOST
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
-export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
+export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
@@ -3777,8 +3921,13 @@ systemd_script=${quote(systemdScript)}
 printf '%s' "$systemd_script" > ${quote(`${wrapperDirectory}/command.sh`)} || exit 70
 unset systemd_script
 expand_environment=
+slice_properties=
 if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
-exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=${checkHostScopeUnitStem(id)} \\
+if systemd-run --help 2>/dev/null | grep -q -- '--slice-property'; then
+  slice_properties='--slice-property=MemoryMax=${memoryPerRunGiB}G --slice-property=MemorySwapMax=0'
+fi
+exec systemd-run --scope --quiet --collect $expand_environment $slice_properties --slice=${runSlice(id)} --unit=${checkHostScopeUnitStem(id)} \\
+  -p MemoryMax=${memoryPerRunGiB}G -p MemorySwapMax=0 \\
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} supervise ${preparationTimeoutMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} \\
   sh ${quote(`${wrapperDirectory}/command.sh`)} ${[cwd, ...command].map(quote).join(' ')}`;
   const executable = (command[0]?.split('/').at(-1) ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '?').slice(0, 64);
@@ -4082,10 +4231,7 @@ type RankedHost = {
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
-  const processorSlots = Math.floor(
-    Math.min(probe.sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot,
-  );
-  return Math.min(host.slots, processorSlots);
+  return hostAdmittedRunCapacity(host, probe.sliceProcessors);
 }
 
 function probeCapacity(capacity: number): number {
@@ -6594,6 +6740,7 @@ async function runLeased(
         options.prepare,
         options.expectedSourceSha256,
         host.dependencyArtifactBudgetBytes,
+        hostMemoryPerRunGiB(host),
       ),
     );
     const launch = () =>
