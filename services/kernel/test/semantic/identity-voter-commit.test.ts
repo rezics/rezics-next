@@ -3,15 +3,21 @@ import { noEffect, runCommand, withSingleCommandAttempt } from '../../src/comman
 import type { Pool, PoolClient } from 'pg';
 import lockOwner from '../../src/semantic/identity-rating-commit-participant-lock-owner.sql';
 import { randomUUID } from 'node:crypto';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createProfileEntryFixture } from '../library/support/profile-entry-fixture.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { drainIdentityTerminalClosure } from '../../src/semantic/identity-terminal-closure.ts';
+import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
+import { identityEpochStore, identityJobPartition } from '../../src/semantic/identity-epoch-store.ts';
+import type { IdentityJobRef } from '../../src/semantic/identity-epoch-contract.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
 import { createIdentityRatingCommitParticipant } from '../../src/semantic/identity-rating-commit-participant.ts';
@@ -116,6 +122,70 @@ async function localRatingSubject(f: Awaited<ReturnType<typeof createProfileEntr
     if (n === 999) throw new Error('Provider source bootstrap did not finish');
   }
   return { requested, sourceHome };
+}
+
+async function grantStewardMerge(f: Awaited<ReturnType<typeof createProfileEntryFixture>>) {
+  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
+    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30_000 },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: f.steward.actor.accountId },
+      actions: ['subject:merge'],
+      valid: '(,)',
+      key: randomUUID(),
+    },
+  );
+}
+
+async function admitSameHomeMerge(
+  f: Awaited<ReturnType<typeof createProfileEntryFixture>>,
+  redirected: string,
+  survivor: string,
+): Promise<IdentityJobRef> {
+  const key = randomUUID();
+  const job = await identityEpochStore.prepareAdmission(
+    f.pool,
+    {
+      basis: {
+        actorAccountId: f.steward.actor.accountId,
+        clientId: f.steward.actor.clientId,
+        requestedBy: f.steward.actor.requestedBy,
+      },
+      authorization: await accessCommandAuthorization(
+        f.access,
+        f.steward.actor,
+        'subject:merge',
+        { route: 0, id: GLOBAL_CONTEXT },
+        { pool: f.pool, deadline: Date.now() + 5000 },
+        () => new Error('Native merge denied'),
+      ),
+    },
+    {
+      intent: { kind: 'merge', redirected, survivor, release: f.originalDigest },
+      receipt: {
+        kind: 'subject.merge',
+        command: {
+          actorAccountId: f.steward.actor.accountId,
+          kind: 'subject.merge',
+          key,
+          digest: digest(key),
+        },
+      },
+    },
+  );
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const progress = await stepIdentityEpochAdmission(f.pool, job);
+    if (progress.state === 'pending') return job;
+  }
+  throw new Error('Native admission did not finish within sixteen bounded steps');
+}
+
+async function drainMapping(pool: Pool, job: IdentityJobRef, bound = 512) {
+  for (let attempt = 0; attempt < bound; attempt++) {
+    const progress = await stepIdentityEpochMapping(pool, job);
+    if (progress.state === 'complete') return progress;
+  }
+  throw new Error(`Native mapping did not finish within ${bound} bounded steps`);
 }
 
 test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
@@ -473,6 +543,19 @@ test('the authorized vote transaction excludes native control writes through com
     const { requested, sourceHome } = await localRatingSubject(f, 'Authorized guarded vote');
     const caller = await f.identity(['rating:vote', 'subject:read'], sourceHome);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
+    await grantStewardMerge(f);
+    const original = await localRatingSubject(f, 'Publication original');
+    const survivor = await localRatingSubject(f, 'Publication survivor');
+    expect(original.sourceHome).toBe(sourceHome);
+    expect(survivor.sourceHome).toBe(sourceHome);
+    const prior = {
+      questionId: STANDARD_QUESTION_ID,
+      targetId: original.requested,
+      units: 16,
+      guard: (await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, original.requested)).guard,
+    };
+    const job = await admitSameHomeMerge(f, original.requested, survivor.requested);
+    expect(identityJobPartition(job)).toBe(sourceHome);
     const input = async (units: number) => ({
       questionId: STANDARD_QUESTION_ID,
       targetId: requested,
@@ -509,6 +592,8 @@ test('the authorized vote transaction excludes native control writes through com
       try {
         await Promise.race([ready, command]);
         await contendedWriter(f, () => drainIdentityTerminalClosure(f.pool, requested, randomUUID()));
+        await contendedWriter(f, () => stepIdentityEpochMapping(f.pool, job));
+        await contendedWriter(f, () => stepLibraryIdentityEpoch(f.pool, job));
       } finally {
         resume();
         try {
@@ -526,6 +611,16 @@ test('the authorized vote transaction excludes native control writes through com
     }
     expect(committed.vote).toMatchObject({ units: 16, revision: 1 });
     expect(committed.component).not.toBeNull();
+    const mapping = await drainMapping(f.pool, job);
+    expect(mapping.state).toBe('complete');
+    const reconciled = await identityEpochStore.reconcileStepReceipt(f.pool, mapping.receipt);
+    expect(reconciled.state).toBe('complete');
+    expect(reconciled.receipt).toEqual(mapping.receipt);
+    const saved = await withConnection(f.pool, (tx) => identityEpochStore.readJob(tx, job));
+    expect(saved?.mapping?.state).toBe('complete');
+    await expect(votes.putVoteOutcome(caller.actor, prior, randomUUID())).rejects.toMatchObject({
+      reason: 'identity_pending',
+    });
     const stale = await input(14);
     await drainIdentityTerminalClosure(f.pool, requested, randomUUID());
     await expect(votes.putVoteOutcome(caller.actor, stale, randomUUID())).rejects.toMatchObject({
