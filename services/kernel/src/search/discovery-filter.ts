@@ -181,6 +181,7 @@ export function compileDiscoveryCapture(
         input.filterDocument,
         release,
         new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)),
+        { inverse: true },
       )
     : undefined;
   const compiled = filterDocument ? compileDiscoveryFilter(filterDocument, registry, release) : undefined;
@@ -262,7 +263,8 @@ export function compileDiscoveryConsumerCapture(
     // The closed parser bounds structure before collecting names; Source owns configured-domain authority.
     const parsed = input.filterDocument === undefined ? undefined : parseDiscoveryFilter(input.filterDocument);
     if (parsed) visit(parsed, false);
-    const admitted = parsed === undefined ? undefined : admitDiscoveryFilter(parsed, meaning.release, kinds);
+    const admitted =
+      parsed === undefined ? undefined : admitDiscoveryFilter(parsed, meaning.release, kinds, { inverse: true });
     if (admitted) visit(admitted, true);
   }
   const plan = registry ? compileDiscoveryCapture(input, registry, meaning.release) : input;

@@ -33,6 +33,7 @@ import {
 } from './condition-editor-model';
 import { findConditionErrorTarget, isConditionEditorPointer } from './condition-error-target';
 import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
+import { changeConditionDirection, conditionDirection } from './condition-direction';
 import {
   changeQualifierProperty,
   changeStatementProperty,
@@ -52,6 +53,7 @@ import {
   searchConditionEntities,
   type ConditionEntityContext,
   type ConditionEntityFailure,
+  type ResolvedConditionEntity,
 } from './condition-entity';
 import {
   conditionTreeCanSubmit,
@@ -541,6 +543,45 @@ function NodeEditor({
     localizedLabel(labels ?? {}, context.locale).text || fallback;
   const property = 'statement' in value ? value.statement.property : undefined;
   const definition = property ? context.metadata.properties[property] : undefined;
+  const statementValue = 'statement' in value ? value.statement : undefined;
+  const [resolvedOperands, setResolvedOperands] = useState<
+    { request: string; labels: Record<string, ResolvedConditionEntity> } | undefined
+  >();
+  const operandRequest =
+    property && statementValue && 'in' in statementValue && context.entityLookup
+      ? conditionEntityRequestIdentity(`${draft.key}:statement`, property, definition?.targets ?? [], context.entityLookup)
+      : undefined;
+  const reportResolvedOperands = useCallback(
+    (request: string, labels: Record<string, ResolvedConditionEntity>) => setResolvedOperands({ request, labels }),
+    [],
+  );
+  const relationDirectionVisible = Boolean(
+    statementValue &&
+      (('inverse' in statementValue && statementValue.inverse === true) ||
+        ('in' in statementValue && definition?.datatype === 'wikibase-item' && definition.relation)),
+  );
+  const selectedOperandLabels =
+    statementValue && 'in' in statementValue
+      ? statementValue.in.filter(Boolean).map((id) => {
+          const resolved =
+            operandRequest && resolvedOperands?.request === operandRequest
+              ? resolvedOperands.labels[id.toLowerCase()]?.label
+              : undefined;
+          if (resolved) return resolved;
+          if (!context.entityLookup)
+            return name(context.values[property ?? '']?.find((choice) => choice.value === id)?.labels, id);
+          return m.condition_entity_unresolved({}, options);
+        })
+      : [];
+  const relationOperandLabel = selectedOperandLabels.length
+    ? new Intl.ListFormat(messageOptions(context.locale).locale, { style: 'long', type: 'conjunction' }).format(
+        selectedOperandLabels,
+      )
+    : m.condition_relation_operand_missing({}, options);
+  const relationPropertyLabel = property
+    ? name(definition?.labels, property)
+    : m.refinement_choose_property({}, options);
+  const direction = statementValue ? conditionDirection(statementValue) : 'direct';
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
   const [pendingPropertyChange, setPendingPropertyChange] = useState<PendingPropertyChange>();
   const propertyChangeDialog = useRef<HTMLDialogElement>(null);
@@ -768,6 +809,42 @@ function NodeEditor({
             )}
           </EditorField>
           <p className="text-sm text-muted-foreground">{definition?.datatype}</p>
+          {relationDirectionVisible && (
+            <EditorField
+              context={context}
+              pointer={`${pointer}/statement/inverse`}
+              label={m.condition_relation_direction({}, options)}
+            >
+              {(props) => (
+                <NativeSelect
+                  {...props}
+                  value={direction}
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    if (next !== 'direct' && next !== 'inverse') return;
+                    onChange(changeConditionDirection(value, next));
+                    context.announce(
+                      m.condition_relation_direction_changed({}, options),
+                      `${pointer}/statement/inverse`,
+                    );
+                  }}
+                >
+                  <NativeSelectOption value="direct">
+                    {m.condition_relation_direct(
+                      { property: relationPropertyLabel, values: relationOperandLabel },
+                      options,
+                    )}
+                  </NativeSelectOption>
+                  <NativeSelectOption value="inverse">
+                    {m.condition_relation_inverse(
+                      { property: relationPropertyLabel, values: relationOperandLabel },
+                      options,
+                    )}
+                  </NativeSelectOption>
+                </NativeSelect>
+              )}
+            </EditorField>
+          )}
           {range ? (
             <>
               {definition?.datatype === 'time' && (
@@ -882,6 +959,7 @@ function NodeEditor({
                         }
                       : undefined
                   }
+                  onResolvedLabels={reportResolvedOperands}
                   onChange={(selected) => replaceStatement({ in: selected })}
                 />
                 {context.conceptLookup && (value.statement.concept || conditionConceptProperty(definition)) && (
@@ -1058,6 +1136,7 @@ function ConditionEntityValues({
   occurrence,
   nodeKey,
   lookup,
+  onResolvedLabels,
   context,
 }: {
   values: readonly string[];
@@ -1068,6 +1147,7 @@ function ConditionEntityValues({
   occurrence: string;
   nodeKey: number;
   lookup: ConditionEntityContext;
+  onResolvedLabels?: ((request: string, labels: Record<string, ResolvedConditionEntity>) => void) | undefined;
   context: EditorContext;
 }) {
   const { options } = context;
@@ -1098,6 +1178,8 @@ function ConditionEntityValues({
     setResolveFailure(undefined);
     setSuggestionFailure(undefined);
   }, [identifiers.join('|')]);
+
+  useEffect(() => onResolvedLabels?.(requestIdentity, resolved), [onResolvedLabels, requestIdentity, resolved]);
 
   useEffect(() => {
     if (context.disabled) {
@@ -1293,6 +1375,7 @@ function ValueFields({
   context,
   closed = false,
   entity,
+  onResolvedLabels,
 }: {
   values: readonly string[];
   choices?: Choice[] | undefined;
@@ -1301,6 +1384,7 @@ function ValueFields({
   context: EditorContext;
   closed?: boolean;
   entity?: { property: string; targets: readonly string[]; occurrence: string; nodeKey: number } | undefined;
+  onResolvedLabels?: ((request: string, labels: Record<string, ResolvedConditionEntity>) => void) | undefined;
 }) {
   if (entity && context.entityLookup)
     return (
@@ -1314,6 +1398,7 @@ function ValueFields({
         occurrence={entity.occurrence}
         nodeKey={entity.nodeKey}
         lookup={context.entityLookup}
+        onResolvedLabels={onResolvedLabels}
         context={context}
       />
     );
