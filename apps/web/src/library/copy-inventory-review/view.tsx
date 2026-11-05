@@ -47,13 +47,7 @@ function MissingObservation() {
   return <span className="text-muted-foreground">{m.library_copy_compare_not_recorded()}</span>;
 }
 
-function HistoricalLabel({
-  value,
-  language,
-}: {
-  value: string | undefined;
-  language: string | undefined;
-}) {
+function HistoricalLabel({ value, language }: { value: string | undefined; language: string | undefined }) {
   return value ? (
     <span lang={language}>{value}</span>
   ) : (
@@ -200,11 +194,15 @@ function ReceivedCopy({
               <dl className="space-y-2 text-sm">
                 <div>
                   <dt className="font-medium">{m.library_copy_compare_id()}</dt>
-                  <dd className="break-all"><code>{copy.id}</code></dd>
+                  <dd className="break-all">
+                    <code>{copy.id}</code>
+                  </dd>
                 </div>
                 <div>
                   <dt className="font-medium">{m.library_copy_compare_revision()}</dt>
-                  <dd><code>{copy.revision}</code></dd>
+                  <dd>
+                    <code>{copy.revision}</code>
+                  </dd>
                 </div>
               </dl>
             </details>
@@ -217,7 +215,10 @@ function ReceivedCopy({
           className={`${control} w-full`}
           onClick={onEdit}
           disabled={editorOpen}
-          aria-label={m.library_copy_compare_edit_named({ position, title: title?.text ?? m.library_subject_unavailable() })}
+          aria-label={m.library_copy_compare_edit_named({
+            position,
+            title: title?.text ?? m.library_subject_unavailable(),
+          })}
         >
           {m.library_copy_compare_edit()}
         </button>
@@ -267,7 +268,12 @@ export function CopyInventoryReview({
     <section id={id} aria-labelledby={`${id}-title`} className="min-w-0 space-y-4 rounded-xl border border-border p-4">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-2">
-          <h2 id={`${id}-title`} ref={heading} tabIndex={-1} className="rounded-md text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <h2
+            id={`${id}-title`}
+            ref={heading}
+            tabIndex={-1}
+            className="rounded-md text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {m.library_copy_compare_heading()}
           </h2>
           <p className="text-sm text-muted-foreground">{m.library_copy_compare_scope()}</p>
@@ -277,11 +283,23 @@ export function CopyInventoryReview({
         </div>
         <div className="flex min-w-0 flex-wrap gap-2">
           {!selection.open ? (
-            <button type="button" className={control} onClick={selection.show} aria-expanded={false} aria-controls={`${id}-body`}>
+            <button
+              type="button"
+              className={control}
+              onClick={selection.show}
+              aria-expanded={false}
+              aria-controls={`${id}-body`}
+            >
               {m.library_copy_compare_open()}
             </button>
           ) : (
-            <button type="button" className={control} onClick={selection.close} aria-expanded={true} aria-controls={`${id}-body`}>
+            <button
+              type="button"
+              className={control}
+              onClick={selection.close}
+              aria-expanded={true}
+              aria-controls={`${id}-body`}
+            >
               {m.library_copy_compare_close()}
             </button>
           )}
@@ -289,7 +307,10 @@ export function CopyInventoryReview({
             type="button"
             className={control}
             disabled={!selection.count && !selection.retired.length}
-            onClick={() => { selection.reset(); focusHeading(); }}
+            onClick={() => {
+              selection.reset();
+              focusHeading();
+            }}
           >
             {m.library_copy_compare_reset()}
           </button>
@@ -298,8 +319,12 @@ export function CopyInventoryReview({
       {selection.retired.length ? (
         <div role="status" className="space-y-2 rounded-lg border border-border p-3 text-sm">
           <p>{m.library_copy_compare_reselect()}</p>
-          {selection.retired.some((item) => item.reason === 'changed') ? <p>{m.library_copy_compare_changed()}</p> : null}
-          {selection.retired.some((item) => item.reason === 'missing') ? <p>{m.library_copy_compare_missing()}</p> : null}
+          {selection.retired.some((item) => item.reason === 'changed') ? (
+            <p>{m.library_copy_compare_changed()}</p>
+          ) : null}
+          {selection.retired.some((item) => item.reason === 'missing') ? (
+            <p>{m.library_copy_compare_missing()}</p>
+          ) : null}
           <button type="button" className={control} onClick={selection.dismissRetired}>
             {m.library_copy_compare_dismiss()}
           </button>
@@ -328,8 +353,13 @@ export function CopyInventoryReview({
                 selected={selection.copies}
                 editorOpen={editorOpen}
                 returnTo={returnTo}
-                onRemove={() => { selection.remove(copy); focusHeading(); }}
-                onEdit={() => { if (!editorOpen) selection.handoff(copy, onEdit); }}
+                onRemove={() => {
+                  selection.remove(copy);
+                  focusHeading();
+                }}
+                onEdit={() => {
+                  if (!editorOpen) selection.handoff(copy, onEdit);
+                }}
               />
             ))}
           </div>

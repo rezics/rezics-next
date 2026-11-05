@@ -3,7 +3,9 @@ import { getLocale } from '../../paraglide/runtime.js';
 
 export const dateText = (value: string) =>
   value
-    ? new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`))
+    ? new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeZone: 'UTC' }).format(
+        new Date(`${value}T12:00:00Z`),
+      )
     : '';
 
 export function CopyTextReader({
@@ -42,4 +44,3 @@ export function CopyTextReader({
     </div>
   );
 }
-

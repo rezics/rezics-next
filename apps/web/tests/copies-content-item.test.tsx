@@ -287,17 +287,28 @@ describe('Copy items retain exact edition identity historical disclosure and ind
 describe('Received-page exact-copy comparison', () => {
   test('keeps distinct copies in native order, bounds selection and labels only supplied observations', async () => {
     const first = copy(11, {
-      location: null, source: null, note: null, acquiredOn: null, disposedOn: null,
-      kindLabel: undefined, statusLabel: undefined, meaning: 'unknown',
+      location: null,
+      source: null,
+      note: null,
+      acquiredOn: null,
+      disposedOn: null,
+      kindLabel: undefined,
+      statusLabel: undefined,
+      meaning: 'unknown',
       readingContext: { state: 'withheld' },
     });
-    const second = copy(12, { note: 'Line one\nLine two\nLine three', source: 'Shop\nReceipt', readingContext: { state: 'unsupported', facts: [] } });
+    const second = copy(12, {
+      note: 'Line one\nLine two\nLine three',
+      source: 'Shop\nReceipt',
+      readingContext: { state: 'unsupported', facts: [] },
+    });
     const hidden = copy(13, { subject: null, readingContext: { state: 'missing' } });
     const fourth = copy(14, { readingContext: { state: 'unavailable' } });
     const outside = copy(15, { note: 'Unselected observation' });
     const h = await mount([first, second, hidden, fourth, outside]);
     try {
-      const select = (position: number) => within(h.rows()[position]! as unknown as HTMLElement).getByRole('button', { name: /^Compare copy/ });
+      const select = (position: number) =>
+        within(h.rows()[position]! as unknown as HTMLElement).getByRole('button', { name: /^Compare copy/ });
       await h.click(select(1));
       await h.click(select(0));
       await h.click(select(2));
@@ -321,15 +332,25 @@ describe('Received-page exact-copy comparison', () => {
       expect(region.textContent).toContain(m.library_copy_compare_same());
       const secondUI = within(cards[1]!);
       await h.click(secondUI.getByRole('button', { name: m.library_copy_note_reader_expand_note() }));
-      expect(secondUI.getByRole('button', { name: m.library_copy_note_reader_collapse_note() }).getAttribute('aria-expanded')).toBe('true');
+      expect(
+        secondUI
+          .getByRole('button', { name: m.library_copy_note_reader_collapse_note() })
+          .getAttribute('aria-expanded'),
+      ).toBe('true');
       expect(cards[1]!.textContent).toContain(second.note);
       await h.show([fourth, hidden, second, first, outside]);
-      expect([...region.querySelectorAll<HTMLElement>('article')].map((card) => card.dataset.copyComparisonId)).toEqual([fourth.id, hidden.id, second.id, first.id]);
-      await h.click(within(region.querySelector('article')!).getByRole('button', { name: m.library_copy_compare_remove() }));
+      expect([...region.querySelectorAll<HTMLElement>('article')].map((card) => card.dataset.copyComparisonId)).toEqual(
+        [fourth.id, hidden.id, second.id, first.id],
+      );
+      await h.click(
+        within(region.querySelector('article')!).getByRole('button', { name: m.library_copy_compare_remove() }),
+      );
       expect(select(4).hasAttribute('disabled')).toBe(false);
       expect(h.readDetail).not.toHaveBeenCalled();
       expect(unexpectedIO).not.toHaveBeenCalled();
-    } finally { await h.close(); }
+    } finally {
+      await h.close();
+    }
   });
 });
 
@@ -339,7 +360,8 @@ describe('Received comparison replacement and focus', () => {
     const second = copy(22, { note: 'Retained other record' });
     const h = await mount([first, second]);
     try {
-      const select = (position: number) => within(h.rows()[position]! as unknown as HTMLElement).getByRole('button', { name: /^Compare copy/ });
+      const select = (position: number) =>
+        within(h.rows()[position]! as unknown as HTMLElement).getByRole('button', { name: /^Compare copy/ });
       const firstTrigger = select(0);
       await h.click(firstTrigger);
       await h.click(h.body.getByRole('button', { name: m.library_copy_compare_open() }));
@@ -365,6 +387,8 @@ describe('Received comparison replacement and focus', () => {
       expect(window.document.activeElement).not.toBe(firstTrigger);
       expect(h.readDetail).not.toHaveBeenCalled();
       expect(unexpectedIO).not.toHaveBeenCalled();
-    } finally { await h.close(); }
+    } finally {
+      await h.close();
+    }
   });
 });

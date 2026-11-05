@@ -809,7 +809,6 @@ export function CopyForm({
   );
 }
 
-
 export function CopyRow({
   copy,
   onEdit,
@@ -910,26 +909,26 @@ export function CopyRow({
       trailing={
         <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
           {comparison ? <CopyInventorySelect {...comparison} title={title} /> : null}
-        <Menu
-          title={m.library_copy_more_actions()}
-          trigger={
-            <button
-              type="button"
-              className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted"
-              aria-label={m.library_copy_more_actions()}
-              ref={launcher}
-            >
-              <EllipsisIcon aria-hidden="true" className="size-5" />
-            </button>
-          }
-          entries={[
-            {
-              type: 'item',
-              label: m.library_copy_edit(),
-              onSelect: () => onEdit(launcher.current),
-            },
-          ]}
-        />
+          <Menu
+            title={m.library_copy_more_actions()}
+            trigger={
+              <button
+                type="button"
+                className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted"
+                aria-label={m.library_copy_more_actions()}
+                ref={launcher}
+              >
+                <EllipsisIcon aria-hidden="true" className="size-5" />
+              </button>
+            }
+            entries={[
+              {
+                type: 'item',
+                label: m.library_copy_edit(),
+                onSelect: () => onEdit(launcher.current),
+              },
+            ]}
+          />
         </div>
       }
     />

@@ -14,9 +14,7 @@ export function CopyInventoryHistory({ copy }: { copy: CopyItem }) {
           {m.library_copy_history_details()}
         </summary>
         <div className="space-y-2 pt-2 text-muted-foreground">
-          <p>
-            {copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}
-          </p>
+          <p>{copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}</p>
           <dl className="space-y-2">
             <div>
               <dt>{m.library_copy_kind()}</dt>
