@@ -579,6 +579,91 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
     else Reflect.deleteProperty(globalThis, key);
 });
 
+test('refresh adopts a newer saved amount in an untouched unit and keeps an explicit local edit', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const measure = {
+    mode: 'scalar_amount' as const,
+    unit: { id: 'chapter', minimum: '0', precision: 0, totalPolicy: 'optional' as const },
+  };
+  const rules = { min: '0', step: '1', total: 'optional' as const };
+  function recorded(amount: string, revision: number): VisitProgress {
+    return {
+      meaning: 'recorded',
+      measure,
+      rules,
+      session: {
+        id: id(8),
+        revision,
+        amount,
+        total: null,
+        unit: 'chapter',
+        mode: 'scalar_amount',
+        state: 'active',
+        meaning: 'known',
+        recordingState: 'supported',
+        unitLabel: 'Chapters',
+      },
+    };
+  }
+  const host = window.document.createElement('div');
+  window.document.body.appendChild(host);
+  const root = createRoot(host);
+  const panel = (progress: VisitProgress) =>
+    createElement(ConfiguredProgressPanel, {
+      subjectId: SERIES,
+      type: MANGA_SERIES_TYPE,
+      locale: 'en',
+      release,
+      progress,
+      credential: 'csrf',
+      current: () => true,
+      onAcknowledged() {},
+    });
+  await act(async () => {
+    root.render(panel(recorded('12', 3)));
+  });
+  const input = () => host.querySelector('input') as HTMLInputElement;
+  expect(input().value).toBe('12');
+  await act(async () => {
+    root.render(panel(recorded('18', 4)));
+  });
+  expect(input().value).toBe('18');
+  const propsKey = Object.keys(input()).find((key) => key.startsWith('__reactProps$'))!;
+  await act(async () => Reflect.get(input(), propsKey).onChange({ currentTarget: { value: '9' } }));
+  expect(input().value).toBe('9');
+  await act(async () => {
+    root.render(panel(recorded('21', 5)));
+  });
+  expect(input().value).toBe('9');
+  await act(async () => {
+    root.unmount();
+  });
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  for (const [key, descriptor] of previous)
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+});
+
 test('owner populations 32, 256 and 2048 keep three native calls and page-bounded work for the selected series', async () => {
   const selected = {
     copies: [copyRow(900, SERIES, 'physical'), copyRow(901, SERIES, 'digital')],

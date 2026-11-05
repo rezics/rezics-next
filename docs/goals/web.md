@@ -14,8 +14,8 @@ capabilities and disclosure rules on every page and device.
 - Collections, the personal library, independent labels, holdings, progress and explicit publication are usable
   through their real APIs. Filters remain available wherever the common Collection abstraction appears.
 
-Decision: Independent progress visits expose explicit refresh, adopt newer saved values in untouched units, and
-retain local amount or clear choices by measure unit.
+Decision: Independent progress visits and the configured Library visit on a manga Subject expose explicit refresh,
+adopt newer saved values in untouched units, and retain local amount or clear choices by measure unit.
 
 - The Collection editor supports bounded destination and occurrence-anchor browsing, exact duplicate-preserving
   transfer review, the existing atomic native transfer and bounded source/destination recovery. Its limits and

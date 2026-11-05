@@ -186,7 +186,11 @@ export function DisplayControls({
         variant="outline"
       >
         {shelfLayouts.map((layout) => (
-          <ToggleGroupItem key={layout} value={layout} className={layout === 'table' ? 'max-sm:hidden' : undefined}>
+          <ToggleGroupItem
+            key={layout}
+            value={layout}
+            className={`min-h-11 min-w-11 ${layout === 'table' ? 'max-sm:hidden' : ''}`}
+          >
             {layoutLabel(layout)}
           </ToggleGroupItem>
         ))}

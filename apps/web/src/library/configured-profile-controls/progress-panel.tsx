@@ -62,7 +62,23 @@ export function ConfiguredProgressPanel({
   const errorId = useId();
   const stored =
     progress.meaning === 'unsupported' ? '' : progress.meaning === 'absent' ? '' : (progress.session.amount ?? '');
+  const sessionIdentity =
+    progress.meaning === 'unsupported'
+      ? 'unsupported'
+      : progress.meaning === 'absent' && !('session' in progress)
+        ? 'absent'
+        : `${progress.session.id}:${progress.session.unit}`;
   const [draft, setDraft] = useState(stored);
+  const seen = useRef({ sessionIdentity, stored, draft });
+  if (seen.current.sessionIdentity !== sessionIdentity) {
+    seen.current = { sessionIdentity, stored, draft: stored };
+    setDraft(stored);
+  } else if (seen.current.draft === seen.current.stored && stored !== seen.current.stored) {
+    seen.current = { sessionIdentity, stored, draft: stored };
+    setDraft(stored);
+  } else {
+    seen.current = { sessionIdentity, stored, draft };
+  }
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<GuardedOutcome | null>(null);

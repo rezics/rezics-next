@@ -201,11 +201,16 @@ function VisitBody({
         current={current}
         onAcknowledged={onRefresh}
       />
-      <Exposure operation="library_entry.get">
-        <a className={linkClass} href={returnTo}>
-          {m.library_configured_return()}
-        </a>
-      </Exposure>
+      <div className="flex min-w-0 flex-wrap gap-3">
+        <Exposure operation="library_entry.get">
+          <a className={linkClass} href={returnTo}>
+            {m.library_configured_return()}
+          </a>
+        </Exposure>
+        <button type="button" className={quiet} onClick={() => current() && onRefresh()}>
+          {m.library_progress_index_refresh()}
+        </button>
+      </div>
     </div>
   );
 }
