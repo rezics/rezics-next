@@ -359,9 +359,14 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
     </StrictMode>
   );
   const session = (subject: string, csrfToken = `csrf-${subject}`) => ({ state: 'signed-in', subject, csrfToken });
-  const show = async (viewer: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
+  const show = async (
+    viewer: { state: string; subject?: string; csrfToken: string | null },
+    admitted = true,
+    keepViewer = false,
+  ) => {
     await act(async () => {
-      client.setQueryData(['session'], viewer);
+      if (!keepViewer || JSON.stringify(client.getQueryData(['session'])) !== JSON.stringify(viewer))
+        client.setQueryData(['session'], viewer);
       const observation = viewerExposureLifetime(client).getSnapshot();
       if (observation.state === 'signed-in')
         client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
@@ -417,7 +422,7 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
           ...(cursor ? { cursor } : {}),
         };
         const index = pendingReads.length;
-        await show(session('C', 'csrf-rotated-again'));
+        await show(session('C', 'csrf-rotated-again'), true, true);
         if (fail) {
           await act(async () => pendingReads[index]!.reject(new Error('target unavailable')));
           await tick();
@@ -430,7 +435,7 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
       try {
         search = { type: 'core:Book', state: 'planned', orderBy: 'createdAt', direction: 'desc' };
         let index = pendingReads.length;
-        await show(session('C', 'csrf-rotated-again'));
+        await show(session('C', 'csrf-rotated-again'), true, true);
         await settle(index, response('C', search));
         const destination = host.querySelector(`a[href*="${id(1)}"]`)?.getAttribute('href');
         expect(destination).toBeTruthy();
@@ -449,7 +454,7 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
         expect(link(m.library_window_first())).toBeDefined();
         expect(windows.previous).toBe('next-C');
         display = { layout: 'grid', size: 'm' };
-        await show(session('C', 'csrf-rotated-again'));
+        await show(session('C', 'csrf-rotated-again'), true, true);
         expect(windows.previous).toBe('next-C');
         await moveWindow(m.library_window_previous(), 'next-C');
         await moveWindow(m.library_window_first());
@@ -457,7 +462,7 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
         // Fresh later address has no invented predecessor, then private replacement cancels a staged move.
         search = { ...search, cursor: 'fresh-later' };
         index = pendingReads.length;
-        await show(session('C', 'csrf-rotated-again'));
+        await show(session('C', 'csrf-rotated-again'), true, true);
         await settle(index, response('C', search));
         expect(link(m.library_window_previous())).toBeUndefined();
         await act(async () => link(m.library_next_page())!.click());
