@@ -201,6 +201,8 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLAnchorElement: window.HTMLAnchorElement,
   Element: window.Element,
   Node: window.Node,
   Document: window.Document,
@@ -214,12 +216,15 @@ const globals = {
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, {
-    configurable: true,
-    writable: true,
-    value,
-  });
+function installWindow() {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value,
+    });
+}
+installWindow();
 const { createRoot } = await import('react-dom/client');
 const { CreatorPaymentAttestation } = await import('../src/checkout/creator-payment-attestation-form');
 const { CreatorStatementPage } = await import('../src/checkout/creator-statement-page');
@@ -235,6 +240,7 @@ afterAll(async () => {
 });
 
 test('the actual form retries captured evidence after a paid read, confirms only the command response, then refreshes once', async () => {
+  installWindow();
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -375,6 +381,7 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
     routeTree: rootRoute.addChildren([listRoute, detailRoute]),
     history: createMemoryHistory({ initialEntries: [`/creator/statements/${statement.id}`] }),
   });
+  installWindow();
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -382,6 +389,7 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
   const settle = async (ready: () => boolean) => {
     for (let count = 0; count < 100 && !ready(); count++)
       await act(async () => {
+        await window.happyDOM.waitUntilComplete();
         await Bun.sleep(10);
       });
     expect(ready()).toBe(true);

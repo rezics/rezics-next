@@ -12,6 +12,7 @@ const globals = {
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
   HTMLInputElement: window.HTMLInputElement,
+  HTMLAnchorElement: window.HTMLAnchorElement,
   Element: window.Element,
   Node: window.Node,
   Document: window.Document,
@@ -26,15 +27,14 @@ const globals = {
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+function installWindow() {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+}
+installWindow();
 
-const {
-  eventElement,
-  hasUnsentPaymentReference,
-  PaymentReferenceDraftNavigation,
-  sameOriginDocumentDestination,
-} = await import('../src/checkout/payment-reference-draft-navigation');
+const { eventElement, hasUnsentPaymentReference, PaymentReferenceDraftNavigation, sameOriginDocumentDestination } =
+  await import('../src/checkout/payment-reference-draft-navigation');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
@@ -121,15 +121,17 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     routeTree: rootRoute.addChildren([statementRoute, nextRoute]),
     history: createMemoryHistory({ initialEntries: ['/statement'] }),
   });
+  installWindow();
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const input = () => host.querySelector('input') as HTMLInputElement | null;
   const nextLink = () => host.querySelector<HTMLAnchorElement>('a[href="/next"]')!;
-  const dialog = () => window.document.querySelector('[role="alertdialog"]');
+  const dialog = () => document.querySelector('[role="alertdialog"]');
   const settle = async (ready: () => boolean) => {
     for (let count = 0; count < 100 && !ready(); count++)
       await act(async () => {
+        await window.happyDOM.waitUntilComplete();
         await Bun.sleep(10);
       });
     expect(ready()).toBe(true);

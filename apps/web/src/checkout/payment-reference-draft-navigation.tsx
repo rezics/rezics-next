@@ -1,5 +1,14 @@
-import { useBlocker, useRouter } from '@tanstack/react-router';
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useBlocker, useRouter, type ShouldBlockFn } from '@tanstack/react-router';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -102,6 +111,8 @@ export function PaymentReferenceDraftNavigation({
   const routerRef = useRef(router);
   routerRef.current = router;
   const departure = useContext(DepartureContext);
+  const departureRef = useRef(departure);
+  departureRef.current = departure;
   const protectedNow = () => live.current.active && live.current.isCurrent();
 
   function choose(discard: boolean) {
@@ -109,7 +120,7 @@ export function PaymentReferenceDraftNavigation({
     pending.current = null;
     discarded.current = discard;
     setOpen(false);
-    if (!discard) departure?.stayed();
+    if (!discard) departureRef.current?.stayed();
     resolve?.(discard);
   }
 
@@ -138,7 +149,6 @@ export function PaymentReferenceDraftNavigation({
   );
 
   useEffect(() => {
-    if (!active && !departure) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (approvedDocumentDeparture.current) {
         approvedDocumentDeparture.current = false;
@@ -151,15 +161,16 @@ export function PaymentReferenceDraftNavigation({
     const documentLink = (event: MouseEvent) => {
       const from = eventElement(event.target);
       const anchor = from?.closest('a[href]') as HTMLAnchorElement | null;
-      if (!anchor || (!protectedNow() && !departure)) return;
+      if (!anchor || (!protectedNow() && !departureRef.current)) return;
       const destination = sameOriginDocumentDestination(anchor, event, window.location.href);
       if (!destination) return;
+      // Window capture runs before the router's document listener; stop this click there.
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
       if (
         !protectedNow() &&
-        departure &&
+        departureRef.current &&
         routerRef.current &&
         (new URL(destination).pathname !== window.location.pathname ||
           new URL(destination).search !== window.location.search)
@@ -168,18 +179,20 @@ export function PaymentReferenceDraftNavigation({
         return;
       }
       void (protectedNow() ? confirmRef.current() : Promise.resolve(true)).then((discard) => {
-        if (!discard || (departure && !departure.beforeLeave(destination))) return;
+        if (!discard || (departureRef.current && !departureRef.current.beforeLeave(destination))) return;
         approvedDocumentDeparture.current = true;
         window.location.assign(destination);
       });
     };
     window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('click', documentLink, true);
     document.addEventListener('click', documentLink, true);
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('click', documentLink, true);
       document.removeEventListener('click', documentLink, true);
     };
-  }, [active, departure]);
+  }, []);
 
   return (
     <>
@@ -222,17 +235,21 @@ function RouterDraftBoundary({
   confirm: () => Promise<boolean>;
   departure: Departure | null;
 }) {
+  const latest = useRef({ protectedNow, confirm, departure });
+  latest.current = { protectedNow, confirm, departure };
+  const shouldBlockFn = useCallback<ShouldBlockFn>(async ({ next }) => {
+    const current = latest.current;
+    if (current.protectedNow() && !(await current.confirm())) return true;
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(next.search)) {
+      if (typeof value === 'string') search.set(key, value);
+    }
+    const query = search.toString();
+    const href = `${next.pathname}${query ? `?${query}` : ''}`;
+    return current.departure ? !current.departure.beforeLeave(href) : false;
+  }, []);
   useBlocker({
-    shouldBlockFn: async ({ next }) => {
-      if (protectedNow() && !(await confirm())) return true;
-      const search = new URLSearchParams();
-      for (const [key, value] of Object.entries(next.search)) {
-        if (typeof value === 'string') search.set(key, value);
-      }
-      const query = search.toString();
-      const href = `${next.pathname}${query ? `?${query}` : ''}`;
-      return departure ? !departure.beforeLeave(href) : false;
-    },
+    shouldBlockFn,
     withResolver: false,
     enableBeforeUnload: false,
   });
