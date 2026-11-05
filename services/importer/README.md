@@ -1242,7 +1242,9 @@ with null object prototypes retain the same provenance; prototype identity is ne
 Decision: development dump acquisition fixes VNDB to the November 4 archive, SHA-256 and TIMESTAMP documented in
 [local stack](../../docs/development/local-stack.md#cross-media-dump-cache); a rotating dump or older cached manifest
 cannot replace that source generation. General unpinned acquisition remains separate. The existing dump-fetch
-suite covers exact cache reopen, stale-manifest replacement, extraction repair, checksum and timestamp refusal.
+suite covers exact cache reopen, stale-manifest replacement, extraction repair, checksum and timestamp refusal. The development wrapper
+returns and persists the acquired `sourceSnapshots` alongside current publication results; its wrapper test retains
+that exact handoff through an incomplete seed without exporting private persona data.
 
 Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 

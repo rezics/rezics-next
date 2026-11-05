@@ -215,7 +215,9 @@ The development pin is `vndb-db-2026-11-04.tar.zst` from https://dl.vndb.org/dum
 integrity, required tables and `.header` files, and the exact timestamp before recording `vndb/manifest.json`.
 Missing or changed pinned bytes stop the seed; it does not continue with Bangumi alone. Restore the exact archive
 in the dump cache when the provider rotates it away. Changing the pin is an explicit source-generation change.
-VNDB's dump metadata licence remains independent of image rights.
+VNDB's dump metadata licence remains independent of image rights. The wrapper's returned and persisted
+`developmentShowcase.sourceSnapshots` carries the verified archive URL, filename, SHA-256 and metadata licences for
+both providers, plus VNDB's verified TIMESTAMP, even when later publication is incomplete.
 
 The general `fetchVndbDump` helper, when called without a pin, first tries the inventoried URL and resolves a rotated
 404/410 through the provider's dump index. It verifies structure and records the resolved filename and SHA-256 for

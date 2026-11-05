@@ -60,6 +60,21 @@ for (const configured of [true, false])
     let passedOptions: unknown;
     let fetches = 0;
     const credentialScopes: string[][] = [];
+    const sourceSnapshots = {
+      bangumi: {
+        file: 'fixture.zip',
+        url: 'https://archive.example.test/fixture.zip',
+        sha256: 'a'.repeat(64),
+        licences: ['CC-BY-SA-3.0'],
+      },
+      vndb: {
+        file: 'fixture.tar.zst',
+        url: 'https://dump.example.test/fixture.tar.zst',
+        sha256: 'b'.repeat(64),
+        timestamp: '2026-11-04 08:00:24+00',
+        licences: ['ODbL-1.0', 'DbCL-1.0'],
+      },
+    };
     const report = {
       readings: [],
       workLinks: [],
@@ -106,6 +121,7 @@ for (const configured of [true, false])
             vndb: '/shared/dumps/vndb',
             bangumiArchive: '/shared/dumps/bangumi.zip',
             vndbArchive: '/shared/dumps/vndb.tar.zst',
+            sourceSnapshots,
           };
         },
         seedCatalogue: async () => ({ subjects: {}, facts: [] }),
@@ -123,6 +139,7 @@ for (const configured of [true, false])
       const option = (name: string) => args[args.indexOf(name) + 1];
       expect(fetches).toBe(1);
       expect(result.collections).toBe(report.persona);
+      expect(result.sourceSnapshots).toBe(sourceSnapshots);
       expect(result).toMatchObject({ state: 'incomplete', community: { state: 'missing_source' } });
       expect(result.personalList).toEqual(
         configured ? { state: 'uploaded', uploadId, rows: 1 } : { state: 'unavailable', code: 'export-not-configured' },
