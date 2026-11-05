@@ -680,9 +680,9 @@ test('canonical Source plan refuses overflow, engine requests and oversized stat
       }),
     ),
   ).toThrow(TypeError);
-  expect(() =>
-    assertCanonicalSourceStatement(CANONICAL_SOURCE_STATEMENTS.seek, ['x'.repeat(8_000), 1, 2, 3]),
-  ).toThrow(TypeError);
+  expect(() => assertCanonicalSourceStatement(CANONICAL_SOURCE_STATEMENTS.seek, ['x'.repeat(8_000), 1, 2, 3])).toThrow(
+    TypeError,
+  );
 });
 
 test('exact raw-limit window resumes durably and source mutation before the next generation CAS is basis_changed', async () => {

@@ -205,12 +205,12 @@ export async function seekCollectionSourceWorkGroup(
 ) {
   const current = frame(options.deadline);
   try {
-    const [row] = await query<{ subject: string }>(
-      work,
-      current,
-      CANONICAL_SOURCE_STATEMENTS.seek,
-      [state.metadata.route, state.metadata.collectionId, state.generation, after],
-    );
+    const [row] = await query<{ subject: string }>(work, current, CANONICAL_SOURCE_STATEMENTS.seek, [
+      state.metadata.route,
+      state.metadata.collectionId,
+      state.generation,
+      after,
+    ]);
     return { subjectId: row?.subject ?? null, work: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek) };
   } catch (error) {
     if (error instanceof Error)

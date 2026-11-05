@@ -63,8 +63,7 @@ const sqlBound = (value: Omit<Bound, 'engineRequests'>): CanonicalSourceSqlBound
 
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const textBytes = (value: string) => Buffer.byteLength(value);
-const bytesOf = (sql: string, values: unknown, resultBytes: number) =>
-  textBytes(sql) + jsonBytes(values) + resultBytes;
+const bytesOf = (sql: string, values: unknown, resultBytes: number) => textBytes(sql) + jsonBytes(values) + resultBytes;
 
 const maxIdentityObject = JSON.parse(`{"k":"${'a'.repeat(identityJsonCeiling - 8)}"}`);
 const maxScopeRow = jsonBytes([
@@ -308,8 +307,22 @@ const commitScopeValues = [
 const insertScopeValues = [maxRoute, maxUuid, 'f'.repeat(64), 'a'.repeat(identityJsonCeiling)];
 
 export const CANONICAL_SOURCE_STATEMENTS = Object.freeze({
-  scope: statement('canonical-source-scope', CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4)),
-  head: statement('canonical-source-head', CANONICAL_SOURCE_SQL.head, maxPointValues, maxHeadRow, 1, point(CANONICAL_SOURCE_SQL.head, maxPointValues, maxHeadRow)),
+  scope: statement(
+    'canonical-source-scope',
+    CANONICAL_SOURCE_SQL.scope,
+    maxScopeValues,
+    maxScopeRow,
+    1,
+    point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4),
+  ),
+  head: statement(
+    'canonical-source-head',
+    CANONICAL_SOURCE_SQL.head,
+    maxPointValues,
+    maxHeadRow,
+    1,
+    point(CANONICAL_SOURCE_SQL.head, maxPointValues, maxHeadRow),
+  ),
   generation: statement(
     'canonical-source-generation',
     CANONICAL_SOURCE_SQL.generation,
@@ -458,11 +471,7 @@ export const CANONICAL_SOURCE_STATEMENTS = Object.freeze({
     updateScopeFrontierValues,
     jsonBytes([{ collection_id: maxUuid }]),
     1,
-    point(
-      CANONICAL_SOURCE_SQL.updateScopeFrontier,
-      updateScopeFrontierValues,
-      jsonBytes([{ collection_id: maxUuid }]),
-    ),
+    point(CANONICAL_SOURCE_SQL.updateScopeFrontier, updateScopeFrontierValues, jsonBytes([{ collection_id: maxUuid }])),
   ),
   commitScopeCapture: statement(
     'canonical-source-commit-scope-capture',
@@ -644,7 +653,11 @@ const publish = sumBounds(
   CANONICAL_SOURCE_STATEMENTS.completeGeneration.bound,
   CANONICAL_SOURCE_STATEMENTS.publishHead.bound,
 );
-const readback = sumBounds(observation, CANONICAL_SOURCE_STATEMENTS.head.bound, CANONICAL_SOURCE_STATEMENTS.generation.bound);
+const readback = sumBounds(
+  observation,
+  CANONICAL_SOURCE_STATEMENTS.head.bound,
+  CANONICAL_SOURCE_STATEMENTS.generation.bound,
+);
 const executionAttempt = sumBounds(OPERATIONAL_WORK_COST.attempt, SELECTED_COST.enqueue, SELECTED_COST.rollback);
 const executionEnvelope = sumBounds(
   SELECTED_COST.consume,
@@ -770,7 +783,8 @@ export function assertCanonicalSourceStatement(
   values: readonly unknown[],
 ): CanonicalSourceSqlBound {
   const requestBytes = textBytes(statement.sql) + jsonBytes(values);
-  if (requestBytes > statement.requestBytes) throw new TypeError('Canonical Source statement exceeds its request bound');
+  if (requestBytes > statement.requestBytes)
+    throw new TypeError('Canonical Source statement exceeds its request bound');
   if (statement.bound.engineRequests !== 0)
     throw new TypeError('Canonical Source statement cannot issue engine requests');
   if (!withinCeiling(statement.bound, statement.bound)) throw new TypeError('Canonical Source statement is unbounded');
@@ -804,8 +818,10 @@ export function canonicalSourceRawSplit(
 }
 
 export function canonicalSourceRawTotal(split: CanonicalSourceRawSplit): number {
-  const total = split.candidateKeys + split.aliasKeys + split.duplicateKeys + split.lookaheadKeys + split.internalDriverKeys;
+  const total =
+    split.candidateKeys + split.aliasKeys + split.duplicateKeys + split.lookaheadKeys + split.internalDriverKeys;
   if (!Number.isSafeInteger(total) || total < 0) throw new TypeError('Canonical Source raw split overflow');
-  if (total > CANONICAL_SOURCE_RAW_KEY_LIMIT) throw new TypeError('Canonical Source raw split exceeds the native 100 ceiling');
+  if (total > CANONICAL_SOURCE_RAW_KEY_LIMIT)
+    throw new TypeError('Canonical Source raw split exceeds the native 100 ceiling');
   return total;
 }

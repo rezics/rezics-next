@@ -350,10 +350,7 @@ function ledger(input: CanonicalCall): CollectionSourceLedger {
     input.deadline,
   );
 }
-function work(
-  l: CollectionSourceLedger,
-  split?: ReturnType<typeof canonicalSourceRawSplit>,
-): CanonicalWork {
+function work(l: CollectionSourceLedger, split?: ReturnType<typeof canonicalSourceRawSplit>): CanonicalWork {
   const r = l.receipt();
   return {
     ...r.used,
@@ -476,11 +473,13 @@ async function readGeneration(pool: Pool, input: CanonicalSourceRef, generation:
   return withConnection(
     pool,
     async (client) =>
-      (await query<Generation>(client, l, CANONICAL_SOURCE_STATEMENTS.generation, [
-        input.route,
-        input.collectionId,
-        generation,
-      ]))[0] ?? null,
+      (
+        await query<Generation>(client, l, CANONICAL_SOURCE_STATEMENTS.generation, [
+          input.route,
+          input.collectionId,
+          generation,
+        ])
+      )[0] ?? null,
   );
 }
 function repair(row: Generation): CanonicalRepair {
@@ -589,7 +588,10 @@ export async function seekCanonicalSourceGroup(
       subjectId: row?.subject ?? null,
       coveredThrough: row?.subject ?? input.afterSubjectId,
       exhausted: !row,
-      work: work(l, canonicalSourceRawSplit(row ? [{ driver: 'member', storedSubjectId: row.subject, factId: row.subject }] : [])),
+      work: work(
+        l,
+        canonicalSourceRawSplit(row ? [{ driver: 'member', storedSubjectId: row.subject, factId: row.subject }] : []),
+      ),
     };
   } catch (error) {
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
@@ -662,11 +664,7 @@ export async function beginCanonicalSourceRepair(pool: Pool, input: CanonicalBou
       ]);
       if (existing && same(existing.basis, input.basis)) return repair(existing);
       if (existing)
-        await query(tx, l, CANONICAL_SOURCE_STATEMENTS.abandon, [
-          input.route,
-          input.collectionId,
-          existing.generation,
-        ]);
+        await query(tx, l, CANONICAL_SOURCE_STATEMENTS.abandon, [input.route, input.collectionId, existing.generation]);
       // Old public/reader custody is retained. Missing disposition consumes capacity, never a fake release.
       const retained = await query(tx, l, CANONICAL_SOURCE_STATEMENTS.retainedGenerations, [
         input.route,
@@ -742,9 +740,8 @@ export async function repairCanonicalSourceStep(
           }),
         );
     const originals = [...new Set(page.rows.map((r) => r.key.storedSubjectId))];
-    const mappings = await l.bounded(
-      canonicalSourceWorkDimensions(canonicalSourceMappingBound(originals.length)),
-      () => identityEpochStore.readMappings(pool, originals),
+    const mappings = await l.bounded(canonicalSourceWorkDimensions(canonicalSourceMappingBound(originals.length)), () =>
+      identityEpochStore.readMappings(pool, originals),
     );
     // Mapping points supply identity for examined raw originals, never complete population evidence.
     if (mappings.some((mapping) => mapping.state !== 'mapped')) return notReady(l, 'identity');
@@ -834,11 +831,7 @@ export async function publishCanonicalSourceRepair(
         input.collectionId,
         row.generation,
       ]);
-      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.publishHead, [
-        input.route,
-        input.collectionId,
-        row.generation,
-      ]);
+      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.publishHead, [input.route, input.collectionId, row.generation]);
       return 'published' as const;
     });
     return result ? { state: result, work: work(l) } : notReady(l, 'source');
