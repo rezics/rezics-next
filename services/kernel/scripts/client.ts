@@ -96,8 +96,13 @@ const declarationSourceExtensions = new Set(['.ts', '.tsx', '.mts', '.cts', '.sq
 /** Keep emitted files and compiler state stable for content edits, but isolate changes to the source file set. */
 export function clientDeclarationCacheDirectory(repositoryRoot = ROOT, kernelDirectory = KERNEL): string {
   const sourceRoot = resolve(kernelDirectory, 'src');
-  const files = [...new Bun.Glob('**/*').scanSync({ cwd: sourceRoot })]
-    .filter((file) => declarationSourceExtensions.has(file.slice(file.lastIndexOf('.'))))
+  const sourceRoots = [sourceRoot, resolve(repositoryRoot, 'packages/search-text/src')].filter(existsSync);
+  const files = sourceRoots
+    .flatMap((directory) =>
+      [...new Bun.Glob('**/*').scanSync({ cwd: directory })]
+        .filter((file) => declarationSourceExtensions.has(file.slice(file.lastIndexOf('.'))))
+        .map((file) => `${relative(repositoryRoot, directory)}\0${file}`),
+    )
     .sort();
   const key = createHash('sha256')
     .update(resolve(repositoryRoot))
@@ -154,7 +159,7 @@ export function clientDeclarations(
     JSON.stringify({
       extends: resolve(kernelDirectory, 'tsconfig.json'),
       compilerOptions: {
-        rootDir: kernelDirectory,
+        rootDir: repositoryRoot,
         outDir: outputDirectory,
         noEmit: false,
         declaration: true,
@@ -162,7 +167,7 @@ export function clientDeclarations(
         incremental: true,
         tsBuildInfoFile: resolve(cacheDirectory, 'tsconfig.tsbuildinfo'),
       },
-      include: [resolve(kernelDirectory, 'src')],
+      include: [resolve(kernelDirectory, 'src'), resolve(repositoryRoot, 'packages/search-text/src')].filter(existsSync),
     }),
   );
   const result = spawnSync(compiler, ['-p', compilerConfig, '--runExternalCode'], {
@@ -174,7 +179,7 @@ export function clientDeclarations(
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
 
-  const sourceRoot = resolve(outputDirectory, 'src');
+  const sourceRoot = resolve(outputDirectory, relative(repositoryRoot, kernelDirectory), 'src');
   publishSqlDeclarations(sourceRoot);
   const pending = ['http/kernel.d.ts', 'http/request.d.ts'];
   const clientIndex = resolve(repositoryRoot, 'packages/client/src/index.ts');
@@ -199,19 +204,7 @@ export function clientDeclarations(
     }
   }
   assertNoServiceImports(declarations, repositoryRoot);
-  return sorted(new Map([...declarations].map(([key, content]) => [key, withOrderReconcileAuthorization(content)])));
-}
-
-/** Per-request bearer header the Commerce owner README requires for `order.reconcile`. */
-export function withOrderReconcileAuthorization(content: string): string {
-  return content.replace(/\$reconcile:\s*\{[\s\S]*?headers:\s*\{([\s\S]*?)\}/, (block, inner: string) => {
-    if (/(?:^|[\s{])authorization\s*:/.test(inner)) return block;
-    const indent = inner.match(/\n([ \t]*)\S/)?.[1] ?? '                            ';
-    return block.replace(
-      inner,
-      `\n${indent}authorization: string;${inner.startsWith('\n') ? inner : `\n${indent}${inner}`}`,
-    );
-  });
+  return sorted(declarations);
 }
 
 export function committedDeclarations(): Map<string, string> {

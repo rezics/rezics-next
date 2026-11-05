@@ -47,7 +47,8 @@
     "structured-headers": "2.1.1",
     "thumbhash": "0.1.1",
     "typebox": "1.4.3",
-    "@rezics/progress": "workspace:*"
+    "@rezics/progress": "workspace:*",
+    "@rezics/search-text": "workspace:*"
   },
   "devDependencies": {
     "@rezics/client": "workspace:*",

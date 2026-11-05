@@ -251,6 +251,10 @@ const orderResponse = t.Object({ order: orderSchema }, object);
 const orderReadResponse = t.Object({ order: orderReadSchema }, object);
 const entitlementResponse = t.Object({ entitlement: entitlementSchema }, object);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+const reconcileHeaders = t.Object({
+  authorization: t.Optional(t.String()),
+  [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
+});
 const languageQuery = t.Object({ languages: t.Optional(t.String()) }, object);
 const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
@@ -950,7 +954,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       customMethod('/v1/orders/:orderId', 'reconcile'),
       {
         params: t.Object({ orderId: id }),
-        headers,
+        headers: reconcileHeaders,
         body: t.Object({}, object),
         response: {
           202: t.Object({ orderId: id, reconciliation: t.Literal('queued') }, object),

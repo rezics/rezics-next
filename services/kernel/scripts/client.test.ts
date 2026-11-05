@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
-import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcileAuthorization } from './client.ts';
+import { clientDeclarationCacheDirectory, clientDeclarations } from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -102,19 +102,30 @@ test('incremental client declarations match a clean emit after one source file c
   const cleanCache = resolve(fixture, '.temp/clean');
   try {
     mkdirSync(resolve(kernel, 'src/http'), { recursive: true });
+    mkdirSync(resolve(kernel, 'src/search'), { recursive: true });
+    mkdirSync(resolve(fixture, 'packages/search-text/src'), { recursive: true });
     writeFileSync(
       resolve(kernel, 'tsconfig.json'),
       JSON.stringify({
-        compilerOptions: { target: 'ES2022', module: 'preserve', moduleResolution: 'bundler', strict: true },
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'preserve',
+          moduleResolution: 'bundler',
+          strict: true,
+          baseUrl: fixture,
+          paths: { '@rezics/search-text': ['packages/search-text/src/index.ts'] },
+        },
         include: ['src'],
       }),
     );
     writeFileSync(resolve(kernel, 'src/http/kernel.ts'), "export type { Response } from './response';\n");
     writeFileSync(resolve(kernel, 'src/http/request.ts'), 'export interface Request { id: string }\n');
+    writeFileSync(resolve(kernel, 'src/search/text.ts'), "import type { TextNode } from '@rezics/search-text';\nexport type SearchNode = TextNode;\n");
+    writeFileSync(resolve(fixture, 'packages/search-text/src/index.ts'), "export type TextNode = { kind: 'term'; value: string };\n");
     mkdirSync(resolve(fixture, 'packages/client/src'), { recursive: true });
     writeFileSync(
       resolve(fixture, 'packages/client/src/index.ts'),
-      "export type { PublicOnly } from './kernel/http/public-only';\n",
+      "export type { PublicOnly } from './kernel/http/public-only';\nexport type { SearchNode } from './kernel/search/text';\n",
     );
     writeFileSync(resolve(kernel, 'src/http/public-only.ts'), 'export interface PublicOnly { revision: number }\n');
     const response = resolve(kernel, 'src/http/response.ts');
@@ -129,6 +140,7 @@ test('incremental client declarations match a clean emit after one source file c
 
     expect([...incremental.entries()]).toEqual([...clean.entries()]);
     expect(incremental.get('http/public-only.d.ts')).toContain('revision: number;');
+    expect(incremental.get('search/text.d.ts')).toContain("'@rezics/search-text'");
     expect(readFileSync(resolve(incrementalCache, 'tsconfig.tsbuildinfo'), 'utf8').length).toBeGreaterThan(0);
     const config = JSON.parse(readFileSync(resolve(incrementalCache, 'tsconfig.json'), 'utf8')) as {
       compilerOptions: {
@@ -142,7 +154,7 @@ test('incremental client declarations match a clean emit after one source file c
       };
     };
     expect(config.compilerOptions).toEqual({
-      rootDir: kernel,
+      rootDir: fixture,
       outDir: resolve(incrementalCache, 'emit'),
       noEmit: false,
       declaration: true,
@@ -152,37 +164,12 @@ test('incremental client declarations match a clean emit after one source file c
     });
     writeFileSync(resolve(kernel, 'src/http/extra.ts'), 'export type Extra = string;\n');
     expect(clientDeclarationCacheDirectory(fixture, kernel)).not.toBe(checkoutCache);
+    const withKernelAddition = clientDeclarationCacheDirectory(fixture, kernel);
+    writeFileSync(resolve(fixture, 'packages/search-text/src/extra.ts'), 'export type Extra = string;\n');
+    expect(clientDeclarationCacheDirectory(fixture, kernel)).not.toBe(withKernelAddition);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
-});
-
-test('the generated order reconcile call includes bearer authorization, idempotency, and a queued response', () => {
-  const source = `                $reconcile: {
-                    post: {
-                        body: object;
-                        params: {
-                            orderId: string;
-                        };
-                        query: unknown;
-                        headers: {
-                            "idempotency-key": string;
-                        };
-                        response: {
-                            202: {
-                                orderId: string;
-                                reconciliation: "queued";
-                            };
-                        };
-                    };
-                };`;
-  const generated = withOrderReconcileAuthorization(source);
-  expect(generated).toContain('authorization: string;');
-  expect(generated).toContain('"idempotency-key": string;');
-  expect(generated).toContain('body: object;');
-  expect(generated).toContain('reconciliation: "queued"');
-  expect(generated.indexOf('authorization: string;')).toBeLessThan(generated.indexOf('"idempotency-key": string;'));
-  expect(withOrderReconcileAuthorization(generated)).toBe(generated);
 });
 
 test('KernelClient accepts order reconciliation headers and types the queued response', () => {

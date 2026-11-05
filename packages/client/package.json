@@ -19,6 +19,7 @@
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
     "@rezics/filter": "workspace:*",
+    "@rezics/search-text": "workspace:*",
     "@types/pg": "8.23.1",
     "elysia": "2.0.0-rc.1",
     "jose": "6.2.14",
