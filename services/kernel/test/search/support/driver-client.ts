@@ -40,6 +40,11 @@ export interface DriverClient {
   nativeVote(voter: string, targetId: string, units: number | null, options?: NativeVoteOptions): Promise<HttpResponse>;
   /** Fixed synthetic Wikidata Book; imports, selects and reopens in this Search world. */
   importReleasedBook(input: ReleasedBookInput): Promise<ReleasedBookReceipt>;
+  /** Request ordinary native rebuild allocation without waiting for worker-owned publication. */
+  requestRebuild(): Promise<{ generation: number }>;
+  restartWorker(): Promise<SupervisorObservation>;
+  loseActivationResponse(): Promise<void>;
+  nativeCoverage(): Promise<{ nativeKeys: number; engineKeys: number; homes: number }>;
   init(): Promise<SearchDriver>;
   inspect(): Promise<SupervisorObservation>;
   ledger(): DriverLedger;
@@ -349,6 +354,10 @@ export function createDriverClient(
       for (const [key, value] of response.headers) headers.append(key, value);
       return { status: response.status, body: response.body, headers };
     },
+    requestRebuild: () => admit('requestRebuild'),
+    restartWorker: () => admit('restartWorker'),
+    loseActivationResponse: () => admit('loseActivationResponse'),
+    nativeCoverage: () => admit('nativeCoverage'),
     init() {
       return (initializing ??= (async () => {
         try {

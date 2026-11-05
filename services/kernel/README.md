@@ -118,6 +118,13 @@ to `.env`. `KERNEL_SEARCH_PREFIX` optionally selects the index prefix and defaul
 `bun run search down` to stop it while keeping its volume, or `bun run search reset` to remove and recreate it. The
 check command starts its own disposable OpenSearch node.
 
+Use the workspace command's pinned image, built from
+[`db/search/opensearch/Dockerfile`](db/search/opensearch/Dockerfile), for the released Search analyzer.
+It installs `analysis-icu`; an unmodified upstream image lacks that plugin. Keep the retained development
+volume when recovering a running catalogue: start the existing node with `up`, then run the ordinary
+worker and rebuild command below. Analyzer definitions and script/alias projection remain owned by
+the released Search text implementation; recovery preserves their mapping metadata.
+
 ## Rebuilding the search index
 
 The configured server installs `createDefaultDiscoverySearch` from

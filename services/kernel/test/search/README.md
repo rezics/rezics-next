@@ -70,3 +70,12 @@ The [existing Search wrapper](outcomes.test.ts) and [relation-facet wrapper](rel
 The final proof must include Search-only pause/resume, replacement-runner stop, worker drain, restart recovery, real node-proxy outage and recovery, real rebuild with cursor/generation behavior, and finite witness convergence using actual API responses and real elapsed-time deadlines. It must exercise startup failure and sequential and concurrent fixtures, proving one fixture can close without affecting another and that owned resources are gone only after drain. Rebuild and restart must use production paths, not injected engine/source results or direct index writes.
 
 Until these suites and lifecycle/convergence checks run against the integrated worker, keep real-source and composition verification explicitly pending. A passing specification, controlled fixture, starter construction, send acknowledgment or process signal is not a passing end-to-end outcome.
+
+`coverage-default-worker.test.ts` requests the ordinary native rebuild without waiting for publication,
+retains its job and physical UUID, drains and restarts the owned worker against the same databases and
+prefix, and loses one real alias response after OpenSearch has applied it. Each child launches the complete
+default registrations once. Serving reads continue during replacement. Final observations require the
+native final pass for all homes and complete engine identities and settled external versions, including
+engine extras; legacy coverage certificates and equal counts do not stand in for native publication.
+The publication suite separately pins filtered/terminal native cursors and maintenance resumption, and
+the metadata suite pins released calendar metadata under an applied-but-lost write response.

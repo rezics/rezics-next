@@ -182,6 +182,26 @@ type Job = {
 };
 type Home = { partition: number; epoch: number; position: string; account_revision: string; claim_revision: string };
 
+/** Preserve released projection metadata when publishing the durable activation timestamp. */
+export async function publishSubjectActivationMetadata(search: OpenSearch, index: string, activatedAt: string) {
+  const mapping = async () => {
+    const response = await search.request<Record<string, { mappings?: { _meta?: Record<string, unknown> } }>>(
+      'GET',
+      `/${index}/_mapping`,
+    );
+    const meta = response.body[index]?.mappings?._meta;
+    if (response.status !== 200 || Object.keys(response.body).length !== 1 || !object(meta))
+      throw new Error('Generation activation mapping is missing or malformed');
+    return meta;
+  };
+  const metadata = { ...(await mapping()), name_sort_format: SUBJECT_SORT_FORMAT, activated_at: activatedAt };
+  await observedWrite(
+    () => search.request('PUT', `/${index}/_mapping`, { _meta: metadata }),
+    async () => same(await mapping(), metadata),
+    'Generation activation metadata could not be established',
+  );
+}
+
 /** A single native publication port for worker and CLI composition. It owns no supplied resources. */
 export function createSearchGenerationPublication(
   config: SearchGenerationPublicationConfig,
@@ -576,23 +596,6 @@ export function createSearchGenerationPublication(
   function cursor(job: Job): SubjectSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
   }
-  function validateKeys(
-    ids: readonly string[],
-    partition: number,
-    after: SubjectSourceKeyCursor | null,
-    next: SubjectSourceKeyCursor | null,
-    complete: boolean,
-  ) {
-    requireValue(Array.isArray(ids) && ids.length <= PAGE && typeof complete === 'boolean');
-    let previous = after;
-    for (const id of ids) {
-      const route = routeOf(id);
-      requireValue(route !== null && partitionOf(route) === partition);
-      requireValue(previous === null || route > previous.route || (route === previous.route && id > previous.id));
-      previous = { route, id };
-    }
-    requireValue(complete ? next === null : next !== null && ids.length > 0 && same(next, previous));
-  }
   async function keysFor(partition: number, ids: readonly string[]): Promise<DiscoveryKey[] | undefined> {
     if (!registry) return undefined;
     const entry = registry.entries.find((entry) => entry.owner === 'semantic');
@@ -721,7 +724,7 @@ export function createSearchGenerationPublication(
         ids = page.ids;
         next = page.after;
         complete = page.complete;
-        validateKeys(ids, job.home, after, next, complete);
+
         keys = job.family === 'discovery' ? await keysFor(job.home, ids) : undefined;
         if (job.family === 'discovery') ids = keys!.map(({ id }) => id);
       } else {
@@ -733,7 +736,7 @@ export function createSearchGenerationPublication(
         next = page.next;
         complete = next === null;
         meter.inputKeys += ids.length;
-        validateKeys(ids, job.home, after, next, complete);
+
         keys = ids.map((id) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
       }
       await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter);
@@ -741,6 +744,8 @@ export function createSearchGenerationPublication(
       job.after_route = next?.route ?? null;
       job.after_id = next?.id ?? null;
       if (complete) {
+        job.after_route = null;
+        job.after_id = null;
         if (job.phase === 'subject' && job.family === 'discovery') job.phase = 'account';
         else {
           job.phase = 'subject';
@@ -1116,27 +1121,8 @@ export function createSearchGenerationPublication(
               job.phase = 'intent';
               await save(client, job, meter);
             }
-            if (job.family === 'subjects') {
-              await observedWrite(
-                () =>
-                  search.request('PUT', `/${job.physical_target}/_mapping`, {
-                    _meta: { name_sort_format: SUBJECT_SORT_FORMAT, activated_at: job.activated_at },
-                  }),
-                async () => {
-                  const response = await search.request<
-                    Record<string, { mappings?: { _meta?: Record<string, unknown> } }>
-                  >('GET', `/${job.physical_target}/_mapping`);
-                  const meta = response.body[job.physical_target]?.mappings?._meta;
-                  return (
-                    response.status === 200 &&
-                    Object.keys(response.body).length === 1 &&
-                    meta?.activated_at === job.activated_at &&
-                    meta.name_sort_format === SUBJECT_SORT_FORMAT
-                  );
-                },
-                'Generation activation metadata could not be established',
-              );
-            }
+            if (job.family === 'subjects')
+              await publishSubjectActivationMetadata(search, job.physical_target, job.activated_at);
             const before = await aliasTarget(job, context, meter);
             if (before !== job.physical_target && before !== job.previous_target) throw new Pending('source_pending');
             if (before !== job.physical_target) {

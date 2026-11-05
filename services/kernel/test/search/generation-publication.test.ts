@@ -1,3 +1,10 @@
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease, activeRelease } from '../../src/semantic/definitions.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import { createPublicPreparation, type PublicPreparationOptions } from '../../src/search/public-preparation.ts';
+import { createPublicPreparationStore, type PopulationFrontier } from '../../src/search/public-preparation-store.ts';
+import type { DefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { RELEASE_FORMAT, releaseDigest } from '@rezics/definitions';
 import { createPool } from '../../src/database/pool.ts';
@@ -43,7 +50,7 @@ afterAll(async () => {
   for (const index of indices) await search.request('DELETE', `/${index}`);
   await pool.end();
 });
-async function fixture() {
+async function fixture(keyPages?: SubjectSourceKeyPages, released?: CustodyDefinition['meaning']['release']) {
   const prefix = `publication-${crypto.randomUUID().slice(0, 8)}-`;
   for (const generation of [1, 2]) {
     await createSubjectIndex(search, prefix, generation);
@@ -52,7 +59,7 @@ async function fixture() {
   await search.request('POST', '/_aliases', {
     actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
   });
-  const release: CustodyDefinition['meaning']['release'] = {
+  const release: CustodyDefinition['meaning']['release'] = released ?? {
     format: RELEASE_FORMAT,
     catalogue: { id: 'publication-boundary', version: '1' },
     generator: { name: 'fixture', version: '1' },
@@ -102,7 +109,7 @@ async function fixture() {
     pool,
     search,
     source,
-    sourceKeys,
+    sourceKeys: keyPages ?? sourceKeys,
     binding,
     clock: () => new Date(),
     meaning: definition.meaning,
@@ -240,4 +247,149 @@ test('a lost native alias response is settled by exact alias readback without re
   );
   expect(writes).toBe(1);
   expect((await subjectGenerations(search, prefix)).active).toBe(1);
+});
+
+test('native complete pages retain their cursor and empty filtered pages advance the same interrupted job', async () => {
+  const after = { route: 0, id: '00000000-0000-7000-8000-000000000001' };
+  const cursors: unknown[] = [];
+  const f = await fixture({
+    async read(request) {
+      cursors.push(request.after);
+      const {
+        rows: [home],
+      } = await pool.query<{ epoch: number; position: string }>(
+        'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
+        [request.partition],
+      );
+      return {
+        status: 'eligible',
+        partition: request.partition,
+        epoch: home!.epoch,
+        position: BigInt(home!.position),
+        ids: [],
+        after,
+        complete: request.after !== null,
+        cost: zero,
+      };
+    },
+  });
+  try {
+    const prepared = await f.operations.prepare(f.registered.consumer, context());
+    if (prepared.status !== 'preparing') throw new Error(prepared.reason);
+    expect(await f.operations.step(prepared.job, context())).toMatchObject({ status: 'progress' });
+    // Re-adoption is the persisted native job, not a replacement frontier from a caller.
+    const resumed = await f.operations.prepare(f.registered.consumer, context());
+    expect(resumed).toMatchObject({ status: 'preparing', job: prepared.job });
+    expect(await f.operations.step(prepared.job, context())).toMatchObject({ status: 'progress' });
+    expect(cursors).toEqual([null, after]);
+    expect(
+      (
+        await pool.query(
+          'SELECT phase,home,after_id FROM search.generation_publication WHERE partition_no=0 AND job=$1',
+          [prepared.job.job],
+        )
+      ).rows[0],
+    ).toEqual({ phase: 'subject', home: 1, after_id: null });
+    expect((await subjectGenerations(search, f.prefix)).active).toBe(1);
+  } finally {
+    await f.operations.close();
+  }
+});
+
+test('ordinary maintenance resumes its stored publication and advances native population without the retired scan', async () => {
+  await bootstrapRelease(pool, bundledRelease);
+  const f = await fixture(
+    {
+      async read({ partition }) {
+        const {
+          rows: [home],
+        } = await pool.query<{ epoch: number; position: string }>(
+          'SELECT epoch,position::text FROM core.partition WHERE partition_no=$1',
+          [partition],
+        );
+        return {
+          status: 'eligible',
+          partition,
+          epoch: home!.epoch,
+          position: BigInt(home!.position),
+          ids: [],
+          after: null,
+          complete: true,
+          cost: zero,
+        };
+      },
+    },
+    bundledRelease,
+  );
+  const work = await createWorkClient(databaseUrl!);
+  await work.registerQueue('maintenance', WORK_QUEUES.maintenance);
+  const store = createPublicPreparationStore(pool, work, f.prefix);
+  let prepares = 0;
+  const runtime = {
+    async preparePublication() {
+      prepares++;
+      return f.operations.prepare(f.registered.consumer, context());
+    },
+    publication: f.operations,
+  } as DefaultPublicFilterRuntime;
+  const start = () =>
+    createPublicPreparation({
+      pool,
+      work,
+      prefix: f.prefix,
+      search,
+      source: {} as PublicPreparationOptions['source'],
+      listing: {} as PublicPreparationOptions['listing'],
+      runtime,
+    });
+  const state: PopulationFrontier = {
+    kind: 'population',
+    key: '2',
+    generation: 2,
+    uuid: f.registered.consumer.incarnation,
+    meaning: (await activeRelease(pool))!.digest,
+    publication: null,
+    partition: 0,
+    epoch: null,
+    through: null,
+    after: null,
+    phase: 'scan',
+    pending: null,
+  };
+  const id = await store.retain(state, Date.now() + 60_000);
+  const read = async () =>
+    (
+      await pool.query<{ revision: string; locator: PopulationFrontier }>(
+        'SELECT revision::text,locator FROM search.public_preparation WHERE partition_no=0 AND id=$1',
+        [id],
+      )
+    ).rows[0]!;
+  let maintenance = start();
+  try {
+    await maintenance.run(id, (await read()).revision);
+    const retained = (await read()).locator.publication;
+    expect(retained).toBeString();
+    await maintenance.stop();
+    maintenance = start();
+    await maintenance.run(id, (await read()).revision);
+    expect(prepares).toBe(1);
+    expect((await read()).locator).toMatchObject({ publication: retained, phase: 'native' });
+    expect(
+      (await pool.query('SELECT home FROM search.generation_publication WHERE partition_no=0 AND job=$1', [retained]))
+        .rows[0],
+    ).toEqual({ home: 1 });
+    expect((await subjectGenerations(search, f.prefix)).active).toBe(1);
+  } finally {
+    await maintenance.stop();
+    await pool.query('DELETE FROM search.public_preparation WHERE partition_no=0 AND id=$1', [id]);
+    const workflows = (
+      await pool.query<{ workflow_uuid: string }>(
+        'SELECT workflow_uuid FROM dbos.workflow_status WHERE workflow_uuid LIKE $1',
+        [`search.publicPreparation:${id}:%`],
+      )
+    ).rows.map((row) => row.workflow_uuid);
+    if (workflows.length) await work.deleteWorkflows(workflows, false);
+    await work.close();
+    await f.operations.close();
+  }
 });
