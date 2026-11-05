@@ -349,7 +349,17 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
         <ErrorAlert tabIndex={-1} ref={alert}>
           {message}
         </ErrorAlert>
-        <a href="/recovery">{m.auth_recovery_new_link()}</a>
+        <a
+          href="/recovery"
+          onClick={(event) => {
+            event.preventDefault();
+            setHasFragment(false);
+            setMessage('');
+            setFresh(true);
+          }}
+        >
+          {m.auth_recovery_new_link()}
+        </a>
       </AuthPage>
     );
   }
