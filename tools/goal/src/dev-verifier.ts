@@ -2,13 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import type {
-  DevVerifierEvidence,
-  DevVerifierFinding,
-  DevVerifierResult,
-  Settings,
-  Task,
-} from './types.ts';
+import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierResult, Settings, Task } from './types.ts';
 import { defaultPolicy } from './policy.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
@@ -486,8 +480,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
     for (const check of baseMissing)
       results[check.index]!.baselineReason = 'The selected command source is absent at the exact verified baseline.';
     const missingBaselineRuns = baselineChecks.filter(
-      (check) =>
-        !baseMissing.includes(check) && !reusableAt(execution, settings, base, check, selection, baseSource),
+      (check) => !baseMissing.includes(check) && !reusableAt(execution, settings, base, check, selection, baseSource),
     );
     let baseSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingBaselineRuns.length) {

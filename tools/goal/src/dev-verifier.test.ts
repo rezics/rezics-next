@@ -208,7 +208,11 @@ test('execution preserves caught runner output, transport retries, and source-bo
     readRun: (key: string) => runs.get(key)?.evidence,
     saveRun: (run: DevVerifierRun) => runs.set(run.key, run),
   };
-  const check: DevVerifierCheck = { command: ['node', 'widget.test.js'], closure: ['apps/widget/**'], cwd: 'apps/widget' };
+  const check: DevVerifierCheck = {
+    command: ['node', 'widget.test.js'],
+    closure: ['apps/widget/**'],
+    cwd: 'apps/widget',
+  };
   const logs: string[] = [];
   const retried = await executeCheck(
     execution,
@@ -226,9 +230,7 @@ test('execution preserves caught runner output, transport retries, and source-bo
     'retry-run',
     'retry-input',
   );
-  expect(retried.output).toBe(
-    'attempt 1: ETIMEDOUT while connecting to check host\nattempt 2: retried successfully',
-  );
+  expect(retried.output).toBe('attempt 1: ETIMEDOUT while connecting to check host\nattempt 2: retried successfully');
   expect(retried.logPath).toBe(logs[1]!);
   expect(readFileSync(retried.logPath, 'utf8')).toBe('retried successfully');
   expect(logs[0]!).not.toBe(logs[1]!);
