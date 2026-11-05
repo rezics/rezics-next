@@ -1,10 +1,49 @@
 import type { JWK } from 'jose';
-import type { Pool } from 'pg';
+import { Client, type Pool } from 'pg';
 import type { Principal } from '../../../../../specs/follow-counts-driver.ts';
 import type { Anchor } from '../../../../../specs/library-driver.ts';
 import { cookies, nativeFixture, password } from '../../access/native-account-bindings-fixture.ts';
 import { deletePersona } from '../../support/account-deletion.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
+
+let stalledNativeStart: Error | undefined;
+
+/** A native Auth start that does not settle within ninety seconds reports the database sessions it waits on. Later
+ * starts in this process fail at once with that first evidence, because the stalled start still owns DBOS here. */
+async function boundedNativeStart<T>(start: () => Promise<T>, databaseUrl: string): Promise<T> {
+  if (stalledNativeStart) throw stalledNativeStart;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stalled = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      void waitingSessions(databaseUrl).then((detail) => {
+        stalledNativeStart = new Error(`Library native Auth start did not settle; sessions: ${detail}`);
+        reject(stalledNativeStart);
+      });
+    }, 90_000);
+  });
+  try {
+    return await Promise.race([start(), stalled]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function waitingSessions(databaseUrl: string): Promise<string> {
+  const client = new Client({ connectionString: databaseUrl, connectionTimeoutMillis: 5_000, statement_timeout: 5_000 });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `SELECT pid, datname, state, wait_event_type, wait_event, pg_blocking_pids(pid)::text AS blocked_by,
+              left(query, 300) AS query
+         FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND datname IS NOT NULL ORDER BY pid`,
+    );
+    return JSON.stringify(result.rows).slice(0, 6000);
+  } catch (error) {
+    return `session probe failed: ${String(error)}`;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
 
 let stalledRegistration: Error | undefined;
 
@@ -43,11 +82,15 @@ export async function createLibraryAccountHost(input: {
   actions: ReadonlyMap<string, { anonymous: boolean }>;
   scopes: string[];
 }) {
-  const fixture = await nativeFixture(input.pool, () => input.authPool, {
-    database: { url: input.databaseUrl, close() {} },
-    privateKey: input.privateKey,
-    actions: input.actions,
-  });
+  const fixture = await boundedNativeStart(
+    () =>
+      nativeFixture(input.pool, () => input.authPool, {
+        database: { url: input.databaseUrl, close() {} },
+        privateKey: input.privateKey,
+        actions: input.actions,
+      }),
+    input.databaseUrl,
+  );
   try {
     await fixture.host.service.internal.registerClient({
       clientId: 'web',

@@ -272,7 +272,9 @@ async function startDriver(
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
     const governanceScopes = [...scopes, 'gate:any'];
-    const knownScopes = new Set(governanceScopes);
+    // Exposure gates are consent scopes beside the action catalogue; the operator's bearer must carry the gate it publishes under.
+    const gateScopes = ['gate:definition_publication', 'gate:subject_identity'];
+    const knownScopes = new Set([...governanceScopes, ...gateScopes]);
     // Kernel Access is lazy. Resolve it through an ordinary public read after
     // composition, retaining exactly the instance returned by access(config).
     // The empty migrated template may have no active release yet.
@@ -440,7 +442,7 @@ async function startDriver(
       person('governor', { scopes: governanceScopes }),
       person('editor'),
       person('acceptor'),
-      person('steward'),
+      person('steward', { scopes: [...scopes, 'gate:definition_publication'] }),
       person('suspended'),
     ]);
     const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
