@@ -864,6 +864,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   ): AniListJourneySnapshot {
     if (!live() || busy || heldUnknown()) return snapshot();
     const row = meta.get(ordinal)!;
+    const pending = page.find((item) => item.ordinal === ordinal)?.labelWork;
+    if (Object.values(pending ?? {}).some((work) => (work.createStarted || work.assignStarted) && !work.outcome))
+      return snapshot();
     row.labels = { subjectId, selections, review: null, invalidated: true, outcomes: null };
     const visible = page.find((item) => item.ordinal === ordinal);
     if (visible) delete visible.currentLabels;
@@ -929,6 +932,22 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     for (const outcome of response.result.outcomes) {
       const labels = meta.get(outcome.ordinal)!.labels!;
       labels.outcomes = outcome;
+      const visible = page.find((row) => row.ordinal === outcome.ordinal);
+      if (visible) {
+        visible.labelWork = { ...visible.labelWork };
+        labels.review!.items.forEach((item, index) => {
+          const result = outcome.items.find((value) => value.key === item.key);
+          if (result)
+            visible.labelWork![index] = {
+              ...visible.labelWork![index],
+              ...(result.label ? { label: result.label } : {}),
+              ...(result.status === 'applied' || result.status === 'unchanged'
+                ? { assignStarted: true, outcome: result }
+                : {}),
+              ...(result.status === 'pending' ? { createStarted: true } : {}),
+            };
+        });
+      }
     }
     // A current read is an observation, never acknowledgement of an unresolved command.
     for (const confirmation of command.body.confirmations) await readLabels(confirmation.ordinal);

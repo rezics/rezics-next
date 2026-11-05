@@ -18,13 +18,19 @@ const productionPort: AniListImportPort = {
   async reviewLabels(command) {
     const { captureAniListLabelSender, reviewAniListLabels } = await import('./server');
     const headers = { 'X-CSRF-Token': sessionCsrfToken() ?? '' };
-    command.custody.sender ??= await captureAniListLabelSender({ data: command.custody, headers });
+    if (command.custody.sender === undefined) {
+      const captured = await captureAniListLabelSender({ data: command.custody, headers });
+      if (captured !== undefined) command.custody.sender = captured;
+    }
     return labelDelivery(command, () => reviewAniListLabels({ data: command, headers }));
   },
   async applyLabels(command) {
     const { captureAniListLabelSender, applyAniListLabels } = await import('./server');
     const headers = { 'X-CSRF-Token': sessionCsrfToken() ?? '' };
-    command.custody.sender ??= await captureAniListLabelSender({ data: command.custody, headers });
+    if (command.custody.sender === undefined) {
+      const captured = await captureAniListLabelSender({ data: command.custody, headers });
+      if (captured !== undefined) command.custody.sender = captured;
+    }
     return labelDelivery(command, () => applyAniListLabels({ data: command, headers }));
   },
   async readLabels(command) {

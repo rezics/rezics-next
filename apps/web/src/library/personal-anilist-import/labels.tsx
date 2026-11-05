@@ -64,6 +64,7 @@ export function AniListLabelAdoption({
     const response = await onSearch(query, cursor);
     if (!current() || epoch !== searchEpoch.current) return;
     setSearching(false);
+    if (reviewed) onChoose(labels.subjectId, selections);
     setSearchFailed(response.kind !== 'label-targets');
     setTargets(response.kind === 'label-targets' ? response : null);
   }

@@ -1,5 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
+import { getLocale } from '../../paraglide/runtime.js';
 import { sessionQuery } from '../../session/query';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
@@ -28,7 +29,7 @@ function useSessionValue(): SessionValue | undefined {
 /** Private visit bound to the current signed-in viewer and CSRF. Replacement retires AniList state. */
 export function useAniListVisit(): AniListVisit | null {
   const session = useSessionValue();
-  const owner = sessionIdentity(session);
+  const owner = `${sessionIdentity(session)}:${getLocale()}`;
   const ready =
     session?.state === 'signed-in' &&
     typeof session.subject === 'string' &&
