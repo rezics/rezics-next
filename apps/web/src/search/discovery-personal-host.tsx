@@ -418,7 +418,10 @@ export function useDiscoveryPersonalResults(input: {
       }
     });
     void load(lifetime.signal)
-      .then(install)
+      .then((result) => {
+        install(result);
+        publishRecovery();
+      })
       .catch(() => {
         if (owns()) install({ state: { status: 'unavailable' }, capabilities: null });
       });

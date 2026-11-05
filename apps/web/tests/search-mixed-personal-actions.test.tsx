@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -16,10 +16,9 @@ import {
 } from '../src/search/discovery-personal-actions';
 import { DiscoveryPersonalControls, DiscoveryScoreControls } from '../src/search/discovery-personal-controls';
 import { changeDiscoveryVote } from '../src/search/discovery-personal-actions';
-import { readBoundDiscoveryPage } from '../src/search/discovery-personal-server';
+
 import { discoveryExposureKey, discoveryMetadataFetch } from '../src/search/discovery-personal-capabilities';
-import { writeQuestionBoundRatingForCurrentReader } from '../src/features/pages/rating-actions';
-import { changePersonalLibraryEntry } from '../src/library/entries-read';
+
 import { QUESTION } from '../src/features/pages/subject-ratings';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { sessionQuery } from '../src/session/query';
@@ -27,9 +26,15 @@ import { viewerExposureQuery } from '../src/kernel/viewer-exposure';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import { discoveryKey } from '../src/search/discovery';
 import { DiscoveryResults } from '../src/search/discovery-results';
-import { useDiscoveryPersonalResults } from '../src/search/discovery-personal-host';
+
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
 
+const { useDiscoveryPersonalResults } = await import('../src/search/discovery-personal-host');
+// Bun supplies the runtime binding; native transport assertions below use explicit ports.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { readBoundDiscoveryPage } = await import('../src/search/discovery-personal-server');
+const { writeQuestionBoundRatingForCurrentReader } = await import('../src/features/pages/rating-actions');
+const { changePersonalLibraryEntry } = await import('../src/library/entries-read');
 test('score zero and clear are independent native commands; another page incarnation sees contention', async () => {
   const registry = createDiscoveryCommandRegistry();
   const a = fixture(registry),
