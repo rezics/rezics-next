@@ -333,16 +333,18 @@ export function CreatorOfferEditor({
   data,
   locale,
   guard,
+  onReview,
 }: {
   data: CreatorEditorPageData;
   locale: string;
   guard?: CreatorOfferGuard;
+  onReview?: (() => Promise<CreatorEditorPageData['editor'] | null>) | undefined;
 }) {
   return (
     <CreatorOfferDraftNavigation>
       <CreatorOfferOriginPanelSlot />
       {guard ? (
-        <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />
+        <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} onReview={onReview} />
       ) : (
         <StandaloneCreatorOfferEditor data={data} locale={locale} />
       )}
@@ -393,11 +395,13 @@ function CreatorOfferForm({
   locale,
   createKey,
   guard,
+  onReview,
 }: {
   data: CreatorEditorPageData;
   locale: string;
   createKey: string;
   guard: CreatorOfferGuard;
+  onReview?: (() => Promise<CreatorEditorPageData['editor'] | null>) | undefined;
 }) {
   const memory = useCreatorIntent<CreateIntent>(guard, 'create');
   const sender = useCreatorIntent<(data: CreatorOfferMutation) => Promise<CreatorOfferResult>>(guard, 'create-sender');
@@ -408,9 +412,11 @@ function CreatorOfferForm({
   const [taxCode, setTaxCode] = useState(resume?.taxCode ?? '');
   const [result, setResult] = useState<CreatorOfferResult | null>(resume?.result ?? null);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const reading = useRef(false);
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
   const submittedRules = useRef<readonly ConfiguredSaleCurrencyRule[] | null>(resume?.rules ?? null);
-  const locked = useRef(resume?.result?.kind === 'saved');
+  const locked = useRef(!!resume?.result && resume.result.kind !== 'retry');
   const key = useRef(resume?.key ?? createKey);
   const lifetime = useRef({ active: false });
   useLayoutEffect(() => {
@@ -426,17 +432,12 @@ function CreatorOfferForm({
   const [draftEditor, setDraftEditor] = useState(resume?.editor);
   const editor = draftEditor ?? data.editor;
   if (!draftEditor && !pending.current && !result) key.current = createKey;
-  const currentEditor = useRef(data.editor);
-  currentEditor.current = data.editor;
-  const currentRules = useRef<readonly ConfiguredSaleCurrencyRule[]>(
-    data.editor.kind === 'ready' ? data.editor.schema.configuredSaleCurrencies : [],
-  );
-  currentRules.current = data.editor.kind === 'ready' ? data.editor.schema.configuredSaleCurrencies : [];
   const rules = submittedRules.current ?? (editor.kind === 'ready' ? editor.schema.configuredSaleCurrencies : []);
   const rule = rules.find((row) => row.currency === currency);
   const amount = parsedPrice(text, rule);
   const uncertain = result?.kind === 'retry';
-  const frozen = busy || uncertain || result?.kind === 'saved';
+  const requiresReview = !!result && result.kind !== 'retry' && result.kind !== 'saved';
+  const frozen = busy || checking || uncertain || result?.kind === 'saved';
   const canSubmit = data.selling && guard.isCurrent() && !!guard.csrfToken();
 
   function keepDraft(changes: Partial<Pick<CreateIntent, 'intent' | 'title' | 'taxCode'>> = {}) {
@@ -454,17 +455,51 @@ function CreatorOfferForm({
     };
   }
 
+  async function reviewCurrent() {
+    if (!onReview || reading.current || !guard.isCurrent()) return;
+    const current = lifetime.current;
+    reading.current = true;
+    setChecking(true);
+    try {
+      const reviewed = await onReview();
+      if (!current.active || !guard.isCurrent() || reviewed?.kind !== 'ready') return;
+      // A separate correction adopts the current Edition and price facts together.
+      // Reviewing never dispatches a command or rewrites the seller's typed draft.
+      const next: CreateIntent = {
+        editor: reviewed,
+        rules: reviewed.schema.configuredSaleCurrencies,
+        intent,
+        title,
+        taxCode,
+        pending: null,
+        key: crypto.randomUUID(),
+        result: null,
+      };
+      memory.value = next;
+      setDraftEditor(reviewed);
+      submittedRules.current = next.rules;
+      key.current = next.key;
+      locked.current = false;
+      setResult(null);
+    } finally {
+      reading.current = false;
+      if (current.active && guard.isCurrent()) setChecking(false);
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const current = lifetime.current;
     const csrfToken = guard.csrfToken();
     if (
       !current.active ||
+      reading.current ||
       locked.current ||
       !guard.isCurrent() ||
       !data.selling ||
       !csrfToken ||
       editor.kind !== 'ready' ||
+      requiresReview ||
       result?.kind === 'saved'
     )
       return;
@@ -497,23 +532,19 @@ function CreatorOfferForm({
     locked.current = true;
     setBusy(true);
     let saved = false;
+    let definitive = false;
     try {
       const next = await sender.value!(pending.current);
       if (!current.active || !guard.isCurrent()) return;
       saved = next.kind === 'saved';
       setResult(next);
-      const definitive = next.kind !== 'saved' && next.kind !== 'retry';
+      definitive = next.kind !== 'saved' && next.kind !== 'retry';
       if (definitive) {
         pending.current = null;
-        submittedRules.current = null;
-        key.current = crypto.randomUUID();
-        setDraftEditor(undefined);
       }
-      const currentEditorForCorrection = definitive ? currentEditor.current : editor;
-      const currentRulesForCorrection = definitive ? currentRules.current : rules;
       memory.value = {
-        editor: currentEditorForCorrection,
-        rules: currentRulesForCorrection,
+        editor,
+        rules,
         intent,
         title,
         taxCode,
@@ -525,7 +556,7 @@ function CreatorOfferForm({
       if (current.active && guard.isCurrent()) setResult({ kind: 'retry' });
     } finally {
       if (current.active && guard.isCurrent()) {
-        locked.current = saved;
+        locked.current = saved || definitive;
         setBusy(false);
       }
     }
@@ -642,6 +673,17 @@ function CreatorOfferForm({
               <p className="text-sm text-muted-foreground">{m.creator_tax_code_hint()}</p>
             </Field>
             {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
+            {requiresReview && onReview && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={checking}
+                onClick={() => void reviewCurrent()}
+              >
+                {checking ? m.creator_offers_preparing() : m.offer_review_terms()}
+              </Button>
+            )}
             {result?.kind === 'saved' ? (
               <a
                 href={`/${locale}/offers/${result.id}`}
@@ -653,7 +695,13 @@ function CreatorOfferForm({
               <Button
                 type="submit"
                 className="min-h-11"
-                disabled={busy || !canSubmit || (!uncertain && (amount === null || !title.trim() || !taxCode.trim()))}
+                disabled={
+                  busy ||
+                  checking ||
+                  requiresReview ||
+                  !canSubmit ||
+                  (!uncertain && (amount === null || !title.trim() || !taxCode.trim()))
+                }
               >
                 {busy ? m.creator_saving() : uncertain ? m.creator_retry() : m.creator_create()}
               </Button>

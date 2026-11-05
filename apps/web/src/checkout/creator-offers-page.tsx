@@ -27,7 +27,7 @@ import { CreatorOfferRowOverview } from './creator-offer-review/row-overview';
 const OfferJourney = createContext<{
   retain(offer: CreatorOffer): void;
   release(id: string): void;
-  confirmOffer: ((id: string) => Promise<CreatorOffer | null>) | undefined;
+  confirmOffer: (() => Promise<CreatorOffersPageData | null>) | undefined;
   registerManagement(id: string, focus: () => void): () => void;
 }>({ retain() {}, release() {}, confirmOffer: undefined, registerManagement: () => () => {} });
 
@@ -141,7 +141,7 @@ function OfferCommands({
   const uncertain = result?.kind === 'retry';
   const conflicted = result?.kind === 'conflict';
   const requiresReview = !!result && result.kind !== 'retry' && result.kind !== 'saved';
-  const frozen = busy || uncertain || conflicted || (result?.kind === 'saved' && !confirmed);
+  const frozen = busy || checking || uncertain || conflicted || (result?.kind === 'saved' && !confirmed);
   const editable = observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
   // Disclosure never hides an edited intent or an operation's recovery/result. Authority
   // withdrawal still belongs to the current-origin boundary that mounts these controls.
@@ -169,11 +169,13 @@ function OfferCommands({
     try {
       // This read starts after the command result. An older or missing row cannot
       // settle the display, and reading never resubmits the saved command.
-      const current = await confirmOffer(observed.id);
+      const latest = await confirmOffer();
+      const current = latest?.page.kind === 'ready' ? latest.page.offers.find((row) => row.id === observed.id) : null;
       if (
         !lifetime.active ||
         !guard.isCurrent() ||
         !current ||
+        (review && !latest?.schema) ||
         (review ? current.revision < observed.revision : current.revision <= observed.revision)
       )
         return;
@@ -187,7 +189,7 @@ function OfferCommands({
           text,
           pending: null,
           keys: keys.current,
-          rule: data.schema?.configuredSaleCurrencies.find((row) => row.currency === current.currency),
+          rule: latest!.schema!.configuredSaleCurrencies.find((row) => row.currency === current.currency),
           result: null,
         };
         memory.value = next;
@@ -214,7 +216,14 @@ function OfferCommands({
     const lifetime = mounted.current;
     const owns = () => lifetime.active && guard.isCurrent();
     const csrfToken = csrf();
-    if (!isCurrent() || !csrfToken || locked.current || (requiresReview && operation === 'reprice') || !editable)
+    if (
+      !isCurrent() ||
+      reading.current ||
+      !csrfToken ||
+      locked.current ||
+      (requiresReview && operation === 'reprice') ||
+      !editable
+    )
       return;
     if (!pending.current) {
       const key = keys.current?.[operation];
@@ -391,7 +400,7 @@ function OfferCommands({
             type="button"
             variant="outline"
             className="min-h-11"
-            disabled={checking || (requiresReview && data.schema === null)}
+            disabled={checking}
             onClick={() => void refreshSaved(requiresReview)}
           >
             {checking
@@ -428,7 +437,7 @@ export function CreatorOffersPage({
   offerPageAvailable?: boolean;
   guard?: CreatorOfferGuard | undefined;
   onRefresh?: () => void;
-  onConfirm?: (id: string) => Promise<CreatorOffer | null>;
+  onConfirm?: () => Promise<CreatorOffersPageData | null>;
   refreshing?: boolean;
 }) {
   const memory = useCreatorIntent<Record<string, CreatorOffer>>(guard ?? creatorPreviewGuard, 'offer-rows');

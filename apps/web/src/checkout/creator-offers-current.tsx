@@ -233,15 +233,13 @@ function CreatorRead({
         data={data}
         guard={guard}
         onRefresh={() => void query.refetch()}
-        onConfirm={async (id) => {
+        onConfirm={async () => {
           const refreshed = await query.refetch({ cancelRefetch: true });
           const outcome = refreshed.data;
           if (!origin.isCurrent() || outcome?.kind !== 'accepted' || !matches(outcome.value, subject, address))
             return null;
           const latest = outcome.value.data;
-          return 'page' in latest && latest.selling && latest.page.kind === 'ready'
-            ? (latest.page.offers.find((offer) => offer.id === id) ?? null)
-            : null;
+          return 'page' in latest && latest.selling && latest.page.kind === 'ready' ? latest : null;
         }}
         refreshing={query.isFetching}
         locale={locale}
@@ -252,7 +250,18 @@ function CreatorRead({
   else
     content =
       data.editor.kind === 'ready' ? (
-        <CreatorOfferEditor data={data} guard={guard} locale={locale} />
+        <CreatorOfferEditor
+          data={data}
+          guard={guard}
+          locale={locale}
+          onReview={async () => {
+            const refreshed = await query.refetch({ cancelRefetch: true });
+            const outcome = refreshed.data;
+            if (!origin.isCurrent() || outcome?.kind !== 'accepted') return null;
+            const latest = outcome.value.data;
+            return 'editor' in latest && latest.selling && latest.editor.kind === 'ready' ? latest.editor : null;
+          }}
+        />
       ) : (
         <CreatorOfferEditor data={data} locale={locale} />
       );
