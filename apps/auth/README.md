@@ -256,10 +256,16 @@ and sign-in/recovery links retain the original query; repairing sign-in uses the
 repeats creation. `src/sign-in.ts` supplies the shared sign-in result and validated destination helpers (there is no
 separate login-attempt helper in this base).
 The page starts with one no-store Auth registration read containing the current viewer, native field limits and
-available actions. An already signed-in viewer gets Continue through the existing safe `signInTarget` plus a Sign in
+available actions. `readRegistrationPage` owns one five-second private-read deadline from before configuration
+loading through server-function/BFF completion, even when transport ignores cancellation. Its optional caller signal
+retires browser ownership; an already aborted caller starts no work. Rejection, timeout or cancellation returns
+dependency unavailable, without retrying or cancelling native work. Each deliberate read has its own lifetime and
+no shared advice cache. An already signed-in viewer gets Continue through the existing safe `signInTarget` plus a Sign in
 link that replaces the active account; `return_to` remains navigation only. A failed read or missing Turnstile
 configuration shows an unavailable state before the form. This read is advice only; `POST /signup` repeats native
 validation and verification.
+The read costs one existing Turnstile configuration read and one BFF/native `GET /registration-page`, with zero
+additional Auth or Kernel calls or commands; the native issuer keeps its own deadline, origin/cookie and no-store rules.
 An already signed-in visitor continues with the current account and can choose Sign in to replace it.
 Nonblank handle/email, any password or confirmation, or a pending creation prompts Stay/Leave; Stay
 preserves input, validation and the same attempt, while confirmed creation releases the warning before sign-in.

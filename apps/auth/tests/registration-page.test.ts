@@ -25,6 +25,90 @@ function nativeRegistration() {
   };
 }
 
+test('production registration advice bounds BFF completion and cancellation without sharing obsolete advice', async () => {
+  // Isolate the installed server-function transport from mounted route tests.
+  const script = `
+    import { expect, mock } from 'bun:test';
+    const native = ${JSON.stringify(nativeRegistration())};
+    const unavailable = { kind: 'unavailable', reason: 'dependency', actions: { register: false, continue: false } };
+    let mode = 'ready', body = native, config = { siteKey: 'public-site-key', scriptUrl: 'https://challenge.test/api.js' };
+    let configReads = 0, nativeReads = 0, calls = 0, signal, expire;
+    let started, completed, late, configWait;
+    const timeout = globalThis.setTimeout;
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      if (delay === 5000) { expire = callback; return timeout(() => {}, 60000); }
+      return timeout(callback, delay, ...args);
+    };
+    mock.module('../src/turnstile.ts', () => ({ readTurnstileConfig: async () => {
+      configReads++; return mode === 'config' ? configWait.promise : config;
+    } }));
+    mock.module('../src/security-inventory', () => ({ issuerSecurityRequest: async path => {
+      expect(path).toBe('/registration-page'); nativeReads++; return Response.json(body);
+    } }));
+    mock.module('@tanstack/react-start', () => ({ createServerFn: () => ({ handler: fn => async options => {
+      calls++; signal = options?.signal; started.resolve();
+      if (mode === 'waiting') return late.promise;
+      const result = await fn();
+      completed.resolve();
+      if (mode === 'completion') return late.promise;
+      if (mode === 'rejected') throw new Error('BFF delivery failed');
+      return result;
+    } }) }));
+    const { readRegistrationPage } = await import('../src/registration-page');
+    function prepare(next) {
+      mode = next; started = Promise.withResolvers(); completed = Promise.withResolvers();
+      late = Promise.withResolvers(); configWait = Promise.withResolvers();
+    }
+    const caller = new AbortController(); caller.abort();
+    expect(await readRegistrationPage(caller.signal)).toEqual(unavailable);
+    expect([calls, configReads, nativeReads]).toEqual([0, 0, 0]);
+    for (const phase of ['waiting', 'completion', 'config', 'cancelled']) {
+      prepare(phase === 'cancelled' ? 'waiting' : phase);
+      const before = [calls, configReads, nativeReads];
+      const owner = new AbortController();
+      const pending = readRegistrationPage(owner.signal);
+      await started.promise;
+      if (phase === 'completion') await completed.promise;
+      if (phase === 'cancelled') owner.abort(); else expire();
+      expect(await pending).toEqual(unavailable);
+      expect(signal.aborted).toBe(true);
+      expect(calls).toBe(before[0] + 1);
+      expect(configReads).toBe(before[1] + (['completion', 'config'].includes(phase) ? 1 : 0));
+      expect(nativeReads).toBe(before[2] + (phase === 'completion' ? 1 : 0));
+      // A new deliberate read uses current native advice while old transport is still pending.
+      const obsolete = late, oldConfig = configWait;
+      prepare('ready');
+      body = { ...native, kind: 'already-signed-in', viewer: { account_id: 'current-account' },
+        verification: { configured: false }, actions: { register: false, continue: true } };
+      config = { siteKey: '', scriptUrl: '' };
+      const current = await readRegistrationPage();
+      expect(current).toEqual(body);
+      obsolete.resolve({ ...native, siteKey: 'obsolete', scriptUrl: 'obsolete' }); oldConfig.resolve(config);
+      expect(await pending).toEqual(unavailable);
+      expect(current.viewer.account_id).toBe('current-account');
+    }
+    prepare('rejected'); expect(await readRegistrationPage()).toEqual(unavailable);
+    body = native; prepare('ready');
+    expect(await readRegistrationPage()).toEqual({ kind: 'unavailable', reason: 'verification', viewer: null,
+      requirements: native.requirements, actions: { register: false, continue: false } });
+    config = { siteKey: 'public-site-key', scriptUrl: 'https://challenge.test/api.js' };
+    const before = [calls, configReads, nativeReads];
+    expect(await readRegistrationPage()).toEqual({ ...native, ...config });
+    expect([calls, configReads, nativeReads]).toEqual(before.map(value => value + 1));
+  `;
+  const child = Bun.spawn([process.execPath, '-e', script], {
+    cwd: import.meta.dir,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [output, error, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(exit, output + error).toBe(0);
+});
+
 async function mount(page: RegistrationPage, query = '?client_id=showcase&scope=openid&return_to=%2Fwork%2Fseeded') {
   const root = createRootRoute({ component: Outlet });
   const route = Route.update({

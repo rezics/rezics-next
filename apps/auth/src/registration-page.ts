@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
+import { privateAuthRead } from './private-auth-read';
 import { issuerSecurityRequest } from './security-inventory';
 import { readTurnstileConfig } from './turnstile.ts';
 
@@ -154,6 +155,10 @@ const registrationPageRead = createServerFn({ method: 'GET' }).handler(async ():
   }
 });
 
-export async function readRegistrationPage(): Promise<RegistrationPage> {
-  return registrationPageRead();
+export async function readRegistrationPage(signal?: AbortSignal): Promise<RegistrationPage> {
+  try {
+    return await privateAuthRead((readSignal) => registrationPageRead({ signal: readSignal }), signal);
+  } catch {
+    return unavailable('dependency');
+  }
 }
