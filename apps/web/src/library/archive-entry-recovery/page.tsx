@@ -23,6 +23,8 @@ export function ArchiveEntryRecoveryPage() {
   const [journey, setJourney] = useState<ArchiveEntryRecoveryJourney | null>(null);
   const sessionIdentity = () =>
     JSON.stringify([
+      client?.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0,
+      client?.getQueryState(exposureQuery.queryKey)?.dataUpdateCount ?? 0,
       client?.getQueryData(sessionQuery.queryKey),
       client?.getQueryData(exposureQuery.queryKey),
       getLocale(),
@@ -44,6 +46,7 @@ export function ArchiveEntryRecoveryPage() {
       viewer: session.subject,
       credentialEpoch: session.csrfToken,
       csrfEpoch: session.csrfToken,
+      admission: crypto.randomUUID(),
       source: 'native-archive-upload',
       route: address,
       locale: getLocale(),
@@ -81,6 +84,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
   const locked = ['applying', 'uncertain', 'recoverable', 'cancelling'].includes(phase);
   const terminal = ['cancelled', 'expired'].includes(phase);
   const busy = snapshot?.busy ?? false;
+  const previewBusy = busy || phase === 'cancelling';
   const uploadLocked = busy || locked || snapshot?.uploadUncertain;
   const hasUpload = !!state?.upload;
   const live = state !== null && journey !== null;
@@ -246,19 +250,45 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 <button
                   type="button"
                   className={control}
-                  disabled={busy || locked}
-                  onClick={() => act(journey!.page())}
+                  disabled={previewBusy || state.pageNavigation.previous.length === 0}
+                  onClick={() => act(journey!.page('previous'))}
+                >
+                  {m.library_window_previous()}
+                </button>
+                <button
+                  type="button"
+                  className={control}
+                  disabled={previewBusy}
+                  onClick={() => act(journey!.page('first'))}
                 >
                   {m.library_archive_entry_first()}
                 </button>
                 <button
                   type="button"
                   className={control}
-                  disabled={busy || locked || state.page?.context.next == null}
-                  onClick={() => act(journey!.page(state.page!.context.next!))}
+                  disabled={previewBusy || state.page?.context.next == null}
+                  onClick={() => act(journey!.page('next'))}
                 >
                   {m.library_archive_entry_next()}
                 </button>
+                <button
+                  type="button"
+                  className={control}
+                  disabled={previewBusy || state.pageNavigation.current === null}
+                  onClick={() => act(journey!.page('refresh'))}
+                >
+                  {m.library_archive_entry_results_refresh()}
+                </button>
+                {state.pageNavigation.staged?.failed && (
+                  <button
+                    type="button"
+                    className={control}
+                    disabled={previewBusy}
+                    onClick={() => act(journey!.page('retry'))}
+                  >
+                    {m.library_window_retry()}
+                  </button>
+                )}
               </div>
             </section>
           )}
@@ -328,9 +358,16 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                       {m.library_archive_recovery_retry_original()}
                     </button>
                   )}
-                  <button type="button" className={control} disabled={busy} onClick={() => act(journey!.results())}>
-                    {m.library_archive_entry_results_refresh()}
-                  </button>
+                  {!state.results && (
+                    <button
+                      type="button"
+                      className={control}
+                      disabled={busy}
+                      onClick={() => act(journey!.results('refresh'))}
+                    >
+                      {m.library_archive_entry_results_refresh()}
+                    </button>
+                  )}
                 </>
               )}
             </section>
@@ -372,15 +409,41 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   {json(snapshot.readback.value)}
                 </div>
               )}
-              {!terminal && (
-                <button
-                  type="button"
-                  className={control}
-                  disabled={busy}
-                  onClick={() => act(journey!.results(state.results!.context.next ?? -1))}
-                >
-                  {m.library_archive_entry_results_refresh()}
-                </button>
+              {phase !== 'expired' && (
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    className={control}
+                    disabled={busy || state.resultsNavigation.previous.length === 0}
+                    onClick={() => act(journey!.results('previous'))}
+                  >
+                    {m.library_window_previous()}
+                  </button>
+                  <button type="button" className={control} disabled={busy} onClick={() => act(journey!.results('first'))}>
+                    {m.library_archive_entry_first()}
+                  </button>
+                  <button
+                    type="button"
+                    className={control}
+                    disabled={busy || state.results.context.next == null}
+                    onClick={() => act(journey!.results('next'))}
+                  >
+                    {m.library_archive_entry_next()}
+                  </button>
+                  <button
+                    type="button"
+                    className={control}
+                    disabled={busy || state.resultsNavigation.current === null}
+                    onClick={() => act(journey!.results('refresh'))}
+                  >
+                    {m.library_archive_entry_results_refresh()}
+                  </button>
+                  {state.resultsNavigation.staged?.failed && (
+                    <button type="button" className={control} disabled={busy} onClick={() => act(journey!.results('retry'))}>
+                      {m.library_window_retry()}
+                    </button>
+                  )}
+                </div>
               )}
             </section>
           )}

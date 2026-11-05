@@ -49,6 +49,17 @@ review refresh or selection edit clears confirmation. A changed current revision
 conflict and requires a new review and explicit confirmation for unstarted effects. Accepted rows can be unselected
 before reviewing the remaining work; a native acknowledged row is never refreshed or reapplied as a new choice.
 
+Preview and result readers keep independent numeric `after` paths. Each keeps its current coordinate, at most eight
+admitted predecessor coordinates, and one staged target; a failed read leaves the displayed page and predecessor
+history intact and exposes Retry for that exact upload, reader and `after`. Previous rereads the exact predecessor,
+First requests `-1`, Next uses only the native `next`, and Refresh rereads the current coordinate, including on the
+final page. Successful empty pages commit movement. A predecessor is popped only after its reread succeeds, so a
+later Next starts a new forward branch from the admitted page. Coordinates hold no row evidence, review, DTO or
+archive text; native `next` remains only in the one current page context, and an empty selected projection does not
+disable it. At maximum, the two paths retain twenty numeric coordinates total: nine admitted coordinates and one
+staged target per reader. An acknowledged apply or cancellation that changes selected results resets only the result
+path to its first coordinate; retained acknowledged destinations remain bounded to the original twenty selected rows.
+
 ## Delivery, cancellation and readback
 
 `visit.ts` owns the existing bounded selection, immutable confirmation and cancellation checkpoints. `controller.ts`
@@ -68,8 +79,10 @@ Expiry clears private upload/replay state and retains accepted results until rep
 Pruning is explicit and native-bounded to 100 evidence records per command.
 
 Every callback is fenced by upload identity and the existing visit requests, the live viewer/credential/CSRF epoch,
-route address, locale, exposure observation and mounted lifetime. Replacement and unmount retire callbacks and
-private state. The server functions return `private, no-store`; archive values never enter query caches or errors.
+route address, locale, exposure observation, actual private-admission identity and mounted lifetime. Monotonic query
+update counts and a per-mount admission ID retire equal-value replacements and A/B/A changes; ordinary display
+rerenders keep the admitted coordinates. Replacement and unmount retire callbacks and private state. The server
+functions return `private, no-store`; archive values never enter query caches or errors.
 
 ## Bounds and verification
 
@@ -79,11 +92,18 @@ entries, labels, assignments, annotations, journals and source observations. The
 and results include native result JSON. The composed maximum is the UTF-8 size of the complete native envelope,
 including coverage, escaped evidence/review/results and punctuation. The native producer's precise caller formula
 and remaining native costs are owned by [Bounds and verification](../../../../docs/library-archive-merge.md#bounds-and-verification).
-This page adds one sender preparation, one upload, one first preview, a review plus a refresh of only the displayed
-page, explicit apply/retry/cancel, and only requested status/result/current reads or cleanup. It never scans every
-page or account-wide labels and adds no smaller native cap. Source bounds are not observed byte/growth acceptance.
+Decision: keep independent preview and result coordinates inside the mounted visit, with eight predecessor offsets
+per reader and one staged target; each navigation action performs exactly one explicit bounded native page read.
 
-Focused Web tests cover mounted file admission, exact confirmation, unchanged original retries, cancellation,
-current readback and native boundary outcomes using the existing native fixture. Existing controller fence and
-bounded-growth assertions remain. Browser, installed-root, byte/caller observations, broader native acceptance and
-promotion remain integration responsibilities.
+This page adds one sender preparation, one upload, one first preview, a review plus a refresh of only the displayed
+coordinate, explicit apply/retry/cancel, and only requested status/result/current reads or cleanup. Previous, First,
+Next, Refresh and read Retry each add one preview or result request at the same `P+1≤101` complete-item bound. It
+never scans every page or account-wide labels and adds no smaller native cap. Source bounds are not observed
+byte/growth acceptance.
+
+Focused Web tests cover mounted file admission, three preview windows, independent reader histories, empty selected
+projections with native continuation, exact failed-read retry, immutable review/apply, pending cancellation,
+acknowledged destination retention, current Entry and label-assignment reads, and original request bounds using the
+existing typed native fixture. Existing controller fence and bounded-growth assertions remain. Browser,
+installed-root, byte/caller observations, broader native acceptance and promotion remain integration
+responsibilities.

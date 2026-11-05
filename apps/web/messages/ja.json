@@ -10946,7 +10946,7 @@
   "library_archive_entry_subject": "正規Subjectを開く",
   "library_archive_entry_read_current": "実際の現在情報を読む",
   "library_archive_entry_current": "現在のネイティブ情報",
-  "library_archive_entry_results_refresh": "次の結果ページを読む／更新",
+  "library_archive_entry_results_refresh": "このページを更新",
   "library_archive_entry_cancel": "未開始の効果をキャンセル／再試行",
   "library_archive_entry_expired": "非公開の証拠は期限切れです。受理された変更は残ります。元のコマンドは再試行できません。",
   "library_archive_entry_prune": "期限切れの証拠を最大100件削除",

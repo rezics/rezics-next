@@ -13,6 +13,7 @@ const binding: RecoveryBinding = {
   viewer: 'owner',
   credentialEpoch: 'credential-1',
   csrfEpoch: 'csrf-1',
+  admission: 'admission-1',
   source: 'private-library',
   route: '/library/recover-archive',
   locale: 'en',
@@ -116,6 +117,49 @@ test('Replacing choices refuses a late review; stale native admission requires a
   }
 });
 
+test('Independent reader paths commit empty successes, retry exact failures and cap predecessor offsets at eight', () => {
+  const { visit } = fixture();
+  try {
+    const first = visit.startPage(-1, 'first');
+    expect(visit.admitPage(first, page([{ ordinal: 0, status: 'unresolved' }]))).toBe(true);
+    for (let after = 0; after < 10; after++) {
+      const request = visit.startPage(after, 'next');
+      expect(visit.admitPage(request, page(after === 9 ? [] : [{ ordinal: after + 1, status: 'unresolved' }]))).toBe(
+        true,
+      );
+    }
+    expect(visit.state?.pageNavigation).toMatchObject({
+      current: 9,
+      previous: [1, 2, 3, 4, 5, 6, 7, 8],
+      staged: null,
+    });
+    const failed = visit.startPage(10, 'next');
+    expect(visit.failPage(failed)).toBe(true);
+    expect(visit.state?.pageNavigation).toMatchObject({
+      current: 9,
+      previous: [1, 2, 3, 4, 5, 6, 7, 8],
+      staged: { after: 10, direction: 'next', failed: true },
+    });
+    const retryTarget = visit.state!.pageNavigation.staged!;
+    const retry = visit.startPage(retryTarget.after, retryTarget.direction);
+    expect(visit.admitPage(retry, page([]))).toBe(true);
+    expect(visit.state?.page?.rows).toEqual([]);
+    expect(visit.state?.pageNavigation).toMatchObject({ current: 10, previous: [2, 3, 4, 5, 6, 7, 8, 9] });
+
+    const previewPath = visit.state?.pageNavigation;
+    const resultFirst = visit.startResults(-1, 'first');
+    expect(visit.admitResults(resultFirst, page([]))).toBe(true);
+    expect(visit.state?.resultsNavigation).toMatchObject({ current: -1, previous: [] });
+    expect(visit.state?.pageNavigation).toEqual(previewPath);
+    const resultNext = visit.startResults(0, 'next');
+    expect(visit.admitResults(resultNext, page([]))).toBe(true);
+    expect(visit.state?.resultsNavigation).toMatchObject({ current: 0, previous: [-1] });
+    expect(visit.state?.pageNavigation).toEqual(previewPath);
+  } finally {
+    visit.retire();
+  }
+});
+
 test('Uncertain retry keeps the original immutable intent; cancellation retains acknowledged effects', () => {
   const { visit } = fixture();
   try {
@@ -185,7 +229,7 @@ test('Native recoverable effects keep original operands; terminal failure requir
   }
 });
 
-test('Account, credential, CSRF, source, route, expiry and upload replacement retire private callbacks', () => {
+test('Account, credential, CSRF, source, route, locale, admission, expiry and upload replacement retire callbacks', () => {
   for (const changed of [null, ...Object.keys(binding).map((key) => ({ ...binding, [key]: 'replacement' }))]) {
     const { visit, replace } = fixture();
     const pending = visit.startPage();
@@ -197,6 +241,12 @@ test('Account, credential, CSRF, source, route, expiry and upload replacement re
     replace(binding);
     expect(visit.state).toBeNull();
   }
+  const { visit, replace } = fixture();
+  const pending = visit.startPage();
+  replace({ ...binding, admission: 'admission-b' });
+  replace({ ...binding, admission: 'admission-a-after-b' });
+  expect(visit.admitPage(pending, page([]))).toBe(false);
+  expect(visit.state).toBeNull();
   const { visit, expire } = fixture();
   const pending = visit.startPage();
   const replacement = visit.startUpload();
@@ -220,7 +270,15 @@ test('Evidence expiry keeps accepted outcomes, refuses replay and clears receipt
     visit.settleApply(apply.request, 'recoverable', acknowledged);
     const pending = visit.startResults();
     expire();
-    expect(visit.state).toMatchObject({ phase: 'expired', upload: null, page: null, choices: [], review: null });
+    expect(visit.state).toMatchObject({
+      phase: 'expired',
+      upload: null,
+      page: null,
+      pageNavigation: { current: null, previous: [], staged: null },
+      resultsNavigation: { current: null, previous: [], staged: null },
+      choices: [],
+      review: null,
+    });
     expect(visit.state?.results).toEqual(acknowledged);
     expect(visit.admitResults(pending, page([]))).toBe(false);
     expect(pending.signal.aborted).toBe(true);

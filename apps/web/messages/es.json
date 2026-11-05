@@ -10852,7 +10852,7 @@
   "library_archive_entry_subject": "Abrir Subject canónico",
   "library_archive_entry_read_current": "Leer datos actuales reales",
   "library_archive_entry_current": "Datos nativos actuales",
-  "library_archive_entry_results_refresh": "Leer siguiente página de resultados / actualizar",
+  "library_archive_entry_results_refresh": "Actualizar esta página",
   "library_archive_entry_cancel": "Cancelar efectos no iniciados / reintentar cancelación",
   "library_archive_entry_expired": "Las pruebas privadas han caducado. Los cambios aceptados permanecen en la biblioteca. Ya no se pueden reintentar los comandos originales.",
   "library_archive_entry_prune": "Eliminar hasta 100 pruebas caducadas",

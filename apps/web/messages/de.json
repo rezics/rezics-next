@@ -10852,7 +10852,7 @@
   "library_archive_entry_subject": "Kanonisches Subject öffnen",
   "library_archive_entry_read_current": "Tatsächliche aktuelle Daten lesen",
   "library_archive_entry_current": "Aktuelle native Daten",
-  "library_archive_entry_results_refresh": "Nächste Ergebnisseite lesen / aktualisieren",
+  "library_archive_entry_results_refresh": "Diese Seite aktualisieren",
   "library_archive_entry_cancel": "Nicht gestartete Effekte abbrechen / Abbruch wiederholen",
   "library_archive_entry_expired": "Private Nachweise sind verfallen. Bestätigte Bibliotheksänderungen bleiben. Ursprüngliche Befehle können nicht mehr wiederholt werden.",
   "library_archive_entry_prune": "Bis zu 100 verfallene Nachweise löschen",

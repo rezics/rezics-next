@@ -11,7 +11,12 @@ import {
 } from './native';
 import { selectedArchiveRecoveryResults } from './results';
 import { type RecoverySection } from './selection';
-import { ArchiveRecoveryVisit, type RecoveryBinding, type RecoveryRequest } from './visit';
+import {
+  ArchiveRecoveryVisit,
+  type RecoveryBinding,
+  type RecoveryReadDirection,
+  type RecoveryRequest,
+} from './visit';
 
 type ResultPage = ReturnType<typeof selectedArchiveRecoveryResults>;
 type Confirmation = { uploadId: string; body: ArchiveConfirmation };
@@ -101,13 +106,16 @@ export class ArchiveEntryRecoveryJourney {
     this.#notice =
       reply.kind === 'uncertain' ? 'uncertain' : reply.kind === 'refused' ? `${reply.status}:${reply.code}` : '';
   }
-  #retainAcknowledged(page: ResultPage): ResultPage {
+  #retainAcknowledged(
+    page: ResultPage,
+    selection: readonly Readonly<{ ordinal: number; section: RecoverySection }>[] = this.visit.state!.resultSelection,
+  ): ResultPage {
     const state = this.visit.state!;
     const previous = state.results?.context.uploadId === page.context.uploadId ? state.results.rows : [];
     const accepted = previous.filter(
       (row) =>
         row.status === 'acknowledged' &&
-        state.choices.some((choice) => choice.ordinal === row.ordinal && choice.section === row.section),
+        selection.some((choice) => choice.ordinal === row.ordinal && choice.section === row.section),
     );
     const rows = new Map(page.rows.map((row) => [row.ordinal, row]));
     // A later supplied page cannot erase matching receipts already acknowledged for this selection.
@@ -170,20 +178,37 @@ export class ArchiveEntryRecoveryJourney {
       },
       Math.max(0, Date.parse(status.expiresAt) - Date.now()),
     );
-    await this.#page(-1);
+    await this.#page(-1, 'first');
   }
-  async page(after = -1) {
-    await this.#run(() => this.#page(after));
+  async page(action: RecoveryReadDirection | 'retry' = 'first') {
+    const path = this.visit.state!.pageNavigation;
+    const state = this.visit.state!;
+    if (action === 'retry') {
+      const target = path.staged!;
+      await this.#run(() => this.#page(target.after, target.direction));
+      return;
+    }
+    const after =
+      action === 'first'
+        ? -1
+        : action === 'previous'
+          ? path.previous.at(-1)!
+          : action === 'next'
+            ? state.page!.context.next!
+            : (path.current ?? -1);
+    const direction = action === 'refresh' && path.current === null ? 'first' : action;
+    await this.#run(() => this.#page(after, direction));
   }
-  async #page(after: number) {
-    const request = this.visit.startPage();
-    const reply = await this.#port.preview(this.visit.state!.upload!.id, after, request.signal);
-    if (!this.#current() || request.signal.aborted) return;
+  async #page(after: number, direction: RecoveryReadDirection) {
+    const uploadId = this.visit.state!.upload!.id;
+    const request = this.visit.startPage(after, direction);
+    const reply = await this.#port.preview(uploadId, after, request.signal);
+    if (!this.#current() || this.visit.state?.upload?.id !== uploadId || request.signal.aborted) return;
     this.#feedback(reply);
     if (reply.kind === 'ok') {
       const { records, ...context } = reply.value;
       this.visit.admitPage(request, { rows: records, context });
-    }
+    } else this.visit.failPage(request);
   }
   choose(choice: ArchiveReviewItem) {
     this.visit.choose(choice.ordinal, sectionOf(choice), choice);
@@ -212,8 +237,8 @@ export class ArchiveEntryRecoveryJourney {
         body: { items: reply.value.reviewed.map(({ ordinal, reviewRevision }) => ({ ordinal, reviewRevision })) },
       });
       // Replace only the displayed native page, including its exact immutable review and conflicts.
-      const first = state.page?.rows[0]?.ordinal;
-      if (first !== undefined) await this.#page(first - 1);
+      const currentAfter = state.pageNavigation.current;
+      if (currentAfter !== null) await this.#page(currentAfter, 'refresh');
     });
   }
   async apply() {
@@ -253,24 +278,46 @@ export class ArchiveEntryRecoveryJourney {
       this.visit.settleApply(
         original.request,
         unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete',
-        this.#retainAcknowledged(results),
+        this.#retainAcknowledged(
+          results,
+          state.choices.map(({ ordinal, section }) => ({ ordinal, section })),
+        ),
       );
       if (unresolved) this.#notice = 'uncertain';
       if (this.#cancelRequest && this.#cancelAcknowledged) this.visit.admitCancel(this.#cancelRequest);
     });
   }
-  async results(after = -1) {
-    const request = this.visit.startResults();
+  async results(action: RecoveryReadDirection | 'retry' = 'refresh') {
     const state = this.visit.state!;
+    const path = state.resultsNavigation;
+    if (action === 'retry') {
+      const target = path.staged!;
+      await this.#readResults(target.after, target.direction, state.upload!.id);
+      return;
+    }
+    const after =
+      action === 'first'
+        ? -1
+        : action === 'previous'
+          ? path.previous.at(-1)!
+          : action === 'next'
+            ? state.results!.context.next!
+            : (path.current ?? -1);
+    const direction = action === 'refresh' && path.current === null ? 'first' : action;
+    await this.#readResults(after, direction, state.upload!.id);
+  }
+  async #readResults(after: number, direction: RecoveryReadDirection, uploadId: string) {
+    const request = this.visit.startResults(after, direction);
     await this.#run(async () => {
-      const reply = await this.#port.results(state.upload!.id, after, request.signal);
-      if (!this.#current() || request.signal.aborted) return;
+      const reply = await this.#port.results(uploadId, after, request.signal);
+      if (!this.#current() || this.visit.state?.upload?.id !== uploadId || request.signal.aborted) return;
       this.#feedback(reply);
       if (reply.kind === 'ok')
         this.visit.admitResults(
           request,
-          this.#retainAcknowledged(selectedArchiveRecoveryResults(reply.value, state.choices)),
+          this.#retainAcknowledged(selectedArchiveRecoveryResults(reply.value, this.visit.state!.resultSelection)),
         );
+      else this.visit.failResults(request);
     });
   }
   async status() {

@@ -10864,7 +10864,7 @@
   "library_archive_entry_subject": "打开规范 Subject",
   "library_archive_entry_read_current": "读取实际当前事实",
   "library_archive_entry_current": "当前原生事实",
-  "library_archive_entry_results_refresh": "读取下一页结果／刷新",
+  "library_archive_entry_results_refresh": "刷新此页",
   "library_archive_entry_cancel": "取消未开始的效果／重试取消",
   "library_archive_entry_expired": "私密证据已到期。已接纳的书库更改仍然保留。不能再重试原始命令。",
   "library_archive_entry_prune": "清理最多 100 条到期证据",

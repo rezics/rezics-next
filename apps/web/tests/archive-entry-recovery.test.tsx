@@ -44,6 +44,14 @@ test('Every locale mounts native file admission and explains the supported branc
         m.library_archive_deliberate(),
       ])
         expect(html).toContain(escaped(text));
+      for (const label of [
+        m.library_window_previous(),
+        m.library_archive_entry_first(),
+        m.library_archive_entry_next(),
+        m.library_archive_entry_results_refresh(),
+        m.library_window_retry(),
+      ])
+        expect(label.length).toBeGreaterThan(0);
       expect(html).toMatch(/<input[^>]*type="file"/);
       expect(html).not.toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
       expect(html).toContain('aria-describedby="archive-file-help"');

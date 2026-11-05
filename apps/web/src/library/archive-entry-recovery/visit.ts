@@ -10,6 +10,7 @@ export type RecoveryBinding = Readonly<{
   viewer: string;
   credentialEpoch: string;
   csrfEpoch: string;
+  admission: string;
   source: string;
   route: string;
   locale: string;
@@ -17,6 +18,24 @@ export type RecoveryBinding = Readonly<{
 }>;
 
 type Channel = 'upload' | 'page' | 'review' | 'apply' | 'results' | 'cancel';
+export type RecoveryReadDirection = 'first' | 'previous' | 'next' | 'refresh';
+export type RecoveryReadTarget = Readonly<{
+  after: number;
+  direction: RecoveryReadDirection;
+  failed: boolean;
+}>;
+export type RecoveryReaderPath = Readonly<{
+  current: number | null;
+  previous: readonly number[];
+  staged: RecoveryReadTarget | null;
+  generation: number;
+}>;
+type MutableReaderPath = {
+  current: number | null;
+  previous: number[];
+  staged: RecoveryReadTarget | null;
+  generation: number;
+};
 export type RecoveryRequest = Readonly<{ signal: AbortSignal }>;
 type Pending = { request: RecoveryRequest; abort: AbortController; selectionRevision: number };
 type Phase =
@@ -34,21 +53,37 @@ type Phase =
 export type RecoveryApplyOutcome = 'complete' | 'uncertain' | 'recoverable' | 'stale' | 'failed';
 
 const retainsOriginal = (phase: Phase) => phase === 'uncertain' || phase === 'recoverable';
+const predecessorLimit = 8;
+const emptyReaderPath = (): MutableReaderPath => ({ current: null, previous: [], staged: null, generation: 0 });
+
+function readerPathSnapshot(path: MutableReaderPath): RecoveryReaderPath {
+  return Object.freeze({
+    current: path.current,
+    previous: Object.freeze([...path.previous]),
+    staged: path.staged === null ? null : Object.freeze({ ...path.staged }),
+    generation: path.generation,
+  });
+}
+
+function samePage<Result, Context>(left: RecoveryPage<Result, Context> | null, right: RecoveryPage<Result, Context>) {
+  return left !== null && JSON.stringify(left) === JSON.stringify(right);
+}
 
 const sameBinding = (left: RecoveryBinding, right: RecoveryBinding | null) =>
   right !== null &&
   left.viewer === right.viewer &&
   left.credentialEpoch === right.credentialEpoch &&
   left.csrfEpoch === right.csrfEpoch &&
+  left.admission === right.admission &&
   left.source === right.source &&
   left.route === right.route &&
   left.locale === right.locale &&
   left.exposure === right.exposure;
 
 /**
- * Transport-neutral private custody. The future adapter must supply generated DTOs for these generics,
- * fresh owner admission and the native immutable review operand. This class does not enable upload.
- * The mounted owner must retire on unmount/session events; every access also checks the live binding.
+ * Transport-neutral private custody for the mounted archive visit. The Web adapter supplies generated DTOs,
+ * fresh owner admission and the immutable native review operand; this class fences their private state and reads.
+ * The mounted owner retires it on unmount/session events, and every access also checks the live binding.
  */
 export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageContext = null, ResultContext = null> {
   #binding: RecoveryBinding;
@@ -64,6 +99,10 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   #upload: Readonly<{ id: string; metadata: Upload }> | null = null;
   #page: RecoveryPage<Row, PageContext> | null = null;
   #results: RecoveryPage<Result, ResultContext> | null = null;
+  #pagePath = emptyReaderPath();
+  #resultsPath = emptyReaderPath();
+  #originalSelection: readonly Readonly<{ ordinal: number; section: RecoverySection }>[] | null = null;
+  #resultSelection: readonly Readonly<{ ordinal: number; section: RecoverySection }>[] = [];
   #review: Readonly<{ revision: number; operand: Confirm }> | null = null;
   #original: Confirm | null = null;
   #cancelNeedsCheckpoint = false;
@@ -136,6 +175,10 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     this.#upload = null;
     this.#page = null;
     this.#selection.clear();
+    this.#pagePath = emptyReaderPath();
+    this.#resultsPath = emptyReaderPath();
+    this.#originalSelection = null;
+    this.#resultSelection = [];
     this.#review = null;
     this.#original = null;
     this.#cancelNeedsCheckpoint = false;
@@ -190,16 +233,54 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     if (!this.#upload) throw new Error('upload_required');
   }
 
-  startPage(): RecoveryRequest {
+  startPage(after = -1, direction: RecoveryReadDirection = 'first'): RecoveryRequest {
     this.#requireUpload();
     if (['cancelling', 'cancelled'].includes(this.#phase)) throw new Error('cancelled_visit');
-    return this.#begin('page');
+    const request = this.#begin('page');
+    this.#pagePath.staged = { after, direction, failed: false };
+    return request;
   }
 
   admitPage(request: RecoveryRequest, page: RecoveryPage<Row, PageContext>): boolean {
     if (!this.#accept('page', request)) return false;
     this.#page = ownRecoveryPage(page);
+    this.#admitRead(this.#pagePath);
     return true;
+  }
+
+  failPage(request: RecoveryRequest): boolean {
+    if (!this.#accept('page', request)) return false;
+    this.#failRead(this.#pagePath);
+    return true;
+  }
+
+  #admitRead(path: MutableReaderPath) {
+    const target = path.staged!;
+    if (target.direction === 'first') path.previous = [];
+    else if (target.direction === 'next' && path.current !== null)
+      path.previous = [...path.previous, path.current].slice(-predecessorLimit);
+    else if (target.direction === 'previous') path.previous = path.previous.slice(0, -1);
+    path.current = target.after;
+    path.staged = null;
+    path.generation++;
+  }
+
+  #failRead(path: MutableReaderPath) {
+    const target = path.staged!;
+    path.staged = { ...target, failed: true };
+  }
+
+  #discardRead(path: MutableReaderPath) {
+    path.staged = null;
+  }
+
+  #resetResultsPath(after: number | null) {
+    this.#resultsPath = {
+      current: after,
+      previous: [],
+      staged: null,
+      generation: this.#resultsPath.generation + 1,
+    };
   }
 
   #edit() {
@@ -248,11 +329,13 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed;
     if (this.#phase === 'reviewed' && this.#review?.revision === this.#selection.revision) {
       this.#original = this.#review.operand;
+      this.#originalSelection = this.#selection.choices.map(({ ordinal, section }) => ({ ordinal, section }));
     } else if (!retainsOriginal(this.#phase) && !reconcilingCancellation) {
       throw new Error('fresh_review_required');
     }
     if (this.#original === null) throw new Error('fresh_review_required');
     this.#abort('results');
+    this.#discardRead(this.#resultsPath);
     if (!reconcilingCancellation) this.#phase = 'applying';
     return Object.freeze({ request: this.#begin('apply'), operand: this.#original });
   }
@@ -264,6 +347,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   ): boolean {
     if (!this.#accept('apply', request)) return false;
     this.#abort('results');
+    this.#discardRead(this.#resultsPath);
     const reconcilingCancellation = this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint;
     let admitted: RecoveryPage<Result, ResultContext> | undefined;
     try {
@@ -278,25 +362,46 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       // recoverable responses must keep the exact review/key available for explicit replay.
       if (admitted !== undefined && (outcome === 'complete' || outcome === 'failed')) this.#cancelCheckpointed = true;
     } else this.#phase = outcome;
-    if (admitted !== undefined) this.#results = admitted;
+    if (admitted !== undefined) {
+      const selection =
+        this.#originalSelection === null
+          ? null
+          : this.#originalSelection.map(({ ordinal, section }) => ({ ordinal, section }));
+      const changed =
+        !samePage(this.#results, admitted) ||
+        (selection !== null && JSON.stringify(this.#resultSelection) !== JSON.stringify(selection));
+      this.#results = admitted;
+      if (selection !== null) this.#resultSelection = selection;
+      if (changed) this.#resetResultsPath(-1);
+    }
     if (!reconcilingCancellation && !retainsOriginal(outcome)) {
       this.#original = null;
+      this.#originalSelection = null;
       this.#review = null;
     }
     // Stale admission keeps choices as context, but cannot confirm them again without fresh review.
     return true;
   }
 
-  startResults(): RecoveryRequest {
+  startResults(after = -1, direction: RecoveryReadDirection = 'first'): RecoveryRequest {
     this.#requireUpload();
-    return this.#begin('results');
+    const request = this.#begin('results');
+    this.#resultsPath.staged = { after, direction, failed: false };
+    return request;
   }
 
   admitResults(request: RecoveryRequest, results: RecoveryPage<Result, ResultContext>, checkpointed = false): boolean {
     if (!this.#accept('results', request)) return false;
     this.#results = ownRecoveryPage(results);
+    this.#admitRead(this.#resultsPath);
     if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed && !this.#pending.has('apply'))
       this.#cancelCheckpointed = true;
+    return true;
+  }
+
+  failResults(request: RecoveryRequest): boolean {
+    if (!this.#accept('results', request)) return false;
+    this.#failRead(this.#resultsPath);
     return true;
   }
 
@@ -310,11 +415,16 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       this.#abort('page');
       this.#abort('review');
       this.#abort('results');
+      this.#discardRead(this.#pagePath);
+      this.#discardRead(this.#resultsPath);
     } else {
       this.#abortAll();
+      this.#discardRead(this.#pagePath);
+      this.#discardRead(this.#resultsPath);
       this.#selection.clear();
       this.#review = null;
       this.#original = null;
+      this.#originalSelection = null;
     }
     this.#page = null;
     this.#phase = 'cancelling';
@@ -324,11 +434,14 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
 
   admitCancel(request: RecoveryRequest): boolean {
     if (this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed) return false;
+    const resultSetMayHaveChanged = this.#cancelNeedsCheckpoint || this.#results !== null;
     if (!this.#accept('cancel', request)) return false;
     this.#phase = 'cancelled';
     this.#selection.clear();
     this.#review = null;
     this.#original = null;
+    this.#originalSelection = null;
+    if (resultSetMayHaveChanged) this.#resetResultsPath(-1);
     this.#cancelNeedsCheckpoint = false;
     this.#cancelCheckpointed = false;
     return true;
@@ -339,8 +452,13 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     return Object.freeze({
       upload: this.#upload,
       page: this.#page,
+      pageNavigation: readerPathSnapshot(this.#pagePath),
       choices: this.#selection.choices,
       results: this.#results,
+      resultsNavigation: readerPathSnapshot(this.#resultsPath),
+      resultSelection: Object.freeze(
+        (this.#originalSelection ?? this.#resultSelection).map((choice) => Object.freeze({ ...choice })),
+      ),
       phase: this.#phase,
       review: this.#review?.operand ?? null,
     });
