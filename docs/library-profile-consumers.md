@@ -214,6 +214,7 @@ the command's authorization/acceptance observation `T`. Validate the operation a
 
 - Entry states must be an exact declared state ID. `role` is descriptive semantic mapping; it never renames an ID or
   maps `in_progress` to a new ID.
+- Decision: Subject state choices remain unsent until a compact inline review; only explicit Save delegates a changed state to the existing writer, and keeping the received state emits no command.
 - Progress must use one of `scalar_amount`, `cursor_position`, or `completed_units`, and an allowed exact mode/unit
   pair. Pair metadata is read as data. The algorithms remain those three kernel algorithms.
 - Numeric minimum/maximum comparison is exact decimal-text comparison. Optional precision is 0–6. If precision is
