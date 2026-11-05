@@ -83,6 +83,9 @@ test('recording visit returns to its exact current stream, Context and row; Prev
     const gate = firstRow?.querySelector('details > summary');
     if (!gate) throw new Error('Expected disclosed recording row');
     await act(async () => gate.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+    const inspect = firstRow?.querySelector<HTMLButtonElement>('button');
+    if (!inspect) throw new Error('Expected occurrence inspection control');
+    await act(async () => inspect.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
     const target = Array.from(ui.host.querySelectorAll<HTMLAnchorElement>('a')).find(
       (node) => node.textContent === m.album_tracks_open(),
     )!;
