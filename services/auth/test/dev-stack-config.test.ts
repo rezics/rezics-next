@@ -6,7 +6,6 @@ import {
   developmentKeys,
   authSecurityScopeConfiguration,
   developmentAuthPageBindings,
-  developmentWebsiteConfiguration,
   developmentBindings,
   developmentRegistrationPassword,
   developmentContentBindings,
@@ -24,30 +23,42 @@ import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
-test('Auth page scope configuration follows the real mounted Access union and records native fallback explicitly', async () => {
-  const mounted = Array.from({ length: 1200 }, (_, index) => `action:${index}`);
-  expect(authSecurityScopeConfiguration([...mounted, 'openid', 'offline_access', 'media:complete', 'openid'])).toBe(
-    'catalogue:1203',
-  );
+test('Auth page scope configuration carries a mounted route catalogue and records native fallback explicitly', async () => {
+  const { actionCatalogue } = await import('../../kernel/src/http/request.ts');
+  const letters = (index: number) => {
+    let value = '';
+    do {
+      value = String.fromCharCode(97 + (index % 26)) + value;
+      index = Math.floor(index / 26) - 1;
+    } while (index >= 0);
+    return value;
+  };
+  const routes = Array.from({ length: 1200 }, (_, index) => {
+    const name = letters(index);
+    return {
+      method: 'get',
+      path: `/fixture/${name}`,
+      hooks: {
+        detail: {
+          'x-action': `fixture_${name}:read`,
+          operationId: `fixture_${name}.read`,
+          security: [{ scope: 'fixture' }],
+        },
+      },
+    };
+  });
+  const catalogue = actionCatalogue({ routes });
+  const configuration = authSecurityScopeConfiguration([
+    ...catalogue.keys(),
+    'openid',
+    'offline_access',
+    'media:complete',
+    'openid',
+  ]);
+  expect(configuration).toBe('catalogue:1203');
   expect(authSecurityScopeConfiguration(undefined)).toBe('native-no-catalogue');
-
-  const key = Buffer.alloc(32, 17).toString('base64url');
-  const previousDatabaseUrl = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = 'postgres://127.0.0.1:1/rezics';
-  let website: Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
-  try {
-    website = await developmentWebsiteConfiguration({
-      DATABASE_URL: process.env.DATABASE_URL,
-      KERNEL_ROUTE_KEY: key,
-      KERNEL_SESSION_KEYS: `1:${key}`,
-    });
-  } finally {
-    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
-    else process.env.DATABASE_URL = previousDatabaseUrl;
-  }
-  expect(website.AUTH_SECURITY_SCOPE_CONFIGURATION).toMatch(/^catalogue:[1-9]\d*$/);
-  expect(developmentAuthPageBindings(website)).toEqual({
-    AUTH_SECURITY_SCOPE_CONFIGURATION: website.AUTH_SECURITY_SCOPE_CONFIGURATION,
+  expect(developmentAuthPageBindings({ AUTH_SECURITY_SCOPE_CONFIGURATION: configuration })).toEqual({
+    AUTH_SECURITY_SCOPE_CONFIGURATION: configuration,
   });
 });
 

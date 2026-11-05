@@ -65,6 +65,7 @@ test('native maximum encrypted cursors pass the production inventory BFF validat
       }),
       setResponseHeader() {},
     }));
+    mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' } }));
     globalThis.__AUTH_ORIGIN__ = '';
     const { securityResponseLimits } = await import('@rezics/auth-contract');
     const { securityCursors } = await import('./services/auth/src/security-cursor.ts');
@@ -172,8 +173,12 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
     for (const [chunks, length] of [[[' '.repeat(limit + 1)], undefined], [[' '.repeat(limit >> 1), ' '.repeat((limit >> 1) + 1)], '1']]) {
       const before = calls.length;
       globalThis.fetch = async () => { calls.push('/clients'); return streamed(chunks, length); };
-      expect((await loadInventory('clients')).kind).toBe('unavailable');
-      expect(calls.length === before + 1 && parses === 0).toBe(true);
+      const page = await loadInventory('clients');
+      const callCount = calls.length - before;
+      const parseCount = parses;
+      expect(page.kind).toBe('unavailable');
+      expect(callCount).toBe(1);
+      expect(parseCount).toBe(0);
     }
     JSON.parse = originalParse;
 
