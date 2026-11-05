@@ -56,10 +56,13 @@ const replyDraftBodies: unknown[] = [];
 let submitMockReply: (() => Promise<void>) | undefined;
 let replyResult: unknown = { ok: true, post: { id: 'created-reply' } };
 mock.module('../src/threads/composer', () => ({
+  csrfHeaders: () => ({}),
   draftFetch: (body: unknown) => {
     replyDraftBodies.push(body);
     return globalThis.fetch;
   },
+  editorLabels: () => ({}),
+  InlinePostEditor: () => null,
   PostComposer: (props: MockComposerProps) => {
     mountedComposerProps.push(props);
     const command = {
@@ -94,12 +97,17 @@ mock.module('../src/threads/composer', () => ({
       ),
     );
   },
+  SignInPrompt: () => null,
 }));
 mock.module('../src/threads/actions', () => ({
   replyToThread: async (request: { data: Record<string, unknown>; headers: HeadersInit; fetch: typeof fetch }) => {
     replyWrites.push({ ...request, headers: new Headers(request.headers) });
     return replyResult;
   },
+  erasePost: async () => ({ ok: false, reason: 'unavailable' }),
+  restorePost: async () => ({ ok: false, reason: 'unavailable' }),
+  revisePost: async () => ({ ok: false, reason: 'unavailable' }),
+  startThread: async () => ({ ok: false, reason: 'unavailable' }),
 }));
 
 const { AccountPosts } = await import('../src/features/pages/account');
