@@ -84,7 +84,9 @@ export function anonymousPreviewFetch(fetcher: typeof fetch): typeof fetch {
     headers.delete('authorization');
     headers.delete('cookie');
     headers.delete(SESSION_HEADER);
-    return fetcher(new Request(request, { headers, credentials: 'omit', cache: 'no-store', redirect: 'manual' }));
+    const anonymous = { credentials: 'omit', cache: 'no-store', redirect: 'manual' } as const;
+    // Bun's Request.credentials does not retain omit; carry it explicitly to the actual fetch call too.
+    return fetcher(new Request(request, { headers, ...anonymous }), anonymous);
   }) as typeof fetch;
 }
 

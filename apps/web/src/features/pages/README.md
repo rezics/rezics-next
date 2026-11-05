@@ -315,4 +315,4 @@ Close, target edits, locale/read-adapter replacement and unmount retire it; reop
 An aborted aggregate starts no profile controls. The two fixed concurrent controls share its signal and retain the
 immutable digest/template witness and separately observed active-head checks. Abort is best effort: serial and
 current-context fences still discard retired results, and native failure semantics remain unchanged. The transport
-strips credentials at the boundary with omit/manual/no-store; inspection never shares viewer or page query caches.
+strips credentials at the boundary with explicit omit/manual/no-store fetch options; inspection never shares viewer or page query caches.

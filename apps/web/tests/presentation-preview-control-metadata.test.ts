@@ -49,9 +49,11 @@ test.each(['aggregate', 'controls'] as const)('cancels anonymous %s reads and re
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const requests: Request[] = [];
+  const credentials: (RequestCredentials | undefined)[] = [];
   const client = presentationPreviewClient('https://kernel.invalid', (async (input, init) => {
     const request = new Request(input, init);
     requests.push(request);
+    credentials.push(init?.credentials);
     if (requests.length === (phase === 'aggregate' ? 1 : 3)) entered.resolve();
     if (phase === 'aggregate' || !request.url.endsWith('/pages:read')) {
       await release.promise;
@@ -73,11 +75,12 @@ test.each(['aggregate', 'controls'] as const)('cancels anonymous %s reads and re
   release.resolve();
   expect(await pending).toEqual({ ok: false, reason: 'unavailable' });
   expect(requests).toHaveLength(phase === 'aggregate' ? 1 : 3);
+  expect(credentials).toEqual(requests.map(() => 'omit'));
   for (const request of requests) {
     expect(request.headers.has('authorization')).toBe(false);
     expect(request.headers.has('cookie')).toBe(false);
     expect(request.headers.has(SESSION_HEADER)).toBe(false);
-    expect([request.credentials, request.redirect, request.cache]).toEqual(['omit', 'manual', 'no-store']);
+    expect([request.redirect, request.cache]).toEqual(['manual', 'no-store']);
   }
   const fresh = new AbortController();
   expect(await loadPresentationPreview(client, input, fresh.signal)).toMatchObject({ ok: true, head: 17 });
