@@ -644,8 +644,20 @@ test('lost score acknowledgements reconcile the original credential and exact na
 
 test('an original score intent cannot admit a fresh effect after source change, cancellation, expiry or removal', async () => {
   const c = await sameHomeScoreCaller();
-  for (const change of ['source', 'review', 'match', 'own-vote', 'question', 'meaning', 'cancel', 'expire', 'remove']) {
-    const { uploadId } = await c.send('POST', base + ':preview', { xml: xml(vn('v999999999994', '<vote>7.3</vote>')) });
+  for (const change of [
+    'source',
+    'review',
+    'match',
+    'own-vote',
+    'question',
+    'meaning',
+    'scale',
+    'cancel',
+    'expire',
+    'remove',
+  ]) {
+    const externalId = `v${Date.now()}${Math.floor(Math.random() * 100000)}`;
+    const { uploadId } = await c.send('POST', base + ':preview', { xml: xml(vn(externalId, '<vote>7.3</vote>')) });
     const chosen = await c.scoreReview(uploadId, 14);
     await expect(
       c.service.apply(c.actor, uploadId, [{ ordinal: 0, scoreReviewId: chosen.reviewId }], () => {
@@ -707,6 +719,10 @@ test('an original score intent cannot admit a fresh effect after source change, 
       );
     if (change === 'question')
       await f.pool.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+    if (change === 'scale')
+      await f.pool.query('UPDATE rating.question SET maximum_units=maximum_units+1 WHERE id=$1', [
+        STANDARD_QUESTION_ID,
+      ]);
     if (change === 'cancel') await c.send('POST', `${base}/${uploadId}:cancel`);
     if (change === 'expire')
       await f.pool.query(
