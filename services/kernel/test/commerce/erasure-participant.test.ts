@@ -17,6 +17,7 @@ import {
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { accessCheck } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -217,15 +218,45 @@ beforeAll(async () => {
     if (method === 'POST' && path === '/v1/boards' && response.status !== 201) {
       const title = (body as { title: string }).title;
       const diagnostic = await pool.query(
-        `SELECT b.route,b.board_id,b.subject_id,b.visibility,
-          (SELECT array_agg(grant_role) FROM access.resource_role_grant r
+        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.availability,
+          (SELECT json_agg(json_build_object('role',grant_role,'valid',valid::text,'current',valid @> clock_timestamp()))
+           FROM access.resource_role_grant r
            WHERE r.route=b.route AND r.resource_id=b.board_id AND r.subject_id=$2) AS roles,
           (SELECT array_agg(action) FROM access.resource_grant g
-           WHERE g.route=b.route AND g.resource_id=b.board_id AND g.subject_id=$2) AS actions
+           WHERE g.route=b.route AND g.resource_id=b.board_id AND g.subject_id=$2) AS actions,
+          (SELECT state FROM access.account a WHERE a.route=$3 AND a.account_id=$2) AS account_state
          FROM content.board b WHERE b.title=$1 ORDER BY b.created_at DESC LIMIT 1`,
-        [title, seller.accountId],
+        [title, seller.accountId, routeOf(seller.accountId)],
       );
-      console.error('Native board visibility diagnostic', JSON.stringify(diagnostic.rows));
+      const row = diagnostic.rows[0];
+      const actor = await kernel.testAccess.authenticate(seller.bearer, { pool, deadline: Date.now() + 30_000 });
+      const boardAllowed = await (
+        await accessCheck(
+          kernel.testAccess,
+          actor,
+          'board:read',
+          { route: row.route, id: row.board_id },
+          { pool, deadline: Date.now() + 30_000 },
+        )
+      )(pool);
+      const subjectAllowed = await (
+        await accessCheck(
+          kernel.testAccess,
+          actor,
+          'subject:read',
+          { route: routeOf(row.subject_id)!, id: row.subject_id },
+          { pool, deadline: Date.now() + 30_000 },
+        )
+      )(pool);
+      console.error(
+        'Native board visibility diagnostic',
+        JSON.stringify({
+          row,
+          actor: actor.kind === 'account' ? actor.accountId : actor.kind,
+          boardAllowed,
+          subjectAllowed,
+        }),
+      );
     }
     return response;
   });
