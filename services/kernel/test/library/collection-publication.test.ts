@@ -4,6 +4,8 @@ import type { PoolClient } from 'pg';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
+import { COLLECTION_PUBLICATION_STEP_CEILING } from '../../src/library/collection-publication-bounds.ts';
+import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
 
 let f: CollectionRulesFixture;
 beforeAll(async () => {
@@ -308,3 +310,9 @@ test('closed explicit intent rejects omission, duplicates and manufactured proof
   const builtin = builtinCollectionId(f.runtime.identity.ordinary.accountId, { kind: 'everything' });
   expect((await f.send('POST', path(builtin), input)).status).toBe(404);
 }, 120_000);
+
+test('selected-publication command bounds stay distinct from the activated public output original command', () => {
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.engineRequests).toBe(0);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.nativeRows).not.toBe(COLLECTION_PUBLICATION_STEP_CEILING.nativeRows);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.bytes).toBeLessThan(COLLECTION_PUBLICATION_STEP_CEILING.bytes);
+});

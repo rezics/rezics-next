@@ -10,6 +10,7 @@ import {
 import { COLLECTION_SOURCE_WORK_COST } from '../../src/library/collection-source-work-native.ts';
 import { MEMBERS_DEFINITION_QUERY_BOUNDS } from '../../src/search/scope-members-work-cost.ts';
 import { MEMBERS_SELECTED_CHILDREN } from '../../src/library/members-preparation-work.ts';
+import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
 
 test('the selected Members Source has a complete static bound for the declared call paths', () => {
   expect(MEMBERS_PREPARATION_SOURCE_AXES).toEqual([
@@ -40,4 +41,10 @@ test('the selected Members Source has a complete static bound for the declared c
     byteMultiplier: 6,
     fixedBytes: 1024,
   });
+});
+
+test('activated public output plans are independent of the selected Members Source cost declaration', () => {
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.engineRequests).toBe(0);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING).not.toEqual(MEMBERS_PREPARATION_SOURCE_COST);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.nativeRows).not.toBe(MEMBERS_PREPARATION_SOURCE_COST.nativeRows);
 });

@@ -3,6 +3,7 @@ import type { NativeCollectionWork } from './collection-source-work.ts';
 import { libraryIdentityFootprint } from './identity-native-planner-work.ts';
 import { nativeCollectionFootprint } from './collection-source-native.ts';
 import { nativeSourceCustodyFootprint } from './native-source-custody.ts';
+import { nativePublicOutputFootprint } from './native-public-output-work.ts';
 import {
   declareNativeIdentitySourceBasisStatements,
   libraryIdentitySelectedFootprint,
@@ -11,7 +12,7 @@ import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from './identity-native-planner-
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 
 /** Producer composition only. A component is neither an allowance nor an original grant. */
-export type LibraryIdentityStatementOwner = 'planner' | 'native-collection' | 'native-custody';
+export type LibraryIdentityStatementOwner = 'planner' | 'native-collection' | 'native-custody' | 'native-public-output';
 const axes = [
   'candidateKeys',
   'nativeRows',
@@ -62,7 +63,9 @@ export function declareLibraryIdentityStatement(
         ? nativeCollectionFootprint(sql, values, work)
         : owner === 'native-custody'
           ? nativeSourceCustodyFootprint(sql, values)
-          : undefined;
+          : owner === 'native-public-output'
+            ? nativePublicOutputFootprint(sql, values, work)
+            : undefined;
   return bound ? declared(bound) : undefined;
 }
 

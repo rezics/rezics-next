@@ -283,18 +283,9 @@ export async function readNativePublicCollectionOutput(
       (sql, values) => nativePublicOutputFootprint(sql, values, work),
       () =>
         withConnection(pool, async (client) => {
-          const begin = {
-            text: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-            query_timeout: Math.max(1, options.deadline - Date.now()),
-          };
-          await client.query(begin);
+          const metered = nativePublicOutputClient(client, work, options.deadline);
+          await metered.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
-            const metered = {
-              query: (async (sql: string, values: unknown[] = []) => {
-                const request = { text: sql, values, query_timeout: Math.max(1, options.deadline - Date.now()) };
-                return client.query(request);
-              }) as PoolClient['query'],
-            };
             const stored = await byIdentity(metered, identity, false);
             let result: PublicOutputPage;
             if (!stored || !(await committed(metered, stored))) result = refusal(work);
@@ -321,11 +312,11 @@ export async function readNativePublicCollectionOutput(
                 };
               }
             }
-            await client.query('COMMIT');
+            await metered.query('COMMIT');
             return { ...result, work: work.receipt() };
           } catch (error) {
             try {
-              await client.query('ROLLBACK');
+              await metered.query('ROLLBACK');
             } catch (cleanup) {
               discardConnection(
                 client,

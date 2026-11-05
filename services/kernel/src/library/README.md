@@ -2,6 +2,8 @@
 
 Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative.
 
+Decision: an activated public Collection output is retained through its original native command using one closed Library descriptor. `native-public-output-bounds.ts` owns the nine-axis SQL plans, bind/projection maxima and journey sums; the adapter executes those same named statements. `engineRequests` is zero at this SQL adapter, and older eight-axis receipts are an explicit translation. Observed row count cannot replace the plan-node bound. A changed source, publication or receiving epoch refuses current admission without an empty page or erasing a committed hold. Transfer consumes the original only from the existing native successor receipt; a fabricated successor is unavailable. Search receiving checks stay independent of these Source cost declarations. Fewest tests: four causal Library cases in the existing suites plus descriptor refusals; Search's five receiving checks stay unchanged.
+
 The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-witness/3-seek/12-statement/80-KiB term plus `c` repetitions of 16 rows, 8 points, 8 witnesses and 5,120 bytes. The fixed term includes initial/final Source preparation and currentness, identity and authority checks, and transaction controls; the per-candidate term includes canonical membership and negative/order work. The existing plan caps pages at three prefix rounds, 100 groups per prefix, 100 aliases per canonical group and six Source drivers. FULL adds at most 100 repetitions of its 32-row/2-identity-row/8-point/12-statement/64-KiB facts term. `engineRequests` is zero for this SQL-only Library plan; the adapter rejects a nonzero value rather than folding it into the older eight-axis SQL observer. `owner-filter-growth.test.ts` is the named growth oracle; this declaration does not claim native acceptance.
 
 transport-contract.ts owns the public Progress session and Continue response schemas consumed by
@@ -147,6 +149,13 @@ Current implementation evidence is narrower than the capability:
   at the current Collection source fence; it never reads live private facts. Missing/pending output and headerless
   references remain unavailable. These helpers do not implement the shared members service or the adopted complete
   indexed filter/identity plan.
+- `native-public-output-custody.ts` is the original-command consumer of that activated public output. Observation,
+  lock, bind-and-hold, retained revalidation, successor transfer and exact release share one descriptor with the
+  SQL adapter. Current, retained, transferred, released and unavailable outcomes use the existing contract types.
+  Revalidation cannot create a missing hold. Partition node projection requires a same-snapshot size admission.
+  Identity-plan, selected-publication, whole-query and account `active_explicit_output` capture keep their own
+  scopes. Disposition ports that are not installed stay unavailable. Retirement hooks remain additive: exact owner
+  lock, partition share lock and collection/output hold blockers.
 - `builtin-identity.ts` deterministically derives Everything/state IDs. `builtin-reference-store.ts` binds exact
   entry witnesses; it does not prove copy/session-only whole-state-set support, all siblings or writer coverage.
   These helpers implement neither Liked identity nor its Content reaction integration.
