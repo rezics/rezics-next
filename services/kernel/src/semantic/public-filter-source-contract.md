@@ -702,7 +702,10 @@ compose original terminal verification, independent Search settlement and the in
 
 The first request is `NativePublicFilterPublication = Readonly<{job: string; bootstrap: string;
 queried: PublicFilterQueriedObservation; execution: string}>`, after actual Search retention and before dispatch
-or adoption uncertainty. Resume with `{job: string}`. Source checks the actual `search.generation_publication`
+or adoption uncertainty. The retained bootstrap snapshot kind must match the exact Search observation kind.
+Search may provide a deterministic bootstrap locator equal to the existing publication job UUID; Source retains
+that original locator and exposes it to completion as `0:<job>`.
+Resume with `{job: string}`. Source checks the actual `search.generation_publication`
 job, binding and physical consumer/incarnation and retains only locators on its existing bootstrap. Restart
 resolves and adopts that same observation, without a latest-observation lookup or a new cut.
 The callable advances only the existing bounded per-home settlement/ACK frontier. Search independently reads

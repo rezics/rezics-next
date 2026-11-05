@@ -1044,6 +1044,7 @@ export function createPublicFilterCustody(
       const input = decode<typeof request>(encode(request));
       lifetime(input.keepAliveMs);
       text(input.covered.observation);
+      if (input.generationPublication) text(input.generationPublication.job);
       return run(context, async (meter) => {
         const consumer = await registered(input.registration, meter);
         if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
@@ -1061,21 +1062,45 @@ export function createPublicFilterCustody(
           if (opened._shards.failed) throw new Failure('observation_lost');
           if ((await native(search, meter, context, consumer.physicalTarget)) !== consumer.incarnation)
             throw new Failure('binding_mismatch');
-          return await retain(
-            input.registration,
-            {
-              consumer,
-              snapshot: {
-                kind: 'pit',
-                observation: `${input.registration.partition}:${randomUUID()}`,
-                pit: opened.pit_id,
-              },
+          const queried: PublicFilterQueriedObservation = {
+            consumer,
+            snapshot: {
+              kind: 'pit',
+              observation: `${input.registration.partition}:${randomUUID()}`,
+              pit: opened.pit_id,
             },
-            input.covered,
-            openedAt + input.keepAliveMs,
-            null,
-            meter,
-          );
+          };
+          return await transaction(meter, async (client) => {
+            const retained = await retain(
+              input.registration,
+              queried,
+              input.covered,
+              openedAt + input.keepAliveMs,
+              null,
+              meter,
+              client,
+            );
+            if (input.generationPublication) {
+              const { job, consumer: expected } = input.generationPublication;
+              const linked = await sql(
+                client,
+                meter,
+                `UPDATE search.generation_publication SET observation=$2
+                 WHERE partition_no=0 AND job=$1::uuid AND physical_target=$3 AND consumer=$4::jsonb
+                   AND native_incarnation=$5 AND (observation IS NULL OR observation=$2)
+                 RETURNING job`,
+                [
+                  job,
+                  queried.snapshot.observation,
+                  expected.physicalTarget,
+                  encode(expected),
+                  expected.incarnation,
+                ],
+              );
+              if (!linked.rowCount) throw new Failure('binding_mismatch');
+            }
+            return retained;
+          });
         } catch (error) {
           await deletePit(opened.pit_id, search, context, meter);
           throw error;
@@ -1788,7 +1813,7 @@ export async function readGenerationPublicationCustody(
   consumer: PublicFilterConsumer,
   sourceHome: number | undefined,
   context: PublicFilterConsumerContext,
-  observation?: string,
+  observation?: string | null,
 ): Promise<
   | Readonly<{
       definition: CustodyRetainedDefinition;
@@ -1817,7 +1842,9 @@ export async function readGenerationPublicationCustody(
     const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
     requireValue(definition.digest === digest(definition.data));
     const found =
-      observation === undefined
+      observation === null
+        ? { rows: [] as { queried: string }[] }
+        : observation === undefined
         ? await sql(
             pool,
             meter,

@@ -1901,10 +1901,11 @@ the affected home, and physical recreation invalidates the entire old job.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
-barrier. Current Source evidence comes from an existing immutable custody observation, the selected native
-binding join and canonical all-native-homes Source observation. Missing custody, routing, Source or native
-barrier evidence returns typed unready; no observation readiness is minted here. Old PIT/prepared observations
-remain bound to their own exact physical target and definition.
+barrier. Generation publication pins one deterministic Source bootstrap to the Search job UUID and stores the
+exact retained observation and execution in existing native custody. Semantic's original completion verifies
+Source terminal repair and all-home disclosure facts; Search independently reads the same execution settlement
+before the writer fence can release. Historical changed facts remain disclosure barriers while allowing verified
+maintenance to finish; they never authorize an old-execution read.
 
 Publication persists native fencing invocation intent before requesting the gate, and alias intent, including
 the previous physical target/UUID, before the native alias switch. A lost fence response resolves through the
@@ -1927,10 +1928,9 @@ takes the same admission lock and refuses creation while this fence is held. Dis
 draining; neither an elapsed deadline nor an ordinary writer scan supplies missing Source proof. No native or
 public-runtime acceptance pass is inferred from compilation.
 
-Decision: Search accepts generation-publication completion only from Semantic's delivered original native
-Source completion for the persisted job and cut. Consumer checkpoints, counts, Account-erasure barriers and
-elapsed time do not satisfy the fence; activation stays pending until that callable is delivered, joined and
-verified.
+Decision: generation publication keeps a job-keyed original Source bootstrap and exact Search observation and
+execution, resumes that tuple through Semantic completion plus independent Search settlement under the writer
+fence, and preserves changed facts as disclosure barriers while maintenance completes.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
 steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
