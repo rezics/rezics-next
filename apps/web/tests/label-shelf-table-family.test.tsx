@@ -409,6 +409,14 @@ test('received-assignment reading keeps exact supplied values, bounded compariso
   const { subjectHref } = await import('../src/subject/subject-href');
   const { m } = await import('../src/paraglide/messages.js');
   const { createRoot } = await import('react-dom/client');
+  const { ConsolidationSelection } = await import('../src/library/label-consolidation/selection');
+  const mutationSelection = new Set([rows[0]!.id]);
+  const changedMutationSelection = mock(() => {});
+  const consolidationProps = (row: LabelShelfEntry) => ({
+    selectable: true,
+    selected: mutationSelection.has(row.id),
+    onSelectedChange: changedMutationSelection,
+  });
   const entries: LabelShelfEntry[] = [
     {
       ...rows[0]!,
@@ -451,17 +459,21 @@ test('received-assignment reading keeps exact supplied values, bounded compariso
   const render = async (received = entries) => {
     await act(async () =>
       root.render(
-        createElement(LabelShelfEntries, {
-          entries: received,
-          label,
-          locale: readingLocale,
-          layout,
-          size: 'm',
-          csrfToken: null,
-          isCurrent: () => false,
-          readIsCurrent: () => readAdmitted,
-          readObservation: pageObservation,
-        }),
+        createElement(
+          ConsolidationSelection.Provider,
+          { value: consolidationProps },
+          createElement(LabelShelfEntries, {
+            entries: received,
+            label,
+            locale: readingLocale,
+            layout,
+            size: 'm',
+            csrfToken: null,
+            isCurrent: () => false,
+            readIsCurrent: () => readAdmitted,
+            readObservation: pageObservation,
+          }),
+        ),
       ),
     );
   };
@@ -523,6 +535,9 @@ test('received-assignment reading keeps exact supplied values, bounded compariso
       expect(reader()).toBeNull();
       expect(window.document.activeElement).toBe(opening);
       expect(entries).toEqual(originalRows);
+      expect(changedMutationSelection).not.toHaveBeenCalled();
+      expect([...mutationSelection]).toEqual([rows[0]!.id]);
+      expect(host.querySelector('[role="checkbox"][aria-checked="true"]')).not.toBeNull();
       expect(requests).not.toHaveBeenCalled();
 
       // Display changes preserve the exact observation; a replaced opening control uses the stable shelf fallback.
@@ -562,7 +577,7 @@ test('received-assignment reading keeps exact supplied values, bounded compariso
         expect(reader()).toBeNull();
         await read(0);
         expect(reader()!.textContent).toContain(label.name);
-        expect(reader()!.querySelector('h3')?.getAttribute('lang')).toBe('ja');
+        expect(reader()!.querySelector('h3')?.getAttribute('lang')).toBe(locale === 'ja' ? null : 'ja');
       }
     } finally {
       requests.mockRestore();
