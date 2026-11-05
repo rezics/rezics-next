@@ -161,7 +161,12 @@ function CorrectionRoute(): ReactElement {
   const generalSubjectHref = `${subjectHref({ id, label: slug }, locale).href}#connections`;
   const freshGlobalHref =
     visit.kind === 'origin'
-      ? factsGlobalVisitHref(`${subjectHref({ id, label: slug }, locale).href}/edit`, id, locale, visit.origin.returnHref)
+      ? factsGlobalVisitHref(
+          `${subjectHref({ id, label: slug }, locale).href}/edit`,
+          id,
+          locale,
+          visit.origin.returnHref,
+        )
       : undefined;
   const candidateWork = useCandidateWork(JSON.stringify([id, locale, visitIdentity]));
   const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property, statement, visitIdentity]));

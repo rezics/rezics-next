@@ -52,7 +52,12 @@ test('Facts public visits keep the address closed and leave exact-review search 
   const realmHref = factsPublicCorrectionHref(base, addonProfileId, 'en', realmOrigin);
   const realmVisit = parseFactsPublicVisit(new URL(realmHref, 'https://site.test').search, addonProfileId, 'en', base);
   expect(factsPublicVisitUnsupported(realmVisit)).toBe(true);
-  const freshHref = factsGlobalVisitHref(base, addonProfileId, 'en', realmVisit.kind === 'origin' ? realmVisit.origin.returnHref : '');
+  const freshHref = factsGlobalVisitHref(
+    base,
+    addonProfileId,
+    'en',
+    realmVisit.kind === 'origin' ? realmVisit.origin.returnHref : '',
+  );
   expect(parseFactsPublicVisit(new URL(freshHref, 'https://site.test').search, addonProfileId, 'en', base)).toEqual({
     kind: 'fresh',
     returnHref: `${publicHref}?realm=${addonWorkId}#connections`,
@@ -72,11 +77,15 @@ test('Facts public visits keep the address closed and leave exact-review search 
     `${publicHref}${'界'.repeat(700)}`,
   ]) {
     const invalidHref = factsPublicCorrectionHref(base, addonProfileId, 'en', { ...observed, returnHref });
-    expect(parseFactsPublicVisit(new URL(invalidHref, 'https://site.test').search, addonProfileId, 'en', base)).toEqual({
-      kind: 'invalid',
-    });
+    expect(parseFactsPublicVisit(new URL(invalidHref, 'https://site.test').search, addonProfileId, 'en', base)).toEqual(
+      {
+        kind: 'invalid',
+      },
+    );
   }
-  expect(parseFactsPublicVisit(new URL(href, 'https://site.test').search + '&origin=!', addonProfileId, 'en', base)).toEqual({
+  expect(
+    parseFactsPublicVisit(new URL(href, 'https://site.test').search + '&origin=!', addonProfileId, 'en', base),
+  ).toEqual({
     kind: 'invalid',
   });
   expect(parseFactsPublicVisit('?origin%ZZ=!', addonProfileId, 'en', base)).toEqual({ kind: 'invalid' });
@@ -103,9 +112,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
       value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name),
     });
   const { createRoot } = await import('react-dom/client');
-  const { waitFor } = await import(
-    createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom')
-  );
+  const { waitFor } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale();
@@ -147,7 +154,14 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
   window.document.body.append(host);
   const root = createRoot(host);
   const Content = createContext<ReactNode>(null);
-  const rootRoute = createRootRoute({ component: () => <>{useContext(Content)}<Outlet /></> });
+  const rootRoute = createRootRoute({
+    component: () => (
+      <>
+        {useContext(Content)}
+        <Outlet />
+      </>
+    ),
+  });
   Route.update({
     id: '/subjects/$id_/$slug_/edit',
     path: '/subjects/$id/$slug/edit',
@@ -191,11 +205,13 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     location: { searchStr: string; hash: string };
   }) => Promise<unknown>;
   const load = (slug: string, href: string) =>
-    loader({ params: { id: addonProfileId, slug }, location: { searchStr: new URL(href, 'https://site.test').search, hash: '' } });
+    loader({
+      params: { id: addonProfileId, slug },
+      location: { searchStr: new URL(href, 'https://site.test').search, hash: '' },
+    });
 
   try {
-    const direct =
-      <SubjectFactsEntry id={addonProfileId} label={label} locale="en" origin={observed} />;
+    const direct = <SubjectFactsEntry id={addonProfileId} label={label} locale="en" origin={observed} />;
     await renderNode(direct);
     expect(host.querySelector<HTMLAnchorElement>('a')?.getAttribute('href')).toBe(originHref);
     const collected = collectEditorialEntries(direct).entries;
@@ -215,8 +231,18 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
 
     const visitValidator = Route.options.validateSearch as (input: Record<string, unknown>) => Record<string, unknown>;
     expect(
-      visitValidator({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'queue' }),
-    ).toMatchObject({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'queue' });
+      visitValidator({
+        reviewProperty: 'schema:abstract',
+        candidate: addonWorkId,
+        context: addonWorkId,
+        returnTo: 'queue',
+      }),
+    ).toMatchObject({
+      reviewProperty: 'schema:abstract',
+      candidate: addonWorkId,
+      context: addonWorkId,
+      returnTo: 'queue',
+    });
     expect(visitValidator({ origin: 'untrusted-raw-origin' })).toMatchObject({ origin: 'untrusted-raw-origin' });
     const changesReview = visitValidator({
       reviewProperty: 'schema:abstract',
@@ -228,7 +254,9 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(changesReview.reviewInvalid).toBeFalsy();
     expect(visitValidator({ property: 'schema:abstract', returnTo: 'sources' })).toMatchObject({ returnTo: 'sources' });
     const visitLoaderDeps = Route.options.loaderDeps as (input: { search: Record<string, unknown> }) => unknown;
-    expect(visitLoaderDeps({ search: { origin: 'observed', publicReturn: '/en/subjects/example#connections' } })).toEqual({
+    expect(
+      visitLoaderDeps({ search: { origin: 'observed', publicReturn: '/en/subjects/example#connections' } }),
+    ).toEqual({
       origin: 'observed',
       publicReturn: '/en/subjects/example#connections',
     });
@@ -254,7 +282,9 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
 
     const fresh = host.querySelector<HTMLAnchorElement>('a[href*="publicReturn="]')?.getAttribute('href');
     expect(fresh).toBeTruthy();
-    expect(parseFactsPublicVisit(new URL(fresh!, 'https://site.test').search, addonProfileId, 'en', base).kind).toBe('fresh');
+    expect(parseFactsPublicVisit(new URL(fresh!, 'https://site.test').search, addonProfileId, 'en', base).kind).toBe(
+      'fresh',
+    );
     await navigate(fresh!);
     expect(router.state.location.searchStr).toBe(new URL(fresh!, 'https://site.test').search);
     await waitFor(() => expect(correctionReads.length).toBeGreaterThan(0));

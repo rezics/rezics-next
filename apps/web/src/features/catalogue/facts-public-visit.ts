@@ -26,12 +26,7 @@ export function factsPublicIntentFits(value: string): boolean {
 }
 
 function publicReturn(value: unknown, subject: string, locale: string): { href: string; realm?: string } | undefined {
-  if (
-    typeof value !== 'string' ||
-    !factsPublicIntentFits(value) ||
-    !value.startsWith('/') ||
-    value.startsWith('//')
-  )
+  if (typeof value !== 'string' || !factsPublicIntentFits(value) || !value.startsWith('/') || value.startsWith('//'))
     return;
   const href = subjectVisitReturn(value, locale);
   if (!href || !factsPublicIntentFits(href)) return;
@@ -94,12 +89,7 @@ export function factsPublicCorrectionHref(
 }
 
 /** A deliberate fresh Global visit keeps only the already validated public return. */
-export function factsGlobalVisitHref(
-  base: string,
-  subject: string,
-  locale: string,
-  returnHref: string,
-): string {
+export function factsGlobalVisitHref(base: string, subject: string, locale: string, returnHref: string): string {
   const returned = publicReturn(returnHref, subject, locale);
   if (!returned) return `${base}?publicReturn=!`;
   const href = `${base}?${new URLSearchParams({ publicReturn: returned.href })}`;
