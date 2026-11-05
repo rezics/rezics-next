@@ -1,5 +1,12 @@
 import { createFileRoute, notFound, useLocation } from '@tanstack/react-router';
 import { GraphBrowserSession } from '../../features/pages/graph-browser/session';
+import {
+  graphPublicPath,
+  graphPublicVisitReturn,
+  graphPublicVisitUnsupported,
+  parseGraphPublicVisit,
+} from '../../features/pages/graph-browser/public-visit';
+import { GraphPublicVisitNotice } from '../../features/pages/graph-browser/public-visit-view';
 import type { GraphBrowserRouteState } from '../../features/pages/graph-browser';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -27,7 +34,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug/graph')({
       throw notFound();
     if (
       (node !== undefined && edge !== undefined) ||
-      ((from !== undefined || to !== undefined || edgeProperty !== undefined) && edge === undefined)
+      ((from !== undefined || to !== undefined || edgeProperty !== undefined) && edge === undefined) ||
+      (edge !== undefined && (from === undefined || to === undefined || edgeProperty === undefined))
     )
       throw notFound();
     return {
@@ -40,6 +48,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug/graph')({
       to: typeof to === 'string' ? to : undefined,
       edgeProperty: typeof edgeProperty === 'string' ? edgeProperty : undefined,
       realm: validatePageRealm(search.realm),
+      origin: search.origin === undefined ? undefined : typeof search.origin === 'string' ? search.origin : '!',
+      publicReturn:
+        search.publicReturn === undefined
+          ? undefined
+          : typeof search.publicReturn === 'string'
+            ? search.publicReturn
+            : '!',
     };
   },
   head: () => ({ meta: [{ title: m.graph_explore_title() }, { name: 'robots', content: 'noindex,follow' }] }),
@@ -51,14 +66,25 @@ function GraphRoute() {
   const { property, direction, depth, node, edge, from, to, edgeProperty } = Route.useSearch();
   const location = useLocation();
   const navigate = Route.useNavigate();
+  const locale = getLocale();
+  const graphPath = graphPublicPath(location.pathname, locale);
+  const visit = parseGraphPublicVisit(location.searchStr, location.hash, id, locale, graphPath);
+  if (visit?.kind === 'invalid' || graphPublicVisitUnsupported(visit))
+    return (
+      <GraphPublicVisitNotice
+        locale={locale}
+        path={graphPath}
+        visit={visit ?? { kind: 'invalid' }}
+      />
+    );
   function updateGraphState(state: GraphBrowserRouteState) {
     return navigate({ search: (previous) => ({ ...previous, ...state }) });
   }
   return (
     <GraphBrowserSession
-      key={`${id}:${getLocale()}`}
+      key={JSON.stringify([id, locale, visit])}
       id={id}
-      locale={getLocale()}
+      locale={locale}
       property={property}
       direction={direction}
       depth={depth}
@@ -67,7 +93,9 @@ function GraphRoute() {
       from={from}
       to={to}
       edgeProperty={edgeProperty}
-      graphPath={location.pathname}
+      visit={visit}
+      publicReturnHref={graphPublicVisitReturn(visit)}
+      graphPath={graphPath}
       onNavigate={updateGraphState}
     />
   );

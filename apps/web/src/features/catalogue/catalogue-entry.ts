@@ -9,6 +9,7 @@ import { addonPublicCorrectionHref, type AddonPublicOrigin } from './addon-publi
 import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation';
 import { isReleaseType } from './release-fidelity/model';
 import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/navigation';
+import { graphPublicOriginHref, type GraphPublicOrigin } from '../pages/graph-browser/public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -332,11 +333,19 @@ export const catalogueEntries = {
       href: `/${locale}/catalogue/file`,
     };
   },
-  graph: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
-    group: 'read',
-    label: m.graph_explore_title({}, options(locale)),
-    href: `${subject({ id, label, locale })}/graph`,
-  }),
+  graph: ({
+    id,
+    label = '',
+    locale,
+    origin,
+  }: Locale & { id: string; label?: string | undefined; origin?: GraphPublicOrigin | undefined }): CatalogueEntry => {
+    const base = `${subject({ id, label, locale })}/graph`;
+    return {
+      group: 'read',
+      label: m.graph_explore_title({}, options(locale)),
+      href: origin ? graphPublicOriginHref(base, origin) : base,
+    };
+  },
   quotations: ({
     id,
     label = '',

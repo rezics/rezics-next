@@ -2486,10 +2486,20 @@ or hydrates every node. Truncations continue through bounded `/relations` or `/l
 empty. Preserve direction, inverse labels, qualifier/credit slots, cycles and node identities; deduplicate edges.
 Reachability neither authorizes access nor proves identity.
 
-The keyboard-selectable diagram has a readable table equivalent. Routes carry only public anchor, relation,
-direction, depth and selected node/edge identifiers. Locale, session epoch, read refusal, anchor or source replacement
-retires obsolete nodes, continuations and pending results. Redirects, stale cursors, concealed endpoints and unavailable
-graphs never leak previous labels.
+Decision: Subject graph entries carry one bounded public origin containing the admitted Subject, actual Context,
+optional Realm, locale and one validated immediate return to the Subject heading. The full encoded graph address,
+including its native selection and return, stays within 2,048 characters and 2,048 UTF-8 bytes. Missing intent keeps
+legacy direct visits; malformed supplied intent never becomes an implicit Global read.
+
+The keyboard-selectable diagram has a readable table equivalent. Routes carry only the closed native property,
+direction, depth and selected node/edge tuple alongside that public origin. The native graph and counts continue to use
+their existing Global contract; Context is never forwarded to them. A non-Global Context or any Realm is explained
+before the graph session mounts. The reader offers the validated public return and a separately named fresh Global
+visit; that choice clears node/edge selection and continuation intent and retains only the public return. Valid route
+changes keep the compatible origin. Observation replacement, locale, session epoch, read refusal, anchor or source
+replacement retires obsolete nodes, continuations and pending results before they can paint. Redirects, stale cursors,
+concealed endpoints and unavailable graphs never leak previous labels. A general return focuses the current Subject
+heading; it does not restore an inferred edge or assertion.
 
 Decision: each read owns cancellation through the server request and native stages. Replacement or source retirement
 aborts work and prevents later stages; result fences reject ignored aborts. Retry preserves the exact selection or
@@ -2513,8 +2523,10 @@ engine cap. Let D be the explicitly selected detail components (at most two) and
 byte caps: quotation, concept and music-context pages use 20 rows; a selected subject/document body is bounded by the
 existing document contract, retained here at 262,144 bytes for the composed detail. Web projection and retention are
 O(G + sum L_i + sum B_i), independent of catalogue N. A further user expansion pays the same formula once and replaces
-the corresponding truncated page instead of accumulating history. Missing native bounds stay unavailable. Growth
-acceptance is `apps/web/tests/subject-graph-browser.test.tsx`.
+the corresponding truncated page instead of accumulating history. Local origin admission and an unsupported-origin
+notice add zero native requests. A chosen Global graph visit or public Subject return performs only its existing
+bounded current reads. Missing native bounds stay unavailable. Growth acceptance is
+`apps/web/tests/subject-graph-browser.test.tsx`.
 
 ## Read an admitted quotation
 

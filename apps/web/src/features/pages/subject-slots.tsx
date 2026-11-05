@@ -4,6 +4,7 @@ import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { candidateContext } from '../../subject/candidates';
+import { graphPublicSourceReturnHref } from './graph-browser/public-visit';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from './subject-visit-navigation';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
@@ -130,7 +131,24 @@ export function SubjectExploreSlot({
   const unsupportedId = useId();
   const address = { id: subjectId, label, locale };
   const o = { locale: locale as never };
-  const graph = catalogueEntries.graph(address);
+  const observedContext = context ?? candidateContext;
+  const graphReturn = graphPublicSourceReturnHref({
+    path: subjectHref(address).href,
+    id: subjectId,
+    locale,
+    context: observedContext,
+    ...(realm ? { realm } : {}),
+  });
+  const graph = catalogueEntries.graph({
+    ...address,
+    origin: {
+      subject: subjectId,
+      context: observedContext,
+      locale,
+      ...(realm ? { realm } : {}),
+      returnHref: graphReturn ?? '',
+    },
+  });
   const quotations =
     subjectType === 'wd:Q95074' || subjectType === 'schema:Quotation' || subjectType.startsWith('schema:')
       ? catalogueEntries.quotations({

@@ -949,6 +949,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject?.[2] && (fragment === '#work-franchise' || franchiseReturn !== undefined) && finiteWorkRegion) &&
       !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
       fragment !== '#connections' &&
+      fragment !== '#subject-heading' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
       !(subject && workCastVisitReturn(fragment)) &&
