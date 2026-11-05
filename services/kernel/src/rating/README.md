@@ -1250,6 +1250,14 @@ the protocol from private source; the account-page `createOwnVotesReader` remain
 `{vote: Vote | null, component: SessionComponent | null}`. Unconditional callers keep their existing writer,
 receipt and matching-no-op behavior. The HTTP vote body remains unchanged; the guard is an internal producer input.
 
+Trusted provider callers may pass `VoteCommandAdmission` as the fourth argument: `{input, prepare()}`. Its immutable
+source operands join the native receipt digest. Preparation returns a callback that runs on the original live
+`CommandTransaction` only after authorization and receipt lookup, before any fresh no-op or effect. The source owner
+holds its retained review row through that transaction's commit or rollback. Known source changes are deferred to
+this callback so an exact receipt replay can settle a lost acknowledgement after cancellation or expiry. This seam
+does not supply question or identity participant fences. With both `guard` and `observation`, current disclosure
+still precedes replay, while exact reviewed question meaning/scale comparison belongs to fresh execution.
+
 `createVoteCommands({pool, access, clock?}).readVoteReview(actor, questionId, targetId)` returns
 `{question: RatingQuestion, currentVote: OwnCountedVoteObservation, guard: VoteReviewGuard}` for the standard
 question. It obtains `currentVote` from the existing `createOwnCountedVoteReader` prepare/read/finish path, so

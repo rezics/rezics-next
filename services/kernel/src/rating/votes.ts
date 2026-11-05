@@ -346,7 +346,7 @@ export function createVoteCommands(config: Dependencies) {
               guard ? { questionId: input.questionId, targetId: input.targetId } : input,
               deadline,
             );
-            if (observation) assertVoteObservation(observation, current.question, current.target.subjectId);
+            if (observation && !guard) assertVoteObservation(observation, current.question, current.target.subjectId);
             if (initial && current.target.subjectId !== initial.target.subjectId)
               throw new IdentityRatingAdmissionPendingError(input.targetId, 'source-pending');
             let epochs: readonly VoteReviewEpoch[] = [];
