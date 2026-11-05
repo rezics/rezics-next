@@ -148,7 +148,16 @@ function originValue(value: unknown, id: string, locale: string): ConceptPublicO
 /** The complete encoded local route and outer observation pay the 2,048-character/byte budget. */
 export function conceptPublicOriginHref(base: string, origin: ConceptPublicOrigin): string {
   const url = new URL(base, localOrigin);
-  url.searchParams.set('origin', JSON.stringify(origin));
+  url.searchParams.set(
+    'origin',
+    JSON.stringify({
+      subject: origin.subject,
+      context: origin.context,
+      locale: origin.locale,
+      ...(origin.realm ? { realm: origin.realm } : {}),
+      returnHref: origin.returnHref,
+    }),
+  );
   const href = `${url.pathname}${url.search}${url.hash}`;
   if (conceptPublicIntentFits(href)) return href;
   return `${url.pathname}?origin=!`;
