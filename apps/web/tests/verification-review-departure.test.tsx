@@ -42,6 +42,7 @@ test('verification departures preserve all reviewed drafts and original commands
   overwriteGetLocale(() => 'en');
   const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
   const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
+  const { waitFor } = await import(require.resolve('@testing-library/dom'));
   const user = userEvent.setup({ document });
   const host = document.createElement('main');
   document.body.append(host);
@@ -146,7 +147,10 @@ test('verification departures preserve all reviewed drafts and original commands
       await user.keyboard('{Enter}');
     });
   const button = (label: string, scope: ParentNode = document) =>
-    [...scope.querySelectorAll('button')].find((node) => node.textContent?.trim() === label)!;
+    [...scope.querySelectorAll('button')].find((node) => node.textContent?.trim() === label) ??
+    (() => {
+      throw new Error(`Missing button: ${label}`);
+    })();
   const fields = () => [...host.querySelectorAll('textarea')];
   const fill = async (index: number, value: string) =>
     act(async () => {
@@ -216,19 +220,20 @@ test('verification departures preserve all reviewed drafts and original commands
     await formSubmit();
     expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
     expect(unload()).toBe(true);
-    const previous = button(m.av_previous_page());
+    const previous = await waitFor(() => button(m.av_previous_page(), host));
     await keyClick(previous);
     expect(page).toBe(1);
     expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     const beforePreviousLeave = movements;
     await choose(false);
+    expect(document.activeElement).toBe(previous);
     expect(page).toBe(1);
     expect(history).toEqual([0]);
     expect(movements).toBe(beforePreviousLeave);
     expect(fields()[0]!.value).toBe('Second window draft');
     expect(host.querySelector('select')!.value).toBe('reject');
     expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
-    await click(previous);
+    await click(await waitFor(() => button(m.av_previous_page(), host)));
     await choose(true, true);
     await settleRoute();
     expect(page).toBe(0);

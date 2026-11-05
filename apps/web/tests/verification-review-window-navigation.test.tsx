@@ -82,6 +82,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const { m } = await import('../src/paraglide/messages.js');
   const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
   const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
+  const { waitFor } = await import(require.resolve('@testing-library/dom'));
   const oldLocale = getLocale;
   overwriteGetLocale(() => 'en');
   reads.length = 0;
@@ -118,8 +119,9 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const hasButton = (label: string) =>
     [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === label);
   const startRead = async (index: number) => {
-    await flush();
-    expect(reads).toHaveLength(index + 1);
+    await act(async () => {
+      await waitFor(() => expect(reads).toHaveLength(index + 1));
+    });
     return reads[index]!;
   };
   const nextRead = async () => {
