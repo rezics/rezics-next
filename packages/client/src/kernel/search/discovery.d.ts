@@ -242,6 +242,10 @@ export type DiscoveryPage = {
         values: DiscoveryKindMetadata[];
         next: string | null;
     };
+    applicability?: {
+        type: 'all' | 'partial' | 'none' | 'unknown';
+        statement: 'all' | 'partial' | 'none' | 'unknown';
+    };
     next: string | null;
     as_of: string;
     /** One current private envelope, present on the installed HTTP response and never cached publicly. */

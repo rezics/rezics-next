@@ -19,6 +19,10 @@ export type RefinementProperty = {
   units: readonly string[];
   help?: string;
 };
+export type RefinementApplicability = Readonly<{
+  type: 'all' | 'partial' | 'none' | 'unknown';
+  statement: 'all' | 'partial' | 'none' | 'unknown';
+}>;
 export type RefinementConditions = {
   kinds?: string[];
   languages?: string[];
@@ -40,7 +44,7 @@ export function refinementProperties(
     { property: 'type', labels: {}, mode: 'types' as const, datatype: 'type', units: [] },
     ...facetProperties(
       release,
-      typeof type === 'string' ? [type] : type?.length ? type : Object.keys(release.types),
+      typeof type === 'string' ? [type] : type === undefined ? Object.keys(release.types) : type,
     ).map((property): RefinementProperty => {
       const definition = release.properties[property];
       const datatype = definition?.datatype ?? '';
@@ -58,6 +62,18 @@ export function refinementProperties(
       };
     }),
   ];
+}
+
+/** Use the current registry's source coverage; released Subject definitions do not imply owner-kind support. */
+export function applicableRefinementProperties(
+  properties: readonly RefinementProperty[],
+  applicability: RefinementApplicability | undefined,
+): RefinementProperty[] {
+  if (!applicability) return [];
+  return properties.filter((entry) => {
+    const state = entry.property === 'type' ? applicability.type : applicability.statement;
+    return state === 'all' || state === 'partial';
+  });
 }
 
 /** Preserve the closed Boolean tree, including NOT and same-statement qualifiers, in one admission. */

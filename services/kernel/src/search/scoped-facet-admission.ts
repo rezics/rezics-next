@@ -30,7 +30,11 @@ function invalidConditions(): never {
 }
 
 function requestBinding(request: ScopedFacetRequest): string {
-  const canonical = canonicalize({ scope: request.scope, conditions: request.conditions ?? null });
+  const canonical = canonicalize({
+    scope: request.scope,
+    conditions: request.conditions ?? null,
+    kinds: request.kinds ?? null,
+  });
   if (canonical === undefined) invalidConditions();
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -53,7 +57,12 @@ export async function admitScopedFacetRequest(
     request: requestBinding(request),
     admission: scopedFacetIdentityKey(admission.scope.identity),
   };
-  return { ...admission, facets: request.facets, scopeBinding };
+  return {
+    ...admission,
+    ...(request.kinds ? { kinds: request.kinds } : {}),
+    facets: request.facets,
+    scopeBinding,
+  };
 }
 
 /** Adjacent route adapter: authorization completes before cursor validation and all producer/engine I/O. */

@@ -169,12 +169,18 @@ export type DiscoveryKindMetadata = {
   icon: string;
   count?: KindCountEvidence;
 };
+export type DiscoveryApplicability = 'all' | 'partial' | 'none' | 'unknown';
+export type DiscoveryFilterApplicability = Readonly<{
+  type: DiscoveryApplicability;
+  statement: DiscoveryApplicability;
+}>;
 export type DiscoveryPage = {
   accountFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   collectionFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   spaceEntries?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPage;
   hits: DiscoveryUnionHit[];
   kinds: { values: DiscoveryKindMetadata[]; next: string | null };
+  applicability?: DiscoveryFilterApplicability;
   next: string | null;
   as_of: string;
   freshness?: import('./search-context.ts').SearchFreshness;

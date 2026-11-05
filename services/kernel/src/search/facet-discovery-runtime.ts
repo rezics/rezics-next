@@ -35,6 +35,7 @@ export type FacetDiscoveryInput = Readonly<{
   text: TextNode | undefined;
   filter: FilterDocument | undefined;
   originalFilter: FilterDocument | undefined;
+  kinds?: readonly string[];
   release: FilterRelease;
   facets: readonly Facet[];
   languages: readonly string[] | undefined;
@@ -69,7 +70,7 @@ export function admitFacetPage(facets: readonly Facet[]) {
 
 export type FacetCursorInput = Pick<
   FacetDiscoveryInput,
-  'principal' | 'text' | 'originalFilter' | 'languages' | 'facets' | 'now' | 'scopeBinding'
+  'principal' | 'text' | 'originalFilter' | 'kinds' | 'languages' | 'facets' | 'now' | 'scopeBinding'
 >;
 export function facetCursorReleaseBinding(release: FilterRelease, scopeBinding?: FacetScopeCursorBinding): string {
   const canonical = canonicalize(scopeBinding ? { release, admission: scopeBinding.admission } : release);
@@ -84,6 +85,7 @@ export function facetCursorBinding(input: FacetCursorInput, facet: Facet): Searc
     request: {
       text: input.text ?? null,
       filter: input.originalFilter ?? null,
+      kinds: input.kinds ?? null,
       property: facet.property,
       languages: input.languages ?? null,
       size: facet.size,
@@ -158,6 +160,7 @@ function consumerBinding(read: FacetNativeRead): string {
   const canonical = canonicalize({
     consumer: read.queried.consumer,
     meaning: read.plan.meaning.digest,
+    kinds: read.plan.kinds ?? null,
     ...(read.plan.scope ? { scope: scopedFacetIdentityKey(read.plan.scope.identity) } : {}),
   });
   if (canonical === undefined) throw ready();
@@ -267,6 +270,7 @@ export async function readFacetDiscovery(
       property: facet.property,
       valueKind: facet.property === 'type' ? 'type' : codeFacet(input.release, facet.property) ? 'code' : 'item',
       meaning: provider.meaning,
+      ...(input.kinds ? { kinds: input.kinds } : {}),
       ...(input.scope ? { scope: input.scope } : {}),
     };
     const captured = await provider.operations.captureFacet({ plan }, input.context);

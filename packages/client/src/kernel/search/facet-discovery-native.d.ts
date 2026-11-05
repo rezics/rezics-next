@@ -10,6 +10,7 @@ import type { TextNode } from './text.ts';
  */
 export type FacetNativePlan = Readonly<{
     filterDocument: FilterDocument | undefined;
+    kinds?: readonly string[];
     text: TextNode | undefined;
     property: string;
     valueKind: 'item' | 'code' | 'type';

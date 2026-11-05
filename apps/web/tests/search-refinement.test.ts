@@ -6,7 +6,12 @@ import { Refinement } from '../src/search/refinement/refinement';
 import { HeaderSearchFilterProvider } from '../src/search/header-search/filter-region';
 import { facetProperties, type FilterDocument } from '@rezics/filter';
 import recording from '../src/kernel/recorded/definitions-release.json';
-import { compileRefinement, refinementHref, refinementProperties } from '../src/search/refinement/model';
+import {
+  applicableRefinementProperties,
+  compileRefinement,
+  refinementHref,
+  refinementProperties,
+} from '../src/search/refinement/model';
 import { facetRequest, readFacetPage, refinementKey, type FacetRequest } from '../src/search/refinement/request';
 import { searchFormFields, searchLoaderDeps } from '../src/search/search-params';
 import { readSearchPage } from '../src/search/search-request';
@@ -34,6 +39,13 @@ test('the released property picker includes structural bases, code fields and in
     'ex:own',
     'ex:base',
   ]);
+});
+
+test('current source applicability removes unrelated owner facets and labels mixed catalogue controls', () => {
+  const roster = refinementProperties(release, [book]);
+  expect(applicableRefinementProperties(roster, { type: 'none', statement: 'none' })).toEqual([]);
+  expect(applicableRefinementProperties(roster, { type: 'partial', statement: 'partial' })).toEqual(roster);
+  expect(applicableRefinementProperties(roster, undefined)).toEqual([]);
 });
 
 test('selected values and ranges compile one closed predicate without detaching nested or same-statement conditions', () => {

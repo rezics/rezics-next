@@ -12,7 +12,7 @@ import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encod
 import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from './discovery-current.ts';
 import { admitDiscoveryPage } from './discovery-http.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
-import { discoveryKindDirectory } from './discovery-registry.ts';
+import { discoveryFilterApplicability, discoveryKindDirectory } from './discovery-registry.ts';
 import { admitDiscoveryRequest, ownDiscoveryRequest, type MixedDiscoveryRequest } from './discovery-request.ts';
 import type {
   DiscoveryPage,
@@ -35,6 +35,48 @@ import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 const ready = () => new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 const invalid = (pointer: string) =>
   new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
+
+function kindLeaves(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.flatMap(kindLeaves);
+  if (value === null || typeof value !== 'object') return [];
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'kind')) return [node];
+  return Object.values(node).flatMap(kindLeaves);
+}
+
+/** Return exact positive kind conjuncts; complex kind logic stays unknown instead of guessing. */
+function selectedKindsForApplicability(filter: unknown): readonly string[] | null | undefined {
+  if (filter === undefined) return undefined;
+  const root = filter !== null && typeof filter === 'object' && !Array.isArray(filter)
+    ? (filter as Record<string, unknown>)
+    : undefined;
+  const top = root && Object.keys(root).length === 1 && Array.isArray(root.and) ? root.and : [filter];
+  const direct = top.filter(
+    (value): value is Record<string, unknown> =>
+      value !== null && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'kind'),
+  );
+  if (top.some((value) => kindLeaves(value).length > 0 && !direct.includes(value as Record<string, unknown>)))
+    return null;
+  if (!direct.length) return undefined;
+  let selected: string[] | undefined;
+  for (const node of direct) {
+    const kind = node.kind;
+    if (
+      node === null ||
+      Object.keys(node).length !== 1 ||
+      kind === null ||
+      typeof kind !== 'object' ||
+      Array.isArray(kind) ||
+      !Array.isArray((kind as Record<string, unknown>).in) ||
+      !(kind as { in: unknown[] }).in.every((entry) => typeof entry === 'string')
+    )
+      return null;
+    const values = (kind as { in: string[] }).in;
+    selected = selected === undefined ? [...values] : selected.filter((entry) => values.includes(entry));
+  }
+  return selected;
+}
+
 type DiscoveryContextWithSpace = DiscoveryReadContext & { spacePopulation?: SpaceSubjectPopulation };
 type Principal = 'anonymous' | `account:${string}`;
 export type DiscoverySearch = (
@@ -467,6 +509,7 @@ function executeDiscoverySearch(
               })),
             ),
             kinds: { values, next: null },
+            applicability: discoveryFilterApplicability(registry, selectedKindsForApplicability(admitted.filter)),
             next: null,
             ...(typeof observed === 'string'
               ? { as_of: observed, freshness: { state: 'unavailable' as const } }
