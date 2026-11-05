@@ -5,7 +5,10 @@ import type { SourceRecord } from '@rezics/conversion';
 import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import {
+  sourceDigest,
+  type VndbPublicTagCategory,
+} from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
@@ -99,6 +102,20 @@ export type ShowcaseVocabularyRequirement = Readonly<{
   schemeId?: string;
 }>;
 
+/** Exact selected COPY association and the current native vocabulary identity it resolves through. */
+export type ShowcaseTagAssociation = Readonly<{
+  workId: string;
+  sourceKey: string;
+  tagId: string;
+  category: VndbPublicTagCategory;
+  spoiler: number;
+  conceptId: string | null;
+  schemeId: string | null;
+  conceptUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
 export function showcaseVocabularyExternalId(sourceKey: string): string {
   if (!/^[a-z][a-z0-9_.:-]{0,127}$/u.test(sourceKey)) throw new TypeError('Invalid showcase vocabulary source key');
   return `vocabulary:${sourceKey}`;
@@ -154,6 +171,8 @@ export type ShowcaseManifest = Readonly<{
   records: readonly ShowcaseRecord[];
   vocabulary: readonly ShowcaseVocabularyRecord[];
   media: readonly ShowcaseMediaRecord[];
+  tagAssociations: readonly ShowcaseTagAssociation[];
+  tagAssociationRefreshes: readonly string[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
   omissions: readonly ShowcaseOmission[];
@@ -476,6 +495,8 @@ export function buildShowcaseManifest(input: {
   bangumiGameGenreOwnerKeys?: readonly string[];
   tagWeightObservations?: readonly VndbTagRatingObservation[];
   tagWeightRefreshes?: readonly string[];
+  tagAssociations?: readonly ShowcaseTagAssociation[];
+  tagAssociationRefreshes?: readonly string[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
   const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
@@ -494,6 +515,8 @@ export function buildShowcaseManifest(input: {
   const currentBangumiGameGenreCandidateIds = new Set(input.currentBangumiGameGenreCandidateIds ?? []);
   const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
   const tagWeightObservations = input.tagWeightObservations ?? [];
+  const tagAssociations = input.tagAssociations ?? [];
+  const tagAssociationRefreshes = [...new Set(input.tagAssociationRefreshes ?? [])];
   const vndbCreditCandidateDigests = new Set(input.vndbCreditCandidateDigests ?? []);
   const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
     /^v[1-9][0-9]{0,9}$/u.test(id),
@@ -894,10 +917,23 @@ export function buildShowcaseManifest(input: {
       assertions: record.assertions.map(({ candidateId, candidateDigest }) => ({ candidateId, candidateDigest })),
     })),
     media,
+    tagAssociations,
+    tagAssociationRefreshes,
     tagWeightObservations,
     tagWeightRefreshes,
   });
-  return { version: 1, digest, records, vocabulary, media, tagWeightObservations, tagWeightRefreshes, omissions };
+  return {
+    version: 1,
+    digest,
+    records,
+    vocabulary,
+    media,
+    tagAssociations,
+    tagAssociationRefreshes,
+    tagWeightObservations,
+    tagWeightRefreshes,
+    omissions,
+  };
 }
 
 function kindFromType(type: string): ShowcaseKind {

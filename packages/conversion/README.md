@@ -91,8 +91,10 @@ bounded to 128 input rows and the remaining slots in the existing 100-command
 batch limit after ordinary source proposals. Unknown
 subtrees are never inspected; resolved scheme and concept bindings are capped
 at 64 and 512 entries per request. Bangumi reciprocal relation rows coalesce by
-canonical direction with a stable source-path order. VNDB tag bindings retain
-their exact content, erotic-content or technical category. VNDB `producers_relations`
+canonical direction with a stable source-path order. VNDB `tags_vn` rows retain
+their exact tag code and content, erotic-content or technical category, and
+map to cited `schema:genre` only through the supplied exact released Concept
+and Scheme binding; citations preserve `#/tags_vn/<vid>/<tag>/tag`. VNDB `producers_relations`
 `par` emits current id → selected pid under released `wdt:P749`; `sub` stores the
 same property losslessly reversed as pid → current id. Dictionary `P355` is not
 emitted, reciprocal rows are not fabricated, and a Person-typed producer stays a

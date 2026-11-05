@@ -3971,6 +3971,9 @@ export async function runCrossMediaSeedCli(
       },
       publicTags: {
         admitted: publicTags.admitted,
+        associationBindings: publicTags.associationBindings,
+        associationRefreshes: publicTags.associationRefreshes,
+        currentBindings: publicTags.bindings,
         vocabulary: publicTags.vocabulary,
         truncated: publicTags.truncated,
         adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
@@ -4083,6 +4086,8 @@ export async function runCrossMediaSeedCli(
         ...(vocabularyRequirements.length ? { vocabularyRequirements } : {}),
         tagWeightObservations: publicTags.tagWeightObservations,
         tagWeightRefreshes: publicTags.tagWeightRefreshes,
+        tagAssociations: publicTags.associationBindings,
+        tagAssociationRefreshes: publicTags.associationRefreshes,
       });
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResult } = combinedResult;
     await mkdir(dirname(resultPath), { recursive: true });
