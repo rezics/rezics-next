@@ -8,7 +8,7 @@ import type { MineCollection } from '../mine-collections';
 
 export type SavedQueryLayout = 'rows' | 'previews';
 
-/** Membership and owner facts only; a missing native dynamic DTO never looks like an empty directory. */
+/** A row requires the native dynamic DTO and the current session owner. */
 export function ownedSavedQueries(collections: readonly MineCollection[], viewerId: string): MineCollection[] {
   return collections.filter(
     (collection) =>
@@ -36,7 +36,7 @@ export function SavedQueryDirectory({
   layout,
 }: {
   collections: readonly MineCollection[];
-  capability: 'available' | 'unavailable';
+  capability: 'unknown' | 'available' | 'denied' | 'unavailable';
   viewerId: string;
   canEditRules: boolean;
   currentHref: string;
@@ -49,9 +49,17 @@ export function SavedQueryDirectory({
       <h2 id="saved-query-directory-heading" className="text-lg font-semibold">
         {m.library_saved_queries_heading()}
       </h2>
-      {capability === 'unavailable' ? (
+      {capability === 'unknown' ? (
+        <p role="status" data-capability="unknown" className="mt-3">
+          {m.settings_sections_loading()}
+        </p>
+      ) : capability === 'denied' ? (
+        <p role="status" data-capability="denied" className="mt-3">
+          {m.library_collections_denied()}
+        </p>
+      ) : capability === 'unavailable' ? (
         <div className="mt-3 space-y-2">
-          <p role="status">{m.library_saved_queries_unavailable()}</p>
+          <p role="status" data-capability="unavailable">{m.library_saved_queries_unavailable()}</p>
           <a href={currentHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
             {m.library_collections_retry()}
           </a>

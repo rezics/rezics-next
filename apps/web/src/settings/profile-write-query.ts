@@ -84,7 +84,26 @@ function createEntry(client: QueryClient) {
       save: async (attempt) => {
         await client.cancelQueries({ queryKey: owner.key, exact: true });
         if (!current() || !owner.canWrite()) throw new Error('Profile unavailable');
-        return saveProfile({ data: attempt, headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' } });
+        const commandProfile = (value: typeof attempt.before) => ({
+          accountId: value.accountId,
+          kind: value.kind,
+          displayName: value.displayName,
+          biography: value.biography,
+          avatar: value.avatar,
+          links: value.links,
+          publicViews: value.publicViews,
+          ...(value.kind === 'organization' && value.speakersListed !== undefined
+            ? { speakersListed: value.speakersListed }
+            : {}),
+        });
+        return saveProfile({
+          data: {
+            before: commandProfile(attempt.before),
+            after: commandProfile(attempt.after),
+            idempotencyKey: attempt.idempotencyKey,
+          },
+          headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' },
+        });
       },
       canWrite: () => current() && owner.canWrite(),
       confirmed: (profile) => {

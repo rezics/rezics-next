@@ -139,7 +139,10 @@ function parseActions(value: unknown): OwnVoteActions | null {
     if (typeof value.clear === 'string' && typeof value.readback === 'string')
       return { state: 'retired', reason: 'question_retired', clear: value.clear, readback: value.readback };
   }
-  if (value.state === 'unavailable' && (value.reason === 'merged_source' || value.reason === 'identity_pending'))
+  if (
+    value.state === 'unavailable' &&
+    (value.reason === 'merged_source' || value.reason === 'identity_pending' || value.reason === 'read_only')
+  )
     return { state: 'unavailable', reason: value.reason };
   return null;
 }

@@ -51,9 +51,15 @@ test('watch pages strictly decode the installed kinds and conceal unavailable ta
     target: null,
   });
   expect(JSON.stringify(page.watches[1])).not.toContain('resourceId');
+  expect(
+    decodeWatchPage({ ...envelope, permissions: { remove: true }, items: [], next: null }, 'thread').watches,
+  ).toEqual([]);
   expect(() => decodeWatchPage({ items: [{ ...threadRow, kind: 'unknown' }], next: null }, 'thread')).toThrow();
   expect(() =>
     decodeWatchPage({ ...envelope, items: [{ ...threadRow, extra: 'untrusted' }], next: null }, 'thread'),
+  ).toThrow();
+  expect(() =>
+    decodeWatchPage({ ...envelope, actions: { remove: 'available', extra: true }, items: [], next: null }, 'thread'),
   ).toThrow();
 });
 

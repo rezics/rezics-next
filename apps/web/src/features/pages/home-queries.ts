@@ -50,7 +50,7 @@ const readHomePage = createServerFn({ method: 'GET' })
     const client = kernelClient(locale);
     const [feed, catalogue] = await Promise.all([
       loadPublicHomeFeed(client),
-      loadRoutePage(client, '/', locale).catch(() => ({ kind: 'missing' as const })),
+      loadRoutePage(client, '/', locale),
     ]);
     const origin = validatePublicOrigin(
       (env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN,

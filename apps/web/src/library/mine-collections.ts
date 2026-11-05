@@ -37,7 +37,7 @@ export type MineCollectionsPage = {
   signedIn: boolean;
   collections: MineCollection[];
   navigationCollections?: MineCollection[];
-  savedQueryCapability?: 'available' | 'unavailable';
+  savedQueryCapability?: 'unknown' | 'available' | 'denied' | 'unavailable';
   next: string | null;
   state?: 'loaded' | 'preparing' | 'denied' | 'unavailable' | 'error';
   cursorReset?: true;

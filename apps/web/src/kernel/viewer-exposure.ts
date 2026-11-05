@@ -4,13 +4,14 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../session/client';
 import { sessionQuery } from '../session/query';
 
-export type ViewerExposure = { subject: string | null; admitted: readonly string[] };
+export type ExposureReadState = 'ready' | 'denied' | 'unavailable';
+export type ViewerExposure = { subject: string | null; admitted: readonly string[]; state?: ExposureReadState };
 export type ViewerObservation = { subject: string; id: number };
 export type ViewerExposureSnapshot =
   | { state: 'unknown' | 'inactive' | 'signed-out' }
   | { state: 'signed-in'; observation: ViewerObservation };
 
-const closedExposure: ViewerExposure = { subject: null, admitted: [] };
+const closedExposure: ViewerExposure = { subject: null, admitted: [], state: 'unavailable' };
 const closedSnapshot: ViewerExposureSnapshot = { state: 'unknown' };
 
 function expectedSubject(value: unknown): string {
@@ -31,11 +32,11 @@ export const readViewerExposure = createServerFn({ method: 'GET' })
       const subject = sessionSubject(request);
       const authorization = viewerCredential(request);
       // The expected subject can reject a read, but only the prepared request establishes its identity.
-      if (!subject || subject !== expected || !authorization) return closedExposure;
-      const { readAdmitted } = await import('./exposure');
-      return { subject, admitted: await readAdmitted(authorization) };
+      if (!subject || subject !== expected || !authorization) return { ...closedExposure, state: 'denied' };
+      const { readAdmittedResult } = await import('./exposure');
+      return { subject, ...(await readAdmittedResult(authorization)) };
     } catch {
-      return closedExposure;
+      return { ...closedExposure, state: 'unavailable' };
     }
   });
 

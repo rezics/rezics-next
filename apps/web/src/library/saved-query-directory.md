@@ -5,12 +5,12 @@ Collection page. It never fetches later pages to build or sort a complete direct
 `membershipKind: "dynamic"`, no `builtinKind`, and `curatorAccountId` equal to the current session subject. The viewer
 controller accepts only a response for that same subject and page address.
 
-The private native owner-list response's explicit `savedQueryCapability` evidence controls directory availability;
-row presence never produces capability evidence. When the admitted current page contains no matching dynamic rows
-and capability is available, the directory reports an empty current page even if the native inventory is empty. If
-the response omits capability evidence, the directory shows the existing explicit unavailable state and retry link;
-it does not describe missing evidence as an empty result. The existing opaque `next` cursor and layout continue the
-same owner list. Dynamic rows show no membership count or timestamp.
+The owner-list response may carry validated `savedQueryCapability` evidence, independent of rows. Web directory
+availability follows the current viewer's enrolled platform-exposure observation and its `collection.create`
+operation admission. Unknown admission remains checking, denied admission remains denied, and an unavailable exposure
+read remains unavailable with deliberate retry. An admitted empty Collection page is a truthful empty directory;
+row presence never produces capability evidence. The existing opaque `next` cursor and layout continue the same owner
+list. Dynamic rows show no membership count or timestamp.
 
 Opening a row uses `/collections/{id}` and its existing authorized Dynamic Collection reader. The row carries a
 validated same-locale return address for the exact bounded directory page, including its cursor and layout. That
@@ -34,6 +34,8 @@ reader and locale replacement retire the private editor state and pending respon
 Decision: row navigation and confirmed deletion retain the exact same-locale directory cursor and rows/previews layout. Delete returns reuse directory admission of up to 4096 logical cursor characters; their finite encoded envelope allows nine characters per UTF-16 unit plus the origin, path and fixed operands.
 
 Decision: manager UI callbacks are bound to their originating controller, preserving its draft, ports, command recovery and retirement.
+
+Decision: Saved-query support follows current-viewer native operation admission; an admitted empty inventory remains empty, and row presence is never capability evidence.
 
 The Web binding uses the installed Collection detail, metadata update and delete routes, all private `no-store` reads
 and writes. Commerce retains native authorization, revision/CAS and deletion semantics. Its remaining Web-facing
