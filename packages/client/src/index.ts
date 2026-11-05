@@ -11,12 +11,7 @@ import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
-export type {
-  ZoneCollectionsCall,
-  ZoneCollectionsClient,
-  ZoneCollectionsPage,
-  ZoneCollectionsQuery,
-} from './zones.ts';
+export type { ZoneCollectionsCall, ZoneCollectionsClient, ZoneCollectionsPage, ZoneCollectionsQuery } from './zones.ts';
 export {
   decodePreferenceAdvice,
   decodePreferencePage,

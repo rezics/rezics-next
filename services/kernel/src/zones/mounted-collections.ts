@@ -2,11 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { admitGroup } from '../access/gates/admission.ts';
 import { ProblemError } from '../http/problem.ts';
-import {
-  collectionReadView,
-  createCollectionReads,
-  type CollectionResourceView,
-} from '../library/collection-reads.ts';
+import { collectionReadView, createCollectionReads, type CollectionResourceView } from '../library/collection-reads.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

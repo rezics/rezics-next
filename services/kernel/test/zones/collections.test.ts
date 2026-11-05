@@ -154,9 +154,7 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
 
   const second = page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(first.next!)}`));
   expect(second.collections.map(({ id }) => id)).toEqual([readable[1]!.id]);
-  expect(
-    page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(first.next!)}`)),
-  ).toEqual(second);
+  expect(page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(first.next!)}`))).toEqual(second);
   const third = page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(second.next!)}`));
   expect(third.collections.map(({ id }) => id)).toEqual([readable[2]!.id]);
   expect(third.next).toBeNull();
