@@ -4,7 +4,6 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
 import {
   createIdentityRatingCommitParticipant,
-  IdentityRatingCommitUnavailableError,
 } from '../../src/semantic/identity-rating-commit-participant.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
 import { release } from './support/identity-epoch.ts';
@@ -110,7 +109,7 @@ test('identity mutation after review refuses admission, and rollback releases th
       runCommand(f.pool, { partition: partitionOf(routeOf(original)!) }, async (tx) =>
         noEffect(await participant.admit(tx, prepared)),
       ),
-    ).rejects.toMatchObject<Partial<IdentityRatingCommitUnavailableError>>({
+    ).rejects.toMatchObject({
       name: 'IdentityRatingCommitUnavailableError',
       identityState: 'pending',
     });
