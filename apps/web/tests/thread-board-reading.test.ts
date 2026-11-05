@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { locales } from '../src/paraglide/runtime.js';
+import { NativeDocumentImage } from '../src/threads/document-media-image';
 import { ThreadPageError } from '../src/threads/thread-page-error';
 import { threadLocation } from '../src/threads/thread-href';
 
@@ -40,6 +41,14 @@ test('reply continuation keeps the exact supplied cursor and one first-page rest
   expect(markup).toContain('This page link is invalid or out of date');
   expect(markup).toContain(`href="${restart.replace(/&/g, '&amp;')}"`);
   expect(markup).not.toContain('cursor=');
+});
+
+test('current document images expose their native media identity', () => {
+  const markup = renderToStaticMarkup(
+    createElement(NativeDocumentImage, { image: null, alt: 'Opening still', locale: 'en', mediaId: threadId }),
+  );
+  expect(markup).toContain('data-slot="document-image"');
+  expect(markup).toContain(`data-media-id="${threadId}"`);
 });
 
 test('touched Board thread labels exist in every launch locale', async () => {

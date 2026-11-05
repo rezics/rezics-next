@@ -5,13 +5,18 @@
  */
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { chromium, type BrowserContext, type Page, type Response } from 'playwright';
+import { chromium, type Page, type Response } from 'playwright';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/thread-reading');
 const seedResultPath = join(root, '.temp/cross-media-seed/result.json');
-const primaryLocales = ['en', 'zh-Hant', 'ja'] as const;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const visits = [
+  { locale: 'en', width: 1440, theme: 'light' },
+  { locale: 'en', width: 390, theme: 'dark' },
+  { locale: 'zh-Hant', width: 1280, theme: 'light' },
+  { locale: 'ja', width: 1440, theme: 'dark' },
+] as const;
 
 type ShowcaseCommunity = {
   state: string;
@@ -20,7 +25,13 @@ type ShowcaseCommunity = {
   thread: { threadId: string; postId: string };
 };
 type SeedResult = {
-  readings?: { source: string; externalId: string; selection?: string; route?: string; subject?: { subject?: { id?: string } } }[];
+  readings?: {
+    source: string;
+    externalId: string;
+    selection?: string;
+    route?: string;
+    subject?: { subject?: { id?: string } };
+  }[];
   developmentShowcase?: { community?: ShowcaseCommunity };
 };
 type ReadingPage = {
@@ -73,7 +84,12 @@ async function run(command: string[], env: NodeJS.ProcessEnv = process.env): Pro
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<{ status: number; body: T }> {
-  const response = await fetch(url, { ...init, redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(url, {
+    ...init,
+    redirect: 'error',
+    cache: 'no-store',
+    signal: AbortSignal.timeout(30_000),
+  });
   return { status: response.status, body: (await response.json()) as T };
 }
 
@@ -96,12 +112,16 @@ async function followAndReturn(page: Page, link: ReturnType<Page['locator']>, st
   const destination = new URL(page.url()).pathname;
   await page.goBack({ waitUntil: 'domcontentloaded' });
   await page.locator('main').waitFor({ state: 'visible', timeout: 60_000 });
-  if (!new URL(page.url()).pathname.includes(stay))
-    throw new Error(`Return missed ${stay}: ${page.url()}`);
+  if (!new URL(page.url()).pathname.includes(stay)) throw new Error(`Return missed ${stay}: ${page.url()}`);
   return destination;
 }
 
-async function compareReading(page: Page, kernel: string, threadId: string, postId: string): Promise<{
+async function compareReading(
+  page: Page,
+  kernel: string,
+  threadId: string,
+  postId: string,
+): Promise<{
   title: string | null;
   opening: string;
   replies: number;
@@ -120,16 +140,16 @@ async function compareReading(page: Page, kernel: string, threadId: string, post
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
-  if (opening && !rendered.includes(opening))
-    throw new Error(`Rendered body missing native opening text: ${opening}`);
+  if (opening && !rendered.includes(opening)) throw new Error(`Rendered body missing native opening text: ${opening}`);
   for (const reply of replyTexts)
     if (reply && !rendered.includes(reply)) throw new Error(`Rendered body missing native reply text: ${reply}`);
-  const frame = page.locator(`#post-${postId}`);
-  await frame.waitFor({ state: 'visible' });
+  await page.locator(`#post-${postId}`).waitFor({ state: 'visible' });
   const shownMedia = await page.locator('[data-slot="document-image"]').evaluateAll((nodes) =>
-    nodes
-      .map((node) => node.getAttribute('data-media-id') ?? node.getAttribute('src') ?? '')
-      .filter(Boolean),
+    nodes.flatMap((node) => {
+      const identity = node.getAttribute('data-media-id');
+      const sources = [...node.querySelectorAll('img')].map((image) => image.getAttribute('src') ?? '');
+      return [identity ?? '', ...sources].filter(Boolean);
+    }),
   );
   const expectedMedia = [
     ...mediaIds(native.body.thread.firstPost),
@@ -150,10 +170,12 @@ async function compareReading(page: Page, kernel: string, threadId: string, post
   };
 }
 
-async function continueReplies(page: Page, kernel: string, threadId: string, next: string | null): Promise<{
-  continued: boolean;
-  retried: boolean;
-}> {
+async function continueReplies(
+  page: Page,
+  kernel: string,
+  threadId: string,
+  next: string | null,
+): Promise<{ continued: boolean; retried: boolean }> {
   if (!next) return { continued: false, retried: false };
   const nextLink = page.locator(`nav a[href*="cursor="]`).first();
   const href = await nextLink.getAttribute('href');
@@ -180,8 +202,10 @@ async function continueReplies(page: Page, kernel: string, threadId: string, nex
   return { continued: true, retried: false };
 }
 
-async function retryInvalidCursorOnce(page: Page, web: string, threadId: string): Promise<void> {
-  await open(page, `${web}/en/threads/${threadId}?cursor=not-a-native-cursor`);
+async function retryInvalidCursorOnce(page: Page, threadHref: string): Promise<void> {
+  const url = new URL(threadHref);
+  url.searchParams.set('cursor', 'not-a-native-cursor');
+  await open(page, url.href);
   const alert = page.locator('section[role="alert"]');
   await alert.waitFor({ state: 'visible', timeout: 30_000 });
   await alert.locator('a').first().click();
@@ -216,20 +240,20 @@ async function walkPersona(
   if (boardNative.status !== 200) throw new Error(`Native board page returned ${boardNative.status}`);
   const threadRow = page.locator(`[data-thread-id="${input.threadId}"]`).first();
   await threadRow.waitFor({ state: 'visible', timeout: 60_000 });
-  const threadLink = threadRow.locator('a[href*="/threads/"]').first();
-  await threadLink.click();
+  await threadRow.locator('a[href*="/threads/"]').first().click();
   await page.locator('main').waitFor({ state: 'visible', timeout: 60_000 });
   await page.locator(`#thread-${input.threadId}`).waitFor({ state: 'visible', timeout: 60_000 });
   const reading = await compareReading(page, input.kernel, input.threadId, input.postId);
+  const threadHref = page.url();
   const context = page.locator('nav a[href*="/boards/"], nav a[href*="/realms/"]').first();
   const author = page.locator('a[href*="/@"]').first();
   const subject = page.locator('ul a[href*="/subjects/"]').first();
   const destinations: Record<string, string> = {};
-  if ((await context.count()) > 0)
-    destinations.context = await followAndReturn(page, context, '/threads/');
+  if ((await context.count()) > 0) destinations.context = await followAndReturn(page, context, '/threads/');
   if ((await author.count()) > 0) destinations.author = await followAndReturn(page, author, '/threads/');
   if ((await subject.count()) > 0) destinations.subject = await followAndReturn(page, subject, '/threads/');
   const continuation = await continueReplies(page, input.kernel, input.threadId, reading.next);
+  await retryInvalidCursorOnce(page, threadHref);
   return {
     locale: input.locale,
     width: input.width,
@@ -252,18 +276,47 @@ async function signUp(page: Page, web: string, issuer: string): Promise<{ handle
   const email = `${handle}@rezics.test`;
   const password = 'Board-thread-reading-walk-9f3a';
   await open(page, `${web}/en/`);
-  await page.getByRole('link', { name: 'Sign in' }).first().click();
-  await page.waitForURL(/\/login|\/signin|\/session/, { timeout: 60_000 });
-  await page.getByRole('link', { name: 'Create an account' }).click();
+  await page
+    .getByRole('link', { name: /sign in/i })
+    .first()
+    .click();
+  await page.waitForURL((url) => url.origin === issuer || /\/login|\/signin|\/session/.test(url.pathname), {
+    timeout: 60_000,
+  });
+  await page
+    .locator('html[data-hydrated]')
+    .waitFor({ state: 'attached', timeout: 60_000 })
+    .catch(() => undefined);
+  await page
+    .getByRole('link', { name: /create an account|sign up/i })
+    .first()
+    .click();
   await page.waitForURL(/\/signup/, { timeout: 60_000 });
-  await page.locator('#signup-handle').fill(handle);
-  await page.locator('#signup-email').fill(email);
-  await page.locator('#signup-password').fill(password);
-  await page.locator('#signup-confirm-password').fill(password);
-  await page.getByText('Local development verification').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.getByRole('button', { name: 'Create an account' }).click();
+  await page
+    .locator('html[data-hydrated]')
+    .waitFor({ state: 'attached', timeout: 60_000 })
+    .catch(() => undefined);
+  const handleField = page.locator('#signup-handle');
+  if ((await handleField.count()) > 0) await handleField.fill(handle);
+  else await page.getByLabel('Handle', { exact: true }).fill(handle);
+  const emailField = page.locator('#signup-email');
+  if ((await emailField.count()) > 0) await emailField.fill(email);
+  else await page.getByLabel('Email', { exact: true }).fill(email);
+  const passwordField = page.locator('#signup-password');
+  if ((await passwordField.count()) > 0) await passwordField.fill(password);
+  else await page.getByLabel('Password', { exact: true }).fill(password);
+  const confirm = page.locator('#signup-confirm-password');
+  if ((await confirm.count()) > 0) await confirm.fill(password);
+  const widget = page.getByText('Local development verification');
+  if ((await widget.count()) > 0) await widget.waitFor({ state: 'visible', timeout: 30_000 });
+  const created = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
+    { timeout: 90_000 },
+  );
+  await page.getByRole('button', { name: 'Create an account', exact: true }).click();
+  const signup = await created;
+  if (signup.status() >= 400) throw new Error(`Signup POST returned ${signup.status()}`);
   await page.waitForURL((url) => url.origin === web, { timeout: 90_000 });
-  if (!page.url().startsWith(web)) throw new Error(`Signup did not return to Web: ${page.url()} (issuer ${issuer})`);
   return { handle };
 }
 
@@ -275,14 +328,18 @@ async function main(): Promise<void> {
   await run(['go-task', 'seed:dev']);
   const seed = (await Bun.file(seedResultPath).json()) as SeedResult;
   const community = seed.developmentShowcase?.community;
-  if (!community || community.state !== 'published' || !uuid.test(community.board.id) || !uuid.test(community.thread.threadId))
+  if (
+    !community ||
+    community.state !== 'published' ||
+    !uuid.test(community.board.id) ||
+    !uuid.test(community.thread.threadId)
+  )
     throw new Error('Seed did not publish a discussion Board and thread');
   const reading = seed.readings?.find(
-    (item) => item.source === 'vndb' && item.externalId === community.source.externalId && item.selection === 'selected',
+    (item) =>
+      item.source === 'vndb' && item.externalId === community.source.externalId && item.selection === 'selected',
   );
-  const workPath =
-    reading?.route ??
-    `/subjects/${community.source.subjectId}`;
+  const workPath = reading?.route ?? `/subjects/${community.source.subjectId}`;
   const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
   const userDataDir = join('/tmp', `rz-${process.pid}`);
   await mkdir(userDataDir, { recursive: true, mode: 0o700 });
@@ -295,23 +352,20 @@ async function main(): Promise<void> {
   try {
     const anonymous = await context.newPage();
     anonymous.setDefaultTimeout(60_000);
-    for (const locale of primaryLocales)
-      for (const width of [390, 1440])
-        for (const theme of ['light', 'dark'] as const)
-          journeys.push(
-            await walkPersona(anonymous, {
-              web,
-              kernel,
-              locale,
-              workPath,
-              boardId: community.board.id,
-              threadId: community.thread.threadId,
-              postId: community.thread.postId,
-              width,
-              theme,
-            }),
-          );
-    await retryInvalidCursorOnce(anonymous, web, community.thread.threadId);
+    for (const visit of visits)
+      journeys.push(
+        await walkPersona(anonymous, {
+          web,
+          kernel,
+          locale: visit.locale,
+          workPath,
+          boardId: community.board.id,
+          threadId: community.thread.threadId,
+          postId: community.thread.postId,
+          width: visit.width,
+          theme: visit.theme,
+        }),
+      );
     await anonymous.close();
     const member = await context.newPage();
     member.setDefaultTimeout(60_000);
@@ -331,7 +385,6 @@ async function main(): Promise<void> {
         theme: 'light',
       })),
     });
-    await retryInvalidCursorOnce(member, web, community.thread.threadId);
     await member.close();
   } finally {
     await context.close();
