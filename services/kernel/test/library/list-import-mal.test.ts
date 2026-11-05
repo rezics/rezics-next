@@ -309,7 +309,7 @@ test('native conflict defaults preserve facts; replacement has revision and rele
   await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
 });
 
-test('MAL score review records explicit native units, preserves corrections and keeps missing vote admission unavailable', async () => {
+test('MAL score review records explicit native units, preserves corrections and uses complete native guarded admission and preserves genuine producer unavailability', async () => {
   const actor = await native.identity([
       ...native.owner.actor.scopes,
       'rating:vote',
@@ -360,7 +360,9 @@ test('MAL score review records explicit native units, preserves corrections and 
     question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 } },
     units: 19,
     baseline: { state: 'absent', units: null, revision: null, at: null },
-    admission: { status: 'unavailable', reason: 'conditional-vote-admission-unavailable' },
+    admission: { status: 'conditional', reason: null },
+    guard: { version: 1, question: { revision: 1, lifecycleRevision: 1 },
+      subject: { canonicalId: targets[0] }, ownVote: { state: 'absent' } },
   });
   expect(page.rows[0].review.score.question).toHaveProperty('meaning');
   await json(
@@ -477,7 +479,7 @@ test('MAL score review records explicit native units, preserves corrections and 
   );
   expect(unavailable.outcomes[0]).toMatchObject({
     status: 'unavailable',
-    score: { action: 'adopt', status: 'unavailable', reason: 'conditional-vote-admission-unavailable', vote: null },
+    score: { action: 'adopt', status: 'unavailable', reason: 'atomic_guard_unavailable', vote: null },
   });
   await json(
     'GET',
@@ -487,6 +489,18 @@ test('MAL score review records explicit native units, preserves corrections and 
     actor.bearer,
     404,
   );
+  // The installed producer's definitive refusal is retained; it is not a successful native vote.
+  const retained = await native.pool.query<{ document: any }>(
+    'SELECT document FROM library.list_import_mal WHERE account_id=$1 AND id=$2',
+    [actor.actor.accountId, id],
+  );
+  const checkpoint = retained.rows[0]!.document.intents['3'];
+  expect(checkpoint.score.started).toBe(true);
+  expect(checkpoint.review.score.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
+  expect(checkpoint.score.outcome.reason).toBe('atomic_guard_unavailable');
+  expect((await json('POST', `${base}/${id}/apply`,
+    { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+    randomUUID(), actor.bearer)).outcomes[0]).toEqual(unavailable.outcomes[0]);
   await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
   await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
 });

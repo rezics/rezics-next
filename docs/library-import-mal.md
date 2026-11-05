@@ -20,7 +20,7 @@ exact conversion.
 | Source                                                                                 | Native proposal or visible retention                                                                                                        |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Watching/Reading, Completed, On-Hold, Dropped, Plan to Watch/Read (or codes 1/2/3/4/6) | Unique released role active/completed/paused/dropped/planned, explicitly confirmed as `status`                                              |
-| Score                                                                                  | Original integer 1–10 scale; zero means no rating. Review can record owner-selected units; conditional native vote admission is unavailable |
+| Score                                                                                  | Original integer 1–10 scale; zero means no rating. Review can record owner-selected units; explicit native units use Content conditional admission |
 | Episodes, chapters and volumes                                                         | Independent original measures, including simultaneous manga counts; retained, no invented subjects or sessions                              |
 | Comments, tags, repeat totals                                                          | Private note, original tags and count; retained, no public review, inferred label or dated repeat session                                   |
 | Start/finish dates                                                                     | Year/month/day precision, all-zero unknown, invalid calendar dates marked invalid; no invented first day                                    |
@@ -57,11 +57,11 @@ POST /v1/libraryImports/mal/:id/review // Idempotency-Key: "review-1"
 }
 // action "clear" has the same questionId and questionRevision and no units.
 // The page returns original score and scale, selected native question/meaning/units, current own-vote baseline,
-// and a typed unavailable admission result until the guarded Content writer is installed.
+// and admission {status:"conditional",reason:null} with the complete native version-1 guard.
 POST /v1/libraryImports/mal/:id/apply
 { confirm: true, rows: [{ row: 0, version: "review-1", fields: ["status", "score"] }] }
 // 200 { id, outcomes: [{row:0,status:"unavailable",applied:["status"],retained:["my_score"],
-//   score:{action:"adopt",status:"unavailable",reason:"conditional-vote-admission-unavailable",vote:null}}], remaining: [], stopped: false }
+//   score:{action:"adopt",status:"unavailable",reason:"atomic_guard_unavailable",vote:null}}], remaining: [], stopped: false }
 POST /v1/libraryImports/mal/:id/cancel // Idempotency-Key and {} body; 200 { id }
 DELETE /v1/libraryImports/mal/:id // Idempotency-Key; 200 { id }
 ```
@@ -77,15 +77,25 @@ unknown scores cannot be adopted; an explicit `clear` remains independent. Unsup
 can be paired with explicitly selected native units without claiming an exact conversion. Adoption over an existing
 vote requires `replaceCurrent:true`; otherwise the local vote is preserved. A review records the question, meaning,
 source value/scale, selected units, own-vote baseline, target observations, consent and stable command attribution in
-the existing bounded plan. The page and apply paths recheck native question/vote authorization and detect changed
-review context, but the score outcome remains typed `unavailable` and never writes a vote.
+the existing bounded plan. `readVoteReview(actor, questionId, targetId)` supplies the complete counted/current
+observation and immutable guard (question revision/lifecycle, canonical identity and all epochs, own-vote witness).
+Page and unstarted apply detect changed observations. Existing reviews without a complete guard remain unavailable
+and require a fresh review; they are never upgraded by sampling new operands during apply.
 
-The missing Content admission signature is an extension to
-`createVoteCommands.putVoteOutcome(actor, { questionId, targetId, units }, idempotencyKey)`: it must accept and
-atomically enforce the reviewed question revision, canonical/counting Subject identity, expected current vote
-revision or absence, and provider attribution. The current writer re-observes question/target before receipt handling
-and locks vote rows for writes, but it does not compare these reviewed observations with the locked rows. Until that
-producer is installed, MAL does not call it or claim accepted native outcomes.
+Decision: compose Content's existing conditional writer and complete native review operands with Library checkpoints;
+retain original guards and keys across uncertain delivery, and require native readback before reporting score success.
+`putVoteOutcome(actor, {questionId,targetId,units,guard}, key)` is called after persisting `score.started` in the
+existing intent. Native stale/unavailable errors are definitive typed outcomes. Unexpected delivery/readback errors
+throw and retain that checkpoint for exact command retry; current reads cannot settle uncertain delivery. A review
+refresh cannot replace a started unresolved score, including when labels are refreshed. Missing score consent remains
+resumable. Independent effects cannot turn a selected unsuccessful vote into overall success.
+
+The consumer now calls the actual installed producer. On this source base the producer still throws
+`atomic_guard_unavailable` for guarded effects; this remains genuine unavailability, not positive acceptance.
+Content owns its original serial atomic-producer repair. No local vote writer, resolver or permission mechanism is
+introduced. Successful producer admission is followed by `readOwnVote`; receipts are never displayed as current votes.
+The owner Entry reader remains the page's current Library state source. Whole-list positive/changed-reimport,
+effect-before-ack retry, all native fences and mounted caller acceptance remain required after producer integration.
 
 Bounds: 4 MiB JSON wire body (413 beyond it), 2 MiB decoded XML UTF-8 (400 beyond it), 500 rows, depth 16, pages/apply batches of 20, 64 selected fields, 48 MiB retained evidence per upload, three retained uploads per
 owner, seven-day readable lifetime. DTD/external entities, malformed roots/rows/IDs and duplicate IDs/fields fail
@@ -112,9 +122,12 @@ the explicit UUID submitted to `review.target` is identity.
 
 Integration decision: MAL and Bangumi retain their separate native review guards, routes and erasure phases.
 
-Native rating cost: for at most 20 rows per page/review/apply batch, each score-selected row performs one current
-question read plus the own-vote reader's question, Subject, account and vote reads. Page and apply repeat that bounded
-read to recheck current authorization and detect stale review observations; the apply plan and outcomes add bounded
-JSONB bytes to the existing document/result limits. This delivery performs no native vote command, receipt,
-component, aggregate or cleanup write. The complete guarded writer and its nested receipt/component/aggregate
-cost remain unmeasured controller acceptance, not a growth claim.
+Native rating cost: at most 20 selected rows per page/review/apply batch use one complete native `readVoteReview`
+per row (question directory/current account, bounded counted-reader prepare/read/finish, original/canonical slots and
+identity epoch fences). Unstarted apply and page repeat these observations. Each effect persists one started checkpoint,
+invokes one conditional native command with its original key/guard, then reads current own vote. An uncertain retry
+repeats that exact command's authorization, exposure and receipt lookup before disclosure; it does not refresh review
+operands. Include the producer's question/lifecycle, identity and own-vote fences, receipt digest, native vote,
+component/aggregate work and transaction commit/rollback in the same caller cost. Guard bytes, checkpoints and outcomes
+remain within the existing 48 MiB document and 512 KiB result caps; no new cap, scan or measurement writer is added.
+Full producer cost and growth at scale remain unmeasured controller acceptance.
