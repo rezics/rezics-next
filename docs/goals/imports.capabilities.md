@@ -4,7 +4,7 @@ Current user cases, native scenarios and evidence limits for the [Imports Goal](
 
 Authority split: module READMEs hold current contracts and costs; this file holds user outcomes, exact native scenarios, commands and what the evidence does not prove.
 
-Decision: Type-only repairs preserve existing outcome assertions and add tests only for behavior newly required by the contract.
+Decision: preserve original showcase claim aliases, source bindings and sealed replay; distinguish native merge admission, operation publication and independent canonical public reads. Focused caller/manifest/redirect cases supplement the unchanged native and browser outcome assertions.
 
 ## User outcome
 

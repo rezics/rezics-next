@@ -1,3 +1,4 @@
+import { observePersonIdentity, personIdentityForSource } from './showcase-person-identity.ts';
 import { Database } from 'bun:sqlite';
 import { chmodSync } from 'node:fs';
 import { sameStatementProvenance } from './statement-provenance.ts';
@@ -649,6 +650,14 @@ function subjectId(read: ReviewedSubjectRead): string | null {
   return typeof subject?.id === 'string' ? subject.id : null;
 }
 
+/** Reads follow canonical identity; statement ownership and adoption stay on the sealed original. */
+function currentSourceRead(read: ReviewedSubjectRead, record: Pick<ShowcaseRecord, 'provider' | 'sourceKey' | 'subjectId' | 'nativeType'>): boolean {
+  if (subjectType(read) !== record.nativeType) return false;
+  if (subjectId(read) === record.subjectId) return true;
+  const identity = personIdentityForSource(record.provider, record.sourceKey, record.nativeType ?? undefined);
+  return identity !== undefined && observePersonIdentity(identity, read).state === 'current';
+}
+
 function subjectType(read: ReviewedSubjectRead): string | null {
   const subject = read.subject as { type?: unknown } | undefined;
   return typeof subject?.type === 'string' ? subject.type : null;
@@ -1287,7 +1296,7 @@ async function resolveLegacyCandidates(input: {
   let visited = 0;
   rowLoop: for (const { provider, row } of rows) {
     const reading = readings.get(`${provider}\0${row.key}`);
-    const id = reading && subjectId(reading.subject);
+    const id = reading && (reading.boundSubjectId ?? subjectId(reading.subject));
     if (!id) continue;
     const alias = input.aliases[provider];
     const registration = createSelectedFamilySourceRegistration(provider, alias);
@@ -1662,7 +1671,7 @@ export async function publishShowcase(input: {
       }
       currentSubjectCache.set(id, current);
     }
-    if (!current || subjectId(current) !== id || subjectType(current) !== record.nativeType) {
+    if (!current || !currentSourceRead(current, record)) {
       omissions.push({
         provider: record.provider,
         sourceKey: record.sourceKey,
@@ -1737,8 +1746,7 @@ export async function publishShowcase(input: {
         !recordHasSourceIdentity(target) ||
         blockedSubjects.has(targetId) ||
         !targetCurrent ||
-        subjectId(targetCurrent) !== targetId ||
-        subjectType(targetCurrent) !== assertion.graphTarget.nativeType
+        !currentSourceRead(targetCurrent, target)
       ) {
         omissions.push({
           provider: record.provider,
@@ -2604,8 +2612,7 @@ export async function publishShowcase(input: {
       const sourceRead = await publicRead(id);
       if (
         !sourceRead ||
-        subjectId(sourceRead) !== id ||
-        subjectType(sourceRead) !== group.record.nativeType ||
+        !currentSourceRead(sourceRead, group.record) ||
         !publicHasSourceIdentity(sourceRead, group.record)
       ) {
         omissions.push({
@@ -2738,7 +2745,7 @@ export async function publishShowcase(input: {
   for (const record of publicRecords) {
     if (!record.subjectId || !record.nativeType) continue;
     const read = await publicRead(record.subjectId);
-    if (!read || subjectId(read) !== record.subjectId || subjectType(read) !== record.nativeType) {
+    if (!read || !currentSourceRead(read, record)) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'public-view-unavailable' });
       continue;
     }
@@ -2779,8 +2786,7 @@ export async function publishShowcase(input: {
         target.subjectId !== endpoint.subjectId ||
         target.nativeType !== endpoint.nativeType ||
         !targetRead ||
-        subjectId(targetRead) !== endpoint.subjectId ||
-        subjectType(targetRead) !== endpoint.nativeType ||
+        !currentSourceRead(targetRead, target) ||
         !publicHasSourceIdentity(targetRead, target)
       ) {
         withheldGraphCandidates.add(assertion.candidateId);
@@ -2881,7 +2887,7 @@ export async function publishShowcase(input: {
       publicIdentity?.labels?.zh ??
       Object.values(publicIdentity?.labels ?? {})[0] ??
       'subject';
-    const route = `/subjects/${record.subjectId}/${subjectSlug(label)}`;
+    const route = `/subjects/${subjectId(read)}/${subjectSlug(label)}`;
     if (imageVisible && imageAssertion && cover) {
       readHandoffs.set(`${record.sourceAlias}\0${record.sourceKey}`, {
         subjectId: record.subjectId,

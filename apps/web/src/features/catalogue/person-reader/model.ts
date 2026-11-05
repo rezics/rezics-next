@@ -108,8 +108,11 @@ export function personCrossSourceIdentity(read: SubjectRead): 'current' | 'uncon
   ] as const;
   let missing = read.subject.type !== 'schema:Person';
   for (const [property, syntax] of providers) {
+    const selected = (read.subject.statements[property] ?? []).filter((statement) => statement.rank !== 'deprecated');
+    if (selected.some((statement) => statement.value.type !== 'value' || typeof statement.value.content !== 'string'))
+      return 'conflicting';
     const values = new Set(
-      (read.subject.statements[property] ?? []).flatMap((statement) =>
+      selected.flatMap((statement) =>
         statement.value.type === 'value' && typeof statement.value.content === 'string'
           ? [statement.value.content]
           : [],
