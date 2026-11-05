@@ -207,7 +207,10 @@ test('approval overflow is rejected before JSON parsing even with a lying small 
   saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'robot-one')!);
   const page = await open(<AutomatedAccountCreatePage />, { ...body });
   await confirm(page.host);
-  const raw = JSON.stringify({ reference: '\u0001'.repeat(4097), expiresAt: new Date(Date.now() + 60000).toISOString() });
+  const raw = JSON.stringify({
+    reference: '\u0001'.repeat(4097),
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+  });
   const parse = spyOn(JSON, 'parse');
   try {
     await flush(() => page.calls[0]!.resolve(new Response(raw, { status: 200, headers: { 'content-length': '1' } })));
@@ -319,9 +322,9 @@ test('newer exact native approval and execution refusals cannot clear an earlier
   await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
   await flush(() => send(page.host));
   await flush(() =>
-    page.calls.at(-1)!.resolve(
-      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
-    ),
+    page.calls
+      .at(-1)!
+      .resolve(Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 })),
   );
   expect(page.calls.filter((call) => call.path === '/account-operations/execute')).toHaveLength(0);
   expect(page.host.textContent).toContain('result remains unresolved');

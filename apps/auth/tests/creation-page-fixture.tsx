@@ -9,7 +9,8 @@ let currentSignal: AbortSignal | undefined;
 const nativeEnv = { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:20' };
 mock.module('@tanstack/react-start', () => ({
   createServerFn: () => ({
-    handler: (handler: (context: { data?: unknown; signal?: AbortSignal }) => unknown) =>
+    handler:
+      (handler: (context: { data?: unknown; signal?: AbortSignal }) => unknown) =>
       (options?: { data?: unknown; signal?: AbortSignal }) => {
         currentSignal = options?.signal;
         return handler({ data: options?.data, signal: options?.signal });

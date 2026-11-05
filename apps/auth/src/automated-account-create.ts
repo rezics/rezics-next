@@ -377,9 +377,7 @@ async function boundSession(accountId: string, signal?: AbortSignal): Promise<Au
   return automatedSessionMatches(session, accountId) ? null : { kind: 'step-up' };
 }
 
-type BoundedCommandResponse =
-  | { kind: 'response'; status: number; body: unknown }
-  | { kind: 'unavailable' };
+type BoundedCommandResponse = { kind: 'response'; status: number; body: unknown } | { kind: 'unavailable' };
 
 /** Each command owns its existing five-second lifetime through streamed body consumption. */
 async function boundedCommandPost(
@@ -439,7 +437,8 @@ function approvalResponse(body: unknown): AccountOperationApprovalResponse | nul
   )
     return null;
   const expires = Date.parse(body.expiresAt);
-  if (!Number.isFinite(expires) || new Date(expires).toISOString() !== body.expiresAt || expires <= Date.now()) return null;
+  if (!Number.isFinite(expires) || new Date(expires).toISOString() !== body.expiresAt || expires <= Date.now())
+    return null;
   return { reference: body.reference, expiresAt: body.expiresAt };
 }
 
@@ -530,12 +529,10 @@ export async function submitAutomatedAttempt(
   if (!current()) return { kind: 'unavailable' };
   const sessionAfterApproval = await boundSession(accountId, signal);
   if (!current()) return { kind: 'unavailable' };
-  if (sessionAfterApproval)
-    return sessionAfterApproval.kind === 'refused' ? { kind: 'unknown' } : sessionAfterApproval;
+  if (sessionAfterApproval) return sessionAfterApproval.kind === 'refused' ? { kind: 'unknown' } : sessionAfterApproval;
   const expires = Date.parse(approvalExpiresAt);
   if (!current()) return { kind: 'unavailable' };
-  if (!attempt.reference || !Number.isFinite(expires) || expires <= Date.now())
-    return { kind: 'unknown' };
+  if (!attempt.reference || !Number.isFinite(expires) || expires <= Date.now()) return { kind: 'unknown' };
   const result = await boundedCommandPost(
     '/account-operations/execute',
     { operation, operationKey, accountId, reference: attempt.reference },

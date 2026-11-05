@@ -13,12 +13,8 @@ import {
 } from './creation-page-fixture';
 creationFixture();
 const { AutomatedAccountCreatePage } = await import('../src/routes/automated.new');
-const {
-  AUTOMATED_PROFILE,
-  createAutomatedAttempt,
-  restoreAutomatedAttempt,
-  saveAutomatedAttempt,
-} = await import('../src/automated-account-create');
+const { AUTOMATED_PROFILE, createAutomatedAttempt, restoreAutomatedAttempt, saveAutomatedAttempt } =
+  await import('../src/automated-account-create');
 
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = {

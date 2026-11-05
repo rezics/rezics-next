@@ -164,9 +164,7 @@ export function accountOperationTransport(
     try {
       const body = await readJsonObject(
         request,
-        command === 'execute'
-          ? Math.max(16384, automatedAccountOperationRequestByteBudgets.execute)
-          : 16384,
+        command === 'execute' ? Math.max(16384, automatedAccountOperationRequestByteBudgets.execute) : 16384,
       );
       const names =
         command === 'approve'

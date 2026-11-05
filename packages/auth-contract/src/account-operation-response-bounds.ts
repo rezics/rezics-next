@@ -135,8 +135,7 @@ const approvalSuccess =
   utf8Bytes(JSON.stringify({ reference: '', expiresAt: '' })) +
   escapedStringBytes(ACCOUNT_OPERATION_REFERENCE_MAX_LENGTH) +
   ACCOUNT_OPERATION_EXPIRY_MAX_LENGTH;
-const executionSuccess =
-  utf8Bytes(JSON.stringify({ accountId: '' })) + ACCOUNT_OPERATION_ACCOUNT_ID_MAX_LENGTH;
+const executionSuccess = utf8Bytes(JSON.stringify({ accountId: '' })) + ACCOUNT_OPERATION_ACCOUNT_ID_MAX_LENGTH;
 const automatedExecuteRequest =
   utf8Bytes(
     JSON.stringify({
