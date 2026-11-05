@@ -657,6 +657,10 @@ test('Annotation and one combined journal row review current facts and read actu
       revision: 4,
       reflection: 'Exact archived reflection',
     });
+    await f.journey.cancel();
+    await f.journey.results('refresh');
+    await f.journey.readCurrent(4);
+    expect(f.journey.snapshot().readback?.value).toMatchObject({ sessionId, revision: 4 });
     expect(f.calls.some((call) => call.path.endsWith('/personal'))).toBe(true);
     expect(f.calls.some((call) => call.path.endsWith('/journal'))).toBe(true);
   } finally {

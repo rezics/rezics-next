@@ -81,6 +81,8 @@ acknowledged rows for the current selection when a later native page omits them.
 current Entry, private annotation reader, occurrence journal reader or addressed FULL
 label-assignment reader, never historical archive values. Removal and seven-day expiry of private evidence do not
 undo admitted Library changes.
+Result refresh retains the original selected mappings, bounded to twenty choices, alongside their acknowledged
+destinations across cancellation. Numeric reader coordinates never substitute for that selected target identity.
 Expiry clears private upload/replay state and retains accepted results until replacement or session retirement.
 Pruning is explicit and native-bounded to 100 evidence records per command.
 
