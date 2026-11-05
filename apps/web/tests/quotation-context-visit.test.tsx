@@ -9,6 +9,7 @@ import { QuotationView } from '../src/features/pages/quotation-view';
 import { CandidateReaderBoundary } from '../src/subject/candidate-lifetime';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
+import { browserObservation } from '../src/session/observation';
 import recordedSubject from '../src/kernel/recorded/subject.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -107,6 +108,7 @@ async function harness(url: string) {
   document.body.append(host);
   const root = (await import('react-dom/client')).createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const stopObservation = browserObservation(client).subscribe(() => {});
   setLocale('en', { reload: false });
   const mount = async (context: string, transport: QuotationTransport, initial?: QuotationRead, reader?: string) =>
     act(async () =>
@@ -136,6 +138,7 @@ async function harness(url: string) {
     cleanup: async () => {
       await act(async () => root.unmount());
       client.clear();
+      stopObservation();
       await window.happyDOM.abort();
       for (const [key, descriptor] of saved) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -210,6 +213,7 @@ test('a changed assertion explains the replacement and Context A/B/A retires lat
         }),
     };
     ui.window.history.replaceState(null, '', `/en/subjects/${work}/work/quotations?context=${contextA}`);
+    await act(async () => ui.root.render(null));
     await ui.mount(contextA, delayed);
     await ui.mount(contextB, delayed);
     await ui.mount(contextA, delayed);
