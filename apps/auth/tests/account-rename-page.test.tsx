@@ -389,11 +389,18 @@ test('failed submitted-marker persistence keeps the original live unknown throug
     return new Response(null, { status: 503 });
   });
   const { host, selected } = await savedReview(async () => current);
-  const slot = window.sessionStorage,
-    set = slot.setItem;
-  slot.setItem = () => {
-    throw Error('quota');
-  };
+  const slot = window.sessionStorage;
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    value: {
+      getItem: slot.getItem.bind(slot),
+      removeItem: slot.removeItem.bind(slot),
+      setItem: () => {
+        throw Error('quota');
+      },
+    },
+  });
   try {
     await send(host);
     expect(readRenameContinuation()?.submitted).toBe(false);
@@ -410,6 +417,7 @@ test('failed submitted-marker persistence keeps the original live unknown throug
     expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
     expect(host.textContent).toContain(m.auth_rename_unknown());
   } finally {
-    slot.setItem = set;
+    if (descriptor) Object.defineProperty(window, 'sessionStorage', descriptor);
+    else Reflect.deleteProperty(window, 'sessionStorage');
   }
 });
