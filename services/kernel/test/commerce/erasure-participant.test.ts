@@ -17,6 +17,7 @@ import {
 } from '../../src/commerce/erasure-participant.ts';
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
+import { readResource } from '../../src/content/reads.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -219,7 +220,8 @@ beforeAll(async () => {
     if (method === 'POST' && path === '/v1/boards' && response.status !== 201) {
       const title = (body as { title: string }).title;
       const diagnostic = await pool.query(
-        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,
+        `SELECT b.route,b.board_id,b.subject_id,b.realm_id,b.visibility,b.title,
+          b.security_revision::text,b.purpose,b.created_at,
           (SELECT json_agg(json_build_object('role',grant_role,'valid',valid::text,'current',valid @> clock_timestamp()))
            FROM access.resource_role_grant r
            WHERE r.route=b.route AND r.resource_id=b.board_id AND r.subject_id=$2) AS roles,
@@ -249,6 +251,43 @@ beforeAll(async () => {
           { pool, deadline: Date.now() + 30_000 },
         )
       )(pool);
+      const boardResource = readResource(
+        {
+          kind: 'board',
+          id: row.board_id,
+          thread_id: null,
+          board_id: null,
+          parent_id: null,
+          author_id: null,
+          head_id: null,
+          first_post_id: null,
+          thread_kind: null,
+          board_purpose: row.purpose,
+          vote_citation: null,
+          title: row.title,
+          visibility: row.visibility,
+          security_revision: row.security_revision,
+          availability: 'available',
+          created_at: row.created_at,
+          licence: null,
+          subject_ids: null,
+          media_ids: null,
+          body: null,
+          sha256: null,
+          revised_at: null,
+          realm_id: row.realm_id,
+          deleted_at: null,
+          restorable: false,
+          decision_id: null,
+        } as Parameters<typeof readResource>[0],
+        {},
+      );
+      const disclosedBoardAllowed = await (
+        await accessCheck(kernel.testAccess, actor, 'board:read', boardResource, {
+          pool,
+          deadline: Date.now() + 30_000,
+        })
+      )(pool);
       console.error(
         'Native board visibility diagnostic',
         JSON.stringify({
@@ -257,6 +296,7 @@ beforeAll(async () => {
           boardScope: actor.kind === 'account' && actor.scopes.includes('board:read'),
           ownerRoleActions: resourceRoleCatalogue(kernel.testAccess)?.roles.get('content.board.owner'),
           boardAllowed,
+          disclosedBoardAllowed,
           subjectAllowed,
         }),
       );
