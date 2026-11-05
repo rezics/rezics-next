@@ -136,8 +136,14 @@ export function CorrectionVisit({
   const issues = correctionIssues(draft);
   const discard = () => {
     controller?.retire();
-    void refreshEntries();
-    onClose();
+    setPreparing(true);
+    void refreshEntries()
+      .then(() => {
+        if (current()) onClose();
+      })
+      .finally(() => {
+        if (current()) setPreparing(false);
+      });
   };
   const state = useSyncExternalStore(
     controller?.subscribe ?? (() => () => {}),
@@ -153,9 +159,6 @@ export function CorrectionVisit({
     undefined,
     {
       title: m.library_annotation_leave_title(),
-      discardTitle: m.library_annotation_leave_title(),
-      discardUnsaved: m.library_selected_correction_departure(),
-      discardPending: m.library_annotation_unresolved_departure(),
       unsaved: m.library_selected_correction_departure(),
       pending: m.library_annotation_unresolved_departure(),
     },
@@ -379,7 +382,7 @@ function Comparison({
 }: {
   page: EntryAnnotationCorrectionPage;
   index: number;
-  current: ReturnType<SelectedCorrection['snapshot']>['current'][string];
+  current: ReturnType<SelectedCorrection['snapshot']>['current'][string] | undefined;
   disabled: boolean;
   confirm: () => void;
 }) {

@@ -226,7 +226,7 @@ for (const width of [390, 1280])
       expect(window.document.activeElement?.textContent).toBe(m.library_annotation_review_title());
       await click(m.library_selected_correction_return());
       expect(closed).toBe(false);
-      expect(window.document.body.textContent).toContain(m.library_annotation_leave_title());
+      expect(window.document.body.textContent).toContain(m.thread_authoring_discard_title());
       await click(m.thread_authoring_stay());
       expect(closed).toBe(false);
       await click(m.library_selected_correction_return());
