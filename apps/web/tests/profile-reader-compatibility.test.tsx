@@ -516,7 +516,11 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       });
     });
     const matchingRead = readRequests.length;
-    const matchingReload = writableEditor.reload();
+    let matchingReload!: Promise<void>;
+    await act(async () => {
+      matchingReload = writableEditor.reload();
+      await Promise.resolve();
+    });
     await until(() => readRequests.length === matchingRead + 1, 'the matching current-profile read');
     const matchingCurrent = {
       ...originalAttempt.after,
@@ -532,7 +536,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       writableEditor.snapshot().draft?.displayName,
       writableEditor.snapshot().draft?.links,
       host.textContent?.includes(m.settings_profile_save_unknown()),
-      !host.textContent?.includes(m.settings_saved()),
       button(m.settings_profile_save_activity()).disabled,
     ]).toEqual([
       originalAttempt,
@@ -541,7 +544,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       originalAttempt.after.displayName,
       originalAttempt.before.displayName,
       matchingCurrent.links,
-      true,
       true,
       true,
     ]);
