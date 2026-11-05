@@ -89,20 +89,32 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
       }
     }
   }
+  const hasOwnAccountAction = [...actions.values()].some((metadata) => metadata.authority === 'own-account');
   const result = compilePolicyCatalogue({
     actions: [...actions].map(([action, metadata]) => ({
       action,
       anonymous: metadata.anonymous,
       authority: metadata.authority === 'own-account' ? 'own-account' : 'resource',
-      resourceTypes: [...new Set([...(metadata['x-resource-types'] ?? []), ...(typesByAction.get(action) ?? [])])],
+      resourceTypes: [
+        ...new Set([
+          ...(metadata['x-resource-types'] ?? []),
+          ...(typesByAction.get(action) ?? []),
+          ...(metadata.authority === 'own-account' ? ['access.account'] : []),
+        ]),
+      ],
       globalReach: isGlobalReachAction(action),
     })),
     roles: [...roles.roles].map(([role, values]) => ({ role, actions: [...values] })),
-    resourceTypes: [...roles.types].map(([type, template]) => ({
-      type,
-      ...(template.owner ? { ownerRole: template.owner } : {}),
-      standingRoles: [...template.standing],
-    })),
+    resourceTypes: [
+      ...[...roles.types].map(([type, template]) => ({
+        type,
+        ...(template.owner ? { ownerRole: template.owner } : {}),
+        standingRoles: [...template.standing],
+      })),
+      ...(roles.types.has('access.account') || !hasOwnAccountAction
+        ? []
+        : [{ type: 'access.account', standingRoles: [] }]),
+    ],
   });
   if (!result.ok)
     throw new TypeError(
@@ -116,6 +128,17 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
 export function nativePolicyCatalogueForAccess(access: Access): PolicyCatalogue | undefined {
   const roles = resourceRoleCatalogue(access);
   return roles ? nativePolicyCatalogues.get(roles) : undefined;
+}
+
+/** Whether this exact action/type pair was admitted from the mounted native registrations. */
+export function hasNativePolicyProfile(catalogue: PolicyCatalogue, action: string, resourceType: string): boolean {
+  return catalogue.actionByName[action]?.resourceTypes.includes(resourceType) ?? false;
+}
+
+/** A point Resource omits its type, so only a single registered type is inferable. */
+export function uniqueNativePolicyResourceType(catalogue: PolicyCatalogue, action: string): string | undefined {
+  const types = catalogue.actionByName[action]?.resourceTypes;
+  return types?.length === 1 ? types[0] : undefined;
 }
 
 /** Evaluate ordinary and explicit forms from distinct SQL branches. `allowed` is intentionally absent. */

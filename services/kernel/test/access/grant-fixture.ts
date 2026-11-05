@@ -11,7 +11,10 @@ import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
-export async function grantFixture(extraActions: readonly string[] = []) {
+export async function grantFixture(
+  extraActions: readonly string[] = [],
+  policyProfile?: Readonly<{ action: string; resourceType: string }>,
+) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
@@ -75,8 +78,26 @@ export async function grantFixture(extraActions: readonly string[] = []) {
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
     await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
   }
+  const declaredActions = actionDeclarations(actions);
+  if (policyProfile) {
+    const metadata = declaredActions.get(policyProfile.action)!;
+    declaredActions.set(policyProfile.action, {
+      ...metadata,
+      'x-resource-types': [policyProfile.resourceType],
+    });
+  }
   const access = createAccess({
-    actions: actionDeclarations(actions),
+    actions: declaredActions,
+    ...(policyProfile
+      ? {
+          resourceRoles: {
+            roles: { 'fixture.permission.reader': [policyProfile.action] },
+            types: {
+              [policyProfile.resourceType]: { owner: 'fixture.permission.reader', standing: [] },
+            },
+          },
+        }
+      : {}),
     auth: {
       issuer,
       audience,

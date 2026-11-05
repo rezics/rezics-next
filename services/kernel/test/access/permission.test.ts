@@ -2,7 +2,13 @@ import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
+import { governanceReachUse, PLATFORM_RESOURCE, usedGovernanceReach } from '../../src/access/governance-reach.ts';
 import { createAccess, checkPermission, checkDelegationBounds } from '../../src/access/permission.ts';
+import {
+  decideNativePermission,
+  nativePolicyCatalogueForAccess,
+  type NativePermissionProjection,
+} from '../../src/access/policy-core.ts';
 import { AccessUnavailableError, createResourcePublicEligibility } from '../../src/access/index.ts';
 import {
   accessCheck,
@@ -30,11 +36,19 @@ const transactionId = id('1234', '7');
 const resource: Resource = { route: 0x6789, id: id('6789', '8') };
 const otherResource: Resource = { route: 0x789a, id: id('789a', '9') };
 const action = 'subject:read';
+const ownAccountAction = 'commerce_sale:list';
 const actions = new Map([
-  [action, { anonymous: false }],
+  [action, { anonymous: false, 'x-resource-types': ['subject'] }],
   ['subject:update', { anonymous: false }],
   ['access:grant', { anonymous: false }],
-  ['subject:public', { anonymous: true }],
+  ['subject:public', { anonymous: true, 'x-resource-types': ['subject'] }],
+  [ownAccountAction, { anonymous: false, authority: 'own-account' as const }],
+  ['post:read', { anonymous: true }],
+  ['post:revise', { anonymous: false }],
+  ['post:erase', { anonymous: false }],
+  ['media:create', { anonymous: false }],
+  ['reaction:set', { anonymous: false }],
+  ['report:create', { anonymous: false }],
 ]);
 const identity = (overrides: Partial<AccountActor> = {}): AccountActor => ({
   kind: 'account',
@@ -96,7 +110,14 @@ async function context(actor: Actor = identity(), deadline = Date.now() + 5000) 
     account: actor.kind === 'account' ? await readAccount(pool, routeOf(actor.accountId), actor.accountId) : null,
   };
 }
-const access = createAccess({ actions, accountEvidence: (_actor, ctx) => ctx.account });
+const access = createAccess({
+  actions,
+  resourceRoles: {
+    roles: { 'fixture.subject.reader': [action] },
+    types: { subject: { owner: 'fixture.subject.reader', standing: [] } },
+  },
+  accountEvidence: (_actor, ctx) => ctx.account,
+});
 async function prepare(actor: Actor = identity(), verb = action, target = resource, deadline?: number) {
   return accessCheck(access, actor, verb, target, await context(actor, deadline));
 }
@@ -260,6 +281,69 @@ test('resource, actor and action must match; operators and first-party preconsen
   await grant();
   expect(await run(identity({ scopes: [action, 'unknown:action'] }), 'unknown:action')).toBe(false);
   expect(await run(identity({ scopes: [action, 'arbitrary:read'] }), 'arbitrary:read')).toBe(false);
+});
+
+test('a missing required primitive remains unavailable even when the grant facts are positive', () => {
+  const catalogue = nativePolicyCatalogueForAccess(access)!;
+  const projection = {
+    assignmentValid: null,
+    deadlineLive: true,
+    localDenied: false,
+    actorActionGrant: true,
+    actorResourceRoleGrant: false,
+  } as unknown as NativePermissionProjection;
+  expect(
+    decideNativePermission(
+      catalogue,
+      {
+        action,
+        resourceType: 'subject',
+        anonymous: false,
+        hasPrincipal: false,
+        authenticatedBenefit: false,
+        scope: true,
+        floor: false,
+        mode: 'ordinary',
+      },
+      projection,
+    ).decision,
+  ).toBe('unavailable');
+});
+
+test('exact own-account and registered Global profiles retain their native ceilings and provenance', async () => {
+  const ownActor = identity({ scopes: [ownAccountAction], requestedBy: null });
+  const ownResource = { route: routeOf(actorId), id: actorId };
+  expect(await run(ownActor, ownAccountAction, ownResource)).toBe(true);
+  expect(await run(ownActor, ownAccountAction, { route: routeOf(principalId), id: principalId })).toBe(false);
+
+  const ownBatch = await prepareReadDecisions(access, {
+    actor: ownActor,
+    context: await context(ownActor),
+    actions: new Set([ownAccountAction]),
+  });
+  await expect(
+    ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [principalId] }),
+  ).rejects.toBeInstanceOf(RangeError);
+  expect(
+    await ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [actorId] }),
+  ).toEqual({ [actorId]: { allowed: true, explicit: false } });
+
+  const governor = identity({ scopes: ['post:erase'], requestedBy: null });
+  await grant(actorId, 'post:erase', PLATFORM_RESOURCE);
+  const evidence = await access.prepare!(governor, 'post:erase', resource, await context(governor));
+  expect(await checkPermission(pool, governor, 'post:erase', resource, evidence)).toBe(true);
+  expect(usedGovernanceReach(evidence)).toBe(true);
+  expect(governanceReachUse(evidence, governor, 'post:erase', resource)?.resources).toEqual([resource]);
+
+  await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+    PLATFORM_RESOURCE.route,
+    PLATFORM_RESOURCE.id,
+  ]);
+  await removeGrant(actorId);
+  await removeGrant(principalId);
+  await grant(actorId, action, PLATFORM_RESOURCE);
+  const noGlobalReach = identity({ requestedBy: null });
+  expect(await run(noGlobalReach, action)).toBe(false);
 });
 
 test('the already-read actor state and epoch fail closed without an actor reread', async () => {

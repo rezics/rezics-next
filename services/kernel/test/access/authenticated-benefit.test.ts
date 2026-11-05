@@ -46,6 +46,8 @@ const resource: Resource = { ...target, authenticatedBenefit: benefit };
 const action = benefit.action;
 const actions = new Map([
   [action, { anonymous: false }],
+  ['edition:sell', { anonymous: false }],
+  ['edition:unpublish', { anonymous: false }],
   ['post:read', { anonymous: true }],
   ['access:grant', { anonymous: false }],
 ]);
