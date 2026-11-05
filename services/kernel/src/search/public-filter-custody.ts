@@ -1863,8 +1863,13 @@ export async function drainGenerationPublicationProofCopy(
   job: string,
 ): Promise<boolean> {
   if (partition !== 0) return false;
-  const retained = await tx.query<{ observation: string; registration: string; bootstrap: string }>(
-    `SELECT o.observation,o.registration,b.bootstrap::text
+  const retained = await tx.query<{
+    observation: string;
+    registration: string;
+    bootstrap: string;
+    consumer_work: string;
+  }>(
+    `SELECT o.observation,o.registration,b.bootstrap::text,o.consumer_work
      FROM semantic.public_filter_bootstrap b
      JOIN search.public_filter_observation o
        ON (o.partition_no,o.consumer_bootstrap,o.observation)=(0,'0:'||b.bootstrap::text,b.publication_observation)
@@ -1878,15 +1883,18 @@ export async function drainGenerationPublicationProofCopy(
   );
   if (!retained.rowCount) return false;
   const row = retained.rows[0]!;
+  const work = decode<Record<string, unknown>>(row.consumer_work);
+  const proofWork = encode({ ...work, prepared: [], preparedRows: [], after: undefined });
   const prepared = await tx.query(
     `UPDATE search.public_filter_prepared SET rows=$3,state='erasing'
      WHERE partition_no=0 AND registration=$1 AND build=$2 AND (state<>'erasing' OR rows<>$3)`,
     [row.registration, '0:' + row.bootstrap, encode([])],
   );
   const observation = await tx.query(
-    `UPDATE search.public_filter_observation SET prepared_rows=$2
-     WHERE partition_no=0 AND observation=$1 AND prepared_rows IS DISTINCT FROM $2`,
-    [row.observation, encode([])],
+    `UPDATE search.public_filter_observation SET prepared_rows=$2,consumer_work=$3
+     WHERE partition_no=0 AND observation=$1
+       AND (prepared_rows IS DISTINCT FROM $2 OR consumer_work IS DISTINCT FROM $3)`,
+    [row.observation, encode([]), proofWork],
   );
   return !!(prepared.rowCount || observation.rowCount);
 }

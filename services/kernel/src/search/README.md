@@ -1937,13 +1937,15 @@ or held. Its original prepared proof payload is emptied only after original read
 proof metadata remains available for replay. Every other retained copy and dispatched writer still blocks the
 drain. Preparation retires its temporary materialization observation through the existing finite custody
 cleanup, retaining its locator until removal so a restart resumes child-before-parent retirement.
+The publication's prepared observation remains until explicit custody retirement, independently of serving
+lease expiry. Draining clears both prepared row stores and the consumer work's duplicate preparation arrays.
 Reconciliation retries preserve the original Source tuple and the retained alias intent.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
 native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
 examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
 its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
-steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
+Steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
 only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
 engine pass without reusing an old frontier. New native outcomes cover incomplete population/barrier refusal, physical

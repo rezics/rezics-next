@@ -1573,7 +1573,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               build: work.bootstrap.id,
               generation: 1n,
               rows: work.preparedRows,
-              expiresAt: Date.now() + 300_000,
+              expiresAt: publication ? Number.MAX_SAFE_INTEGER : Date.now() + 300_000,
             },
             context,
           ),
