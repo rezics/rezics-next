@@ -51,6 +51,7 @@
     "@rezics/search-text": "workspace:*"
   },
   "devDependencies": {
+    "@rezics/conversion": "workspace:*",
     "@rezics/client": "workspace:*",
     "@types/pg": "8.23.1",
     "@types/spdx-license-ids": "3.0.0",
