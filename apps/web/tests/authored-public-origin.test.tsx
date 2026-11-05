@@ -195,10 +195,14 @@ test('mounted entry, contribution menu and authored route keep public intent out
       location: { searchStr: new URL(href, window.location.origin).search, hash: '' },
     });
   try {
-    await renderNode(
-      <EditorialEntry id={addonProfileId} label={label} locale="en" context={candidateContext}>
-        <AuthoredFieldEntry id={addonProfileId} title={label} locale="en" origin={observed} />
-      </EditorialEntry>,
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <EditorialEntry id={addonProfileId} label={label} locale="en" context={candidateContext}>
+            <AuthoredFieldEntry id={addonProfileId} title={label} locale="en" origin={observed} />
+          </EditorialEntry>
+        </QueryClientProvider>,
+      ),
     );
     const publicDom = within(window.document.body);
     await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
