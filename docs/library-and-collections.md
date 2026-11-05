@@ -67,6 +67,10 @@ journal owner in the bounded session seek; unknown dates remain null, without an
 Native subject visibility controls optional labels. The linked contract owns installed methods,
 caller binding, bounded continuation lifecycle, concurrent edits, terminal fences and Web recovery semantics.
 
+Decision: Diary page and period reads preserve ordinary permission denial and account-independent platform closure
+as separate region outcomes, without retained facts or Retry. A refused reported-year summary cannot admit
+occurrences without the existing page/summary revision agreement; independently admitted regions remain visible.
+
 ## Personal facts and one Collection abstraction
 
 Decision: Account member reads add each viewer's own entry state and standard-question score beside each disclosed subject in a private, no-store response.

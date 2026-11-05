@@ -103,6 +103,8 @@ export function ReportedYearPanel({
             </li>
           </ul>
         </>
+      ) : result.kind === 'denied' || result.kind === 'closed' ? (
+        <p role="status">{result.kind === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}</p>
       ) : (
         <>
           <p role="status">{m.library_diary_year_unavailable()}</p>

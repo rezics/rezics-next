@@ -2,10 +2,10 @@ import { Link } from '@tanstack/react-router';
 import type { DiaryAddress } from './address';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import type { ConsumptionSummary, ReportedYearRead, ReportedYearSummary } from './native';
+import type { ConsumptionSummary, DiaryReadFailure, ReportedYearRead, ReportedYearSummary } from './native';
 import { privateCount } from './presentation';
 
-type AllTimeRead = { kind: 'ready'; value: ConsumptionSummary } | { kind: 'unavailable' | 'retired' | 'not-selected' };
+type AllTimeRead = { kind: 'ready'; value: ConsumptionSummary } | DiaryReadFailure | { kind: 'not-selected' };
 type BucketCounts = ReportedYearSummary['monthUnallocated'];
 
 function CountValues({
@@ -53,6 +53,9 @@ function monthName(month: number) {
 }
 
 function YearBucket({ address, result }: { address: DiaryAddress; result: ReportedYearRead | null }) {
+  if (result?.kind === 'denied' || result?.kind === 'closed') {
+    return <p role="status">{result.kind === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}</p>;
+  }
   if (!result || result.kind !== 'ready' || result.value.year !== address.year) {
     return <p role="status">{m.library_diary_year_unavailable()}</p>;
   }
@@ -163,6 +166,8 @@ export function ReadingPeriod({
               {m.library_diary_currentness({ state: allTime.value.currentness.state })}
             </p>
           </>
+        ) : allTime.kind === 'denied' || allTime.kind === 'closed' ? (
+          <p role="status">{allTime.kind === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}</p>
         ) : (
           <div aria-live="polite">
             <p role="status">{m.library_diary_statistics_unavailable()}</p>

@@ -2,6 +2,8 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { createKernelClient } from '@rezics/client';
+import * as start from '../.storybook/react-start';
+import { PlatformClosedError, withPlatformClosedRecognition } from '../src/kernel/platform-closed';
 import { diarySearch, diaryReturnContext, historyReturn } from '../src/library/private-diary/address';
 import {
   readDiaryPage,
@@ -14,7 +16,18 @@ import type { PrivateDiaryLoad } from '../src/library/private-diary/server';
 import type { DiaryOccurrence as KernelDiaryOccurrence } from '../../../services/kernel/src/library/diary-model';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
-mock.module('../src/library/private-diary/server', () => ({ cancelPrivateDiary: mock(async () => 'cancelled') }));
+let nativeClient: ReturnType<typeof createKernelClient>;
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => ({
+  getRequest: () => new Request('https://site.test/library/history'),
+  setResponseHeader: () => {},
+}));
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/kernel/client', () => ({ kernelClient: () => nativeClient }));
+mock.module('../src/library/subject-slot', () => ({
+  readSubjectSlotSession: async () => ({ state: 'signed-in', subject: 'owner', csrfToken: 'csrf', authorization: 'Bearer current' }),
+}));
+const { readPrivateDiary } = await import('../src/library/private-diary/server');
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -188,6 +201,41 @@ test('native year read uses one addressed summary, retains exact strings and rej
   expect(await readReportedYearSummary(client, 'Bearer current', 2020)).toEqual({ kind: 'unavailable' });
 });
 
+test('prepared Diary composition preserves native refusals, retirement, stale pages and producer failures', async () => {
+  const cases = [
+    [403, { code: 'forbidden' }, 'denied'],
+    [403, { code: 'platform_closed' }, 'closed'],
+    [401, { code: 'platform_closed' }, 'retired'],
+    [503, { code: 'platform_closed' }, 'unavailable'],
+    [409, { code: 'stale' }, 'unavailable'],
+  ] as const;
+  for (const wrapped of [false, true]) for (const [status, body, kind] of cases) {
+    const requests: Request[] = [];
+    const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(body, { status });
+    } });
+    nativeClient = wrapped ? withPlatformClosedRecognition(client) : client;
+    for (const address of [{}, { year: 2020 }]) {
+      const result = await readPrivateDiary({ data: address });
+      expect(result).toMatchObject({ kind: 'ready', viewer: 'owner', csrfToken: 'csrf', address,
+        diary: { kind: status === 409 ? 'stale' : kind },
+        summary: { kind: 'year' in address ? 'not-selected' : kind },
+        reportedYear: 'year' in address ? { kind } : null });
+    }
+    expect(requests).toHaveLength(4);
+    expect(requests.every((request) => request.headers.get('authorization') === 'Bearer current')).toBe(true);
+  }
+  for (const error of [new PlatformClosedError(403, {}), { name: 'PlatformClosedError' },
+    { message: 'rezics-platform-closed' }, new Error('forbidden'), { code: 'platform_closed' }]) {
+    nativeClient = createKernelClient('https://kernel.test', { fetch: async () => { throw error; } });
+    const kind = error instanceof PlatformClosedError || 'name' in error && error.name === 'PlatformClosedError' ||
+      'message' in error && error.message === 'rezics-platform-closed' ? 'closed' : 'unavailable';
+    expect(await readPrivateDiary({ data: {} })).toMatchObject({ diary: { kind }, summary: { kind } });
+    expect(await readPrivateDiary({ data: { year: 2020 } })).toMatchObject({ diary: { kind }, reportedYear: { kind } });
+  }
+});
+
 test('mounted year counts keep year-only separate, open exact buckets and remove stale owner/year values', async () => {
   const h = await mount();
   try {
@@ -242,6 +290,20 @@ test('active period reads native all-time, year, month and unallocated counts wi
     expect(h.host.textContent).toContain('9,007,199,254,740,993');
     expect(h.host.textContent).toContain(m.library_diary_period_precision_unavailable());
     expect(h.host.textContent).toContain(m.library_diary_page_empty());
+
+    for (const kind of ['denied', 'closed'] as const) {
+      const feedback = kind === 'closed' ? m.platform_closed_message() : m.ctxw_denied();
+      await h.show({ ...allTimeLoad, summary: { kind } });
+      expect(h.host.textContent).toContain(feedback);
+      expect(h.host.querySelector('dl')).toBeNull();
+      expect(h.host.textContent).toContain(m.library_diary_page_empty());
+      expect(h.host.textContent).not.toContain(m.library_selection_retry());
+      await h.show({ ...allTimeLoad, diary: { kind } });
+      expect(h.host.textContent).toContain(feedback);
+      expect(h.host.textContent).toContain('9,007,199,254,740,993');
+      expect(h.host.textContent).not.toContain(m.library_diary_page_empty());
+      expect(h.host.textContent).not.toContain(m.library_selection_retry());
+    }
 
     await h.navigate({ year: 2020 });
     const yearLoad: PrivateDiaryLoad = {
@@ -505,6 +567,20 @@ test('bucket return restores exact frontier/focus and rejects old bucket or chan
       await h.show({ ...value, address: returned });
       expect(h.host.querySelector('ol')).not.toBeNull();
 
+      for (const kind of ['denied', 'closed'] as const) {
+        const refused = { ...value, address: returned, reportedYear: { kind } };
+        await h.show(refused);
+        expect(h.host.textContent).toContain(kind === 'closed' ? m.platform_closed_message() : m.ctxw_denied());
+        expect(h.host.querySelector('ol, dl, details')).toBeNull();
+        expect(h.host.textContent).not.toContain(m.library_selection_retry());
+        expect(h.host.textContent).not.toContain(m.library_diary_page_empty());
+        expect(h.host.querySelector('li a')).toBeNull();
+        await h.show(refused, 'replacement');
+        expect(h.host.textContent).not.toContain(m.ctxw_denied());
+        expect(h.host.textContent).not.toContain(m.platform_closed_message());
+        await h.show({ ...value, address: returned });
+        expect(h.host.querySelector('details')?.open).toBe(false);
+      }
       h.host.querySelector('details')!.open = true;
       const receivedPage = value.diary.kind === 'ready' ? value.diary.page : undefined;
       await h.navigate({ year: 2020, month: 'unallocated' });

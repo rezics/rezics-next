@@ -80,6 +80,12 @@ export function PrivateDiaryPage({
           yearSummary?.kind === 'ready' &&
           page.currentness?.revision !== yearSummary.value.currentness.revision)));
   const visiblePage = currentPage ? page : null;
+  const pageRefusal =
+    authorizedLoad?.diary.kind === 'denied' || authorizedLoad?.diary.kind === 'closed'
+      ? authorizedLoad.diary.kind
+      : page && !currentPage && (yearSummary?.kind === 'denied' || yearSummary?.kind === 'closed')
+        ? yearSummary.kind
+        : null;
   const reviewIdentity = {
     loaded,
     authorizedLoad,
@@ -246,6 +252,10 @@ export function PrivateDiaryPage({
             {m.library_diary_restart()}
           </Link>
         </section>
+      ) : pageRefusal ? (
+        <p role="status" className="rounded-md border p-4">
+          {pageRefusal === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}
+        </p>
       ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
         <section className="rounded-md border p-4">
           <p>{m.library_diary_read_unavailable()}</p>
