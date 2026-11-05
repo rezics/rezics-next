@@ -21,7 +21,7 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
-import { activeRelease, readRelease } from '../semantic/definitions.ts';
+import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import {
@@ -971,7 +971,6 @@ export function createSearchService({
         if (releaseBinding) {
           if (readContext?.savedCollection) {
             // The saved rule's immutable release remains its meaning after activation changes.
-            if (!(await sourceRequest(() => readRelease(pool, releaseBinding.digest)))) throw indexNotReady();
             return;
           }
           const latest = await sourceRequest(() => activeRelease(pool));
