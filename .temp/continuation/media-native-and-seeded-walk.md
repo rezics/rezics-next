@@ -46,3 +46,10 @@ The required manager notification was attempted twice with `bun tools/goal/src/c
 both failed before sending with `Error: unknown pool policy field: maxConcurrent`. This worktree's retained
 CLI cannot decode the current controller pool policy. This file preserves the exact receiving report without
 changing control-plane configuration or Accounts authorization code.
+
+The raw Auth script check `3a52495e-ef3a-4ddd-879d-4189e24f364f` passed the new binding scenario but the
+retained mounted-scope scenario failed SQL import with `No database URL: set DATABASE_URL in the environment,
+.env.local or .env, or "direct_url" in .reylo.yaml.` The mounted-scope scenario has moved unchanged to
+`services/kernel/test/content/media-dev-stack-configuration.test.ts`, under the owning native check-host
+protocol. Its complete original scope assertions are retained. The full Auth dev-stack browser scenario remains
+part of the owner-deferred seeded/browser execution.

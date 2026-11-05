@@ -178,6 +178,8 @@ Upload cleanup deletes the failed original only, preserving any independently pr
 Decision: local media serving adapts the existing site object port to the native file store; it adds no upload
 writer, public object URL or production endpoint. Focused transport acceptance covers unauthorized access,
 invalid keys, oversized external bytes, range reads, producer readback and exact original cleanup.
+Native mounted-scope composition acceptance runs in the Kernel check host, which supplies its migrated SQL
+analysis database; pure local binding acceptance stays in the Auth script suite.
 
 Decision: local media acceptance starts the supported `setup`/`start` composition against its owning check's
 isolated database and search node, with separate loopback application ports, before testing site media admission.

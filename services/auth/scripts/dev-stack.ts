@@ -12,8 +12,6 @@ import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 
-import { developmentMediaHandler } from '../../kernel/src/content/media-local-http.ts';
-
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
 const LOCAL_MEDIA_SOURCE_HOST = 'lain.bgm.tv';
@@ -656,7 +654,9 @@ async function serveHost() {
     throw error;
   }
   const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
-  const media = mediaBindings.LOCAL_MEDIA_TOKEN ? developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN) : undefined;
+  const media = mediaBindings.LOCAL_MEDIA_TOKEN
+    ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
+    : undefined;
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: localPort(origins.native),
