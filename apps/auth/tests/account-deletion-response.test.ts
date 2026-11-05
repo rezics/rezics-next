@@ -48,7 +48,10 @@ test('closed usable approval and exact original success; malformed output never 
   }
   for (const status of [400, 401, 403, 409, 413, 415, 503]) {
     replies([Response.json(approval()), refusal(status)]);
-    expect((await runAccountOperation('key', operation, browser)).ok).toBe(false);
+    expect(await runAccountOperation('key', operation, browser)).toEqual({
+      ok: false,
+      reason: status === 503 ? 'unavailable' : [401, 403, 409].includes(status) ? 'denied' : 'failure',
+    });
   }
   replies([Response.json(approval()), Response.json({ accountId: 'original' })]);
   expect(await runAccountOperation('key', operation, browser)).toEqual({ ok: true, accountId: 'original' });
