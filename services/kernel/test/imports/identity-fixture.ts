@@ -10,6 +10,7 @@ import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes, randomUU
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -331,7 +332,15 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     };
     // Built-in role definitions already come from createAccess. Expose their exact
     // resolved data for observation, without attempting to redefine built-ins.
-    const access = createAccess({ actions, auth: accessConfig.auth! });
+    const nativeAccess = createAccess({ actions, auth: accessConfig.auth! });
+    const authorizationChecks: { action: string; resource: string; allowed: boolean }[] = [];
+    const access = deriveAccess(nativeAccess, {
+      async authorize(client, actor, action, resource, evidence, time) {
+        const allowed = await nativeAccess.authorize(client, actor, action, resource, evidence, time);
+        authorizationChecks.push({ action, resource: resource.id, allowed });
+        return allowed;
+      },
+    });
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool: database.pool,
@@ -536,6 +545,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
     }
     async function grant(path: string, accountId: string, actions: readonly string[]) {
+      authorizationChecks.length = 0;
       const key = randomUUID();
       const send = () =>
         app.handle(
@@ -562,7 +572,9 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
       if (![200, 201].includes(response.status)) {
         const problem = await response.json();
-        throw new Error(`Public ${path} ${actions}: HTTP ${response.status} ${JSON.stringify(problem)}`);
+        throw new Error(
+          `Public ${path} ${actions}: HTTP ${response.status} ${JSON.stringify(problem)}; native checks ${JSON.stringify(authorizationChecks)}`,
+        );
       }
       const body = (await response.json()) as { grant: GrantInput };
       if (path === '/v1/grants') grantLocators.push(body.grant);
