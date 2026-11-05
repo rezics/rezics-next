@@ -2022,6 +2022,7 @@ export class WorkerJob implements GateOutcomeSink {
         candidate: handoff.candidate,
         base: handoff.base,
         diagnostic,
+        compilerDiagnostic: handoff.diagnostic,
         logPath: handoff.logPath,
       });
       recordFlow(store.db, {

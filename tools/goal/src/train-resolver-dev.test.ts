@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { agentAdapter, withAgentAdapter } from './agents.ts';
 import { MergeTrain } from './merge-train.ts';
@@ -498,11 +498,15 @@ test('a dev compile defect returns to the original worker session, repairs in pl
       candidate: string;
       logPath: string;
       diagnostic: string;
+      compilerDiagnostic: { file: string; line: number; column: number; message: string };
     };
     expect(diagnostic.sourceCommit).toBe(git(task.worktree, 'rev-parse', 'HEAD~1'));
     expect(diagnostic.candidate).toMatch(/^[0-9a-f]{40}$/);
     expect(diagnostic.logPath.startsWith('/')).toBe(true);
-    expect(readFileSync(diagnostic.logPath, 'utf8')).toContain(`${join(task.worktree, file)}:2:`);
+    expect(existsSync(diagnostic.logPath)).toBe(true);
+    expect(existsSync(diagnostic.compilerDiagnostic.file)).toBe(true);
+    expect(diagnostic.compilerDiagnostic).toMatchObject({ file: join(task.worktree, file), line: 2 });
+    expect(readFileSync(diagnostic.logPath, 'utf8')).toContain('Dev landing transpile diagnostic:');
     expect(diagnostic.diagnostic).toContain('constant');
     expect(h.store.record({ taskId: task.id, attempt: 1 })).toMatchObject({ outcome: 'pending-gate' });
     expect(h.store.events(task.id, 1).filter((event) => event.kind === 'gate-outcome')).toHaveLength(0);

@@ -1585,6 +1585,11 @@ function transpileHandoff(
 ): DevLandingTranspileHandoff {
   if (result.outcome !== 'diagnostic' || !result.diagnostic || result.elapsedMs === null)
     throw new Error('dev landing compiler handoff requires a measured TypeScript diagnostic');
+  const diagnostic = { ...result.diagnostic };
+  if (diagnostic.file) {
+    const sourcePath = changedFiles.find((path) => diagnostic.file!.endsWith(`/${path}`));
+    if (sourcePath) diagnostic.file = resolve(entry.request.worktree, sourcePath);
+  }
   return {
     kind: 'dev-landing-transpile',
     taskId: entry.request.taskId,
@@ -1598,7 +1603,7 @@ function transpileHandoff(
     typescriptFiles: [...result.typescriptFiles],
     elapsedMs: result.elapsedMs,
     logPath: result.logPath,
-    diagnostic: result.diagnostic,
+    diagnostic,
   };
 }
 
