@@ -6,33 +6,36 @@ those suites have passed. Shared native bounds and evidence are owned by the [Ke
 
 ## Collection operation costs
 
-Decision: keep each native repair page at 128 raw original occurrences, independently of Source's 100-key ceiling; charge the failed edit, separately authorized begin, each outbox/DBOS continuation, and deliberate retry as separate stages.
+Decision: preserve the existing Collection actor command, exact 720-hour Undo and purge key, ten-minute maintenance
+workflow, and every current page cap. Bind complete nine-axis costs at the existing command, page and segment
+executions, composed with the actual Shelf, public-reduction and native Source owners.
 
-Price the complete operation: request and status reads, checkpoints, activation, preparation, authorization, locks,
-serialization, receipt and effect work, source fences, negative or discarded candidates, and every nested disclosure.
-A short returned page, deduplicated terminal set or fixed candidate declaration does not reduce physical work already
-performed. Apply the existing 100 raw-key and 262,144-row native ceilings and the published Search maxima. Producer
-declarations describe admissible work; they are not native grants, pagination evidence or funding.
+Library's immutable closed operations price the reached work before dispatch, using the actual SQL, schema-bounded
+escaped projections, serialized binds, negative probes, trigger work, transaction controls and DBOS calls. The nine
+axes are `candidateKeys`, `nativeRows`, `identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`,
+`emptySeeks` and `engineRequests`; arithmetic is overflow-safe. A returned row count never reduces a declaration.
+Declarations describe work only; they do not grant native execution or reservation authority.
 
-Library owns one immutable closed nine-axis operation set: `candidateKeys`, `nativeRows`,
-`identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks` and `engineRequests`.
-Use overflow-safe sums, complete nested costs, explicit aliases and deterministic conflict resolution. Actual
-Progress/Continue and Content Feed callers consume these descriptors.
+Collection delete and exact restore remain existing `runCommand` transactions and current owner authorization still
+precedes receipt replay. Their paths account for preparation, identity and owner reads, lock and revision checks,
+original SQL, Shelf write/counter, receipt and History, effects, rollback and mounted result. A listed delete composes
+the public-reduction owner's actual writes. Replay and stale, expired or no-effect paths have separate costs and do
+not repeat or rebase the original result.
 
-`collection-history-bounds.ts` now binds each metadata-history SQL leaf to its exact stored operands and bounded
-projection. Capture composes curator reconciliation, transition append, the 129-row prune scan and partial-coverage
-update once; the snapshot projection reserves escaped schema maxima for both sides of all five metadata fields.
-First/next page, empty page, state and exact-revision leaves retain the 128-entry journal bound and 51-row page
-sentinel. These are DAO declarations only. The dense-order journey keeps the failed add/move command and the
-separately authorized repair-begin command in their existing `runCommand` transactions. A failed edit commits no
-receipt and returns dependency-unavailable; the original request body and key remain available for a deliberate,
-currently authorized retry after repair. Each committed page writes its next exact locator to the existing outbox in
-the same fence transaction. The existing outbox effect then enqueues that locator through the DBOS client with the
-current workflow name, maintenance queue, step identity and return-existing policy. Page SQL and event-fence bytes
-are charged in the page declaration; the enqueue is a separate `engineRequests: 1` continuation term and is not
-double-counted in the event fence. The page wrapper preserves the existing one-command-attempt-per-DBOS-attempt
-retry composition. Full actor Access/receipt/History/result-envelope cost derivation remains in
-`.temp/continuation/dense-collection-edit-costs.md`.
+Retention binds the due partition's ordered eight-key seek, exact deletion episode and cutoff. Each cleanup call
+revalidates its key and authoritative time under the locked head, then commits at most one nonempty child page in
+the existing order. Empty probes, row triggers, history cleanup, metadata pin revision, head anti-existence checks
+and the final retirement fence remain priced. Public custody and extant native capture custody retain the head.
+Capture retirement composes the native custody owner's bounded generation/hold/fence checks and its independent
+80-row page. Ordinary cleanup keeps the 64-row member, fact and reference pages, 25-entry metadata-history page,
+4096-byte key ceiling, and existing indexes and source generations.
+
+The ten-minute DBOS workflow uses at most 32 iterations per segment. Discovery and page removal remain independent
+retried steps; continuation keeps the original root, cutoff and exact frontier and carries at most one key. The
+segment cost distinguishes empty, pending, stale, not-due, retained and purged paths, repeated delivery and final
+enqueue. It is not a bound on an account's complete retained graph. Dense-order repair retains its separate failed
+edit, separately authorized begin, per-page outbox continuation and deliberate retry stages; each remains composed
+with its existing Shelf, Source and command owners.
 
 ## Whole-query publication
 
