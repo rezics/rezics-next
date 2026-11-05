@@ -35,7 +35,7 @@ function createController(io: WatchManagementIO, owner: NonNullable<ReturnType<t
     readCurrent: owner.readCurrent,
     credential: owner.credential,
     subscribe: owner.subscribe,
-  });
+  }, owner);
 }
 
 /** Visited Settings panels keep this controller and its unresolved command alive across category changes. */
@@ -93,7 +93,7 @@ function OwnedWatches({
     controller.finishReturnFocus();
   }, [controller, state.returnFocus]);
   const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
-  const originalWaiting = usePreferenceRetry(undefined, state.writeRetryAt);
+  const writeWaiting = usePreferenceRetry(undefined, state.writeRetryAt);
   if (state.retired) return null;
   const reading = state.read === 'idle' || state.read === 'loading';
   const failed =
@@ -165,12 +165,15 @@ function OwnedWatches({
           {state.write === 'removed_current' ? <p role="status">{m.settings_watches_removed_current()}</p> : null}
           {state.write === 'rejected' || state.write === 'conflict' || state.write === 'denied' ? (
             <Alert variant="destructive">
-              <AlertDescription
-                data-response-status={state.writeProblem?.status ?? ''}
-                data-response-code={state.writeProblem?.code ?? ''}
-                data-retry-after={state.writeProblem?.retryAfter}
-              >
-                {writeText}
+              <AlertDescription className="space-y-3">
+                <p
+                  data-response-status={state.writeProblem?.status ?? ''}
+                  data-response-code={state.writeProblem?.code ?? ''}
+                  data-retry-after={state.writeProblem?.retryAfter}
+                >
+                  {writeText}
+                </p>
+                {writeWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -185,7 +188,7 @@ function OwnedWatches({
                 >
                   {m.settings_watches_uncertain_text()}
                 </p>
-                {originalWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+                {writeWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
                 <Button
                   className={controlClass}
                   variant="outline"
@@ -196,6 +199,9 @@ function OwnedWatches({
                 </Button>
               </AlertDescription>
             </Alert>
+          ) : null}
+          {writeWaiting && !['uncertain', 'rejected', 'conflict', 'denied'].includes(state.write) ? (
+            <p role="status">{m.settings_retry_wait()}</p>
           ) : null}
           {reading ? (
             <p role="status" aria-busy="true">
