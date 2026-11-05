@@ -1348,13 +1348,9 @@ export function createSearchService({
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
         sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
-          checkHits(
-            disclosureSource,
-            hits,
-            clauses,
-            {
-              ...(admitted && !preparedScope
-                ? {
+          checkHits(disclosureSource, hits, clauses, {
+            ...(admitted && !preparedScope
+              ? {
                   filter: catalogueFilter(admitted),
                   relationProperties,
                   ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
@@ -1365,14 +1361,13 @@ export function createSearchService({
                       : null;
                   },
                 }
-                : {}),
-              ...(currentTextDisclosure && text
-                ? {
-                    currentText: (subject: IndexedSubject) => currentTextDisclosure.matchesText(subject, text),
-                  }
-                : {}),
-            },
-          ),
+              : {}),
+            ...(currentTextDisclosure && text
+              ? {
+                  currentText: (subject: IndexedSubject) => currentTextDisclosure.matchesText(subject, text),
+                }
+              : {}),
+          }),
         );
         inexact ||= relationRejected === true;
         const ratingAccepted = rating ? await ratingCandidates([...hits], rating, sourcePositions) : undefined;

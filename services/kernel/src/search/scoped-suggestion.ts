@@ -78,15 +78,10 @@ export async function executeScopedSuggestions(options: {
 
   const check = async (hits: readonly NativeSearchHit[]): Promise<ReadonlyMap<NativeSearchHit, IndexedSubject>> => {
     const { passed } = await options.readSource(() =>
-      checkHits(
-        options.source,
-        hits,
-        clauses,
-        {
-          ...(options.preparedScope ? {} : { filter: options.filter, relationProperties }),
-          currentText: options.currentText,
-        },
-      ),
+      checkHits(options.source, hits, clauses, {
+        ...(options.preparedScope ? {} : { filter: options.filter, relationProperties }),
+        currentText: options.currentText,
+      }),
     );
     const acceptedById = new Map(passed.map(({ hit, subject }) => [hit.id, subject]));
     const accepted = new Map(

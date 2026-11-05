@@ -56,8 +56,9 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
     return result;
   }
 
-  const values = (subject: IndexedSubject) =>
-    [...new Set([...publicNames(subject).map(({ value }) => value), ...subject.descriptions.map(({ value }) => value)])];
+  const values = (subject: IndexedSubject) => [
+    ...new Set([...publicNames(subject).map(({ value }) => value), ...subject.descriptions.map(({ value }) => value)]),
+  ];
 
   async function matchesText(subject: IndexedSubject, query: TextNode): Promise<boolean> {
     const texts = values(subject);
@@ -92,7 +93,10 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
         continue;
       }
       if (key.startsWith('term\0')) {
-        leafMatches.set(key, tokens.every(({ text }) => all.has(text)));
+        leafMatches.set(
+          key,
+          tokens.every(({ text }) => all.has(text)),
+        );
         continue;
       }
       const phrase = tokens.map(({ text, position }) => ({ text, offset: position - tokens[0]!.position }));
