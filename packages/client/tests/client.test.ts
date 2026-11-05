@@ -332,7 +332,7 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   expect(isReviewedPersonEndpoint({ ...endpoint, privateClaim: ID })).toBe(false);
 });
 
-test('reviewed Person evidence accepts exactly the four source keys with their interpreted identifiers', () => {
+test('reviewed Person evidence accepts exactly the four source keys with their interpreted identifiers', async () => {
   const OTHER = '019a1b2c-3d4e-7f00-8a00-000000000002';
   const claims = [
     { source: 'bangumi', externalId: 'person:123', property: 'wdt:P6298', value: '123' },
