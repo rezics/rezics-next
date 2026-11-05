@@ -189,7 +189,8 @@ const fakeKernelClient = {
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => fakeKernelClient }));
+const kernel = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => fakeKernelClient }));
 
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
