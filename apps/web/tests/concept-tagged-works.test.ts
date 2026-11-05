@@ -64,7 +64,7 @@ test('the mounted weight control and committed request preserve the fixed tag, m
       onChange() {},
     }),
   );
-  expect(markup).toContain('Source tag weight');
+  expect(markup).toContain('source tag weight');
   expect(markup).toContain('name="gte"');
   expect(markup).toContain('value="2"');
   expect(markup).toContain('value="3"');
