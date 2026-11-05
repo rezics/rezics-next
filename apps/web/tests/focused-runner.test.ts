@@ -62,6 +62,8 @@ test('named host files use the host-runner path-ignore override', () => {
   expect(admitExplicitHostTestCommand(['bun', 'test', 'tests/pages-workers.host.test.ts'])).toEqual([
     'bun',
     'test',
+    '--preload',
+    './tests/native/register-kernel-sql.ts',
     '--path-ignore-patterns=node_modules/**',
     'tests/pages-workers.host.test.ts',
   ]);
@@ -77,7 +79,14 @@ test('named host files use the host-runner path-ignore override', () => {
       '--path-ignore-patterns=custom/**',
       'tests/pages-workers.host.test.ts',
     ]),
-  ).toEqual(['bun', 'test', '--path-ignore-patterns=custom/**', 'tests/pages-workers.host.test.ts']);
+  ).toEqual([
+    'bun',
+    'test',
+    '--preload',
+    './tests/native/register-kernel-sql.ts',
+    '--path-ignore-patterns=custom/**',
+    'tests/pages-workers.host.test.ts',
+  ]);
 });
 
 test('an explicit nested host file executes when bunfig excludes host discovery', async () => {
@@ -86,6 +95,7 @@ test('an explicit nested host file executes when bunfig excludes host discovery'
   try {
     mkdirSync(join(project, 'tests', 'native'), { recursive: true });
     writeFileSync(join(project, 'bunfig.toml'), '[test]\npathIgnorePatterns = ["**/*.host.test.ts"]\n');
+    writeFileSync(join(project, 'tests', 'native', 'register-kernel-sql.ts'), '');
     writeFileSync(
       join(project, 'tests', 'ordinary.test.ts'),
       "import { expect, test } from 'bun:test';\ntest('ordinary witness', () => { console.log('ORDINARY_WITNESS_EXECUTED'); expect(1).toBe(1); });\n",

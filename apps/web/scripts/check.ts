@@ -17,6 +17,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StackRun } from '../../../scripts/stack-run.ts';
 import { placeWebCheck, requireWebCheckCustody, routeWebCheck, workspacePath } from './check-placement.ts';
+import { admitExplicitHostTestCommand } from './focused.ts';
 import {
   databaseCheck,
   ownDatabase,
@@ -464,13 +465,10 @@ export async function runWebHostTests(
   const runAuthBinding = runtime.runAuthBinding ?? runAuthBindingHostTest;
   const runNative =
     runtime.runNative ??
-    ((selected: string[], commandEnv: NodeJS.ProcessEnv) =>
-      runCommand(
-        'host tests',
-        'bun',
-        ['test', '--path-ignore-patterns=node_modules/**', ...selected.map((file) => `./${file}`)],
-        commandEnv,
-      ));
+    ((selected: string[], commandEnv: NodeJS.ProcessEnv) => {
+      const argv = admitExplicitHostTestCommand(['bun', 'test', ...selected.map((file) => `./${file}`)]);
+      return runCommand('host tests', argv[0]!, argv.slice(1), commandEnv);
+    });
 
   if (files.includes(authFile)) {
     try {
