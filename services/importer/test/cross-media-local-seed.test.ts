@@ -52,8 +52,9 @@ test('development seed fetches the shared cache once and passes the local person
   const args: string[] = [];
   let passedOptions: unknown;
   let fetches = 0;
+  const report = { persona: { status: 'incomplete', collections: [] } };
   try {
-    await runDevelopmentSeed({
+    const result = await runDevelopmentSeed({
       root,
       env: {
         REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
@@ -78,10 +79,12 @@ test('development seed fetches the shared cache once and passes the local person
       runSeed: async (argv, seedOptions) => {
         args.push(...argv);
         passedOptions = seedOptions;
+        return report as never;
       },
     });
     const option = (name: string) => args[args.indexOf(name) + 1];
     expect(fetches).toBe(1);
+    expect(result).toBe(report);
     expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
     expect(option('--vndb')).toBe('/shared/dumps/vndb');
     expect(option('--api')).toBe('http://127.0.0.1:4100');
