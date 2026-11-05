@@ -13,7 +13,7 @@ mock.module('../../session/request', () => ({
   sessionSubject: () => reader,
   viewerCredential: () => 'Bearer authored-owner',
 }));
-const { kernelVndbPort } = await import('./native');
+const { kernelVndbPort, readVndbTargetEntry } = await import('./native');
 
 test('request boundary preserves deliberate zero, clear, explicit occurrence and both review identities', () => {
   const common = { ordinal: 0, action: 'score' as const, targetId, questionId: targetId, questionRevision: 1 };
@@ -160,4 +160,33 @@ test('lost transport keeps the original command', async () => {
   });
   const port = kernelVndbPort(client, new Request('https://web.invalid'), {}, true, owner);
   expect(await port.apply(command)).toEqual({ kind: 'unknown', command });
+});
+
+// Current target selection is independent of the private source review and never writes an Entry.
+test('explicit selection reads the current owner Entry and distinguishes absence from denial', async () => {
+  const requests: Request[] = [];
+  let status = 200;
+  const baseline = { state: 'playing', revision: 3, incarnationId: reviewId };
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(status === 200 ? { libraryEntry: baseline } : {}, { status });
+    }) as typeof fetch,
+  });
+  const read = () => readVndbTargetEntry(client, new Request('https://web.invalid'), {}, true, owner, targetId);
+  expect(await read()).toEqual({ kind: 'target-entry', baseline });
+  status = 404;
+  expect(await read()).toEqual({ kind: 'target-entry', baseline: null });
+  status = 403;
+  expect(await read()).toEqual({ kind: 'denied', status: 403 });
+  reader = undefined;
+  expect(await read()).toEqual({ kind: 'denied', status: 401 });
+  reader = owner;
+  expect(requests).toHaveLength(3);
+  expect(
+    requests.every(
+      (request) => request.method === 'GET' && request.headers.get('authorization') === 'Bearer authored-owner',
+    ),
+  ).toBe(true);
+  expect(new URL(requests[0]!.url).pathname).toBe(`/v1/libraryEntries/${targetId}`);
 });

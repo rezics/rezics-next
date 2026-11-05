@@ -638,6 +638,11 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
       rows.set(row.ordinal, updated);
       rememberRowEffects(updated);
       if (page) page = { ...page, rows: page.rows.map((item) => (item.ordinal === row.ordinal ? updated : item)) };
+      // Explicit matching changes the native vote/profile basis. Read it before offering score consent;
+      // the review receipt itself is not a current target or vote preview.
+      if (response.value.targetId && response.value.targetId !== row.target?.targetId) {
+        return loadPage(pageOffset);
+      }
     }
     stage = 'review';
     return snapshot();
