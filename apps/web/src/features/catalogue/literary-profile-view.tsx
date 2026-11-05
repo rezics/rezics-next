@@ -42,6 +42,8 @@ import {
 } from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
+import { LiteraryCurrentAssertionInspection } from './literary-current-visit-inspection';
+import type { LiteraryCurrentVisit } from './literary-current-visit';
 import {
   isLiteraryType,
   literaryFields,
@@ -519,6 +521,7 @@ export const LiteraryProfile = catalogueEditor(LiteraryProfileLive);
 
 function LiteraryProfileLive({
   id,
+  visit,
   locale,
   session,
   transport,
@@ -528,6 +531,7 @@ function LiteraryProfileLive({
   authored,
 }: {
   id?: string | undefined;
+  visit?: LiteraryCurrentVisit | undefined;
   address?: string | undefined;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
@@ -858,7 +862,13 @@ function LiteraryProfileLive({
     );
   // A previous successful subject read is never authority for the current public page.
   const admitted =
-    !readingRefresh.pending && !query.isError && query.data?.ok && query.data.current?.public.subject.id === id
+    !readingRefresh.pending &&
+    !query.isError &&
+    query.data?.ok &&
+    query.data.current?.public.subject.id === id &&
+    (!visit ||
+      (query.data.current.public.subject.type === visit.type &&
+        query.data.current.public.subject.context === visit.context))
       ? query.data
       : undefined;
   const reload = () => {
@@ -880,6 +890,8 @@ function LiteraryProfileLive({
       read={admitted}
       locale={locale}
       session={session}
+      visit={visit}
+      reader={lifetime.reader}
       facts={facts}
       review={review}
       relations={relations}
@@ -891,11 +903,16 @@ function LiteraryProfileLive({
       revision={JSON.stringify([id, readingRefresh.sequence])}
       reload={reload}
       observe={(next) => {
-        if (lifetime.active())
-          client.setQueryData<LiteraryRead>(
-            queryKey,
-            next.ok ? { ok: true, release: next.release, current: next } : next,
-          );
+        if (!lifetime.active()) return;
+        const current =
+          next.ok &&
+          next.public.subject.id === id &&
+          (!visit ||
+            (next.public.subject.type === visit.type && next.public.subject.context === visit.context));
+        client.setQueryData<LiteraryRead>(
+          queryKey,
+          current ? { ok: true, release: next.release, current: next } : next.ok ? { ok: false, reason: 'stale' } : next,
+        );
       }}
     />
   );
@@ -906,6 +923,8 @@ function LiteraryCorrection({
   read,
   locale,
   session,
+  visit,
+  reader,
   facts,
   review,
   relations,
@@ -921,6 +940,8 @@ function LiteraryCorrection({
   read: Ready | undefined;
   locale: string;
   session: string;
+  visit?: LiteraryCurrentVisit | undefined;
+  reader: string;
   facts: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
   relations: ReactNode;
@@ -993,6 +1014,11 @@ function LiteraryCorrection({
               </a>
             </section>
             <nav className="flex min-w-0 flex-wrap gap-3">
+              {visit && (
+                <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={visit.source}>
+                  {m.literary_visit_return({}, o)}
+                </a>
+              )}
               <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={href}>
                 {m.candidate_view_public({}, o)}
               </a>
@@ -1072,6 +1098,19 @@ function LiteraryCorrection({
         )}
         {session === 'signed-in' && privateRead?.current && (
           <>
+            {visible && current && (
+              <LiteraryCurrentAssertionInspection
+                read={current}
+                locale={locale}
+                visit={visit}
+                reader={reader}
+                effectiveReader={() => lifetime.reader}
+                revision={revision}
+                active={canOpen}
+                refresh={facts.read}
+                observe={observe}
+              />
+            )}
             <section aria-label={visible ? m.literary_bibliography({}, o) : undefined} className="space-y-4">
               {visible && <h2 className="text-xl font-semibold">{m.literary_bibliography({}, o)}</h2>}
               <LiteraryFacts

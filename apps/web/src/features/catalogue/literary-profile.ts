@@ -37,9 +37,13 @@ export function literaryFields(release: Release, type: string, locale: string) {
   };
 }
 
-export async function readLiteraryProfile(client: KernelClient, id?: string): Promise<LiteraryRead> {
+export async function readLiteraryProfile(
+  client: KernelClient,
+  id?: string,
+  authorization?: string,
+): Promise<LiteraryRead> {
   if (id) {
-    const current = await readStatementEditor(client, { id });
+    const current = await readStatementEditor(client, { id }, authorization);
     if (!current.ok) return current;
     if (!isLiteraryType(current.public.subject.type)) return { ok: false, reason: 'invalid' };
     if (!current.release.types[current.public.subject.type]) return { ok: false, reason: 'stale' };
