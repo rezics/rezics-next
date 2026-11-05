@@ -185,11 +185,13 @@ async function mount(initialAddress = { year: 2020 } as ReturnType<typeof diaryS
     back: () =>
       act(async () => {
         router.history.back();
+        await router.load();
         await new Promise((resolve) => setTimeout(resolve, 0));
       }),
     forward: () =>
       act(async () => {
         router.history.forward();
+        await router.load();
         await new Promise((resolve) => setTimeout(resolve, 0));
       }),
     show,
