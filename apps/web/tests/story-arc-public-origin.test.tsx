@@ -1,9 +1,10 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, PAGE_GLOBAL_CONTEXT, type CompositionDocument } from '@rezics/composition';
+import { createRequire } from 'node:module';
 import { act, createContext, createElement, useContext, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { StoryArcProfileEntry } from '../src/features/catalogue/story-arc-profile-entry';
+import { StoryArcProfileEntry, storyArcEntry } from '../src/features/catalogue/story-arc-profile-entry';
 import {
   parseStoryArcProfileSearch,
   storyArcCanonicalSlugTarget,
@@ -97,6 +98,7 @@ test('canonical slug changes redirect only for the same identity', () => {
 
 test('the mounted Subject, canonical route, correction session and existing reader preserve only current admitted intent', async () => {
   const { dirname } = await import('node:path');
+  const require = createRequire(import.meta.url);
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -155,6 +157,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     import('../src/paraglide/runtime'),
     import('../src/paraglide/messages'),
   ]);
+  const { within } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
   const oldLocale = getLocale();
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -215,6 +218,9 @@ test('the mounted Subject, canonical route, correction session and existing read
         renderJsonLd: false,
       }),
     );
+    const publicDom = within(host);
+    await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
+    await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
     return host.querySelector<HTMLAnchorElement>('a[href*="/story-arc?"]')?.getAttribute('href');
   };
   const routeLoader = Route.options.loader;
@@ -261,9 +267,32 @@ test('the mounted Subject, canonical route, correction session and existing read
     expect(profileLoads).toHaveLength(beforeRefusal);
     expect(client.getQueryCache().findAll({ queryKey: ['story-arc-profile'] })).toHaveLength(0);
 
-    const realmEntry = await subjectEntry(selectedContext, realmId);
-    expect(realmEntry).toBeDefined();
-    const realmVisit = parseStoryArcProfileSearch(new URL(realmEntry!, window.location.origin).search, storyArcProfileId, 'en')!;
+    await render(
+      createElement(SubjectPage, {
+        page: makePage(selectedContext, realmId),
+        locale: 'en',
+        messages: subjectPageMessages(),
+        currentHref: originHref(realmId),
+        renderJsonLd: false,
+      }),
+    );
+    expect(host.querySelector('a[href*="/story-arc?"]')).toBeNull();
+    const realmVia = storyArcPublicOrigin({
+      currentHref: originHref(realmId),
+      id: storyArcProfileId,
+      locale: 'en',
+      realm: realmId,
+    })!;
+    const realmEntry = storyArcEntry({
+      id: storyArcProfileId,
+      label: 'The journey arc',
+      locale: 'en',
+      context: selectedContext,
+      realm: realmId,
+      definition: fixture.arc.subject.release,
+      via: realmVia,
+    }).href;
+    const realmVisit = parseStoryArcProfileSearch(new URL(realmEntry, window.location.origin).search, storyArcProfileId, 'en')!;
     expect(realmVisit).toMatchObject({ context: selectedContext, realm: realmId, via: originHref(realmId) });
     const realmRoute = await loadRoute(realmEntry!);
     await render(sessionFor((realmRoute as { id: string }).id, realmVisit));
