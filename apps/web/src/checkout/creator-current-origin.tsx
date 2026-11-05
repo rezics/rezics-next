@@ -73,8 +73,8 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
           : exposure.data?.subject === subject && operationIsAdmitted(operation, exposure.data.admitted)
             ? 'admitted'
             : 'closed',
-    exposureSubject: exposure?.status === 'success' ? exposure.data.subject : null,
-    admitted: exposure?.status === 'success' ? exposure.data.admitted : null,
+    exposureSubject: exposure?.status === 'success' ? (exposure.data?.subject ?? null) : null,
+    admitted: exposure?.status === 'success' ? (exposure.data?.admitted ?? null) : null,
   };
 }
 
