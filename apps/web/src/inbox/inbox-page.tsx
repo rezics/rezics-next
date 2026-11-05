@@ -403,7 +403,12 @@ export function ViewerInboxPage({
   );
   const admittedReturn =
     returnReceipt?.historyKey === historyKey && returnReceipt.owner.isCurrent() ? returnReceipt : null;
-  useEffect(() => subscribeInboxReturn(router, setReturnReceipt), [router]);
+  useEffect(() => {
+    const unsubscribe = subscribeInboxReturn(router, setReturnReceipt);
+    return () => {
+      unsubscribe();
+    };
+  }, [router]);
   useEffect(() => {
     if (returnReceipt && returnReceipt.phase !== 'departed' && !admittedReturn)
       retireInboxReturn(router, returnReceipt.id);
@@ -1090,7 +1095,7 @@ export function ViewerInboxPage({
           <Button
             variant="outline"
             className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-            onClick={startAtFirstPage}
+            onClick={() => startAtFirstPage()}
             disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting}
           >
             {m.inbox_start_first_page()}
@@ -1279,7 +1284,7 @@ export function ViewerInboxPage({
                   type="button"
                   variant="outline"
                   className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-                  onClick={startAtFirstPage}
+                  onClick={() => startAtFirstPage()}
                   disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting}
                 >
                   {m.inbox_start_first_page()}
