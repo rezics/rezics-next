@@ -1317,13 +1317,18 @@ test('launch dependency projection batches shared facts and observes changed row
         current.integratedCommit = dependency.id === missingObject.id ? '0'.repeat(40) : 'invalid';
       });
     const task = h.tasks.dispatch(h.briefFile);
+    git(task.worktree, ['tag', '-a', 'projection-peel', '-m', 'peel', first.commit]);
+    const tagged = h.tasks.dispatch(h.briefFile);
+    const tagObject = git(task.worktree, ['rev-parse', 'projection-peel']);
+    h.store.updateTask({ taskId: tagged.id, attempt: 0 }, (current) => {
+      current.state = 'integrated';
+      current.integratedCommit = tagObject;
+    });
     const tree = git(task.worktree, ['rev-parse', 'HEAD^{tree}']);
     h.store.updateTask({ taskId: nonCommit.id, attempt: 0 }, (current) => {
       current.integratedCommit = tree;
     });
-    const after = [
-      first.id, first.id, shared.id, distinct.id, 'missing-record', missingObject.id, nonCommit.id, invalidCommit.id, 9,
-    ];
+    const after = [first.id, first.id, shared.id, distinct.id, tagged.id, 'missing-record', missingObject.id, nonCommit.id, invalidCommit.id, 9];
     h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
       current.brief = { ...current.brief, after: after as unknown as string[] };
     });
@@ -1373,9 +1378,12 @@ exec "${realGit}" "$@"
       basePresence: 'present',
       precondition: 'satisfied',
     } as const);
+    const unavailable = (id: string, state: string, completion: string, commit: string | null, reason: string) => ({
+      id, state, completion, commit, sourcePresence: 'unknown', basePresence: 'unknown', precondition: 'unknown', reason,
+    });
     expect(captured.context.dependencies).toEqual({
-      required: 9,
-      included: 9,
+      required: 10,
+      included: 10,
       omitted: 0,
       completeness: 'complete',
       receipts: [
@@ -1383,44 +1391,36 @@ exec "${realGit}" "$@"
         present(first.id, first.commit),
         present(shared.id, first.commit),
         present(distinct.id, distinct.commit),
-        {
-          id: 'missing-record', state: 'missing', completion: 'unknown', commit: null, sourcePresence: 'unknown',
-          basePresence: 'unknown', precondition: 'unknown', reason: 'no task record exists for this declared dependency',
-        },
-        {
-          id: missingObject.id, state: 'integrated', completion: 'integrated', commit: '0'.repeat(40),
-          sourcePresence: 'unknown', basePresence: 'unknown', precondition: 'unknown',
-          reason: 'the dependency commit is not available in the current task checkout',
-        },
-        {
-          id: nonCommit.id, state: 'integrated', completion: 'integrated', commit: tree, sourcePresence: 'unknown',
-          basePresence: 'unknown', precondition: 'unknown',
-          reason: 'the dependency commit is not available in the current task checkout',
-        },
-        {
-          id: invalidCommit.id, state: 'integrated', completion: 'integrated', commit: null, sourcePresence: 'unknown',
-          basePresence: 'unknown', precondition: 'unknown', reason: 'the current task record has no valid integrated or merged commit',
-        },
-        {
-          id: '<invalid dependency 9>', state: 'unknown', completion: 'unknown', commit: null, sourcePresence: 'unknown',
-          basePresence: 'unknown', precondition: 'unknown', reason: 'historical task record contains an invalid dependency id',
-        },
+        present(tagged.id, tagObject),
+        unavailable('missing-record', 'missing', 'unknown', null, 'no task record exists for this declared dependency'),
+        unavailable(missingObject.id, 'integrated', 'integrated', '0'.repeat(40), 'the dependency commit is not available in the current task checkout'),
+        unavailable(nonCommit.id, 'integrated', 'integrated', tree, 'the dependency commit is not available in the current task checkout'),
+        unavailable(invalidCommit.id, 'integrated', 'integrated', null, 'the current task record has no valid integrated or merged commit'),
+        unavailable('<invalid dependency 10>', 'unknown', 'unknown', null, 'historical task record contains an invalid dependency id'),
       ],
     });
     expect(captured.commands.filter((command) => command.startsWith('cat-file --batch-check'))).toHaveLength(1);
-    expect(captured.commands.filter((command) => command.startsWith('merge-base --is-ancestor'))).toHaveLength(2);
+    expect(captured.commands.filter((command) => command.startsWith('merge-base --is-ancestor'))).toHaveLength(3);
     expect(Object.fromEntries(counts)).toEqual(
       Object.fromEntries(
-        [first.id, shared.id, distinct.id, 'missing-record', missingObject.id, nonCommit.id, invalidCommit.id].map(
+        [first.id, shared.id, distinct.id, tagged.id, 'missing-record', missingObject.id, nonCommit.id, invalidCommit.id].map(
           (id) => [id, 1],
         ),
       ),
     );
     const prompt = renderLaunchContext(captured.context);
-    expect(prompt).toContain(`- \`${first.id}\`: integrated in your base at \`${first.commit}\`.`);
-    expect(prompt).toContain(`- \`${distinct.id}\`: integrated in your base at \`${distinct.commit}\`.`);
-    expect(prompt.match(new RegExp(first.id, 'g'))).toHaveLength(2);
-    expect(prompt).toContain(`- \`missing-record\`: source observation is unavailable; build against its contract.`);
+    expect(prompt).toBe([
+      '## Current controller launch context',
+      'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
+      'Dependencies:',
+      ...[first.id, first.id, shared.id, distinct.id, tagged.id].map((id) => `- \`${id}\`: integrated in your base at \`${id === tagged.id ? tagObject : id === distinct.id ? distinct.commit : first.commit}\`.`),
+      ...['missing-record', missingObject.id, nonCommit.id, invalidCommit.id, '<invalid dependency 10>'].map(
+        (id) => `- \`${id}\`: source observation is unavailable; build against its contract.`,
+      ),
+      '```json',
+      JSON.stringify({ version: captured.context.version, boundary: captured.context.boundary, origin: captured.context.origin, task: captured.context.task }),
+      '```',
+    ].join('\n'));
 
     h.store.updateTask({ taskId: first.id, attempt: 0 }, (current) => {
       current.state = 'cancelled';
@@ -1435,8 +1435,8 @@ exec "${realGit}" "$@"
       },
     ]);
     expect(failed.commands.filter((command) => command.startsWith('cat-file --batch-check'))).toHaveLength(1);
-    expect(failed.commands.filter((command) => command.startsWith('merge-base --is-ancestor'))).toHaveLength(2);
-    expect([...counts.values()]).toEqual([2, 2, 2, 2, 2, 2, 2]);
+    expect(failed.commands.filter((command) => command.startsWith('merge-base --is-ancestor'))).toHaveLength(3);
+    expect([...counts.values()]).toEqual([2, 2, 2, 2, 2, 2, 2, 2]);
     expect(renderLaunchContext(failed.context)).toContain(
       `- \`${shared.id}\`: source observation is unavailable; build against its contract.`,
     );
