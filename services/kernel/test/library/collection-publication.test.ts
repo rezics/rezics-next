@@ -259,10 +259,17 @@ test('A real owner prepares and republishes an explicit selection after public a
   const a = await f.subject('Published selection A');
   await f.entry(a);
   const collection = await saved();
+  const publicMembers = async (viewer: string | null) => {
+    const response = await f.send('GET', `/v1/collections/${collection.id}/members`, undefined, viewer);
+    expect(response.status, await response.clone().text()).toBe(200);
+    return (await response.json()).members.map((member: { subjectId: string }) => member.subjectId);
+  };
   const first = await f.send('POST', path(collection.id), { revision: collection.revision, subjectIds: [a] });
   expect(first.status).toBe(200);
   const outputA = await first.json();
   const before = await native(collection.id);
+  expect(await publicMembers(null)).toEqual([a]);
+  expect(await publicMembers(f.other)).toEqual([a]);
 
   // This ordinary private write occurs AFTER activation. A cannot certify its private membership.
   const b = await f.subject('New private working selection B');
@@ -274,6 +281,8 @@ test('A real owner prepares and republishes an explicit selection after public a
   const page = await working.json();
   expect(page.members.map((row: { subjectId: string }) => row.subjectId)).toContain(b);
   expect(await native(collection.id)).toEqual(before);
+  expect(await publicMembers(null)).toEqual([a]);
+  expect(await publicMembers(f.other)).toEqual([a]);
   const scopes = await f.database.admin.query<{ scope: string; account: string; generation: string; capture: string }>(
     `SELECT identity->>'scope' AS scope,identity->>'accountId' AS account,
             identity->>'generation' AS generation,capture_id::text AS capture
@@ -301,6 +310,8 @@ test('A real owner prepares and republishes an explicit selection after public a
   const second = await f.send('POST', path(collection.id), { revision, subjectIds: [b] });
   expect(second.status).toBe(200);
   const outputB = await second.json();
+  expect(await publicMembers(null)).toEqual([b]);
+  expect(await publicMembers(f.other)).toEqual([b]);
   const after = await native(collection.id);
   expect(after.members).toEqual([b]);
   expect(after.selected.generation).toBe(outputB.publication.generation);
