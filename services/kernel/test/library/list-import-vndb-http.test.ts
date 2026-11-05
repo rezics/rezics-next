@@ -116,7 +116,7 @@ test('own HTTP upload, admitted VN identifier, explicit unmatched resolution and
   expect((await f.send('other', 'POST', `${base}/${id}:apply`, { rows: selection })).status).toBe(404);
   await json('DELETE', `${base}/${id}`);
 }, 120000);
-test('VNDB Progress requires its declared current-profile unit, applies selected zero and preserves occurrence state and other measures', async () => {
+test('VNDB Progress requires its declared current-profile unit, uses exported play-time minutes, applies selected zero and preserves occurrence state and other measures', async () => {
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
   const started = await sessions.startSession(
     f.owner.actor,
@@ -143,28 +143,34 @@ test('VNDB Progress requires its declared current-profile unit, applies selected
     entryKey(),
   );
 
-  const id = (await upload(xml(vn(vnId, '<label label="Playing"/><progress unit="minute">0</progress>')))).uploadId;
+  const id = (
+    await upload(
+      xml(vn(vnId, '<label label="Playing"/>'), `<length-votes>${vn(vnId, '<minutes>0</minutes>')}</length-votes>`),
+    )
+  ).uploadId;
+  const state = await review(id, { ordinal: 0, action: 'state', targetId: matched, state: 'completed', replace: true });
   const reviewed = await review(id, {
-    ordinal: 0,
-    action: 'state',
+    ordinal: 1,
+    action: 'progress',
     targetId: matched,
-    state: 'completed',
-    replace: true,
     progress: {
       occurrence: { kind: 'existing', sessionId: started.value.id },
-      measures: [{ field: 'progress', action: 'adopt', replace: true }],
+      measures: [{ field: 'minutes', action: 'adopt', replace: true }],
     },
   });
   expect(reviewed.progress).toMatchObject({
     complete: false,
-    measures: [{ field: 'progress', unit: 'minute', status: 'unattempted', sourceAmount: '0', currentAmount: '2' }],
+    measures: [{ field: 'minutes', unit: 'minute', status: 'unattempted', sourceAmount: '0', currentAmount: '2' }],
   });
-  const applied = await apply(id, [{ ordinal: 0, reviewId: reviewed.reviewId }]);
-  expect(applied.outcomes[0]).toMatchObject({
+  const applied = await apply(id, [
+    { ordinal: 0, reviewId: state.reviewId },
+    { ordinal: 1, reviewId: reviewed.reviewId },
+  ]);
+  expect(applied.outcomes[1]).toMatchObject({
     status: 'applied',
     progress: {
       complete: true,
-      measures: [{ field: 'progress', unit: 'minute', status: 'applied', sourceAmount: '0' }],
+      measures: [{ field: 'minutes', unit: 'minute', status: 'applied', sourceAmount: '0' }],
       readback: {
         sessionId: started.value.id,
         state: 'active',
@@ -184,7 +190,7 @@ test('VNDB Progress requires its declared current-profile unit, applies selected
     revision: episode.value.revision + 1,
     measures: [{ unit: 'episode', amount: '6' }],
   });
-  expect(applied.outcomes[0].progress.readback.revision).toBe(current.progressSession.revision);
+  expect(applied.outcomes[1].progress.readback.revision).toBe(current.progressSession.revision);
 
   const unsupportedId = (await upload(xml(vn(vnId, '<progress unit="chapter">4</progress>')))).uploadId;
   const unsupportedReview = await review(unsupportedId, {
@@ -196,7 +202,7 @@ test('VNDB Progress requires its declared current-profile unit, applies selected
       measures: [{ field: 'progress', action: 'adopt' }],
     },
   });
-  expect(unsupportedReview.progress.measures[0]).toMatchObject({ status: 'unsupported', unit: 'chapter' });
+  expect(unsupportedReview.progress.measures[0]).toMatchObject({ status: 'unsupported', unit: null });
   const unsupported = await apply(unsupportedId, [{ ordinal: 0, reviewId: unsupportedReview.reviewId }]);
   expect(unsupported.outcomes[0].progress.measures[0].status).toBe('unsupported');
   expect((await json('GET', `/v1/progressSessions/${started.value.id}`)).progressSession).toMatchObject({
@@ -206,6 +212,49 @@ test('VNDB Progress requires its declared current-profile unit, applies selected
   });
   const retained = await json('GET', `${base}/${unsupportedId}`);
   expect(retained.rows[0].fields.progress).toMatchObject({ kind: 'value', raw: '4', value: '4' });
+  const missingId = (await upload(xml('', `<length-votes>${vn(vnId)}</length-votes>`))).uploadId;
+  const missing = await review(missingId, {
+    ordinal: 0,
+    action: 'progress',
+    targetId: matched,
+    progress: {
+      occurrence: { kind: 'existing', sessionId: started.value.id },
+      measures: [{ field: 'minutes', action: 'adopt' }],
+    },
+  });
+  expect(missing.progress.measures[0]).toMatchObject({ status: 'missing', currentAmount: '0' });
+  const cleared = await review(missingId, {
+    ordinal: 0,
+    action: 'progress',
+    targetId: matched,
+    progress: {
+      occurrence: { kind: 'existing', sessionId: started.value.id },
+      measures: [{ field: 'minutes', action: 'clear' }],
+    },
+  });
+  expect(
+    (await apply(missingId, [{ ordinal: 0, reviewId: cleared.reviewId }])).outcomes[0].progress.readback,
+  ).toMatchObject({
+    amount: null,
+    measures: [{ unit: 'episode', amount: '6' }],
+  });
+  await json('DELETE', `${base}/${missingId}`);
+  const startId = (await upload(xml('', `<length-votes>${vn(vnId, '<minutes>12</minutes>')}</length-votes>`))).uploadId;
+  const entryBefore = await f.commands.readEntry(f.owner.actor, matched);
+  const selectedStart = await review(startId, {
+    ordinal: 0,
+    action: 'progress',
+    targetId: matched,
+    progress: {
+      occurrence: { kind: 'start', primaryUnit: 'minute' },
+      measures: [{ field: 'minutes', action: 'adopt' }],
+    },
+  });
+  const startedImport = await apply(startId, [{ ordinal: 0, reviewId: selectedStart.reviewId }]);
+  expect(startedImport.outcomes[0].progress.readback).toMatchObject({ unit: 'minute', amount: '12' });
+  expect(startedImport.outcomes[0].progress.readback.sessionId).not.toBe(started.value.id);
+  expect(await f.commands.readEntry(f.owner.actor, matched)).toEqual(entryBefore);
+  await json('DELETE', `${base}/${startId}`);
   await json('DELETE', `${base}/${id}`);
   await json('DELETE', `${base}/${unsupportedId}`);
 }, 120000);
@@ -315,7 +364,7 @@ test('reviewed conflicts preserve facts, revision and release guards reject stal
   await json('DELETE', `${base}/${next.uploadId}`);
   await f.activate(f.originalDigest);
 }, 120000);
-test('VNDB score review preserves unsupported precision, explicit native units and clear consent without effects', async () => {
+test('VNDB score review freezes native counted operands and dispatches guarded commands with explicit units and clear consent', async () => {
   const scorer = await f.identity([
     'subject:create',
     'subject:read',
@@ -343,7 +392,7 @@ test('VNDB score review preserves unsupported precision, explicit native units a
     question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { min: 0, max: 20, step: 1 } },
     currentVote: { state: 'absent' },
     exactUnits: null,
-    admission: { status: 'unavailable', reason: 'conditional-admission-unavailable' },
+    admission: { status: 'conditional', reason: null },
   });
   expect(page.rows[0].nativeScore.sourceReason).toContain('no exact standard half-point value');
   expect(page.rows[1].nativeScore.admission.reason).toBe('source-not-vn-score');
@@ -386,7 +435,7 @@ test('VNDB score review preserves unsupported precision, explicit native units a
     action: 'vote',
     units: 0,
     consent: 'adopt-native-vote',
-    nativeAdmission: 'unavailable',
+    nativeAdmission: 'conditional',
   });
 
   const stateReview = await f.send(
@@ -443,6 +492,44 @@ test('VNDB score review preserves unsupported precision, explicit native units a
       matched,
     ),
   ).toBeNull();
+  const storedScore = async () =>
+    (
+      await f.pool.query(
+        "SELECT decisions->'0'->'score' AS score FROM library.vndb_import WHERE account_id=$1 AND upload_id=$2",
+        [scorer.actor.accountId, uploadId],
+      )
+    ).rows[0].score;
+  const frozen = await storedScore();
+  expect(frozen).toMatchObject({
+    status: 'applying',
+    nativeGuard: { ownVote: { state: 'absent' } },
+    commandActor: scorer.actor,
+  });
+  expect(frozen.sourceDigest).toHaveLength(64);
+  expect(frozen.matchDigest).toHaveLength(64);
+  expect(JSON.stringify(await (await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`)).json())).not.toContain(
+    'nativeGuard',
+  );
+  // An original command may retry unchanged after unavailable admission, but may
+  // not acquire a new own-vote witness after somebody changes the native vote.
+  await createVoteCommands({ pool: f.pool, access: f.access }).putVoteOutcome(
+    scorer.actor,
+    { questionId: STANDARD_QUESTION_ID, targetId: matched, units: 0 },
+    entryKey(),
+  );
+  const replay = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:apply`,
+    { rows: [{ ordinal: 0, scoreReviewId: clearReview.reviewId }] },
+    entryKey(),
+  );
+  expect(replay.status).toBe(200);
+  expect((await replay.json()).outcomes[0].status).toBe('stale');
+  expect(await storedScore()).toEqual({ ...frozen, status: 'stale' });
+  const currentPage = await (await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`)).json();
+  expect(currentPage.rows[0].nativeScore.currentVote).toMatchObject({ state: 'set', units: 0 });
+  await f.send(scorer.bearer, 'DELETE', `${base}/${uploadId}`, undefined, entryKey());
 }, 120000);
 
 test('VNDB typed dates select one repeat, preserve precision, and clear only with explicit consent', async () => {

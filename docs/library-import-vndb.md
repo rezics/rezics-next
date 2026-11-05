@@ -1,23 +1,33 @@
 # Personal VNDB list import
 
-The mounted Kernel API imports only the authenticated person's uploaded `vndb-export version="1.0"` XML.
-It does not fetch accounts, claim another person's account, create catalogue subjects, change provider mappings,
-create holdings, labels or sessions, import provider aggregates, or publish notes/reviews. Web owns the interface.
+The mounted Kernel API imports the authenticated person's uploaded `vndb-export version="1.0"` XML into reviewed
+personal state and selected native Progress, with explicit guarded score consent. It does not fetch or claim provider
+accounts, create catalogue subjects or holdings, change provider mappings, import aggregates, or publish notes/reviews.
+Web owns the interface; a changed re-import preserves the original Entry identity.
 
-The mounted personal-list caller submits the supplied private export through the generated VNDB preview method,
-seals the exact upload body and idempotency key in the existing `ShowcaseJournal`, and returns only the native upload
-UUID and row count. Imports remains the sole mounted personal-list caller and owns review matching. Progress and vote
-effects remain unavailable until their consumers safely compose the owning native producers.
-UUID and row count.
+Imports owns the mounted personal-list caller and explicit unmatched match. It submits the supplied private export
+through the generated VNDB preview method, seals the exact body and idempotency key in the existing `ShowcaseJournal`,
+and returns the actual native upload UUID and row count. The existing review/apply API composes each native owner;
+no second importer or Library vote writer is introduced.
 
-Decision: adopt VNDB Progress only through the shared helper when the live native profile admits the literal declared
-source unit; keep guarded vote application unavailable at Rating's `atomic_guard_unavailable` source-admission seam.
+## Private evidence
 
-State changes use explicit released entry-state commands alongside private source evidence. Role suggestions never
-grant a mapping or invent state IDs. Every other field remains evidence until its native owner admits it; a profile
-with no entry state set cannot receive a state. There is no separate VNDB field mapping. A changed re-import preserves
-the original Entry identity. AniList label adoption and VNDB evidence cleanup remain with their existing import and
-erasure owners.
+| Source field | Review and native treatment |
+| --- | --- |
+| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; explicitly select a released native state ID. |
+| Other labels and per-label attributes | Private evidence; no automatic local label creation. |
+| Vote | Exact raw 1–10, step 0.1 evidence; zero invalid. Explicit native units and consent enter the native guarded writer, without rounding or automatic conversion. Supported commits require the native participants described below. |
+| Started / finished | Preserve year/month/day precision, including unknown trailing `00` components. Adopt only through explicit occurrence date review; no command clock is inferred. |
+| Play-time minutes | Each `length-votes/vn/minutes` row declares minutes. Explicitly select one occurrence/start and the `minutes` measure; only a current released scalar `minute` profile admits it. |
+| Progress extensions, speed, releases, notes, privacy, reviews, metadata, unknown XML | Retain exact evidence and its reason; never infer unit meaning or public review content. Original XML is downloadable only by its owner. |
+
+Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
+Notes preserve significant whitespace when proposed for native adoption. Date parsing trims only its interpretation;
+the original spelling, including whitespace and unknown components, stays in `raw`. Progress and privacy tokens also
+retain their original spelling. Unsupported priority, timestamp and release vocabulary remains parsed evidence;
+no native priority or timestamp meaning is guessed.
+
+## Matching
 
 Matching uses the admitted native `semantic.external_claim` tuple `(source="vndb", external_id="v123")`,
 its tuple home, current canonical identity and subject readability. Alternate source namespaces are unavailable
@@ -29,28 +39,8 @@ Candidate arrays distinguish matched, ambiguous, unmatched, unavailable and unsu
 the ambiguous shape is reserved for multiple disclosed canonical candidates, never generated from titles.
 Unmatched rows accept an explicit readable target obtained through ordinary catalogue search.
 
-| Source field                                             | Review and native treatment                                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; the person explicitly selects an actual released state ID.                                                                                                                                                                                                                   |
-| Other labels and per-label attributes                    | Private evidence; no automatic local label creation.                                                                                                                                                                                                                                                                                        |
-| Vote                                                     | Retain exact raw spelling and original 1–10, step 0.1 scale. Zero is invalid. Values such as 7.3 have no exact native half-point value; the person may choose native units explicitly, with no rounding or exact-conversion claim. Library effects remain unavailable until the consumer safely composes the current guarded Rating writer. |
-| Started / finished                                       | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred.                                                                                                                                                        |
-| Progress and measure                                     | Preserve original value, including zero, and supplied unit as private evidence. VNDB progress binding/readback is an open Commerce decision; no session, historical activity or counted use is inferred.                                                                                                                                    |
-| Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                                                                                                                                                                            |
-| Source field                                             | Review and native treatment                                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------            |
-| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; the person explicitly selects an actual released state ID.                                                                                                                                                                                                                   |
-| Other labels and per-label attributes                    | Private evidence; no automatic local label creation.                                                                                                                                                                                                                                                                                        |
-| Vote                                                     | Retain exact raw spelling and original 1–10, step 0.1 scale. Zero is invalid. Values such as 7.3 have no exact native half-point value; the person may choose native units explicitly, with no rounding or exact-conversion claim. Native admission currently returns typed unavailable and performs no vote or aggregate write.            |
-| Started / finished                                       | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred.                                                                                                                                                        |
-| Progress and measure                                     | Retain exact source value and declared unit. Adoption is available only when the current released native profile admits that same unit as a scalar amount; no conversion, session, or counted activity is inferred.                                                                                                                         |
-| Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                                                                                                                                                                            |
+## Original command custody
 
-Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
-Notes preserve significant whitespace when proposed for native adoption. Date parsing trims only its interpretation;
-the original spelling, including whitespace and unknown components, stays in `raw`. Progress and privacy tokens also
-retain their original spelling. Unsupported priority, timestamp and release vocabulary remains parsed evidence;
-no native priority or timestamp meaning is guessed.
 No absent value clears native facts. Existing entries are preserved by default; `replace:true` captures the current
 revision and incarnation for explicit review. Confirmation names that immutable `reviewId`. Apply rechecks current
 account authority, chosen identity, readability, release, cancellation and native admission. A changed basis returns
@@ -80,22 +70,23 @@ new review, even if an old mutation receipt exists. Exact metadata/date acknowle
 the bounded native outcome; it does not restore private evidence access. Label orchestration still requires its live
 preview lifetime, so expired label acknowledgement reconciliation remains unavailable in this delivery.
 
-Decision: score review requires the owner to choose native units explicitly; native zero is a vote, clear is a
-separate explicit action, and source absence preserves the current vote.
+## Progress
 
-VNDB Progress uses the shared retained-measure adoption helper. It accepts only the source's declared unit
-when the current profile reader admits that exact scalar unit; the existing XML fixture demonstrates `progress` with
-unit `minute`, including zero, against a compiled and activated profile. No unit is guessed from VNDB's title or
-other fields. The VNDB row may attach an explicit Progress selection to its state review or submit a Progress-only
-review. Existing occurrences require an explicit session ID; new occurrences require the explicit `start` choice.
-Only selected measures are written, current measures are preserved without `replace`, and clear remains a separate
-explicit action for one existing measure. The caller receives per-measure outcomes and a current session readback
-from the native Progress reader. Missing, unknown, invalid, or unsupported source operands remain in private source
-evidence and have distinct outcomes without native effects.
+[VNDB's exporter](https://g.blicky.net/vndb.git/tree/lib/VNWeb/ULists/Export.pm?id=75a40d0dcbd4691abe8aed52c6447361cacf65c2)
+places each play-time observation in `length-votes/vn/minutes`. The element declares minutes; its `vn` ID uses the
+ordinary VN tuple matcher. Each observation remains a separate retained row. Speed, releases, date and notes do not
+change its unit, create an enjoyment vote, or publish a length aggregate. Arbitrary `progress` and `unit` extensions
+remain private evidence; a matching unit word alone cannot establish VNDB meaning.
 
-Guarded VNDB vote application remains unavailable while Rating returns `atomic_guard_unavailable` and
-does not expose the source/review admission needed by this import. VNDB keeps its existing typed unavailable outcome;
-it does not call an unguarded writer or implement another guard.
+Decision: adopt only the exported `minutes` scalar into a current released profile admitting `minute`, using the
+shared Progress helper; retain Content's exact counted vote review and original command operands for guarded dispatch.
+
+A Progress-only review selects `field: "minutes"` and one existing occurrence by session ID, or explicitly selects
+`occurrence: {kind: "start", primaryUnit: "minute"}`. State review remains independent. Only selected measures are
+written. Existing measures are preserved unless replacement is explicit, unrelated measures remain unchanged, zero
+is an amount, absence preserves current facts, and `action: "clear"` separately clears one selected measure. Missing,
+unknown, invalid and unsupported values have distinct outcomes. No occurrence or historical activity is inferred.
+The result includes per-measure outcomes and the native reader's current occurrence and measures.
 
 ## Native score review
 
@@ -116,16 +107,24 @@ Parsed evidence reserves one 32 KiB slot per possible page row for score context
 existing 16 MiB evidence cap. The XML, escaped JSON request, page, batch, upload count, lifetime and erasure bounds
 remain unchanged; no score table or second evidence store is added.
 
-The current [Rating module owner](../services/kernel/src/rating/README.md) supplies `putVoteOutcome` with
-`input.guard` and its closed `VoteReviewGuard`. The native witness binds the question and revision, canonical/counting
-identity, and the owner's vote or absence. Stale/unavailable witnesses and authorization-before-receipt remain the
-writer's contract; the reader witness is not atomic permission. The VNDB reader does not implement or replace that
-writer.
+The [Rating module owner](../services/kernel/src/rating/README.md) supplies `readVoteReview` and
+`putVoteOutcome`. Review captures its exact guard for question revision/lifecycle, canonical identity and published
+epochs, and current counted own vote or proven absence. The consumer also captures exact question meaning, grain and
+scale, the whole retained source digest, match digest and target source fingerprint. These private operands never
+appear in public aggregates or HTTP review responses.
 
-Library's score effect remains typed `unavailable` until its unbound consumer composes the actual guarded writer
-safely with the private source/review admission and exact retry. When admitted, the command must use the frozen review
-operands and key and return only the permitted native vote view. Do not create a Library vote writer or import a
-provider aggregate. No progress binding/readback is inferred from score review.
+Apply freezes the original actor credential before dispatch. The existing native vote writer receives the frozen
+body, guard, observation and key, plus the source owner's admission. Source operands join the native receipt digest;
+fresh execution checks the locked retained row, review, lifetime and cancellation after native receipt lookup.
+Known source or native witness changes return stale. An unexpected error propagates while preserving the original
+dispatch for exact retry. Current authorization precedes receipt disclosure. Cancellation or expiry permits only
+reconciliation of a pending original command; no later action starts. Success reads current own state through
+`readVoteReview`, including counted zero and explicit clear; neither a receipt nor an aggregate supplies readback.
+
+The base native writer still returns `atomic_guard_unavailable` before guarded effects. This consumer dispatches the
+actual writer and retains its original operands, but successful supported-home commits depend on Content's named
+repair and Semantic's same-home participant. Foreign-home support and the Person merge guard remain separate.
+Do not interpret conditional review as delivered guarded effects or relax native publication or money prerequisites.
 
 ## Caller cost and cleanup
 
@@ -133,15 +132,15 @@ For a page of `p <= 8` source rows, the existing private upload read and owner c
 context adds at most one Content question read and one current-own-vote read for each addressed VN target. Matching
 still addresses only each selected provider tuple and at most two disclosed candidates; a chosen target adds its
 existing Library profile/source observation. A score review repeats the bounded upload/owner read, one tuple match,
-the chosen target observation, one Content question/current-vote pair, and one Library review receipt plus the locked
+the chosen target observation, one Content counted question/current-vote review, and one Library review receipt plus the locked
 decision JSON update. No history, other-account vote or account-wide vote scan is added.
 
-An apply batch selects at most eight actions total, even when one row selects both state and score. Each current
-score action reads its exact upload row and writes one bounded Library unavailable outcome/receipt. It currently
-executes zero Content vote commands, aggregate changes or rating components. After the missing Content guard is
-delivered, each selected score action will additionally pay the existing writer's target/question preparation,
-current-vote and counted-target locks, native receipt, emitted aggregate work and returned component; Content owns
-those native terms. Exact physical counts and shared native growth remain unmeasured. The whole journey is bounded by
+An apply batch selects at most eight actions total, even when one row selects both state and score. Each selected
+score action reads its exact upload row, records its immutable dispatch and invokes the existing Content writer.
+Charge target/question preparation, current-vote and counted-target locks and source-owner admission on every reached
+attempt, including unavailable or rolled-back attempts. Successful supported native effects additionally pay the
+native receipt, aggregate work and returned component; Content owns those native terms. Acknowledgement records one
+bounded Library result, and current own-vote readback repeats the counted reader. Exact physical counts and shared native growth remain unmeasured. The whole journey is bounded by
 `1 upload + P pages + R reviews + A selected apply actions + lifecycle cleanup + exact-key retries`, with rows/page,
 actions/apply, five-second apply scheduling, XML/JSON/evidence/decision bytes and upload lifetime under the existing
 `VNDB_LIMITS` and table constraints.
@@ -163,6 +162,8 @@ payloads never enter public Search, events, logs or error details. Responses use
 mutation receipts carry only bounded identifiers/outcomes, while source evidence stays in the owner table. HTTP
 admission also requires personal Library exposure and the current `library_entry:update` scope; native entry reads
 require `library_entry:read`.
+
+## Examples
 
 The following are constructed typed request/result examples for Web, not execution evidence. All mutations except
 apply require the ordinary quoted `Idempotency-Key`; apply reuses the stable commands named by its review IDs.
@@ -196,7 +197,7 @@ const scoreReviewRequest: ScoreReviewRequest = {
   selection: { kind: 'vote', units: 15 },
   consent: 'adopt-native-vote',
 };
-// 200: {reviewId:UUID,status:"reviewed",targetId:UUID,action:"vote",units:15,question:{id,revision,meaning,label,grain,scale,aggregateEffect:"public-standard-aggregate"},currentVote:{state:"absent"},consent:"adopt-native-vote",sourceReason,nativeAdmission:"unavailable"}
+// 200: {reviewId:UUID,status:"reviewed",targetId:UUID,action:"vote",units:15,question:{id,revision,meaning,label,grain,scale,aggregateEffect:"public-standard-aggregate"},currentVote:{state:"absent"},consent:"adopt-native-vote",sourceReason,nativeAdmission:"conditional"}
 // An explicit clear instead uses selection:{kind:"clear"}, consent:"clear-native-vote". units:0 remains a vote.
 // GET again shows current candidate states, conflicts, retained fields and the stored decision before confirmation.
 const applyRequest: { rows: { ordinal: number; reviewId: string }[] } = {
@@ -211,7 +212,7 @@ type ScoreApplyRow = Parameters<Service['apply']>[2][number];
 const scoreApplyRequest: { rows: ScoreApplyRow[] } = {
   rows: [{ ordinal: 0, scoreReviewId: '01900000-0000-7000-8000-000000000004' }],
 };
-// Current installed result: {uploadId:UUID,outcomes:[{ordinal:0,scoreReviewId:UUID,status:"unavailable"}],stopped:null}
+// Until the native supported-home repair is delivered: {uploadId:UUID,outcomes:[{ordinal:0,scoreReviewId:UUID,status:"unavailable"}],stopped:null}
 // POST /v1/libraryImports/vndb/{uploadId}:apply
 // 200: {uploadId:UUID,outcomes:[{ordinal:0,reviewId:UUID,status:"applied"}],stopped:null}
 // action:"skip" => skipped; action:"retain" => unsupported, with evidence still readable.
@@ -254,8 +255,10 @@ over every reached attempt. Include account/Access/partition checks, reservation
 lookups, native type preparation, component/event/fence writes, and transaction retries. Library state start/finish,
 metadata confirmation/progress, date intent checkpoints and label creation/assignment acknowledgements each dispatch
 their own native command and repeat those costs. A lost acknowledgement adds another full dispatch; a refused or
-failed dispatch is never refunded. Current score application executes zero vote/aggregate commands but still pays
-the Library unavailable receipt and its authority work. Do not infer Content installation from a bounded result.
+failed dispatch is never refunded. Score application dispatches the guarded native command and its source admission under frozen operands. Charge
+question, identity and vote preparations, locks and rolled-back work even when native admission is unavailable.
+Successful effects add native receipt/event/aggregate work and current counted readback; each lost acknowledgement
+repeats dispatch with the original credential, guard and key. A bounded outcome does not prove native installation.
 
 Upload parses, hashes through the native command digest, serializes and indexes `B+E` before returning, including
 idempotent upload retries. Its row-index trigger inserts `N` evidence rows and advances the source fence for each.

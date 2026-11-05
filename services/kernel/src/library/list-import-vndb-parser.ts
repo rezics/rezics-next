@@ -142,7 +142,8 @@ export function parseVndb(xml: string): VndbRow[] {
     if (rows.length >= VNDB_LIMITS.rows - 1) throw new VndbInvalid();
     const nodes = (node[Object.keys(node).find((k) => k !== ':@')!] ?? []) as Node[];
     const identifier = attr(node, 'id');
-    if (kind === 'vn' && (!identifier || !/^v[1-9][0-9]*$/.test(identifier))) throw new VndbInvalid();
+    const lengthVote = container === 'length-votes' && Array.isArray(node.vn);
+    if ((kind === 'vn' || lengthVote) && (!identifier || !/^v[1-9][0-9]*$/.test(identifier))) throw new VndbInvalid();
     const labels = nodes.filter((n) => Array.isArray(n.label)).map((n) => attr(n, 'label') ?? text(n.label as Node[]));
     const progress = nodes.find((n) => Array.isArray(n.progress));
     const roles: Record<string, string> = {
@@ -156,7 +157,7 @@ export function parseVndb(xml: string): VndbRow[] {
     rows.push({
       ordinal: rows.length,
       kind,
-      identifier: kind === 'vn' ? { provider: 'vndb', kind: 'vn', value: identifier! } : null,
+      identifier: kind === 'vn' || lengthVote ? { provider: 'vndb', kind: 'vn', value: identifier! } : null,
       title: field(nodes, 'title') ?? '',
       labels,
       suggestedRole: suggested.length === 1 ? suggested[0]! : null,
@@ -169,13 +170,16 @@ export function parseVndb(xml: string): VndbRow[] {
         progressMeasure: value(
           (progress ? attr(progress, 'unit') : null) ?? attr(node, 'progress_unit') ?? rawField(nodes, 'progress-unit'),
         ),
+        ...(lengthVote ? { minutes: value(rawField(nodes, 'minutes')) } : {}),
         notes: value(rawField(nodes, 'notes') ?? rawField(nodes, 'note')),
         privacy: value(attr(node, 'private') ?? rawField(nodes, 'private')),
       },
       retainedReason:
         kind === 'vn'
           ? 'Native state, labels, metadata and occurrence dates each require explicit review and consent; unsupported fields remain private evidence.'
-          : `${container}: no native Library admission; retained privately, never published.`,
+          : lengthVote
+            ? 'Play time in minutes may be selected for one native Progress occurrence; never an enjoyment vote or public length aggregate.'
+            : `${container}: no native Library admission; retained privately, never published.`,
       evidence: node,
     });
   };

@@ -17,3 +17,15 @@ test('private evidence preserves source spelling and unsupported precision witho
   expect(JSON.stringify(row?.evidence)).toContain('unmapped');
   expect(JSON.stringify(row?.evidence)).toContain('original');
 });
+
+test('exported play-time minutes retain their own VN tuple and exact scalar evidence without becoming enjoyment', () => {
+  const [row] = parseVndb(`<vndb-export version="1.0"><length-votes><vn id="v42">
+    <minutes> 0123 </minutes><speed>fast</speed><notes>private</notes>
+  </vn></length-votes></vndb-export>`);
+  expect(row).toMatchObject({
+    kind: 'retained',
+    identifier: { provider: 'vndb', kind: 'vn', value: 'v42' },
+    fields: { minutes: { kind: 'value', raw: ' 0123 ', value: ' 0123 ' }, score: { kind: 'missing' } },
+  });
+  expect(JSON.stringify(row?.evidence)).toContain('fast');
+});

@@ -111,7 +111,7 @@ const scoreDecision = object({
   currentVote: nativeVoteObservation,
   consent: strings('adopt-native-vote', 'clear-native-vote'),
   sourceReason: t.String(),
-  nativeAdmission: t.Literal('unavailable'),
+  nativeAdmission: t.Literal('conditional'),
 });
 export const vndbReviewSchema = t.Union([
   vndbDecisionSchema,
@@ -127,13 +127,8 @@ const nativeScore = object({
   sourceReason: t.String(),
   exactUnits: nullable(t.Integer({ minimum: 0, maximum: 20 })),
   admission: object({
-    status: t.Literal('unavailable'),
-    reason: strings(
-      'conditional-admission-unavailable',
-      'native-question-unavailable',
-      'native-current-vote-unavailable',
-      'source-not-vn-score',
-    ),
+    status: strings('conditional', 'unavailable'),
+    reason: nullable(strings('native-question-unavailable', 'native-current-vote-unavailable', 'source-not-vn-score')),
   }),
 });
 const sourceValue = object({
@@ -196,6 +191,7 @@ export const vndbApplySchema = object({
         ordinal: count,
         scoreReviewId: uuid,
         status: strings('applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable'),
+        currentVote: t.Optional(nativeVoteObservation),
       }),
     ]),
     {
