@@ -40,6 +40,8 @@ function validate(input: unknown): Input {
     'cancel',
     'prune',
     'entry',
+    'personal',
+    'journal',
     'label',
   ];
   if (!operations.includes(input.operation as Operation)) throw new Error('Invalid archive operation');
@@ -78,6 +80,10 @@ export const archiveRecoveryCall = createServerFn({ method: 'POST' })
         return port.prune(...data.args);
       case 'entry':
         return port.entry(...data.args);
+      case 'personal':
+        return port.personal(...data.args);
+      case 'journal':
+        return port.journal(...data.args);
       case 'label':
         return port.label(...data.args);
     }

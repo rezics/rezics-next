@@ -1,13 +1,14 @@
-# Library archive entry and private-label recovery
+# Library archive recovery
 
-`/library/recover-archive` is the Library destination for recovering selected Entries, private labels and assignments
-from a completed local archive. The native owner is [Library archive review and merge](../../../../docs/library-archive-merge.md);
+`/library/recover-archive` is the Library destination for recovering selected Entries, private labels, assignments,
+annotations, occurrence journals and source observations from a completed local archive. The native owner is
+[Library archive review and merge](../../../../docs/library-archive-merge.md);
 the artifact format is owned by [Library export](../../../../docs/library-export.md). This guide owns the mounted Web visit.
 
-Decision: enable the Entry/private-label/assignment branch through the installed generated original-text upload and
-exact `{items:[{ordinal,reviewRevision}]}` confirmation; preserve local work by default and keep personal-field recovery independent.
-The base generated declarations contain these operands. Web consumes them without probing or casting Eden's proxy,
-generating another client, decoding files locally or adding a native endpoint. Content remains the shared publisher.
+Decision: use the installed generated original-text upload and exact `{items:[{ordinal,reviewRevision}]}` confirmation
+for every supported branch; preserve current fields by default and require deliberate field-level set or clear choices
+for personal facts. Web consumes producer-published operands without generating another client, decoding files locally
+or adding a native endpoint. Content remains the shared publisher.
 
 ## Upload and inventory
 
@@ -23,16 +24,19 @@ new exports emit it. Malformed, incomplete, unsupported and inconsistent files r
 
 One upload identity and one preview page of at most 100 records are retained. Inventory shows native computed
 section counts, capture and treatment alongside validated overall manifest rows and compact bytes. It explains empty
-captures, retained unsupported evidence and manifest omissions. An empty page never substitutes for inventory.
-Annotation, journal, observation and Collection recovery are not activated by this branch or a generic result object.
+captures, retained unsupported evidence and manifest omissions. An empty page never substitutes for inventory. One
+upload, page size, selected-row limit and immutable review lifecycle cover every activated branch. V4 provider sections
+and rows without a producer-published review operand remain retained unsupported evidence.
 
 ## Deliberate selection and immutable review
 
 A person explicitly enters the current canonical Subject, a supported current state and create/update/preserve choice,
-or chooses a current private label ID or validated creation using its archived name. Equal names and archived IDs
-never supply mappings. Native review validates these inputs against current owners. Preserve is the default Entry
-and assignment action. Label mappings must be reviewed before assignments; a created label must be acknowledged
-before reviewing its assignments. Selection is bounded to twenty across page navigation.
+or chooses a current private label ID or validated creation using its archived name. Personal rows require a current
+Subject plus the exact existing Entry incarnation, non-retired Session or provider/record address. Equal names,
+archived IDs, titles and dates never supply mappings. Native review compares current values with archived evidence.
+Personal fields start as preserve; set and clear are deliberate field-level choices. Label mappings must be reviewed
+before assignments; a created label must be acknowledged before reviewing its assignments. The shared selection is
+bounded to twenty rows across branches and page navigation.
 
 The selected choices and returned ordinal, status and `reviewRevision` appear together. The displayed preview also
 shows its exact native review, including current conflicts. Explicit confirmation binds the returned revisions; a
@@ -50,11 +54,11 @@ its original key, canonical operands and started checkpoint. Reads of current fa
 A refused replay also retains the original command. Cancellation stops unstarted effects while preserving accepted
 partial results; it cannot release a started command before matching native acknowledgement.
 
-Only acknowledged matching Entry/label/assignment effects supply canonical destinations. One selected result page
-is shown, retaining acknowledged rows for the current selection when a later native page omits them; native result
-navigation never imports unrelated journal/session fields. Explicit readback uses the actual
-current Entry read or the existing addressed FULL label-assignment read (one row, including current label metadata),
-not historical archive values. Removal and seven-day expiry of private evidence do not undo admitted Library changes.
+Only acknowledged matching effects supply canonical destinations. One selected result page is shown, retaining
+acknowledged rows for the current selection when a later native page omits them. Explicit readback uses the actual
+current Entry, private annotation/source-observation reader, occurrence journal reader or addressed FULL
+label-assignment reader, never historical archive values. Removal and seven-day expiry of private evidence do not
+undo admitted Library changes.
 Expiry clears private upload/replay state and retains accepted results until replacement or session retirement.
 Pruning is explicit and native-bounded to 100 evidence records per command.
 
@@ -64,7 +68,8 @@ private state. The server functions return `private, no-store`; archive values n
 
 ## Bounds and verification
 
-One native preview/result acquisition reads P+1 complete retained rows (P≤100); review/apply selects R≤20. The
+One native preview/result acquisition reads P+1 complete retained rows (P≤100); review/apply selects R≤20 across
+entries, labels, assignments, annotations, journals and source observations. The
 120,000-byte record cap does not bound the full response: every preview row also includes review JSON and revision,
 and results include native result JSON. The composed maximum is the UTF-8 size of the complete native envelope,
 including coverage, escaped evidence/review/results and punctuation. The native producer's precise caller formula

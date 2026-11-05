@@ -52,6 +52,7 @@ test('Selection is explicit, bounded and independent of unsupported archive evid
   selection.set(0, 'entries', { action: 'update', stateId: 'current-state', labelIds: ['current-label'] });
   selection.remove(19);
   selection.set(20, 'labels', { action: 'preserve' });
+  expect(() => selection.set(21, 'annotations', { action: 'preserve' })).toThrow('selection_limit');
   // @ts-expect-error Unsupported sections must also be refused at runtime.
   expect(() => selection.set(21, 'history', { action: 'preserve' })).toThrow('invalid_selection');
   expect(selection.choices).toHaveLength(20);

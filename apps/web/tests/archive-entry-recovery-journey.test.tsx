@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ArchiveEntryRecoveryJourney } from '../src/library/archive-entry-recovery/controller';
 import {
   archiveRecoveryNative,
+  type ArchiveReviewItem,
   type ArchiveRow,
   type NativeArchiveStatus,
 } from '../src/library/archive-entry-recovery/native';
@@ -26,11 +27,13 @@ const status: NativeArchiveStatus = {
   createdAt: new Date().toISOString(),
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
   state: 'ready',
-  rows: 3,
+  rows: 5,
   recordBytes: 330,
   coverage: [
     { section: 'entries', rows: 1, capture: 'present', treatment: 'requires-explicit-mapping' },
-    { section: 'sessions', rows: 0, capture: 'empty', treatment: 'retained-unsupported' },
+    { section: 'labels', rows: 1, capture: 'present', treatment: 'requires-explicit-mapping' },
+    { section: 'annotations', rows: 1, capture: 'present', treatment: 'requires-explicit-mapping' },
+    { section: 'journals', rows: 2, capture: 'present', treatment: 'requires-explicit-mapping' },
   ],
 };
 
@@ -64,12 +67,29 @@ function fixture() {
     {
       ordinal: 2,
       section: 'journals',
-      evidence: { reflection: 'private' },
+      evidence: { subject_id: subjectId, session_id: '019a1b2c-3d4e-7f00-8a00-000000000004', start_date: { year: 2004 }, reflection: 'private' },
+      status: 'unresolved',
+      review: null,
+      reviewRevision: 0,
+    },
+    {
+      ordinal: 3,
+      section: 'annotations',
+      evidence: { subject_id: subjectId, incarnation_id: '019a1b2c-3d4e-7f00-8a00-000000000005', note: 'Archived note', priority: 4 },
+      status: 'unresolved',
+      review: null,
+      reviewRevision: 0,
+    },
+    {
+      ordinal: 4,
+      section: 'journals',
+      evidence: { subject_id: subjectId, session_id: '019a1b2c-3d4e-7f00-8a00-000000000006', start_date: { year: 2005 }, finish_date: { year: 2006, month: 2 }, reflection: 'Exact archived reflection' },
       status: 'unresolved',
       review: null,
       reviewRevision: 0,
     },
   ];
+  let reviewedItems: ArchiveReviewItem[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: Object.assign(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,6 +107,30 @@ function fixture() {
         if (path.endsWith('/review')) {
           revision++;
           const { items } = JSON.parse(calls.at(-1)!.body);
+          reviewedItems = items;
+          for (const item of items) {
+            const index = rows.findIndex((candidate) => candidate.ordinal === item.ordinal);
+            const row = rows[index]!;
+            rows[index] = {
+              ...row,
+              review:
+                item.kind === 'annotation'
+                  ? { current: { note: 'Current note', priority: 0, annotationRevision: 8 } }
+                  : item.kind === 'journal'
+                    ? {
+                        current: {
+                          startDate: null,
+                          finishDate: null,
+                          reflection: 'Current reflection',
+                          assessment: { meaningRevision: 1, units: 0 },
+                          revision: 3,
+                        },
+                      }
+                    : { current: { revision: 8 } },
+              status: 'current_conflict',
+              reviewRevision: revision,
+            };
+          }
           return Response.json({
             uploadId: id,
             reviewed: items.map(({ ordinal }: { ordinal: number }) => ({
@@ -102,12 +146,44 @@ function fixture() {
           if (unknown) return Response.json({ code: 'temporarily_unavailable' }, { status: 503 });
           return Response.json({
             uploadId: id,
-            applied: [
-              { ordinal: 0, status: 'acknowledged', result: { effect: 'entry.put', subjectId, state: 'planned' } },
-              { ordinal: 1, status: 'acknowledged', result: { effect: 'label.create', labelId } },
-            ],
+            applied: reviewedItems.map((item) => ({
+              ordinal: item.ordinal,
+              status: 'acknowledged',
+              result:
+                item.kind === 'entry'
+                  ? { effect: 'entry.put', subjectId, state: 'planned' }
+                  : item.kind === 'label'
+                    ? { effect: 'label.create', labelId }
+                    : item.kind === 'assignment'
+                      ? { effect: 'label.assign', subjectId }
+                      : item.kind === 'annotation'
+                        ? { subjectId: item.subjectId, incarnationId: item.incarnationId, annotationRevision: 9 }
+                        : { subjectId: item.subjectId, sessionId: item.sessionId, revision: 4 },
+            })),
           });
         }
+        if (path.endsWith('/personal'))
+          return Response.json({
+            personalEntry: {
+              subjectId,
+              annotationRevision: 9,
+              note: 'Current note',
+              priority: 0,
+              annotationUpdatedAt: null,
+              sourceObservations: [],
+            },
+          });
+        if (path.endsWith('/journal'))
+          return Response.json({
+            journal: {
+              sessionId: '019a1b2c-3d4e-7f00-8a00-000000000006',
+              revision: 4,
+              startDate: { year: 2005 },
+              finishDate: { year: 2006, month: 2 },
+              reflection: 'Exact archived reflection',
+              assessment: { meaningRevision: 1, units: 0 },
+            },
+          });
         if (path.includes('/libraryEntries/'))
           return Response.json({ libraryEntry: { subjectId, state: 'in_progress', revision: 8 } });
         if (path.endsWith('/libraryLabelAssignments'))
@@ -247,5 +323,50 @@ test('Acknowledged matching receipts allow actual current label readback and cha
     expect(acknowledged.journey.snapshot().state!.phase).toBe('cancelled');
   } finally {
     acknowledged.journey.retire();
+  }
+});
+
+test('Annotation and one combined journal row review current facts and read actual native targets', async () => {
+  const f = fixture();
+  try {
+    await f.journey.upload(new File(['{}'], 'archive-v3.json'));
+    const sessionId = '019a1b2c-3d4e-7f00-8a00-000000000006';
+    f.journey.choose({
+      ordinal: 3,
+      kind: 'annotation',
+      subjectId,
+      incarnationId: '019a1b2c-3d4e-7f00-8a00-000000000005',
+      fields: { note: 'set', priority: 'preserve' },
+    });
+    f.journey.choose({
+      ordinal: 4,
+      kind: 'journal',
+      subjectId,
+      sessionId,
+      fields: { startDate: 'set', finishDate: 'set', reflection: 'set' },
+    });
+    await f.journey.review();
+    const reviewHtml = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />);
+    expect(reviewHtml).toContain('Current note');
+    expect(reviewHtml).toContain('Current reflection');
+    const review = JSON.parse(f.calls.find((call) => call.path.endsWith('/review'))!.body);
+    expect(review.items).toEqual([
+      { ordinal: 3, kind: 'annotation', subjectId, incarnationId: '019a1b2c-3d4e-7f00-8a00-000000000005', fields: { note: 'set', priority: 'preserve' } },
+      { ordinal: 4, kind: 'journal', subjectId, sessionId, fields: { startDate: 'set', finishDate: 'set', reflection: 'set' } },
+    ]);
+    f.acknowledge();
+    await f.journey.apply();
+    expect(f.journey.snapshot().state!.results!.rows).toMatchObject([
+      { ordinal: 3, section: 'annotations', status: 'acknowledged', subjectId },
+      { ordinal: 4, section: 'journals', status: 'acknowledged', subjectId, sessionId },
+    ]);
+    await f.journey.readCurrent(3);
+    expect(f.journey.snapshot().readback?.value).toMatchObject({ note: 'Current note', priority: 0, annotationRevision: 9 });
+    await f.journey.readCurrent(4);
+    expect(f.journey.snapshot().readback?.value).toMatchObject({ sessionId, revision: 4, reflection: 'Exact archived reflection' });
+    expect(f.calls.some((call) => call.path.endsWith('/personal'))).toBe(true);
+    expect(f.calls.some((call) => call.path.endsWith('/journal'))).toBe(true);
+  } finally {
+    f.journey.retire();
   }
 });

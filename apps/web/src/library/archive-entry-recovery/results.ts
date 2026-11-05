@@ -1,4 +1,5 @@
 import type { NativeArchiveResults } from './native';
+import type { ArchiveReviewItem } from './native';
 import {
   ownRecoveryPage,
   recoveryPageLimit,
@@ -12,10 +13,18 @@ type ResultContext = Omit<NativeArchiveResults, 'results'>;
 type SelectedResult = Pick<NativeResult, 'ordinal' | 'section' | 'status'> & {
   subjectId: string | null;
   labelId?: string;
+  sessionId?: string;
 };
 
 const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const supported = new Set<RecoverySection>(['entries', 'labels', 'assignments']);
+const supported = new Set<RecoverySection>([
+  'entries',
+  'labels',
+  'assignments',
+  'annotations',
+  'journals',
+  'provenance',
+]);
 
 /** Only a checkpointed native receipt may supply a successful canonical destination. */
 function destination(row: NativeResult): string | null {
@@ -34,11 +43,11 @@ function destination(row: NativeResult): string | null {
  */
 export function selectedArchiveRecoveryResults(
   page: NativeArchiveResults,
-  selection: readonly Pick<RecoveryChoice<unknown>, 'ordinal' | 'section'>[],
+  selection: readonly Pick<RecoveryChoice<ArchiveReviewItem>, 'ordinal' | 'section' | 'choice'>[],
 ) {
   if (page.results.length > recoveryPageLimit) throw new Error('page_limit');
   if (selection.length > recoverySelectionLimit) throw new Error('selection_limit');
-  const selected = new Map<number, RecoverySection>();
+  const selected = new Map<number, Pick<RecoveryChoice<ArchiveReviewItem>, 'section' | 'choice'>>();
   for (const choice of selection) {
     if (
       !Number.isSafeInteger(choice.ordinal) ||
@@ -47,11 +56,13 @@ export function selectedArchiveRecoveryResults(
       !supported.has(choice.section)
     )
       throw new Error('invalid_selection');
-    selected.set(choice.ordinal, choice.section);
+    selected.set(choice.ordinal, choice);
   }
   const rows: SelectedResult[] = [];
   for (const row of page.results) {
-    if (selected.get(row.ordinal) !== row.section) continue;
+    const selectedChoice = selected.get(row.ordinal);
+    if (selectedChoice?.section !== row.section) continue;
+    const reviewChoice = selectedChoice.choice;
     const labelId =
       row.status === 'acknowledged' &&
       row.section === 'labels' &&
@@ -59,12 +70,31 @@ export function selectedArchiveRecoveryResults(
       typeof row.result.labelId === 'string'
         ? row.result.labelId
         : undefined;
+    let currentSubjectId = destination(row);
+    let sessionId: string | undefined;
+    if (row.status === 'acknowledged' && row.result !== null) {
+      switch (reviewChoice.kind) {
+        case 'entry':
+        case 'assignment':
+          break;
+        case 'label':
+          break;
+        case 'annotation':
+          currentSubjectId = reviewChoice.subjectId;
+          break;
+        case 'journal':
+          currentSubjectId = reviewChoice.subjectId;
+          sessionId = reviewChoice.sessionId;
+          break;
+      }
+    }
     rows.push({
       ordinal: row.ordinal,
       section: row.section,
       status: row.status,
-      subjectId: destination(row),
+      subjectId: currentSubjectId,
       ...(labelId === undefined ? {} : { labelId }),
+      ...(sessionId === undefined ? {} : { sessionId }),
     });
   }
   const context: ResultContext = { uploadId: page.uploadId, state: page.state, next: page.next };

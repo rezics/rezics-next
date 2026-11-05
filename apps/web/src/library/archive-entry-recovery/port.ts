@@ -29,6 +29,8 @@ export async function browserArchiveRecoveryPort(expected: ExpectedReader): Prom
     cancel: (id) => call('cancel', [id]),
     prune: (id) => call('prune', [id]),
     entry: (id) => call('entry', [id]),
+    personal: (id) => call('personal', [id]),
+    journal: (id) => call('journal', [id]),
     label: (id) => call('label', [id]),
   };
 }
