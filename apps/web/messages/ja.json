@@ -11256,5 +11256,7 @@
   "moderation_manual_hint": "掲示板 ID を入力するか、カタログの通報を開いてください。各キューで現在のアクセス権を個別に確認します。",
   "moderation_manual_board": "掲示板 ID",
   "moderation_manual_open": "掲示板のキューを開く",
-  "moderation_manual_catalogue": "カタログの通報を開く"
+  "moderation_manual_catalogue": "カタログの通報を開く",
+  "subject_rating_control_uncertain": "結果を確認できません。同じリクエストを再試行するか、リクエストを破棄して現在の評価を読み込んでください。",
+  "subject_rating_control_discard": "リクエストを破棄して評価を再読み込み"
 }

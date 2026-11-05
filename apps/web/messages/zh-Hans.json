@@ -11159,5 +11159,7 @@
   "library_mal_retry_source_evidence": "重试来源证据接纳",
   "library_mal_score_zero_source": "{value}（0 表示未评分）",
   "library_mal_score_source_details": "数值：{value}；MAL 评分范围：{scale}",
-  "library_mal_score_source_scale": "MAL 范围 {min} 至 {max}，步长 {step}"
+  "library_mal_score_source_scale": "MAL 范围 {min} 至 {max}，步长 {step}",
+  "subject_rating_control_uncertain": "结果尚未确定。你可以重试同一笔请求，或丢弃请求并重新加载当前评分。",
+  "subject_rating_control_discard": "丢弃请求并重新加载评分"
 }

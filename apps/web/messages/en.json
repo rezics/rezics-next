@@ -11444,5 +11444,7 @@
   "moderation_manual_hint": "Enter a board ID or open catalogue reports. Each queue checks your current access independently of discovery.",
   "moderation_manual_board": "Board ID",
   "moderation_manual_open": "Open board queue",
-  "moderation_manual_catalogue": "Open catalogue reports"
+  "moderation_manual_catalogue": "Open catalogue reports",
+  "subject_rating_control_uncertain": "The result is unknown. Retry the same request, or discard it and reload your current answer.",
+  "subject_rating_control_discard": "Discard request and reload answer"
 }
