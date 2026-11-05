@@ -16,8 +16,6 @@ import {
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-/** The runner names each log by its start time and a random suffix, so the name does not carry the check id. */
-const CHECK_LOG_PATH = /^\.temp\/goal\/checks\/worker-check-[^/]+\.log$/;
 const CHECK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Each finished check's whole log is copied here, in the worktree, where the worker can read it. */
 const FULL_LOG_DIRECTORY = '.temp/check-logs';
@@ -82,7 +80,9 @@ function ownedTerminalLogPath(
   if (typeof raw !== 'string' || !raw.length) return unknown('terminal record did not include an original log path');
 
   const normalized = raw.replaceAll('\\', '/');
-  if (!CHECK_LOG_PATH.test(normalized)) return unknown('log path is outside the worker-check log directory');
+  // The runner names a physical run's log after its check id, so a record can name only its own check's log.
+  const ownName = new RegExp(`^\\.temp/goal/checks/worker-check-${id}(?:-[^/]+)?\\.log$`);
+  if (!ownName.test(normalized)) return unknown('log path is outside this UUID-owned check log prefix');
   const path = resolve(task.worktree, normalized);
   const checksDirectory = resolve(task.worktree, '.temp/goal/checks');
 

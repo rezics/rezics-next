@@ -73,8 +73,8 @@ test('ordinary observation stays pending for live local, remote, queued and sibl
 test('a finished check names its whole log, copied into the worktree past the excerpt bound', () => {
   const worktree = tempDirectory();
   const id = randomUUID();
-  // The runner names logs by start time and a random suffix, not by the check id.
-  const log = '.temp/goal/checks/worker-check-2026-11-05T19-00-00.000Z-0a1b2c3d.log';
+  // The runner names a physical run's log after its check id, then its start time and a random suffix.
+  const log = `.temp/goal/checks/worker-check-${id}-2026-11-05T19-00-00.000Z-0a1b2c3d.log`;
   const output = `${'compiling module\n'.repeat(600)}FAIL apps/web/tests/example.test.ts:12: expected 2\n`;
   mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
   writeFileSync(join(worktree, log), output);
