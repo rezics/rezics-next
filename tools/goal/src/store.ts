@@ -1061,26 +1061,24 @@ export class WorkerStore implements AttemptFence {
       if (updated.changes !== 1) throw new Error('False integration landing changed before reconciliation');
 
       const at = new Date().toISOString();
-      this.db
-        .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-        .run(
-          ref.taskId,
-          ref.attempt,
-          'false-integration-reconciled',
-          at,
-          JSON.stringify({
-            publishedCommit: evidence.publishedCommit,
-            candidate: evidence.candidate,
-            request,
-            outcome,
-            taskIntegration: {
-              integratedBase: task.integratedBase,
-              integratedCommits: task.integratedCommits,
-              integratedCommit: task.integratedCommit,
-              mergedCommit: task.mergedCommit,
-            },
-          }),
-        );
+      this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
+        ref.taskId,
+        ref.attempt,
+        'false-integration-reconciled',
+        at,
+        JSON.stringify({
+          publishedCommit: evidence.publishedCommit,
+          candidate: evidence.candidate,
+          request,
+          outcome,
+          taskIntegration: {
+            integratedBase: task.integratedBase,
+            integratedCommits: task.integratedCommits,
+            integratedCommit: task.integratedCommit,
+            mergedCommit: task.mergedCommit,
+          },
+        }),
+      );
       task.state = 'landing';
       delete task.integratedBase;
       delete task.integratedCommits;

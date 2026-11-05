@@ -100,8 +100,14 @@ test('a partial batch member keeps its effective change and the prior sibling be
     expect(partialOutcome.passed).toBe(true);
     expect(partialOutcome.mergedCommit).toBe(siblingOutcome.mergedCommit);
     expect(partialOutcome.mergedCommit).toBe(git(h.root, 'rev-parse', 'refs/heads/dev'));
-    expect(h.store.task(sibling.id)).toMatchObject({ state: 'integrated', integratedCommit: partialOutcome.mergedCommit });
-    expect(h.store.task(partial.id)).toMatchObject({ state: 'integrated', integratedCommit: partialOutcome.mergedCommit });
+    expect(h.store.task(sibling.id)).toMatchObject({
+      state: 'integrated',
+      integratedCommit: partialOutcome.mergedCommit,
+    });
+    expect(h.store.task(partial.id)).toMatchObject({
+      state: 'integrated',
+      integratedCommit: partialOutcome.mergedCommit,
+    });
     expect(git(h.root, 'show', 'dev:sibling.txt')).toBe('sibling.txt');
     expect(git(h.root, 'show', 'dev:target.txt')).toBe('target.txt');
     expect(git(h.root, 'show', 'dev:effective.txt')).toBe('worker effective change');

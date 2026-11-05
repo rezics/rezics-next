@@ -172,8 +172,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       throw new Error('usage: recover false-integration <task> <attempt>');
     const ref = { taskId: id, attempt };
     store.assertCurrent(ref);
-    if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'false-integration-reconciled'))
-      return 0;
+    if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'false-integration-reconciled')) return 0;
     const task = store.task(ref.taskId);
     const entry = queue.entry(ref);
     if (!entry?.outcome || !entry.candidate) throw new Error('False integration has no retained landing candidate');

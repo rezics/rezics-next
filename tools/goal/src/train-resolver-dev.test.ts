@@ -198,7 +198,11 @@ test('a target-preserving resolution publishes its other change after dev moves'
     expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 1 } });
     expect(outcome.mergedCommit).toBe(git(h.root, 'rev-parse', 'refs/heads/dev'));
     expect(outcome.mergedCommit).not.toBe(concurrentHead);
-    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated', integratedCommit: outcome.mergedCommit });
+    expect(h.store.task(task.id)).toMatchObject({
+      currentAttempt: 1,
+      state: 'integrated',
+      integratedCommit: outcome.mergedCommit,
+    });
     expect(git(h.root, 'show', `dev:${file}`)).toBe(dev.trimEnd());
     expect(git(h.root, 'show', `dev:${effectiveFile}`)).toBe('worker effective change');
     expect(git(h.root, 'show', `dev:${concurrentFile}`)).toBe('concurrent target edit');

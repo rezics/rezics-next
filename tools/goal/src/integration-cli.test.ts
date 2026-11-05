@@ -8,7 +8,12 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory, repository, integrationHarness } from './test-support.ts';
-import { createHourlyReportScheduler, runIntegration, singleFlight, type IntegrationRuntime } from './integration-cli.ts';
+import {
+  createHourlyReportScheduler,
+  runIntegration,
+  singleFlight,
+  type IntegrationRuntime,
+} from './integration-cli.ts';
 import { git } from './merge.ts';
 
 const cli = join(import.meta.dir, 'fixtures/cli-runtime.ts');

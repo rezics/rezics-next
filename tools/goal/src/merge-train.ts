@@ -3770,10 +3770,7 @@ export class MergeTrain {
           taskPaths,
           this.options.policy?.merge,
         );
-        if (
-          delta.kind !== 'effective' &&
-          !(integratesIntoDev && !stabilize && delta.kind === 'partial-no-effect')
-        ) {
+        if (delta.kind !== 'effective' && !(integratesIntoDev && !stabilize && delta.kind === 'partial-no-effect')) {
           if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, delta.paths, logPath);
           else refuseNoEffect(result, delta.paths, logPath);
           return finish();
