@@ -333,6 +333,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
     expect(JSON.parse(finishedProbeOutput.at(-1)!)).toEqual({
       ...h.store.task(taskIds[0]!),
       urgent: false,
+      pendingRetry: { reason: 'start' },
       toolIncidents: [],
     });
     expect(taskStateRead).toHaveBeenCalledTimes(1);
