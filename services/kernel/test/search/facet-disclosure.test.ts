@@ -94,7 +94,15 @@ function fixture(finalStatus: 'current' | 'changed') {
     now,
     context: { deadline: now + 10_000 },
   };
-  return { provider, input, captures, queries, finalizations };
+  return {
+    provider,
+    input,
+    captures,
+    queries,
+    get finalizations() {
+      return finalizations;
+    },
+  };
 }
 
 test('changed final facet disclosure withholds every sibling and its cursors', async () => {
