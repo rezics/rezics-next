@@ -68,6 +68,7 @@ export function ContributionReaction({
           value={value}
           signedIn
           personalReady
+          readAuthority={lease}
           canStart={ready}
           allowDiscard
           returnTo={returnTo}

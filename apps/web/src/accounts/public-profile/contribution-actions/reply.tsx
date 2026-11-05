@@ -150,6 +150,8 @@ function ContributionReplyVisit({
 }) {
   const [initialKey] = useState(() => crypto.randomUUID());
   const [pending, setPending] = useState(false);
+  const [admitted, setAdmitted] = useState(ready);
+  if (ready && !admitted) setAdmitted(true);
   const [intentLocked, setIntentLocked] = useState(false);
   const leaseId = contributionOperationLeaseId(lease);
   const currentLease =
@@ -160,7 +162,7 @@ function ContributionReplyVisit({
     lease.reader === presentation.reader &&
     presentation.isCurrent() &&
     lease.current();
-  const keepOwner = currentLease && (ready || pending || intentLocked) && state !== 'retired';
+  const keepOwner = currentLease && (ready || admitted || pending || intentLocked) && state !== 'retired';
   const origin: ReplyOrigin | undefined =
     target && leaseId !== null
       ? {
