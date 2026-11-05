@@ -32,6 +32,7 @@ let sessionReader: string | null = null;
 let bffReader: string | null = null;
 let currentRequest = new Request('https://rezics.test/en/@alice');
 let nextSessionGate: { entered: Deferred<void>; release: Deferred<void> } | undefined;
+let nextPreparationGate: { entered: Deferred<void>; release: Deferred<void> } | undefined;
 let failNextAgentAction = false;
 let failNextSessionAction = false;
 let nextAgentActionGate: { entered: Deferred<void>; release: Deferred<unknown> } | undefined;
@@ -46,15 +47,18 @@ type PreferenceResult = {
 const nativeReads: Array<{
   accountId: string;
   authorization?: string;
+  signal?: AbortSignal;
   work: Deferred<PreferenceResult>;
 }> = [];
 const readerEnvelopes: Array<Record<string, unknown>> = [];
+const readerSignals: Array<AbortSignal | undefined> = [];
 
-function requestFor(reader: string | null): Request {
+function requestFor(reader: string | null, signal?: AbortSignal): Request {
   const id = reader ? ids.get(reader) : undefined;
-  return new Request('https://rezics.test/en/_server/agent-reader', {
-    headers: id ? { cookie: `__Host-rezics_session=${id}` } : undefined,
-  });
+  const init: RequestInit = {};
+  if (id) init.headers = { cookie: `__Host-rezics_session=${id}` };
+  if (signal) init.signal = signal;
+  return new Request('https://rezics.test/en/_server/agent-reader', init);
 }
 
 const env = {
@@ -71,6 +75,12 @@ const env = {
         return { signedIn: Boolean(subject), ...(subject ? { subject } : {}), csrfToken: null };
       },
       credential: async () => {
+        const gate = nextPreparationGate;
+        if (gate) {
+          nextPreparationGate = undefined;
+          gate.entered.resolve(undefined);
+          await gate.release.promise;
+        }
         const subject = readers.get(id);
         return subject
           ? { status: 'active' as const, subject, accessToken: `${subject}-access-token`, csrfToken: null }
@@ -88,11 +98,12 @@ function createServerFn() {
       return chain;
     },
     handler(handler: (input: { data?: unknown }) => unknown) {
-      return async (input: { data?: unknown } = {}) => {
+      return async (input: { data?: unknown; signal?: AbortSignal } = {}) => {
         const data = validate ? validate(input.data) : input.data;
         const isAgentReader = !!data && typeof data === 'object' && 'expectedReader' in data;
         if (isAgentReader) {
           readerEnvelopes.push(data as Record<string, unknown>);
+          readerSignals.push(input.signal);
           if (failNextAgentAction) {
             failNextAgentAction = false;
             return Promise.reject(new Error('Reader BFF unavailable'));
@@ -107,7 +118,10 @@ function createServerFn() {
           gate.entered.resolve(undefined);
           await gate.release.promise;
         }
-        currentRequest = requestFor(isAgentReader ? bffReader : sessionReader);
+        currentRequest = requestFor(
+          isAgentReader ? bffReader : sessionReader,
+          isAgentReader ? input.signal : undefined,
+        );
         const response = await handler({ data });
         if (isAgentReader && nextAgentActionGate) {
           const actionGate = nextAgentActionGate;
@@ -140,9 +154,14 @@ mock.module('../src/kernel/client', () => ({
   kernelClient: () => ({
     accounts: ({ accountId }: { accountId: string }) => ({
       preferences: {
-        get: (options?: { headers?: { authorization?: string } }) => {
+        get: (options?: { headers?: { authorization?: string }; fetch?: { signal?: AbortSignal } }) => {
           const work = deferred<PreferenceResult>();
-          nativeReads.push({ accountId, authorization: options?.headers?.authorization, work });
+          nativeReads.push({
+            accountId,
+            authorization: options?.headers?.authorization,
+            signal: options?.fetch?.signal,
+            work,
+          });
           return work.promise;
         },
       },
@@ -290,7 +309,7 @@ test('public account readers retire old admissions across sign-out, replacement,
   const root = createRoot(host as unknown as HTMLElement);
   const secondHost = window.document.createElement('div');
   window.document.body.append(secondHost);
-  const secondRoot = createRoot(secondHost as unknown as HTMLElement);
+  let secondRoot = createRoot(secondHost as unknown as HTMLElement);
   let secondRootMounted = true;
   type RenderProps = {
     handle?: string;
@@ -660,10 +679,46 @@ test('public account readers retire old admissions across sign-out, replacement,
     await settle();
     expectSafeReader();
     expect(nativeReads).toHaveLength(23);
+
+    secondRoot = createRoot(secondHost as unknown as HTMLElement);
+    secondRootMounted = true;
+    const preparation = { entered: deferred<void>(), release: deferred<void>() };
+    nextPreparationGate = preparation;
+    const delayedPath = { kind: 'view' as const, view: 'posts' };
+    await act(async () => renderInto(secondRoot, { path: delayedPath }, true));
+    await preparation.entered.promise;
+    const abandonedSignal = readerSignals.at(-1);
+    expect(abandonedSignal).toBeDefined();
+    await act(async () => renderInto(secondRoot, { locale: 'fr', path: delayedPath }, true));
+    expect(abandonedSignal?.aborted).toBe(true);
+    const reopened = await nextRead(24);
+    expect(reopened.signal).toBeDefined();
+    expect(reopened.signal?.aborted).toBe(false);
+    preparation.release.resolve(undefined);
+    await settle();
+    expect(nativeReads).toHaveLength(24);
+    reopened.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader(secondHost);
+
+    await setSession(alice);
+    const mountedReads = [await nextRead(25), await nextRead(26)];
+    expect(mountedReads.every((read) => read.signal)).toBe(true);
+    await act(async () => secondRoot.unmount());
+    secondRootMounted = false;
+    await settle();
+    expect(mountedReads.filter((read) => read.signal?.aborted)).toHaveLength(1);
+    expect(mountedReads.filter((read) => !read.signal?.aborted)).toHaveLength(1);
+    mountedReads.forEach((read) => read.work.resolve(result('show')));
+    await settle();
+    expectAdmittedReader();
+    expect(nativeReads).toHaveLength(26);
   } finally {
     await act(async () => {
       root.unmount();
       if (secondRootMounted) secondRoot.unmount();
+      nextPreparationGate?.release.resolve(undefined);
+      nextPreparationGate = undefined;
       failNextAgentAction = false;
       failNextSessionAction = false;
       nextAgentActionGate = undefined;
@@ -718,6 +773,7 @@ export const readerTestRuntime = {
   markCoversWithheld,
   result,
   nativeReads,
+  readerSignals,
   setReader(reader: string | null) {
     sessionReader = reader;
     bffReader = reader;
@@ -725,5 +781,7 @@ export const readerTestRuntime = {
   reset() {
     nativeReads.length = 0;
     readerEnvelopes.length = 0;
+    readerSignals.length = 0;
+    nextPreparationGate = undefined;
   },
 };

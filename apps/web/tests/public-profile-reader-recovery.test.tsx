@@ -137,6 +137,8 @@ for (const view of ['overview', 'posts'] as const) {
       const trigger = retry();
       await clickRetry();
       const recovered = await nextRead(2);
+      expect(recovered.signal).toBeDefined();
+      expect(recovered.signal?.aborted).toBe(false);
       safe();
       expect(retry() === trigger).toBe(true);
       expect(retry().getAttribute('aria-disabled')).toBe('true');
@@ -181,9 +183,15 @@ for (const view of ['overview', 'posts'] as const) {
         client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-b', csrfToken: 'new' });
       });
       const replacement = await nextRead(6);
+      expect(retired.signal?.aborted).toBe(true);
+      expect(replacement.signal?.aborted).toBe(false);
+      const currentNotice = status().textContent;
+      const currentFocus = window.document.activeElement;
       retired.work.resolve(runtime.result('show'));
       await runtime.settle();
       safe();
+      expect(status().textContent).toBe(currentNotice);
+      expect(window.document.activeElement).toBe(currentFocus);
       replacement.work.resolve(runtime.result('blur'));
       await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
@@ -203,17 +211,29 @@ for (const view of ['overview', 'posts'] as const) {
       locale = 'fr';
       await render();
       const currentRoute = await nextRead(9);
+      expect(lateRoute.signal?.aborted).toBe(true);
+      expect(currentRoute.signal?.aborted).toBe(false);
+      const currentRouteNotice = status().textContent;
+      const currentRouteFocus = window.document.activeElement;
       lateRoute.work.resolve(runtime.result('show'));
       await runtime.settle();
       safe();
-      currentRoute.work.resolve(runtime.result('blur'));
-      await runtime.settle();
+      expect(status().textContent).toBe(currentRouteNotice);
+      expect(window.document.activeElement).toBe(currentRouteFocus);
+      currentRoute.work.resolve({ status: 503, error: { code: 'unavailable' }, headers: new Headers() });
+      await waitForStatus('unavailable');
+      await clickRetry();
+      const retryAfterReturn = await nextRead(10);
+      expect(retryAfterReturn).not.toBe(currentRoute);
+      expect(retryAfterReturn.signal?.aborted).toBe(false);
+      retryAfterReturn.work.resolve(runtime.result('blur'));
+      await waitForStatus('preferences are applied');
       safe();
       // Existing return recovery survives preference updates for missing rows in both populated and empty lists.
       if (view === 'posts') {
         rememberContribution('missing-row', '/en/threads/missing#post-missing', window as unknown as Window);
         await clickRetry();
-        const beforeEmpty = await nextRead(10);
+        const beforeEmpty = await nextRead(11);
         const oldPage = page;
         page = fixtures.contributionPage('posts');
         for (const read of Object.values(page.reads)) {
@@ -221,7 +241,7 @@ for (const view of ['overview', 'posts'] as const) {
             (read.body as { posts: unknown[] }).posts = [];
         }
         await render();
-        const emptyReading = await nextRead(11);
+        const emptyReading = await nextRead(12);
         beforeEmpty.work.resolve(runtime.result('show'));
         emptyReading.work.resolve(runtime.result('blur'));
         await runtime.settle();
@@ -232,7 +252,7 @@ for (const view of ['overview', 'posts'] as const) {
         expect(window.location.href).toBe('https://rezics.test/en/@mira/posts?cursor=a%2Bb#reading');
       }
       await clickRetry();
-      const pending = await nextRead(view === 'posts' ? 12 : 10);
+      const pending = await nextRead(view === 'posts' ? 13 : 11);
       enabled = false;
       await render();
       pending.work.resolve(runtime.result('show'));
