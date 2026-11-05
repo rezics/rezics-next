@@ -234,8 +234,8 @@ states; definition/Subject labels retain their native fallback language.
 Decision: retain the supported same-work Subject address and a single-hop opener, with stream/node and separate
 browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart.
 
-Decision: keep finite-view work-region grammar closed until Semantic exposes its actual grouped public component
-and native selected-region handoff; consume a return arriving on a retired reading before equal replacement.
+Decision: keep finite-view work-region grammar closed until Web mounts the supported grouped component
+and its supplied native selected-region handoff; consume a return arriving on a retired reading before equal replacement.
 
 Decision: expose the existing overview and exact native region through `showcase-work/index.ts`; select only the requested node/property/direction/current cursor, and leave finite route grammar and outer composition with Web.
 

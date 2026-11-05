@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { act, createElement as h } from 'react';
 import { dirname } from 'node:path';
+import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import type { Subject } from '../src/subject/types';
@@ -12,7 +13,7 @@ import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigati
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { WorkFranchiseOverview } = await import('../src/features/pages/showcase-work/overview');
-const { WorkFranchiseReading, subjectBody } = await import('../src/features/pages/showcase-work');
+const { WorkFranchiseReading, subjectBody, loadSubjectPage } = await import('../src/features/pages/showcase-work');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const property = 'wdt:P155';
@@ -250,7 +251,7 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     expect(host.textContent).not.toContain('Secret sequel');
     expect(host.querySelectorAll('button[type="submit"]')).toHaveLength(0);
 
-    const document: CompositionDocument = {
+    const nativeDocument: CompositionDocument = {
       root: { props: {} },
       content: [
         { type: 'SubjectHeader', props: { id: 'identity' } },
@@ -258,11 +259,11 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
         { type: 'RelationGroups', props: { id: 'selected', property, limit: 2, paged: true } },
       ],
     };
-    const plan = planReads(platformRegistry, document, { subject: subject.id, context: value.context });
-    const native = {
+    const plan = planReads(platformRegistry, nativeDocument, { subject: subject.id, context: value.context });
+    const nativeResponse = {
       subject: subject.id,
       context: value.context,
-      document,
+      document: nativeDocument,
       profile: 'native',
       template: { scope: 'type', key: 'schema:Book' },
       reads: Object.fromEntries(
@@ -280,6 +281,12 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
         ]),
       ),
     } as SubjectPageData;
+    const nativeClient = createKernelClient('https://native.test', {
+      fetch: (async () => Response.json(nativeResponse)) as typeof fetch,
+    });
+    const loaded = await loadSubjectPage(nativeClient, subject.id, 'relations', 'en');
+    if (loaded.kind !== 'page') throw Error('Expected native page');
+    const native = loaded.page;
     const continued: unknown[] = [];
     const drawNative = (page = native, reading = value) =>
       act(async () =>
