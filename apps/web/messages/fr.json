@@ -207,6 +207,7 @@
   "settings_shelf_read_status": "Réponse de la lecture actuelle",
   "settings_shelf_values_unconfirmed": "Voici les dernières valeurs disponibles de l’étagère ; les valeurs actuelles n’ont pas pu être confirmées.",
   "settings_shelf_write_confirmed": "La modification d’origine des préférences d’étagère a été confirmée à la version {version}. Les valeurs actuelles doivent encore être rechargées.",
+  "settings_shelf_keep_local": "Conserver mes choix non enregistrés",
   "settings_shelf_use_current": "Abandonner mes choix non enregistrés",
   "settings_shelf_choices_unavailable_title": "Choix de vue par défaut indisponibles",
   "settings_shelf_choices_unavailable_text": "Les options par défaut actuelles de la bibliothèque n’ont pas pu être confirmées. Vérifiez ci-dessous le motif de la réponse et tout délai avant de recharger. L’apparence dans ce navigateur est inchangée.",

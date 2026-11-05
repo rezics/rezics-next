@@ -321,3 +321,133 @@ test('a fresh Shelf read can run during the original command wait without changi
     Date.now = realNow;
   }
 });
+
+test('dirty review keep then Save uses the current version and only intended operands', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  let version = 1;
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' }, gridSize: 'large' },
+  });
+  const current = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 4,
+    shelf: { layouts: { all: 'grid' }, gridSize: 'small' },
+  });
+  const commands: Readonly<PreferenceChange>[] = [];
+  const draft = new ShelfPreferenceDraftRecovery(
+    initial,
+    {
+      read: async () => ({ signedIn: true, preferences: current, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        return {
+          ok: true,
+          preferences: withShelfAdvice({
+            ...current,
+            version: input.expectedVersion + 1,
+            shelf: { ...current.shelf, layouts: { all: 'table' } },
+          }),
+        };
+      },
+    },
+    {
+      canRead: () => true,
+      canWrite: () => true,
+      version: () => version,
+      onVersionChange: (next) => {
+        version = next;
+      },
+    },
+  );
+  draft.edit({ layout: 'table' }, 'layout');
+  await draft.reload();
+  expect(draft.snapshot().phase).toBe('review');
+  expect(draft.snapshot().known.version).toBe(4);
+  expect(draft.snapshot().draft.layout).toBe('table');
+  expect(draft.snapshot().draft.gridSize).toBe('small');
+  expect(draft.canSubmit()).toBe(false);
+  draft.keepLocal();
+  expect(commands).toHaveLength(0);
+  expect(draft.snapshot().phase).toBe('idle');
+  expect(draft.snapshot().comparison).toBeNull();
+  expect(draft.snapshot().confirmedWrite).toBeNull();
+  expect(draft.canSubmit()).toBe(true);
+  await draft.submit();
+  expect(commands).toHaveLength(1);
+  expect(commands[0]?.expectedVersion).toBe(4);
+  expect(commands[0]?.shelf).toEqual({ layouts: { all: 'table' } });
+  expect(commands[0]?.idempotencyKey).toEqual(expect.any(String));
+});
+
+test('keep cannot dispatch an unresolved original or an unsupported whole patch', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const readable = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' } },
+  });
+  const commands: Readonly<PreferenceChange>[] = [];
+  const pending = new ShelfPreferenceDraftRecovery(
+    readable,
+    {
+      read: async () => ({ signedIn: true, preferences: readable, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        return { ok: false, reason: 'unavailable' };
+      },
+    },
+    owner,
+  );
+  pending.edit({ layout: 'table' }, 'layout');
+  await pending.submit();
+  const original = pending.snapshot().pending?.input;
+  expect(original).toBeDefined();
+  pending.keepLocal();
+  expect(pending.snapshot().pending?.input).toBe(original);
+  expect(pending.snapshot().phase).toBe('uncertain');
+  expect(pending.snapshot().pending?.input.expectedVersion).toBe(1);
+  expect(pending.snapshot().pending?.input.shelf).toEqual({ layouts: { all: 'table' } });
+  await pending.submit();
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toBe(original);
+
+  const advice = readable.advice!;
+  const restricted: ReadingPreferences = {
+    ...readable,
+    advice: {
+      ...advice,
+      shelfAdvice: {
+        ...advice.shelfAdvice!,
+        supported: { ...advice.shelfAdvice!.supported, layouts: ['grid'] },
+      },
+    },
+  };
+  const blocked: Readonly<PreferenceChange>[] = [];
+  const unsupported = new ShelfPreferenceDraftRecovery(
+    readable,
+    {
+      read: async () => ({ signedIn: true, preferences: restricted, securityHref: null }),
+      save: async (input) => {
+        blocked.push(input);
+        return { ok: false, reason: 'unavailable' };
+      },
+    },
+    owner,
+  );
+  unsupported.editTypeLayout('schema:Book', 'table');
+  await unsupported.reload();
+  expect(unsupported.snapshot().phase).toBe('review');
+  expect(unsupported.snapshot().draft.layouts['schema:Book']).toBe('table');
+  unsupported.keepLocal();
+  expect(unsupported.snapshot().phase).toBe('idle');
+  expect(unsupported.snapshot().draft.layouts['schema:Book']).toBe('table');
+  expect(unsupported.canSubmit()).toBe(true);
+  await unsupported.submit();
+  expect(blocked).toHaveLength(0);
+  expect(unsupported.snapshot().phase).toBe('failed');
+});
