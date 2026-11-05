@@ -13,7 +13,12 @@ export const PIN_PREFERENCE_UPDATE_SQL = `UPDATE library.collection_pins SET col
 
 export type PinStoreStatement = Readonly<
   | { kind: 'read'; sql: string; values: readonly [number, string] }
-  | { kind: 'insert' | 'update'; sql: string; values: readonly [number, string, readonly string[], number]; before: number }
+  | {
+      kind: 'insert' | 'update';
+      sql: string;
+      values: readonly [number, string, readonly string[], number];
+      before: number;
+    }
 >;
 export type PinStoreExecutor = <T>(statement: PinStoreStatement, dispatch: () => Promise<T>) => Promise<T>;
 const direct: PinStoreExecutor = (_statement, dispatch) => dispatch();
@@ -26,9 +31,8 @@ export async function readPins(
   execute: PinStoreExecutor = direct,
 ): Promise<PinPreference> {
   const values = Object.freeze([route, accountId] as const);
-  const result = await execute(
-    Object.freeze({ kind: 'read', sql: PIN_PREFERENCE_READ_SQL, values }),
-    () => client.query<{ ids: string[]; revision: string }>(PIN_PREFERENCE_READ_SQL, [...values]),
+  const result = await execute(Object.freeze({ kind: 'read', sql: PIN_PREFERENCE_READ_SQL, values }), () =>
+    client.query<{ ids: string[]; revision: string }>(PIN_PREFERENCE_READ_SQL, [...values]),
   );
   const row = result.rows[0];
   return row ? { ids: row.ids, revision: Number(row.revision) } : { ids: [], revision: 0 };
@@ -45,14 +49,12 @@ export async function writePins(
 ) {
   const originalIds = Object.freeze([...ids]);
   const values = Object.freeze([route, accountId, originalIds, before] as const);
-  const result = await execute(
-    Object.freeze({ kind: 'insert', sql: PIN_PREFERENCE_INSERT_SQL, values, before }),
-    () => client.query(PIN_PREFERENCE_INSERT_SQL, [...values]),
+  const result = await execute(Object.freeze({ kind: 'insert', sql: PIN_PREFERENCE_INSERT_SQL, values, before }), () =>
+    client.query(PIN_PREFERENCE_INSERT_SQL, [...values]),
   );
   if (result.rowCount) return true;
-  const updated = await execute(
-    Object.freeze({ kind: 'update', sql: PIN_PREFERENCE_UPDATE_SQL, values, before }),
-    () => client.query(PIN_PREFERENCE_UPDATE_SQL, [...values]),
+  const updated = await execute(Object.freeze({ kind: 'update', sql: PIN_PREFERENCE_UPDATE_SQL, values, before }), () =>
+    client.query(PIN_PREFERENCE_UPDATE_SQL, [...values]),
   );
   return updated.rowCount === 1;
 }

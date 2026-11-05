@@ -115,9 +115,7 @@ export function pinRoutes(
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const command = await admission.run('normal', job, () =>
-          pins().mutate(actor, params.collectionId, body, key),
-        );
+        const command = await admission.run('normal', job, () => pins().mutate(actor, params.collectionId, body, key));
         session.record({ partition: command.partition, epoch: command.epoch, position: command.position });
         return command.value;
       },

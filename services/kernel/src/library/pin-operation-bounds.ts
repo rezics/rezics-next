@@ -23,19 +23,18 @@ const zero = () =>
     bytes: 0,
     engineRequests: 0,
   });
-const rows = (
-  value: Omit<Bound, 'engineRequests'>,
-): Bound => declareBound({ ...value, engineRequests: 0 });
-const byteCost = (bytes: number): Bound => rows({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes,
-});
+const rows = (value: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...value, engineRequests: 0 });
+const byteCost = (bytes: number): Bound =>
+  rows({
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes,
+  });
 
 function maximum(...values: readonly Bound[]): Bound {
   if (!values.length) return zero();
@@ -74,7 +73,10 @@ function triggerBound(route: number, accountId: string, writes: number): Bound {
       statements: writes,
       bytes: 0,
     }),
-    byteCost(writes * (Buffer.byteLength(triggerSql) + serializedBytes(binds) + serializedBytes({ generation: '9'.repeat(19) }))),
+    byteCost(
+      writes *
+        (Buffer.byteLength(triggerSql) + serializedBytes(binds) + serializedBytes({ generation: '9'.repeat(19) })),
+    ),
   );
 }
 
@@ -116,11 +118,7 @@ export function runPinBoundedStep<T>(operation: string, bound: Bound, dispatch: 
 }
 
 /** Owner transaction framing and current account/time observations; the full pin row is a separate exact leaf. */
-export function pinOwnerObservationBound(input: {
-  route: number;
-  accountId: string;
-  cursor?: string;
-}): Bound {
+export function pinOwnerObservationBound(input: { route: number; accountId: string; cursor?: string }): Bound {
   const controls = ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'];
   const accountProjection = {
     route: 65535,
@@ -152,18 +150,23 @@ export function pinOwnerObservationBound(input: {
     statements: controls.length + 2,
     bytes: 0,
   });
-  const sqlBytes = Buffer.byteLength(accountRead.sql) + Buffer.byteLength(readTime.sql) + controls.reduce((n, sql) => n + Buffer.byteLength(sql), 0);
-  const inputBytes = serializedBytes([input.route, input.accountId]) + serializedBytes({ at: '' }) + serializedBytes(input.cursor ?? '');
+  const sqlBytes =
+    Buffer.byteLength(accountRead.sql) +
+    Buffer.byteLength(readTime.sql) +
+    controls.reduce((n, sql) => n + Buffer.byteLength(sql), 0);
+  const inputBytes =
+    serializedBytes([input.route, input.accountId]) + serializedBytes({ at: '' }) + serializedBytes(input.cursor ?? '');
   const cursorOutput = input.cursor === undefined ? 0 : Buffer.byteLength(input.cursor);
-  return sumBounds(base, byteCost(sqlBytes + inputBytes + serializedBytes(accountProjection) + serializedBytes({ at: escaped(64) }) + cursorOutput));
+  return sumBounds(
+    base,
+    byteCost(
+      sqlBytes + inputBytes + serializedBytes(accountProjection) + serializedBytes({ at: escaped(64) }) + cursorOutput,
+    ),
+  );
 }
 
 /** The common Collection resolver's existing exact point derivation plus its bounded native header branches. */
-export function pinCollectionHeaderBound(input: {
-  accountId: string;
-  route: number;
-  collectionId: string;
-}): Bound {
+export function pinCollectionHeaderBound(input: { accountId: string; route: number; collectionId: string }): Bound {
   const collection = collectionDirectoryRowPlan({ route: input.route, id: input.collectionId }).total;
   const commonAccess = rows({
     candidateKeys: 5,
@@ -191,12 +194,38 @@ export function pinCollectionHeaderBound(input: {
     bytes: 0,
   });
   const builtinBytes = byteCost(
-    Buffer.byteLength(`SELECT labels FROM library.owner_index_state WHERE route=$1 AND account_id=$2 AND collection_id=$3 ORDER BY pin->>'releaseDigest',pin LIMIT 1`) +
-      Buffer.byteLength(`SELECT builtin_kind,curator_account_id,membership_kind,state,visibility,title,description,revision,presentation_kind,cover_media_id FROM library.collection WHERE route=$1 AND collection_id=$2`) +
+    Buffer.byteLength(
+      `SELECT labels FROM library.owner_index_state WHERE route=$1 AND account_id=$2 AND collection_id=$3 ORDER BY pin->>'releaseDigest',pin LIMIT 1`,
+    ) +
+      Buffer.byteLength(
+        `SELECT builtin_kind,curator_account_id,membership_kind,state,visibility,title,description,revision,presentation_kind,cover_media_id FROM library.collection WHERE route=$1 AND collection_id=$2`,
+      ) +
       serializedBytes([input.route, input.accountId, input.collectionId]) +
-      serializedBytes({ labels: { en: escaped(RELEASE_LIMITS.bytes * 6) }, id: uuid, title: escaped(200), description: escaped(2000) }),
+      serializedBytes({
+        labels: { en: escaped(RELEASE_LIMITS.bytes * 6) },
+        id: uuid,
+        title: escaped(200),
+        description: escaped(2000),
+      }),
   );
-  return sumBounds(maximum(sumBounds(commonAccess, commonBytes, collection), sumBounds(builtin, builtinBytes)), byteCost(serializedBytes({ id: uuid, curatorAccountId: uuid, title: escaped(200), description: escaped(2000), visibility: 'private', revision: 2147483647, memberCount: 2147483647, orderEpoch: 2147483647, createdAt: escaped(64), updatedAt: escaped(64), builtinLabels: { en: escaped(RELEASE_LIMITS.bytes * 6) } })));
+  return sumBounds(
+    maximum(sumBounds(commonAccess, commonBytes, collection), sumBounds(builtin, builtinBytes)),
+    byteCost(
+      serializedBytes({
+        id: uuid,
+        curatorAccountId: uuid,
+        title: escaped(200),
+        description: escaped(2000),
+        visibility: 'private',
+        revision: 2147483647,
+        memberCount: 2147483647,
+        orderEpoch: 2147483647,
+        createdAt: escaped(64),
+        updatedAt: escaped(64),
+        builtinLabels: { en: escaped(RELEASE_LIMITS.bytes * 6) },
+      }),
+    ),
+  );
 }
 
 /** Shared group admission occurs once per nonempty page; the open and closed native branches are both retained. */
@@ -206,14 +235,46 @@ export function pinTargetGateBound(input: {
   group?: string;
   clientAction?: string;
 }): Bound {
-  const exposure = rows({ candidateKeys: 2, nativeRows: 6, identityMetadataRows: 0, emptySeeks: 2, nativePoints: 2, witnessKeys: 0, statements: 4, bytes: 0 });
-  const closedAuthority = rows({ candidateKeys: 5, nativeRows: 12, identityMetadataRows: 1, emptySeeks: 4, nativePoints: 5, witnessKeys: 0, statements: 8, bytes: 0 });
+  const exposure = rows({
+    candidateKeys: 2,
+    nativeRows: 6,
+    identityMetadataRows: 0,
+    emptySeeks: 2,
+    nativePoints: 2,
+    witnessKeys: 0,
+    statements: 4,
+    bytes: 0,
+  });
+  const closedAuthority = rows({
+    candidateKeys: 5,
+    nativeRows: 12,
+    identityMetadataRows: 1,
+    emptySeeks: 4,
+    nativePoints: 5,
+    witnessKeys: 0,
+    statements: 8,
+    bytes: 0,
+  });
   const sqlBytes = Buffer.byteLength(openingRead.sql) + Buffer.byteLength(partitionRead.sql);
   const group = input.group ?? 'collections';
   const action = input.clientAction ?? 'collection:read';
-  const operands = serializedBytes([0]) + serializedBytes({ group, at: escaped(64) }) + serializedBytes([input.route, input.accountId, group, action]);
-  const projections = serializedBytes({ partitionNo: 4095, node: escaped(255), writeState: 'moved', movedTo: escaped(255), epoch: 2147483647, position: '9223372036854775807' }) + serializedBytes({ at: escaped(64), open: true });
-  return sumBounds(maximum(exposure, sumBounds(exposure, closedAuthority)), byteCost(sqlBytes + operands + projections));
+  const operands =
+    serializedBytes([0]) +
+    serializedBytes({ group, at: escaped(64) }) +
+    serializedBytes([input.route, input.accountId, group, action]);
+  const projections =
+    serializedBytes({
+      partitionNo: 4095,
+      node: escaped(255),
+      writeState: 'moved',
+      movedTo: escaped(255),
+      epoch: 2147483647,
+      position: '9223372036854775807',
+    }) + serializedBytes({ at: escaped(64), open: true });
+  return sumBounds(
+    maximum(exposure, sumBounds(exposure, closedAuthority)),
+    byteCost(sqlBytes + operands + projections),
+  );
 }
 
 /** Current actor admission at the attempt's original T; Core still owns receipt and transaction custody. */
@@ -239,17 +300,26 @@ export function pinCommandAdmissionBound(input: { route: number; accountId: stri
     transactionId: uuid,
   };
   return sumBounds(
-    rows({ candidateKeys: 1, nativeRows: 2, identityMetadataRows: 0, emptySeeks: 1, nativePoints: 1, witnessKeys: 0, statements: 1, bytes: 0 }),
-    byteCost(Buffer.byteLength(accountRead.sql) + serializedBytes([input.route, input.accountId]) + serializedBytes(projection)),
+    rows({
+      candidateKeys: 1,
+      nativeRows: 2,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 1,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: 0,
+    }),
+    byteCost(
+      Buffer.byteLength(accountRead.sql) +
+        serializedBytes([input.route, input.accountId]) +
+        serializedBytes(projection),
+    ),
   );
 }
 
 /** Final route mapping serializes only selected headers; owner preference projection remains fixed at 100 IDs. */
-export function pinWireResponseBound(input: {
-  pins: number;
-  revision: number;
-  next: string | null;
-}): Bound {
+export function pinWireResponseBound(input: { pins: number; revision: number; next: string | null }): Bound {
   const curated = {
     collectionId: uuid,
     target: {
@@ -281,15 +351,27 @@ export function pinWireResponseBound(input: {
       revision: 2147483647,
     },
   };
-  const largestHeader = Math.max(serializedBytes(curated), serializedBytes(builtin), serializedBytes({ collectionId: uuid, target: null }));
+  const largestHeader = Math.max(
+    serializedBytes(curated),
+    serializedBytes(builtin),
+    serializedBytes({ collectionId: uuid, target: null }),
+  );
   const bodyBytes = serializedBytes({
     pins: Array.from({ length: input.pins }, () => ({ collectionId: uuid, target: { ...builtin.target } })),
     revision: input.revision,
     next: input.next ?? escaped(4096),
   });
   return sumBounds(
-    rows({ candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, emptySeeks: 0, nativePoints: 0, witnessKeys: 0, statements: 0, bytes: 0 }),
+    rows({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+    }),
     byteCost(Math.max(bodyBytes, input.pins * largestHeader)),
   );
 }
-
