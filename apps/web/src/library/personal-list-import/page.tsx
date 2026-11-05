@@ -59,8 +59,8 @@ export function PersonalVndbImportPage({
     <VndbImportAccess
       visit={current}
       libraryReturn={libraryReturn}
-      address={address}
-      onAddressChange={onAddressChange}
+      {...(address ? { address } : {})}
+      {...(onAddressChange ? { onAddressChange } : {})}
     />
   );
 }
@@ -102,8 +102,8 @@ function VndbImportAccess({ visit, libraryReturn, address, onAddressChange }: Vn
       key={identity}
       visit={scoped}
       libraryReturn={libraryReturn}
-      address={address}
-      onAddressChange={onAddressChange}
+      {...(address ? { address } : {})}
+      {...(onAddressChange ? { onAddressChange } : {})}
     />
   );
 }

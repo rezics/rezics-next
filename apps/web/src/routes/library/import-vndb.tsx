@@ -40,7 +40,7 @@ function VndbImportRoute() {
   return (
     <PersonalVndbImportPage
       libraryReturn={libraryReturn}
-      address={search.uploadId ? { uploadId: search.uploadId, offset: search.offset ?? 0 } : undefined}
+      {...(search.uploadId ? { address: { uploadId: search.uploadId, offset: search.offset ?? 0 } } : {})}
       onAddressChange={(address) => {
         if (search.uploadId !== address.uploadId || search.offset !== address.offset)
           void navigate({ search: address, replace: true, ignoreBlocker: true, resetScroll: false });
