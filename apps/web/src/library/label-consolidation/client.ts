@@ -11,7 +11,7 @@ export type SelectedAssignment = ReviewInput['items'][number];
 /** These functions require the existing private request envelope's current owner headers. */
 export function consolidationClient(client: KernelClient, sourceLabelId: string, headers: Record<string, string>) {
   const label = client.libraryLabels({ id: sourceLabelId });
-  const writeHeaders = (key: string) => ({ ...headers, 'idempotency-key': key });
+  const writeHeaders = (key: string) => ({ ...headers, 'idempotency-key': JSON.stringify(key) });
   return {
     review: (body: ReviewInput) => label.$reviewConsolidation.post(body, { headers }),
     confirm: (body: ConfirmationInput, key: string) =>

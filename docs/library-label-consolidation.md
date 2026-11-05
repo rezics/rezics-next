@@ -151,3 +151,8 @@ growth coverage remain in `.temp/continuation/label-consolidation-client-growth.
 Sources read: `docs/library-labels.md`, native metadata/assignment commands and storage, reservation/parent/tuple SQL
 and migrations, native Subject and family admission, shared cursor codec and existing native label fixtures. No
 external product survey is needed to preserve the adopted native model.
+
+Decision: encode each logical caller key as a structured-field string once at the native HTTP boundary.
+Unknown acknowledgements retain the original transport and encrypted sender through the existing private-command
+credential owner; current viewer/CSRF, mounted reader, address and exposure still fence replay and disclosure.
+A result read never clears an uncertain command. No new receipt store or automatic retry is introduced.
