@@ -22,7 +22,10 @@ export function BangumiReviewPage({
   port: BangumiImportPort;
   visit: BangumiVisit;
   labelPanels: Record<string, BangumiLabelPanelState>;
-  onLabelPanelChange: (key: string, update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState) => void;
+  onLabelPanelChange: (
+    key: string,
+    update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState,
+  ) => void;
   onSave: (draft: RowDraft) => void;
   onChoose: (draft: RowDraft) => void;
   onNext: () => void;

@@ -152,9 +152,7 @@ async function originalLabelRequest(
     { viewer: identity.subject, csrfToken: identity.csrfToken, authorization: '' },
     { ...custody, subjectId: uploadId },
   );
-  return authorization
-    ? { authorization, request: requestWithCredential(request, authorization) }
-    : { kind: 'denied' };
+  return authorization ? { authorization, request: requestWithCredential(request, authorization) } : { kind: 'denied' };
 }
 
 export const previewBangumiImport = createServerFn({ method: 'POST' })
@@ -326,10 +324,15 @@ export const reviewBangumiLabels = createServerFn({ method: 'POST' })
     const mappings = input.mappings.map((value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid Bangumi label review');
       const mapping = value as Record<string, unknown>;
-      if (!Number.isSafeInteger(mapping.index) || (mapping.index as number) < 0 || (mapping.index as number) > BANGUMI_ROW_BYTES)
+      if (
+        !Number.isSafeInteger(mapping.index) ||
+        (mapping.index as number) < 0 ||
+        (mapping.index as number) > BANGUMI_ROW_BYTES
+      )
         throw new Error('Invalid Bangumi label review');
       const target = mapping.target;
-      if (!target || typeof target !== 'object' || Array.isArray(target)) throw new Error('Invalid Bangumi label review');
+      if (!target || typeof target !== 'object' || Array.isArray(target))
+        throw new Error('Invalid Bangumi label review');
       const item = target as Record<string, unknown>;
       if (typeof item.labelId === 'string' && Object.keys(item).length === 1)
         return { index: mapping.index as number, target: { labelId: requireId(item.labelId) } };
@@ -386,7 +389,8 @@ export const applyBangumiLabels = createServerFn({ method: 'POST' })
 
 export const readBangumiLabelAssignments = createServerFn({ method: 'GET' })
   .validator((input: unknown): { subjectId: string } => {
-    if (!input || typeof input !== 'object' || !('subjectId' in input)) throw new Error('Invalid label assignment read');
+    if (!input || typeof input !== 'object' || !('subjectId' in input))
+      throw new Error('Invalid label assignment read');
     return { subjectId: requireId(input.subjectId) };
   })
   .handler(async ({ data }): Promise<BangumiLabelAssignmentsResult> => {

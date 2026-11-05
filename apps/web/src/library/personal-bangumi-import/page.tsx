@@ -41,7 +41,10 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
   const [labelPanels, setLabelPanels] = useState<Record<string, BangumiLabelPanelState>>({});
   useEffect(() => () => visit.retire(), [visit]);
 
-  function changeLabelPanel(key: string, update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState) {
+  function changeLabelPanel(
+    key: string,
+    update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState,
+  ) {
     setLabelPanels((previous) => {
       const current = previous[key];
       return { ...previous, [key]: update(current) };

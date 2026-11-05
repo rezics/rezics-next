@@ -1,6 +1,12 @@
 import { useId, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
-import type { BangumiApplyState, BangumiImportPort, BangumiLabelPanelState, BangumiRow, BangumiRowMeta } from './contract';
+import type {
+  BangumiApplyState,
+  BangumiImportPort,
+  BangumiLabelPanelState,
+  BangumiRow,
+  BangumiRowMeta,
+} from './contract';
 import { BangumiAction, BangumiCheck } from './controls';
 import { BangumiEvidencePanel } from './fields';
 import { BangumiLabelAdoption } from './labels';

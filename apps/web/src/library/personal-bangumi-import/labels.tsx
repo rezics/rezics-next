@@ -115,11 +115,18 @@ export function BangumiLabelAdoption({
 
   function update(fn: (state: BangumiLabelPanelState) => BangumiLabelPanelState) {
     if (!current) return;
-    onChange((previous) => fn(!previous || previous.rowRevision !== current.rowRevision ? emptyBangumiLabelPanel(current.rowRevision) : previous));
+    onChange((previous) =>
+      fn(
+        !previous || previous.rowRevision !== current.rowRevision
+          ? emptyBangumiLabelPanel(current.rowRevision)
+          : previous,
+      ),
+    );
   }
 
   async function loadTags(after = -1, retryCommand?: Extract<BangumiCommand, { kind: 'tags' }>) {
-    if (!current || !rowRevision || disabled || current.busy || (current.command && !retryCommand) || !visit.current()) return;
+    if (!current || !rowRevision || disabled || current.busy || (current.command && !retryCommand) || !visit.current())
+      return;
     const command: Extract<BangumiCommand, { kind: 'tags' }> = retryCommand ?? {
       kind: 'tags',
       uploadId,
@@ -131,7 +138,11 @@ export function BangumiLabelAdoption({
     const response = await port.tags(command);
     if (!isCurrent(rowRevision)) return;
     if (response.kind === 'unknown') {
-      update((state) => ({ ...state, busy: false, command: response.command as Extract<BangumiCommand, { kind: 'tags' }> }));
+      update((state) => ({
+        ...state,
+        busy: false,
+        command: response.command as Extract<BangumiCommand, { kind: 'tags' }>,
+      }));
       return;
     }
     if (response.kind !== 'tags') {
@@ -143,7 +154,9 @@ export function BangumiLabelAdoption({
       return;
     }
     update((state) => {
-      const index = state.pages.findIndex((page) => page.tags[0]?.index === response.page.tags[0]?.index && page.tags.length > 0);
+      const index = state.pages.findIndex(
+        (page) => page.tags[0]?.index === response.page.tags[0]?.index && page.tags.length > 0,
+      );
       const pages = [...state.pages];
       if (index >= 0) pages[index] = response.page;
       else pages.push(response.page);
@@ -174,7 +187,12 @@ export function BangumiLabelAdoption({
     const response = await port.searchLabels(query);
     if (!isCurrent(rowRevision)) return;
     if (response.kind !== 'label-options') {
-      update((state) => ({ ...state, busy: false, searchState: { ...state.searchState, [index]: 'unavailable' }, notice: response }));
+      update((state) => ({
+        ...state,
+        busy: false,
+        searchState: { ...state.searchState, [index]: 'unavailable' },
+        notice: response,
+      }));
       return;
     }
     update((state) => ({
@@ -187,7 +205,8 @@ export function BangumiLabelAdoption({
   }
 
   async function reviewLabels() {
-    if (!current || !rowRevision || !current.custody || disabled || current.busy || current.command || !visit.current()) return;
+    if (!current || !rowRevision || !current.custody || disabled || current.busy || current.command || !visit.current())
+      return;
     const mappings = Object.entries(current.mappings)
       .map(([index, target]) => ({ index: Number(index), target }))
       .sort((left, right) => left.index - right.index);
@@ -205,14 +224,28 @@ export function BangumiLabelAdoption({
     const response = await port.reviewLabels(command);
     if (!isCurrent(rowRevision)) return;
     if (response.kind === 'unknown') {
-      update((state) => ({ ...state, busy: false, command: response.command as Extract<BangumiCommand, { kind: 'review-labels' }> }));
+      update((state) => ({
+        ...state,
+        busy: false,
+        command: response.command as Extract<BangumiCommand, { kind: 'review-labels' }>,
+      }));
       return;
     }
     if (response.kind !== 'labels-reviewed') {
       update((state) => ({ ...state, busy: false, command: null, notice: response as BangumiFailure }));
       return;
     }
-    update((state) => ({ ...state, busy: false, command: null, labels: response.labels, reviewedMappings: command.mappings, result: null, assignments: null, assignmentState: 'idle', notice: null }));
+    update((state) => ({
+      ...state,
+      busy: false,
+      command: null,
+      labels: response.labels,
+      reviewedMappings: command.mappings,
+      result: null,
+      assignments: null,
+      assignmentState: 'idle',
+      notice: null,
+    }));
   }
 
   async function readAssignments(subjectId: string, expectedRevision: string | null) {
@@ -232,7 +265,8 @@ export function BangumiLabelAdoption({
     const review = current.labels?.review;
     const canRetry =
       current.labels?.confirmed &&
-      (current.labels.outcomes.some((outcome) => outcome.status === 'failed') || (current.result?.remaining.length ?? 0) > 0);
+      (current.labels.outcomes.some((outcome) => outcome.status === 'failed') ||
+        (current.result?.remaining.length ?? 0) > 0);
     if (!command && (!review || !current.custody || (current.labels?.confirmed && !canRetry))) return;
     const exact: Extract<BangumiCommand, { kind: 'apply-labels' }> = command ?? {
       kind: 'apply-labels',
@@ -245,7 +279,11 @@ export function BangumiLabelAdoption({
     const response = await port.applyLabels(exact);
     if (!isCurrent(rowRevision)) return;
     if (response.kind === 'unknown') {
-      update((state) => ({ ...state, busy: false, command: response.command as Extract<BangumiCommand, { kind: 'apply-labels' }> }));
+      update((state) => ({
+        ...state,
+        busy: false,
+        command: response.command as Extract<BangumiCommand, { kind: 'apply-labels' }>,
+      }));
       return;
     }
     if (response.kind !== 'labels-applied') {
@@ -257,7 +295,10 @@ export function BangumiLabelAdoption({
     if (review?.subject) await readAssignments(review.subject.subjectId, rowRevision);
   }
 
-  async function loadTagsForReadback(command: Extract<BangumiCommand, { kind: 'apply-labels' }>, expectedRevision: string) {
+  async function loadTagsForReadback(
+    command: Extract<BangumiCommand, { kind: 'apply-labels' }>,
+    expectedRevision: string,
+  ) {
     if (!isCurrent(expectedRevision)) return;
     const tagsCommand: Extract<BangumiCommand, { kind: 'tags' }> = {
       kind: 'tags',
@@ -269,7 +310,13 @@ export function BangumiLabelAdoption({
     const response = await port.tags(tagsCommand);
     if (!isCurrent(expectedRevision)) return;
     if (response.kind === 'tags' && response.page.rowRevision === expectedRevision)
-      update((state) => ({ ...state, pages: [response.page], pageIndex: 0, labels: response.page.labels, custody: response.custody ?? state.custody }));
+      update((state) => ({
+        ...state,
+        pages: [response.page],
+        pageIndex: 0,
+        labels: response.page.labels,
+        custody: response.custody ?? state.custody,
+      }));
   }
 
   async function retry() {
@@ -281,9 +328,20 @@ export function BangumiLabelAdoption({
       const response = await port.reviewLabels(command);
       if (!isCurrent(rowRevision)) return;
       if (response.kind === 'unknown') {
-        update((state) => ({ ...state, busy: false, command: response.command as Extract<BangumiCommand, { kind: 'review-labels' }> }));
+        update((state) => ({
+          ...state,
+          busy: false,
+          command: response.command as Extract<BangumiCommand, { kind: 'review-labels' }>,
+        }));
       } else if (response.kind === 'labels-reviewed') {
-        update((state) => ({ ...state, busy: false, command: null, labels: response.labels, reviewedMappings: command.mappings, notice: null }));
+        update((state) => ({
+          ...state,
+          busy: false,
+          command: null,
+          labels: response.labels,
+          reviewedMappings: command.mappings,
+          notice: null,
+        }));
       } else {
         update((state) => ({ ...state, busy: false, command: null, notice: response as BangumiFailure }));
       }
@@ -307,41 +365,57 @@ export function BangumiLabelAdoption({
   const selectedMappings = Object.entries(current.mappings)
     .map(([index, target]) => ({ index: Number(index), target }))
     .sort((left, right) => left.index - right.index);
-  const exactSelection = current.reviewedMappings === null
-    ? selectedMappings.length === 0
-    : JSON.stringify(selectedMappings) === JSON.stringify(current.reviewedMappings);
+  const exactSelection =
+    current.reviewedMappings === null
+      ? selectedMappings.length === 0
+      : JSON.stringify(selectedMappings) === JSON.stringify(current.reviewedMappings);
   const outcomes = outcomeSummary(current.result, current.labels);
   const held = !!current.command;
   const retryableResults =
     current.labels?.confirmed &&
-    (current.labels.outcomes.some((outcome) => outcome.status === 'failed') || (current.result?.remaining.length ?? 0) > 0);
-  const staleCommand = current.command && current.command.kind !== 'tags' && current.command.rowRevision !== rowRevision;
+    (current.labels.outcomes.some((outcome) => outcome.status === 'failed') ||
+      (current.result?.remaining.length ?? 0) > 0);
+  const staleCommand =
+    current.command && current.command.kind !== 'tags' && current.command.rowRevision !== rowRevision;
 
   return (
     <details className="rounded-md border p-4" data-bangumi-labels={ordinal}>
       <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_bangumi_label_adoption()}</summary>
       <div className="space-y-4 pt-3">
         {staleCommand ? <p role="status">{m.library_bangumi_label_prior_command_pending()}</p> : null}
-        {!current.pages.length ? (
-          <p className="text-sm">{m.library_bangumi_label_not_loaded()}</p>
-        ) : null}
+        {!current.pages.length ? <p className="text-sm">{m.library_bangumi_label_not_loaded()}</p> : null}
         <div className="flex flex-wrap gap-3">
           {!current.pages.length ? (
             <BangumiAction type="button" disabled={disabled || current.busy || held} onClick={() => void loadTags()}>
               {current.busy ? m.library_bangumi_label_loading() : m.library_bangumi_label_load_tags()}
             </BangumiAction>
           ) : (
-            <BangumiAction type="button" variant="outline" disabled={disabled || current.busy || held} onClick={() => void loadTags()}>
+            <BangumiAction
+              type="button"
+              variant="outline"
+              disabled={disabled || current.busy || held}
+              onClick={() => void loadTags()}
+            >
               {m.library_bangumi_label_refresh_tags()}
             </BangumiAction>
           )}
           {page?.next !== null && page?.next !== undefined ? (
-            <BangumiAction type="button" variant="outline" disabled={disabled || current.busy || held} onClick={() => void loadTags(page.next!)}>
+            <BangumiAction
+              type="button"
+              variant="outline"
+              disabled={disabled || current.busy || held}
+              onClick={() => void loadTags(page.next!)}
+            >
               {m.library_bangumi_label_next_page()}
             </BangumiAction>
           ) : null}
           {current.pages.length > 1 ? (
-            <BangumiAction type="button" variant="outline" disabled={current.pageIndex === 0} onClick={() => update((state) => ({ ...state, pageIndex: Math.max(0, state.pageIndex - 1) }))}>
+            <BangumiAction
+              type="button"
+              variant="outline"
+              disabled={current.pageIndex === 0}
+              onClick={() => update((state) => ({ ...state, pageIndex: Math.max(0, state.pageIndex - 1) }))}
+            >
               {m.library_bangumi_label_previous_page()}
             </BangumiAction>
           ) : null}
@@ -369,18 +443,29 @@ export function BangumiLabelAdoption({
                   return (
                     <li key={tag.index} className="space-y-3 rounded-md border p-3" data-bangumi-tag-index={tag.index}>
                       <p className="text-sm font-medium">{m.library_bangumi_label_tag_index({ index: tag.index })}</p>
-                      <p className="break-words"><span className="font-medium">{m.library_bangumi_label_source_text()}</span> {textValue(tag.value)}</p>
+                      <p className="break-words">
+                        <span className="font-medium">{m.library_bangumi_label_source_text()}</span>{' '}
+                        {textValue(tag.value)}
+                      </p>
                       {tag.proposedName ? (
-                        <p className="break-words"><span className="font-medium">{m.library_bangumi_label_proposed_name()}</span> {tag.proposedName}</p>
+                        <p className="break-words">
+                          <span className="font-medium">{m.library_bangumi_label_proposed_name()}</span>{' '}
+                          {tag.proposedName}
+                        </p>
                       ) : null}
                       {target ? (
                         <p className="break-words" data-bangumi-label-target={tag.index}>
-                          {m.library_bangumi_label_mapping_selected({ target: 'labelId' in target ? target.labelId : target.name })}
+                          {m.library_bangumi_label_mapping_selected({
+                            target: 'labelId' in target ? target.labelId : target.name,
+                          })}
                         </p>
                       ) : null}
                       {tag.status === 'supported' ? (
                         <div className="space-y-2">
-                          <label className="block text-sm font-medium" htmlFor={`bangumi-new-label-${ordinal}-${tag.index}`}>
+                          <label
+                            className="block text-sm font-medium"
+                            htmlFor={`bangumi-new-label-${ordinal}-${tag.index}`}
+                          >
                             {m.library_bangumi_label_new_name_input()}
                           </label>
                           <input
@@ -388,17 +473,41 @@ export function BangumiLabelAdoption({
                             className="min-h-11 w-full rounded-md border bg-background px-3 py-2"
                             value={current.newNames[tag.index] ?? tag.proposedName ?? ''}
                             disabled={disabled || current.busy || held}
-                            onChange={(event) => update((state) => ({ ...state, newNames: { ...state.newNames, [tag.index]: event.target.value } }))}
+                            onChange={(event) =>
+                              update((state) => ({
+                                ...state,
+                                newNames: { ...state.newNames, [tag.index]: event.target.value },
+                              }))
+                            }
                           />
                           <BangumiAction
                             type="button"
                             variant="outline"
-                            disabled={disabled || current.busy || held || !(current.newNames[tag.index] ?? tag.proposedName ?? '').length || (selectedCount >= 16 && !target)}
-                            onClick={() => update((state) => ({ ...state, mappings: { ...state.mappings, [tag.index]: { name: state.newNames[tag.index] ?? tag.proposedName ?? '' } } }))}
+                            disabled={
+                              disabled ||
+                              current.busy ||
+                              held ||
+                              !(current.newNames[tag.index] ?? tag.proposedName ?? '').length ||
+                              (selectedCount >= 16 && !target)
+                            }
+                            onClick={() =>
+                              update((state) => ({
+                                ...state,
+                                mappings: {
+                                  ...state.mappings,
+                                  [tag.index]: { name: state.newNames[tag.index] ?? tag.proposedName ?? '' },
+                                },
+                              }))
+                            }
                           >
-                            {m.library_bangumi_label_use_new_name({ name: current.newNames[tag.index] ?? tag.proposedName ?? '' })}
+                            {m.library_bangumi_label_use_new_name({
+                              name: current.newNames[tag.index] ?? tag.proposedName ?? '',
+                            })}
                           </BangumiAction>
-                          <label className="block text-sm font-medium" htmlFor={`bangumi-label-query-${ordinal}-${tag.index}`}>
+                          <label
+                            className="block text-sm font-medium"
+                            htmlFor={`bangumi-label-query-${ordinal}-${tag.index}`}
+                          >
                             {m.library_bangumi_label_search_query()}
                           </label>
                           <input
@@ -406,9 +515,19 @@ export function BangumiLabelAdoption({
                             className="min-h-11 w-full rounded-md border bg-background px-3 py-2"
                             value={query}
                             disabled={disabled || current.busy || held}
-                            onChange={(event) => update((state) => ({ ...state, queries: { ...state.queries, [tag.index]: event.target.value } }))}
+                            onChange={(event) =>
+                              update((state) => ({
+                                ...state,
+                                queries: { ...state.queries, [tag.index]: event.target.value },
+                              }))
+                            }
                           />
-                          <BangumiAction type="button" variant="outline" disabled={disabled || current.busy || held || selectedCount >= 16 && !target} onClick={() => void search(tag.index, query)}>
+                          <BangumiAction
+                            type="button"
+                            variant="outline"
+                            disabled={disabled || current.busy || held || (selectedCount >= 16 && !target)}
+                            onClick={() => void search(tag.index, query)}
+                          >
                             {m.library_bangumi_label_search_owned()}
                           </BangumiAction>
                           {current.searchState[tag.index] === 'loaded' && current.options[tag.index]?.length === 0 ? (
@@ -421,19 +540,33 @@ export function BangumiLabelAdoption({
                                   <BangumiAction
                                     type="button"
                                     variant="outline"
-                                    disabled={disabled || current.busy || held || selectedCount >= 16 && !target}
-                                    onClick={() => update((state) => ({ ...state, mappings: { ...state.mappings, [tag.index]: { labelId: label.id } } }))}
+                                    disabled={disabled || current.busy || held || (selectedCount >= 16 && !target)}
+                                    onClick={() =>
+                                      update((state) => ({
+                                        ...state,
+                                        mappings: { ...state.mappings, [tag.index]: { labelId: label.id } },
+                                      }))
+                                    }
                                   >
-                                    {m.library_bangumi_label_use_existing({ name: label.name, revision: label.revision })}
+                                    {m.library_bangumi_label_use_existing({
+                                      name: label.name,
+                                      revision: label.revision,
+                                    })}
                                   </BangumiAction>
                                 </li>
                               ))}
                             </ul>
                           ) : null}
-                          {current.searchState[tag.index] === 'unavailable' ? <p role="status">{m.library_bangumi_label_search_unavailable()}</p> : null}
+                          {current.searchState[tag.index] === 'unavailable' ? (
+                            <p role="status">{m.library_bangumi_label_search_unavailable()}</p>
+                          ) : null}
                         </div>
                       ) : (
-                        <p>{tag.status === 'invalid' ? m.library_bangumi_label_tag_invalid() : m.library_bangumi_label_tag_unknown()}</p>
+                        <p>
+                          {tag.status === 'invalid'
+                            ? m.library_bangumi_label_tag_invalid()
+                            : m.library_bangumi_label_tag_unknown()}
+                        </p>
                       )}
                     </li>
                   );
@@ -444,39 +577,78 @@ export function BangumiLabelAdoption({
           </div>
         ) : null}
         {current.mappings && Object.keys(current.mappings).length ? (
-          <BangumiAction type="button" disabled={disabled || current.busy || held || !current.custody} onClick={() => void reviewLabels()}>
+          <BangumiAction
+            type="button"
+            disabled={disabled || current.busy || held || !current.custody}
+            onClick={() => void reviewLabels()}
+          >
             {current.busy ? m.library_bangumi_label_reviewing() : m.library_bangumi_label_review_mapping()}
           </BangumiAction>
         ) : null}
         {current.labels ? (
           <section className="space-y-3 rounded-md border p-3" aria-labelledby={`bangumi-label-review-${ordinal}`}>
-            <h5 id={`bangumi-label-review-${ordinal}`} className="font-medium">{m.library_bangumi_label_exact_review()}</h5>
-            <p className="break-all text-sm">{m.library_bangumi_label_row_revision({ revision: current.labels.review.rowRevision })}</p>
-            <p className="break-all text-sm">{m.library_bangumi_label_review_token({ token: current.labels.review.token })}</p>
+            <h5 id={`bangumi-label-review-${ordinal}`} className="font-medium">
+              {m.library_bangumi_label_exact_review()}
+            </h5>
+            <p className="break-all text-sm">
+              {m.library_bangumi_label_row_revision({ revision: current.labels.review.rowRevision })}
+            </p>
+            <p className="break-all text-sm">
+              {m.library_bangumi_label_review_token({ token: current.labels.review.token })}
+            </p>
             {current.labels.review.subject ? (
               <dl className="space-y-1 text-sm">
                 <dt className="font-medium">{m.library_bangumi_label_subject_identity()}</dt>
-                <dd className="break-all">{current.labels.review.subject.subjectId} · {current.labels.review.subject.acceptingType} · {current.labels.review.subject.identityEpoch} · {current.labels.review.subject.releaseDigest ?? m.library_bangumi_label_profile_absent()}</dd>
+                <dd className="break-all">
+                  {current.labels.review.subject.subjectId} · {current.labels.review.subject.acceptingType} ·{' '}
+                  {current.labels.review.subject.identityEpoch} ·{' '}
+                  {current.labels.review.subject.releaseDigest ?? m.library_bangumi_label_profile_absent()}
+                </dd>
               </dl>
-            ) : <p>{m.library_bangumi_label_subject_unavailable()}</p>}
+            ) : (
+              <p>{m.library_bangumi_label_subject_unavailable()}</p>
+            )}
             <ul className="space-y-2">
               {current.labels.review.items.map((item) => (
                 <li key={item.index} className="rounded border p-2" data-bangumi-label-review-index={item.index}>
-                  <p>{m.library_bangumi_label_tag_index({ index: item.index })}: {textValue(item.source)}</p>
-                  <p className="break-words">{'labelId' in item.target ? m.library_bangumi_label_review_existing({ id: item.target.labelId, revision: item.target.revision }) : m.library_bangumi_label_review_new({ name: item.target.name })}</p>
+                  <p>
+                    {m.library_bangumi_label_tag_index({ index: item.index })}: {textValue(item.source)}
+                  </p>
+                  <p className="break-words">
+                    {'labelId' in item.target
+                      ? m.library_bangumi_label_review_existing({
+                          id: item.target.labelId,
+                          revision: item.target.revision,
+                        })
+                      : m.library_bangumi_label_review_new({ name: item.target.name })}
+                  </p>
                   <p>{reviewItemLabel(item.status)}</p>
                 </li>
               ))}
             </ul>
-            <p>{current.labels.confirmed ? m.library_bangumi_label_confirmed() : m.library_bangumi_label_confirmation_needed()}</p>
-            {!exactSelection && !current.labels.confirmed ? <p role="status">{m.library_bangumi_label_mapping_changed_needs_review()}</p> : null}
+            <p>
+              {current.labels.confirmed
+                ? m.library_bangumi_label_confirmed()
+                : m.library_bangumi_label_confirmation_needed()}
+            </p>
+            {!exactSelection && !current.labels.confirmed ? (
+              <p role="status">{m.library_bangumi_label_mapping_changed_needs_review()}</p>
+            ) : null}
             {!current.labels.confirmed ? (
-              <BangumiAction type="button" disabled={disabled || current.busy || held || !current.labels.review.subject || !exactSelection} onClick={() => void applyLabels()}>
+              <BangumiAction
+                type="button"
+                disabled={disabled || current.busy || held || !current.labels.review.subject || !exactSelection}
+                onClick={() => void applyLabels()}
+              >
                 {current.busy ? m.library_bangumi_label_applying() : m.library_bangumi_label_confirm_exact()}
               </BangumiAction>
             ) : null}
             {current.labels.confirmed && retryableResults ? (
-              <BangumiAction type="button" disabled={disabled || current.busy || held} onClick={() => void applyLabels(undefined, true)}>
+              <BangumiAction
+                type="button"
+                disabled={disabled || current.busy || held}
+                onClick={() => void applyLabels(undefined, true)}
+              >
                 {current.busy ? m.library_bangumi_label_applying() : m.library_bangumi_label_retry_failed()}
               </BangumiAction>
             ) : null}
@@ -487,33 +659,73 @@ export function BangumiLabelAdoption({
             <h5 className="font-medium">{m.library_bangumi_label_results()}</h5>
             <ul className="space-y-2">
               {outcomes.map((outcome) => (
-                <li key={outcome.index} className="space-y-1 rounded border p-3" data-bangumi-label-outcome={outcome.status}>
-                  <p>{m.library_bangumi_label_tag_index({ index: outcome.index })}: {outcomeLabel(outcome.status)}</p>
-                  <p>{m.library_bangumi_label_created({ created: outcome.created ? m.library_bangumi_label_yes() : m.library_bangumi_label_no() })}</p>
-                  {outcome.label ? <p className="break-all">{m.library_bangumi_label_identity({ id: outcome.label.id, revision: outcome.label.revision })}</p> : null}
-                  {outcome.assignment ? <p className="break-all">{m.library_bangumi_label_assignment_identity({ id: outcome.assignment.id, revision: outcome.assignment.revision })}</p> : null}
-                  {outcome.created && !outcome.assignment ? <p role="status">{m.library_bangumi_label_incomplete_adoption()}</p> : null}
+                <li
+                  key={outcome.index}
+                  className="space-y-1 rounded border p-3"
+                  data-bangumi-label-outcome={outcome.status}
+                >
+                  <p>
+                    {m.library_bangumi_label_tag_index({ index: outcome.index })}: {outcomeLabel(outcome.status)}
+                  </p>
+                  <p>
+                    {m.library_bangumi_label_created({
+                      created: outcome.created ? m.library_bangumi_label_yes() : m.library_bangumi_label_no(),
+                    })}
+                  </p>
+                  {outcome.label ? (
+                    <p className="break-all">
+                      {m.library_bangumi_label_identity({ id: outcome.label.id, revision: outcome.label.revision })}
+                    </p>
+                  ) : null}
+                  {outcome.assignment ? (
+                    <p className="break-all">
+                      {m.library_bangumi_label_assignment_identity({
+                        id: outcome.assignment.id,
+                        revision: outcome.assignment.revision,
+                      })}
+                    </p>
+                  ) : null}
+                  {outcome.created && !outcome.assignment ? (
+                    <p role="status">{m.library_bangumi_label_incomplete_adoption()}</p>
+                  ) : null}
                 </li>
               ))}
             </ul>
-            {current.result?.remaining.length ? <p>{m.library_bangumi_label_remaining({ indices: current.result.remaining.join(', ') })}</p> : null}
+            {current.result?.remaining.length ? (
+              <p>{m.library_bangumi_label_remaining({ indices: current.result.remaining.join(', ') })}</p>
+            ) : null}
           </section>
         ) : null}
         {current.labels?.review.subject ? (
           <section className="space-y-2 rounded-md border p-3">
             <h5 className="font-medium">{m.library_bangumi_label_current_assignments()}</h5>
             {current.assignmentState !== 'loaded' ? (
-              <BangumiAction type="button" variant="outline" disabled={disabled || current.busy || held || current.assignmentState === 'loading'} onClick={() => void readAssignments(current.labels!.review.subject!.subjectId, rowRevision)}>
-                {current.assignmentState === 'loading' ? m.library_bangumi_label_assignments_loading() : m.library_bangumi_label_read_assignments()}
+              <BangumiAction
+                type="button"
+                variant="outline"
+                disabled={disabled || current.busy || held || current.assignmentState === 'loading'}
+                onClick={() => void readAssignments(current.labels!.review.subject!.subjectId, rowRevision)}
+              >
+                {current.assignmentState === 'loading'
+                  ? m.library_bangumi_label_assignments_loading()
+                  : m.library_bangumi_label_read_assignments()}
               </BangumiAction>
             ) : null}
-            {current.assignmentState === 'unavailable' ? <p role="status">{m.library_bangumi_label_assignments_unavailable()}</p> : null}
+            {current.assignmentState === 'unavailable' ? (
+              <p role="status">{m.library_bangumi_label_assignments_unavailable()}</p>
+            ) : null}
             {current.assignments ? (
               current.assignments.length ? (
                 <ul className="space-y-1">
-                  {current.assignments.map((assignment) => <li key={assignment.id} className="break-all">{assignment.name} · {assignment.labelId} · {assignment.id} · {assignment.revision}</li>)}
+                  {current.assignments.map((assignment) => (
+                    <li key={assignment.id} className="break-all">
+                      {assignment.name} · {assignment.labelId} · {assignment.id} · {assignment.revision}
+                    </li>
+                  ))}
                 </ul>
-              ) : <p>{m.library_bangumi_label_no_current_assignments()}</p>
+              ) : (
+                <p>{m.library_bangumi_label_no_current_assignments()}</p>
+              )
             ) : null}
           </section>
         ) : null}

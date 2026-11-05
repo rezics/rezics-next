@@ -314,7 +314,13 @@ function isLabelVersion(value: unknown): value is { id: string; revision: number
 }
 
 function isLabelState(value: unknown): value is BangumiLabelState {
-  if (!record(value) || typeof value.confirmed !== 'boolean' || !Array.isArray(value.outcomes) || value.outcomes.length > 16) return false;
+  if (
+    !record(value) ||
+    typeof value.confirmed !== 'boolean' ||
+    !Array.isArray(value.outcomes) ||
+    value.outcomes.length > 16
+  )
+    return false;
   const review = value.review;
   if (
     !record(review) ||
@@ -348,8 +354,12 @@ function isLabelState(value: unknown): value is BangumiLabelState {
       return false;
     if (!record(item.target)) return false;
     if ('labelId' in item.target)
-      return typeof item.target.labelId === 'string' && SUBJECT_ID.test(item.target.labelId) &&
-        Number.isSafeInteger(item.target.revision) && item.target.revision > 0;
+      return (
+        typeof item.target.labelId === 'string' &&
+        SUBJECT_ID.test(item.target.labelId) &&
+        Number.isSafeInteger(item.target.revision) &&
+        item.target.revision > 0
+      );
     return typeof item.target.name === 'string';
   });
   if (!items) return false;
@@ -357,22 +367,16 @@ function isLabelState(value: unknown): value is BangumiLabelState {
     if (
       !record(outcome) ||
       !Number.isSafeInteger(outcome.index) ||
-      ![
-        'assigned',
-        'unchanged',
-        'duplicate',
-        'invalid',
-        'stale',
-        'capacity',
-        'conflict',
-        'limit',
-        'failed',
-      ].includes(String(outcome.status)) ||
+      !['assigned', 'unchanged', 'duplicate', 'invalid', 'stale', 'capacity', 'conflict', 'limit', 'failed'].includes(
+        String(outcome.status),
+      ) ||
       typeof outcome.created !== 'boolean'
     )
       return false;
-    return (outcome.label === null || isLabelVersion(outcome.label)) &&
-      (outcome.assignment === null || isLabelVersion(outcome.assignment));
+    return (
+      (outcome.label === null || isLabelVersion(outcome.label)) &&
+      (outcome.assignment === null || isLabelVersion(outcome.assignment))
+    );
   });
 }
 
@@ -416,22 +420,16 @@ function isLabelApply(value: unknown): value is BangumiLabelApplyData {
       if (
         !record(outcome) ||
         !Number.isSafeInteger(outcome.index) ||
-        ![
-          'assigned',
-          'unchanged',
-          'duplicate',
-          'invalid',
-          'stale',
-          'capacity',
-          'conflict',
-          'limit',
-          'failed',
-        ].includes(String(outcome.status)) ||
+        !['assigned', 'unchanged', 'duplicate', 'invalid', 'stale', 'capacity', 'conflict', 'limit', 'failed'].includes(
+          String(outcome.status),
+        ) ||
         typeof outcome.created !== 'boolean'
       )
         return false;
-      return (outcome.label === null || isLabelVersion(outcome.label)) &&
-        (outcome.assignment === null || isLabelVersion(outcome.assignment));
+      return (
+        (outcome.label === null || isLabelVersion(outcome.label)) &&
+        (outcome.assignment === null || isLabelVersion(outcome.assignment))
+      );
     }) && value.remaining.every((index) => Number.isSafeInteger(index))
   );
 }

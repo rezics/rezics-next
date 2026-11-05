@@ -301,7 +301,10 @@ function recordingPort(
       };
     },
     async applyLabels(command) {
-      return { kind: 'labels-applied', result: { uploadId: command.uploadId, ordinal: command.ordinal, outcomes: [], remaining: [] } };
+      return {
+        kind: 'labels-applied',
+        result: { uploadId: command.uploadId, ordinal: command.ordinal, outcomes: [], remaining: [] },
+      };
     },
     async readAssignments(subjectId) {
       return { kind: 'assignments', subjectId, assignments: [] };
