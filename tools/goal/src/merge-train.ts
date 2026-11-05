@@ -11,7 +11,14 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
-import { controlPlaneReleaseBrief, matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
+import {
+  controlPlaneReleaseBrief,
+  isProtectedRiskPath,
+  matchesPath,
+  parseBrief,
+  protectedRiskAreasForBrief,
+  readRiskOwnership,
+} from './briefs.ts';
 import { selectAffectedChecks } from './check-plan.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type {
@@ -3681,9 +3688,7 @@ export class MergeTrain {
             o.policy?.brief,
           );
           for (const task of sharedTasks) {
-            const protectedPaths = Object.entries(ownership.areas)
-              .filter(([area]) => !task.brief.riskAreas.includes(area))
-              .flatMap(([, paths]) => paths);
+            const protectedRiskAreas = protectedRiskAreasForBrief(ownership, task.brief.riskAreas);
             try {
               this.checkScope(
                 taskChangedPaths(task, tip, this.options.policy?.merge).filter(
@@ -3692,7 +3697,7 @@ export class MergeTrain {
                 {
                   ...request,
                   declaredPaths: task.brief.paths,
-                  protectedPaths,
+                  protectedRiskAreas: [...(request.protectedRiskAreas ?? []), ...protectedRiskAreas],
                 },
                 logPath,
               );
@@ -4919,8 +4924,14 @@ export class MergeTrain {
   private checkScope(files: readonly string[], request: LandingRequest, logPath: string): void {
     const outside = outsideScope(files, request.declaredPaths);
     if (!outside.length) return;
-    const protectedPaths = request.protectedPaths ?? [];
-    const refused = protectedPaths.length ? outside.filter((path) => !outsideScope([path], protectedPaths).length) : [];
+    const refused = outside.filter((path) =>
+      isProtectedRiskPath(
+        path,
+        request.protectedPaths,
+        request.protectedRiskAreas,
+        this.options.policy?.brief,
+      ),
+    );
     if (refused.length) throw new Error(`Changes in undeclared risk areas: ${refused.join(', ')}`);
     appendFileSync(logPath, `Changed outside declared paths (allowed): ${outside.join(', ')}\n`);
   }
@@ -6462,11 +6473,9 @@ export class MergeTrain {
                   ...entry.request.declaredPaths,
                   ...(journal.scopeApprovals![task.id]?.additionalPaths.map((addition) => addition.path) ?? []),
                 ],
-                protectedPaths: [
-                  ...(entry.request.protectedPaths ?? []),
-                  ...Object.entries(risk.areas)
-                    .filter(([area]) => !task.brief.riskAreas.includes(area))
-                    .flatMap(([, paths]) => paths),
+                protectedRiskAreas: [
+                  ...(entry.request.protectedRiskAreas ?? []),
+                  ...protectedRiskAreasForBrief(risk, task.brief.riskAreas),
                 ],
               };
               let files: string[] = [];

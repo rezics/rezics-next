@@ -24,6 +24,9 @@ test('every attempt-ending failure and landing refusal has a non-empty priced gu
   expect(GUARDS['dev-landing-transpile'].repair).toContain('original worker session');
   expect(GUARDS['dev-landing-transpile'].repair).toContain('Cost target: <1000ms');
   expect(GUARDS['dev-landing-transpile'].repair).toContain('Measured disposable fixture: 7ms');
+  expect(GUARDS['undeclared-risk-area'].defect).toContain('undeclared production change');
+  expect(GUARDS['scope-failed'].defect).toContain('matched a protected production risk area');
+  expect(GUARDS['scope-failed'].defect).not.toContain('unsafe source change');
 });
 
 test('flow report prices guard firings and flags unchanged next attempts for repair in place', async () => {

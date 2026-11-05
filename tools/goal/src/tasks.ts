@@ -21,6 +21,7 @@ import {
   devProductBrief,
   assertBriefDispatchable,
   parseBrief,
+  protectedRiskAreasForBrief,
   readRiskOwnership,
   withStabilizeTarget,
 } from './briefs.ts';
@@ -516,10 +517,12 @@ export class WorkerTasks {
   }
   /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
   protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
+    return this.protectedRiskAreas(brief).flatMap(({ include }) => include);
+  }
+  /** Per-area undeclared rules preserve exclusions and overlapping ownership in the persisted landing request. */
+  protectedRiskAreas(brief: { riskAreas: readonly string[] }) {
     const ownership = readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief);
-    return Object.entries(ownership.areas)
-      .filter(([area]) => !brief.riskAreas.includes(area))
-      .flatMap(([, patterns]) => patterns);
+    return protectedRiskAreasForBrief(ownership, brief.riskAreas);
   }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
     const worker = await this.retryTask(taskId, options);

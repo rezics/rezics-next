@@ -1,4 +1,5 @@
 import type { AffectedTestResult, Tokens } from './types.ts';
+import type { RiskAreaRules } from './briefs.ts';
 import type { ProcessIdentity } from './process.ts';
 
 // The two halves of the control plane meet only here. The worker side owns tasks, attempts, routing, launch,
@@ -150,8 +151,10 @@ export type LandingRequest = AttemptRef & {
   sourceDirtyAtSettlement?: true;
   /** Path patterns the brief declared: where the work is expected. A worker may change files outside them. */
   declaredPaths: readonly string[];
-  /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
+  /** Legacy flat rules remain authoritative when reading queued requests written before per-area snapshots existed. */
   protectedPaths?: readonly string[];
+  /** Undeclared risk-area rules captured for this request, retaining each area's exclusions independently. */
+  protectedRiskAreas?: readonly RiskAreaRules[];
   gate: readonly string[];
   affectedTests?: readonly AffectedTestResult[];
   /** Original worker acceptance is retained when the owning manager advances an already accepted attempt. */

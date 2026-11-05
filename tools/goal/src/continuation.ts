@@ -19,10 +19,11 @@ import { dirname, join } from 'node:path';
 import type { AttemptRef } from './contracts.ts';
 import {
   BRIEF_KINDS,
+  classifyRiskAreas,
   devProductBrief,
   parseBrief,
-  pathsOverlap,
   readRiskOwnership,
+  riskAreaRulesFor,
   type RiskOwnership,
 } from './briefs.ts';
 import { classifyTask } from './routing.ts';
@@ -472,13 +473,13 @@ export function completeContinuation(
   if (Array.isArray(front.after) && !front.after.includes(task.id)) front.after = [...front.after, task.id];
   const areas = list(front.riskAreas, []);
   const paths = front.paths;
-  if (ownership && Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string'))
-    for (const [area, patterns] of Object.entries(ownership.areas))
-      if (
-        !areas.includes(area) &&
-        paths.some((path) => patterns.some((pattern) => pathsOverlap(path, pattern, policy)))
-      )
-        areas.push(area);
+  if (ownership && Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string')) {
+    const rules = riskAreaRulesFor(ownership);
+    for (const path of paths) {
+      for (const area of classifyRiskAreas(path, rules, 'pattern', policy))
+        if (!areas.includes(area)) areas.push(area);
+    }
+  }
   front.riskAreas = areas;
   if (front.acceptance && typeof front.acceptance === 'object' && !Array.isArray(front.acceptance)) {
     const acceptance = { ...(front.acceptance as Record<string, unknown>) };

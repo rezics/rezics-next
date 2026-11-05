@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { matchesPath } from './briefs.ts';
+import { isProtectedRiskPath } from './briefs.ts';
 import { choosePool } from './allowance.ts';
 import { agentAdapter } from './agents.ts';
 import type { AttemptRef, LandingRequest } from './contracts.ts';
@@ -370,7 +370,14 @@ export class TrainResolver {
       });
     if (
       allPaths.some(
-        (path) => frozen.includes(path) || matchesPath(path, request.protectedPaths ?? [], this.store.policy.brief),
+        (path) =>
+          frozen.includes(path) ||
+          isProtectedRiskPath(
+            path,
+            request.protectedPaths,
+            request.protectedRiskAreas,
+            this.store.policy.brief,
+          ),
       )
     ) {
       conflict.detail = 'Conflict touches a frozen or protected input';

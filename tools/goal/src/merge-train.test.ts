@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openDb } from './db.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { failingTestFiles, MergeTrain, devPushScript } from './merge-train.ts';
 import { firstFailure, gateRunner, git } from './merge.ts';
-import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
 import { repository } from './test-support.ts';
 
@@ -178,6 +178,40 @@ describe('sequential integration', () => {
     } finally {
       s.close();
     }
+  });
+  test('authorization classification allows auth tooling, protects production paths, and preserves queued rules', async () => {
+    const land = async (path: string, declaredRiskAreas: string[], legacy = false) => {
+      const s = setup();
+      try {
+        const request = s.branch('alpha', 'allowed.txt');
+        mkdirSync(dirname(join(request.worktree, path)), { recursive: true });
+        writeFileSync(join(request.worktree, path), 'risk change\n');
+        git(request.worktree, 'add', '--', path);
+        git(request.worktree, 'commit', '-m', `Change ${path}`);
+        const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+        s.queue.enqueue({
+          ...request,
+          declaredPaths: ['allowed.txt'],
+          ...(legacy
+            ? { protectedPaths: ['**/auth/**'] }
+            : { protectedRiskAreas: protectedRiskAreasForBrief(ownership, declaredRiskAreas) }),
+        });
+        await new MergeTrain({
+          ...s.options,
+          riskAreasFile: join(import.meta.dir, '../risk-areas.json'),
+          runGate: async () => ({ passed: true, output: '', timedOut: false }),
+        }).run();
+        return s.outcomes[0]!;
+      } finally {
+        s.close();
+      }
+    };
+
+    expect((await land('services/auth/scripts/dev-stack.ts', [])).passed).toBe(true);
+    const production = await land('services/auth/src/policy.ts', []);
+    expect(production).toMatchObject({ passed: false, stage: 'scope' });
+    expect((await land('services/auth/src/policy.ts', ['authorization'])).passed).toBe(true);
+    expect(await land('services/auth/scripts/dev-stack.ts', [], true)).toMatchObject({ passed: false, stage: 'scope' });
   });
   test('refuses stale enqueue, queued attempts and attempts invalidated during the gate', async () => {
     for (const when of ['enqueue', 'queued', 'gate']) {

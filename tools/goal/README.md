@@ -1267,9 +1267,15 @@ replacement. Delivering that lifecycle seam remains separate work.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
 are refused. Matching walks an explicit stack and refuses after one million visited states; each pattern shares the
-12,288-byte brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
-Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
-brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
+12,288-byte brief size bound. Risk ownership accepts legacy path lists and typed per-area `{ include, exclude }` rules.
+The shared classifier applies an exclusion only to its named area; another matching area remains protected. Broad claims
+such as `services/**` continue to intersect production authorization paths.
+
+Decision: the authorization risk area excludes `services/auth/scripts/**`; production auth, authorization and permissions
+paths remain protected. New landing requests persist per-area rules, while previously queued flat path lists retain their
+original matching behavior. Every intersected production risk area must be declared. Extend the ownership data when adding
+product modules. A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks
+that they be split into a dev task.
 
 Routing records the table version on each attempt. Open experiments weight work toward cheaper models: implementation, interface and bulk text rotate Grok 4.7, Grok 4.7, Luna `max`; claims rotate Luna `max`, Grok 4.7, Sol `high`
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
@@ -1704,8 +1710,9 @@ conflict or tool blocker), or two consecutive attempts that end without a new co
 attempt records an `attempt-progress` event: whether its branch head moved from the head recorded at its first prompt,
 or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
 beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
-`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change on lanes that retain
-the refusal, a specification conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
+`estimateOverrun`. Scope-stage refusals report matches against configured protected paths for owner review; a frozen
+acceptance change on lanes that retain the refusal, a specification conflict and a stall also reach the owning manager.
+Control-plane releases, stabilize-target and verification work keep
 every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own

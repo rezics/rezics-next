@@ -117,13 +117,16 @@ export function requestManagerLanding(
     }
     if (row.outcome || row.delivered) throw new Error(`Landing for task ${task.id} has already been processed`);
     const previous = JSON.parse(row.request) as LandingRequest;
+    const legacyProtectedScope = previous.protectedRiskAreas === undefined;
     if (
       previous.taskId !== request.taskId ||
       previous.attempt !== request.attempt ||
       previous.branch !== request.branch ||
       previous.worktree !== request.worktree ||
       JSON.stringify(previous.declaredPaths) !== JSON.stringify(request.declaredPaths) ||
-      JSON.stringify(previous.protectedPaths ?? []) !== JSON.stringify(request.protectedPaths ?? []) ||
+      (!legacyProtectedScope &&
+        (JSON.stringify(previous.protectedPaths ?? []) !== JSON.stringify(request.protectedPaths ?? []) ||
+          JSON.stringify(previous.protectedRiskAreas ?? []) !== JSON.stringify(request.protectedRiskAreas ?? []))) ||
       JSON.stringify(previous.gate) !== JSON.stringify(request.gate)
     )
       throw new Error(`Queued landing for task ${task.id} no longer matches its current work`);
@@ -138,12 +141,15 @@ export function requestManagerLanding(
       changed = false;
       return;
     }
+    const authorizedRequest = legacyProtectedScope
+      ? { ...request, protectedPaths: previous.protectedPaths, protectedRiskAreas: undefined }
+      : request;
     const updated = store.db
       .query('UPDATE landing_queue SET request=? WHERE task=? AND attempt=? AND delivered=0 AND outcome IS NULL')
-      .run(JSON.stringify(request), taskId, ref.attempt);
+      .run(JSON.stringify(authorizedRequest), taskId, ref.attempt);
     if (updated.changes !== 1) throw new Error(`Landing for task ${task.id} changed while the manager authorized it`);
     if (!store.events(taskId, ref.attempt).some((event) => event.kind === 'landing-requested'))
-      store.event(ref, 'landing-requested', request);
+      store.event(ref, 'landing-requested', authorizedRequest);
     store.event(ref, 'manager-landing-authorized', request.managerLanding);
   });
   return changed;
