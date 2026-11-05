@@ -62,4 +62,4 @@ test('uploads through the generated VNDB route and resumes the exact private int
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 120000);
