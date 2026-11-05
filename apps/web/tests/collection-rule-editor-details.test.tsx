@@ -148,8 +148,12 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
       await act(async () => {
         const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
         if (select.multiple) {
+          select.selectedIndex = -1;
           for (const option of select.options) option.selected = values.includes(option.value);
-        } else setValue?.call(select, values[0] ?? '');
+        } else {
+          select.selectedIndex = -1;
+          setValue?.call(select, values[0] ?? '');
+        }
         expect([...select.selectedOptions].map((option) => option.value)).toEqual(values);
         select.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
       });
