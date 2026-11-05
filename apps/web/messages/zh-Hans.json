@@ -3230,6 +3230,7 @@
   "av_refresh": "刷新状态",
   "av_first_page": "第一页",
   "av_next_page": "下一页",
+  "av_previous_page": "上一页",
   "av_empty": "此页没有待审核的申请。",
   "av_profile_unavailable": "无法获取账号资料",
   "av_subject_unavailable": "无法获取目录主体",

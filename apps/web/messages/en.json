@@ -3291,6 +3291,7 @@
   "av_refresh": "Refresh status",
   "av_first_page": "First page",
   "av_next_page": "Next page",
+  "av_previous_page": "Previous page",
   "av_empty": "There are no pending requests on this page.",
   "av_profile_unavailable": "Account profile unavailable",
   "av_subject_unavailable": "Catalogue subject unavailable",

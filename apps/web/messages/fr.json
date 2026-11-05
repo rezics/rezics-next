@@ -3230,6 +3230,7 @@
   "av_refresh": "Actualiser l’état",
   "av_first_page": "Première page",
   "av_next_page": "Page suivante",
+  "av_previous_page": "Page précédente",
   "av_empty": "Aucune demande en attente sur cette page.",
   "av_profile_unavailable": "Profil du compte indisponible",
   "av_subject_unavailable": "Sujet du catalogue indisponible",

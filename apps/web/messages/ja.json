@@ -3230,6 +3230,7 @@
   "av_refresh": "状況を更新",
   "av_first_page": "最初のページ",
   "av_next_page": "次のページ",
+  "av_previous_page": "前のページ",
   "av_empty": "このページに審査待ちの申請はありません。",
   "av_profile_unavailable": "アカウント情報を取得できません",
   "av_subject_unavailable": "カタログの対象を取得できません",

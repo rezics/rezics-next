@@ -3230,6 +3230,7 @@
   "av_refresh": "상태 새로고침",
   "av_first_page": "첫 페이지",
   "av_next_page": "다음 페이지",
+  "av_previous_page": "이전 페이지",
   "av_empty": "이 페이지에 심사 대기 중인 신청이 없습니다.",
   "av_profile_unavailable": "계정 프로필을 사용할 수 없음",
   "av_subject_unavailable": "카탈로그 대상을 사용할 수 없음",
