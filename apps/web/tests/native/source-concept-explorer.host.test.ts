@@ -5,8 +5,6 @@ import { expect as ui } from 'playwright/test';
 import type { Page } from 'playwright';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { catalogueEntries } from '../../src/features/catalogue/catalogue-entry.ts';
-import { conceptWorksAdmission, conceptWorksRequest } from '../../src/features/catalogue/concept-works/index.ts';
-import { parseConceptVisitDescriptor } from '../../src/features/pages/source-concept-reading/navigation.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import {
   startCatalogueClassificationFixture,
@@ -188,6 +186,8 @@ async function waitForTaggedWorks(
   schemeId: string,
   expected: number,
 ) {
+  const { conceptWorksAdmission } = await import('../../src/features/catalogue/source-concept-explorer');
+  const { conceptWorksRequest } = await import('../../src/features/catalogue/concept-works/index.ts');
   const admission = conceptWorksAdmission(bundledRelease, true);
   const request = conceptWorksRequest(
     { conceptId, property: 'schema:genre', scheme: schemeId, type: 'schema:Book' },
@@ -225,6 +225,7 @@ async function waitForTaggedWorks(
 }
 
 test('anonymous and member walk a real Concept hierarchy to filtered native Works, recover the exact page, and return without mixing identities', async () => {
+  const { parseConceptVisitDescriptor } = await import('../../src/features/pages/source-concept-reading/navigation.ts');
   await openSearch(fixture.stack);
   const marker = crypto.randomUUID().replaceAll('-', '').slice(0, 8);
   const schemeLabel = `Works scheme ${marker}`;
