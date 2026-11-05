@@ -725,10 +725,7 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
       if (observed.usageLimitRefusal || observed.failureKind === 'pool-exhausted')
         throw new TrainResolverInfrastructureError('Train resolver provider allowance refused the bounded session');
       if (code !== 0 || failure) throw new Error(failure ?? `Train resolver exited with ${code}`);
-      if (
-        this.git(tree, 'rev-parse', 'HEAD') !== head ||
-        this.git(tree, 'ls-files', '--stage', '-z') !== index
-      )
+      if (this.git(tree, 'rev-parse', 'HEAD') !== head || this.git(tree, 'ls-files', '--stage', '-z') !== index)
         throw new Error('Train resolver changed Git source or index');
       if (snapshot(tree, paths, this.store.policy.merge) !== before)
         throw new Error('Train resolver edited outside conflicted files or frozen inputs');
@@ -864,10 +861,11 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
   ): void {
     this.store.write(request, () => {
       if (
-        this.store.events(request.taskId, request.attempt).some(
-          (event) =>
-            event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
-        )
+        this.store
+          .events(request.taskId, request.attempt)
+          .some(
+            (event) => event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
+          )
       )
         return;
       const at = new Date().toISOString();
@@ -912,8 +910,7 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
     this.store.write(request, () => {
       const events = this.store.events(request.taskId, request.attempt);
       const started = events.some(
-        (event) =>
-          event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
+        (event) => event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
       );
       if (!started) return;
       if (

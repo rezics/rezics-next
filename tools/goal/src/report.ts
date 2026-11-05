@@ -243,7 +243,11 @@ export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
   const observedTiming = outcomes?.observationToLandedMs;
   const returnReasons = devOutcomes?.returnedToWorker.reasons;
   const reasonLabel = (value: string) =>
-    value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    value
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
   const returnReasonSummary = returnReasons?.length
     ? `${returnReasons
         .slice(0, 3)
