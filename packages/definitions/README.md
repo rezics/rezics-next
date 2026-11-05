@@ -70,8 +70,6 @@ recordings retain their normal stack placement and artifact boundary; generated 
   real 10/100 manifests, inheritance, clearing, invalid references, immutable pins, source exclusion and
   bundle/recording parity. Original expansion and historical archive construction controls run unchanged.
 
-
-
 ## Bundled catalogue
 
 The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` imports
