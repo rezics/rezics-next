@@ -313,12 +313,15 @@ test('a disclosed later-page visit returns to its exact current window without s
     expect(found).toBeDefined();
     return found!;
   };
+  const back = () =>
+    new Promise<void>((resolve) => {
+      window.addEventListener('popstate', () => resolve(), { once: true });
+      router.history.back();
+    });
   const visitAndReturn = async (label: string) => {
     await act(async () => link(label).click());
     expect(host.textContent).toContain('Thread target');
-    await act(async () => {
-      await router.history.back();
-    });
+    await act(async () => back());
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
   };
   try {
@@ -349,9 +352,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => link('Later thread').click());
     await act(async () => button(m.settings_profile_leave()).click());
     expect(host.textContent).toContain('Thread target');
-    await act(async () => {
-      await router.history.back();
-    });
+    await act(async () => back());
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
     expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();
 
