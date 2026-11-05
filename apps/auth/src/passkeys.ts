@@ -35,9 +35,9 @@ export type PasskeySignInResult = SignInResult | { ok: false; reason: 'cancelled
 // while they are younger. Sharing keeps a sign-in at two Auth calls however the person starts it.
 const OPTIONS_MAX_AGE_MS = 4 * 60_000;
 type SignInOptionsResult = Awaited<ReturnType<typeof receiveSignInOptions>>;
-let held: { fetchedAt: number; result: SignInOptionsResult } | null = null;
+let held: { fetchedAt: number; result: Promise<SignInOptionsResult> } | null = null;
 
-function signInOptions(): Promise<SignInOptions> {
+function signInOptions(): Promise<SignInOptionsResult> {
   if (!held || Date.now() - held.fetchedAt >= OPTIONS_MAX_AGE_MS) {
     const entry = {
       fetchedAt: Date.now(),
@@ -47,6 +47,7 @@ function signInOptions(): Promise<SignInOptions> {
     void entry.result.then((result) => {
       if (!result.ok && held === entry) held = null;
     });
+    return entry.result;
   }
   return held.result;
 }
