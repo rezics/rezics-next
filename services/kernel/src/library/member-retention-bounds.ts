@@ -76,9 +76,15 @@ export function consumeMemberRetention<T>(name: string, bound: Bound, dispatch: 
   return runLibraryBoundedStep(`library.member-retention.${name}`, bound, dispatch);
 }
 export async function memberRetentionControl(client: Client, sql: string): Promise<void> {
-  await consumeMemberRetention('control', memberRetentionSqlPlan(sql, [], {
-    examined: 0, points: 0, returned: 0, rowBytes: 0, candidates: 0,
-  }).total, () => client.query(sql));
+  // Hold terminal control costs before useful work. Expiry cannot prevent the original client's rollback.
+  if (sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY') {
+    const controls = sumBounds(...[sql, 'COMMIT', 'ROLLBACK'].map(text => memberRetentionSqlPlan(text, [], {
+      examined: 0, points: 0, returned: 0, rowBytes: 0, candidates: 0,
+    }).total));
+    await consumeMemberRetention('control', controls, () => client.query(sql));
+  } else {
+    await client.query(sql);
+  }
 }
 
 /** Separate physical ceilings: pending homes consume probes but never consume due seeks. */
