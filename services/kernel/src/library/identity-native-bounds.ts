@@ -465,8 +465,9 @@ export function nativeIdentitySourceBasisBound(sql: string, values: readonly unk
     return undefined;
   const queryBound = base(sql, values);
   if (!queryBound) return undefined;
-  const nativeWork = basisWork.get(query)!;
-  return sumBounds(queryBound, nativeWork, bound({ bytes: basisProjectionBytes.get(query)! }));
+  // basisQueries holds frozen copies; the work and projection tables are keyed by the original queries.
+  const original = [...basisWork.keys()].find((item) => item.sql === query.sql)!;
+  return sumBounds(queryBound, basisWork.get(original)!, bound({ bytes: basisProjectionBytes.get(original)! }));
 }
 export function nativeIdentitySourceBasisFootprint(
   sql: string,

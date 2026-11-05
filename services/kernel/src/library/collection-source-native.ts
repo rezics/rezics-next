@@ -1,3 +1,6 @@
+// Loaded first: nativeCollectionOrdinalPageBound runs during module initialization of an import cycle
+// (search/service-scope-order.ts), before later imports of this file are evaluated.
+import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 import { declareBound, type Bound } from '@rezics/bounds';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -125,7 +128,6 @@ import type { CollectionOutputPublication } from './collection-source-output.ts'
 import outputHead from './collection-source-output-head.sql';
 import outputPage from './collection-source-output-page.sql';
 import outputProbe from './collection-source-output-probe.sql';
-import ordinalPage from './collection-source-native-ordinal.sql';
 
 export type NativeCollectionOrdinalPageBound = Readonly<{
   limit: number;

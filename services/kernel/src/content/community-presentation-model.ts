@@ -5,7 +5,7 @@ import {
   RealmPresentationImageSchema,
   type RealmPresentationImage,
   type RealmPresentationOptional,
-} from './realm-media.ts';
+} from './realm-presentation-image.ts';
 
 export type CommunityPresentation = Readonly<{
   realmId: string;
