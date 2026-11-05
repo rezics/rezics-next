@@ -27,6 +27,14 @@ type FocusIntent =
   | Readonly<{ kind: 'open' | 'close'; visit: number }>
   | Readonly<{ kind: 'search' | 'reference'; owner: string; from: HTMLElement }>;
 
+function ownsFocusOrLostTrigger(from: HTMLElement): boolean {
+  const active = document.activeElement;
+  return (
+    active === from ||
+    (!from.isConnected && (active === document.body || active === document.documentElement))
+  );
+}
+
 type Props = {
   value: FilterDocument;
   lookup: ConditionConceptLookup;
@@ -409,8 +417,7 @@ function ConceptPicker({
         return;
       }
       if (currentSearchView?.phase !== 'settled') return;
-      const active = document.activeElement;
-      if (active !== intent.from && !(active === document.body && !intent.from.isConnected)) {
+      if (!ownsFocusOrLostTrigger(intent.from)) {
         focusIntent.current = undefined;
         return;
       }
@@ -425,8 +432,7 @@ function ConceptPicker({
       return;
     }
     if (currentReferenceView?.phase !== 'settled') return;
-    const active = document.activeElement;
-    if (active !== intent.from && !(active === document.body && !intent.from.isConnected)) {
+    if (!ownsFocusOrLostTrigger(intent.from)) {
       focusIntent.current = undefined;
       return;
     }
