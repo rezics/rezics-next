@@ -357,7 +357,9 @@ function notifyReturns(runtime: BacklogRuntime, groups: Map<string, SizeReturnEn
         ? `; and ${entries.length - policy.backlog.refusalBriefs} more`
         : '';
     const locations = [
-      ...new Set(entries.map((entry) => join(backlogDirectory(runtime.stateDirectory, entry.goal), RETURNED_DIRECTORY))),
+      ...new Set(
+        entries.map((entry) => join(backlogDirectory(runtime.stateDirectory, entry.goal), RETURNED_DIRECTORY)),
+      ),
     ].join(', ');
     runtime.inbox.deliver({
       managerId,
@@ -371,11 +373,7 @@ function notifyReturns(runtime: BacklogRuntime, groups: Map<string, SizeReturnEn
   }
 }
 
-function returnProductBriefs(
-  runtime: BacklogRuntime,
-  goals: string[],
-  now: number,
-): BacklogSweep['returned'] {
+function returnProductBriefs(runtime: BacklogRuntime, goals: string[], now: number): BacklogSweep['returned'] {
   const policy = runtime.policy ?? defaultPolicy;
   const returned: BacklogSweep['returned'] = [];
   const groups = new Map<string, SizeReturnEntry[]>();
@@ -417,10 +415,7 @@ function returnProductBriefs(
         detail: reason,
       });
       const managerId = item.snapshot?.manager ?? goal;
-      groups.set(managerId, [
-        ...(groups.get(managerId) ?? []),
-        { goal, brief: archived, reason, candidates },
-      ]);
+      groups.set(managerId, [...(groups.get(managerId) ?? []), { goal, brief: archived, reason, candidates }]);
     }
   }
   notifyReturns(runtime, groups);

@@ -572,7 +572,10 @@ test('backlog dispatch returns undersized or oversized product briefs to their m
     .replace('paths: [result.txt]', 'paths: [tools/goal/src/briefs.ts]');
   const long = `${complete
     .replace('goal: fixture', 'goal: web\nmanager: web')
-    .replace('paths: [result.txt]', 'paths: [tools/goal/src/policy.ts]')}${'x'.repeat(defaultPolicy.brief.maximumBodyCharacters + 1)}`;
+    .replace(
+      'paths: [result.txt]',
+      'paths: [tools/goal/src/policy.ts]',
+    )}${'x'.repeat(defaultPolicy.brief.maximumBodyCharacters + 1)}`;
   const urgent = markdown
     .replace('goal: fixture', 'goal: web\nmanager: web')
     .replace('criticalPath: false', 'urgent: true\ncriticalPath: false');
@@ -580,14 +583,14 @@ test('backlog dispatch returns undersized or oversized product briefs to their m
   brief(f.state, 'web', 'long.md', 80_000, long);
   brief(f.state, 'web', 'sibling.md', 70_000, sibling);
   brief(f.state, 'web', 'urgent.md', 60_000, urgent);
-  brief(f.state, 'search', 'research.md', 90_000, '---\ngoal: search\nmanager: search\nkind: research\npaths: [docs/research/topic.md]\n---\nResearch brief');
   brief(
     f.state,
-    'imports',
-    'slice.md',
+    'search',
+    'research.md',
     90_000,
-    markdown.replace('goal: fixture', 'goal: imports\nmanager: imports'),
+    '---\ngoal: search\nmanager: search\nkind: research\npaths: [docs/research/topic.md]\n---\nResearch brief',
   );
+  brief(f.state, 'imports', 'slice.md', 90_000, markdown.replace('goal: fixture', 'goal: imports\nmanager: imports'));
 
   const sweep = await sweepBacklog(f.runtime);
 
@@ -620,9 +623,11 @@ test('backlog dispatch returns undersized or oversized product briefs to their m
     { goal: 'web', ready: 0, dispatched: 2, failed: 0, returned: 2 },
   ]);
   expect(
-    (f.db.query("SELECT count(*) AS n FROM flow_events WHERE stage='dispatch' AND action='returned'").get() as {
-      n: number;
-    }).n,
+    (
+      f.db.query("SELECT count(*) AS n FROM flow_events WHERE stage='dispatch' AND action='returned'").get() as {
+        n: number;
+      }
+    ).n,
   ).toBe(3);
 }, 10_000);
 

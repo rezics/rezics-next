@@ -329,7 +329,9 @@ test('product brief size returns use policy floors and exempt urgent research me
   expect(productBriefSizeReturnReason({ bodyCharacters: policy.maximumBodyCharacters + 1 }, policy)).toContain(
     'brief.maximumBodyCharacters is 4000',
   );
-  expect(productBriefSizeViolation(complete.replace('criticalPath: false', 'urgent: true\ncriticalPath: false'))).toBeUndefined();
+  expect(
+    productBriefSizeViolation(complete.replace('criticalPath: false', 'urgent: true\ncriticalPath: false')),
+  ).toBeUndefined();
   for (const kind of ['research', 'mechanical', 'specification'] as const)
     expect(productBriefSizeViolation(markdown.replace('kind: implementation', `kind: ${kind}`))).toBeUndefined();
   expect(
@@ -339,12 +341,16 @@ test('product brief size returns use policy floors and exempt urgent research me
   ).toBeUndefined();
   expect(productBriefSizeViolation(markdown, policy, 'continuation-abcd-1-rest.md')).toBeUndefined();
   expect(
-    productBriefSizeViolation(markdown.replace('kind: implementation', 'kind: verification').replace('paths: [result.txt]', 'paths: []')),
+    productBriefSizeViolation(
+      markdown.replace('kind: implementation', 'kind: verification').replace('paths: [result.txt]', 'paths: []'),
+    ),
   ).toBeUndefined();
   expect(
     productBriefSizeViolation(markdown.replace('goal: fixture', 'goal: control-plane\ntarget: main')),
   ).toBeUndefined();
-  expect(productBriefSizeViolation(complete, { ...policy, minimumEstimateLines: 2000 })).toEqual({ estimateLines: 1200 });
+  expect(productBriefSizeViolation(complete, { ...policy, minimumEstimateLines: 2000 })).toEqual({
+    estimateLines: 1200,
+  });
   expect(briefPathCloseness(['tools/goal/src/backlog.ts'], ['tools/goal/src/briefs.ts'])).toBeGreaterThan(
     briefPathCloseness(['tools/goal/src/backlog.ts'], ['apps/web/src/page.ts']),
   );

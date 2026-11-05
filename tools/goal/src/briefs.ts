@@ -617,11 +617,7 @@ export function parseBrief(
   return brief;
 }
 
-export const PRODUCT_SIZE_EXEMPT_KINDS: ReadonlySet<TaskKind> = new Set([
-  'research',
-  'mechanical',
-  'specification',
-]);
+export const PRODUCT_SIZE_EXEMPT_KINDS: ReadonlySet<TaskKind> = new Set(['research', 'mechanical', 'specification']);
 
 export type BriefSizeSnapshot = {
   goal: string;
@@ -727,8 +723,7 @@ export function productBriefSizeViolation(
   const frozen = /^\s*(?:`{3,}|~{3,})(?:[^\r\n]*[ \t])?path=/m.test(markdown);
   const lines = snapshot.estimateLines ?? (frozen ? undefined : 1500);
   const estimateLines = lines !== undefined && lines < policy.minimumEstimateLines ? lines : undefined;
-  const bodyCharacters =
-    snapshot.bodyCharacters > policy.maximumBodyCharacters ? snapshot.bodyCharacters : undefined;
+  const bodyCharacters = snapshot.bodyCharacters > policy.maximumBodyCharacters ? snapshot.bodyCharacters : undefined;
   if (estimateLines === undefined && bodyCharacters === undefined) return;
   return {
     ...(estimateLines === undefined ? {} : { estimateLines }),
