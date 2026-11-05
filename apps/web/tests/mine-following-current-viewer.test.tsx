@@ -330,6 +330,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
       trigger.click();
       await tick();
     });
+    const reactPropsKey = Object.getOwnPropertyNames(trigger).find((key) => key.startsWith('__reactProps$'));
+    console.log('Following trigger React props', reactPropsKey ? Object.keys((trigger as any)[reactPropsKey]) : []);
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
       (item) => item.textContent === m.library_follow_unfollow(),
     );
