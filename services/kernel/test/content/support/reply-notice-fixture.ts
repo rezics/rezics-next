@@ -65,16 +65,16 @@ export async function replyNoticeFixture() {
     await accounts.grant(id, 'account:read', { route: routeOf(id)!, id });
     await accounts.grant(id, 'account:update', { route: routeOf(id)!, id });
   }
-  async function call(account: string, method: string, path: string, body?: unknown, key: string = randomUUID()) {
+  async function call(account: string, method: string, path: string, payload?: unknown, key: string = randomUUID()) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
           authorization: `Bearer ${credentials.get(account)}`,
           'idempotency-key': JSON.stringify(key),
-          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       }),
     );
     const body = response.status === 204 ? null : await response.text();

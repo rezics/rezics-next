@@ -42,9 +42,9 @@ async function reserve(actor: ContentCredential, containerId: string) {
 
 test('the native inventory exposes one uploader page with safe reserved advice and no other uploader locator', async () => {
   const { system, anchors } = currentMediaScenario();
-  await driver.grantParent('other', anchors.thread.id);
-  const authorId = await reserve(system.actors.author, anchors.thread.id);
-  const otherId = await reserve(system.actors.other, anchors.thread.id);
+  await driver.grantParent('other', anchors.containers.thread.id);
+  const authorId = await reserve(system.actors.author, anchors.containers.thread.id);
+  const otherId = await reserve(system.actors.other, anchors.containers.thread.id);
 
   const authorPage = await call(system.actors.author, 'GET', '/v1/media');
   expect(authorPage.status).toBe(200);
@@ -59,7 +59,7 @@ test('the native inventory exposes one uploader page with safe reserved advice a
   expect(authorBody.entries[0]).toMatchObject({
     purpose: 'post-image',
     state: 'reserved',
-    container: { id: anchors.thread.id, kind: 'thread' },
+    container: { id: anchors.containers.thread.id, kind: 'thread' },
     actions: {
       read: null,
       remove: { operationId: 'media.erase' },
