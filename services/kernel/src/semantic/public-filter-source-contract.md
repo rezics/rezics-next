@@ -704,19 +704,20 @@ The first request is `NativePublicFilterPublication = Readonly<{job: string; boo
 queried: PublicFilterQueriedObservation; execution: string}>`, after actual Search retention and before dispatch
 or adoption uncertainty. Resume with `{job: string}`. Source checks the actual `search.generation_publication`
 job, binding and physical consumer/incarnation and retains only locators on its existing bootstrap. Restart
-explicitly resolves that same observation and adopts it, without a latest-observation lookup or a new cut.
+resolves and adopts that same observation, without a latest-observation lookup or a new cut.
 The callable advances only the existing bounded per-home settlement/ACK frontier. Search independently reads
 original dispatch/winner/copy/refresh/writer and physical incarnation evidence; Source verifies its original
 terminal chain, immutable enrollment, owner epochs and contiguous creation obligations. No transaction spans
 foreign I/O. A clean population, count, complete bit, callback, caller token or Account erasure barrier cannot
 replace these proofs. Current changes and late writers require native owner repair.
 
-The result is `PublicFilterBindingFailure` until complete. Its complete branch is
-`{status: 'complete'; publication: NativePublicFilterPublication; definition: PublicFilterSourceDefinition;
-covered: PrivacyReductionStart; execution: NonNullable<Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>,
-{status: 'joined'}>['execution']>; observation: Extract<PrivacyReductionObservation, {status: 'observed'}>;
-terminal: Readonly<{step: string; root: string}>; settlement: NativePublicFilterRepairSettlement;
-cost: PublicFilterCost}`. The settlement type is Search's exact native type. The all-native-homes observation
+Before resolution the result is `PublicFilterBindingFailure`. Once resolved, incomplete repair returns
+`{status: 'pending'; publication: NativePublicFilterPublication; reason: PublicFilterBindingFailure['reason'];
+cost: PublicFilterCost}` so Search can resume the original tuple. This grants no completion.
+The complete branch carries that `publication`, `definition: PublicFilterSourceDefinition`, original
+`covered: PrivacyReductionStart` and non-null joined `execution`, observed `observation`,
+`terminal: Readonly<{step: string; root: string}>`, `settlement: NativePublicFilterRepairSettlement` and
+`cost: PublicFilterCost`. The settlement type is Search's exact native type. The all-native-homes observation
 uses that original execution/start; it must have complete routing and no blocking or unacknowledged homes.
 Changed-since-start information remains intact and never authorizes disclosure of an old execution. Search
 composes the callable through its existing writer fence and owns activation and reader-safe retirement.

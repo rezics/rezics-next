@@ -553,6 +553,12 @@ export type NativePublicFilterPublication = Readonly<{
 export type NativePublicFilterPublicationRequest = NativePublicFilterPublication | Readonly<{ job: string }>;
 export type NativePublicFilterPublicationCompletion =
   | Readonly<{
+      status: 'pending';
+      publication: NativePublicFilterPublication;
+      reason: PublicFilterBindingFailure['reason'];
+      cost: PublicFilterCost;
+    }>
+  | Readonly<{
       status: 'complete';
       publication: NativePublicFilterPublication;
       definition: PublicFilterSourceDefinition;
@@ -2942,10 +2948,11 @@ export function createPublicFilterSourceBinding(
       };
       const adopted = await bootstrapBinding.adopt({ bootstrap, queried: native.queried }, { deadline });
       addCost(cost, adopted.cost);
-      if (adopted.status !== 'adopted') return { ...adopted, cost };
+      if (adopted.status !== 'adopted')
+        return { status: 'pending' as const, publication, reason: adopted.reason, cost };
       const settled = await settleNative(publication, { deadline }, cost);
       addCost(cost, settled.cost);
-      if (settled.status !== 'joined') return { ...settled, cost };
+      if (settled.status !== 'joined') return { status: 'pending' as const, publication, reason: settled.reason, cost };
       // Clean current population alone cannot replace the independently verified original
       // chain and Search's dispatch/winner/copy/writer/physical-target completion above.
       const observation = await sourceReader(cut.definition).readPrivacyReductionHeads({
@@ -2962,7 +2969,7 @@ export function createPublicFilterSourceBinding(
         observation.unacknowledged.length ||
         observation.blocking.length
       )
-        throw new BindingError('owner_unavailable');
+        return { status: 'pending' as const, publication, reason: 'owner_unavailable' as const, cost };
       return {
         status: 'complete' as const,
         publication,
