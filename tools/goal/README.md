@@ -2148,6 +2148,9 @@ host's socket. The host skips the minute while the previous child is still runni
   recognized idempotently. Stale, foreign, cancelled, live or otherwise ineligible tasks move to `failed/` with a
   reason. Briefs without this marker continue to create new tasks.
 
+  Decision: Build one projection per continuation harvest or claimed brief; refresh between admissions and include each
+  harvest publication before checking siblings.
+
 - **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner

@@ -693,3 +693,40 @@ test('seven continuations that share owner docs dispatch; a proposal does not bl
   expect((await sweepBacklog(f.runtime)).dispatched.map((entry) => entry.brief)).toEqual([released]);
   expect(existsSync(join(root, 'proposed', 'continuation-bbbbbbbb-1-parked.md'))).toBe(true);
 });
+
+test('each continuation admission refreshes overlap after the preceding dispatch', async () => {
+  const f = fixture({ perSweep: 2 });
+  f.runtime.policy = readControlPolicy({ backlog: { continuationReview: { web: false } } });
+  let sequence = 0;
+  f.runtime.dispatch = async (file) => {
+    const id = `admitted-${++sequence}`;
+    const text = readFileSync(file, 'utf8');
+    task(
+      f.db,
+      id,
+      'ready',
+      { goal: 'web', manager: 'web', paths: ['apps/web/src/shared.ts'], markdown: text },
+      100 + sequence,
+    );
+    f.dispatched.push({ file, text });
+    return id;
+  };
+  const shared = 'apps/web/src/shared.ts';
+  const first = 'continuation-aaaaaaaa-1-first.md';
+  const second = 'continuation-bbbbbbbb-1-second.md';
+  const text = markdown
+    .replace('goal: fixture', 'goal: web\nmanager: web')
+    .replace('paths: [result.txt]', `paths: [${shared}]`)
+    .replace('Write the requested result and commit it.', '# Shared output');
+  brief(f.state, 'web', first, 60_000, text);
+  brief(f.state, 'web', second, 59_000, text);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.dispatched.map((entry) => entry.brief)).toEqual([first]);
+  expect(sweep.dispatched[0]?.taskId).toBe('admitted-1');
+  expect(readFileSync(join(f.state, 'backlog', 'web', 'proposed', second), 'utf8')).toContain('# Shared output');
+  expect(readFileSync(join(f.state, 'backlog', 'web', 'proposed', `${second}.reason`), 'utf8')).toContain(
+    'overlaps task admitted-1',
+  );
+});
