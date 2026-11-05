@@ -307,11 +307,8 @@ test('three windows return through exact Previous and failed Restart retry witho
     }),
     component: function SalesRoute() {
       const routeRouter = useRouter();
-      const data = routeRouter.state.matches.at(-1)!.loaderData as {
-        initial: CreatorSalesCurrentRead;
-        loadId: string;
-      };
-      const cursor = (routeRouter.state.location.search as { cursor?: string }).cursor;
+      const data = salesRoute.useLoaderData();
+      const { cursor } = salesRoute.useSearch();
       return (
         <CreatorSalesCurrent
           initial={data.initial}
@@ -514,11 +511,8 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     }),
     component: function SalesRoute() {
       const router = useRouter();
-      const data = router.state.matches.at(-1)!.loaderData as {
-        initial: CreatorSalesCurrentRead;
-        loadId: string;
-      };
-      const cursor = (router.state.location.search as { cursor?: string }).cursor;
+      const data = salesRoute.useLoaderData();
+      const { cursor } = salesRoute.useSearch();
       return (
         <CreatorSalesCurrent
           initial={data.initial}
