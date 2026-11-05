@@ -24,8 +24,16 @@ function deferred<T>(): Deferred<T> {
 function clickHandler(element: Element): (() => void) | undefined {
   const reactPropsKey = Object.keys(element).find((key) => key.startsWith('__reactProps$'));
   if (!reactPropsKey) return undefined;
-  const props = (element as unknown as Record<string, unknown>)[reactPropsKey] as { onClick?: () => void } | undefined;
-  return props?.onClick;
+  const props = (element as unknown as Record<string, unknown>)[reactPropsKey] as
+    | { onClick?: (event: MouseEvent) => void }
+    | undefined;
+  const handler = props?.onClick;
+  if (!handler) return;
+  return () => {
+    const event = new element.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'currentTarget', { value: element });
+    handler(event);
+  };
 }
 
 test('mounted curation retires every stale cache owner and recovers only an explicitly retried original intent', async () => {
