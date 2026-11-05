@@ -283,7 +283,7 @@ test('a consent changed after review cannot acknowledge an uncommitted Allow and
   );
 });
 
-test('session revocation targets the owned opaque session and leaves another current bearer usable', async () => {
+test('session revocation targets the owned opaque session and stops issuance while another session stays usable', async () => {
   const native = driver.security;
   const human = await native.person();
   const unrelated = await native.person();
@@ -297,7 +297,9 @@ test('session revocation targets the owned opaque session and leaves another cur
   expect((await native.request(unrelated.caller, '/sessions/revoke', { session_id: other.id })).status).toBe(404);
   expect(await json(await native.request(human.caller, '/sessions/revoke', { session_id: other.id }))).toEqual({});
   expect((await native.snapshot(human.accountId)).sessions.some((row) => row.id === other.id)).toBe(false);
-  expect((await native.kernel(bearer, `/v1/accounts/${human.accountId}/profile`)).status).toBe(401);
+  // Session revocation ends issuance. Already issued five-minute JWTs retain their bounded lifetime.
+  expect((await native.kernel(bearer, `/v1/accounts/${human.accountId}/profile`)).status).toBe(200);
+  expect((await native.request(second, '/token', {})).status).toBe(401);
   expect((await native.kernel(currentBearer, `/v1/accounts/${human.accountId}/profile`)).status).toBe(200);
   expect((await native.request(second, '/session')).status).toBe(401);
 });
