@@ -606,7 +606,98 @@ feature with fake loaders is its isolation proof.
 
 ## Migration under a ratchet
 
+Each step is a sequence of ordinary briefs that agents carry out module by module. Each step adds a rule to the
+checker with a baseline of today's violations, so new violations stop at once and old ones shrink as briefs land. The
+order is by the measured cost each step removes, cheapest decisive step first.
+
+**Step 1. Gate the existing check (stops the growth).** Wire `bun scripts/architecture.ts --changed` into the landing
+of every candidate and into `worker-check`, by exit code; add the module map to every prompt. Before wiring, reseed
+the baseline once from the current revision so the gate starts green, with the 1,014 new entries grouped by owner.
+*Cost removed:* about 65 new violations an hour, including about 17 new value-cycle edges an hour (268 in 15.6
+hours), which are the raw material of boot failures. *Done when:* a candidate that adds a rule 2 or rule 3 violation
+is refused, and the baseline only shrinks.
+
+**Step 2. Make the declared graph acyclic and the modules fine-grained.** Replace snapshotted `allowedDependencies`
+with the declared domain order; move every back edge into the baseline. Split each Kernel domain module into
+contract, core, application and adapter modules by path (initially by a path convention, for example
+`<domain>/contract/**`, with existing files assigned to `adapters` until moved). *Cost removed:* 18 modules on
+allowed cycles become zero by declaration; rule 2 starts seeing intra-domain deep imports. No product code changes.
+
+**Step 3. Forbid cross-module evaluation at load (removes the boot-failure class).** New checker rule: a top-level
+initialiser may not call or read an imported binding from a module other than its own, its domain's contract or core,
+or a package of kind contract or core. Baseline today's 197 initialisers in 108 files; briefs move each into its
+owner's contract (constants, bound sums) or behind the module's `start` (registries, compiled statements). *Cost
+removed:* the mechanism of all five boot failures named in the brief. After this step a new cycle is a structural debt
+but no longer a crash, so dev boots even while cycles remain.
+
+**Step 4. Registrations as declared values (removes the boot-only conflict class).** Introduce `defineModule` in the
+platform contract and the static composition check. Convert `modules?: ((app) => void)[]` mounting, event catalogue
+entries, queue registration and permission catalogue contributions one module at a time; the composition root accepts
+both forms until the last module moves, then the old form is deleted. *Cost removed:* route, security and catalogue
+conflicts found at landing in seconds instead of at `createKernel`; 38 top-level registries and 18 `install*` setters
+lose their reason to exist.
+
+**Step 5. Ambient effects as capabilities.** Checker rule: `Date.now`, `new Date()` without arguments,
+`Math.random`, `crypto.randomUUID`, `process.env` and effect-library imports are allowed only in adapters and
+composition roots. Baseline 257 + 81 + 14 files; briefs thread the `Ambient` capability through use cases. *Cost
+removed:* flaky time-dependent tests and the need for a running system to control time; applications become testable
+with fakes.
+
+**Step 6. Invert cross-domain behaviour edges (dissolves the cycle).** In the order the simulation gives: (a) make
+platform directories domain-free (155 edges), (b) move vocabulary to domain contracts (176 edges), (c) introduce
+consumer-owned ports or integration modules for the 12 bidirectional domain pairs (71 minority edges first), then
+the remaining back edges against the declared order. Each brief takes one module pair and must reduce the largest-SCC
+counter. *Cost removed:* the 387-file SCC; the median closure of 610 files falls toward the size of a domain plus
+contracts. The simulation's endpoint is no cross-module file cycle, with intra-library cycles of 65 files left for the
+owner.
+
+**Step 7. Fenced module tests as the landing's runtime proof.** Add the import-fence preload and per-module test
+entries; land them per module as soon as that module's closure fits its declared dependencies. Switch affected-test
+selection at landing to manifest dependents of touched modules. *Cost removed:* whole-system test runs for ordinary
+changes; 71% of test files currently load the giant cycle.
+
+Steps 1–3 can start the same day and are independent. Step 4 and step 5 run in parallel per module. Step 6 is the
+long tail, owned by domain Goals with a standing share of capacity, gated by the counters. Step 7 follows step 6
+module by module.
+
+**Ratchet counters**, all computed by the checker and printed in the landing record:
+
+| Counter | Today | Must |
+| --- | ---: | --- |
+| Baseline entries | 9,714 (+1,014 unbaselined) | only shrink |
+| Largest Kernel value SCC (files) | 387 | not grow; target 0 cross-module |
+| Kernel files in value cycles | 404 | not grow |
+| Cross-module top-level initialisers | 197 | not grow; target 0 |
+| Ambient-effect call sites outside adapters | 257 / 81 / 14 files | not grow |
+| Manifest modules on allowed cycles | 18 | 0 after step 2 |
+| Median Kernel transitive closure (files) | 610 | report; target under 150 |
+
 ## Prices
+
+Lines are estimates from the measured counts (files × typical edit), not from trial edits. "Throughput" means
+accepted landings per worker-hour across the fleet; the estimates are judgments derived as stated and are marked
+unverified in the next section.
+
+| Step | Lines touched | Risk | Expected throughput change |
+| --- | --- | --- | --- |
+| 1. Gate the check | 100–300 in `tools/goal` and `scripts`; baseline regenerated | Low. Main risk: refusals. Files with new violations were touched by 505 of the 2,145 commits since seeding (24%), an upper bound on initial refusals; most fixes are one import line | Short term −5% to −15% while workers learn the map (refusals cost one fix round each). Medium term positive: new cycles stop, so the boot failures and cycle repairs they cause stop growing (222 cycle- or initialisation-related commit subjects since 10-25) |
+| 2. Acyclic declared graph, fine modules | 500–1,500 in `modules.json` and the checker; no product code | Low. A badly chosen domain order causes many baseline entries, which is cosmetic | Neutral directly; enables steps 3–7 and makes rule 2 meaningful inside domains |
+| 3. No cross-module load-time evaluation | 1,500–3,000 across 108 files | Medium. Moving initialisers changes when values are computed; each brief proves its module still loads with the fence or a targeted import test | High. Each boot failure stalls every worker that needs a booting dev to verify (all 30) until repaired; five such failures are named in the brief. Removing the class removes those stalls; size depends on stall duration, not measured here |
+| 4. Registrations as declared values | 4,000–8,000 (one definition per domain plus composition root and checker) | Medium. Two registration forms coexist during migration; the composition root must accept both | Positive. Conflicts found in seconds at landing instead of blocking unrelated tasks at `createKernel` (the earlier report traces one such block) |
+| 5. Ambient effects as capabilities | 3,000–6,000 across about 330 files | Low to medium. Mechanical threading; risk of mixing domain time and real time, mitigated by distinct types | Small positive: fewer time-dependent flaky tests and fewer tests needing the system to control time |
+| 6. Invert cross-domain edges | 15,000–40,000 over weeks: about 400 edges, each needing a port, a moved type or an integration module, plus tests | High per edge, low per brief: each brief is one module pair, gated by the SCC counter | Largest long-term gain. Test closure falls from half the Kernel to a domain; affected-test selection becomes meaningful; parallel briefs in different domains stop colliding through shared hubs |
+| 7. Fenced module tests | 2,000–5,000 (preload, per-module entries, fakes and conformance suites) on top of step 6 | Low. The fence can be enabled per module | High for verification cost: a worker verifies its module in seconds to minutes without a stack. The landing runs fenced tests of touched modules and contract dependents instead of whole-system suites |
+| Not adopting Effect | 0 now; a full adoption would touch most of the 405,370 Kernel lines | — | Avoids a fleet-wide learning cost whose benefit is unmeasured |
+
+**Order by cost removed per line.** Step 1 removes the growth at the lowest price. Step 3 removes the most severe
+failure class (boot) for a few thousand lines. Step 4 removes the next blocking class (composition conflicts). Step 6 is
+the largest and slowest and is what turns the rules into isolation; step 7 harvests it. Step 2 costs no product code
+and is a precondition, so it runs immediately with step 1.
+
+**What would prove this wrong.** If after steps 1–3 boot failures recur at a similar rate, the failure is not load-time
+evaluation and the cause must be re-traced. If after step 6 in one domain its fenced tests still need most of the
+Kernel, the port inversion is leaking (likely through contract modules that grew behaviour). If refusals stay above
+10% of landings after two weeks, the module map in prompts is not reaching workers or the declared order is wrong.
 
 ## Unverified claims
 
