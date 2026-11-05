@@ -16,9 +16,12 @@ the separate pure Community projection module, and Web's checkout reader-origin 
 
 Complete the seeded public Kurisu journey from actual local Bangumi data. Before designing the association lookup, trace
 Character `01a1a7f2-b438-779d-be96-aa19ca250569` through its source holders, candidates, Context adoption, outbox and
-projection. No source admission was established in this attempt; do not infer one from authored fixtures. If the actual
-graph lacks source admission, return that gap to Imports rather than fabricating relations. The attempt did not establish
-a read-only query path to the local graph, so this brief makes no claim that the seed is absent.
+projection. The read-only local `rezics-kernel-dev` database was inspected: it has 136 `semantic.fact` rows and 382
+`core.outbox` rows, but no subject or facts for this Character, no `schema:character`/`wdt:P725` holder facts mentioning
+it, and no matching outbox subject or payload. Its installed schema has no candidate/adoption or inbound-projection
+tables, so those stages cannot be traced in this local database. This source-admission gap was returned to Imports via
+the goal inbox. Do not infer admission from authored fixtures or fabricate relations; continue the receiver against its
+documented native contract when Imports supplies the graph.
 
 Add the narrow native released `wdt:P725` lookup by its admitted `wdt:P453` slot key. Reuse current native projection,
 selection, Context suppression, source-fence, disclosure, labels, inspection, evidence, Sources and work-context
@@ -39,6 +42,9 @@ uncertain commands with their current owners.
 - The named screenshot directory `/home/edge/projects/rezics/rezics-next/.temp/screenshots/core` was absent during this
   attempt. Browser review is deferred to the controller. Inspect legacy `apps/web/features/` and its named Character
   credit feature before UI design; no legacy code was ported in this attempt.
+- `bun run --cwd services/kernel typecheck` ran after the committed extraction but failed on existing diagnostics in
+  untouched importer/kernel files (including duplicate `ImportTransportError` declarations and route-handler typing).
+  The captured output was truncated, so the controller must establish the final workspace typecheck after integration.
 - Preserve the existing authored-Character document preview tests. Add native tests using the adopted Bangumi graph, and
   add `services/kernel/test/semantic/m1-character-public-reading-growth.test.ts` at 64/512/4096 surrounding works,
   history and same-Character degree with the selected page fixed. Charge examined rows, SQL statements and UTF-8 bytes
