@@ -129,6 +129,8 @@ export const ScoreConsent: Story = {
     await expect(confirm).toBeDisabled();
     await userEvent.click(consent);
     await expect(confirm).toBeEnabled();
-    await expect(canvas.getByText(m.library_mal_vote_present({ units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' }))).toBeVisible();
+    await expect(
+      canvas.getByText(m.library_mal_vote_present({ units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' })),
+    ).toBeVisible();
   },
 };

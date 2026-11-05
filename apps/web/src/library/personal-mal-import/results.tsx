@@ -55,9 +55,7 @@ function Outcome({
       <p>{m.library_mal_row_outcome({ status: malOutcomeLabel(outcome.status) })}</p>
       <p className="text-sm">
         {m.library_mal_state_effect({
-          effect: outcome.applied.includes('status')
-            ? m.library_mal_result_applied()
-            : m.library_mal_state_no_effect(),
+          effect: outcome.applied.includes('status') ? m.library_mal_result_applied() : m.library_mal_state_no_effect(),
         })}
       </p>
       {outcome.applied.length ? (
@@ -115,9 +113,7 @@ function Outcome({
         <p className="text-sm">{m.library_mal_score_effect_none()}</p>
       )}
       <section className="space-y-2 rounded-md border p-3">
-        <p className="text-sm">
-          {m.library_mal_current_vote_label({ value: currentVoteLabel(row, voteReadback) })}
-        </p>
+        <p className="text-sm">{m.library_mal_current_vote_label({ value: currentVoteLabel(row, voteReadback) })}</p>
         {row && targetId && questionId ? (
           <MalAction type="button" variant="outline" disabled={busy} onClick={() => onReadVote(row)}>
             {m.library_mal_read_current_vote()}
@@ -206,7 +202,9 @@ export function MalResultPage({
       </ul>
       {rows
         .filter(
-          (row) => row.outcome?.labels?.length || result.outcomes.some((outcome) => outcome.row === row.index && outcome.labels?.length),
+          (row) =>
+            row.outcome?.labels?.length ||
+            result.outcomes.some((outcome) => outcome.row === row.index && outcome.labels?.length),
         )
         .map((row) => {
           const subjectId = row.review?.target ?? row.target;

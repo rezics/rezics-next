@@ -53,7 +53,8 @@ const { m } = await import('../src/paraglide/messages.js');
 const { MalImportPortContext } = await import('../src/library/personal-mal-import/port');
 const { PersonalMalImportPage } = await import('../src/library/personal-mal-import/page');
 const { sessionQuery } = await import('../src/session/query');
-const { malOriginalScoreLabel, malScoreLabel, malValueLabel } = await import('../src/library/personal-mal-import/meaning');
+const { malOriginalScoreLabel, malScoreLabel, malValueLabel } =
+  await import('../src/library/personal-mal-import/meaning');
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
@@ -148,7 +149,11 @@ function row(changes: Partial<MalPreviewRow> = {}): MalPreviewRow {
   };
 }
 
-function reviewedScore(targetId: string, source: MalPreviewRow['score'], input: NonNullable<MalReviewInput['score']>): MalScoreReview {
+function reviewedScore(
+  targetId: string,
+  source: MalPreviewRow['score'],
+  input: NonNullable<MalReviewInput['score']>,
+): MalScoreReview {
   return {
     action: input.action,
     source,
@@ -574,9 +579,7 @@ test('keep stays the default and separates MAL zero from a real native zero thro
           id,
           stopped: false,
           remaining: [],
-          outcomes: [
-            { row: 0, status: 'applied', applied: ['status'], retained: ['my_score'], reason: null },
-          ],
+          outcomes: [{ row: 0, status: 'applied', applied: ['status'], retained: ['my_score'], reason: null }],
         },
       };
     },
@@ -724,7 +727,10 @@ test('adopt and clear use separate consent, exact retry, guarded partial results
     },
     async review(command) {
       reviewInputs.push(command.input);
-      const reviewed = reviewedRow(rows.find((item) => item.index === command.input.row)!, command);
+      const reviewed = reviewedRow(
+        rows.find((item) => item.index === command.input.row)!,
+        command,
+      );
       rows = rows.map((item) =>
         item.index === command.input.row
           ? reviewInputs.length === 1

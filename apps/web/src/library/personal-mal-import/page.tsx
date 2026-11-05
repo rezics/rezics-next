@@ -74,9 +74,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({});
   const [result, setResult] = useState<MalApplyPage | null>(restored?.result ?? null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<Notice>(
-    restored ? { kind: 'unknown', command: restored.command } : null,
-  );
+  const [notice, setNotice] = useState<Notice>(restored ? { kind: 'unknown', command: restored.command } : null);
   const [unknownCommand, setUnknownCommand] = useState<MalCommand | null>(restored?.command ?? null);
   const [confirmPrivacy, setConfirmPrivacy] = useState(restored?.sourceConsent.privacy ?? false);
   const [confirmTimestamps, setConfirmTimestamps] = useState(restored?.sourceConsent.timestamps ?? false);
@@ -360,9 +358,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
 
   function queueSourceAdmissions(currentPage: MalPage, outcomes: MalOutcome[]) {
     if (!confirmFlags.current.privacy || !confirmFlags.current.timestamps) return;
-    const stateApplied = new Set(
-      outcomes.filter((item) => item.applied.includes('status')).map((item) => item.row),
-    );
+    const stateApplied = new Set(outcomes.filter((item) => item.applied.includes('status')).map((item) => item.row));
     for (const row of currentPage.rows) {
       if (row.review?.skip || !stateApplied.has(row.index) || row.sourceAdmission) continue;
       const preview = row.sourcePreview ?? malSourcePreview(row);
@@ -372,7 +368,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       if (!body || !target) {
         setRowAdmission(row.index, {
           status: 'unsupported',
-          reason: target ? (blocked ?? 'This provider record has no stable identity.') : 'This row has no canonical Subject.',
+          reason: target
+            ? (blocked ?? 'This provider record has no stable identity.')
+            : 'This row has no canonical Subject.',
         });
         continue;
       }
@@ -559,7 +557,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       ) : null}
       {page ? (
         <>
-          <p className="break-all">{m.library_mal_label_upload_id()}: {page.id}</p>
+          <p className="break-all">
+            {m.library_mal_label_upload_id()}: {page.id}
+          </p>
           <MalRetainedSource key={page.id} id={page.id} />
         </>
       ) : null}

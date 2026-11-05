@@ -3,7 +3,24 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
-import { MAL_FIELD_CAP, MAL_PAGE, MAL_ROWS, MAL_UPLOAD_BYTES, SUBJECT_ID, type MalApplyBody, type MalApplyResult, type MalCommand, type MalMutateResult, type MalPageResult, type MalPreviewResult, type MalQuestionResult, type MalReviewInput, type MalReviewResult, type MalScoreReviewInput, type MalVoteReadResult } from './contract';
+import {
+  MAL_FIELD_CAP,
+  MAL_PAGE,
+  MAL_ROWS,
+  MAL_UPLOAD_BYTES,
+  SUBJECT_ID,
+  type MalApplyBody,
+  type MalApplyResult,
+  type MalCommand,
+  type MalMutateResult,
+  type MalPageResult,
+  type MalPreviewResult,
+  type MalQuestionResult,
+  type MalReviewInput,
+  type MalReviewResult,
+  type MalScoreReviewInput,
+  type MalVoteReadResult,
+} from './contract';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import { kernelMalPort } from './native';
 
@@ -109,11 +126,10 @@ export const previewMalImport = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<MalPreviewResult> => port().preview(data));
 
-export const readMalImportQuestion = createServerFn({ method: 'GET' })
-  .handler(async (): Promise<MalQuestionResult> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    return port().readQuestion();
-  });
+export const readMalImportQuestion = createServerFn({ method: 'GET' }).handler(async (): Promise<MalQuestionResult> => {
+  setResponseHeader('cache-control', 'private, no-store');
+  return port().readQuestion();
+});
 
 export const readMalImportVote = createServerFn({ method: 'GET' })
   .validator((input: unknown): { targetId: string; questionId: string } => {

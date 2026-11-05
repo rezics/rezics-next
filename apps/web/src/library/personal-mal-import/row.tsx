@@ -1,6 +1,12 @@
 import { useId } from 'react';
 import { m } from '../../paraglide/messages.js';
-import type { MalLabelSelection, MalOwnVoteReadback, MalPreviewRow, MalQuestion, MalScoreReviewInput } from './contract';
+import type {
+  MalLabelSelection,
+  MalOwnVoteReadback,
+  MalPreviewRow,
+  MalQuestion,
+  MalScoreReviewInput,
+} from './contract';
 import { MalAction, MalCheck } from './controls';
 import {
   admittedFields,
@@ -69,16 +75,17 @@ export function draftMatchesReview(row: MalPreviewRow, draft: RowDraft): boolean
       !draft.skip &&
       !draft.replace &&
       draft.score === undefined &&
-      !(draft.labels?.length) &&
+      !draft.labels?.length &&
       [...draft.fields].sort().join(',') === [...admittedFields(row)].sort().join(',')
     );
   }
   if (draft.target !== review.target || draft.skip !== review.skip || draft.replace !== review.replace) return false;
   const saved = review.score;
   const selected = draft.score;
-  const savedLabels = review.labels?.selections.flatMap((selection) =>
-    selection.target ? [{ value: selection.value, target: selection.target }] : [],
-  ) ?? [];
+  const savedLabels =
+    review.labels?.selections.flatMap((selection) =>
+      selection.target ? [{ value: selection.value, target: selection.target }] : [],
+    ) ?? [];
   const selectedLabels = draft.labels ?? [];
   const stableLabels = (labels: MalLabelSelection[]) =>
     JSON.stringify([...labels].sort((left, right) => left.value - right.value));
@@ -270,7 +277,12 @@ export function MalRowReview({
             score: skip ? undefined : draft.score,
             fields: skip
               ? []
-              : [...new Set([...admitted.filter((field) => field === 'status'), ...(draft.labels?.length ? ['tags'] : [])])],
+              : [
+                  ...new Set([
+                    ...admitted.filter((field) => field === 'status'),
+                    ...(draft.labels?.length ? ['tags'] : []),
+                  ]),
+                ],
           })
         }
       />
@@ -401,7 +413,9 @@ export function MalRowReview({
                           ...draft,
                           score: {
                             ...draft.score!,
-                            ...(event.currentTarget.value ? { units: Number(event.currentTarget.value) } : { units: undefined }),
+                            ...(event.currentTarget.value
+                              ? { units: Number(event.currentTarget.value) }
+                              : { units: undefined }),
                           },
                         })
                       }
@@ -448,11 +462,11 @@ export function MalRowReview({
           ) : null}
         </section>
       ) : null}
-        <MalAction
-          type="button"
-          disabled={busy || (draft.score?.action === 'adopt' && draft.score.units === undefined)}
-          onClick={() => onSave(draft)}
-        >
+      <MalAction
+        type="button"
+        disabled={busy || (draft.score?.action === 'adopt' && draft.score.units === undefined)}
+        onClick={() => onSave(draft)}
+      >
         {m.library_mal_save_review()}
       </MalAction>
     </article>

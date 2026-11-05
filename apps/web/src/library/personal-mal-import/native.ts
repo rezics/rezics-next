@@ -2,12 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { archiveTransportLost } from '../archive-entry-recovery/native';
 import type { SessionEnv } from '../../session/client';
-import {
-  prepareSession,
-  requestCsrfToken,
-  sessionSubject,
-  viewerCredential,
-} from '../../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';
 import { mapSourceAdmissionPort, type SourceAdmissionCustody } from '../rich-private-entry/admission';
 import { captureAnnotationCredential, originalAnnotationCredential } from '../rich-private-entry/credential';
 import { admitPrivateSourceObservation } from '../rich-private-entry/native';
@@ -234,8 +229,7 @@ export function kernelMalPort(
       return value;
     } catch (error) {
       if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-      if (archiveTransportLost(error))
-        return unknown(await retainedCommand(command, session, request, sessionEnv));
+      if (archiveTransportLost(error)) return unknown(await retainedCommand(command, session, request, sessionEnv));
       throw error;
     }
   }

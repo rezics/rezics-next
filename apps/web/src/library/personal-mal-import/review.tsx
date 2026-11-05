@@ -67,15 +67,13 @@ export function MalReviewPage({
               row={row}
               draft={drafts[row.index] ?? draftFromRow(row)}
               question={question}
-              voteReadback={
-                voteReadbacks.get(
-                  malVoteReadKey(
-                    row.index,
-                    drafts[row.index]?.target ?? row.target ?? '',
-                    question?.id ?? row.review?.score?.question.id ?? '',
-                  ),
-                )
-              }
+              voteReadback={voteReadbacks.get(
+                malVoteReadKey(
+                  row.index,
+                  drafts[row.index]?.target ?? row.target ?? '',
+                  question?.id ?? row.review?.score?.question.id ?? '',
+                ),
+              )}
               busy={busy || page.canceled}
               onChange={onChangeDraft}
               onSave={onSave}

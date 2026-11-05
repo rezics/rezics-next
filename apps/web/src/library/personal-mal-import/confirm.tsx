@@ -77,15 +77,15 @@ export function MalConfirmPage({
                 step: question.scale.displayStep,
               })
             : score
-            ? m.library_mal_question_details({
-                label: score.question.label,
-                revision: score.question.revision,
-                grain: score.question.grain,
-                meaning: score.question.meaning ?? '',
-                min: score.question.scale.minimumUnits,
-                max: score.question.scale.maximumUnits,
-                step: score.question.scale.stepUnits,
-              })
+              ? m.library_mal_question_details({
+                  label: score.question.label,
+                  revision: score.question.revision,
+                  grain: score.question.grain,
+                  meaning: score.question.meaning ?? '',
+                  min: score.question.scale.minimumUnits,
+                  max: score.question.scale.maximumUnits,
+                  step: score.question.scale.stepUnits,
+                })
               : null;
           const target = review.target ?? row.target;
           const questionId = nativeQuestion?.id;
@@ -107,7 +107,11 @@ export function MalConfirmPage({
                       : m.library_mal_state_kept(),
                 })}
               </p>
-              <p className="text-sm">{m.library_mal_retained_evidence({ fields: row.retained.map((item) => item.field).join(', ') || m.library_mal_none() })}</p>
+              <p className="text-sm">
+                {m.library_mal_retained_evidence({
+                  fields: row.retained.map((item) => item.field).join(', ') || m.library_mal_none(),
+                })}
+              </p>
               <div className="space-y-2 rounded-md bg-muted/40 p-3">
                 <p className="text-sm">{m.library_mal_source_score({ value: malOriginalScoreLabel(row.score) })}</p>
                 {questionText ? (
@@ -156,7 +160,9 @@ export function MalConfirmPage({
                     <p role="status">{m.library_mal_score_review_stale()}</p>
                   ) : null}
                 </div>
-              ) : <p className="text-sm">{m.library_mal_score_effect_none()}</p>}
+              ) : (
+                <p className="text-sm">{m.library_mal_score_effect_none()}</p>
+              )}
               {review.target ? <p className="text-sm [overflow-wrap:anywhere]">{review.target}</p> : null}
               <p className="break-all">{review.version}</p>
               <MalReviewedLabels review={review.labels} />
