@@ -264,3 +264,25 @@ test('offers cancellation only for an active native operation phase and current 
   expect(canCancelBulkOperation(operation())).toBe(false);
   expect(canCancelBulkOperation({ ...operation('applying'), cancelRequested: true })).toBe(false);
 });
+
+test('refresh reads native progress at the exact current cursor and rejects oversized external pages', async () => {
+  const requests: URL[] = [];
+  let oversized = false;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url); requests.push(url);
+      expect(request.cache).toBe('no-store');
+      return Response.json(url.pathname.endsWith('/outcomes')
+        ? { outcomes: Array.from({ length: oversized ? 21 : 20 }, (_, i) => outcome('applied', String(i))), next: null }
+        : { operation: operation('applying') });
+    },
+  });
+  const refreshed = await readBulkOperationFromNative(client, operationId, 'Bearer viewer', 'exact+/=');
+  expect(refreshed.state).toBe('available');
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.searchParams.get('cursor')).toBe('exact+/=');
+  oversized = true;
+  expect(await readBulkOperationPageFromNative(client, operationId, 'exact+/=', 'Bearer viewer'))
+    .toEqual({ state: 'unavailable', operationId });
+});

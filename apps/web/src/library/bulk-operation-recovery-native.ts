@@ -107,6 +107,11 @@ function failureState(status: number, missingMeansExpired = false): 'expired' | 
   return 'unavailable';
 }
 
+/** Native producer output is external input; never retain an oversized page or coordinate. */
+function boundedPage(page: BulkOutcomes): boolean {
+  return page.outcomes.length <= 20 && (page.next === null || page.next.length <= 4096);
+}
+
 /** Read the stored operation and its first bounded native result page. */
 export async function readBulkOperationFromNative(
   client: KernelClient,
@@ -128,7 +133,7 @@ export async function readBulkOperationFromNative(
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  if (resultPage.status !== 200 || resultPage.error || !resultPage.data)
+  if (resultPage.status !== 200 || resultPage.error || !resultPage.data || !boundedPage(resultPage.data))
     return { state: failureState(resultPage.status, true), operationId };
   return {
     state: 'available',
@@ -150,7 +155,7 @@ export async function readBulkOperationPageFromNative(
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  if (result.status !== 200 || result.error || !result.data)
+  if (result.status !== 200 || result.error || !result.data || !boundedPage(result.data))
     return { state: failureState(result.status, true), operationId };
   return { state: 'available', page: result.data };
 }

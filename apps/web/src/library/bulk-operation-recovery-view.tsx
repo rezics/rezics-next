@@ -9,6 +9,7 @@ import {
 import { m } from '../paraglide/messages.js';
 
 type Props = {
+  focusOwner?: string;
   addressOperationId: string;
   authorized: boolean;
   read: LibraryBulkRecoveryRead;
@@ -98,6 +99,7 @@ function unavailableLabel(state: 'expired' | 'forbidden' | 'invalid' | 'unavaila
 }
 
 export function LibraryBulkOperationRecoveryView({
+  focusOwner = '',
   addressOperationId,
   authorized,
   read,
@@ -113,6 +115,11 @@ export function LibraryBulkOperationRecoveryView({
   const heading = useRef<HTMLHeadingElement>(null);
   const focus = useRef(searchWindowFocus());
   const sequence = useRef(0);
+  const focusIdentity = useRef(focusOwner);
+  if (focusIdentity.current !== focusOwner || !authorized) {
+    focus.current.retire();
+    focusIdentity.current = focusOwner;
+  }
   useEffect(() => {
     if (!authorized) focus.current.retire();
     else if (!busy && !readFailed && read.state === 'available')
