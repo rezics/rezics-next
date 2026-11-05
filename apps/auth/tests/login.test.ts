@@ -347,7 +347,7 @@ test(
             ),
             review.click(),
           ]);
-          await choice.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
+          await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
           await choice.getByText('The sign-in outcome could not be confirmed.', { exact: false }).waitFor({ state: 'visible' });
           expect(await page.getByLabel(/^email$/i).inputValue()).toBe('');
           expect(await page.getByLabel(/^password$/i).inputValue()).toBe('');
