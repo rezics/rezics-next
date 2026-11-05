@@ -749,8 +749,6 @@ Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjec
 Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
 unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
 
-Decision: reviewed Person merge coverage admits the four exact source keys as co-resident pairs (`bangumi` with `bangumi_cross_media`, `vndb` with `vndb_cross_media`). Each key reads only its own claim; the same interpreted identifier under another key never satisfies an expected endpoint.
-
 Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
 uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
 before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
