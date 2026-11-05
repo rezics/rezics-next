@@ -5,7 +5,8 @@ or personal readiness, unmounting, or observing loss/replacement of the browser 
 and CSRF token are both identity fields. Replacing the QueryClient also creates a new visit, even with identical
 session fields. Even an observed away/back transition creates a new visit. The shared
 `Reactions` child remounts with the current controlled counts and selection; old optimistic state and refusal copy
-cannot follow it. Ordinary rerenders, callback changes and count echoes retain the current serialized queue.
+cannot follow it. Ordinary rerenders, callback changes and count echoes retain the current serialized queue. Each
+queued command keeps the refresh callback of the render that issued it, so a later replacement does not redirect it.
 Every committed success update of the exact one-segment session Query retires earlier work synchronously, even
 when all serialized fields are equal and structural sharing retains the data object. Fetch starts, observer
 attachment/results notifications and invalidation without a successful replacement preserve current work.
