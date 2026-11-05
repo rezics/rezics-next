@@ -666,6 +666,8 @@ test('late initial native home cannot bind to a retired route observation', asyn
 });
 
 test('the mounted Board seam restores its supplying shelf and links to the exact Realm cursor', async () => {
+  native = fixture(0);
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
   const page = await readNativeRealmHome(operations, input);
   const realm = page.realm!;
   const restored: (string | undefined)[] = [];
