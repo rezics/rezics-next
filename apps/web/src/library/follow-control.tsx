@@ -236,15 +236,12 @@ function FollowControlState({
     const live = committed.current;
     if (!live?.ready || disabled || conflict.current || inFlight.current || !action) return;
     const next = intent.current?.following ?? action === 'follow';
-    if (!(next ? live.canFollow : live.canRemove)) return;
-    if (isCurrent && !isCurrent(next)) {
-      console.log('follow submit blocked by component currentness', { next, readLifetime: live.readLifetime });
+    if (
+      !(next ? live.canFollow : live.canRemove) ||
+      (isCurrent && !isCurrent(next)) ||
+      (live.isCurrent && !live.isCurrent(next))
+    )
       return;
-    }
-    if (live.isCurrent && !live.isCurrent(next)) {
-      console.log('follow submit blocked by committed currentness', { next, readLifetime: live.readLifetime });
-      return;
-    }
     const input = intent.begin(targetId, next, idempotencyKey);
     const running = {
       input,

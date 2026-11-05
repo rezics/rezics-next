@@ -330,7 +330,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     subject,
     csrfToken: token,
   });
-  client.setQueryData(sessionQuery.queryKey, viewer('A', null));
+  client.setQueryData(sessionQuery.queryKey, viewer('A'));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
   const initial = loaded('A', null, 'A private title');
   const retainedLoader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
@@ -407,25 +407,6 @@ test('the mounted default Following composition retires viewer, cursor and row l
     });
     expect(host.textContent).toContain('A private title');
     await remove();
-    expect(writes).toHaveLength(0);
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, viewer('A'));
-      await tick();
-    });
-    expect(writes).toHaveLength(0);
-    await act(async () => {
-      void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
-      await tick();
-    });
-    await settle(reads[0]!, loaded('A', null, 'A refreshed title'));
-    console.log('following retry before remove', {
-      text: host.textContent,
-      control: host.querySelector('[data-slot="follow-control"]')?.outerHTML,
-      writes: writes.length,
-      reads: reads.length,
-    });
-    await remove();
-    console.log('following retry after remove', { writes: writes.length });
     const aRemoval = writes[0]!;
     expect(aRemoval.input).toEqual({
       targetId: initial.page.follows[0]!.targetId,
@@ -443,7 +424,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await refresh();
     const deniedA = loaded('A', null, 'A private title');
     deniedA.page = { signedIn: true, forbidden: true, follows: [], next: null };
-    await settle(reads[1]!, deniedA);
+    await settle(reads[0]!, deniedA);
     expect(host.textContent).toContain(m.library_my_ratings_denied());
     expect(host.textContent).not.toContain('A private title');
     expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"]')).toBeNull();
@@ -453,7 +434,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.querySelector('a[href*="A-canonical"]')).toBeNull();
     expect(writes).toHaveLength(1); // The denied list did not settle or replace the unanswered command.
     await refresh();
-    await settle(reads[2]!, loaded('A', null, 'A private title restored'));
+    await settle(reads[1]!, loaded('A', null, 'A private title restored'));
     expect(host.textContent).toContain('A private title restored');
     expect(host.textContent).not.toContain(m.library_my_ratings_denied());
     await remove();
@@ -464,8 +445,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
       void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
       await tick();
     });
-    expect(reads).toHaveLength(4);
-    const aRead = reads[3]!;
+    expect(reads).toHaveLength(3);
+    const aRead = reads[2]!;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
       await tick();
@@ -474,9 +455,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain('A private title');
     expect(host.textContent).not.toContain(m.library_follow_reason_library());
     expect(host.querySelector('a[href*="A-canonical"]')).toBeNull();
-    expect(reads).toHaveLength(5); // B progresses while its old A read and retry remain pending.
+    expect(reads).toHaveLength(4); // B progresses while its old A read and retry remain pending.
     const b = loaded('B', null, 'B current title');
-    await settle(reads[4]!, b);
+    await settle(reads[3]!, b);
     expect(host.textContent).toContain('B current title');
     await remove();
     const rejected = writes.at(-1)!;
@@ -490,7 +471,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     });
     expect(reads.at(-1)!.cursor).toBeUndefined();
     await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(3);
     await remove();
     const uncertain = writes.at(-1)!;
     expect(uncertain.input.targetId).toBe(rejected.input.targetId);

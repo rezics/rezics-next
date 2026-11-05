@@ -152,25 +152,8 @@ export function FollowTargetControl({
     readLifetime.accepted === true &&
     queryClient.getQueryState(options.queryKey)?.status === 'success' &&
     queryClient.getQueryData(options.queryKey) === readLifetime.data;
-  const isCurrent = (next: boolean) => {
-    const direction = next ? 1 : 2;
-    if (!address.isCurrent()) {
-      console.log('following current rejected by address');
-      return false;
-    }
-    if (!origin.current(direction)) {
-      console.log('following current rejected by operation', {
-        parent: parent?.isCurrent(),
-        allowed: origin.allowed[direction],
-      });
-      return false;
-    }
-    if (following === undefined && next && !acceptedRead()) {
-      console.log('following current rejected by own-edge read');
-      return false;
-    }
-    return true;
-  };
+  const isCurrent = (next: boolean) =>
+    address.isCurrent() && origin.current(next ? 1 : 2) && (following !== undefined || !next || acceptedRead());
   return (
     <span hidden={!canFollow && !canRemove}>
       <FollowControl
@@ -206,23 +189,11 @@ export function FollowTargetControl({
             }
           : {})}
         write={(input) => {
-          const current = isCurrent(input.following);
-          if (!current) {
-            console.log('following dispatch retired', {
-              parent: parent?.isCurrent(),
-              address: address.isCurrent(),
-              direction: origin.current(input.following ? 1 : 2),
-            });
-            return Promise.resolve({ ok: false, reason: 'unavailable' });
-          }
+          if (!isCurrent(input.following)) return Promise.resolve({ ok: false, reason: 'unavailable' });
           return (
             intentOwner.dispatch(
               input,
-              () => {
-                const credential = origin.credential(input.following ? 1 : 2);
-                console.log('following credential available', !!credential);
-                return credential;
-              },
+              () => origin.credential(input.following ? 1 : 2),
               (command, credential) => setFollow({ data: command, headers: { 'X-CSRF-Token': credential } }),
             ) ?? Promise.resolve({ ok: false, reason: 'unavailable' })
           );
