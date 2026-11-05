@@ -142,10 +142,20 @@ test('filtered page cost stays bounded while matching and nonmatching native pop
     await seedCopies(foreignOwner.accountId, otherSubject, 'ordered', scale - previous, pins);
 
     const matching = await measure(database, () =>
-      commands.listCopies(matchingOwner, { subjectId: target, kind: 'physical', status: 'ordered', limit: 1 }),
+      commands.listCopiesWithObservation(matchingOwner, {
+        subjectId: target,
+        kind: 'physical',
+        status: 'ordered',
+        limit: 1,
+      }),
     );
     const nonmatching = await measure(database, () =>
-      commands.listCopies(nonmatchingOwner, { subjectId: target, kind: 'physical', status: 'ordered', limit: 1 }),
+      commands.listCopiesWithObservation(nonmatchingOwner, {
+        subjectId: target,
+        kind: 'physical',
+        status: 'ordered',
+        limit: 1,
+      }),
     );
     for (const sample of [matching, nonmatching]) {
       expect(sample.value.copies).toHaveLength(1);
@@ -170,7 +180,7 @@ test('filtered page cost stays bounded while matching and nonmatching native pop
     assertGrowth(samples, { statements: 'constant', rows: 'constant', blocks: 'logarithmic' });
   }
 
-  const firstMaximum = await commands.listCopies(matchingOwner, {
+  const firstMaximum = await commands.listCopiesWithObservation(matchingOwner, {
     subjectId: target,
     kind: 'physical',
     status: 'ordered',
@@ -178,7 +188,7 @@ test('filtered page cost stays bounded while matching and nonmatching native pop
   });
   expect(firstMaximum.copies).toHaveLength(100);
   expect(firstMaximum.next).toBeString();
-  const nextMaximum = await commands.listCopies(matchingOwner, {
+  const nextMaximum = await commands.listCopiesWithObservation(matchingOwner, {
     subjectId: target,
     kind: 'physical',
     status: 'ordered',
