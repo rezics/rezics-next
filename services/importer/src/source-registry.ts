@@ -205,7 +205,8 @@ function addAliases(
 ): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
-  const statistics = sourceKind === 'vndb' ? vndbSourceStatistics(result.normalizedRecord, sourceAlias, sourceSnapshotAsOf) : {};
+  const statistics =
+    sourceKind === 'vndb' ? vndbSourceStatistics(result.normalizedRecord, sourceAlias, sourceSnapshotAsOf) : {};
   const vocabulary =
     context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
       ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary, context)
@@ -325,7 +326,9 @@ export function createSourceRegistration(
           const base: ImportConversion<SourceAssets> = {
             ...entity,
             normalized: entity.normalizedRecord,
-            ...(sourceKind === 'vndb' ? vndbSourceStatistics(entity.normalizedRecord, source, options?.sourceSnapshotAsOf) : {}),
+            ...(sourceKind === 'vndb'
+              ? vndbSourceStatistics(entity.normalizedRecord, source, options?.sourceSnapshotAsOf)
+              : {}),
             coverAssets: [...entity.coverAssets],
             mediaImportIntents: [...entity.mediaImportIntents],
           };

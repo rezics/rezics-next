@@ -99,14 +99,23 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'],
     },
     async stage(change = false, alias?: string, timestamp?: string) {
       const run = facade.begin();
-      await facade.stage(run, (async function* () {
-        yield* entries(change, false, undefined, alias);
-        if (timestamp !== undefined) {
-          const bytes = new TextEncoder().encode(timestamp);
-          yield { path: 'TIMESTAMP', kind: 'file' as const, declaredBytes: bytes.length,
-            bytes: (async function* () { yield bytes; })() };
-        }
-      })());
+      await facade.stage(
+        run,
+        (async function* () {
+          yield* entries(change, false, undefined, alias);
+          if (timestamp !== undefined) {
+            const bytes = new TextEncoder().encode(timestamp);
+            yield {
+              path: 'TIMESTAMP',
+              kind: 'file' as const,
+              declaredBytes: bytes.length,
+              bytes: (async function* () {
+                yield bytes;
+              })(),
+            };
+          }
+        })(),
+      );
       return run;
     },
     async reopen() {
@@ -353,42 +362,87 @@ test('unchanged VNDB rows refresh newly reviewed tag bindings and preserve unrel
   const registration: SourceRegistration = {
     ...native,
     convert(input, context) {
-      return native.convert(input, input.external_id !== 'v123' ? context : {
-        ...context,
-        sourceVocabulary: {
-          bindings: {
-            releaseDigest: bundledDigest,
-            schemes: [{ taxonomy: vndbPublicTagTaxonomy('cont'), uri: vndbPublicTagScheme('cont'), id: schemeId,
-              type: 'skos:ConceptScheme', releaseDigest: bundledDigest }],
-            concepts: conceptId ? [{ taxonomy: vndbPublicTagTaxonomy('cont'), code: 'g311', id: conceptId,
-              type: 'skos:Concept', schemeId, releaseDigest: bundledDigest }] : [],
-          },
-          rows: context.subjectId ? [{ kind: 'tag', path: '/tags_vn/v123/g311/tag', code: 'g311', category: 'cont',
-            spoiler: 0, subject: { id: context.subjectId, type: 'wd:Q689445', releaseDigest: bundledDigest } }] : [],
-        },
-      });
+      return native.convert(
+        input,
+        input.external_id !== 'v123'
+          ? context
+          : {
+              ...context,
+              sourceVocabulary: {
+                bindings: {
+                  releaseDigest: bundledDigest,
+                  schemes: [
+                    {
+                      taxonomy: vndbPublicTagTaxonomy('cont'),
+                      uri: vndbPublicTagScheme('cont'),
+                      id: schemeId,
+                      type: 'skos:ConceptScheme',
+                      releaseDigest: bundledDigest,
+                    },
+                  ],
+                  concepts: conceptId
+                    ? [
+                        {
+                          taxonomy: vndbPublicTagTaxonomy('cont'),
+                          code: 'g311',
+                          id: conceptId,
+                          type: 'skos:Concept',
+                          schemeId,
+                          releaseDigest: bundledDigest,
+                        },
+                      ]
+                    : [],
+                },
+                rows: context.subjectId
+                  ? [
+                      {
+                        kind: 'tag',
+                        path: '/tags_vn/v123/g311/tag',
+                        code: 'g311',
+                        category: 'cont',
+                        spoiler: 0,
+                        subject: { id: context.subjectId, type: 'wd:Q689445', releaseDigest: bundledDigest },
+                      },
+                    ]
+                  : [],
+              },
+            },
+      );
     },
   };
   const f = await local(undefined, registration);
   try {
     expect((await f.facade.commit(await f.stage())).status).toBe('committed');
-    const before = f.importer.session.bindings.candidates({ source: 'vndb', external_id: 'v123' }, 'facts', { limit: 100 });
+    const before = f.importer.session.bindings.candidates({ source: 'vndb', external_id: 'v123' }, 'facts', {
+      limit: 100,
+    });
     f.calls.length = 0;
     conceptId = randomUUID();
     await f.reopen();
     expect((await f.facade.commit(await f.stage())).status).toBe('committed');
     const proposed = f.calls.flatMap((request) => request.commands);
     expect(proposed).toHaveLength(1);
-    expect(proposed[0]).toMatchObject({ op: 'propose', statement: { property: { id: 'schema:genre' },
-      value: { type: 'value', content: conceptId } } });
-    const after = f.importer.session.bindings.candidates({ source: 'vndb', external_id: 'v123' }, 'facts', { limit: 100 });
-    expect(after.map((candidate) => candidate.candidate)).toEqual(expect.arrayContaining(before.map((candidate) => candidate.candidate)));
+    expect(proposed[0]).toMatchObject({
+      op: 'propose',
+      statement: { property: { id: 'schema:genre' }, value: { type: 'value', content: conceptId } },
+    });
+    const after = f.importer.session.bindings.candidates({ source: 'vndb', external_id: 'v123' }, 'facts', {
+      limit: 100,
+    });
+    expect(after.map((candidate) => candidate.candidate)).toEqual(
+      expect.arrayContaining(before.map((candidate) => candidate.candidate)),
+    );
     f.calls.length = 0;
     expect((await f.facade.commit(await f.stage())).status).toBe('committed');
     expect(f.calls).toEqual([]);
     conceptId = randomUUID();
     expect((await f.facade.commit(await f.stage())).status).toBe('committed');
-    expect(f.calls.flatMap((request) => request.commands).map((command) => command.op).sort()).toEqual(['propose', 'retract']);
+    expect(
+      f.calls
+        .flatMap((request) => request.commands)
+        .map((command) => command.op)
+        .sort(),
+    ).toEqual(['propose', 'retract']);
   } finally {
     await f.close();
   }

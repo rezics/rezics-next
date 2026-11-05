@@ -32,8 +32,7 @@ export class VndbSnapshotReader {
           let used = 0;
           for await (const chunk of entry.bytes) {
             // Check backing allocation before hashing or copying external bytes.
-            if (!(chunk instanceof Uint8Array) || chunk.buffer.byteLength > self.chunkBytes)
-              throw new DumpInputError();
+            if (!(chunk instanceof Uint8Array) || chunk.buffer.byteLength > self.chunkBytes) throw new DumpInputError();
             content.update(chunk);
             if (timestamp) {
               if (used + chunk.length > timestamp.length) throw new DumpInputError();

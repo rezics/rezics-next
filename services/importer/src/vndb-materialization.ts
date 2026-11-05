@@ -89,7 +89,7 @@ export class VndbMaterialization {
     return {
       ...inspect,
       materializedGeneration: row?.generation ?? null,
-      sourceSnapshot: row?.snapshot_json ? JSON.parse(row.snapshot_json) as VndbTableSnapshot : null,
+      sourceSnapshot: row?.snapshot_json ? (JSON.parse(row.snapshot_json) as VndbTableSnapshot) : null,
       checkpoint: this.tables.checkpoint(this.source, run),
     };
   }
@@ -109,7 +109,7 @@ export class VndbMaterialization {
 
   async stage(run: string, entries: VndbEntries, tracking?: VndbStageTracking): Promise<void> {
     try {
-      const snapshot = new VndbSnapshotReader(this.options.maxChunkBytes);
+      const snapshot = new VndbSnapshotReader(this.options?.maxChunkBytes);
       const self = this;
       async function* observed() {
         yield* snapshot.entries(entries);
@@ -181,13 +181,15 @@ export class VndbMaterialization {
       });
     }
     const snapshot = this.acquisition(run).sourceSnapshot;
-    const registration = snapshot ? {
-      ...this.registration,
-      convert: (...args: Parameters<SourceRegistration['convert']>) => {
-        const conversion = this.registration.convert(...args);
-        return { ...conversion, ...vndbSourceStatistics(conversion.normalized, this.source, snapshot.asOf) };
-      },
-    } : this.registration;
+    const registration = snapshot
+      ? {
+          ...this.registration,
+          convert: (...args: Parameters<SourceRegistration['convert']>) => {
+            const conversion = this.registration.convert(...args);
+            return { ...conversion, ...vndbSourceStatistics(conversion.normalized, this.source, snapshot.asOf) };
+          },
+        }
+      : this.registration;
     return this.importer.runRecords(registration, records(), runOptions);
   }
 
