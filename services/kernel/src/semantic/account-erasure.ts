@@ -315,7 +315,8 @@ async function minimizePayload(
   }
   if (store === 'zone') {
     const zone = await lockZoneHeadByErasureKey(tx, partition, key);
-    if (!zone) throw new Error('semantic_zone_erasure_source_missing');
+    // A normal owner purge may remove the row after T but before this locator runs.
+    if (!zone) return;
     if (zone.ownerId !== accountId && zone.transactionId !== locator.source_transaction_id) return;
     const publicRetained = zone.visibility === 'public' && zone.state === 'active' && zone.publicEver;
     const command = currentCommand(tx);
