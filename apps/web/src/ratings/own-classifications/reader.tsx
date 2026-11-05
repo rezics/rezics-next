@@ -158,7 +158,7 @@ export function ClassificationsReader({
       locale={locale}
       isCurrent={current}
       onNext={onNext}
-      previous={windows?.previous(frontier)}
+      previous={windows?.previous(frontier) ?? null}
       focusHeading={focusHeading}
       onRetry={refresh}
       commands={

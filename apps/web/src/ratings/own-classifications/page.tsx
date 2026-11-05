@@ -234,7 +234,7 @@ export function OwnClassificationsWorkspace({
               )}
             </section>
           ) : null}
-          <div className="flex flex-wrap gap-3">
+          <div key={generation} className="flex flex-wrap gap-3">
             {previous ? (
               <Button className={control} onClick={(event) => void move(previous.cursor, event.detail === 0)}>
                 {m.library_collections_previous({}, options)}
