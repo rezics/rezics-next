@@ -33,10 +33,23 @@ const order: BuyerOrder = {
   contentEdition: null,
 };
 const next = 'story-signed/+?=next&recorded';
-function OrdersStory({ page, continuation = false, previous }: { page: BuyerOrderPage; continuation?: boolean; previous?: string }) {
+function OrdersStory({
+  page,
+  continuation = false,
+  previous,
+}: {
+  page: BuyerOrderPage;
+  continuation?: boolean;
+  previous?: string;
+}) {
   return (
     <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
-      <OrdersPage page={page} locale={getLocale()} continuation={continuation} navigation={previous ? { previous, move: () => {} } : undefined} />
+      <OrdersPage
+        page={page}
+        locale={getLocale()}
+        continuation={continuation}
+        navigation={previous ? { previous, move: () => {} } : undefined}
+      />
     </main>
   );
 }
@@ -76,7 +89,10 @@ export const LaterPageEmpty: Story = {
       'href',
       `/${getLocale()}/orders`,
     );
-    await expect(canvas.getByRole('link', { name: m.buyer_history_previous() })).toHaveAttribute('href', `/${getLocale()}/orders?cursor=${encodeURIComponent('supplied-previous/+?=')}`);
+    await expect(canvas.getByRole('link', { name: m.buyer_history_previous() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/orders?cursor=${encodeURIComponent('supplied-previous/+?=')}`,
+    );
     await expect(canvas.queryByRole('link', { name: m.buyer_history_next() })).toBeNull();
   },
 };

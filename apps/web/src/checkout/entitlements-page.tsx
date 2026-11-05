@@ -124,7 +124,9 @@ export function EntitlementsPage({
   return (
     <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
       <header className="space-y-3">
-        <PageHeading id="entitlements-heading" tabIndex={-1}>{m.entitlements_heading()}</PageHeading>
+        <PageHeading id="entitlements-heading" tabIndex={-1}>
+          {m.entitlements_heading()}
+        </PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
         <a
           href={purchaseHistoryHref(locale, 'orders', history)}
@@ -178,11 +180,22 @@ export function EntitlementsPage({
           })}
         </ul>
       )}
-      {page.kind === 'ready' ? <>
-        <p className="sr-only" role="status" aria-live="polite">{m.buyer_history_ready()}</p>
-        <BuyerHistoryControls list="entitlements" locale={locale} history={history} continuation={continuation}
-          next={page.data.next} navigation={navigation} label={m.entitlements_pagination()} />
-      </> : null}
+      {page.kind === 'ready' ? (
+        <>
+          <p className="sr-only" role="status" aria-live="polite">
+            {m.buyer_history_ready()}
+          </p>
+          <BuyerHistoryControls
+            list="entitlements"
+            locale={locale}
+            history={history}
+            continuation={continuation}
+            next={page.data.next}
+            navigation={navigation}
+            label={m.entitlements_pagination()}
+          />
+        </>
+      ) : null}
     </section>
   );
 }

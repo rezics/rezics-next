@@ -103,9 +103,18 @@ export function OrdersPage({
           ))}
         </ul>
       )}
-      <p className="sr-only" role="status" aria-live="polite">{m.buyer_history_ready()}</p>
-      <BuyerHistoryControls list="orders" locale={locale} history={history} continuation={continuation}
-        next={page.next} navigation={navigation} label={m.orders_pagination()} />
+      <p className="sr-only" role="status" aria-live="polite">
+        {m.buyer_history_ready()}
+      </p>
+      <BuyerHistoryControls
+        list="orders"
+        locale={locale}
+        history={history}
+        continuation={continuation}
+        next={page.next}
+        navigation={navigation}
+        label={m.orders_pagination()}
+      />
     </section>
   );
 }

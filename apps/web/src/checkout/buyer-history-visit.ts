@@ -4,21 +4,38 @@ import type { QueryClient } from '@tanstack/react-query';
 import { browserObservation } from '../session/observation';
 import { purchaseReaderOriginFromState } from './purchase-return';
 import type { BuyerCurrentOrigin } from './buyer-current-origin';
-import { BuyerHistoryWindows, type BuyerHistoryIntent, type BuyerHistoryList, type BuyerHistoryMovement } from './buyer-history-windows';
+import {
+  BuyerHistoryWindows,
+  type BuyerHistoryIntent,
+  type BuyerHistoryList,
+  type BuyerHistoryMovement,
+} from './buyer-history-windows';
 
 export type BuyerHistoryNavigation = {
   previous: string | null | undefined;
   move: (movement: BuyerHistoryMovement, cursor: string | null, event: ReactMouseEvent<HTMLAnchorElement>) => void;
 };
 
-function ordinary(event: Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>, anchor: HTMLAnchorElement) {
-  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey &&
-    (!anchor.target || anchor.target === '_self') && !anchor.hasAttribute('download');
+function ordinary(
+  event: Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>,
+  anchor: HTMLAnchorElement,
+) {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey &&
+    (!anchor.target || anchor.target === '_self') &&
+    !anchor.hasAttribute('download')
+  );
 }
 
 function buyerRoute(href: string) {
   const url = new URL(href, 'https://buyer.invalid');
-  const match = /^\/(?:([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\/)?(orders|entitlements|editions)(?:\/([^/]+))?\/?$/.exec(url.pathname);
+  const match = /^\/(?:([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\/)?(orders|entitlements|editions)(?:\/([^/]+))?\/?$/.exec(
+    url.pathname,
+  );
   return match ? { locale: match[1], list: match[2], id: match[3], url } : undefined;
 }
 
@@ -36,7 +53,9 @@ export class BuyerHistoryVisit {
   snapshot = () => this.revision;
   subscribe = (notify: () => void) => {
     this.listeners.add(notify);
-    return () => { this.listeners.delete(notify); };
+    return () => {
+      this.listeners.delete(notify);
+    };
   };
   private publish() {
     this.revision++;
@@ -71,9 +90,16 @@ export class BuyerHistoryVisit {
     const cache = observation.subscribeCache((event) => {
       const current = observation.getSnapshot();
       const key = event.query.queryKey;
-      if (current.state === 'signed-in' && key[0] === 'exposure' && key[1] === 'viewer' &&
-        key[2] === current.observation.subject && key[3] === current.observation.id && event.type === 'updated' &&
-        ['success', 'error', 'invalidate'].includes(event.action.type)) this.clear();
+      if (
+        current.state === 'signed-in' &&
+        key[0] === 'exposure' &&
+        key[1] === 'viewer' &&
+        key[2] === current.observation.subject &&
+        key[3] === current.observation.id &&
+        event.type === 'updated' &&
+        ['success', 'error', 'invalidate'].includes(event.action.type)
+      )
+        this.clear();
     });
     const navigation = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
       if (fromLocation?.href === toLocation.href) return;
@@ -82,10 +108,14 @@ export class BuyerHistoryVisit {
       let eligible = !!from && !!to && (from.locale ?? this.locale) === (to.locale ?? this.locale);
       if (eligible && to?.list === 'editions') {
         const origin = purchaseReaderOriginFromState(toLocation.state, to.id!, (to.locale ?? this.locale)!);
-        eligible = !!origin && from?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && from.id === origin.recordId;
+        eligible =
+          !!origin &&
+          from?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') &&
+          from.id === origin.recordId;
       } else if (eligible && from?.list === 'editions') {
         const origin = purchaseReaderOriginFromState(fromLocation!.state, from.id!, (from.locale ?? this.locale)!);
-        eligible = !!origin && to?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && to.id === origin.recordId;
+        eligible =
+          !!origin && to?.list === (origin.kind === 'order' ? 'orders' : 'entitlements') && to.id === origin.recordId;
       }
       if (!eligible) this.clear();
       else if (this.focus && to?.list !== this.focus.ticket.list) this.focus = undefined;
@@ -93,7 +123,9 @@ export class BuyerHistoryVisit {
     const focus = (event: FocusEvent) => {
       if (this.focus && event.target !== this.focus.initiator) this.focus = undefined;
     };
-    const cancelFocus = () => { this.focus = undefined; };
+    const cancelFocus = () => {
+      this.focus = undefined;
+    };
     const click = (event: MouseEvent) => {
       if (event.defaultPrevented || !(event.target instanceof Element)) return;
       const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
@@ -102,7 +134,7 @@ export class BuyerHistoryVisit {
       if (url.origin !== window.location.origin) return;
       const from = buyerRoute(router.state.location.publicHref);
       const to = buyerRoute(url.href);
-      if (!from || !to || from.locale !== to.locale || to.list === 'editions') return;
+      if (!from || !to || (from.locale ?? this.locale) !== (to.locale ?? this.locale) || to.list === 'editions') return;
       // The originating control has already made its departure decision. Never dispatch one here.
       // Native malformed/stale First recovery may have no ready pagination control to stage it.
       if (!to.id && !to.url.searchParams.has('cursor')) {
@@ -123,7 +155,9 @@ export class BuyerHistoryVisit {
     document.addEventListener('keydown', cancelFocus);
     return () => {
       this.connected = false;
-      retirement(); cache(); navigation();
+      retirement();
+      cache();
+      navigation();
       document.removeEventListener('click', click);
       document.removeEventListener('focusin', focus);
       document.removeEventListener('pointerdown', cancelFocus);
@@ -135,17 +169,50 @@ export class BuyerHistoryVisit {
   private initiateFocus(ticket: BuyerHistoryIntent, keyboard: boolean, initiator: Element) {
     this.focus = keyboard && document.activeElement === initiator ? { ticket, initiator } : undefined;
   }
-  move(windows: BuyerHistoryWindows, origin: BuyerCurrentOrigin, list: BuyerHistoryList,
-    movement: BuyerHistoryMovement, cursor: string | null, event: ReactMouseEvent<HTMLAnchorElement>) {
+  move(
+    windows: BuyerHistoryWindows,
+    origin: BuyerCurrentOrigin,
+    list: BuyerHistoryList,
+    movement: BuyerHistoryMovement,
+    cursor: string | null,
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ) {
     if (!ordinary(event, event.currentTarget)) return;
-    if (!this.connected || this.windows !== windows || !origin.isCurrent()) { event.preventDefault(); return; }
+    if (!this.connected || this.windows !== windows || !origin.isCurrent()) {
+      event.preventDefault();
+      return;
+    }
     const ticket = windows.stage(list, movement, cursor);
-    if (!ticket) { event.preventDefault(); return; }
+    if (!ticket) {
+      event.preventDefault();
+      return;
+    }
     this.initiateFocus(ticket, event.detail === 0, event.currentTarget);
     this.publish();
   }
-  receive(windows: BuyerHistoryWindows, origin: BuyerCurrentOrigin, list: BuyerHistoryList,
-    cursor: string | null, ticket: BuyerHistoryIntent | undefined) {
+  retryFocus(
+    windows: BuyerHistoryWindows,
+    origin: BuyerCurrentOrigin,
+    list: BuyerHistoryList,
+    cursor: string | null,
+    event: ReactMouseEvent<HTMLElement>,
+  ) {
+    const ticket = windows.window(list).pending;
+    const button = event.target instanceof Element ? event.target.closest('button') : null;
+    if (this.windows === windows && origin.isCurrent() && ticket?.cursor === cursor && button)
+      this.initiateFocus(
+        ticket,
+        event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey,
+        button,
+      );
+  }
+  receive(
+    windows: BuyerHistoryWindows,
+    origin: BuyerCurrentOrigin,
+    list: BuyerHistoryList,
+    cursor: string | null,
+    ticket: BuyerHistoryIntent | undefined,
+  ) {
     if (this.windows !== windows || !origin.isCurrent()) return;
     if (ticket) {
       if (ticket.cursor !== cursor || !windows.admit(ticket)) return;
@@ -157,8 +224,14 @@ export class BuyerHistoryVisit {
   }
   focusHeading(windows: BuyerHistoryWindows, list: BuyerHistoryList, cursor: string | null) {
     const pending = this.focus;
-    if (this.windows !== windows || !pending || pending.ticket.list !== list || pending.ticket.cursor !== cursor ||
-      windows.window(list).pending) return;
+    if (
+      this.windows !== windows ||
+      !pending ||
+      pending.ticket.list !== list ||
+      pending.ticket.cursor !== cursor ||
+      windows.window(list).pending
+    )
+      return;
     this.focus = undefined;
     document.getElementById(`${list}-heading`)?.focus();
   }
@@ -168,8 +241,12 @@ const noSubscribe = () => () => {};
 const zero = () => 0;
 
 /** Each receiver captures the precise visit, current origin and staged ticket before dispatch. */
-export function useBuyerHistoryNavigation(list: BuyerHistoryList, cursor: string | null,
-  locale: string, origin: BuyerCurrentOrigin) {
+export function useBuyerHistoryNavigation(
+  list: BuyerHistoryList,
+  cursor: string | null,
+  locale: string,
+  origin: BuyerCurrentOrigin,
+) {
   const router = useRouter({ warn: false });
   const visit = router?.options.context?.buyerHistory as BuyerHistoryVisit | undefined;
   useSyncExternalStore(visit?.subscribe ?? noSubscribe, visit?.snapshot ?? zero, zero);
@@ -177,18 +254,34 @@ export function useBuyerHistoryNavigation(list: BuyerHistoryList, cursor: string
   const path = windows?.window(list);
   const ticket = path?.pending;
   return {
-    controls: visit && windows ? {
-      previous: path?.previous,
-      move: (movement: BuyerHistoryMovement, next: string | null, event: ReactMouseEvent<HTMLAnchorElement>) =>
-        visit.move(windows, origin, list, movement, next, event),
-    } : undefined,
-    ready: () => { if (windows) visit!.receive(windows, origin, list, cursor, ticket); },
-    failed: () => { if (windows) visit!.failed(windows); },
-    focus: () => { if (windows && origin.isCurrent()) visit!.focusHeading(windows, list, cursor); },
+    controls:
+      visit && windows
+        ? {
+            previous: path?.previous,
+            move: (movement: BuyerHistoryMovement, next: string | null, event: ReactMouseEvent<HTMLAnchorElement>) =>
+              visit.move(windows, origin, list, movement, next, event),
+          }
+        : undefined,
+    retry: (event: ReactMouseEvent<HTMLElement>) => {
+      if (windows) visit!.retryFocus(windows, origin, list, cursor, event);
+    },
+    ready: () => {
+      if (windows) visit!.receive(windows, origin, list, cursor, ticket);
+    },
+    failed: () => {
+      if (windows) visit!.failed(windows);
+    },
+    focus: () => {
+      if (windows && origin.isCurrent()) visit!.focusHeading(windows, list, cursor);
+    },
   };
 }
 
-export function useBuyerHistoryFocus(navigation: ReturnType<typeof useBuyerHistoryNavigation>, ready: boolean, failed: boolean) {
+export function useBuyerHistoryFocus(
+  navigation: ReturnType<typeof useBuyerHistoryNavigation>,
+  ready: boolean,
+  failed: boolean,
+) {
   useLayoutEffect(() => {
     if (failed) navigation.failed();
     else if (ready) navigation.focus();
