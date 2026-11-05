@@ -1146,6 +1146,9 @@ export function createPublicFilterCustody(
             AND r.state='active' AND t.incarnation=$7
             AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate g
               WHERE g.partition_no=0 AND g.physical_target=r.physical_target AND g.publication_fence IS NOT NULL)
+            AND NOT EXISTS (SELECT 1 FROM search.public_filter_prepared p
+              WHERE (p.partition_no,p.registration,p.build,p.generation)=(r.partition_no,r.id,$8::text,$9::bigint)
+                AND p.state='erasing')
           FOR UPDATE OF o FOR SHARE OF r,t)
           INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING token`,
             [
@@ -1156,6 +1159,8 @@ export function createPublicFilterCustody(
               token,
               Math.min(context.deadline, Date.now() + 300_000),
               input.consumer.incarnation,
+              input.snapshot.kind === 'prepared' ? input.snapshot.build : null,
+              input.snapshot.kind === 'prepared' ? input.snapshot.generation.toString() : null,
             ],
           );
           if (!result.rowCount) throw new Failure('observation_lost');

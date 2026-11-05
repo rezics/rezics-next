@@ -1939,6 +1939,8 @@ drain. Preparation retires its temporary materialization observation through the
 cleanup, retaining its locator until removal so a restart resumes child-before-parent retirement.
 The publication's prepared observation remains until explicit custody retirement, independently of serving
 lease expiry. Draining clears both prepared row stores and the consumer work's duplicate preparation arrays.
+The existing prepared `erasing` state prevents a new reader from enrolling on that drained proof even after
+the publication gate releases; original admitted readers drain before that transition.
 Reconciliation retries preserve the original Source tuple and the retained alias intent.
 Current Source changes during drain release the fence for ordinary repair. An interrupted alias intent
 first recovers that exact native admission fence before rollback; Source completion is still required for
