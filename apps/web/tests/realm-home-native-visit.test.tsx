@@ -678,6 +678,8 @@ test('the mounted Board seam restores its supplying shelf and links to the exact
             realm={realm}
             returnTo={returnTo}
             transport={{
+              publications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
+              change: async () => ({ kind: 'denied' }),
               boards: async ({ cursor }) => {
                 restored.push(cursor);
                 return {
