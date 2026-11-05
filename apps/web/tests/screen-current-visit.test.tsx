@@ -408,7 +408,6 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
       contract.screenCurrentVisitHref(entry.pathname.replace('/the-observatory/', '/former-title/'), visit)!,
       'https://site.invalid',
     );
-    formerSlug.searchParams.set('realm', realmId);
     await go(formerSlug.pathname + formerSlug.search);
     expect(router.state.location.pathname).toBe(entry.pathname);
     expect(router.state.location.searchStr).toBe(formerSlug.search);
