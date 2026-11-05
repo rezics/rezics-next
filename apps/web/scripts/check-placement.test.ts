@@ -349,18 +349,7 @@ function fixture() {
         input.onReceipt?.(Buffer.from(missingFinal ? `${messages.nativeLine}` : messages.bytes));
         return { code: nativeExitCode, signal: null, closed: true, output: '', outputOverflow: false };
       }
-      if (input.phase === 'status') {
-        if (!messages) {
-          const value = preparationStatusFor(descriptor!, prepared!, registration!);
-          return { code: 0, signal: null, closed: true, output: `${JSON.stringify(value)}\n`, outputOverflow: false };
-        }
-        const value = statusFor(descriptor!, messages, prepared!, registration!);
-        if (missingFinal) value.final = null as never;
-        return { code: 0, signal: null, closed: true, output: `${JSON.stringify(value)}\n`, outputOverflow: false };
-      }
-      if (!messages) return { code: 75, signal: null, closed: true, output: '', outputOverflow: false };
-      const result = statusFor(descriptor!, messages, prepared!, registration!);
-      return { code: 0, signal: null, closed: true, output: `${JSON.stringify(result)}\n`, outputOverflow: false };
+      return { code: 75, signal: null, closed: true, output: '', outputOverflow: false };
     },
     cleanup(files) {
       if (cleanupError) throw cleanupError;
@@ -378,14 +367,10 @@ function fixture() {
       const directory = mkdtempSync(join(privateRoot, 'invocation-'));
       const path = join(directory, 'environment.json');
       writeFileSync(path, JSON.stringify(values), { mode: 0o600 });
-      const evidenceFile = join(directory, 'receipts.ndjson');
-      writeFileSync(evidenceFile, '', { mode: 0o600 });
       lastFiles = {
         directory,
         environmentFile: path,
         descriptorFile: join(directory, 'prepared-descriptor.json'),
-        recordFile: join(directory, 'web-custody.json'),
-        evidenceFile,
         close: () => {
           closed += 1;
           rmSync(directory, { recursive: true, force: true });
@@ -859,7 +844,7 @@ test('unreachable transport, timeout and native exits are returned without a loc
   expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter)).toBe(75);
   expect(f.calls).toHaveLength(1);
   expect(f.runCalls).toHaveLength(1);
-  expect(f.closed()).toBe(0);
+  expect(f.closed()).toBe(1);
 });
 
 test('only actual remote custody admits the native continuation; forged markers are irrelevant', async () => {
@@ -880,8 +865,6 @@ test('private environment cleanup cannot hide native or transport failure', asyn
     await routeWebCheck(fixtureRun(native, { root, cwd: app, command: ['bun', 'test'] }), {}, native.adapter),
   ).toBe(17);
   expect(native.closed()).toBe(0);
-  expect(readFileSync(native.files().evidenceFile, 'utf8')).toContain('native-terminal');
-  expect(readFileSync(native.files().evidenceFile, 'utf8')).toContain('final-settlement');
 
   const transport = fixture();
   transport.setTransportError(new Error('transport terminality unknown'));

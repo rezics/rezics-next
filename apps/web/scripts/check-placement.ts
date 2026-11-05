@@ -457,22 +457,15 @@ export async function routeWebCheck(
       adapter.receiver,
       signal,
     );
-    if (result.custody === 'occupied')
-      console.error(
-        `Web check custody remains occupied; reconcile the original descriptor with --descriptor ${result.descriptorFile}`,
-      );
     return result.code;
   } catch (error) {
-    // A journal is created before prepare dispatch; keep its input whenever caller close is uncertain.
-    if (!existsSync(file.recordFile)) {
+    try {
+      file.close();
+    } catch {
       try {
-        file.close();
+        disposeWebCheckEnvironmentInput(file);
       } catch {
-        try {
-          disposeWebCheckEnvironmentInput(file);
-        } catch {
-          /* Preserve the original invocation error. */
-        }
+        /* Preserve the original invocation error. */
       }
     }
     throw error;

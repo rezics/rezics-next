@@ -306,6 +306,32 @@ test('prepared descriptor records the prior binding, claims once, and fences que
   expect(abandonedState.snapshot?.workspace).toBe(join(candidateRoot, '.temp', 'abandoned-frozen'));
 });
 
+test('an unknown earlier invocation does not block a new registration or require reconciliation first', async () => {
+  const state = stateDirectory();
+  const earlier = await registerCheckRunInvocation(binding(), { stateDirectory: state });
+  await markCheckRunQueued(earlier.invocationId, earlier.nonce, { stateDirectory: state });
+  await allocateCheckRunPhysical(earlier.invocationId, earlier.nonce, 'a', 'unknown-earlier-run', {
+    stateDirectory: state,
+  });
+  const unknown = await reconcileCheckRunInvocation(earlier.invocationId, {
+    stateDirectory: state,
+    reconcilePhysical: async () => ({ disposition: 'unknown', reason: 'mock host evidence unavailable' }),
+  });
+  expect(unknown.phase).toBe('unknown');
+
+  const next = await registerCheckRunInvocation(binding(), { stateDirectory: state });
+  expect(next.invocationId).not.toBe(earlier.invocationId);
+  const leftover = await reconcileCheckRunInvocation(earlier.invocationId, {
+    stateDirectory: state,
+    reconcilePhysical: async () => {
+      throw new Error('unknown earlier runs must not be reconciled to prevent a later invocation');
+    },
+  });
+  expect(leftover.phase).toBe('unknown');
+  expect(leftover.invocationId).toBe(earlier.invocationId);
+  expect((await getCheckRunStatus(next.invocationId, { stateDirectory: state })).phase).toBe('registered');
+});
+
 test('queueing rejects an unclaimed prepared invocation and preserves claimed identity behind cancellation fencing', async () => {
   const state = stateDirectory();
   const candidateRoot = mkdtempSync(join(temporaryRoot, `check-run-queue-candidate-${randomUUID()}-`));
