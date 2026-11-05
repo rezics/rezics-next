@@ -690,10 +690,10 @@ test('The default home route renders a bounded mixed discovery Following and Con
     expect(host.textContent).not.toContain(m.home_feed_unavailable());
     expect(host.textContent).toContain(m.home_questions_unavailable());
     feedStatus = 200;
-    await click(m.library_follow_retry());
+    await click(m.home_question_refresh()); // The question's own recovery re-reads and restarts the feed.
     expect(query().get('ratingQuestionId')).toBe(firstQuestion.id);
     expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
-    expect(query().get('cursor')).toBe('illustrative-signed-frontier');
+    expect(query().has('cursor')).toBe(false);
     await click(m.nav_home());
     await click(m.library_next_page());
     questionStatus = 409;
