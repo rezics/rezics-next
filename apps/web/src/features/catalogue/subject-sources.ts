@@ -244,10 +244,11 @@ export async function readSubjectSources(
   const visit = synopsisVisit(returnTo, id, locale);
   if (visit.kind === 'invalid') return { kind: 'invalid' };
   const selection = visit.kind === 'selected' ? visit.selection : undefined;
-  if (selection && (!selection.release || selection.realm)) return { kind: 'conflict' };
+  if (selection && (!selection.subjectRelease || selection.realm)) return { kind: 'conflict' };
   const selectedSynopsis = selection ? JSON.stringify({
     statement: selection.candidateId, document: selection.documentId, digest: selection.digest,
-    language: selection.language, context: selection.context, release: selection.release,
+    language: selection.language, context: selection.context, release: selection.subjectRelease,
+    ...(selection.release ? { pageRelease: selection.release } : {}),
   }) : undefined;
   try {
     const query = { language: locale, includeViewerActions, ...(selectedSynopsis ? { selectedSynopsis } : {}) };

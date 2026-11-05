@@ -34,7 +34,7 @@ export function parseSelectedSynopsis(value: string): SelectedSynopsisInput | un
 
 export function selectedSynopsisFact(subject: Item, input: SelectedSynopsisInput): Statement | undefined {
   if (subject.context !== GLOBAL_CONTEXT || input.context !== subject.context || input.realm ||
-      subject.release !== input.release || (input.pageRelease && input.pageRelease !== subject.release)) return;
+      subject.release !== input.release) return;
   const statements = subject.statements['schema:abstract'] ?? [];
   const rank = statements.some((row) => row.rank === 'preferred') ? 'preferred' : 'normal';
   return statements.find((row) => {
