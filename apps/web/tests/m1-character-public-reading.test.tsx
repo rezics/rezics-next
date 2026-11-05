@@ -33,7 +33,12 @@ test('the Character voice stream uses the released P453 slot key and keeps P725 
           requests.push(options);
           return {
             status: 200,
-            data: { links: [], next: null, freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true } },
+            data: {
+              links: [],
+              next: null,
+              partial: true,
+              freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
+            },
           };
         },
       },
@@ -49,6 +54,7 @@ test('the Character voice stream uses the released P453 slot key and keeps P725 
     { calls: 0, values: 0, bytes: 0 },
   );
   expect(result.ok).toBe(true);
+  expect(result.ok && result.body.partial).toBe(true);
   expect(requests[0]).toMatchObject({
     query: { property: 'wdt:P725', filter: id, qualifier: 'wdt:P453', limit: 12 },
   });

@@ -146,6 +146,11 @@ test('released inverse descriptors keep the original cast property and pin quali
     `/v1/subjects/${characterSubject.id}/links?property=wdt%3AP725&filter=${characterSubject.id}&qualifier=wdt%3AP3831`,
   );
   expect(wrongQualifier.response.status).toBe(400);
+  const oversizedQualifiedPage = await call(
+    'GET',
+    `/v1/subjects/${characterSubject.id}/links?property=wdt%3AP725&filter=${characterSubject.id}&qualifier=wdt%3AP453&limit=21`,
+  );
+  expect(oversizedQualifiedPage.response.status).toBe(400);
   const voice = await call(
     'GET',
     `/v1/subjects/${characterSubject.id}/links?property=wdt%3AP725&filter=${characterSubject.id}&qualifier=wdt%3AP453`,

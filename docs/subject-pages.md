@@ -1614,7 +1614,26 @@ per-assertion reuse. Qualifiers and references have no additional fixed array ca
 are charged within each admitted response's measured UTF-8 bytes. Processing is linear in those supplied rows and
 bytes. No cursor drain, per-row Subject read, graph expansion or additional SQL producer is added. The optional
 Search-owned qualified work-context projection is not present on this native links DTO; no replacement enrichment
-pipeline is introduced. A 1 MiB response guard does not bound examined SQL rows.
+pipeline is introduced.
+
+The released `wdt:P725` voice stream is admitted only for the exact `wdt:P453` slot key and the Character filter.
+Its native request page accepts at most 20 rows; the Character visitor requests 12. One indexed SQL statement merges
+the Global and selected Context projections, examines at most 20 ordered keys (at most 40 layer seeks plus two
+lookahead seeks), and returns the last examined key when more work remains. Current selected-holder hydration checks
+at most 20 candidate statements in one batched current-fact read, selects at most 12 current rows for output, and
+hydrates their current statements by source home (at most 12 homes). At most 256 distinct related Subjects are
+resolved for labels and assertion disclosure. Each statement retains the native admission bound of 16 qualifiers,
+16 references and 16 parts per reference; complete response bytes are charged by the existing 1 MiB stream adapter.
+The direct native Character preview selects at most 15 document bodies, caps each source at 262,144 bytes, and caps
+the retained documents map at 1 MiB, independently of relation lookup; page composition retains its existing 2 MiB
+native document limit. If the index scan reaches its 20-key cap before finding
+enough current assertions, the response includes `partial: true` and a continuation after the last examined key;
+the reader presents this as incomplete. Projection freshness can independently be eventual through the existing
+10-second deadline. The bounded growth test covers 64/512/4096 same-Character projection degree and unrelated
+history, charging statements, examined rows, blocks and response bytes. It does not establish imported Kurisu admission.
+
+Decision: the Character `wdt:P725` inverse keeps the released `wdt:P453` slot key, reports a capped scan as partial,
+and resumes from the last examined projection key while keeping the `wdt:P725` main value as the performer.
 
 Focused mounted cases exercise assertion separation, selected-window return, independent retry, withheld/spoiler
 rows and session/Context retirement. The adapter64/512/4096 case measures typed calls, retained rows and response

@@ -2585,6 +2585,7 @@ function subjectRoutes(
                   },
                   { additionalProperties: false },
                 ),
+                partial: t.Optional(t.Boolean()),
                 next: t.Union([t.String(), t.Null()]),
               },
               { additionalProperties: false },
@@ -2621,6 +2622,7 @@ function subjectRoutes(
           property.qualifiers?.includes('wdt:P453') === true &&
           active.release.properties['wdt:P453']?.targets?.includes('wd:Q95074') === true;
         if (query.qualifier !== undefined && !slotQualifier) throw new ProblemError('invalid_request');
+        if (slotQualifier && (query.limit ?? 20) > 20) throw new ProblemError('invalid_request');
         if (query.filter !== undefined && !relation?.filter && !slotQualifier)
           throw new ProblemError('invalid_request');
         if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
