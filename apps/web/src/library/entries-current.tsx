@@ -319,9 +319,7 @@ export function SortControls({
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
-          <option value="priority">
-            {m.library_rich_entry_priority()}
-          </option>
+          <option value="priority">{m.library_rich_entry_priority()}</option>
           <option value="title">{m.library_column_title()}</option>
           <option value="personalScore" disabled>
             {m.library_score_order()}

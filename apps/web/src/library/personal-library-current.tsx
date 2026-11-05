@@ -475,11 +475,7 @@ function PersonalLibraryRead({
     async (key: string): Promise<ShelfTitlePreparationReceipt> => {
       if (!isCurrent()) throw new CancelledError({ silent: true, revert: true });
       const result = await preparePersonalLibraryTitle({ data: { search: input, key } });
-      if (
-        !isCurrent() ||
-        result.sessionSubject !== subject ||
-        !samePersonalLibraryAddress(result.requested, address)
-      )
+      if (!isCurrent() || result.sessionSubject !== subject || !samePersonalLibraryAddress(result.requested, address))
         throw new CancelledError({ silent: true, revert: true });
       return result.preparation;
     },

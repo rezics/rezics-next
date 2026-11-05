@@ -17,7 +17,9 @@ test('title preparation retries the exact key and allocates the next key only fo
     keys.push(key);
     calls++;
     if (calls === 1) throw new Error('response lost');
-    return calls === 2 ? { installation: 'pending' as const, prepared: 100 } : { installation: 'installed' as const, prepared: 20 };
+    return calls === 2
+      ? { installation: 'pending' as const, prepared: 100 }
+      : { installation: 'installed' as const, prepared: 20 };
   };
 
   await expect(steps.run(prepare)).rejects.toThrow('response lost');
