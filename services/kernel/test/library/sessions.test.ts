@@ -13,6 +13,7 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const route = 0x21b0;
 const eventType = 'com.rezics.library.progress_session.updated.v1';
@@ -77,6 +78,8 @@ async function snapshot() {
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
+  configureTestReceiptKeys(database.pool);
+  configureTestReceiptKeys(database.admin);
   await bootstrapRelease(database.pool, bundledRelease);
   for (const actor of [owner, other, suspended]) {
     await database.admin.query(

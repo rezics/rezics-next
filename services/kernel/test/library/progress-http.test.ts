@@ -13,6 +13,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject as createSemanticSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const issuer = 'https://auth.progress.test';
 const audience = 'https://kernel.progress.test';
@@ -135,6 +136,7 @@ function stableProblem(body: Record<string, unknown>) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.admin);
   db.pool.options.max = 1;
   await bootstrapRelease(db.pool, bundledRelease);
 
@@ -150,6 +152,7 @@ beforeAll(async () => {
     },
   });
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(23),
     tokens,
