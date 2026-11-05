@@ -7,7 +7,6 @@ import { isPlatformClosedError } from '../src/kernel/platform-closed';
 import type { CurrentViewerProgressIndex } from '../src/library/progress-server';
 import type { SessionEnv } from '../src/session/client';
 import type { ProgressPickerSubject } from '../src/library/progress-picker';
-import { readProgressIndex } from '../src/library/progress-server';
 
 // UNRUN: focused mounted/deferred regressions for controller execution. No native/browser proof.
 const { Window } = await import(
@@ -288,7 +287,7 @@ const { renderToString } = await import('react-dom/server');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { CurrentViewerProgressIndexPage } = await import('../src/library/progress-page');
-const { readCurrentViewerProgressIndex } = await import('../src/library/progress-server');
+const { readProgressIndex, readCurrentViewerProgressIndex } = await import('../src/library/progress-server');
 const { prepareSession } = await import('../src/session/request');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
