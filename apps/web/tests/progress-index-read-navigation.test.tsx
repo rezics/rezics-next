@@ -207,6 +207,7 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       profileSession.subjectId,
       undefined,
       profileSession.startedAt,
+      { predecessors: [null, 'prior/opaque'], current: continued },
     );
     const returnContext = progressReturnContextFromLocationState(
       progressReturnLocationState(context!),
@@ -216,11 +217,26 @@ test('disclosed Subject navigation survives read-only active and completed rows;
     expect(new URL(returnContext!.indexHref, window.location.href).searchParams.get('cursor')).toBe(continued);
     expect(returnContext?.subjectId).toBe(profileSession.subjectId);
     expect(returnContext?.startedAt).toBe(profileSession.startedAt);
+    expect(returnContext?.windowCoordinates).toEqual({ predecessors: [null, 'prior/opaque'], current: continued });
+    expect(Object.keys(returnContext?.windowCoordinates ?? {})).toEqual(['predecessors', 'current']);
+    expect(progressReturnLocationState(returnContext!).progressReturn).not.toHaveProperty('sessions');
 
     const selection = progressIndexReturnSelectionFromLocationState(
       progressIndexSelectionLocationState(returnContext!, profileSession.startedAt),
       'en',
     );
+    expect(selection?.indexSearch?.cursor).toBe(continued);
+    expect(selection?.windowCoordinates).toEqual({ predecessors: [null, 'prior/opaque'], current: continued });
+    const oversizedSelection = progressIndexReturnSelectionFromLocationState(
+      {
+        progressReturnSelection: {
+          ...progressIndexSelectionLocationState(returnContext!, profileSession.startedAt).progressReturnSelection,
+          windowCoordinates: { predecessors: Array(9).fill('old'), current: continued },
+        },
+      },
+      'en',
+    );
+    expect(oversizedSelection?.windowCoordinates).toBeUndefined();
     await tick(() =>
       root.render(
         <QueryClientProvider client={client}>

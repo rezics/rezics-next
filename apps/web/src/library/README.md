@@ -317,6 +317,8 @@ notice. Unavailable, denied, preparing, signed-out and invalid-address states do
 
 Decision: keep private Progress return context in router history state, re-read the native index before restoring row focus, and offer first-page/current-work recovery when the original address no longer admits the selected session; an explicit new session keeps its filters and removes only the Progress cursor.
 
+The cursor path and page cost bounds are owned by [Progress index windows](progress-index-windows.md).
+
 Canonical session and Subject links remain ordinary shareable addresses. Same-tab Progress navigation carries the filtered index selectors and opaque cursor privately, then accepts focus only for the same admitted session ID, Subject ID and start time. A stale or changed source offers a safe restart instead of searching later pages. Subject return context is revalidated against the currently disclosed work before it is used.
 
 ## Selected Collection publication

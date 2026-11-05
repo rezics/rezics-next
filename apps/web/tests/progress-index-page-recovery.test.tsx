@@ -10,6 +10,7 @@ import type {
   ProgressStarted,
   ProgressStartInput,
 } from '../src/library/progress-reads';
+import type { ProgressIndexReturnSelection } from '../src/library/progress-start-draft-navigation';
 import type { EntityPickerProps } from '@rezics/ui/entity-picker';
 
 // UNRUN: focused composed outcomes for controller execution; no native or browser proof.
@@ -206,7 +207,7 @@ const tick = (run: () => unknown = () => {}) =>
 function propsOf<T>(element: Element): T {
   return Object.entries(element).find(([key]) => key.startsWith('__reactProps$'))![1] as T;
 }
-async function mount(initial = envelope(), standalone = false) {
+async function mount(initial = envelope(), standalone = false, returnSelection?: ProgressIndexReturnSelection) {
   setLocale(initial.locale as Parameters<typeof setLocale>[0], { reload: false });
   writes.length = reads.length = 0;
   choices.mockClear();
@@ -254,6 +255,7 @@ async function mount(initial = envelope(), standalone = false) {
                     ...(initial.requested.subjectId ? { subjectId: initial.requested.subjectId } : {}),
                     ...(initial.requested.cursor ? { cursor: initial.requested.cursor } : {}),
                   }}
+                  returnSelection={returnSelection}
                 />
               )}
             </RouterContextProvider>
@@ -358,6 +360,39 @@ test('Progress index later-page recovery preserves subject scope and unknown nat
             await h.close();
           }
         }
+});
+
+test('missing returned session offers first-page and current-work recovery while dropping saved cursors', async () => {
+  const initial = envelope({ cursor: 'return/opaque+==', sessions: [] });
+  const selection: ProgressIndexReturnSelection = {
+    locale: 'en',
+    sessionId: id(21),
+    subjectId: id(1),
+    startedAt: '2026-03-15T18:30:00Z',
+    indexSearch: { subjectId: id(1), cursor: 'return/opaque+==' },
+    windowCoordinates: { predecessors: [null, 'earlier/opaque'], current: 'return/opaque+==' },
+  };
+  const h = await mount(initial, false, selection);
+  try {
+    expect(h.host.textContent).toContain(m.library_progress_discovery_stale());
+    const recovery = h.view.getByRole('navigation', { name: m.library_progress_return_to_progress() });
+    const links = [...recovery.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links.map((link) => link.textContent)).toEqual([
+      m.library_collections_first_page(),
+      m.library_progress_restart(),
+    ]);
+    for (const link of links) {
+      const target = new URL(link.href);
+      expect(target.searchParams.get('subjectId')).toBe(id(1));
+      expect(target.searchParams.has('cursor')).toBe(false);
+    }
+    expect(h.host.querySelector(`[data-progress-session-id="${id(21)}"]`)).toBeNull();
+    await h.click(links[0]!);
+    expect(h.router.state.location.search).toMatchObject({ subjectId: id(1) });
+    expect(h.router.state.location.search.cursor).toBeUndefined();
+  } finally {
+    await h.close();
+  }
 });
 
 test('Unknown-unit disclosure keeps exact scalar, literal cursor and completed-count readings in returned session order', async () => {

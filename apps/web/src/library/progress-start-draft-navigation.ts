@@ -8,6 +8,10 @@ import {
   type ProgressIndexAddress,
 } from './progress-address';
 import type { ProgressIndex, ProgressMode } from './progress-reads';
+import {
+  progressIndexWindowCoordinates,
+  type ProgressIndexWindowCoordinates,
+} from './progress-index-windows';
 
 export type ProgressStartDraft = {
   subjectId: string;
@@ -26,6 +30,7 @@ export type ProgressReturnContext = {
   subjectId: string;
   startedAt?: string;
   sourceReturnTo?: string;
+  windowCoordinates?: ProgressIndexWindowCoordinates;
 };
 
 export type ProgressIndexReturnSelection = {
@@ -34,6 +39,8 @@ export type ProgressIndexReturnSelection = {
   subjectId: string;
   startedAt?: string;
   sourceReturnTo?: string;
+  windowCoordinates?: ProgressIndexWindowCoordinates;
+  indexSearch?: ProgressIndexAddress;
 };
 
 const privateOrigin = 'https://rezics.invalid';
@@ -103,6 +110,7 @@ export function progressReturnContextForPage(
   subjectId: string,
   sourceReturnTo?: string,
   startedAt?: string,
+  windowCoordinates?: ProgressIndexWindowCoordinates,
 ): ProgressReturnContext | undefined {
   if (!progressAddressId.test(sessionId) || !progressAddressId.test(subjectId)) return;
   const indexHref = progressIndexHref(page, cursor, locale);
@@ -117,6 +125,7 @@ export function progressReturnContextForPage(
     subjectId,
     ...(startedAt ? { startedAt } : {}),
     ...(source ? { sourceReturnTo: source } : {}),
+    ...(windowCoordinates ? { windowCoordinates } : {}),
   };
 }
 
@@ -141,6 +150,7 @@ export function progressReturnContextFromLocationState(
       ? raw.startedAt
       : undefined;
   const sourceReturnTo = safeSourceHref(raw.sourceReturnTo);
+  const windowCoordinates = progressIndexWindowCoordinates(raw.windowCoordinates);
   return {
     indexHref: String(raw.indexHref),
     indexSearch,
@@ -149,6 +159,7 @@ export function progressReturnContextFromLocationState(
     subjectId: raw.subjectId,
     ...(startedAt ? { startedAt } : {}),
     ...(sourceReturnTo ? { sourceReturnTo } : {}),
+    ...(windowCoordinates ? { windowCoordinates } : {}),
   };
 }
 
@@ -159,7 +170,9 @@ export function progressIndexSelectionLocationState(context: ProgressReturnConte
       sessionId: context.sessionId,
       subjectId: context.subjectId,
       startedAt,
+      indexHref: context.indexHref,
       ...(context.sourceReturnTo ? { sourceReturnTo: context.sourceReturnTo } : {}),
+      ...(context.windowCoordinates ? { windowCoordinates: context.windowCoordinates } : {}),
     },
   };
 }
@@ -184,12 +197,16 @@ export function progressIndexReturnSelectionFromLocationState(
       ? raw.startedAt
       : undefined;
   const sourceReturnTo = safeSourceHref(raw.sourceReturnTo);
+  const windowCoordinates = progressIndexWindowCoordinates(raw.windowCoordinates);
+  const indexSearch = indexAddressFromHref(raw.indexHref, locale);
   return {
     locale,
     sessionId: raw.sessionId,
     subjectId: raw.subjectId,
     ...(startedAt ? { startedAt } : {}),
     ...(sourceReturnTo ? { sourceReturnTo } : {}),
+    ...(windowCoordinates ? { windowCoordinates } : {}),
+    ...(indexSearch ? { indexSearch } : {}),
   };
 }
 
