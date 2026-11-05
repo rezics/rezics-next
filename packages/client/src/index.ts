@@ -14,6 +14,13 @@ import type {
   ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
 
+export {
+  isPlatformClosedProblem,
+  isPlatformClosedError,
+  PlatformClosedError,
+  withPlatformClosedRecognition,
+} from './platform-closed.ts';
+
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
 export type { ZoneCollectionsCall, ZoneCollectionsClient, ZoneCollectionsPage, ZoneCollectionsQuery } from './zones.ts';

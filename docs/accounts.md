@@ -155,6 +155,8 @@ idempotency keys; exact edge identities bind acknowledgements, and fresh reads s
 Private profile-page context hydrates the current handle from immutable account attribution and confirms that
 identity in the full profile. Its incoming-count destination requires a successful native target-count read;
 profile-edit advice on a software operator never substitutes for count authority on the actual account.
+Platform-closure recognition uses the public Kernel client transport entry, shared by native follow fixtures and
+Web consumers without importing private Web modules.
 
 ### Managed-account detail presentation
 

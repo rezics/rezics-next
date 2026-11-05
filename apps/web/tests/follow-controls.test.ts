@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, withPlatformClosedRecognition } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FollowControl, followAction } from '../src/library/follow-control';
@@ -9,6 +9,7 @@ import {
   writeFollowRecord,
   type FollowTargetType,
 } from '../src/library/follow-records';
+import { sendFollowRecord } from '../src/library/follow-transport';
 
 const targetId = '01a17a3b-70ea-712a-9ff7-81fc6a9381b6';
 const idempotencyKey = '123e4567-e89b-42d3-a456-426614174000';
@@ -21,6 +22,23 @@ const follow = (following: boolean, targetType: FollowTargetType = 'subject') =>
   state: following ? 'following' : 'unfollowed',
   reason: 'explicit',
   updatedAt: '2026-10-31T07:00:00Z',
+});
+
+test('raw and wrapped native clients preserve platform closure separately from target denial', async () => {
+  for (const wrap of [false, true]) {
+    for (const code of ['platform_closed', 'forbidden']) {
+      const raw = createKernelClient('https://kernel.example.test', {
+        fetch: async () => Response.json({ code }, { status: 403 }),
+      });
+      const client = wrap ? withPlatformClosedRecognition(raw) : raw;
+      const reason = code === 'platform_closed' ? 'closed' : 'forbidden';
+      expect(await readFollowRecord(client, targetId, authorization)).toEqual({ state: reason });
+      expect(await sendFollowRecord(client, authorization, { targetId, following: true, idempotencyKey })).toEqual({
+        ok: false,
+        reason,
+      });
+    }
+  }
 });
 
 test('the complete assigned visible journey uses actual current native data and preserves its privacy failure and request bounds', async () => {
