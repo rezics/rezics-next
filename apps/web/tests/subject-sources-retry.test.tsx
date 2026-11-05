@@ -122,7 +122,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
           document.body.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
         if (['moved-back', 'tab', 'blur', 'pointer-departure'].includes(mode)) opener.blur();
         if (mode === 'retired') {
-          await act(async () => root.unmount());
+          act(() => root.unmount());
           mounted = false;
           outside.focus();
         }
@@ -176,7 +176,9 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         if (mode === 'empty' || mode === 'error') {
           expect(host.textContent).toContain(m.sources_empty());
-          expect(document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
+          expect(document.activeElement, `${mode}: final keyboard focus`).toBe(
+            host.querySelector('[data-slot="view-heading"] h1'),
+          );
           expect(host.querySelector('button')).toBeNull();
         } else if (mode === 'failed' || mode === 'denied') {
           expect(document.activeElement).toBe(
@@ -197,7 +199,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
         }
         expect(client.getQueryData(sessionQuery.queryKey)).toEqual(session());
       } finally {
-        if (mounted) await act(async () => root.unmount());
+        if (mounted) act(() => root.unmount());
         client.clear();
         host.remove();
         outside.remove();

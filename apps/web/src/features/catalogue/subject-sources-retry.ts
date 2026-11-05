@@ -114,7 +114,11 @@ export function useSourcesRetry({
     const tabbed = (event: KeyboardEvent) => {
       if (event.key === 'Tab') cancelFocus();
     };
-    const leave = router.subscribe('onBeforeNavigate', retire);
+    let startingRetry = false;
+    const leave = router.subscribe('onBeforeNavigate', () => {
+      // The Router announces our own invalidation as navigation too.
+      if (!startingRetry) retire();
+    });
     document.addEventListener('focusin', moved);
     document.addEventListener('pointerdown', cancelFocus, true);
     document.addEventListener('keydown', tabbed, true);
@@ -132,8 +136,11 @@ export function useSourcesRetry({
     // Reset is the error-boundary branch; invalidate also rereads failed loaders.
     void (async () => {
       try {
+        startingRetry = true;
         reset?.();
-        await router.invalidate({ sync: true });
+        const reading = router.invalidate({ sync: true });
+        startingRetry = false;
+        await reading;
       } finally {
         retry.pending = false;
         if (!retry.listeners.size) retire();
