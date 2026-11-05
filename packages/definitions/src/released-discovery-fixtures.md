@@ -239,6 +239,12 @@ parallel fixture or accept caller-injected truth.
 | platform              | Adopt exact released platform/language/date same-statement qualifier representation. Current `schema:inLanguage` is string, not an item field; a credit-role qualifier is not language. Retain the Switch/Japanese plus PC/English crossed-tuple case; do not freeze a speculative property/QID binding.                                                                                                                                                                 |
 | realm subject context | Content/Search must adopt the actual Context page schema and native local fact/rating/review population. No proposed report route is treated as mounted.                                                                                                                                                                                                                                                                                                                 |
 
+Setup prerequisite, not a producer row: every consumer of this fixture first needs the governor's native grants on the
+Global Context to succeed. On base, the driver's first grant (`editor`: `subject:create`, `statement:propose`,
+`context:create`, in `services/kernel/test/semantic/outcome-driver.ts`) returns `403 forbidden`, so setup fails before
+any scenario runs. Access must admit those `platform.governance` grants through `POST /v1/grants`. This fixture neither
+substitutes another grant path nor relaxes the native check.
+
 ## Native boundary and handoff
 
 The first native suite is `services/kernel/test/semantic/released-discovery-fixtures.test.ts`:
