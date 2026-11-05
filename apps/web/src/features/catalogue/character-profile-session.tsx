@@ -28,8 +28,11 @@ function CharacterProfileSessionLive({
   );
   return (
     <CharacterProfile
-      {...address}
-      label={label}
+      {...(address.id !== undefined ? { id: address.id } : {})}
+      {...(address.work !== undefined ? { work: address.work } : {})}
+      {...(address.context !== undefined ? { context: address.context } : {})}
+      {...(address.realm !== undefined ? { realm: address.realm } : {})}
+      {...(label !== undefined ? { label } : {})}
       locale={locale}
       session={state}
       search={search}
@@ -45,8 +48,8 @@ function CharacterProfileSessionLive({
           const read = await loadCharacterProfile({
             data: {
               id,
-              ...(address.context ? { context: address.context } : {}),
-              ...(address.realm ? { realm: address.realm } : {}),
+              ...(address.context !== undefined ? { context: address.context } : {}),
+              ...(address.realm !== undefined ? { realm: address.realm } : {}),
             },
           });
           return read.ok ? characterFacts(read) : read;
