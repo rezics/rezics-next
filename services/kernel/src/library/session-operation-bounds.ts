@@ -109,6 +109,27 @@ const unitBytes = size({ route: 65535, sessionId: uuid, unitId: text(128), added
 const intentBytes = size({ add: [], remove: [] }) + 100 * (size(text(128)) + 1) + size(measure);
 const changeBytes = size({ route: 65535, sessionId: uuid, changeNo: 2_147_483_647,
   intent: null, recordedAt: timestamp, transactionId: uuid }) + intentBytes;
+const bigint = '-9223372036854775808';
+const ownerKey = { route: 65535, accountId: uuid };
+const subjectKey = { ...ownerKey, subjectId: uuid };
+const consumptionOwnerBytes = size({ ...ownerKey, retainedSessions: bigint, completedOccurrences: bigint,
+  completedSubjects: bigint, unknownProfileCompleted: bigint, revision: uuid });
+const consumptionSubjectBytes = size({ ...subjectKey, retainedSessions: bigint, completedOccurrences: bigint });
+const reportedBucketBytes = size({ ...ownerKey, year: 9999, bucket: 13, completed: bigint,
+  subjects: bigint, unknownProfile: bigint, monthPrecision: bigint, dayPrecision: bigint });
+const reportedSubjectBytes = size({ ...subjectKey, year: 9999, bucket: 13, completed: bigint });
+// The two profile_key columns have an octet_length <= 1024 CHECK. Escaping
+// is independent of that native byte limit, as it is for original SQL binds.
+const insightsProfileBytes = size({ ...subjectKey, year: 9999, profileKey: text(1024),
+  completed: bigint, subjects: bigint, repeats: bigint, knownProfiles: bigint });
+const assessmentBytes = size({ ...ownerKey, meaningRevision: 16, units: 20, occurrences: bigint,
+  absent: bigint, explicitNull: bigint, valued: bigint, historicalUnknown: bigint, revision: uuid });
+const projectedMeaningBytes = pinBytes + size({ profilePin: null, unitId: text(128), meaningRevision: 1,
+  mode: 'completed_units', unit: text(128), dimension: '', precision: 6, minimum: numeric, maximum: numeric,
+  totalPolicy: 'forbidden', identityKind: 'session_local', structureKind: 'none', locator: text(256) }) + 6 * RELEASE_LIMITS.bytes;
+const currentProgressBytes = projectedMeaningBytes + size({ ...subjectKey, sessionId: uuid,
+  scope: 'backlog', state: 'abandoned', covered: false, occurrences: bigint, currentKnown: bigint,
+  currentSum: numeric, totalKnown: bigint, totalSum: numeric, revision: uuid });
 
 export function sessionBytesWork(bytes: number): Bound {
   return declareBound({ candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0,
@@ -130,20 +151,23 @@ function nativePoint(rows: number, points: number, statements: number, bytes: nu
 const sessionHeapAndIndexes = nativePoint(2 + 2 * 21, 1 + 2 * 21, 0, 2 * factBytes);
 // All scalar statistics are exact owner/subject/year/meaning points. These
 // counts include negative probes, ON CONFLICT old/new tuples and cleanup DELETEs.
-const sourceHeads = nativePoint(4 * 4, 4, 4, 4 * size({ route: 65535, accountId: uuid, generation: '-9223372036854775808' }));
-const consumption = repeatBound(nativePoint(4 + 1 + 3 + 3 + 2 + 2, 6, 6, 512), 2);
-const reportedYear = repeatBound(nativePoint(4 + 3 + 2 + 4 + 3, 5, 5, 512), 2);
-const insightsYear = repeatBound(nativePoint(4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3, 10, 10, 2048), 2);
-const assessment = sumBounds(nativePoint(4 + 1 + 3, 3, 3, 256),
-  repeatBound(nativePoint(4 + 3 + 1 + 4 + 2, 5, 5, 256), 2));
+const sourceHeads = nativePoint(4 * 4, 4, 4, 4 * 4 * size({ ...ownerKey, generation: bigint }));
+const consumption = repeatBound(nativePoint(4 + 1 + 3 + 3 + 2 + 2, 6, 6,
+  (4 + 3 + 2) * consumptionOwnerBytes + (1 + 3 + 2) * consumptionSubjectBytes), 2);
+const reportedYear = repeatBound(nativePoint(4 + 3 + 2 + 4 + 3, 5, 5,
+  (4 + 3) * reportedSubjectBytes + (2 + 4 + 3) * reportedBucketBytes), 2);
+const insightsYear = repeatBound(nativePoint(4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3, 10, 10,
+  (4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3) * insightsProfileBytes), 2);
+const assessment = sumBounds(nativePoint(4 + 1 + 3, 3, 3, (4 + 1 + 3) * assessmentBytes),
+  repeatBound(nativePoint(4 + 3 + 1 + 4 + 2, 5, 5, (4 + 3 + 1 + 4 + 2) * assessmentBytes), 2));
 
 // reading_insights_current_progress_refresh removes every OLD measure then
 // inserts every NEW one, even for a same-value update or a journal-only patch.
 // apply touches group, scope, owner and its empty-group cleanup independently.
-const progressApply = nativePoint(1 + 4 + 3 + 3 + 2, 5, 5, pinBytes + size(measure));
+const progressApply = nativePoint(1 + 4 + 3 + 3 + 2, 5, 5, (1 + 4 + 3 + 3 + 2) * currentProgressBytes);
 const progressRefresh = sumBounds(
   nativePoint(1 + 1 + 2 + 3 + 2 + 3 + 2 + 2 + 1 + 4 + 1 + 2 + 4 + 3 + 3 + 3, 16, 16, 2 * factBytes),
-  repeatBound(sumBounds(nativePoint(3 + 1 + 3, 3, 3, pinBytes + size(measure)), progressApply), 2 * SESSION_LIMITS.measures),
+  repeatBound(sumBounds(nativePoint(3 + 1 + 3, 3, 3, (3 + 1 + 3) * currentProgressBytes), progressApply), 2 * SESSION_LIMITS.measures),
 );
 const migration = nativePoint(4 + 1 + 4 + 3, 7, 7, pinBytes);
 // Scope refresh: exact head lock, live pin existence, support/index/pin
@@ -151,7 +175,7 @@ const migration = nativePoint(4 + 1 + 4 + 3, 7, 7, pinBytes);
 const memberScope = repeatBound(nativePoint(1 + 2 + 4 + 4 + 4 + 2 + 2 + 2 + 64, 9, 9, pinBytes), 2);
 const sessionTriggers = sumBounds(sourceHeads, consumption, reportedYear, insightsYear, assessment,
   progressRefresh, migration, memberScope);
-const childFence = nativePoint(1 + 4, 2, 2, 128);
+const childFence = nativePoint(1 + 4, 2, 2, (1 + 4) * size({ route: 65535, sessionId: uuid, writeState: 'active' }));
 
 export function retainSessionOperands<I>(input: I): I {
   const original = structuredClone(input);
@@ -302,7 +326,7 @@ function sqlWork(sql: string, input: unknown, rows: number, points: number, outp
  * Native Access owns account/action/group preparation via its original work port.
  * There is no second command invocation or admission for these declarations.
  */
-export function sessionCommandPlan(kind: SessionOperationKind, original: SessionCommandPlan['original'], receiptKeys: number, preparesSource = false): SessionCommandPlan {
+export function sessionCommandPlan(kind: SessionOperationKind, original: SessionCommandPlan['original'], receiptKeys: number, preparesSource = false, durationMs = 5000): SessionCommandPlan {
   const retained = retainSessionOperands(original);
   const responseBytes = kind === 'journal' ? size({ sessionId: uuid, revision: 2_147_483_646, changed: false }) : responseSessionBytes;
   const receipt = { principal: { kind: 'account', id: retained.accountId }, kind: retained.kind,
@@ -314,6 +338,8 @@ export function sessionCommandPlan(kind: SessionOperationKind, original: Session
   ];
   const control = sumBounds(
     ...controls.map((sql) => sqlWork(sql, [], 0, 0, 0)),
+    // Core's time mint is a completed read-only transaction before preparation.
+    boundedCommandReadWork(),
     sqlWork(timeRead.sql, { at: timestamp }, 1, 1, size({ value: timestamp })),
     // Native Access supplies account row/byte work; add its statement and original binds.
     sqlWork(accountRead.sql, { route: routeOf(retained.accountId)!, account_id: retained.accountId }, 0, 0, 0),
@@ -333,11 +359,22 @@ export function sessionCommandPlan(kind: SessionOperationKind, original: Session
     sqlWork(noEffectFence.sql, { partition_no: 4095, transaction_id: uuid, receipt }, 1 + 4, 1 + 3,
       size({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
     sessionPartitionWork(partitionOf(routeOf(retained.accountId)!)),
+    // A failed write reads its partition again after rollback. Fenced recovery
+    // releases the failed client, pauses 25ms, then checks out one read client.
+    // The original absolute deadline bounds these probes, independently of
+    // population and contention retries. No later attempt extends that budget.
+    repeatBound(sumBounds(boundedCommandReadWork(), sessionPartitionWork(partitionOf(routeOf(retained.accountId)!))),
+      1 + Math.ceil(durationMs / 25)),
     sessionBytesWork(size(retained) + 3 * responseBytes),
   );
   const total = sumBounds(control, commandJourneyWork(kind, retained, preparesSource));
   return Object.freeze({ kind, original: retained, total,
     consumeAttempt() { return consumeNativeSessionWork(`command.${kind}`, total, async () => undefined); } });
+}
+
+function boundedCommandReadWork(): Bound {
+  return sumBounds(...['BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+    "SET LOCAL statement_timeout = '200ms'", 'COMMIT', 'ROLLBACK'].map((sql) => sqlWork(sql, [], 0, 0, 0)));
 }
 
 /** Preparation snapshots have one connection and one RR transaction, released by

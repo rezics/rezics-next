@@ -144,6 +144,8 @@ current-progress refresh. Refresh removes every old measure and inserts every ne
 including same-state writes and journal updates. Sparse adds/removes price original inputs, conflicts and child
 source-fence triggers; clear prices the retained 20000-key native cap. Start also declares accepted meaning rows
 and the second refresh after meaning insertion. Failed CAS, stale revision and rollback retain dispatched work.
+Nested statistics bytes use their bigint, UUID and escaped profile-key projections for every reached tuple;
+current-progress values include the complete projected meaning and numeric operands on both refresh sides.
 
 The command control declaration includes authoritative time, native account hold, original receipt candidates,
 replay projection, transaction controls, commit/rollback, no-effect and event fences, History attribution,
@@ -152,6 +154,9 @@ the original deadline; declarations do not introduce a runner, scheduler, retry 
 gate/owner composition includes first initialization, existing durable backfill run/step creation, run reads,
 head locks, activity and Entry activity effects. The future backfill pages retain their own operation owner;
 creating its durable continuation does not claim those pages have executed.
+Core's pre-preparation time mint and post-rollback partition checks include their read-only transaction controls.
+Fenced recovery probes are bounded by the original remaining deadline divided by Core's existing 25ms pause;
+each probe uses a released checkout, and the attempt declaration includes failed-read rollback work.
 
 ### Current presentation and continuation
 
