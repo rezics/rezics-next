@@ -51,20 +51,23 @@ test('screen overview uses its released reader label and description instead of 
 
 test('The default Subject reader does not describe admitted incoming editions as title-only and reports temporary dependency failure honestly with safe read recovery', async () => {
   // The recorded native default composition, with the same owner leaves as the ordinary route.
-  const page = structuredClone(recordedPage) as unknown as SubjectPageData;
-  const sourcePlan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-  const subjectKeys = Object.entries(sourcePlan.reads)
-    .filter(([, read]) => read.kind === 'subject' && read.id === page.subject)
-    .map(([key]) => key);
-  if (subjectKeys.length === 0) throw new Error('Expected the composition Subject read.');
-  for (const key of subjectKeys) page.reads[key] = { status: 200, body: structuredClone(recordedSubject) };
   const recorded = await loadSubjectPage(
     createKernelClient('https://kernel.invalid', {
-      fetch: createRecordedKernelFetch({ 'subject-page': page as never }),
+      fetch: createRecordedKernelFetch({ 'subject-page': recordedPage }),
     }),
     recordedPage.subject,
   );
   if (recorded.kind !== 'page') throw new Error('Expected the recorded subject page.');
+  const sourcePlan = planReads(
+    platformRegistry,
+    recorded.page.document as CompositionDocument,
+    pageContext(recorded.page),
+  );
+  const subjectKeys = Object.entries(sourcePlan.reads)
+    .filter(([, read]) => read.kind === 'subject' && read.id === recorded.page.subject)
+    .map(([key]) => key);
+  if (subjectKeys.length === 0) throw new Error('Expected the composition Subject read.');
+  for (const key of subjectKeys) recorded.page.reads[key] = { status: 200, body: structuredClone(recordedSubject) };
   const labels = viewTabLabels();
   const messages = subjectPageMessages();
   const client = createKernelClient('https://kernel.invalid', { fetch: createFakeKernelFetch(fixtures as never) });
