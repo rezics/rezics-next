@@ -213,7 +213,10 @@ test('a replaced continuation during released review retires controls and preser
 });
 
 test('a continuation replaced while approval is receiving prevents execution and preserves the replacement', async () => {
-  const page = await open(content(first, async () => ready(first)), body);
+  const page = await open(
+    content(first, async () => ready(first)),
+    body,
+  );
   await confirm(page.host, '@first');
   let finishApproval!: () => void;
   const approvalBody = JSON.stringify({
