@@ -475,7 +475,7 @@
       "kind": "UI/transport library",
       "owner": "commerce",
       "paths": ["apps/web/src/library/**"],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/library/follow-control.tsx"],
       "allowedDependencies": [
         "client",
         "composition",

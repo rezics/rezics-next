@@ -52,6 +52,8 @@ type Mounted = DiscoveryBoundPage & {
   observation: DiscoveryPersonalObservation;
   suppressed: boolean;
   spaceCommands: SpaceEntryCommands;
+  reviewedRow?: string;
+  refresh: (suppress?: boolean, rowKey?: string) => Promise<void>;
 };
 type Focus = { element: HTMLElement; row: string | undefined; index: number; x: number; y: number };
 
@@ -124,7 +126,7 @@ export function useDiscoveryPersonalResults(input: {
   } | null>(null);
   if (!episodeRef.current || episodeRef.current.signature !== signature || episodeRef.current.source !== input.source) {
     if (episodeRef.current) {
-      captureFocus();
+      pendingFocus.current = null;
       episodeRef.current.active = false;
       episodeRef.current.retired = true;
     }
@@ -222,7 +224,7 @@ export function useDiscoveryPersonalResults(input: {
     const request = structuredClone(input.request!);
     const binding = { expectedReader: session.subject!, expectedCredential: session.csrfToken! };
     const load = (signal: AbortSignal) => read({ data: { ...binding, request, locale: input.locale }, signal });
-    const install = (result: DiscoveryBoundPage) => {
+    const install = (result: DiscoveryBoundPage, reviewedRow?: string) => {
       if (!owns()) return;
       current?.page.dispose();
       current?.spaceCommands.dispose();
@@ -320,6 +322,33 @@ export function useDiscoveryPersonalResults(input: {
         page,
         observation,
         suppressed: false,
+        ...(reviewedRow ? { reviewedRow } : {}),
+        refresh: async (suppress = false, rowKey) => {
+          if (!owns() || current !== installed || (rowKey && !installed.page.current())) return;
+          const active = document.activeElement;
+          if (
+            !rowKey ||
+            (active instanceof HTMLElement &&
+              active.closest<HTMLElement>('[data-discovery-personal-row]')?.dataset.discoveryPersonalRow === rowKey)
+          )
+            captureFocus();
+          if (suppress) {
+            installed.suppressed = true;
+            setMounted({ owner: episode, value: { ...installed } });
+          }
+          let fresh: DiscoveryBoundPage;
+          try {
+            fresh = await load(lifetime.signal);
+          } catch {
+            fresh = { state: { status: 'unavailable' }, capabilities: null };
+          }
+          if (!owns() || current !== installed) return;
+          if (fresh.state.status === 'unavailable' && installed.state.status === 'ready') {
+            const { spaceEntries: _, ...publicPage } = installed.state.page;
+            fresh = { state: { status: 'ready', page: { ...publicPage, viewerFacts: null } }, capabilities: null };
+          }
+          install(fresh, !suppress ? rowKey : undefined);
+        },
         spaceCommands: createSpaceEntryCommands({
           reader: binding,
           current: () => owns() && current === installed,
@@ -336,21 +365,7 @@ export function useDiscoveryPersonalResults(input: {
             installed.suppressed = true;
             setMounted({ owner: episode, value: { ...installed } });
           },
-          refresh: async () => {
-            let fresh: DiscoveryBoundPage;
-            try {
-              fresh = await load(lifetime.signal);
-            } catch {
-              fresh = { state: { status: 'unavailable' }, capabilities: null };
-            }
-            if (!owns() || current !== installed) return;
-            if (fresh.state.status === 'unavailable' && installed.state.status === 'ready') {
-              const { spaceEntries: _, ...publicPage } = installed.state.page;
-              fresh = { state: { status: 'ready', page: { ...publicPage, viewerFacts: null } }, capabilities: null };
-            }
-            captureFocus();
-            install(fresh);
-          },
+          refresh: () => installed.refresh(),
         }),
       };
       current = installed;
@@ -359,7 +374,7 @@ export function useDiscoveryPersonalResults(input: {
     // An observed cache retirement is terminal even if the old reader/exposure object returns before React renders.
     const unsubscribe = client.getQueryCache().subscribe(() => {
       if (!owns() && episode.active) {
-        captureFocus();
+        pendingFocus.current = null;
         episode.retired = true;
         episode.active = false;
         episode.abort.abort();
@@ -465,6 +480,9 @@ export function useDiscoveryPersonalResults(input: {
                 unfollow: row.actions.unfollow && operationIsAdmitted('follow.delete', admitted?.admitted),
               },
             }}
+            title={title}
+            reviewed={value.reviewedRow === discoveryKey(hit)}
+            refresh={(suppress: boolean) => value.refresh(suppress, discoveryKey(hit))}
             rowKey={discoveryKey(hit)}
             binding={{
               expectedReader: value.observation.scope.viewer,

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { FollowControl } from '../../library/follow-control';
-import type { FollowWriteInput, FollowWriteResult } from '../../library/follow-records';
+import { FollowControl, type FollowWriteInput, type FollowWriteResult } from '../../library/follow-control';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import type { ExpectedReader } from '../../session/expected-reader';
@@ -17,6 +16,9 @@ export function CollectionFollowControl({
   locale,
   write,
   rowKey,
+  title,
+  reviewed,
+  refresh,
 }: {
   row: Row;
   binding: ExpectedReader;
@@ -25,33 +27,42 @@ export function CollectionFollowControl({
   locale: string;
   write: (input: FollowWriteInput & ExpectedReader) => Promise<FollowWriteResult>;
   rowKey: string;
+  title: string;
+  reviewed: boolean;
+  refresh: (suppress: boolean) => Promise<void>;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [denied, setDenied] = useState(false);
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   return (
     <div data-slot="collection-follow" data-discovery-personal-row={rowKey}>
+      {reviewed ? <p role="status">{m.library_follow_conflict_recovery_ready({}, options)}</p> : null}
       <FollowControl
         targetId={row.targetId}
-        initial={failed ? { state: 'unavailable' } : { state: 'ready', following: row.following }}
+        initial={{ state: 'ready', following: row.following }}
         canFollow={row.actions.follow}
         canRemove={row.actions.unfollow}
-        ready={!failed && current()}
+        ready={!denied && current()}
+        locale={options.locale}
+        labelContext={`${title} (${row.targetId})`}
+        onAccepted={() => {
+          void refresh(true);
+          return false;
+        }}
+        onReview={async () => {
+          await refresh(false);
+          return null;
+        }}
         readLifetime={lifetime}
         isCurrent={() => current()}
         write={async (input) => {
           if (!current()) return { ok: false, reason: 'unavailable' };
-          let result: FollowWriteResult;
-          try {
-            result = await write({ ...input, ...binding });
-          } catch {
-            result = { ok: false, reason: 'unavailable' };
-          }
+          const result = await write({ ...input, ...binding });
           if (!current()) return { ok: false, reason: 'unavailable' };
-          if (!result.ok) setFailed(true);
+          // Only a definitive denial closes admission. Transport uncertainty belongs to native intent.
+          if (!result.ok && result.reason !== 'unavailable' && result.reason !== 'conflict') setDenied(true);
           return result;
         }}
       />
-      {failed ? <p role="alert">{m.library_follow_unavailable({}, options)}</p> : null}
       {!row.actions.follow && !row.actions.unfollow ? (
         <p role="status">{m.library_follow_forbidden({}, options)}</p>
       ) : null}

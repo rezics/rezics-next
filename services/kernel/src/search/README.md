@@ -173,6 +173,13 @@ owner state before allowing fresh contributions; old contributions never return.
 detached serialization. `page.ts` composes the closed union and preserves page byte budgets, duplicate identity
 checks and the ordered private overlay admission before cursor signing. `viewer-overlays.ts` binds Library facts
 and follows to the exact public rows; native Library, Rating, work-context and Space contracts remain their owners.
+
+Collection discovery follow controls retain Library's exact native intent through transport uncertainty. Only an
+explicit retry may resend it with the same target, direction, key and reader/credential binding. Definitive denial
+closes the action; conflict requires deliberate current-page review. Accepted settlement and review use the host's
+bounded aggregate refresh, never a per-target read or an optimistic following value. The host retires private
+rows and focus with its reader/source episode; public Collection cards remain usable during recovery.
+
 `discovery-http.ts` retains the stable exports. Catalogue, grouped releases/children, facets and suggestions own
 their response definitions and adapters in `http/{catalogue,releases,facets,suggest}.ts`; `http/routes.ts` registers,
 admits and dispatches requests. Family changes belong in their module. Shared envelope or route changes must name
