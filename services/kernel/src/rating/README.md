@@ -1267,7 +1267,7 @@ new review or substitute `readOwnVotes`.
 
 Decision: `readVoteReview` extends the counted witness with Semantic's exact reviewed operand; fresh guarded effects compose the native question and identity participants on the authorized executor, while historical guards retain replay only.
 
-Each available counted-reader observation now includes `review: VoteReviewGuard`, with version 1,
+Each available counted-reader observation includes `review: VoteReviewGuard`, with version 1,
 `question: {revision, lifecycleRevision}`, `subject: {canonicalId, epochs: [{partition, epoch}]}` and
 `ownVote: {state: 'absent' | 'present', observation}`. Epochs are native published unsigned decimal strings from
 both requested and canonical homes, deduplicated and sorted. Missing or pending coverage cannot produce a review.
@@ -1297,7 +1297,7 @@ Fresh execution admits `createQuestionVoteAdmission` and
 Both participants use the original authorized transaction and release their locks only at its COMMIT/ROLLBACK.
 The question participant holds the owning definition tuple and compares its lifecycle head; Semantic holds the
 local core owner row and compares the complete reviewed source/control/publication evidence. Content then
-recompares the native published-home epochs under that fence. Existing account sharing and the shelf gate serialize
+recompares the native published-home epochs under that fence. The held core completion fence, existing account sharing, shelf gate and counted-row locks serialize
 absence and counted-source replacement with the owning Library/merge writers. No additional vote writer or
 participant connection is introduced. Unconditional vote admission retains its existing behavior.
 
