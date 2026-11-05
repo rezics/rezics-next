@@ -293,6 +293,7 @@ test('a non-resumable author task gets one Goal repair task for the cause', asyn
     expect(inbox.read(owner.brief.manager).map(({ event }) => event)).toContainEqual({
       managerId: owner.brief.manager,
       taskId: repairs[0]!.id,
+      goalId: owner.brief.goal,
       kind: 'instruction',
       summary: 'Seeded page-data repair for home/feed: API; first error line: home anonymous feed API.',
     });

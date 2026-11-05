@@ -52,6 +52,7 @@ test('runtime repair callbacks update the existing boot task or dispatch one urg
     expect(inbox.read(owner.brief.manager).map(({ event }) => event)).toContainEqual({
       managerId: owner.brief.manager,
       taskId: existing.id,
+      goalId: owner.brief.goal,
       kind: 'instruction',
       summary: 'Boot smoke still fails on services/kernel/test/boot/kernel-boots.test.ts at broken-head.',
     });
@@ -70,6 +71,7 @@ test('runtime repair callbacks update the existing boot task or dispatch one urg
     expect(inbox.read(owner.brief.manager).map(({ event }) => event)).toContainEqual({
       managerId: owner.brief.manager,
       taskId: created.id,
+      goalId: owner.brief.goal,
       kind: 'instruction',
       summary: 'Urgent boot-smoke repair for services/kernel/test/boot/kernel-boots.test.ts at broken-head.',
     });
