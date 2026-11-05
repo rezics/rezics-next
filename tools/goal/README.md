@@ -1095,7 +1095,7 @@ scales in both modes, retaining the current attempt, events and replacement/leas
 Decision: settled-history fixtures use terminal task states; held, ready, stopped and landing tasks belong to the
 active-work axis and cannot be counted as unrelated settled history.
 
-`sqlite-work.test-support.ts` builds a fixture-only extension under `.temp` using `cc` and SQLite development headers.
+`test-support/sqlite-work.ts` builds a fixture-only extension under `.temp` using `cc` and SQLite development headers.
 Through the hosting engine's extension API it reads [SQLite statement counters](https://sqlite.org/c3ref/stmt_status.html)
 on the actual Bun statements: native runs, VM instructions, full-table-scan steps and sorts. Each mapped read
 execution must run once, use 1–1000 VM instructions and zero full-table-scan steps at these fixed live sizes;
@@ -1481,6 +1481,11 @@ resumes the same attempt, and records named scenario and regression evidence. A 
 candidate, dev script tree and scenario results. A failed, timed-out, capacity-waiting or incomplete suite or contract
 is unverified and cannot certify `main`; no baseline allowance can turn a required failure into a pass. Candidate
 mutation or a stale main, stabilize or dev ref invalidates the run and starts validation again.
+
+Lifecycle fixtures live in `test-support/lifecycle-fixture.ts`, `test-support/lifecycle-scenarios.ts` and
+`test-support/sqlite-work.ts`; they are retained support, not runtime inventory. `src/test-support.ts` and
+`src/test-environment.ts` remain the injected process-ownership adapter and Bun preload. Decision: existing
+consumer tests pin those APIs; no tests that only assert a directory name.
 
 The existing local-placement, compatibility and smoke test fixtures share `checkScriptFixture` in `src/test-support.ts`.
 It captures the development ref as one immutable commit before reading files, including the manifest and lockfile

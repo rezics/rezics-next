@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { parseProviderObject, runLaunchSmoke } from '../scripts/launch-smoke.ts';
-import { parseWorkerResult } from './lifecycle-fixture.ts';
+import { parseWorkerResult } from '../test-support/lifecycle-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 

@@ -7,7 +7,7 @@ import { checkPinnedBunRuntime } from './check-compatibility.ts';
 import { openDb } from './db.ts';
 import { parseFrozenFiles } from './frozen.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { runBoundedProcess } from './lifecycle-fixture.ts';
+import { runBoundedProcess } from '../test-support/lifecycle-fixture.ts';
 import { integrationChecksForFiles, landingAffectedChecks } from './merge-train.ts';
 import { defaultPolicy, readControlPolicy } from './policy.ts';
 import { PublicationLegacyReconciliation } from './publication-legacy.ts';

@@ -35,8 +35,8 @@ import {
   requireWorkerCheck,
   runBoundedProcess,
   writeEvidenceAtomically,
-} from '../src/lifecycle-fixture.ts';
-import type { ExecutedRegression, ScenarioEvidence } from '../src/lifecycle-scenarios.ts';
+} from '../test-support/lifecycle-fixture.ts';
+import type { ExecutedRegression, ScenarioEvidence } from '../test-support/lifecycle-scenarios.ts';
 
 const CHECK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type SmokePolicy = ControlPolicy['launchSmoke'];
@@ -1099,7 +1099,7 @@ async function runRealSmoke(
     const completed = readReport(reportPath);
     if (completed.status !== 'passed')
       throw new Error('inner lifecycle suite exited without complete passing evidence');
-    const { gateParityScenario } = await import('../src/lifecycle-scenarios.ts');
+    const { gateParityScenario } = await import('../test-support/lifecycle-scenarios.ts');
     const parity = await gateParityScenario({
       policy: startupPolicy,
       root,
@@ -1760,7 +1760,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
 
   if (originalPath === undefined) delete process.env.PATH;
   else process.env.PATH = originalPath;
-  const lifecycle = await import('../src/lifecycle-scenarios.ts');
+  const lifecycle = await import('../test-support/lifecycle-scenarios.ts');
   try {
     const { incidents, suite } = await lifecycle.runNamedLifecycleRegressions({
       policy: settings.policy,

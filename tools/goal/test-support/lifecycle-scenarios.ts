@@ -1,7 +1,7 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 import { driveGateParity } from '../scripts/gate-parity.ts';
-import { integrationHarness } from './test-support.ts';
-import { git } from './merge.ts';
+import { integrationHarness } from '../src/test-support.ts';
+import { git } from '../src/merge.ts';
 import { runBoundedProcess, type BoundedProcessResult } from './lifecycle-fixture.ts';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
