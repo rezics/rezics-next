@@ -151,6 +151,7 @@ test('options receiving bounds actual bytes before prompt and retains one exact 
   });
   for (const response of [
     streamed({ ...enrollmentOptionsFixture(), timeout: 0 }),
+    streamed({ ...enrollmentOptionsFixture(), challenge: 'a' }),
     new Response(' '.repeat(budgets.options + 1), { headers: { 'content-length': '1' } }),
     new Response('x', { status: 503 }),
     new Response(' '.repeat(budgets.error + 1), { status: 401 }),

@@ -76,7 +76,8 @@ const closed = (value: Record<string, unknown>, keys: string[]) =>
   Object.keys(value).every((key) => keys.includes(key));
 const text = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
-const encoded = (value: unknown, max: number): value is string => text(value, max) && /^[A-Za-z0-9_-]+$/.test(value);
+const encoded = (value: unknown, max: number): value is string =>
+  text(value, max) && value.length % 4 !== 1 && /^[A-Za-z0-9_-]+$/.test(value);
 
 /** Validate and project the complete configured creation DTO at response ingress. */
 export function parsePasskeyEnrollmentOptions(value: unknown): PasskeyEnrollmentOptions | null {
@@ -106,6 +107,7 @@ export function parsePasskeyEnrollmentOptions(value: unknown): PasskeyEnrollment
   } = value;
   if (
     !encoded(value.challenge, l.challenge) ||
+    value.challenge.length !== l.challenge ||
     !record(rp) ||
     !closed(rp, ['id', 'name']) ||
     !text(rp.id, 10) ||
@@ -113,6 +115,7 @@ export function parsePasskeyEnrollmentOptions(value: unknown): PasskeyEnrollment
     !record(user) ||
     !closed(user, ['id', 'name', 'displayName']) ||
     !encoded(user.id, l.userHandle) ||
+    user.id.length !== l.userHandle ||
     !text(user.name, l.userLabel) ||
     !text(user.displayName, l.userLabel) ||
     !Array.isArray(algorithms) ||

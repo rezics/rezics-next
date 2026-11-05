@@ -21,9 +21,9 @@ export default {
 };
 
 const optionBody = {
-  challenge: 'Y2hhbGxlbmdl',
+  challenge: 'a'.repeat(42) + 'A',
   rp: { id: 'auth.test', name: 'REZICS' },
-  user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
+  user: { id: 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE', name: 'reader', displayName: 'Reader' },
   pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key' as const, alg })),
   timeout: 60000,
   attestation: 'none',
