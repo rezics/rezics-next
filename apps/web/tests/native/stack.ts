@@ -3,7 +3,7 @@ import type { Access, AccessConfig } from '../../../../services/kernel/src/reque
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -127,6 +127,69 @@ const webRoot = resolve(import.meta.dir, '../..');
 const repositoryRoot = resolve(webRoot, '../..');
 const nativeWebsiteHost = 'web.native.rezics.com';
 const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
+
+function ownedPostgresUrl(port: number, database: string, socketDirectory?: string): string {
+  const url = `postgres://rezics:rezics@127.0.0.1:${port}/${database}?sslmode=disable`;
+  return socketDirectory ? `${url}&host=${encodeURIComponent(socketDirectory)}` : url;
+}
+
+async function postgresConnectionWorks(url: string): Promise<Error | undefined> {
+  const probe = new Pool({
+    connectionString: url,
+    connectionTimeoutMillis: 1500,
+    max: 1,
+  });
+  try {
+    await probe.query('SELECT 1');
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
+  } finally {
+    await probe.end();
+  }
+}
+
+/** Prefer published TCP; use the bind-mounted Unix socket when the private net namespace cannot reach it. */
+async function waitForOwnedPostgres(container: string, port: number, socketDirectory: string): Promise<string> {
+  const tcpUrl = ownedPostgresUrl(port, 'rezics');
+  const socketUrl = ownedPostgresUrl(port, 'rezics', socketDirectory);
+  const deadline = Date.now() + 60_000;
+  let lastError: Error | undefined;
+  while (true) {
+    const tcpError = await postgresConnectionWorks(tcpUrl);
+    if (!tcpError) return tcpUrl;
+    lastError = tcpError;
+    const socketError = await postgresConnectionWorks(socketUrl);
+    if (!socketError) return socketUrl;
+    lastError = socketError;
+    if (Date.now() >= deadline) {
+      const inspect = Bun.spawnSync([
+        'docker',
+        'inspect',
+        '-f',
+        '{{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}',
+        container,
+      ]);
+      const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
+      const ready = Bun.spawnSync(['docker', 'exec', container, 'pg_isready', '-U', 'rezics']);
+      const logText = `${logs.stdout.toString()}${logs.stderr.toString()}`;
+      const { formatPostgresErrors } = await import('../../../../services/kernel/scripts/check.ts');
+      throw new Error(
+        [
+          'Disposable PostgreSQL did not become ready.',
+          inspect.stdout.toString().trim(),
+          `pg_isready=${ready.stdout.toString().trim() || ready.stderr.toString().trim()}`,
+          formatPostgresErrors(logText),
+          logText.slice(-1500),
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        { cause: lastError },
+      );
+    }
+    await Bun.sleep(500);
+  }
+}
 
 function fetchNativeWebsite(input: string | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(input);
@@ -415,6 +478,7 @@ async function startStack(): Promise<
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
+  let postgresSocketDirectory: string | undefined;
   let runtimeDirectory: string | undefined;
   let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
@@ -547,6 +611,10 @@ async function startStack(): Promise<
           errors.push(new Error(`Could not remove owned PostgreSQL container: ${removed.stderr.toString()}`));
         postgresContainer = undefined;
       }
+      if (postgresSocketDirectory) {
+        await attempt(() => rm(postgresSocketDirectory!, { recursive: true, force: true }));
+        postgresSocketDirectory = undefined;
+      }
       if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = originalDatabaseUrl;
       if (errors.length) throw new AggregateError(errors, 'Native web stack cleanup failed');
@@ -561,7 +629,9 @@ async function startStack(): Promise<
       reportStackProgress('Native web stack startup: starting PostgreSQL');
       const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
-      postgresContainer = startPostgresContainer();
+      postgresSocketDirectory = await mkdtemp(join(tmpdir(), 'native-web-pg-socket-'));
+      await chmod(postgresSocketDirectory, 0o1777);
+      postgresContainer = startPostgresContainer(undefined, { socketDirectory: postgresSocketDirectory });
       if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
       const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
       if (portResult.exitCode !== 0)
@@ -569,27 +639,7 @@ async function startStack(): Promise<
       const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
       if (!Number.isInteger(port) || port <= 0)
         throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
-      const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-      const deadline = Date.now() + 60_000;
-      while (true) {
-        const probe = new Pool({
-          connectionString: databaseUrl,
-          connectionTimeoutMillis: 1500,
-          max: 1,
-        });
-        try {
-          await probe.query('SELECT 1');
-          break;
-        } catch (error) {
-          if (Date.now() >= deadline)
-            throw new Error('Disposable PostgreSQL did not become ready.', {
-              cause: error,
-            });
-          await Bun.sleep(500);
-        } finally {
-          await probe.end();
-        }
-      }
+      const databaseUrl = await waitForOwnedPostgres(postgresContainer, port, postgresSocketDirectory);
       process.env.DATABASE_URL = databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
       migrate(databaseUrl);
