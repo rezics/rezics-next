@@ -38,11 +38,7 @@ type ResolvedInboxSender = {
   worker?: { kind: 'worker'; taskId: string; attempt: number; ownerManager: string };
 };
 
-export async function runInboxCommand(
-  argv: string[],
-  runtime: InboxCommandRuntime,
-  host: InboxHost,
-): Promise<number> {
+export async function runInboxCommand(argv: string[], runtime: InboxCommandRuntime, host: InboxHost): Promise<number> {
   const [, subcommand, id, ...flags] = argv;
   const policy = runtime.managerServices.policy ?? defaultPolicy;
   const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory, undefined, policy.inbox);
@@ -179,9 +175,7 @@ export async function runInboxCommand(
     }
   } else if (subcommand === 'log' || subcommand === 'thread' || subcommand === 'digest') {
     const args =
-      subcommand === 'thread'
-        ? [id, ...flags].filter((value): value is string => value !== undefined)
-        : argv.slice(2);
+      subcommand === 'thread' ? [id, ...flags].filter((value): value is string => value !== undefined) : argv.slice(2);
     const options = parseInboxQueryOptions(args);
     if (subcommand !== 'thread' && options.reference !== undefined)
       throw new Error(`unexpected inbox argument: ${options.reference}`);
