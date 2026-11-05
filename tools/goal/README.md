@@ -208,6 +208,8 @@ never renders as present: prepared-base and current-source presence each require
 of that tip. A new context supersedes future-tense instructions in an older prompt, retry manifest or
 attempt result; recovery does not reuse an older attempt's context.
 
+Decision: Each capture reads each distinct included dependency ID once, batches valid delivered-commit checks, and reuses ancestry observations per distinct commit/tip pair. The projection lasts only for that capture so later captures observe changed task rows and Git objects.
+
 When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
 and original log path. It reads only a UUID-owned log in that task's check directory and includes at most 4 KiB of its
 tail. Missing, unreadable, mismatched or truncated evidence is identified as unknown; other check logs and the worker's
