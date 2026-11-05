@@ -123,7 +123,11 @@ function Preview({
           return readyPage([nativeNotice('report-outcome', 'moderation_decision')], null, query.selection);
         if (view === 'uncertain') return readyPage([nativeNotice('reply-1', 'reply')], null, query.selection);
         if (view === 'mixed-previous' && query.cursor === 'opaque/+older==')
-          return readyPage([nativeNotice('older-reply', 'reply'), nativeNotice('older-report', 'moderation_decision')], null, query.selection);
+          return readyPage(
+            [nativeNotice('older-reply', 'reply'), nativeNotice('older-report', 'moderation_decision')],
+            null,
+            query.selection,
+          );
         return readyPage(mixedNotices, view === 'mixed-previous' ? 'opaque/+older==' : null, query.selection);
       },
     [cursors, view],
@@ -163,8 +167,9 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
           await canvas.findByRole('link', { name: 'A useful update summary' });
           await userEvent.click(await canvas.findByRole('button', { name: m.inbox_previous_page() }));
           await expect(cursors).toEqual([null, 'opaque/+older==', null]);
-          await expect(within(await canvas.findByRole('list', { name: m.inbox_heading() })).getAllByRole('listitem'))
-            .toHaveLength(5);
+          await expect(
+            within(await canvas.findByRole('list', { name: m.inbox_heading() })).getAllByRole('listitem'),
+          ).toHaveLength(5);
         }
       } else if (view === 'sparse') {
         await canvas.findByText(m.inbox_selection_sparse());

@@ -198,16 +198,13 @@ test('Previous re-admits exact paired addresses, caps history at eight, and clea
     const requested = nextInboxPage(current);
     expect(requested.cursor).toBe(`cursor-${index}`);
     const rows = index === 5 ? [] : [item(`page-${index}`)];
-    current = receiveInboxPage(
-      requested,
-      ready(rows, index === 10 ? null : `cursor-${index + 1}`, 'unread'),
-    );
+    current = receiveInboxPage(requested, ready(rows, index === 10 ? null : `cursor-${index + 1}`, 'unread'));
   }
 
   expect(current.history).toHaveLength(8);
-  expect(current.history.map(({ cursor, selection, episode: addressEpisode }) => [cursor, selection, addressEpisode])).toEqual(
-    Array.from({ length: 8 }, (_, index) => [`cursor-${index + 2}`, 'unread', episode]),
-  );
+  expect(
+    current.history.map(({ cursor, selection, episode: addressEpisode }) => [cursor, selection, addressEpisode]),
+  ).toEqual(Array.from({ length: 8 }, (_, index) => [`cursor-${index + 2}`, 'unread', episode]));
   const previous = previousInboxPage(current);
   expect(previous.cursor).toBe('cursor-9');
   expect(previous.readId).toBe(current.readId + 1);

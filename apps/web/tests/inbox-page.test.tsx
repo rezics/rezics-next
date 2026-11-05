@@ -547,7 +547,12 @@ test('Previous and browser return re-admit the exact unread address and restore 
       if (query.selection === 'unread') {
         unreadFirstPageReads += 1;
         if (unreadFirstPageReads === 1)
-          return readyInboxPage([notice('return-origin', true, { text: 'Original admitted notice' })], 'unread-older', 'alice', 'unread');
+          return readyInboxPage(
+            [notice('return-origin', true, { text: 'Original admitted notice' })],
+            'unread-older',
+            'alice',
+            'unread',
+          );
         if (unreadFirstPageReads === 2)
           return readyInboxPage(
             [notice('return-origin', true, { text: 'Previous fresh notice' }), notice('read-neighbor', false)],
@@ -555,7 +560,12 @@ test('Previous and browser return re-admit the exact unread address and restore 
             'alice',
             'unread',
           );
-        return readyInboxPage([notice('return-origin', true, { text: 'Current native replacement' })], 'unread-older', 'alice', 'unread');
+        return readyInboxPage(
+          [notice('return-origin', true, { text: 'Current native replacement' })],
+          'unread-older',
+          'alice',
+          'unread',
+        );
       }
       throw new Error(`Unexpected inbox query: ${JSON.stringify(query)}`);
     },
@@ -623,8 +633,18 @@ test('a missing returned notice names the changed result, focuses the heading, a
       if (query.cursor) return readyInboxPage([notice('sparse-only')], 'unread-end', 'alice', 'unread');
       firstPageReads += 1;
       if (firstPageReads <= 2)
-        return readyInboxPage([notice('disappearing-origin', true, { text: 'Original unread notice' })], 'unread-old', 'alice', 'unread');
-      return readyInboxPage([notice('current-neighbor', true, { text: 'Fresh selected page' })], null, 'alice', 'unread');
+        return readyInboxPage(
+          [notice('disappearing-origin', true, { text: 'Original unread notice' })],
+          'unread-old',
+          'alice',
+          'unread',
+        );
+      return readyInboxPage(
+        [notice('current-neighbor', true, { text: 'Fresh selected page' })],
+        null,
+        'alice',
+        'unread',
+      );
     },
     async (attempt) => {
       noticeAcknowledgements.push(attempt);

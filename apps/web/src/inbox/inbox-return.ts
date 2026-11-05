@@ -74,10 +74,7 @@ function clear(slot: ReturnSlot, id?: string) {
 }
 
 /** Keep one private, same-tab return receipt; it never enters a URL or persistent browser store. */
-export function armInboxReturn(
-  routerObject: object,
-  input: Omit<InboxReturnReceipt, 'id' | 'phase' | 'focusVersion'>,
-) {
+export function armInboxReturn(routerObject: object, input: Omit<InboxReturnReceipt, 'id' | 'phase' | 'focusVersion'>) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const router = routerObject as ReturnRouter;
   const slot = slotFor(routerObject);
@@ -134,9 +131,7 @@ export function subscribeInboxReturn(router: object, listener: (receipt: InboxRe
 /** Read only a matching arrival. A changed viewer episode never inherits the old address. */
 export function inboxReturnFor(router: object, expectedHistoryKey: string): InboxReturnReceipt | null {
   const receipt = slotFor(router).receipt;
-  return receipt?.phase === 'arrived' &&
-    receipt.historyKey === expectedHistoryKey &&
-    receipt.owner.isCurrent()
+  return receipt?.phase === 'arrived' && receipt.historyKey === expectedHistoryKey && receipt.owner.isCurrent()
     ? receipt
     : null;
 }
