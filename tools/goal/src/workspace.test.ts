@@ -98,7 +98,7 @@ function fixture(script?: string) {
       branch: task.branch,
       worktree: task.worktree,
       declaredPaths: task.brief.paths,
-      protectedRiskAreas: tasks.protectedRiskAreas(task.brief),
+      protectedPaths: tasks.protectedPaths(task.brief),
       gate: task.brief.acceptance.command,
     });
   }

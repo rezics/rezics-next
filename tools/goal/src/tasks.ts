@@ -520,6 +520,10 @@ export class WorkerTasks {
     const ownership = readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief);
     return protectedRiskAreasForBrief(ownership, brief.riskAreas);
   }
+  /** Flattened legacy view for callers that still construct pre-snapshot queued requests. */
+  protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
+    return this.protectedRiskAreas(brief).flatMap(({ include }) => include);
+  }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
     const worker = await this.retryTask(taskId, options);
     if (!worker) throw new TaskHeldForDependenciesError();
