@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { collectionKindInputWork } from '../../src/library/collection-kind-input-bounds.ts';
+import { readCollectionKindPreparationType } from '../../src/library/collection-kind-preparation.ts';
 import { createCollectionKindFixture, type CollectionKindFixture } from './support/collection-kind-fixture.ts';
 
 let f: CollectionKindFixture;
@@ -41,4 +43,20 @@ test('an explicit kind supplies presentation for every readable viewer', async (
       presentationKindSource: 'owner',
     });
   }
+}, 120_000);
+
+test('native Type evidence stays unavailable and is not treated as an empty match', async () => {
+  const remaining = collectionKindInputWork();
+  const result = await readCollectionKindPreparationType({
+    allowance: { reservationId: crypto.randomUUID(), remaining },
+    deadline: Date.now() + 5000,
+  });
+  expect(result.status).toBe('unavailable');
+  expect(result).not.toHaveProperty('typeId');
+  expect(Object.values(result.work.used).every((value) => value === 0)).toBe(true);
+  const collection = await f.collection({ visibility: 'public' });
+  expect(await f.read(collection.id, null)).toMatchObject({
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+  });
 }, 120_000);

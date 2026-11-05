@@ -251,13 +251,13 @@ Current implementation evidence is narrower than the capability:
   and maintenance queue. Missing Semantic scope/public capture remains retryable unavailability; the provisional
   Semantic factory returns `source_unready`, never current/ready-empty. Native useful outcomes remain pending.
 - `collection-kind.ts` projects mixed defaults or stored explicit choices without member observations.
-  Owner overrides bypass observation access. Metadata reads do not enqueue work; native mutation effects and the
-  admitted repair boundary drive raw100/4096-byte steps, generation/version CAS, canonical unique votes, indexed
-  Type winners and bounded retired-generation cleanup. Account-fenced operational transactions retain work with
-  its owning account; the existing Library erasure inventory includes all four local kind stores. The native
-  preparation binding resolves native retained Source/identity records and current audience authority; missing scoped
-  Type/disclosure and authenticated continuation producers remain typed unavailable, and cannot certify a winner.
-  The Semantic scoped-observation factory is a provisional typed unavailable adapter using its closed declarations.
+  Owner overrides bypass observation access. Metadata reads do not enqueue work. Raw-original input is one
+  nine-axis Library plan (`COLLECTION_KIND_INPUT_DECLARATION`): admission, two collision reads, one predecessor
+  retirement, Source size-point/range, INSERT fence and native adapter invocation; `engineRequests` stays 0 at
+  NativeCollectionWork. A raw original is not a Type vote. Missing scoped Type/disclosure stays typed unavailable
+  and cannot certify a winner. Account-fenced operational transactions retain work with its owning account; the
+  existing Library erasure inventory includes all four local kind stores. The Semantic scoped-observation factory
+  remains a provisional typed unavailable adapter using its closed declarations.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
 - Semantic's `identity-epoch-store.ts:identityEpochStore`, admission/receiving custody, native birth mappings and
@@ -282,8 +282,10 @@ Collection and Account IDs. The forward migration removes only the obsolete gene
 Consent changes cancel originals in the same home. Observation deletion cascades the bounded original control;
 existing migrations and ordinary Collection tables are unchanged. The full callable declarations and remaining raw
 interval/foreign receipt operands are documented in [Access](../access/README.md#native-kind-audience-contract).
-Source checkpoints are post-vote progress, not committed pre-Type raw input. Neither a capture, a consent enrollment
-nor a current scoped observation manufactures the Semantic committed repair receipt and all five owner closures.
+Source checkpoints are post-vote progress, not committed pre-Type raw input. Decision: Kind raw-original input
+is one nine-axis Library plan with explicit zero engineRequests at NativeCollectionWork; native Type stays
+unavailable. Neither a capture, a consent enrollment nor a current scoped observation manufactures the Semantic
+committed repair receipt and all five owner closures.
 
 ### Native whole-query episode storage
 
