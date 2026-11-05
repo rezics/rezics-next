@@ -1,14 +1,5 @@
 import { defaultPolicy } from './policy.ts';
-import {
-  closeSync,
-  constants,
-  existsSync,
-  fstatSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  readSync,
-} from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -27,9 +18,7 @@ export type WorkerCheckObservationPolicy = {
   summaryCharacters: number;
 };
 
-export type WorkerCheckObservation =
-  | { status: 'pending' }
-  | { status: 'terminal'; resumeText: string };
+export type WorkerCheckObservation = { status: 'pending' } | { status: 'terminal'; resumeText: string };
 
 function singleLine(value: unknown, limit: number): string {
   return String(value)
@@ -227,7 +216,8 @@ export function observeWorkerChecks(
       if (exit === undefined && pending) {
         const runner = Number(value.runnerPid ?? value.runner_pid);
         const local = !value.runnerHost || value.runnerHost === hostname();
-        if (!Number.isSafeInteger(runner) || runner <= 0 || !local || processAlive(runner)) return { status: 'pending' };
+        if (!Number.isSafeInteger(runner) || runner <= 0 || !local || processAlive(runner))
+          return { status: 'pending' };
         details.push(
           `check ${id}: run vanished (runner ${runner} exited without a result); exit status unavailable; log path ${String(value.log ?? value.logPath ?? 'unavailable')}`,
         );
