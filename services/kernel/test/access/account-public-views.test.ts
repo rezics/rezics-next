@@ -1,4 +1,5 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
@@ -9,6 +10,7 @@ import { newId } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
+configureTestReceiptKeys(pool);
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const commands = createLifecycleCommands({ pool, access });
 const internal = createLifecycleInternals({

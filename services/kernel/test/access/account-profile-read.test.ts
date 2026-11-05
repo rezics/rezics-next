@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createHash } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
@@ -19,6 +20,7 @@ import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const routeKey = new Uint8Array(32).fill(29);
 const kernel = createKernel({ pool, routeKey });
