@@ -310,10 +310,10 @@ test('The default home route renders a bounded mixed discovery Following and Con
   });
   expect(calls).toHaveLength(countBeforeMismatch);
   const beforeInvalid = calls.length;
-  await expect(async () => readPublicHomePage({ data: { locale: 'en', kind: '' } })).rejects.toThrow();
-  await expect(async () =>
+  await expect(Promise.resolve().then(() => readPublicHomePage({ data: { locale: 'en', kind: '' } }))).rejects.toThrow();
+  await expect(Promise.resolve().then(() =>
     readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-a', stream: 'home', kind: '界'.repeat(86) } }),
-  ).rejects.toThrow();
+  )).rejects.toThrow();
   expect(calls).toHaveLength(beforeInvalid);
   const personalReads = sessionReads;
   request = new Request('https://rezics.example/en');
@@ -540,10 +540,10 @@ test('The default home route renders a bounded mixed discovery Following and Con
     const pointCalls = () => calls.filter((call) => new URL(call.url).pathname.startsWith('/v1/rating-questions/'));
     const feedCalls = () => calls.filter((call) => new URL(call.url).pathname === '/v1/feedItems');
     const beforeInvalidQuestion = calls.length;
-    await expect(async () =>
+    await expect(Promise.resolve().then(() =>
       readPublicHomePage({ data: { locale: 'en', ratingQuestionId: 'invalid' } }),
-    ).rejects.toThrow();
-    await expect(async () => readHomeQuestions({ data: { locale: 'en', questionId: '' } })).rejects.toThrow();
+    )).rejects.toThrow();
+    await expect(Promise.resolve().then(() => readHomeQuestions({ data: { locale: 'en', questionId: '' } }))).rejects.toThrow();
     expect(calls).toHaveLength(beforeInvalidQuestion);
     await click(m.home_kinds_load());
     await choose(nativeKind);
@@ -980,7 +980,7 @@ test('Default Home keeps question details optional and recovers partial, refused
     });
     await settle();
     expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(2);
-    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_presentation_partial());
+    expect(host.querySelector('[data-feed-result-state] > [role="status"]')?.textContent).toBe(m.home_presentation_partial());
 
     await click(m.search_filters());
     await click(m.home_kinds_load());
@@ -1013,8 +1013,8 @@ test('Default Home keeps question details optional and recovers partial, refused
     expect(feedInputs).toHaveLength(beforeRetry + 1);
     expect(feedInputs.at(-1)).toMatchObject({ kind: 'schema:Book', ratingQuestionId: question.id });
     expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(2);
-    expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
-    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.home_presentation_partial());
+    expect(host.querySelectorAll('[data-feed-result-state] > [role="status"]')).toHaveLength(1);
+    expect(host.querySelector('[data-feed-result-state] > [role="status"]')?.textContent).toBe(m.home_presentation_partial());
 
     questionPoint = { status: 'lost', code: 'not_found' };
     await click(m.home_question_refresh());
@@ -1267,10 +1267,10 @@ test('Default Home resolves one exact Space and carries its identity through pub
     status: 'auth',
   });
   expect(calls.length).toBe(beforeMismatch);
-  await expect(async () => readPublicHomePage({ data: { locale: 'en', spaceId: 'invalid' } })).rejects.toThrow();
-  await expect(async () =>
+  await expect(Promise.resolve().then(() => readPublicHomePage({ data: { locale: 'en', spaceId: 'invalid' } }))).rejects.toThrow();
+  await expect(Promise.resolve().then(() =>
     readPrivateHomePage({ data: { locale: 'en', viewer: 'viewer-a', stream: 'home', ratingQuestionId: 'invalid' } }),
-  ).rejects.toThrow();
+  )).rejects.toThrow();
   expect(calls.length).toBe(beforeMismatch);
 
   // Reuse the existing regression's DOM setup and actual default route, not an alternate Home harness.
