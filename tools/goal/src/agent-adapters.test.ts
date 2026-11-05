@@ -305,7 +305,6 @@ describe('agent adapters', () => {
 });
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { withAgentAdapter } from './agents.ts';
 import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
