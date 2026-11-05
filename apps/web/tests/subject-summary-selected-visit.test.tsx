@@ -220,7 +220,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect([...evidence.querySelectorAll('a')].some((link) => link.href.includes('via='))).toBe(true);
     expect(evidence.textContent).toContain(m.sources_no_citations());
     const general = [...evidence.querySelectorAll('a')].find(
-      (link) => link.textContent === m.subject_synopsis_general_sources(),
+      (link) => link.textContent === m.subject_synopsis_evidence(),
     )!;
     await click(general);
     expect(host.querySelector('[data-slot="subject-sources-detail"]')).not.toBeNull();
