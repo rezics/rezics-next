@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "此修正網址無效。請從目前的文學作品閱讀頁重新開啟修正。",
+  "literary_visit_global_only": "此編輯器僅支援全域修正。請另行開啟全域修正，以取得目前的修正建議。",
+  "literary_visit_return": "返回文學作品閱讀頁",
+  "literary_visit_global": "另行開啟全域修正",
   "game_visit_invalid": "此修正位址無效。請從目前的遊戲閱讀頁面重新開啟修正。",
   "game_visit_unsupported": "遊戲修正編輯器尚未支援此閱讀使用的 Context。請返回來源閱讀，或另行開始 Global 修正。",
   "game_visit_context": "Context：{context}",

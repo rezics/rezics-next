@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "이 수정 주소는 유효하지 않습니다. 현재 문학 작품 읽기 화면에서 수정을 다시 여세요.",
+  "literary_visit_global_only": "이 편집기는 전역 수정만 지원합니다. 별도의 전역 수정 화면을 열어 현재 수정 안내를 받으세요.",
+  "literary_visit_return": "문학 작품 읽기로 돌아가기",
+  "literary_visit_global": "별도의 전역 수정 시작",
   "game_visit_invalid": "이 수정 주소는 유효하지 않습니다. 현재 게임 읽기 화면에서 수정을 다시 여세요.",
   "game_visit_unsupported": "이 읽기의 컨텍스트는 게임 수정 편집기에서 지원하지 않습니다. 원래 읽기 화면으로 돌아가거나 별도의 글로벌 수정을 시작하세요.",
   "game_visit_context": "컨텍스트: {context}",

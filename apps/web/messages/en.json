@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "This correction address is invalid. Open correction again from the current literary reading.",
+  "literary_visit_global_only": "This editor supports Global correction only. Start a separate Global visit to obtain current correction advice.",
+  "literary_visit_return": "Return to the literary reading",
+  "literary_visit_global": "Start a separate Global correction",
   "game_visit_invalid": "This correction address is invalid. Open correction again from the current Game reading.",
   "game_visit_unsupported": "This reading uses a Context that the Game correction editor does not support. Return to the source reading, or start a separate Global correction.",
   "game_visit_context": "Context: {context}",

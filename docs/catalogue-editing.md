@@ -952,6 +952,17 @@ Decision: Book and BookSeries creation uses the shared current parent `subject.c
 - Bound: reuse the existing parent action observation, independently bounded definitions, and existing target readers; no permission request per field, history scan, or polling. Retain existing field, statement, serialized-command, and held-retry caps.
 - Growth check: hold one Book or BookSeries type and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Literary create fixture.
 
+Decision: Literary correction carries bounded public Subject/Realm/Context and released Book or BookSeries type intent; nonGlobal intent is refused before editor or candidate work mounts, with a separate fresh Global visit that drops the old intent.
+
+The optional correction query is capped at 2,048 characters and UTF-8 bytes including percent-encoding expansion.
+It retains one validated public literary address and no previous address, observations, commands or draft bodies.
+Duplicate, unknown, unsupported or contradictory fields invalidate the whole descriptor independently of native
+missing, refused and unavailable reads. Direct addresses retain ordinary Global correction and creation is unchanged.
+Fresh profile admission compares a supplied Type with the current native Type. The existing native correction,
+relation and authored read windows and related-summary caps are unchanged; the descriptor adds zero native reads.
+Exact authored assertion inspection and completed fresh public return/focus are not yet supplied by this admission
+slice. The retained address promises navigation intent only, never current assertion identity or completed receiving.
+
 The current work groups identity/original names, bibliography/declared quantities, creator/series/classification
 relations and admitted original text. Bibliography reuses the multi-field editor and its independent results and
 keys; relations reuse the native target picker and qualified-slot editor; original text reuses authored fields,

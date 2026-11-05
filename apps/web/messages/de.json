@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "Diese Korrekturadresse ist ungültig. Öffne die Korrektur erneut aus der aktuellen Werkansicht.",
+  "literary_visit_global_only": "Dieser Editor unterstützt nur globale Korrekturen. Öffne eine separate globale Ansicht, um aktuelle Korrekturhinweise zu erhalten.",
+  "literary_visit_return": "Zur Werkansicht zurückkehren",
+  "literary_visit_global": "Separate globale Korrektur öffnen",
   "game_visit_invalid": "Diese Korrekturadresse ist ungültig. Öffne die Korrektur erneut aus der aktuellen Spielansicht.",
   "game_visit_unsupported": "Diese Ansicht verwendet einen Kontext, den der Spielkorrektur-Editor nicht unterstützt. Kehre zur Ausgangsansicht zurück oder beginne eine separate globale Korrektur.",
   "game_visit_context": "Kontext: {context}",

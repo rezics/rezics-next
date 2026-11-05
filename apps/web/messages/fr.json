@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "Cette adresse de correction est invalide. Rouvrez la correction depuis la lecture littéraire actuelle.",
+  "literary_visit_global_only": "Cet éditeur prend uniquement en charge les corrections globales. Ouvrez une visite globale distincte pour obtenir les indications actuelles.",
+  "literary_visit_return": "Revenir à la lecture littéraire",
+  "literary_visit_global": "Ouvrir une correction globale distincte",
   "game_visit_invalid": "Cette adresse de correction est invalide. Rouvrez la correction depuis la lecture actuelle du jeu.",
   "game_visit_unsupported": "Cette lecture utilise un Contexte que l’éditeur de correction de jeux ne prend pas en charge. Revenez à la lecture d’origine ou commencez une correction Globale distincte.",
   "game_visit_context": "Contexte : {context}",

@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "Esta dirección de corrección no es válida. Abre de nuevo la corrección desde la lectura literaria actual.",
+  "literary_visit_global_only": "Este editor solo admite correcciones globales. Abre una visita global independiente para obtener las indicaciones actuales.",
+  "literary_visit_return": "Volver a la lectura literaria",
+  "literary_visit_global": "Abrir una corrección global independiente",
   "game_visit_invalid": "Esta dirección de corrección no es válida. Abre la corrección desde la lectura actual del juego.",
   "game_visit_unsupported": "Esta lectura usa un Contexto que el editor de correcciones de juegos no admite. Vuelve a la lectura de origen o inicia una corrección Global por separado.",
   "game_visit_context": "Contexto: {context}",

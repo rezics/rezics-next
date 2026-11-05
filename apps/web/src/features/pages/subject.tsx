@@ -754,6 +754,9 @@ export function SubjectPage({
               label={subjectPageTitle(page, locale)}
               type={read.subject.type}
               locale={locale}
+              context={page.context?.id ?? read.subject.context}
+              realm={subjectPageRealm(page)}
+              source={literaryReturn}
             />
           )}
           {read.subject.type === 'schema:MusicAlbum' &&

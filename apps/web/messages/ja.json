@@ -1,4 +1,8 @@
 {
+  "literary_visit_invalid": "この修正アドレスは無効です。現在の文学作品の閲覧ページから修正を開き直してください。",
+  "literary_visit_global_only": "このエディターはグローバルの修正のみ対応しています。別のグローバル修正を開き、現在の修正案内を取得してください。",
+  "literary_visit_return": "文学作品の閲覧に戻る",
+  "literary_visit_global": "別のグローバル修正を開く",
   "game_visit_invalid": "この修正アドレスは無効です。現在のゲームの閲覧画面から修正を開き直してください。",
   "game_visit_unsupported": "この閲覧に使われているコンテキストはゲーム修正エディターでは未対応です。元の閲覧画面に戻るか、グローバルで別の修正を開始してください。",
   "game_visit_context": "コンテキスト: {context}",

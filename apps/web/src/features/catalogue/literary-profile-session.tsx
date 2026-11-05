@@ -1,3 +1,6 @@
+import { LiteraryCurrentVisitAdmission } from './literary-current-visit-view';
+import type { LiteraryVisitInput } from './literary-current-visit';
+import { subjectHref } from '../../subject/subject-href';
 import { useEffect, useRef } from 'react';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { editorRequest } from './editor-request';
@@ -86,16 +89,17 @@ function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
     />
   );
 }
-function LiteraryProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+function LiteraryProfileSessionLive({ id, locale, address, expectedType }: { id?: string; locale: string; address?: string | undefined; expectedType?: string | undefined }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   return (
     <LiteraryProfile
       id={id}
       locale={locale}
+      address={address}
       session={state}
       transport={{
-        load: () => loadLiteraryProfile({ data: id }),
+        load: () => loadLiteraryProfile({ data: expectedType && id ? { id, type: expectedType } : id }),
         eligibility: () => readCatalogueCreateEligibility(),
         submit: (command) =>
           createCatalogueLiteraryWork({
@@ -131,4 +135,12 @@ function LiteraryProfileSessionLive({ id, locale }: { id?: string; locale: strin
   );
 }
 
-export const LiteraryProfileSession = candidateSession(LiteraryProfileSessionLive);
+function LiteraryProfileVisit({ id, locale, visit = { kind: 'direct' }, address }: {
+  id?: string; locale: string; visit?: LiteraryVisitInput; address?: string;
+}) {
+  const globalHref = id ? `${subjectHref({ id, label: '' }, locale).href}/literary` : `/${locale}/catalogue/literary`;
+  return <LiteraryCurrentVisitAdmission input={visit} locale={locale} globalHref={globalHref}>
+    <LiteraryProfileSessionLive id={id} locale={locale} address={address} expectedType={visit.kind === 'visit' ? visit.visit.type : undefined} />
+  </LiteraryCurrentVisitAdmission>;
+}
+export const LiteraryProfileSession = candidateSession(LiteraryProfileVisit);
