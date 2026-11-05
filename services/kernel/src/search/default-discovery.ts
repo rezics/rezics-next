@@ -29,12 +29,7 @@ import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
-import type {
-  DiscoveryPage,
-  DiscoveryProducerEntry,
-  DiscoveryReadContext,
-  DiscoveryUnionHit,
-} from './index.ts';
+import type { DiscoveryPage, DiscoveryProducerEntry, DiscoveryReadContext, DiscoveryUnionHit } from './index.ts';
 import {
   createRetainedDiscoverySearch,
   type DiscoverySearch,

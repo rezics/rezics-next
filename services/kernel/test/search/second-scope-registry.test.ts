@@ -68,17 +68,20 @@ const options: DiscoveryRegistryOptions = {
         metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'collection' },
         async readCurrent(ids) {
           return new Map(
-            ids.map((currentId) => [
-              currentId,
-              {
-                id: currentId,
-                title: 'Collection',
-                summary: null,
-                revision: '1',
-                sourcePosition: '1',
-                card: collectionCard(currentId),
-              },
-            ] as const),
+            ids.map(
+              (currentId) =>
+                [
+                  currentId,
+                  {
+                    id: currentId,
+                    title: 'Collection',
+                    summary: null,
+                    revision: '1',
+                    sourcePosition: '1',
+                    card: collectionCard(currentId),
+                  },
+                ] as const,
+            ),
           );
         },
       },
@@ -91,18 +94,21 @@ const options: DiscoveryRegistryOptions = {
         metadata: { id: 'review', labels: { en: 'Reviews' }, icon: 'review' },
         async readCurrent(ids) {
           return new Map(
-            ids.map((currentId) => [
-              currentId,
-              {
-                id: currentId,
-                title: 'Review',
-                summary: null,
-                sourceVersion: 'source-v1',
-                sourcePosition: '1',
-                authorId,
-                subjectId,
-              },
-            ] as const),
+            ids.map(
+              (currentId) =>
+                [
+                  currentId,
+                  {
+                    id: currentId,
+                    title: 'Review',
+                    summary: null,
+                    sourceVersion: 'source-v1',
+                    sourcePosition: '1',
+                    authorId,
+                    subjectId,
+                  },
+                ] as const,
+            ),
           );
         },
       },
@@ -115,19 +121,22 @@ const options: DiscoveryRegistryOptions = {
         metadata: { id: 'space', labels: { en: 'Spaces' }, icon: 'space' },
         async readCurrent(ids) {
           return new Map(
-            ids.map((currentId) => [
-              currentId,
-              {
-                id: currentId,
-                title: 'Space',
-                summary: null,
-                revision: '1',
-                sourcePosition: '1',
-                address: 'native-space',
-                realmId: null,
-                realmTitle: null,
-              },
-            ] as const),
+            ids.map(
+              (currentId) =>
+                [
+                  currentId,
+                  {
+                    id: currentId,
+                    title: 'Space',
+                    summary: null,
+                    revision: '1',
+                    sourcePosition: '1',
+                    address: 'native-space',
+                    realmId: null,
+                    realmTitle: null,
+                  },
+                ] as const,
+            ),
           );
         },
       },

@@ -435,22 +435,25 @@ test('default discovery owns hydration languages before activeRelease', async ()
     },
   });
   const producers = createDiscoveryProducerEntry({ pool, routeKey: new Uint8Array(32).fill(1), access, tokens: keys });
-  const discovery = createDefaultDiscoverySearch({
-    pool,
-    routeKey: new Uint8Array(32).fill(1),
-    access: new Proxy({} as Access, {
-      get() {
-        throw new Error('Unexpected Access read');
-      },
-    }),
-    search: {
-      request: async () => ({ status: 503, body: {} }),
-      bulk: async () => ({ errors: true }),
-    } as OpenSearch,
-    prefix: 'own-',
-    clock: () => new Date(now),
-    keys,
-  }, producers);
+  const discovery = createDefaultDiscoverySearch(
+    {
+      pool,
+      routeKey: new Uint8Array(32).fill(1),
+      access: new Proxy({} as Access, {
+        get() {
+          throw new Error('Unexpected Access read');
+        },
+      }),
+      search: {
+        request: async () => ({ status: 503, body: {} }),
+        bulk: async () => ({ errors: true }),
+      } as OpenSearch,
+      prefix: 'own-',
+      clock: () => new Date(now),
+      keys,
+    },
+    producers,
+  );
   try {
     const request = liveRequest();
     const pending = discovery.open('anonymous', request, {

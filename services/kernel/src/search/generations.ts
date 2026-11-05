@@ -37,11 +37,7 @@ import {
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { validateObservation } from './indexer.ts';
 import type { Pool } from 'pg';
-import type {
-  DiscoveryMetadataKind,
-  DiscoveryMetadataProducer,
-  DiscoveryMetadataProducers,
-} from './discovery-api.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './discovery-api.ts';
 import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
 import {
   classifyDiscoveryMetadataProducers,

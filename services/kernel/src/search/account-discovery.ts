@@ -36,10 +36,7 @@ import {
   type IndexedAccount,
 } from './discovery.ts';
 import { reviewDiscoveryDocument } from './review-discovery.ts';
-import {
-  assertDiscoveryCapabilityBinding,
-  DiscoveryProducerCoverageError,
-} from './generations.ts';
+import { assertDiscoveryCapabilityBinding, DiscoveryProducerCoverageError } from './generations.ts';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
 import type { ReviewDiscoveryRefresh } from '../content/index.ts';
 import { assertCompleteSearch } from './complete-search.ts';

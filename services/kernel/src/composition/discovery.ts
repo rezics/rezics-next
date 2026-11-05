@@ -26,16 +26,17 @@ export function createDiscoveryProducerEntry(input: {
   reviewSource?: ReviewDiscoverySource;
 }): DiscoveryProducerEntry {
   const { pool, routeKey, access, clock } = input;
-  const reviewSource = input.reviewSource ?? (input.tokens
-    ? createReviewDiscoverySource(
-        { pool, access, tokens: input.tokens, ...(clock ? { clock } : {}) },
-        () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
-      )
-    : undefined);
+  const reviewSource =
+    input.reviewSource ??
+    (input.tokens
+      ? createReviewDiscoverySource({ pool, access, tokens: input.tokens, ...(clock ? { clock } : {}) }, () => ({
+          actor: { kind: 'anonymous' },
+          deadline: Date.now() + 30_000,
+        }))
+      : undefined);
   const spaceDependencies = { pool, access, ...(clock ? { clock } : {}) };
-  const space = createSpaceDiscoveryAdapter(
-    spaceDiscoverySource(spaceDependencies),
-    (ids, context) => readSpaceDiscoverySummaries(spaceDependencies, ids, context),
+  const space = createSpaceDiscoveryAdapter(spaceDiscoverySource(spaceDependencies), (ids, context) =>
+    readSpaceDiscoverySummaries(spaceDependencies, ids, context),
   );
   const ownerAdapters = createDiscoveryOwnerAdapters({
     pool,

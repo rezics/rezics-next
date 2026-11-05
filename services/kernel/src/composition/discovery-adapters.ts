@@ -3,7 +3,10 @@ import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from '../search/collection-discovery.ts';
+import {
+  CollectionDiscoveryReadinessError,
+  createNativeCollectionDiscoveryAdapter,
+} from '../search/collection-discovery.ts';
 import { createReviewDiscoveryAdapter } from '../search/review-discovery.ts';
 import type { SpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
@@ -12,10 +15,7 @@ import {
   type IndexedReview,
   type ReviewDiscoverySource,
 } from '../content/review-discovery.ts';
-import type {
-  CollectionDiscoveryItem,
-  CollectionDiscoverySource,
-} from '../library/collection-discovery-source.ts';
+import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../library/collection-discovery-source.ts';
 import type {
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerMetadataSummary,
@@ -27,9 +27,10 @@ import type {
 import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from '../search/discovery-errors.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from '../search/discovery-documents.ts';
 
-export type DiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots & Readonly<{
-  metadataProducers: DiscoveryMetadataProducers;
-}>;
+export type DiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots &
+  Readonly<{
+    metadataProducers: DiscoveryMetadataProducers;
+  }>;
 
 const DISCOVERY_OWNER_METADATA = {
   collection: {
@@ -96,9 +97,7 @@ function requestedKeys(
   return keys;
 }
 
-function collectionRecords(
-  items: readonly CollectionDiscoveryItem[],
-) {
+function collectionRecords(items: readonly CollectionDiscoveryItem[]) {
   const records: SecondScopeDiscoveryRecord[] = [];
   for (const item of items) {
     if (item.status === 'unavailable') throw new CollectionDiscoveryReadinessError('unavailable', item.reason);
@@ -115,11 +114,7 @@ function collectionRecords(
   return records;
 }
 
-function reviewRecords(
-  partition: number,
-  position: bigint,
-  reviews: readonly IndexedReview[],
-) {
+function reviewRecords(partition: number, position: bigint, reviews: readonly IndexedReview[]) {
   const records: SecondScopeDiscoveryRecord[] = [];
   for (const review of reviews) {
     const key = metadataKey('content', 'review', review.id);
@@ -250,9 +245,7 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
   };
 }
 
-function createSpacePopulationProducer(
-  adapter: SpaceDiscoveryAdapter,
-): DiscoveryMetadataProducer {
+function createSpacePopulationProducer(adapter: SpaceDiscoveryAdapter): DiscoveryMetadataProducer {
   return {
     kind: 'space',
     owner: 'content',
@@ -396,4 +389,3 @@ export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionIn
     metadataProducers,
   });
 }
-

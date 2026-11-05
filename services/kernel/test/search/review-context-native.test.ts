@@ -73,12 +73,11 @@ test('selected mixed Search preserves the opening citation and current target, a
     }
     const source = createRatedSubjectSource(deps.pool, deps.routeKey).source;
     const producers = createDiscoveryProducerEntry({ ...deps, subjects: source });
-    const registry = await nativeDiscoveryRegistry(
-      deps.pool,
-      deps.routeKey,
-      producers.subjects,
-      { ownerAdapters: producers.ownerAdapters, accounts: producers.accounts, languages: ['en'] },
-    );
+    const registry = await nativeDiscoveryRegistry(deps.pool, deps.routeKey, producers.subjects, {
+      ownerAdapters: producers.ownerAdapters,
+      accounts: producers.accounts,
+      languages: ['en'],
+    });
     async function selected(): Promise<DiscoveryPage> {
       const read = context();
       const source = createReviewDiscoverySource(deps, () => read);

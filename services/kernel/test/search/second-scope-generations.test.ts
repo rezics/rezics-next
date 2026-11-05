@@ -102,8 +102,11 @@ test('metadata producer absence and readiness omit only that kind from generatio
 
 test('query registration omits unavailable kinds and waits for the published generation', async () => {
   const producer = (kind: 'collection' | 'review' | 'space', readiness: unknown) =>
-    ({ kind, owner: kind === 'collection' ? 'commerce' : 'content', readiness: async () => readiness }) as unknown as
-      DiscoveryMetadataProducer;
+    ({
+      kind,
+      owner: kind === 'collection' ? 'commerce' : 'content',
+      readiness: async () => readiness,
+    }) as unknown as DiscoveryMetadataProducer;
   const entry = {
     ownerAdapters: {
       collection: { readiness: 'ready', adapter: {} },

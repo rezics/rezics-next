@@ -1,7 +1,5 @@
 import { classifyDiscoveryMetadataProducers } from './discovery-readiness.ts';
-import type {
-  DiscoveryCapabilityWitnesses,
-} from './discovery-readiness.ts';
+import type { DiscoveryCapabilityWitnesses } from './discovery-readiness.ts';
 import type {
   DiscoveryMetadataKind,
   DiscoveryMetadataProducer,

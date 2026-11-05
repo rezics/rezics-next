@@ -24,5 +24,8 @@ export type SourcePage<Item, Continuation extends SerializableContinuation, Cove
 
 /** The admitted plan is supplied by the owning service; continuation carries no policy or native authority. */
 export interface Source<Plan, Item, Continuation extends SerializableContinuation, Coverage, Freshness> {
-  read(admittedPlan: Plan, continuation: Continuation | null): Promise<SourcePage<Item, Continuation, Coverage, Freshness>>;
+  read(
+    admittedPlan: Plan,
+    continuation: Continuation | null,
+  ): Promise<SourcePage<Item, Continuation, Coverage, Freshness>>;
 }

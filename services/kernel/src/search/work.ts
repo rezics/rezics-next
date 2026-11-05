@@ -64,10 +64,12 @@ type SearchDiscoveryComposer = (input: {
   subjects: SubjectSource;
 }) => DiscoveryProducerEntry;
 
-type SearchRuntimeDefaults = Required<Pick<
-  Parameters<typeof createKernel>[0],
-  'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
->>;
+type SearchRuntimeDefaults = Required<
+  Pick<
+    Parameters<typeof createKernel>[0],
+    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
+  >
+>;
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
 
 export function createSearchWorkModule(
@@ -159,7 +161,8 @@ export function createSearchWorkModule(
           types: ['com.rezics.access.account-tombstoned.v1'],
           async run(event) {
             const data = event.data as { accountId?: string };
-            if (!data.accountId || data.accountId !== event.subject) throw new TypeError('Invalid Search erasure event');
+            if (!data.accountId || data.accountId !== event.subject)
+              throw new TypeError('Invalid Search erasure event');
             await context.client.enqueue(
               {
                 workflowName: 'search.eraseAccount',
@@ -214,7 +217,9 @@ export function createSearchWorkModule(
       DBOS.registerWorkflow(segment, { name: 'search.recentRetentionSegment' });
       DBOS.registerWorkflow(
         async () => {
-          const cutoff = await DBOS.runStep(async () => context.clock().toISOString(), { name: 'search.retentionTime' });
+          const cutoff = await DBOS.runStep(async () => context.clock().toISOString(), {
+            name: 'search.retentionTime',
+          });
           await segment({ root: DBOS.workflowID!, sequence: 0, cutoff, partition: 0 });
         },
         { name: 'search.recentRetention' },
