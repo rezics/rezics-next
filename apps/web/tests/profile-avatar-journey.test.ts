@@ -1,3 +1,4 @@
+import { mediaClient, readAvatarUploadAdvice } from '../src/media/kernel';
 import { expect, test } from 'bun:test';
 import { spyOn } from 'bun:test';
 import {
@@ -969,5 +970,21 @@ test('command waits keep the longest response-time Retry-After through delayed c
     boundary.disconnect();
     fetchSpy.mockRestore();
     clock.mockRestore();
+  }
+});
+
+
+test('the installed Eden callable delivers current avatar advice with the original bearer', async () => {
+  const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    expect(String(input)).toBe('https://kernel.test/v1/media/avatar-upload-advice');
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer original');
+    return Response.json(advice(profile().accountId));
+  });
+  try {
+    expect(await readAvatarUploadAdvice(mediaClient('https://kernel.test'), 'Bearer original', profile().accountId))
+      .toEqual(advice(profile().accountId));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    fetchSpy.mockRestore();
   }
 });
