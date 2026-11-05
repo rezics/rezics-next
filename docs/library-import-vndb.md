@@ -113,18 +113,23 @@ epochs, and current counted own vote or proven absence. The consumer also captur
 scale, the whole retained source digest, match digest and target source fingerprint. These private operands never
 appear in public aggregates or HTTP review responses.
 
-Apply freezes the original actor credential before dispatch. The existing native vote writer receives the frozen
-body, guard, observation and key, plus the source owner's admission. Source operands join the native receipt digest;
+Apply uses Content’s `preparePutVote` to retain the normalized body and receipt digest together with the original
+actor credential before dispatch. The existing native vote writer receives that frozen body, guard, observation
+and key, plus the source owner’s admission. Source operands join the native receipt digest;
 fresh execution checks the locked retained row, review, lifetime and cancellation after native receipt lookup.
 Known source or native witness changes return stale. An unexpected error propagates while preserving the original
 dispatch for exact retry. Current authorization precedes receipt disclosure. Cancellation or expiry permits only
 reconciliation of a pending original command; no later action starts. Success reads current own state through
 `readVoteReview`, including counted zero and explicit clear; neither a receipt nor an aggregate supplies readback.
 
-The base native writer still returns `atomic_guard_unavailable` before guarded effects. This consumer dispatches the
-actual writer and retains its original operands, but successful supported-home commits depend on Content's named
-repair and Semantic's same-home participant. Foreign-home support and the Person merge guard remain separate.
-Do not interpret conditional review as delivered guarded effects or relax native publication or money prerequisites.
+Decision: supported same-home score effects use Content’s native question and Semantic identity participants;
+pending dispatches first use `reconcilePutVote` with their original producer-prepared receipt, then dispatch the
+original command only if no receipt exists. Historical dispatches retain their original guard and digest.
+
+The supported native path commits deliberately chosen units, counted zero and explicit clear, and its current
+readback uses `readVoteReview`. Source cancellation or expiry permits receipt reconciliation but refuses a fresh
+effect. Foreign-home support and the Person merge guard remain separate; foreign question, source or persisted
+control homes still return `atomic_guard_unavailable`. Native publication and money prerequisites remain unchanged.
 
 ## Caller cost and cleanup
 
@@ -137,7 +142,9 @@ decision JSON update. No history, other-account vote or account-wide vote scan i
 
 An apply batch selects at most eight actions total, even when one row selects both state and score. Each selected
 score action reads its exact upload row, records its immutable dispatch and invokes the existing Content writer.
-Charge target/question preparation, current-vote and counted-target locks and source-owner admission on every reached
+A pending retry with a retained producer receipt adds one native receipt-only lookup with current authorization
+and disclosure; an absent receipt continues into the original writer. Charge target/question preparation, current-vote
+and counted-target locks and source-owner admission on every reached
 attempt, including unavailable or rolled-back attempts. Successful supported native effects additionally pay the
 native receipt, aggregate work and returned component; Content owns those native terms. Acknowledgement records one
 bounded Library result, and current own-vote readback repeats the counted reader. Exact physical counts and shared native growth remain unmeasured. The whole journey is bounded by
