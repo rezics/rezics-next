@@ -190,6 +190,7 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
     expect((await loadInventory('clients')).kind).toBe('unavailable');
     expect(calls.length).toBe(beforeInvalid);
 
+    workerEnv.AUTH_SECURITY_SCOPE_CONFIGURATION = 'catalogue:4';
     for (const [status, cursor, kind] of [[401, undefined, 'signed-out'], [403, undefined, 'denied'], [400, 'opaque-cursor', 'expired']]) {
       globalThis.fetch = async input => { calls.push(String(input)); return new Response(null, { status }); };
       expect((await loadInventory('clients', cursor)).kind).toBe(kind);
