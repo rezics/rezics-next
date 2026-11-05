@@ -3,10 +3,14 @@
 [Zones](../../../../docs/zones.md), [membership](../../../../docs/zone-membership.md) and
 [filtered lists](../../../../docs/filtered-lists.md) own behavior.
 
-`http.ts` mounts one `zone.read_page` composition in `page-runtime.ts`. Kernel supplies the same optional real
-Search service used by Search routes, native Access, routing key, clock and Accounts key ring. Static documents
-with no planned reads take the original independent 200 path. Source-dependent and direct-subject reads first
-use current Zone authority and native `admitGroup('zone_sources')`; exposure grants no source permission.
+`http.ts` mounts `GET /v1/zones/{id}/collections` and one `zone.read_page` composition in `page-runtime.ts`.
+The mounted Collection summary route uses the requesting Actor's current Zone `zone:read` admission, then the
+existing `zone_sources` gate and each Collection owner's `readCollection` projection. It returns only the
+currently readable summaries in configured mount order. Hidden mounts add no output or cursor position.
+Kernel supplies the same optional real Search service used by Search routes, native Access, routing key, clock
+and Accounts key ring. Static documents with no planned reads take the original independent 200 path.
+Source-dependent and direct-subject reads first use current Zone authority and native
+`admitGroup('zone_sources')`; exposure grants no source permission.
 
 ## Callable composition
 
@@ -42,7 +46,30 @@ allow vectors and proofs never enter the public token. There is no new token lif
 
 A changed retained frontier yields private/no-store `202 {next}`. Complete common pages plus the safe Zone shell
 yield 200. Unready or impossible/no-progress work yields standard 503 with Retry-After and no partial document.
-An admitted source-free direct target is concealed 404. GET UUID list semantics are separate.
+An admitted source-free direct target is concealed 404. The separate mounted Collection GET is a finite summary
+list, not the Zone's UUID Subject union.
+
+## Mounted Collection summary list
+
+The cursor uses the default list profile and binds method, Zone, viewer and limit. Its locator is the last
+disclosed Collection ID plus current Zone and lifecycle revisions; each request re-reads every configured mount
+through `createCollectionReads().readCollection`. Only a native `not_found` is omitted. Other owner errors,
+including unavailable reads with their original Retry-After, abort the whole response. A first and final Zone
+basis read and two serial source passes revalidate mount configuration, visibility, owner activity, Collection
+permissions and safe summaries before returning `{collections,next}`. No Collection members, owner predicates or
+hidden source ordinals are read or retained.
+
+### Cost
+
+- The Zone has at most 16 configured mounts. Each pass reads at most 16 owner summaries; the full request makes
+  at most 32 serial `readCollection` calls, two Zone basis reads and one gate admission. Each Zone basis performs
+  one `zone:read` check and its own read-only Zone transaction; current Zone-head and owner-account verification
+  remain within those reads.
+- There are at most 16 output slots. The response byte cost is the selected existing Collection projections,
+  the `{collections,next}` envelope and one cursor. The default cursor has three position keys and remains under
+  the existing 4,096-character cap. Neither rows nor token positions include hidden mount IDs or ordinals.
+- The Zone holds no checkout across owner calls. Each Collection keeps its documented Access, presentation and
+  currentness bounds; no member, history or owner-index scan is added.
 
 ## Owner dependencies and verification boundary
 
