@@ -1,5 +1,6 @@
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { Provider } from './cross-media-bindings.ts';
+import type { SourceRecord } from '@rezics/conversion';
 
 export type PersonIdentity = Readonly<{
   source: Provider;
@@ -22,6 +23,66 @@ export type PersonIdentityObservation =
       state: Exclude<PersonIdentityCurrentness, 'current'>;
       identity: PersonIdentity;
     }>;
+
+/** Private seed handoff. The binding is the original native UUID, even after a merge. */
+export type PersonReviewSource = Readonly<{
+  identity: PersonIdentity;
+  boundSubjectId: string;
+  sourceAlias: string;
+  record: SourceRecord;
+  digest: string;
+  converterRevision: string;
+}>;
+
+export type PersonReviewSelection = Readonly<{
+  bangumi: string;
+  vndb: string;
+}>;
+
+export type PersonReviewPair =
+  | Readonly<{ state: 'selected'; sources: readonly [PersonReviewSource, PersonReviewSource] }>
+  | Readonly<{
+      state: 'incomplete';
+      missing: readonly Readonly<{ source: Provider; externalId: string }>[];
+    }>;
+
+/** Use the converter's actual type and digest, never a name match or a fabricated native ID. */
+export function personReviewSource(input: {
+  record: SourceRecord;
+  nativeType: string;
+  boundSubjectId: string;
+  sourceAlias: string;
+  digest: string;
+  converterRevision: string;
+}): PersonReviewSource | undefined {
+  const { record } = input;
+  if (record.source !== 'bangumi' && record.source !== 'vndb') return undefined;
+  const identity = personIdentityForSource(record.source, record.key, input.nativeType);
+  if (!identity) return undefined;
+  const { nativeType: _, ...source } = input;
+  return { identity, ...structuredClone(source) };
+}
+
+/** Select exact admitted records for comparison. Selection is not an identity decision. */
+export function selectPersonReviewPair(
+  sources: readonly PersonReviewSource[],
+  selection: PersonReviewSelection,
+): PersonReviewPair {
+  const bangumi = sources.find(
+    (entry) => entry.identity.source === 'bangumi' && entry.identity.externalId === selection.bangumi,
+  );
+  const vndb = sources.find(
+    (entry) => entry.identity.source === 'vndb' && entry.identity.externalId === selection.vndb,
+  );
+  if (bangumi && vndb) return { state: 'selected', sources: [bangumi, vndb] };
+  return {
+    state: 'incomplete',
+    missing: [
+      ...(!bangumi ? [{ source: 'bangumi' as const, externalId: selection.bangumi }] : []),
+      ...(!vndb ? [{ source: 'vndb' as const, externalId: selection.vndb }] : []),
+    ],
+  };
+}
 
 /** Only exact source-key identities qualify; names and credit evidence never create a binding. */
 export function personIdentityForSource(

@@ -29,7 +29,9 @@ import { sourceDigest, sourceWebsiteUrl } from '../../../packages/conversion/src
 import {
   observePersonIdentity,
   personIdentityForSource,
+  personReviewSource,
   type CurrentPersonIdentity,
+  type PersonReviewSource,
 } from './showcase-person-identity.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
@@ -2084,6 +2086,8 @@ export type CrossMediaSeedResult = {
   readings: CrossMediaReading[];
   /** Current native identities for exact source records, including their durable original binding. */
   personIdentities: CrossMediaPersonIdentity[];
+  /** Private comparison inputs from actual admitted records, independent of canonical read availability. */
+  personReviewSources?: readonly PersonReviewSource[];
   mediaOutcomes: CrossMediaMediaOutcome[];
   workLinks: ShowcaseWorkLinkHandoff[];
   gaps: CrossMediaGap[];
@@ -2626,6 +2630,7 @@ export async function seedCrossMedia(
       };
     }
     const nativeTypes = new Map<string, string>();
+    const personSourceEvidence = new Map<string, { record: SourceRecord; digest: string; converterRevision: string }>();
     const currentReads = new Map<string, Promise<ReviewedSubjectRead | null>>();
     const currentReadFailures = new Map<string, unknown>();
     const readCurrent = (subjectId: string): Promise<ReviewedSubjectRead | null> => {
@@ -2655,8 +2660,15 @@ export async function seedCrossMedia(
           { source: registration.source },
         );
         const bootstrap = conversion.proposals.find((command) => command.op === 'create');
-        if (bootstrap?.op === 'create')
+        if (bootstrap?.op === 'create') {
           nativeTypes.set(`${crossMediaAliases[provider]}\u0000${record.key}`, bootstrap.subject.type);
+          if (personIdentityForSource(provider, record.key, bootstrap.subject.type))
+            personSourceEvidence.set(`${crossMediaAliases[provider]}\u0000${record.key}`, {
+              record,
+              digest: conversion.digest,
+              converterRevision: conversion.converter_revision,
+            });
+        }
       }
       async function* records() {
         if (extras?.entitiesFirst || (provider === 'vndb' && vndbCredits !== undefined)) {
@@ -2759,11 +2771,22 @@ export async function seedCrossMedia(
     });
     const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     const sourceIdentityGaps: CrossMediaGap[] = [];
+    const personReviewSources: PersonReviewSource[] = [];
     for (const record of keys) {
       const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
       const sourceAlias = crossMediaAliases[provider];
       const claim = importer.session.bindings.claim({ source: sourceAlias, external_id: record.key });
       if (claim?.state !== 'bound') continue;
+      const evidence = personSourceEvidence.get(`${sourceAlias}\u0000${record.key}`);
+      if (evidence) {
+        const reviewSource = personReviewSource({
+          ...evidence,
+          nativeType: 'schema:Person',
+          sourceAlias,
+          boundSubjectId: claim.subject,
+        });
+        if (reviewSource) personReviewSources.push(reviewSource);
+      }
       const subjectRead = await readCurrent(claim.subject);
       if (!subjectRead && provider === 'vndb' && /^r[1-9][0-9]*$/u.test(record.key)) {
         const status = currentReleaseEndpoint(
@@ -2907,6 +2930,7 @@ export async function seedCrossMedia(
       runs,
       readings,
       personIdentities,
+      personReviewSources,
       mediaOutcomes: [],
       workLinks: [],
       gaps: [
