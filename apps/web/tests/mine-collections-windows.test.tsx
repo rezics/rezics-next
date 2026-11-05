@@ -134,6 +134,9 @@ test('the private Collections route retains admitted cursor coordinates across l
   const { m } = await import('../src/paraglide/messages.js');
   const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   const reads = await import('../src/library/mine-collections-route');
+  const movementSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'beginMovement');
+  const observeSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'observe');
+  const acceptSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'accept');
   const inputs: { cursor: string | null; layout: 'rows' | 'previews' }[] = [];
   let allowRetry = false;
   const reader = spyOn(reads, 'readMineCollectionsViewerPage').mockImplementation(async ({ data }) => {
@@ -226,6 +229,17 @@ test('the private Collections route retains admitted cursor coordinates across l
     const next = movementLink(m.library_collection_more());
     next.focus();
     await click(next);
+    if ((router.state.location.search as Record<string, unknown>).cursor !== 'cursor-a')
+      throw new Error(
+        JSON.stringify({
+          href: next.href,
+          location: router.state.location,
+          movementCalls: movementSpy.mock.calls.map(([, action, source, target]) => [action, source, target]),
+          movementResults: movementSpy.mock.results.map((result) => result.value),
+          observations: observeSpy.mock.calls.map((call) => call.slice(0, 3)),
+          admissions: acceptSpy.mock.calls,
+        }),
+      );
     expect((router.state.location.search as Record<string, unknown>).cursor).toBe('cursor-a');
     expect(host.querySelector('[data-collection-browse="rows"]')?.textContent).toContain('Collection sparse');
     expect(document.activeElement?.hasAttribute('data-collections-list-region')).toBe(true);
@@ -285,5 +299,8 @@ test('the private Collections route retains admitted cursor coordinates across l
     host.remove();
     canonical.remove();
     reader.mockRestore();
+    movementSpy.mockRestore();
+    observeSpy.mockRestore();
+    acceptSpy.mockRestore();
   }
 });
