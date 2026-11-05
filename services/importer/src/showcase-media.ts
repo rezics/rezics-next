@@ -47,6 +47,8 @@ export type BangumiPersonCareerSource = Readonly<{
   birth_year?: number | null;
   birth_mon?: number | null;
   birth_day?: number | null;
+  personChineseName?: string;
+  personNameDiagnostics?: readonly Readonly<{ pointer: string; code: string }>[];
   responseDigest?: string;
   etag?: string;
   code?: 'source-api-http' | 'source-api-unavailable' | 'source-payload-invalid';

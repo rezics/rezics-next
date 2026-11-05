@@ -39,6 +39,7 @@ const personOne = {
   birth_year: 1974,
   birth_mon: 11,
   birth_day: 8,
+  infobox: [{ key: '简体中文名', value: '星見中文' }],
 };
 const personBirthDate = {
   time: '+1974-11-08T00:00:00Z',
@@ -159,6 +160,47 @@ function readSubjectId(result: Awaited<ReturnType<typeof seedCrossMedia>>, exter
   return id;
 }
 
+async function selectNameCandidates(
+  editor: Awaited<ReturnType<typeof openApiObserver>>,
+  subjectId: string,
+  selected: readonly { id: string }[],
+  accept = selected,
+) {
+  const query = new URLSearchParams({ property: 'schema:name', context: globalContext, limit: '100' });
+  const page = await editor.http(`/v1/subjects/${subjectId}/candidates?${query}`);
+  expect(page.status).toBe(200);
+  const head = (page.body.adoption as { head: number } | null)?.head ?? null;
+  for (const candidate of accept)
+    expect(
+      (await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
+        context: globalContext,
+        expected_head: null,
+      })).status,
+    ).toBe(200);
+  expect(
+    (
+      await editor.http(`/v1/subjects/${subjectId}:adopt`, {
+        context: globalContext,
+        property: 'schema:name',
+        mode: 'replace',
+        selection: selected.map(({ id }) => ({ candidate: id, rank: 'normal' })),
+        expected_head: head,
+      })
+    ).status,
+  ).toBe(200);
+}
+
+async function publicNames(editor: Awaited<ReturnType<typeof openApiObserver>>, subjectId: string) {
+  const current = await editor.http(`/v1/subjects/${subjectId}?context=${globalContext}`);
+  expect(current.status).toBe(200);
+  const statements = (
+    current.body.subject as {
+      statements: Record<string, { value: { content: unknown }; references: unknown[] }[]>;
+    }
+  ).statements['schema:name'] ?? [];
+  return statements.map((statement) => statement.value.content);
+}
+
 function importerTransport(port: CrossMediaPort): ImportTransport {
   return {
     batchWrite: (request) => port.batch(request),
@@ -277,6 +319,27 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     expect(firstRun.runs.bangumi?.status).toBe('committed');
     const personId = readSubjectId(firstRun, 'person:8101');
     const organizationId = readSubjectId(firstRun, 'person:8102');
+    const nameCandidates = await candidates(editor, personId, 'schema:name');
+    expect(nameCandidates).toHaveLength(2);
+    const originalName = nameCandidates.find(
+      (candidate) => JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'und', text: '星見' }),
+    );
+    const originalChineseName = nameCandidates.find(
+      (candidate) => JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'zh', text: '星見中文' }),
+    );
+    expect(originalName?.source).toMatchObject({ source: alias, external_id: 'person:8101', field_group: 'facts' });
+    expect(originalChineseName?.statement.references?.[0]?.parts).toContainEqual({
+      property: { id: 'schema:url' },
+      value: { type: 'value', content: 'https://bgm.tv/person/8101' },
+    });
+    if (!originalName || !originalChineseName) throw new Error('Missing source-selected Person names');
+    await selectNameCandidates(editor, personId, [originalName, originalChineseName]);
+    expect(await publicNames(editor, personId)).toEqual(
+      expect.arrayContaining([
+        { language: 'und', text: '星見' },
+        { language: 'zh', text: '星見中文' },
+      ]),
+    );
     const captured = commands(runtime);
     const biographyCommands = captured.filter(
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
@@ -426,12 +489,34 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     ).statements['schema:birthDate']?.[0]?.value.content;
     expect(selectedBirth).toEqual(personBirthDate);
 
-    const changedBiography = { ...personOne, summary: '新しい紹介：別の作品を発表した。' };
+    const changedBiography = {
+      ...personOne,
+      summary: '新しい紹介：別の作品を発表した。',
+      infobox: [{ key: '简体中文名', value: '星見中文 改' }],
+    };
     await writeBangumi(bangumiDirectory, [changedBiography, organization, emptyPerson, absentPerson]);
     const changed = await runSeed();
     expect(changed.runs.bangumi?.status).toBe('committed');
     const personCandidates = await candidates(editor, personId, 'schema:abstract');
     expect(personCandidates).toHaveLength(2);
+    const refreshedNames = await candidates(editor, personId, 'schema:name');
+    const refreshedChineseName = refreshedNames.find(
+      (candidate) =>
+        JSON.stringify(candidate.statement.value.content) ===
+        JSON.stringify({ language: 'zh', text: '星見中文 改' }),
+    );
+    expect(refreshedChineseName).toBeDefined();
+    const currentBeforeNameSelection = await publicNames(editor, personId);
+    expect(currentBeforeNameSelection).toContainEqual({ language: 'zh', text: '星見中文' });
+    expect(currentBeforeNameSelection).not.toContainEqual({ language: 'zh', text: '星見中文 改' });
+    if (!originalName || !refreshedChineseName) throw new Error('Missing changed Chinese name candidate');
+    await selectNameCandidates(editor, personId, [originalName, refreshedChineseName], [refreshedChineseName]);
+    expect(await publicNames(editor, personId)).toEqual(
+      expect.arrayContaining([
+        { language: 'und', text: '星見' },
+        { language: 'zh', text: '星見中文 改' },
+      ]),
+    );
     const changedCommand = commands(runtime).find(
       (command) =>
         command.op === 'propose' &&
@@ -459,7 +544,12 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
 
     await editor.takedown(alias, 'person:8101', 'summary');
     await writeBangumi(bangumiDirectory, [
-      { ...changedBiography, name: '星見 改訂', summary: '受け取られない再掲載：概要の取り下げ後。' },
+      {
+        ...changedBiography,
+        name: '星見 改訂',
+        summary: '受け取られない再掲載：概要の取り下げ後。',
+        infobox: [{ key: '简体中文名', value: { malformed: ['withheld'] } }],
+      },
       organization,
       emptyPerson,
       absentPerson,
@@ -480,6 +570,16 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     expect(fencedFacts?.op).toBe('propose');
     if (!fencedFacts || fencedFacts.op !== 'propose') throw new Error('Facts did not refresh behind the summary fence');
     expect(fencedFacts.statement.value.content).toEqual({ language: 'und', text: '星見 改訂' });
+    expect(
+      fencedCommands.some(
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === 'person:8101' &&
+          command.statement.property.id === 'schema:name' &&
+          (command.statement.value.content as { language?: string }).language === 'zh',
+      ),
+    ).toBe(false);
+    expect(await publicNames(editor, personId)).toContainEqual({ language: 'zh', text: '星見中文 改' });
     expect(
       fencedCommands.some(
         (command) =>
