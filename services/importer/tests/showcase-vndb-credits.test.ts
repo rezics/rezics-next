@@ -362,6 +362,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       status: 'incomplete' as const,
       manifest,
       published,
+      vndbWorkRelations: [],
       omissions: [],
       unresolvedCharacterDependencies: [],
     } satisfies ShowcasePublicationResult;

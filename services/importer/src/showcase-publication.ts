@@ -5,7 +5,12 @@ import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement 
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import { createImportTransport } from './import-client.ts';
-import type { CrossMediaPlan, CrossMediaPort, CrossMediaSeedResult } from './cross-media-seed.ts';
+import type {
+  CrossMediaPlan,
+  CrossMediaPort,
+  CrossMediaSeedResult,
+  VndbWorkRelationOutcome,
+} from './cross-media-seed.ts';
 import {
   buildShowcaseManifest,
   showcaseDigest,
@@ -1206,6 +1211,7 @@ export type ShowcasePublicationResult = Readonly<{
       target?: { sourceKey: string; subjectId: string; nativeType: string };
     }[];
   }[];
+  vndbWorkRelations: readonly VndbWorkRelationOutcome[];
   omissions: readonly { provider: 'bangumi' | 'vndb'; sourceKey: string; code: string }[];
   unresolvedCharacterDependencies: readonly {
     workKey: string | null;
@@ -1954,7 +1960,14 @@ export async function publishShowcase(input: {
     nativeType: string;
     readerRoute: string;
     kind: string;
-    assertions: { candidateId: string; property: string; digest: string }[];
+    assertions: {
+      candidateId: string;
+      property: string;
+      digest: string;
+      citations?: readonly string[];
+      qualifiers?: NonNullable<BatchStatement['qualifiers']>;
+      target?: { sourceKey: string; subjectId: string; nativeType: string };
+    }[];
   }[] = [];
   const finalMediaOutcomes = [...mediaOutcomes];
   const readHandoffs = new Map<
@@ -2228,6 +2241,34 @@ export async function publishShowcase(input: {
     )
       input.journal.completeVndbTagRatingSource(observation.workId, observation.responseDigest);
   }
+  const vndbWorkRelations = input.result.vndbWorkRelations.map((relation) => {
+    const publicRelation = published
+      .find(
+        (record) =>
+          record.provider === 'vndb' &&
+          record.sourceKey === relation.holderKey &&
+          record.subjectId === relation.holderSubjectId,
+      )
+      ?.assertions.find(
+        (assertion) =>
+          assertion.candidateId === relation.candidateId &&
+          assertion.property === relation.property &&
+          assertion.target?.sourceKey === relation.targetKey &&
+          assertion.target.subjectId === relation.targetSubjectId,
+      );
+    if (relation.delivery === 'acknowledged' && publicRelation)
+      return { ...relation, publication: 'published' as const };
+    const omission = uniqueOmissions.find(
+      (item) =>
+        item.provider === 'vndb' &&
+        (item.sourceKey === relation.holderKey || item.sourceKey === relation.targetKey),
+    );
+    return {
+      ...relation,
+      publication: 'withheld' as const,
+      ...(omission ? { publicationReason: omission.code } : {}),
+    };
+  });
   return {
     status:
       uniqueOmissions.length || published.length !== manifest.records.length + manifest.vocabulary.length
@@ -2235,6 +2276,7 @@ export async function publishShowcase(input: {
         : 'published',
     manifest,
     published,
+    vndbWorkRelations,
     omissions: uniqueOmissions,
     unresolvedCharacterDependencies,
   };
