@@ -130,6 +130,7 @@ export function mineCollectionsViewerPage(
     },
     pins: {
       state: 'loaded',
+      origin: { sessionSubject: subject, credentialAgrees: true, requestedLimit: 100 },
       revision: 7,
       next: null,
       canUpdate: true,

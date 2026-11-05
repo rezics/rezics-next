@@ -41,7 +41,22 @@ const request = () =>
     headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
   });
 let currentRequest = request();
-mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn() {
+    let handler!: (...args: never[]) => unknown;
+    const chain = {
+      server(run: (...args: never[]) => unknown) {
+        handler = run;
+        return chain;
+      },
+      client() {
+        return handler;
+      },
+    };
+    return chain;
+  },
+}));
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest,
