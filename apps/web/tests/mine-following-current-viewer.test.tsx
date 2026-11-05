@@ -598,7 +598,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     );
   const link = (label: string) =>
     [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find((item) => item.textContent === label);
-  const previous = () => link(m.following_navigation_previous());
+  const previousLink = () => link(m.following_navigation_previous());
   const next = () => link(m.library_collection_more());
   const expectPageEmpty = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
@@ -650,7 +650,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(reads).toHaveLength(1);
     await settle(reads[0]!, initial);
     expect(host.textContent).toContain('Last visible row');
-    expect(previous()).toBeUndefined(); // A direct cursor visit does not invent an in-app predecessor.
+    expect(previousLink()).toBeUndefined(); // A direct cursor visit does not invent an in-app predecessor.
     expect(restart()).toBeDefined(); // Populated later pages also have a way back.
     const beforeRemoval = reads.length;
     await remove();
@@ -742,7 +742,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     const subjectFirst = loaded('B', null, 'Subject first window', 'subject-next', 'subject');
     subjectFirst.page.follows[0]!.idempotencyKey = crypto.randomUUID();
     await settle(reads.at(-1)!, subjectFirst);
-    expect(previous()).toBeUndefined();
+    expect(previousLink()).toBeUndefined();
 
     await remove();
     const pendingRemoval = writes.at(-1)!;
@@ -786,7 +786,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     await settle(reads.at(-1)!, subjectSecond);
     expect(host.textContent).toContain(m.library_following_page_empty());
     expect(next()).toBeDefined();
-    expect(new URL(previous()!.href).searchParams.has('cursor')).toBe(false);
+    expect(new URL(previousLink()!.href).searchParams.has('cursor')).toBe(false);
 
     const secondNext = next()!;
     await act(async () => {
@@ -811,10 +811,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     await settle(reads.at(-1)!, subjectThird);
     expect(host.textContent).toContain(m.library_following_page_empty());
     expect(next()).toBeUndefined();
-    expect(previous()).toBeDefined();
+    expect(previousLink()).toBeDefined();
 
     await act(async () => {
-      previous()!.click();
+      previousLink()!.click();
       await tick();
     });
     expect(reads.at(-1)!.cursor).toBe('subject-next');
@@ -831,7 +831,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(reads.at(-1)!.cursor).toBeUndefined();
     const afterFirst = loaded('B', null, 'Subject first after First', 'subject-next', 'subject');
     await settle(reads.at(-1)!, afterFirst);
-    expect(previous()).toBeUndefined();
+    expect(previousLink()).toBeUndefined();
     expect(window.document.activeElement?.tagName).toBe('H1'); // Keyboard Next focuses the accepted page heading.
 
     const beforeBack = reads.length;
@@ -845,7 +845,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       backRead.page.follows = [];
       await settle(reads.at(-1)!, backRead);
     }
-    expect(previous()).toBeUndefined();
+    expect(previousLink()).toBeUndefined();
     const beforeForward = reads.length;
     await act(async () => {
       router.history.forward();
