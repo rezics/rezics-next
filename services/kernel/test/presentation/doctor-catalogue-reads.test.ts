@@ -469,14 +469,13 @@ async function discoverSynopsis(
         else if (candidate.id !== firstUnadopted.candidate.id) unadopted ??= candidateSynopsis;
       }
     }
-    if (selected && firstUnadopted) unadopted ??= firstUnadopted;
-    if (selected && unadopted) break;
-    if (selected === null && firstUnadopted && unadopted) break;
+    if (unadopted) break;
   }
-  const target = selected ?? firstUnadopted;
-  if (!target || !unadopted || target.candidate.id === unadopted.candidate.id)
+  const target = unadopted ? firstUnadopted : selected;
+  const withheld = unadopted ?? firstUnadopted;
+  if (!target || !withheld || target.candidate.id === withheld.candidate.id)
     throw new Error(`Retained ${type} source bindings lack a current publishable and withheld synopsis pair`);
-  return { target, unadopted };
+  return { target, unadopted: withheld };
 }
 
 function sourceBindingsSql(type: string): string {
