@@ -2352,6 +2352,7 @@ keeps the worker's source branch available for the owner's fix. It then advances
 the fix can start from that verified base. A transport or other recognized infrastructure failure during a culprit
 probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion.
 Decision: source-presence and failed-input hashes use one Git batch-check per revision; missing paths, cwd, closure/package trees, env/toolchain identity and hashes stay.
+Decision: comparison, evidence construction and failure attribution live in `dev-verifier-comparison.ts`; `dev-verifier.ts` retains orchestration while planning, execution/classification and persistence stay with their existing owners.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to

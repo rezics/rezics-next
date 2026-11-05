@@ -636,3 +636,34 @@ test('a new assertion without a task in the verified range remains unowned and u
     ctx.close();
   }
 });
+
+test('a command source missing at the captured head remains unknown without running a baseline', async () => {
+  const root = repository();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const head = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing change');
+  git(root, 'update-ref', 'refs/heads/dev', head, base);
+  const missingCommand = ['bun', 'test', 'services/kernel/missing.test.ts'];
+  const ctx = context(root, [task('missing-head-source', base, head, ['services/kernel/**'], missingCommand)]);
+  const calls: string[] = [];
+  try {
+    await verifyDev({
+      ...ctx,
+      runGate: async (command) => {
+        calls.push(command.join(' '));
+        return { passed: true, output: '', timedOut: false };
+      },
+    });
+    expect(ctx.store.devVerifierFindings()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: 'unknown',
+          reason: 'The selected command source is absent at the captured head.',
+        }),
+      ]),
+    );
+    expect(calls.some((command) => command.includes('missing.test.ts'))).toBe(false);
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+  } finally {
+    ctx.close();
+  }
+});
