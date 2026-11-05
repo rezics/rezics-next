@@ -1846,13 +1846,14 @@ export function RealmCatalogueSearch({
   const queryState = realmCatalogueSearchLoaderDeps(search, realmId);
   const resourceScope = queryState.resourceScope!;
   const pathname = location.pathname;
+  const publicPathname = new URL(location.publicHref, 'https://rezics.invalid').pathname;
   const pageSearch = new URLSearchParams();
   if (search.node === 'boards' || search.node === 'publications') pageSearch.set('node', search.node);
   if (typeof search.cursor === 'string' && search.cursor) pageSearch.set('cursor', search.cursor);
-  const action = `${pathname}${pageSearch.size ? `?${pageSearch}` : ''}`;
+  const action = `${publicPathname}${pageSearch.size ? `?${pageSearch}` : ''}`;
   const hrefForState = (state: SearchLoaderDeps) => {
     const url = new URL(
-      discoverySearchHref(locale, state, { pathname, cursorParam: 'searchCursor' }),
+      discoverySearchHref(locale, state, { pathname: publicPathname, cursorParam: 'searchCursor' }),
       'https://rezics.invalid',
     );
     if (search.node === 'boards' || search.node === 'publications') url.searchParams.set('node', search.node);
