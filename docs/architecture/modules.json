@@ -384,7 +384,8 @@
       "publicEntries": [
         "services/kernel/src/semantic/index.ts",
         "services/kernel/src/semantic/identity-adapters/index.ts",
-        "services/kernel/src/semantic/identity-adapters/read.ts"
+        "services/kernel/src/semantic/identity-adapters/read.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
       ],
       "allowedDependencies": [
         "composition",

@@ -975,11 +975,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity-retention.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-retention.ts",
           "edge": "value import \"../semantic/identity-source-consumer-custody.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-custody.ts"
         },
         {
@@ -1001,11 +996,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity-reversal.ts",
           "edge": "value import \"../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-reversal.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
         },
         {
           "rule": "rule 2",
@@ -1081,16 +1071,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
           "edge": "value import \"../semantic/agents.ts\" #1 => services/kernel/src/semantic/agents.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
         },
         {
           "rule": "rule 2",

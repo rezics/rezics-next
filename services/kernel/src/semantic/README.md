@@ -13,10 +13,15 @@ existing import path.
 
 Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,
 while `identity-adapters/read.ts` is the lightweight native mapping entry and `identity-adapters/index.ts`
-is the native store entry of the existing `kernel-semantic` adapter module.
+is the native store entry of the existing `kernel-semantic` adapter module. The existing
+`identity-adapters/identity-epoch-binding.ts` implementation is the exact public binding entry; callers retain the
+same named binding functions, proof objects and WeakMaps.
 Read-only callers use `read.ts`, which re-exports only `readIdentityMappings` and never loads the store or binding graph.
-Binding proofs remain owned by the existing native binding implementation; a public binding entry must preserve
-its opaque proof identity without adding value-import cycles through Accounts or the store.
+The current static edges are `retention -> binding -> retention`, `binding -> index -> binding`,
+`binding -> identity -> retention`, and `reversal -> binding`. Deferred edges are `identity -> binding` for undo and
+lookup and `binding -> identity` for reversal verification. Declaring the existing file adds no node or value edge,
+preserves those static/deferred loads, and leaves `read.ts` and `index.ts` cold-load behavior unchanged. Remove only the
+four replaced Access-to-binding rule 2 exceptions; retain the existing rule 3 cycle records.
 The adapter remains in that module because its admission, closure and participant mechanisms already share native authority.
 
 The core owns mapping DTOs, bounded evidence classification, exact observation values and immutable merge/unmerge/repoint
