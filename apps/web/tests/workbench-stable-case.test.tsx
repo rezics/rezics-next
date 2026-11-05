@@ -4,12 +4,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Appeal } from '../src/moderation/appeals-read';
 import type { Report } from '../src/moderation/reports-read';
-import { workbenchAppealFromPage } from '../src/moderation/workbench-appeal';
 import type { WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+const { workbenchAppealFromPage } = await import('../src/moderation/workbench-appeal');
 const {
   parseWorkbenchCaseSearch,
   workbenchCaseFromPage,
