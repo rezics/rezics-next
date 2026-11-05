@@ -136,16 +136,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const hasButton = (label: string) =>
     [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === label);
   const startRead = async (index: number) => {
-    await act(async () => {
-      await waitFor(() => {
-        if (reads.length !== index + 1) {
-          const queries = queryClient.getQueryCache().findAll({ queryKey: ['account-verification', 'review'] });
-          throw new Error(
-            `Expected ${index + 1} reads, got ${reads.length}; queries=${JSON.stringify(queries.map((query) => [query.queryKey, query.state.status, query.state.fetchStatus]))}; session=${JSON.stringify(queryClient.getQueryData(sessionQueryKey))}; observation=${JSON.stringify(currentObservation)}`,
-          );
-        }
-      });
-    });
+    await waitFor(() => expect(reads).toHaveLength(index + 1));
     return reads[index]!;
   };
   const nextRead = async () => {
@@ -157,20 +148,8 @@ test('review windows browse only admitted targets, retry exact failures, cap his
       reads[index]!.resolve(result);
       await Promise.resolve();
     });
-    await act(async () => {
-      await waitFor(() => {
-        const busy = host.querySelector('[role="region"]')?.getAttribute('aria-busy');
-        if (busy !== 'false') {
-          const queries = queryClient.getQueryCache().findAll({ queryKey: ['account-verification', 'review'] });
-          throw new Error(
-            `Read ${index} did not settle; busy=${busy}; queries=${JSON.stringify(queries.map((query) => [query.queryKey, query.state.status, query.state.fetchStatus]))}`,
-          );
-        }
-      });
-    });
-    await act(async () => {
-      await waitFor(() => expect(queryClient.isFetching({ queryKey: ['account-verification', 'review'] })).toBe(0));
-    });
+    await waitFor(() => expect(host.querySelector('[role="region"]')?.getAttribute('aria-busy')).toBe('false'));
+    await waitFor(() => expect(queryClient.isFetching({ queryKey: ['account-verification', 'review'] })).toBe(0));
     await flush();
   };
   const pageRow = (name: string) =>
