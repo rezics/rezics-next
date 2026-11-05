@@ -652,7 +652,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
       // wait, stop the child this call started, and report what it printed so the failure names the stalled step.
       let stallTimer: ReturnType<typeof setTimeout> | undefined;
       const stalled = new Promise<{ ready: false; code: 'stalled' }>((resolveStalled) => {
-        stallTimer = setTimeout(() => resolveStalled({ ready: false, code: 'stalled' }), 150_000);
+        stallTimer = setTimeout(() => resolveStalled({ ready: false, code: 'stalled' }), 60_000);
       });
       const outcome = await Promise.race([
         readiness.then(() => ({ ready: true as const })),
