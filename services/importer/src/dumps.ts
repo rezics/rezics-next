@@ -294,8 +294,14 @@ export async function* readDump(
         } else {
           payload = object(text);
           if (source === 'bangumi') {
-            if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
-            key = String(payload.id);
+            const career = Object.prototype.hasOwnProperty.call(payload, 'career') ? payload.career : undefined;
+            if (Array.isArray(career)) {
+              if (!positive(payload.id) || ![1, 2, 3].includes(payload.type as number)) return invalid();
+              key = `person:${payload.id}`;
+            } else {
+              if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
+              key = String(payload.id);
+            }
           } else {
             const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
             const identity =

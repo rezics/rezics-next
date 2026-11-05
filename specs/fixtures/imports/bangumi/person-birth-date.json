@@ -1,0 +1,14 @@
+{
+  "sourceURL": "https://api.bgm.tv/v0/persons/641",
+  "personURL": "https://bgm.tv/person/641",
+  "responseDigest": "d6f42fe4ead6cefcadae0408a6bf22c82055afc33032cd003e53acbacccd21b3",
+  "responseBytes": 2626,
+  "recordRevision": "unversioned",
+  "commentTime": "0001-01-01T00:00:00Z",
+  "id": 641,
+  "type": 1,
+  "name": "岸本斉史",
+  "birth_year": 1974,
+  "birth_mon": 11,
+  "birth_day": 8
+}

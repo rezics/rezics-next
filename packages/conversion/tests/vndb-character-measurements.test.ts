@@ -30,7 +30,7 @@ function quantities(proposals: readonly BatchCommand[]) {
 }
 
 test('production caller publishes exact COPY height and weight and keeps unknown measurements absent', () => {
-  expect(converter_revision).toBe('cross-media-entities@11');
+  expect(converter_revision).toBe('cross-media-entities@12');
   const registration = createSourceRegistration('vndb', {
     source: 'vndb_cross_media',
     converterRevision: converter_revision,

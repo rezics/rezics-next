@@ -2262,9 +2262,7 @@ The production release-language operator
 planner and `convertCrossMediaEntity`. `releases.olang` is a cited literal, not a
 Concept binding. Title language never supplies the whole-release fact. COPY `\\N`
 and codes outside the inventory language enumeration withhold only that statement.
-Decision: converter `@6` offers the new fact on unchanged dump bytes without a
-fabricated source revision; a later absent or unsupported `olang` does not retract
-an independently adopted language.
+Decision: a later absent or unsupported `olang` does not retract an independently adopted language.
 
 Those callers also keep the COPY `releases.gtin` cell. Admitted 8 or 12–14 digit
 strings become one cited `schema:gtin` fact on the same Release; dump unknown
@@ -2347,8 +2345,7 @@ only weights while valid association and spoiler facts remain eligible.
 
 `bangumi@14` includes TVAnime names, original-run, work evidence and official
 websites. Ordinary and selected-family registration share bounded conversion;
-selected envelopes use `cross-media-entities@11+bangumi@14`. The existing journal
-selected envelopes use `cross-media-entities@12+bangumi@13`. The existing journal
+selected envelopes use `cross-media-entities@12+bangumi@14`. The existing journal
 preserves exact alias/key, source admission, citations, independent
 review/adoption and current reads. Unversioned rows retain the bounded infobox
 digest; no publisher or identity lookup is added.
@@ -2377,8 +2374,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@11+bangumi@14` registration, record bindings,
-uses its existing `cross-media-entities@12+bangumi@13` registration, record bindings,
+uses its existing `cross-media-entities@12+bangumi@14` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2420,8 +2416,7 @@ date is not completion or access authority.
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
 `游玩人数` on type 4 through current `bangumi@14`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@11+bangumi@14` registration; this journey adds no
-existing combined `cross-media-entities@12+bangumi@13` registration; this journey adds no
+existing combined `cross-media-entities@12+bangumi@14` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2709,24 +2704,21 @@ Decision: bounded `traits_parents` edges publish as `skos:broader` on the child 
 
 ### Bangumi person biographies
 
-The bounded family seed follows only people actually selected by Bangumi
-`subject-persons` or `person-characters` rows. It passes each selected person
-row through the registered cross-media converter, preserving the source type,
-`person:<id>` identity and ordinary acknowledged create-or-resolve binding.
-Admitted nonempty summaries become attributed `schema:abstract` proposals on
-the resulting Person or Organization. The summary digest includes the source
-bytes and the tuple's existing summary fence governs refresh; identity facts
-remain independently useful. VNDB prose and other unknown-rights descriptions
-are not borrowed into this Bangumi mapping.
+Selected `subject-persons`/`person-characters` rows keep `person:<id>` identity
+and type. Nonempty summaries become attributed `schema:abstract` proposals.
+Type-1 PersonDetail `birth_year`/`birth_mon`/`birth_day` integers become one
+cited day-precision `schema:birthDate`; partial, Organization and Character
+`生日` stay omitted. Archive person rows lack those fields: one shared GET
+`/v0/persons/{id}` per selected id (existing public GET, 65,536 bytes, 64 people)
+is sealed beside the archive digest. Failed acquisition withholds only the date.
+Ordinary dumps are JSON-lines; a `career` array keys `person:<id>` under
+`cross-media-entities@12` on `bangumi@14`. Selected envelopes keep
+`cross-media-entities@12+bangumi@14`. `last_modified` is comment time, not a
+wiki revision. VNDB prose is not borrowed.
 
-Focused scenarios are `cross-media seed preserves a credited person's raw
-biography for the current Bangumi registration` in
-`services/importer/test/bangumi-people-biography.test.ts` and
-`authored Bangumi JSON-lines biographies are adopted and read on Person and
-Organization, refresh by digest, and respect the summary fence` in
-`services/kernel/test/imports/bangumi-people-biography.test.ts`. The native
-scenario uses the current released definitions and Auth/Access/public API;
-execution remains controller-owned and is not recorded as a local pass.
+- Touches: one Person, at most one birthDate and one abstract, at most 64 PersonDetail reads.
+- Bound: 65,536-byte response, one GET per id per attempt, journal reuse; no second HTTP stack.
+- Growth check: `tests/showcase-bangumi-person-birth-date.test.ts`, `test/bangumi-people-biography.test.ts`; native `services/kernel/test/imports/bangumi-person-birth-date.test.ts` remains controller-owned.
 
 Reviewed metadata and candidate provenance compare bounded canonical JSON values. Public transport snapshots
 with null object prototypes retain the same provenance; prototype identity is never a source or permission fact.
@@ -2788,9 +2780,7 @@ canonical equivalence.
 ### Bangumi TVAnime official websites
 
 The official-website projection runs through ordinary `bangumi@14` and the
-selected-family `cross-media-entities@11+bangumi@14` registration. It recognizes
-The official-website projection runs through ordinary `bangumi@13` and the
-selected-family `cross-media-entities@12+bangumi@13` registration. It recognizes
+selected-family `cross-media-entities@12+bangumi@14` registration. It recognizes
 only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
 The URL fact is distinct from its `schema:url` reference to the exact Bangumi
 subject record. Source spelling, path, query and fragment are preserved. A
@@ -2821,8 +2811,7 @@ Decision: trim only horizontal template/list-boundary whitespace; `链接` remai
 
 Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
 
-- Touches: ordinary `bangumi@14` and selected-family `cross-media-entities@11+bangumi@14` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
-- Touches: ordinary `bangumi@13` and selected-family `cross-media-entities@12+bangumi@13` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Touches: ordinary `bangumi@14` and selected-family `cross-media-entities@12+bangumi@14` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
 - Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
 - Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
 

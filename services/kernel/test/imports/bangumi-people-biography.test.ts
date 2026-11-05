@@ -30,7 +30,21 @@ const families = [
   { id: 201, name: 'CLANNAD', vndb: 'v201', title: 'CLANNAD' },
   { id: 301, name: 'Fate/stay night', vndb: 'v301', title: 'Fate/stay night' },
 ];
-const personOne = { id: 8101, type: 1, name: '星見', summary: '作者紹介：物語と音楽を研究する。' };
+const personOne = {
+  id: 8101,
+  type: 1,
+  name: '星見',
+  summary: '作者紹介：物語と音楽を研究する。',
+  career: ['mangaka'],
+  birth_year: 1974,
+  birth_mon: 11,
+  birth_day: 8,
+};
+const personBirthDate = {
+  time: '+1974-11-08T00:00:00Z',
+  precision: 11,
+  calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+};
 const organization = { id: 8102, type: 2, name: '星見制作室', summary: '星見制作室の歩み：作品を作り続ける。' };
 const emptyPerson = { id: 8103, type: 1, name: '空欄の人物', summary: '' };
 const absentPerson = { id: 8104, type: 1, name: '紹介のない人物' };
@@ -375,6 +389,23 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       expect(JSON.stringify(document.body)).toContain(expected);
     }
 
+    const birthCandidates = await candidates(editor, personId, 'schema:birthDate');
+    expect(birthCandidates).toHaveLength(1);
+    const birthCandidate = birthCandidates[0]!;
+    expect(birthCandidate.statement.value.content).toEqual(personBirthDate);
+    expect(birthCandidate.statement.references?.[0]?.parts).toContainEqual({
+      property: { id: 'schema:url' },
+      value: { type: 'value', content: 'https://bgm.tv/person/8101' },
+    });
+    await editor.adoptSubject(personId, 'schema:birthDate', birthCandidate.statement.value.content as Json, globalContext);
+    const birthRead = await editor.http(`/v1/subjects/${personId}?context=${globalContext}`);
+    expect(birthRead.status).toBe(200);
+    expect(
+      (birthRead.body.subject as { statements: Record<string, { value: { content: unknown } }[]> }).statements[
+        'schema:birthDate'
+      ]?.[0]?.value.content,
+    ).toEqual(personBirthDate);
+
     const acceptedIds = (await candidates(editor, personId, 'schema:abstract')).map((candidate) => candidate.id);
     const reopened = await runSeed();
     expect(reopened.runs.bangumi?.status).toBe('committed');
@@ -382,6 +413,13 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     expect((await candidates(editor, personId, 'schema:abstract')).map((candidate) => candidate.id)).toEqual(
       acceptedIds,
     );
+
+    const selectedBirth = (
+      (await editor.http(`/v1/subjects/${personId}?context=${globalContext}`)).body.subject as {
+        statements: Record<string, { value: { content: unknown } }[]>;
+      }
+    ).statements['schema:birthDate']?.[0]?.value.content;
+    expect(selectedBirth).toEqual(personBirthDate);
 
     const changedBiography = { ...personOne, summary: '新しい紹介：別の作品を発表した。' };
     await writeBangumi(bangumiDirectory, [changedBiography, organization, emptyPerson, absentPerson]);

@@ -4,7 +4,16 @@ import { converter_revision as crossMediaRevision } from '../../../packages/conv
 import { createSourceRegistration } from '../src/source-registry.ts';
 
 const biography = '人物紹介：創作と音楽を研究する。';
-const authoredPerson = { id: 8101, type: 1, name: '星見', summary: biography };
+const authoredPerson = {
+  id: 8101,
+  type: 1,
+  name: '星見',
+  summary: biography,
+  career: ['mangaka'],
+  birth_year: 1974,
+  birth_mon: 11,
+  birth_day: 8,
+};
 const rows: Record<'bangumi' | 'vndb', Record<string, Record<string, unknown>[]>> = {
   bangumi: {
     subject: [
@@ -55,12 +64,28 @@ test("cross-media seed preserves a credited person's raw biography for the curre
     { source: registration.source, subjectId: '11111111-1111-4111-8111-111111111111' },
   );
   const biographyCommand = converted.proposals.find((command) => command.source.field_group === 'summary');
+  const birthCommand = converted.proposals.find(
+    (command) => command.op === 'propose' && command.statement.property.id === 'schema:birthDate',
+  );
   expect(registration.converter_revision).toBe(crossMediaRevision);
-  expect(converted.normalized).toMatchObject({ summary: biography });
+  expect(converted.normalized).toMatchObject({
+    summary: biography,
+    birth_year: 1974,
+    birth_mon: 11,
+    birth_day: 8,
+  });
   expect(biographyCommand?.op === 'propose' ? biographyCommand.statement.property.id : undefined).toBe(
     'schema:abstract',
   );
   expect(biographyCommand?.source.digest).toBe(converted.digest);
+  expect(birthCommand?.op === 'propose' ? birthCommand.statement.value : undefined).toEqual({
+    type: 'value',
+    content: {
+      time: '+1974-11-08T00:00:00Z',
+      precision: 11,
+      calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+    },
+  });
 
   const foreign = createSourceRegistration('vndb', {
     source: crossMediaAliases.vndb,

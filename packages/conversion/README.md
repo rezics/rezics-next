@@ -293,8 +293,6 @@ different component than the infobox, withhold `datePublished` rather than
 emit two scalars or pad the infobox date. An end that cannot overlap the
 start withholds both run dates. An end date is not completion, watch or
 access authority.
-Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
-unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
 Bangumi revision `bangumi@9` converts pinned Game infobox `游玩人数` on type 4
 through the same bound proposal path, preserving `bangumi@8` TVAnime original-run
@@ -309,8 +307,6 @@ dump bytes refresh under this revision without inventing a native record
 revision.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
 positive integer or inclusive range; a lone count invents no minimum.
-Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
-unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
 Bangumi revision `bangumi@11` converts pinned Game infobox `平台` and `游戏引擎`
 on type 4 through the same bound proposal path, preserving Game names, Game
@@ -329,16 +325,19 @@ unchanged dumps offer the new facts; names, dates, player count, book grain,
 cover and source-link support are preserved. No infobox-field scheme URI is
 minted.
 
-Cross-media entity revision `cross-media-entities@6` retains an admitted
+Cross-media entity revision `cross-media-entities@12` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
 `schema:Organization` identity. Its exact bytes enter the normalized digest;
 nonempty text becomes an `und` `schema:abstract` document proposal with the
 Bangumi citation and CC-BY-SA-3.0 attribution and ShareAlike rights. Empty and
 absent summaries produce no document. Summary commands remain in `summary`,
 separate from identity facts, metadata licences and image rights.
-Decision: biography admission advances the existing `@3` converter to `@4`, preserving the prior VNDB release-title projection revision.
-Decision: release original language advances the existing `@4` converter to `@5`, preserving biography, websites, staff names and release-title projection.
-Decision: release minimum age advances the existing `@5` converter to `@6`, preserving biography, websites, staff names, release titles and original language.
+Type-1 PersonDetail `birth_year`/`birth_mon`/`birth_day` integers become one
+cited day-precision `schema:birthDate` in the released 4–16 digit year range.
+Partial, invalid and Organization dates are withheld; Character `生日` stays
+omitted. `last_modified` is comment time, not a record revision. Ordinary
+`person:<id>` JSON uses this entity revision; selected-family envelopes keep
+`cross-media-entities@12+bangumi@14`.
 
 Decision: type 3 uses admitted `schema:MusicAlbum` because Semantic has no music work/release/track split; type 6 uses `schema:Movie` for pinned movie platforms and `schema:TVSeries` for pinned TV-template platforms, sharing `liveActionWorkType`; archive integer platform ids stringify; unknown live-action platform codes stay ignored at `/platform`. MusicAlbum has no library profile. Bangumi episode records stay the graph continuation.
 
@@ -575,7 +574,6 @@ and `releases_media.qty` is omitted.
   is registered; native execution is deferred to integration.
 
 Decision: source-specific schemes are `https://vndb.org/releases/platforms` and `https://vndb.org/releases/media`, with taxonomies `vndb.releases.platform` and `vndb.releases.media`; these Concepts do not assert canonical equivalence.
-Decision: platform and medium projections advance the converter from `@6` to `@7`, preserving the release minimum-age mapping while enabling deliberate refresh of unchanged source revisions.
 
 ### VNDB character names and aliases
 
@@ -629,7 +627,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@12` preserves Bangumi character names, physical profiles and person biographies while adding bounded Person careers, Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
+Combined revision decision: `cross-media-entities@12` preserves Bangumi character names, physical profiles, person biographies, type-1 Person birth dates and bounded Person careers while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
 
 ### Bangumi Person careers
 
@@ -857,6 +855,12 @@ cannot retract an earlier candidate from source data alone.
   These are functional assertions and source-derived bounds, not timing or
   heap measurements.
 
+### Project a Bangumi Person birth date
+
+- Touches: one type-1 Person, at most one cited `schema:birthDate`, existing identity facts and the Person URL.
+- Bound: three integers, one Gregorian day-precision time (4–16 digit years), 65,536-byte projection, 64 people, one PersonDetail read per id. No string coercion, age, Organization founding date or Character `生日`.
+- Growth check: `tests/bangumi-person-birth-date.test.ts`; ordinary native `services/kernel/test/imports/bangumi-person-birth-date.test.ts`; selected `services/importer/tests/showcase-bangumi-person-birth-date.test.ts`. Native execution remains controller-owned.
+
 ### Project a Bangumi television original run
 
 - Touches: one type-2 TVAnime infobox, the existing subject conversion, at
@@ -1052,6 +1056,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
 Game-name mapping; the combined registration keeps `cross-media-entities@12`.
 
+
 Current `bangumi@14` shares one bounded infobox scan for the exact pinned
 `{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
 records. It preserves the existing cited name, original-run and work-evidence
@@ -1184,9 +1189,7 @@ descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
 - Touches: ordinary `bangumi@14` and selected-family
-  `cross-media-entities@11+bangumi@14` publication for one TVAnime source record,
-- Touches: ordinary `bangumi@13` and selected-family
-  `cross-media-entities@12+bangumi@13` publication for one TVAnime source record,
+  `cross-media-entities@12+bangumi@14` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1235,7 +1238,7 @@ current public read confirms the Concept, source URI, and membership in
 `https://rezics.com/schemes/bangumi/genres`. The pinned source field declares
 this meaning but supplies no native UUID or taxonomy equivalence. Ordinary
 registration remains proposal-only; the selected-family caller uses the
-combined `cross-media-entities@11+bangumi@14` registration and existing
+combined `cross-media-entities@12+bangumi@14` registration and existing
 manifest, separate review/adoption, and public-read path.
 
 Missing, wrong-scheme, refused, concealed, retracted, and unavailable bindings

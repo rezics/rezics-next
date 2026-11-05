@@ -10,6 +10,7 @@ import {
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
+import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
   bangumiCharacterNameScalar,
@@ -35,6 +36,10 @@ import {
   projectBangumiCharacterMeasurements,
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
+import {
+  projectBangumiPersonBirthDate,
+  type BangumiPersonBirthDate,
+} from './bangumi-person-birth-date.ts';
 
 export const converter_revision = 'cross-media-entities@12';
 export const bangumiCharacterNameCommandLimit =
@@ -756,6 +761,7 @@ type Projected = {
   maxCommands?: number;
   minimumAge?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
   characterMeasurements?: BangumiCharacterMeasurementProjection;
+  personBirthDate?: BangumiPersonBirthDate;
   ignored?: ConversionDiagnostic;
   diagnostics?: ConversionDiagnostic[];
 };
@@ -1455,6 +1461,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   const diagnostics: ConversionDiagnostic[] = [];
   let characterMeasurements: BangumiCharacterMeasurementProjection | undefined;
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
+  let personBirthDate: BangumiPersonBirthDate | undefined;
   if (kind === 'bangumi-person') {
     type = personType(raw);
     normalized.type = own(raw, 'type', '/type');
@@ -1473,6 +1480,20 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
         diagnostics.push({ pointer: '/career', code: 'malformed_person_career' });
       }
     }
+    const year = own(raw, 'birth_year', '/birth_year');
+    const month = own(raw, 'birth_mon', '/birth_mon');
+    const day = own(raw, 'birth_day', '/birth_day');
+    if (year !== undefined) normalized.birth_year = year;
+    if (month !== undefined) normalized.birth_mon = month;
+    if (day !== undefined) normalized.birth_day = day;
+    const birth = projectBangumiPersonBirthDate({
+      profile: type,
+      birth_year: year,
+      birth_mon: month,
+      birth_day: day,
+    });
+    personBirthDate = birth.fact;
+    if (birth.diagnostic) diagnostics.push(birth.diagnostic);
   }
   if (kind === 'vndb-producer') {
     type = producerType(raw);
@@ -1546,6 +1567,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     identifier: expected,
     ...(minimumAge ? { minimumAge } : {}),
     ...(characterMeasurements ? { characterMeasurements } : {}),
+    ...(personBirthDate ? { personBirthDate } : {}),
     ...(diagnostics.length ? { diagnostics } : {}),
   };
 }
@@ -1648,6 +1670,18 @@ function convert(
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
   if (omitOrganizationIdentifier) diagnostics.push({ pointer: '/id', code: 'unadmitted_organization_identifier' });
   const measurementCommandKeys = new Map<number, string>();
+  if (kind === 'bangumi-person' && projected.personBirthDate) {
+    const admitted =
+      projected.type === 'schema:Person' &&
+      bundledRelease.types['schema:Person']?.properties.includes('schema:birthDate') === true;
+    const statement = fact('schema:birthDate', projected.personBirthDate.time);
+    if (!admitted || checkStatementInput(statement, bundledRelease).violations.length)
+      diagnostics.push({ pointer: '/birth_day', code: 'unadmitted_person_birth_date' });
+    else {
+      measurementCommandKeys.set(facts.length, 'birthDate');
+      facts.push(statement);
+    }
+  }
   for (const measurement of projected.characterMeasurements?.measurements ?? []) {
     if (!releasedCharacterQuantity(measurement.property, measurement.quantity)) {
       diagnostics.push({ pointer: measurement.pointer, code: 'unadmitted_character_quantity' });
