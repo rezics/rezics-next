@@ -305,7 +305,8 @@ export function releaseSearchQueryOptions(locale: string, raw: Record<string, un
       }
     },
     staleTime: 0,
-    gcTime: 0,
+    // Keep the just-finished loader read through the observer handoff; the visit removes retired queries.
+    gcTime: 60_000,
     retry: false,
     refetchOnMount: true,
     refetchOnWindowFocus: true,

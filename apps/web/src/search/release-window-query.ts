@@ -3,13 +3,11 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { browserObservation } from '../session';
 import { useReaderAddress, useReaderResponseOrigin, type ReaderOrigin } from '../session/reader';
-import { useSession } from '../session/query';
 import type { ParsedReleaseSearch } from './release-search';
 import { releaseSearchQueryOptions } from './release-search-query';
 
 /** The loader reads once; the observer exposes only that current address and actual reader incarnation. */
 export function useReleaseWindowQuery(locale: string, raw: Record<string, unknown>) {
-  useSession();
   const client = useQueryClient();
   const router = useRouter({ warn: false });
   const store = browserObservation(client);
@@ -26,6 +24,16 @@ export function useReleaseWindowQuery(locale: string, raw: Record<string, unknow
   else if (lifetime.current.readerKey !== readerKey)
     lifetime.current = { key, readerKey, minimum: readCount() + 1, refresh: true };
   const current = lifetime.current;
+  useEffect(() => {
+    client.removeQueries({
+      queryKey: ['release-search'],
+      type: 'inactive',
+      predicate: (candidate) => JSON.stringify(candidate.queryKey) !== key,
+    });
+    return () => {
+      client.removeQueries({ queryKey: options.queryKey, exact: true, type: 'inactive' });
+    };
+  }, [client, key]);
   const matches = () => {
     const location = router?.state.location;
     return (

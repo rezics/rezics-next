@@ -29,6 +29,7 @@ export function ReleaseWindowControls({
       className={buttonVariants({ variant: 'outline' })}
       aria-disabled={disabled || undefined}
       onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         if (disabled) event.preventDefault();
         else visit.activate(event, target, action);
       }}
