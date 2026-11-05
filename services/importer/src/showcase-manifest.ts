@@ -7,11 +7,7 @@ import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
-import {
-  bangumiAppearanceSource,
-  graphEdgeCommandKey,
-  graphEdgeSource,
-} from './cross-media-bindings.ts';
+import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';

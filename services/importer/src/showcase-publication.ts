@@ -1013,33 +1013,34 @@ export async function publishShowcase(input: {
   if (gameGenre?.diagnostics.length)
     for (const item of gameGenre.diagnostics.slice(0, showcaseLimits.omissions - omissions.length))
       omissions.push({ provider: 'bangumi', sourceKey: item.sourceKey, code: 'source-claim-withheld' });
-  const assertionsFor = (selectedManifest: ShowcaseManifest) => [
-    ...selectedManifest.records.flatMap((record) => record.assertions.map((assertion) => ({ record, assertion }))),
-    ...selectedManifest.vocabulary.flatMap((record) =>
-      record.assertions.map((assertion) => ({
-        record: {
-          provider: record.provider,
-          sourceAlias: record.sourceAlias,
-          sourceKey: record.sourceKey,
-          sourceUri: record.sourceUri,
-          sourceRevision: 'unversioned',
-          rawDigest: record.assertions[0]?.source.digest ?? '',
-          semanticDigest: record.assertions[0]?.source.digest ?? '',
-          converterRevision: record.assertions[0]?.source.converter_revision ?? '',
-          kind: 'source-vocabulary' as const,
-          subjectId: record.subjectId,
-          nativeType: record.nativeType,
-          readerRoute: null,
-          assertions: record.assertions,
-        },
-        assertion,
-      })),
-    ),
-  ].sort(
-    (left, right) =>
-      phase(left.record, left.assertion) - phase(right.record, right.assertion) ||
-      left.assertion.candidateId.localeCompare(right.assertion.candidateId),
-  );
+  const assertionsFor = (selectedManifest: ShowcaseManifest) =>
+    [
+      ...selectedManifest.records.flatMap((record) => record.assertions.map((assertion) => ({ record, assertion }))),
+      ...selectedManifest.vocabulary.flatMap((record) =>
+        record.assertions.map((assertion) => ({
+          record: {
+            provider: record.provider,
+            sourceAlias: record.sourceAlias,
+            sourceKey: record.sourceKey,
+            sourceUri: record.sourceUri,
+            sourceRevision: 'unversioned',
+            rawDigest: record.assertions[0]?.source.digest ?? '',
+            semanticDigest: record.assertions[0]?.source.digest ?? '',
+            converterRevision: record.assertions[0]?.source.converter_revision ?? '',
+            kind: 'source-vocabulary' as const,
+            subjectId: record.subjectId,
+            nativeType: record.nativeType,
+            readerRoute: null,
+            assertions: record.assertions,
+          },
+          assertion,
+        })),
+      ),
+    ].sort(
+      (left, right) =>
+        phase(left.record, left.assertion) - phase(right.record, right.assertion) ||
+        left.assertion.candidateId.localeCompare(right.assertion.candidateId),
+    );
   let assertions = assertionsFor(manifest);
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
   const pageCache = new Map<string, CandidatePage>();
@@ -1593,7 +1594,11 @@ export async function publishShowcase(input: {
     const graphAssertions = record.assertions.filter((assertion) => assertion.graphTarget);
     if (graphAssertions.length && !publicHasSourceIdentity(read, record)) {
       for (const assertion of graphAssertions) withheldGraphCandidates.add(assertion.candidateId);
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-endpoint-public-read-unavailable' });
+      omissions.push({
+        provider: record.provider,
+        sourceKey: record.sourceKey,
+        code: 'graph-endpoint-public-read-unavailable',
+      });
     }
     for (const assertion of graphAssertions) {
       const endpoint = assertion.graphTarget!;
@@ -1611,7 +1616,11 @@ export async function publishShowcase(input: {
         !publicHasSourceIdentity(targetRead, target)
       ) {
         withheldGraphCandidates.add(assertion.candidateId);
-        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-endpoint-public-read-unavailable' });
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: 'graph-endpoint-public-read-unavailable',
+        });
       }
     }
     const imageAssertion = record.assertions.find((assertion) => assertion.property === 'schema:image');
@@ -1663,8 +1672,7 @@ export async function publishShowcase(input: {
     const reportable = visible.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
     const required = record.assertions.filter(
       (assertion) =>
-        !withheldGraphCandidates.has(assertion.candidateId) &&
-        (assertion.property !== 'schema:image' || imageVisible),
+        !withheldGraphCandidates.has(assertion.candidateId) && (assertion.property !== 'schema:image' || imageVisible),
     );
     if (imageAssertion && imagePublishable && !imageVisible) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-not-public' });
@@ -1697,22 +1705,24 @@ export async function publishShowcase(input: {
       nativeType: record.nativeType,
       readerRoute: route,
       kind: record.kind,
-      assertions: reportable.map(({ candidateId, property, candidateDigest, citations: sourceCitations, statement, graphTarget }) => ({
-        candidateId,
-        property,
-        digest: candidateDigest,
-        citations: sourceCitations,
-        ...(statement.qualifiers?.length ? { qualifiers: statement.qualifiers } : {}),
-        ...(graphTarget
-          ? {
-              target: {
-                sourceKey: graphTarget.sourceKey,
-                subjectId: graphTarget.subjectId,
-                nativeType: graphTarget.nativeType,
-              },
-            }
-          : {}),
-      })),
+      assertions: reportable.map(
+        ({ candidateId, property, candidateDigest, citations: sourceCitations, statement, graphTarget }) => ({
+          candidateId,
+          property,
+          digest: candidateDigest,
+          citations: sourceCitations,
+          ...(statement.qualifiers?.length ? { qualifiers: statement.qualifiers } : {}),
+          ...(graphTarget
+            ? {
+                target: {
+                  sourceKey: graphTarget.sourceKey,
+                  subjectId: graphTarget.subjectId,
+                  nativeType: graphTarget.nativeType,
+                },
+              }
+            : {}),
+        }),
+      ),
     });
   }
 
