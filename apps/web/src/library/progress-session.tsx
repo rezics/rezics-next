@@ -17,7 +17,7 @@ import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { isNotFound, Link, useLocation, useRouter } from '@tanstack/react-router';
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   admitHistory,
   historyPaths,
@@ -156,15 +156,14 @@ export function CurrentProgressDetail({
     locale,
     detailReads.map((op) => snapshot.admissions.get(op)?.id),
   ]);
+  const historyAuthority = useMemo(() => ({}), [historyScope, snapshot.identity, snapshot.observation]);
   type Visit = {
-    scope: string;
-    identity: object;
-    observation: object | undefined;
+    authority: object;
     location: object;
     address: ProgressDetailAddress;
     paths: HistoryPaths;
     staged?: { target: HistoryTarget; address: ProgressDetailAddress; keyboard: boolean; focus: Element | null };
-    admitted?: object;
+    admitted?: string;
   };
   const visitRef = useRef<Visit | null>(null);
   let visit = visitRef.current;
@@ -172,15 +171,11 @@ export function CurrentProgressDetail({
   const carrying = visit?.staged && sameAddress(visit.staged.address, address);
   if (
     !visit ||
-    visit.scope !== historyScope ||
-    visit.identity !== snapshot.identity ||
-    visit.observation !== snapshot.observation ||
+    visit.authority !== historyAuthority ||
     ((changedLocation || !sameAddress(visit.address, address)) && !carrying)
   ) {
     visit = {
-      scope: historyScope,
-      identity: snapshot.identity,
-      observation: snapshot.observation,
+      authority: historyAuthority,
       location,
       address,
       paths: historyPaths(),
@@ -359,11 +354,11 @@ export function CurrentProgressDetail({
           if (!current()) return { signedIn: false, idempotencyKey: '' };
           const accepted = client.getQueryData<ProgressDetail>(queryKey);
           if (!matchingDetail(accepted, viewer, address)) return { signedIn: false, idempotencyKey: '' };
-          const admittedAddress = {
-            ...address,
-            changes: accepted.progress.changesCursor,
-            units: accepted.progress.unitsCursor,
-          };
+          const admittedAddress = { ...address };
+          delete admittedAddress.changes;
+          delete admittedAddress.units;
+          if (accepted.progress.changesCursor !== undefined) admittedAddress.changes = accepted.progress.changesCursor;
+          if (accepted.progress.unitsCursor !== undefined) admittedAddress.units = accepted.progress.unitsCursor;
           const fresh = await readDetail(admittedAddress, current);
           if (!current() || !matchingDetail(fresh, viewer, admittedAddress))
             return { signedIn: false, idempotencyKey: '' };
@@ -384,12 +379,13 @@ export function CurrentProgressDetail({
   const healthyPause = browser && snapshot.healthyPause;
   // Admission consumes actual returned cursors: a stale native cursor may have restarted.
   const focus = useRef<{ visit: Visit; section: HistorySection; element: Element | null } | null>(null);
-  if (detail && isCurrent() && (!browser || checkEvidence()) && visit.admitted !== detail) {
+  const admission = `${boundary.epoch}:${actualState?.dataUpdateCount}`;
+  if (detail && isCurrent() && (!browser || checkEvidence()) && visit.admitted !== admission) {
     const staged = visit.staged;
     const target = staged && sameAddress(staged.address, address) ? staged.target : undefined;
     if (visit.admitted && !target) visit.paths = historyPaths();
     admitHistory(visit.paths, target, detail.progress.changesCursor, detail.progress.unitsCursor);
-    visit.admitted = detail;
+    visit.admitted = admission;
     if (target && staged?.keyboard) focus.current = { visit, section: target.section, element: staged.focus };
     delete visit.staged;
   }

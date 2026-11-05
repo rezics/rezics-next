@@ -27,10 +27,7 @@ export const Route = createFileRoute('/library/progress/$id')({
   shouldReload: ({ cause }) => cause !== 'stay',
   loader: ({ params, location }) =>
     readProgressDetail({
-      data: {
-        id: params.id,
-        ...progressSessionAddress({ ...location.search, id: params.id }),
-      },
+      data: progressSessionAddress({ ...location.search, id: params.id }),
     }),
   staleTime: 0,
   head: ({ match }) =>
