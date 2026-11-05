@@ -5,9 +5,11 @@ import { createAccess } from '../../src/access/permission.ts';
 import { createCopyCommands } from '../../src/library/copies.ts';
 import { createEntryCommands } from '../../src/library/entries.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
+import { createLoanCommands } from '../../src/library/loan-commands.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 
 const ROWS_PER_SCALE = 500;
 const RUNS_PER_SCALE = 6; // checkGrowth defaults: one warm-up and five measured runs.
@@ -397,16 +399,54 @@ async function growPersonalRows(
   prepared: PreparedGrowth,
   scale: number,
   previous: number,
-  kind: 'entry' | 'copy' | 'unfollow' | 'membership',
+  kind: 'entry' | 'copy' | 'unfollow' | 'membership' | 'loan',
 ): Promise<void> {
   await seedSharedRows(prepared, scale, previous);
   if (kind === 'entry') await seedEntries(prepared, scale, previous);
   if (kind === 'copy') await seedCopies(prepared, scale, previous);
+  if (kind === 'loan') await seedReturnedLoans(prepared, scale, previous);
   if (kind === 'unfollow') {
     await seedCollections(prepared, scale, previous);
     await seedFollows(prepared, scale, previous, 'collection');
   }
   if (kind === 'membership') await seedFollows(prepared, scale, previous, 'space');
+}
+
+async function seedReturnedLoans(prepared: PreparedGrowth, scale: number, previous: number): Promise<void> {
+  await database.admin.query(
+    `WITH source AS (
+       SELECT $1::int AS route, $2::uuid AS account_id, n,
+         ('10000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') ||
+          lpad(to_hex($4::bigint + n), 8, '0'))::uuid AS loan_id
+       FROM generate_series($3::int + 1, $5::int) AS n
+     )
+     INSERT INTO library.copy_loan
+       (route,loan_id,account_id,copy_id,direction,counterparty_kind,counterparty_name,counterparty_person_id,
+        started_on,due_on,returned_on,revision,created_at,updated_at,transaction_id)
+     SELECT route,loan_id,account_id,loan_id,'lent','name','retained history',NULL,
+            '2018-01-01','2018-02-01','2019-01-01',2,$6::timestamptz,$6::timestamptz,loan_id
+       FROM source`,
+    [prepared.ownerRoute, prepared.actor.accountId, previous * ROWS_PER_SCALE, prepared.seedSalt, scale * ROWS_PER_SCALE, TIME],
+  );
+}
+
+function probeLoan(prepared: PreparedGrowth, repetition: number): string {
+  return routedId(prepared.ownerRoute, prepared.seedSalt + PROBE_OFFSET + repetition, '80000000');
+}
+
+function probeLoanCopy(prepared: PreparedGrowth): string {
+  return routedId(prepared.ownerRoute, prepared.seedSalt + 1, '20000000');
+}
+
+async function seedOpenLoan(prepared: PreparedGrowth, repetition: number): Promise<void> {
+  const loanId = probeLoan(prepared, repetition);
+  await commandPool.query(
+    `INSERT INTO library.copy_loan
+      (route,loan_id,account_id,copy_id,direction,counterparty_kind,counterparty_name,counterparty_person_id,
+       started_on,due_on,returned_on,revision,created_at,updated_at,transaction_id)
+     VALUES ($1,$2,$3,$4,'lent','name','loan write growth',NULL,'2018-01-01',NULL,NULL,1,$5,$5,$2)`,
+    [prepared.ownerRoute, loanId, prepared.actor.accountId, probeLoanCopy(prepared), TIME],
+  );
 }
 
 function probeEntry(prepared: PreparedGrowth, repetition: number): string {
@@ -513,4 +553,59 @@ test('Membership follow has constant rows and statements as follows grow', async
     operation: (_database, _scale, repetition) => measuredRun(() => run(repetition)),
   });
   assertLibraryRows(report, ['library.follow']);
+}, 120_000);
+
+test('Loan extend and return have constant work as retained returned history grows', async () => {
+  const prepared = await prepareGrowth(['copy:update']);
+  await commandPool.query(
+    `INSERT INTO library.copy
+       (route,copy_id,account_id,subject_id,status,revision,created_at,updated_at,transaction_id,kind)
+     VALUES ($1,$2,$3,$4,'owned',1,$5,$5,$6,'physical')`,
+    [
+      prepared.ownerRoute,
+      probeLoanCopy(prepared),
+      prepared.actor.accountId,
+      routedId(prepared.ownerRoute, prepared.seedSalt + 2, '30000000'),
+      TIME,
+      randomUUID(),
+    ],
+  );
+  const access = createAccess({ actions: new Map(), accountEvidence: () => null });
+  const commands = createLoanCommands({
+    pool: commandPool,
+    access,
+    tokens,
+    routeKey: testRouteKey(),
+    clock: () => new Date(TIME),
+  });
+  const run = async (repetition: number) => {
+    const loanId = probeLoan(prepared, repetition);
+    const extended = await commands.extendLoan(
+      prepared.actor,
+      loanId,
+      { revision: 1, dueOn: '2018-02-01' },
+      randomUUID(),
+    );
+    expect(extended.value.revision).toBe(2);
+    const returned = await commands.returnLoan(
+      prepared.actor,
+      loanId,
+      { revision: 2, returnedOn: '2018-02-02' },
+      randomUUID(),
+    );
+    expect(returned.value).toMatchObject({ revision: 3, dueOn: '2018-02-01', returnedOn: '2018-02-02' });
+  };
+  const report = await checkGrowth(database, {
+    name: 'loan extend and return with retained history',
+    scales: [1, 4, 16],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_database, scale, previous) => growPersonalRows(prepared, scale, previous, 'loan'),
+    warmup: async (_database, _scale, repetition) => {
+      await seedOpenLoan(prepared, repetition);
+      await run(repetition);
+    },
+    prepare: (_database, _scale, repetition) => seedOpenLoan(prepared, repetition),
+    operation: (_database, _scale, repetition) => measuredRun(() => run(repetition)),
+  });
+  assertLibraryRows(report, ['library.copy_loan', 'library.copy_loan_generation']);
 }, 120_000);

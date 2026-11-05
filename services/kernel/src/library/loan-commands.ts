@@ -9,7 +9,6 @@ import {
 } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { classifyUnavailability, AccessUnavailableError } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { type AccountActor, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -49,24 +48,22 @@ import {
   loanAdvanceGenerationPlan,
   loanCopyLocatorPlan,
   loanCopyLockPlan,
+  loanCopyReadPlan,
+  loanCursorDuePlan,
   loanGenerationPlan,
   loanInsertPlan,
   loanLockPlan,
   loanOpenProbePlan,
+  loanPagePlan,
+  loanReadPlan,
   loanUpdatePlan,
+  type LoanNativeRow,
   MAX_HISTORY_LOAN_PAGE,
-  MAX_LOAN_PRESENTATION_ROWS,
   MAX_OPEN_LOAN_PAGE,
 } from './loan-operation-bounds.ts';
 const UNDATED_SORT_DAY = '9999-12-31';
 const LOAN_EVENT = 'com.rezics.library.copy-loan.changed.v1';
-const SOFT_SEMANTIC_FAILURES = new Set([
-  'semantic_not_ready',
-  'dependency_unavailable',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'overloaded',
-]);
+const SOFT_SEMANTIC_FAILURES = new Set(['semantic_not_ready', 'dependency_unavailable']);
 
 type Dependencies = { pool: Pool; access: Access; routeKey: Uint8Array; tokens: KeyRing; clock?: KernelClock };
 type CopyRow = {
@@ -79,25 +76,7 @@ type CopyRow = {
   disposedOn: string | null;
   deletionId: string | null;
 };
-type LoanRow = {
-  loanId: string;
-  accountId: string;
-  copyId: string;
-  direction: 'lent' | 'borrowed';
-  counterpartyKind: 'name' | 'person';
-  counterpartyName: string | null;
-  counterpartyPersonId: string | null;
-  startedOn: string | Date;
-  dueOn: string | Date | null;
-  returnedOn: string | Date | null;
-  revision: number;
-  copySubjectId: string | null;
-  copyRevision: number | null;
-  copyKind: string | null;
-  copyStatus: string | null;
-  copyDisposedOn: string | Date | null;
-  copyDeletionId: string | null;
-};
+type LoanRow = LoanNativeRow;
 export type LoanFilter = 'open' | 'history';
 export type LoanAction = Readonly<{ allowed: boolean; reason: 'returned' | 'copy_unavailable' | null }>;
 export type LoanPageItem = Readonly<{
@@ -173,12 +152,7 @@ function copyView(row: Record<string, unknown> | undefined): CopyRow | null {
 }
 
 async function readCopy(client: Pick<PoolClient, 'query'>, route: number, accountId: string, copyId: string) {
-  const result = await client.query(
-    `SELECT copy_id::text AS "copyId", account_id::text AS "accountId", subject_id::text AS "subjectId",
-            revision, kind, status, disposed_on::text AS "disposedOn", deletion_id::text AS "deletionId"
-       FROM library.copy WHERE route=$1 AND account_id=$2 AND copy_id=$3`,
-    [route, accountId, copyId],
-  );
+  const result = await executeLoanNative(client, loanCopyReadPlan({ route, accountId, id: copyId }));
   return copyView(result.rows[0]);
 }
 
@@ -253,18 +227,27 @@ function cursorBinding(accountId: string, filter: LoanFilter): CursorBinding {
 
 function cursorAfter(tokens: KeyRing, binding: CursorBinding, token: string, generation: number, filter: LoanFilter) {
   const cursor = decodeCursor(tokens, binding, token);
-  if (
-    !cursor.ok ||
-    cursor.after.length !== 2 ||
-    typeof cursor.after[0] !== 'string' ||
-    typeof cursor.after[1] !== 'string'
-  )
+  if (!cursor.ok || typeof cursor.after[0] !== 'string' || typeof cursor.after[1] !== 'string')
     throw new ProblemError('invalid_cursor');
   if (cursor.epoch !== generation) throw new ProblemError('stale_cursor');
   const day = cursor.after[0];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || routeOf(cursor.after[1]) === null) throw new ProblemError('invalid_cursor');
-  if (filter === 'open' && day > UNDATED_SORT_DAY) throw new ProblemError('invalid_cursor');
-  return { day, id: cursor.after[1] };
+  if (filter === 'open') {
+    if (day > UNDATED_SORT_DAY || cursor.after.length < 2 || cursor.after.length > 3)
+      throw new ProblemError('invalid_cursor');
+    if (cursor.after.length === 2)
+      return {
+        day,
+        id: cursor.after[1],
+        undated: day === UNDATED_SORT_DAY ? null : false,
+      };
+    const dueState = cursor.after[2];
+    if ((dueState !== 'dated' && dueState !== 'undated') || (day !== UNDATED_SORT_DAY && dueState === 'undated'))
+      throw new ProblemError('invalid_cursor');
+    return { day, id: cursor.after[1], undated: dueState === 'undated' };
+  }
+  if (cursor.after.length !== 2) throw new ProblemError('invalid_cursor');
+  return { day, id: cursor.after[1], undated: false };
 }
 
 async function bumpGeneration(tx: CommandTransaction, route: number, accountId: string): Promise<number> {
@@ -278,18 +261,7 @@ function event(accountId: string, loanId: string) {
 }
 
 async function readLoan(tx: Pick<PoolClient, 'query'>, route: number, accountId: string, loanId: string) {
-  const result = await tx.query<LoanRow>(
-    `SELECT l.loan_id::text AS "loanId", l.account_id::text AS "accountId", l.copy_id::text AS "copyId",
-            l.direction, l.counterparty_kind AS "counterpartyKind", l.counterparty_name AS "counterpartyName",
-            l.counterparty_person_id::text AS "counterpartyPersonId", l.started_on AS "startedOn", l.due_on AS "dueOn",
-            l.returned_on AS "returnedOn", l.revision,
-            c.subject_id::text AS "copySubjectId", c.revision AS "copyRevision", c.kind AS "copyKind",
-            c.status AS "copyStatus", c.disposed_on AS "copyDisposedOn", c.deletion_id::text AS "copyDeletionId"
-       FROM library.copy_loan l
-       LEFT JOIN library.copy c ON c.route=l.route AND c.account_id=l.account_id AND c.copy_id=l.copy_id
-      WHERE l.route=$1 AND l.account_id=$2 AND l.loan_id=$3`,
-    [route, accountId, loanId],
-  );
+  const result = await executeLoanNative(tx, loanReadPlan({ route, accountId, id: loanId }));
   return result.rows[0] ?? null;
 }
 
@@ -367,8 +339,6 @@ export async function loanPeopleDisplay(
   languages: readonly string[] = [],
 ): Promise<Map<string, string | null>> {
   const selected = [...new Set(personIds)];
-  if (selected.length > MAX_LOAN_PRESENTATION_ROWS)
-    throw new RangeError('Loan person presentation exceeds the bounded page');
   if (!selected.length) return new Map();
   const concealed = () => new Map(selected.map((id) => [id, null]));
   try {
@@ -397,12 +367,7 @@ export async function loanPeopleDisplay(
       }),
     );
   } catch (error) {
-    const unavailable = classifyUnavailability(error);
-    if (
-      (error instanceof ProblemError && SOFT_SEMANTIC_FAILURES.has(error.code)) ||
-      (error instanceof AccessUnavailableError && error.reason !== 'deadline') ||
-      (unavailable !== undefined && unavailable !== 'deadline')
-    )
+    if (error instanceof ProblemError && SOFT_SEMANTIC_FAILURES.has(error.code))
       return concealed();
     throw error;
   }
@@ -552,38 +517,32 @@ export function createLoanCommands(config: Dependencies) {
     return readOnly(pool, owner, async (client) => {
       const generationRow = await executeLoanNative(client, loanGenerationPlan({ route, accountId: owner.accountId }));
       const generation = Number(generationRow.rows[0]?.generation ?? 1);
-      const after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
-      const sql =
-        filter === 'open'
-          ? `SELECT l.loan_id::text AS "loanId", l.account_id::text AS "accountId", l.copy_id::text AS "copyId",
-                    l.direction, l.counterparty_kind AS "counterpartyKind", l.counterparty_name AS "counterpartyName",
-                    l.counterparty_person_id::text AS "counterpartyPersonId", l.started_on AS "startedOn", l.due_on AS "dueOn",
-                    l.returned_on AS "returnedOn", l.revision,
-                    c.subject_id::text AS "copySubjectId", c.revision AS "copyRevision", c.kind AS "copyKind",
-                    c.status AS "copyStatus", c.disposed_on AS "copyDisposedOn", c.deletion_id::text AS "copyDeletionId"
-               FROM library.copy_loan l
-               LEFT JOIN library.copy c ON c.route=l.route AND c.account_id=l.account_id AND c.copy_id=l.copy_id
-              WHERE l.route=$1 AND l.account_id=$2 AND l.returned_on IS NULL
-                AND ($3::date IS NULL OR (COALESCE(l.due_on,DATE '9999-12-31'),l.loan_id)>($3::date,$4::uuid))
-              ORDER BY l.due_on ASC NULLS LAST,l.loan_id ASC LIMIT $5`
-          : `SELECT l.loan_id::text AS "loanId", l.account_id::text AS "accountId", l.copy_id::text AS "copyId",
-                    l.direction, l.counterparty_kind AS "counterpartyKind", l.counterparty_name AS "counterpartyName",
-                    l.counterparty_person_id::text AS "counterpartyPersonId", l.started_on AS "startedOn", l.due_on AS "dueOn",
-                    l.returned_on AS "returnedOn", l.revision,
-                    c.subject_id::text AS "copySubjectId", c.revision AS "copyRevision", c.kind AS "copyKind",
-                    c.status AS "copyStatus", c.disposed_on AS "copyDisposedOn", c.deletion_id::text AS "copyDeletionId"
-               FROM library.copy_loan l
-               LEFT JOIN library.copy c ON c.route=l.route AND c.account_id=l.account_id AND c.copy_id=l.copy_id
-              WHERE l.route=$1 AND l.account_id=$2 AND l.returned_on IS NOT NULL
-                AND ($3::date IS NULL OR (l.returned_on,l.loan_id)<($3::date,$4::uuid))
-              ORDER BY l.returned_on DESC,l.loan_id DESC LIMIT $5`;
-      const rows = await client.query<LoanRow>(sql, [
-        route,
-        owner.accountId,
-        after?.day ?? null,
-        after?.id ?? null,
-        size + 1,
-      ]);
+      let after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
+      if (after?.undated === null) {
+        const cursorRow = await executeLoanNative(
+          client,
+          loanCursorDuePlan({ route, accountId: owner.accountId, id: after.id }),
+        );
+        const dueOn = cursorRow.rows[0]?.dueOn;
+        if (dueOn === undefined) throw new Error('A generation-current legacy loan cursor has no retained loan');
+        after = { ...after, undated: dueOn === null };
+      }
+      const rows = await executeLoanNative(
+        client,
+        loanPagePlan({
+          route,
+          accountId: owner.accountId,
+          filter,
+          after: after
+            ? {
+                day: after.day,
+                id: after.id,
+                undated: after.undated ?? false,
+              }
+            : null,
+          limit: size + 1,
+        }),
+      );
       const visible = rows.rows.slice(0, size);
       const last = visible.at(-1);
       const nextCursor =
@@ -593,6 +552,7 @@ export function createLoanCommands(config: Dependencies) {
               after: [
                 filter === 'open' ? (dateText(last.dueOn) ?? UNDATED_SORT_DAY) : dateText(last.returnedOn)!,
                 last.loanId,
+                ...(filter === 'open' ? [last.dueOn === null ? 'undated' : 'dated'] : []),
               ],
             })
           : null;
