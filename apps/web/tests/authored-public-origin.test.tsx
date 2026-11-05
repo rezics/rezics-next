@@ -90,7 +90,6 @@ test('mounted entry, contribution menu and authored route keep public intent out
   const { createRoot } = await import('react-dom/client');
   const storybook = createRequire(require.resolve('storybook/test'));
   const { within, waitFor } = await import(storybook.resolve('@testing-library/dom'));
-  const { default: userEvent } = await import(storybook.resolve('@testing-library/user-event'));
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale();
@@ -130,7 +129,6 @@ test('mounted entry, contribution menu and authored route keep public intent out
   const { sessionQuery } = await import('../src/session/query');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const reader = '00000000-0000-4000-8000-00000000f101';
-  const user = userEvent.setup({ document: window.document });
   const label = 'Harbor: Northern lights';
   const publicHref = subjectHref({ id: addonProfileId, label }, 'en').href;
   const base = `${publicHref}/authored`;
@@ -202,8 +200,8 @@ test('mounted entry, contribution menu and authored route keep public intent out
         <AuthoredFieldEntry id={addonProfileId} title={label} locale="en" origin={observed} />
       </EditorialEntry>,
     );
-    await act(async () => user.click(within(host).getByRole('button', { name: m.contribute_title() })));
-    await act(async () => user.click(within(host).getByText(m.contribute_edit(), { exact: true })));
+    await act(async () => within(host).getByRole('button', { name: m.contribute_title() }).click());
+    await act(async () => within(host).getByText(m.contribute_edit(), { exact: true }).click());
     const menuHref = host.querySelector<HTMLAnchorElement>('a[href*="/authored?origin="]')?.getAttribute('href');
     expect(menuHref).toBe(authoredPublicCorrectionHref(base, observed));
 
