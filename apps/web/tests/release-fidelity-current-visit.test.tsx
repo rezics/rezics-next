@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { candidateContext } from '../src/subject/candidates';
@@ -84,7 +84,7 @@ async function mount(data: ReturnType<typeof fixture>, context = selectedContext
     }),
     review: () => ({}) as never,
   };
-  let activeContext = context;
+  let setContext: (context: string) => void;
   const host = window.document.createElement('div');
   window.document.body.append(host);
   host.addEventListener('click', (event) => event.preventDefault());
@@ -92,15 +92,19 @@ async function mount(data: ReturnType<typeof fixture>, context = selectedContext
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const route = createRootRoute({
-    component: () => (
-      <ReleaseFidelityPage
-        id={source}
-        context={activeContext}
-        locale="en"
-        transport={transport}
-        search={async () => []}
-      />
-    ),
+    component: function Visit() {
+      const [activeContext, changeContext] = useState(context);
+      setContext = changeContext;
+      return (
+        <ReleaseFidelityPage
+          id={source}
+          context={activeContext}
+          locale="en"
+          transport={transport}
+          search={async () => []}
+        />
+      );
+    },
   });
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await act(async () => router.load());
@@ -137,10 +141,8 @@ async function mount(data: ReturnType<typeof fixture>, context = selectedContext
       });
     },
     context: async (next: string) => {
-      activeContext = next;
       await act(async () => {
-        await router.invalidate();
-        render();
+        setContext(next);
       });
     },
     close: async () => {
@@ -171,6 +173,8 @@ test('selected Context release visit keeps exact duplicate occurrence, date, evi
     expect(visit.host.textContent).toContain(m.release_fidelity_date_tba({}, o));
     expect(visit.host.querySelector('time')?.getAttribute('datetime')).toContain('2024-05');
     expect(visit.host.textContent).toContain('https://source.example/exact-release');
+    expect(visit.host.textContent).toContain('https://vndb.org/r200');
+    expect(visit.host.textContent).toContain('https://vndb.org/r123');
     expect(visit.host.querySelector('[data-slot="release-work"] a')).toBeNull();
     const link = visit.host.querySelector<HTMLAnchorElement>('[data-slot="release-related"] li a')!;
     const destination = new URL(link.href);

@@ -1,4 +1,5 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
+import { GREGORIAN_CALENDAR } from '../../../subject/time-presentation';
 import definitions from '../../../kernel/recorded/definitions-release.json';
 import { readReleaseFidelity } from './read';
 import type { ReleaseFidelityTransport } from './view';
@@ -20,7 +21,14 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
     rank: 'normal',
     property: { id: property, data_type: 'wikibase-item' },
     value,
-    qualifiers: [],
+    qualifiers: ['rezics:releaseSupersedes', 'wdt:P155'].includes(property)
+      ? [
+          {
+            property: { id: 'schema:sameAs', data_type: 'url' },
+            value: { type: 'value', content: `https://vndb.org/r${n}` },
+          },
+        ]
+      : [],
     references: [
       {
         parts: [
@@ -45,12 +53,24 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
     resolution: {},
     relationCounts: {},
     statements: {
+      'schema:inLanguage': [
+        {
+          ...statement(13, 'schema:inLanguage', { type: 'value', content: 'ja' }),
+          property: { id: 'schema:inLanguage', data_type: 'string' },
+        },
+      ],
+      'schema:url': [
+        {
+          ...statement(14, 'schema:url', { type: 'value', content: 'https://vndb.org/r123' }),
+          property: { id: 'schema:url', data_type: 'url' },
+        },
+      ],
       'schema:exampleOfWork': [statement(10, 'schema:exampleOfWork', { type: 'value', content: work })],
       'schema:datePublished': [
         {
           ...statement(11, 'schema:datePublished', {
             type: 'value',
-            content: { time: '+2024-05-00T00:00:00Z', precision: 10 },
+            content: { time: '+2024-05-00T00:00:00Z', precision: 10, calendarmodel: GREGORIAN_CALENDAR },
           }),
           property: { id: 'schema:datePublished', data_type: 'time' },
         },
