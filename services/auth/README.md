@@ -420,8 +420,9 @@ native composition.
 The Auth-page `/clients` and `/consents` receivers use `securityResponseByteBudgets(C, 20).clients` and `.consents`
 with `readJsonBounded` before parsing. Each admitted page still makes one selected native read of 20 rows; byte
 admission adds no native reads or per-row probes. The five-second private read signal covers issuer fetch, body
-consumption and BFF delivery. This slice receives neither `/security-page`, `/passkeys`, `/registration-page` nor
-the distinct `/session` response; the `/session` receiver still needs the same trusted C/native-mode input.
+consumption and BFF delivery. Fixed `GET /security-page`, `GET /passkeys` and `GET /registration-page` receivers use
+`securityFixedResponseByteBudgets` with `readJsonBounded`; these DTO allowances need no catalogue count. The distinct
+`/session` response remains catalogue-dependent and still needs the trusted C/native-mode input.
 The page/BFF imports only the public pure helpers, never service/database code. Neither response
 Content-Length nor an arbitrary response header may raise a cap. There is no new metadata endpoint,
 scan, per-row read, polling or storage migration. Browser parsing/migration and native journey
