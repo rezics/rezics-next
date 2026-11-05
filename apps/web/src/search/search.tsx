@@ -86,6 +86,7 @@ import { conditionConceptSuggestionFilter } from './condition-concept-model';
 import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
 import { useFilterSurfaceFocus } from './filter-surface-focus';
 type SearchResult = LegacySearchPage;
+export type SearchFacetValueLabel = { text: string; lang?: string };
 type SearchParams = {
   query: string;
   locale: string;
@@ -131,7 +132,7 @@ export type SearchPageData = {
     }[];
   }[];
   selectedFacets: Record<string, string[]>;
-  selectedFacetLabels: Record<string, Record<string, string>>;
+  selectedFacetLabels: Record<string, Record<string, SearchFacetValueLabel>>;
   facetsAvailable: boolean;
   facetRetry: boolean;
   facetIndexNotReady: boolean;
@@ -324,6 +325,32 @@ function requestParams(data: SearchParams): SearchLoaderDeps {
     resourceScope: data.resourceScope,
     ratingPopulation: data.ratingPopulation,
   };
+}
+
+function selectedFacetValueLabels(
+  facets: Record<string, string[]>,
+  result: FacetState | undefined,
+  locale: string,
+): SearchPageData['selectedFacetLabels'] {
+  const admitted = result?.status === 'ready' ? result.page.facets : [];
+  return Object.fromEntries(
+    Object.entries(facets).map(([property, values]) => {
+      const nativeFacet = admitted.find((facet) => facet.property === property);
+      return [
+        property,
+        Object.fromEntries(
+          values.flatMap((value) => {
+            const labels = nativeFacet?.values.find((entry) => entry.value === value)?.labels;
+            if (!labels) return [];
+            const picked = localizedLabel(labels, locale);
+            return picked.text.trim()
+              ? [[value, { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) }]]
+              : [];
+          }),
+        ),
+      ];
+    }),
+  );
 }
 
 const readKindsWithLocale = createServerFn({ method: 'GET' })
@@ -549,9 +576,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       ...(data.ranges ? { ranges: data.ranges } : {}),
       ...(data.condition ? { condition: data.condition } : {}),
       selectedFacets: data.facetValues,
-      selectedFacetLabels: Object.fromEntries(
-        Object.keys(data.facetValues).map((property) => [property, release?.properties[property]?.labels ?? {}]),
-      ),
+      selectedFacetLabels: selectedFacetValueLabels(data.facetValues, facetResult, data.locale),
       facetsAvailable: release !== undefined,
       facetRetry: false,
       facetIndexNotReady: facetResult?.status === 'preparing',
@@ -844,7 +869,7 @@ export function SearchPage({
             : property === RESOURCE_LANGUAGE_PROPERTY
               ? m.search_resource_language({}, options)
               : label(
-                  data?.selectedFacetLabels[property],
+                  data?.conditionMetadata?.properties[property]?.labels,
                   m.search_constraint_identity_property_unavailable({}, options),
                 )
         }: ${

@@ -145,7 +145,7 @@ test('current authority and restart invalidation remove hits and independently r
       },
     },
     selectedFacets: state.facets,
-    selectedFacetLabels: { private: { en: 'Retired selected label' } },
+    selectedFacetLabels: { private: { en: { text: 'Retired selected label' } } },
     facetsAvailable: true,
     facetRetry: false,
     facetIndexNotReady: false,

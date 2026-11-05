@@ -75,13 +75,17 @@ test('selected Search identities retain exact operands, local keyboard actions a
       };
       const metadata = conditionMetadata(release.release);
       metadata.properties['schema:datePublished'].labels = { en: 'Publication year' };
+      metadata.properties['schema:genre'].labels = known || mixed ? { en: 'Current property label' } : {};
       const known = mode === 'known';
       const mixed = mode === 'mixed';
       const facets = mode === 'many' ? { ...state.facets, 'fixture:missing': Array.from({ length: 24 }, (_, index) => 'fixture:' + index + '-' + '長い値'.repeat(32)) } : state.facets;
       return <SearchPage query={state.query} cursor={state.cursor} data={{
         ...outcome, queryState: { ...state, facets }, type: state.type, typeLabels: known || mixed ? { en: 'Book' } : {},
         conditionMetadata: known || mixed ? metadata : undefined, condition: state.condition, ranges: state.ranges,
-        selectedFacets: facets, selectedFacetLabels: known || mixed ? { 'schema:genre': { en: 'Current property label' } } : {},
+        selectedFacets: facets, selectedFacetLabels: known || mixed ? { 'schema:genre': {
+          'fixture:genre-a': { text: long, lang: 'en' },
+          ...(known ? { 'fixture:genre-b': { text: 'Mystery', lang: 'en' } } : {})
+        } } : {},
         hitTypes: {}, yearProperties: [], typeChoices: [], groups: [], facetsAvailable: true, facetRetry: false,
         facetIndexNotReady: false, staleCursorRestarted: false, sort: 'relevance',
         discovery: outcome.recovery.status === 'ready' ? { status: 'ready', page: { ...page, kinds: { ...page.kinds,

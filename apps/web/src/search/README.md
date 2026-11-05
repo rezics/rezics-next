@@ -49,6 +49,8 @@ so a repeated query repeats that display, and each delivered `{query, display}` 
 Response admission copies that escaping and the 256 UTF-8-byte label bound on the closed `{trendingSearches, next:null}`
 envelope; it does not reimplement parseText, and a malformed page is unavailable as a whole.
 
+## Filters and condition authoring
+
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
 result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation
@@ -82,6 +84,26 @@ Condition-tree edits recover keyboard focus for the initiating action after the 
 session's draft-node identity. A later recovery, external replacement, disablement, unmount, or a focus move away from
 the initiating control retires the queued handoff; the live status still announces the edit.
 
+Released filter selection consumes only public definition labels and filters through the existing bounded metadata
+projection (at most 1024 released filters). Decision: choosing a candidate stages it for an explicit Add or Replace;
+Apply remains the execution boundary. Names use the existing language fallback and retain their language tags;
+references remain identity, appear beside names, and survive URL reload and Back without expansion into authored state.
+Missing names use the reference. Private Library filters never enter this catalogue.
+
+The picker examines at most 1024 names per narrowing operation, accepts 128 characters of narrowing text, and shows
+12 candidates per window plus a retained selection. Only the selected reference can open an inspection. Each
+catalogue owns a shared filter-construction snapshot; inspection uses its admitted expansion inside the request's
+outer AND, with the same cycle, depth and leaf limits. It grants no execution permission. Full-tree admission still
+checks Add, Replace and Apply. An unavailable reference remains explicitly repairable or removable.
+
+The optional current-definition preview uses the existing predicate presenter, showing at most 16 expression nodes,
+six operands per leaf, two qualifiers per statement, and 160 characters per displayed metadata label. Omitted
+structure and operands say the preview is shortened; range endpoints retain their precision and direction stays
+visible. It never reads matching subjects or opens operand lookups. Coverage describes the committed references,
+independently of the draft. Locale, public reader/address observation, accepted release replacement, external document
+replacement and node replacement/deletion retire inspection and picker state and pending tree-edit focus. Equivalent
+renders preserve deliberate edits. Existing saved-reference sharing refusal remains authoritative.
+
 Range controls show a localized Remove range link only for a committed property range; lower/upper strings and units
 stay local to the SearchPage committed-state identity across Filters dismissal and desktop/phone changes, and blank
 bounds remain invalid on Apply. The condition/language Revert action does not reset range drafts.
@@ -90,8 +112,20 @@ Property changes preserve values only when released datatypes and value definiti
 definitions support the selected unit, and statement qualifiers only when both properties allow the same released
 qualifier; incompatible nonempty operands require confirmation before reset to a fresh draft.
 
+Advanced time conditions offer numeric year bounds and explicit Gregorian calendar bounds. Decision: switching
+modes always confirms replacement of bounds and unfinished edits, because numeric year projection and calendar
+precision overlap are not assumed equivalent. The selected mode never changes on mount or metadata arrival.
+Calendar text retains exact signed/extended years and year/month/day precision; `@rezics/filter` alone validates
+endpoints and inclusive interval ordering. Empty text opens one endpoint, never both. Invalid or incomplete raw
+edits remain on their occurrence and block form Apply without publishing a replacement predicate. Occurrence edits
+survive Boolean wrapping and equivalent renders; property/mode, external request and reader replacement retire
+obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
+dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
+
 Refinement property lookup searches case-insensitive substrings of the current localized name or exact case-sensitive
 identifiers; options with colliding names include their property IDs.
+
+Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.
 
 Facet More replaces the visible ten-value window while pending and failed reads retain the accepted window. Refinement
 keeps windows and cursor progress only for the eight shown properties, then offers a restart after 64 successful
@@ -101,6 +135,8 @@ reader moved away. Picker, Load, More and Retry share one native facet-read admi
 a future Retry-After deadline withhold every read; expiry only enables an explicit Retry of the failed facets and
 cursor, never a queued request. Local property lookup and shown-set selection stay available during those states. A new
 query identity starts a fresh admitted state.
+
+## Route, query recovery and navigation
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
@@ -164,20 +200,12 @@ disappears, only while the same history owner remains current, and never if the 
 session replacement, Header unmount and a superseded retry drop the request. Header Reload stays while failure remains
 even if sync is pending; clearing failure during pending is the existing hide path.
 
-The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
-filter entry and phone interaction. Header story suggestion loaders project recorded search subjects onto the
-admitted suggestion page (identity, type, labels and a nullable summary). `tests/header-search-composition.test.tsx` exercises the existing routed
-Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual
-geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
-acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
-does not establish those outcomes.
-
-Composed Members replaces its single accepted native page only after successful explicit More (at most the planned limit, capped at 12 rows with facts when paged, or 24 in previews); sparse pages stay sparse, failures retry the same cursor, and cycles offer a fresh restart with at most 12 recent cursors plus one cycle checkpoint and two bounded counters per node. Outer or selected-leaf Retry-After is admitted as delay text on that list's failure; the list captures one absolute deadline when it accepts the failure, and expiry only enables an explicit retry of the same request.
-A malformed or over-limit native Members page is a 422 failed page before projection or cursor progress, not a sliced or filtered prefix. Retry-After delay text stays on outer and selected-leaf refusals; it is not attached to a 422 admission failure.
+Decision: About these results uses only the executed SearchLoaderDeps and current response labels; private owner leaves are category-only, and an unresolved filter context is never described as Global.
 
 Search text repair follows [the Search text contract](../../../../services/kernel/src/search/text-query-repair.md):
 localized bounded diagnostics, retained original text, explicit Apply, request-preserving navigation and focus
 limited to a current failing submission. The pure Search text core is shared with native admission.
+
 Native result-window navigation retains at most 12 admitted opaque cursors for the active complete request, plus its
 first-page address (at most 131,072 characters). Each cursor is at most 4,864 characters. The address list is carried
 only by this visit's browser-history entry, bound to the reader observation and locale; it contains no result DTOs,
@@ -193,38 +221,28 @@ locale or request replacement, cancellation, leaving Search and a reader's focus
 A failed forward read retains its last admitted return address; uncertain authority clears rows and labels, and
 Previous re-reads that address rather than restoring its prior render. Refusal and restart keep explicit recovery.
 
-Released filter selection consumes only public definition labels and filters through the existing bounded metadata
-projection (at most 1024 released filters). Decision: choosing a candidate stages it for an explicit Add or Replace;
-Apply remains the execution boundary. Names use the existing language fallback and retain their language tags;
-references remain identity, appear beside names, and survive URL reload and Back without expansion into authored state.
-Missing names use the reference. Private Library filters never enter this catalogue.
+## Query sharing
 
-The picker examines at most 1024 names per narrowing operation, accepts 128 characters of narrowing text, and shows
-12 candidates per window plus a retained selection. Only the selected reference can open an inspection. Each
-catalogue owns a shared filter-construction snapshot; inspection uses its admitted expansion inside the request's
-outer AND, with the same cycle, depth and leaf limits. It grants no execution permission. Full-tree admission still
-checks Add, Replace and Apply. An unavailable reference remains explicitly repairable or removable.
+Query sharing prepares the last executed request through the installed native portable-query projection. Draft
+edits are explained separately and never disable an otherwise allowed executed link. Native advice keeps private,
+unsupported, oversized and unavailable states distinct; filter detail is the bounded native document, not a second
+predicate presenter. Links use only the same-origin Search route and its current recipient admission and repair.
 
-The optional current-definition preview uses the existing predicate presenter, showing at most 16 expression nodes,
-six operands per leaf, two qualifiers per statement, and 160 characters per displayed metadata label. Omitted
-structure and operands say the preview is shortened; range endpoints retain their precision and direction stays
-visible. It never reads matching subjects or opens operand lookups. Coverage describes the committed references,
-independently of the draft. Locale, public reader/address observation, accepted release replacement, external document
-replacement and node replacement/deletion retire inspection and picker state and pending tree-edit focus. Equivalent
-renders preserve deliberate edits. Existing saved-reference sharing refusal remains authoritative.
+The share visit retains Search's request/locale/session key and consumes Web's public retiring reader observation,
+including equal-principal replacement. Preparation and clipboard dispatch each capture synchronous ownership;
+preparation receives an AbortSignal, and close or replacement rejects completions even if cancellation is ignored.
+Decision: retry retains the current preview while preparing, and clipboard refusal offers deliberate link selection
+without automatic focus movement. Preparation waits for an issued clipboard command to settle. Copy captures the
+current allowed URL immediately before writing; an issued external write cannot be recalled. Opening focuses the
+panel only while its activation still owns focus; close/Escape restores the surviving trigger only from that panel.
+Prepared documents, labels and links remain in the mounted visit and never enter browser storage.
 
-Advanced time conditions offer numeric year bounds and explicit Gregorian calendar bounds. Decision: switching
-modes always confirms replacement of bounds and unfinished edits, because numeric year projection and calendar
-precision overlap are not assumed equivalent. The selected mode never changes on mount or metadata arrival.
-Calendar text retains exact signed/extended years and year/month/day precision; `@rezics/filter` alone validates
-endpoints and inclusive interval ordering. Empty text opens one endpoint, never both. Invalid or incomplete raw
-edits remain on their occurrence and block form Apply without publishing a replacement predicate. Occurrence edits
-survive Boolean wrapping and equivalent renders; property/mode, external request and reader replacement retire
-obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
-dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
-Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.
+## Result traversal and native windows
 
-## Release child windows
+Composed Members replaces its single accepted native page only after successful explicit More (at most the planned limit, capped at 12 rows with facts when paged, or 24 in previews); sparse pages stay sparse, failures retry the same cursor, and cycles offer a fresh restart with at most 12 recent cursors plus one cycle checkpoint and two bounded counters per node. Outer or selected-leaf Retry-After is admitted as delay text on that list's failure; the list captures one absolute deadline when it accepts the failure, and expiry only enables an explicit retry of the same request.
+A malformed or over-limit native Members page is a 422 failed page before projection or cursor progress, not a sliced or filtered prefix. Retry-After delay text stays on outer and selected-leaf refusals; it is not attached to a 422 admission failure.
+
+### Release child windows
 
 The released-edition journey consumes native grouped responses without reconstructing groups or cursors. Each work
 starts collapsed with its native preview (at most three children); rendering and expanding never read a continuation.
@@ -253,16 +271,13 @@ registry or replacement detector. An owner change hides old windows during rende
 rejects late completions even if cancellation is ignored. Equivalent renders retain expansion and independent work
 state. Focus intent belongs only to an activated current action: completion keeps the surviving action or named
 work region, while closing, replacement, disposal or moving focus cancels recovery.
-Query sharing prepares the last executed request through the installed native portable-query projection. Draft
-edits are explained separately and never disable an otherwise allowed executed link. Native advice keeps private,
-unsupported, oversized and unavailable states distinct; filter detail is the bounded native document, not a second
-predicate presenter. Links use only the same-origin Search route and its current recipient admission and repair.
 
-The share visit retains Search's request/locale/session key and consumes Web's public retiring reader observation,
-including equal-principal replacement. Preparation and clipboard dispatch each capture synchronous ownership;
-preparation receives an AbortSignal, and close or replacement rejects completions even if cancellation is ignored.
-Decision: retry retains the current preview while preparing, and clipboard refusal offers deliberate link selection
-without automatic focus movement. Preparation waits for an issued clipboard command to settle. Copy captures the
-current allowed URL immediately before writing; an issued external write cannot be recalled. Opening focuses the
-panel only while its activation still owns focus; close/Escape restores the surviving trigger only from that panel.
-Prepared documents, labels and links remain in the mounted visit and never enter browser storage.
+## Canonical stories and verification limits
+
+The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
+filter entry and phone interaction. Header story suggestion loaders project recorded search subjects onto the
+admitted suggestion page (identity, type, labels and a nullable summary). `tests/header-search-composition.test.tsx` exercises the existing routed
+Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual
+geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
+acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
+does not establish those outcomes.

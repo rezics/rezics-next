@@ -40,6 +40,10 @@ export function ConditionPresetInspection({
   const region = useId();
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const preview = useMemo(() => (open ? catalogue.preview(id) : undefined), [catalogue, id, open]);
+  const presetLabel = (key: string) => {
+    const label = catalogue.label(key);
+    return <span lang={label.lang}>{presetText(label.text || key)}</span>;
+  };
   return (
     <div className="min-w-0 space-y-2 break-words">
       <Button
@@ -65,9 +69,12 @@ export function ConditionPresetInspection({
               value={preview.value}
               locale={locale}
               previewNodes={preview.nodes}
-              label={(key) => {
-                const label = catalogue.label(key);
-                return <span lang={label.lang}>{presetText(label.text || key)}</span>;
+              presentation={{
+                property: presetLabel,
+                catalogueType: presetLabel,
+                discoveryType: presetLabel,
+                value: (_property, key) => presetLabel(key),
+                conceptScheme: presetLabel,
               }}
             />
           ) : (
