@@ -380,7 +380,7 @@ function MusicContextReadingBound({
       busyRef.current = false;
       lifetime.retire();
     };
-  }, [context, freshReadRequired, lifetime.generation, realm]);
+  }, [context, lifetime.generation, realm]);
 
   const selectStream = (nextStream: string) => {
     if (!nextStream || nextStream === (streamIntent ?? displayed?.stream)) return;
