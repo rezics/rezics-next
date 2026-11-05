@@ -6,10 +6,7 @@ import {
 } from '../../src/semantic/public-filter-source-binding.ts';
 import { createSubjectSourceKeyPages } from '../../src/semantic/subject-source-key-pages.ts';
 import { createSearchGenerationPublication } from '../../src/search/generation-publication.ts';
-import {
-  createPublicFilterCustody,
-  decodePublicFilterNativeState,
-} from '../../src/search/public-filter-custody.ts';
+import { createPublicFilterCustody, decodePublicFilterNativeState } from '../../src/search/public-filter-custody.ts';
 import { createOpenSearch, SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName, subjectGenerations } from '../../src/search/indices.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
