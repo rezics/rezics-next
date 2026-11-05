@@ -21,6 +21,8 @@ async function installDom(url: string) {
   ))
     globals[key] = Reflect.get(window, key);
   globals.getComputedStyle = window.getComputedStyle.bind(window);
+  globals.scrollTo = () => {};
+  globals.scrollBy = () => {};
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -200,6 +202,10 @@ test('public return waits for fresh admission and cancels focus when the person 
   };
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
+  const sentinel = window.document.createElement('button');
+  sentinel.textContent = 'Keep current focus';
+  window.document.body.append(sentinel);
+  sentinel.focus();
   let root = createRoot(host);
   try {
     await act(async () =>
@@ -215,7 +221,7 @@ test('public return waits for fresh admission and cancels focus when the person 
       queued?.(0);
     });
     expect(window.location.hash).toContain('#album-current-return=');
-    expect(window.document.activeElement?.textContent).not.toBe('Current Album reading');
+    expect(window.document.activeElement).toBe(sentinel);
     await act(async () => root.unmount());
     root = createRoot(host);
     window.history.replaceState({}, '', returnHref);
@@ -234,6 +240,7 @@ test('public return waits for fresh admission and cancels focus when the person 
     expect(host.textContent).not.toContain(m.album_current_return_changed({}, { locale: 'en' }));
   } finally {
     await act(async () => root.unmount());
+    sentinel.remove();
     await restore();
   }
 });
