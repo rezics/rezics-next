@@ -29,6 +29,7 @@ export const readViewerExposure = createServerFn({ method: 'GET' })
       const { env } = await import('cloudflare:workers');
       const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
       const request = getRequest();
+      console.log('viewer exposure environment', Object.keys(env), Boolean(env.SESSIONS), env.AUTH_ISSUER);
       await prepareSession(request, env as Partial<SessionEnv>);
       console.log('viewer exposure prepared', request.url, request.headers.get('cookie'));
       const subject = sessionSubject(request);
