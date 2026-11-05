@@ -429,3 +429,36 @@ test('native fresh undo applies current source visibility while old authorized r
   expect(await restore(f.owner.actor, subjectId, d, restoreKey)).toEqual({ ...undone, replayed: true });
   expect(await observed(subjectId)).toEqual(before);
 });
+
+test('native retained history pages preserve the sentinel and coverage without no-op or receipt duplicates', async () => {
+  const subjectId = await f.createSubject('game');
+  let entry = (await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey())).value.entry;
+  for (let n = 0; n < 65; n++) {
+    entry = (await f.commands.putEntry(f.owner.actor, subjectId, {
+      state: n % 2 === 0 ? 'completed' : 'planned',
+      revision: entry.revision,
+      incarnationId: entry.incarnationId!,
+    }, entryKey())).value.entry;
+  }
+  const first = await f.commands.listEntryStateHistory(f.owner.actor, subjectId, { limit: 50 });
+  expect(first.changes).toHaveLength(50);
+  expect(first.coverage).toBe('partial');
+  expect(first.next).toEqual(expect.any(String));
+  const last = await f.commands.listEntryStateHistory(f.owner.actor, subjectId, { limit: 50, cursor: first.next! });
+  expect(last.changes).toHaveLength(14);
+  expect(last.next).toBeNull();
+  expect(last.coverage).toBe('partial');
+  expect(new Set([...first.changes, ...last.changes].map((change) => change.revision)).size).toBe(64);
+  const key = entryKey();
+  const noop = await f.commands.putEntry(f.owner.actor, subjectId, {
+    state: entry.state, revision: entry.revision, incarnationId: entry.incarnationId!,
+  }, key);
+  expect(await f.commands.putEntry(f.owner.actor, subjectId, {
+    state: entry.state, revision: entry.revision, incarnationId: entry.incarnationId!,
+  }, key)).toEqual({ ...noop, replayed: true });
+  const after = await f.commands.listEntryStateHistory(f.owner.actor, subjectId, { limit: 50 });
+  expect(after.changes).toEqual(first.changes);
+  expect(after.coverage).toBe(first.coverage);
+  expect(after.currentRevision).toBe(noop.value.entry.revision);
+  expect(await f.commands.readEntry(f.owner.actor, subjectId)).toEqual(noop.value.entry);
+});

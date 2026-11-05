@@ -1,7 +1,8 @@
 import type { PoolClient } from 'pg';
 import append from './entry-state-history-append.sql';
 import markIncomplete from './entry-state-history-mark-incomplete.sql';
-import page from './entry-state-history-page.sql';
+import type page from './entry-state-history-page.sql';
+import { entryHistoryPagePlan, executeEntryHistoryPage } from './entry-operation-bounds.ts';
 import prune from './entry-state-history-prune.sql';
 import read from './entry-state-history-read.sql';
 import readLocked from './entry-state-history-read-locked.sql';
@@ -66,11 +67,12 @@ export function pageEntryStateChanges(
   client: Client,
   input: OwnerKey & { afterRevision: number | null; limit: number },
 ): Promise<EntryStateHistoryPageRow[]> {
-  return page.run(client, {
+  const plan = entryHistoryPagePlan({
     ...key(input),
     after_revision: input.afterRevision,
     page_limit: input.limit,
   });
+  return executeEntryHistoryPage(client, plan);
 }
 
 export async function readEntryStateChange(
