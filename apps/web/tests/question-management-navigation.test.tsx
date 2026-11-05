@@ -1,9 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { QuestionWindow, questionManagementWindows } from '../src/ratings/question-management/window-navigation';
 import { sessionQueryKey } from '../src/session/browser-state';
 import { m } from '../src/paraglide/messages.js';
@@ -43,6 +41,9 @@ afterAll(() => {
   for (const [key, value] of previousGlobals)
     value ? Object.defineProperty(globalThis, key, value) : Reflect.deleteProperty(globalThis, key);
 });
+const { createRoot } = await import('react-dom/client');
+const { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const realmId = '019a1b2c-3d4e-7f00-8a00-5ab1ec702001';
 const viewer = '019a1b2c-3d4e-7f00-8a00-5ab1ec702002';
 const questionId = '019a1b2c-3d4e-7f00-8a00-5ab1ec702101';
@@ -62,7 +63,11 @@ const visit: QuestionManagementVisit = {
 };
 const directoryCursors = [null, 'd1 +%&=opaque', 'd2 /?opaque'];
 const historyCursors = [null, 'h1 +%&=opaque', 'h2 /?opaque'];
-type ReadRequest = { visit: QuestionManagementVisit; resolve: (value: QuestionManagementRead) => void };
+type ReadRequest = {
+  visit: QuestionManagementVisit;
+  address: { realmId: string; selectedQuestionId: string | null; cursor: string | null };
+  resolve: (value: QuestionManagementRead) => void;
+};
 type HistoryRequest = {
   questionId: string;
   cursor: string | null;
@@ -153,6 +158,7 @@ async function mount(cursor: string | null = null) {
           ? { ...request.visit, ...request.address, state: 'unavailable' }
           : {
               ...request.visit,
+              ...request.address,
               state: 'ready',
               viewer,
               credentialEpisode: visit.credentialEpisode!,
