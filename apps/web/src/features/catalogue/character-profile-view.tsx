@@ -90,6 +90,8 @@ function CharacterProfileLive({
   const reloadFocusIntent = useRef<{
     id: typeof initialId;
     work: typeof initialWork;
+    context: typeof context;
+    realm: typeof realm;
     locale: string;
     session: string;
     generation: typeof lifetime.generation;
@@ -106,9 +108,9 @@ function CharacterProfileLive({
   });
   const retained = useRef<Extract<CharacterRead, { ok: true }> | undefined>(undefined);
   const result = query.data;
-  const currentRead = isCurrentCharacterRead(result, query, { id, work });
+  const currentRead = isCurrentCharacterRead(result, query, { id, work, context, realm });
   if (currentRead) retained.current = result;
-  const reloadContext = { id, work, locale, session, generation: lifetime.generation };
+  const reloadContext = { id, work, context, realm, locale, session, generation: lifetime.generation };
   const currentReloadContext = useRef(reloadContext);
   currentReloadContext.current = reloadContext;
   useLayoutEffect(() => {
@@ -132,7 +134,7 @@ function CharacterProfileLive({
   useLayoutEffect(() => {
     keyboardReloadActivation.current = false;
     reloadFocusIntent.current = null;
-  }, [id, work, locale, session, lifetime.generation]);
+  }, [id, work, context, realm, locale, session, lifetime.generation]);
   const reload = async (keyboard: boolean) => {
     if (reloadInFlight.current || query.isFetching || !lifetime.active()) return;
     reloadInFlight.current = true;
@@ -154,6 +156,8 @@ function CharacterProfileLive({
         !intent ||
         intent.id !== current.id ||
         intent.work !== current.work ||
+        intent.context !== current.context ||
+        intent.realm !== current.realm ||
         intent.locale !== current.locale ||
         intent.session !== current.session ||
         intent.generation !== current.generation ||
@@ -173,8 +177,27 @@ function CharacterProfileLive({
   const current = retained.current;
   const character = current?.character;
   const label = pageText(character?.subject.labels, locale);
-  const href =
-    currentRead && character ? subjectHref({ id: character.subject.id, label: label.text }, locale).href : undefined;
+  const correctionLabel = (currentRead && character ? label.text : '') || initialLabel || '';
+  const globalHref = id
+    ? globalCharacterCorrectionHref({
+        id,
+        label: correctionLabel,
+        locale,
+        work,
+        classificationHandoff: classificationHandoffToken,
+      })
+    : undefined;
+  const publicHref =
+    currentRead && character
+      ? characterPublicReturnHref({
+          id: character.subject.id,
+          label: correctionLabel,
+          locale,
+          context: current.context,
+          realm,
+        })
+      : undefined;
+  const globalMutation = currentRead && current?.context === candidateContext && !realm;
   const groups = current ? characterGroups(current.release) : undefined;
   const groupLabels = {
     identity: m.character_identity({}, o),
@@ -189,17 +212,40 @@ function CharacterProfileLive({
         headingClassName="font-sans"
         actions={
           currentRead &&
-          href && (
-            <a href={href} className={buttonVariants({ variant: 'outline' })}>
+          publicHref && (
+            <a href={publicHref} className={buttonVariants({ variant: 'outline' })}>
               {m.candidate_view_public({}, o)}
             </a>
           )
         }
       />
       <p className="text-muted-foreground">{m.character_intro({}, o)}</p>
+      {currentRead && character && (
+        <p className="text-sm text-muted-foreground">{m.character_visit_context({ context: current.context }, o)}</p>
+      )}
+      {currentRead && character && !globalMutation && (
+        <div role="status" className="space-y-2 rounded-lg border border-border p-4">
+          <p>{m.character_visit_unsupported({}, o)}</p>
+          {globalHref && (
+            <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
+              {m.character_visit_global({}, o)}
+            </a>
+          )}
+        </div>
+      )}
+      {query.data && !query.data.ok && query.data.reason === 'unsupported' && (
+        <div role="status" className="space-y-2 rounded-lg border border-border p-4">
+          <p>{m.character_visit_unsupported({}, o)}</p>
+          {globalHref && (
+            <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
+              {m.character_visit_global({}, o)}
+            </a>
+          )}
+        </div>
+      )}
       {((query.isFetching && !currentRead) || reloadPending) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {(query.isError ||
-        (query.data && !query.data.ok) ||
+        (query.data && !query.data.ok && query.data.reason !== 'unsupported') ||
         (query.isSuccess && !query.isFetching && query.data?.ok && !currentRead)) && (
         <div ref={reloadFailure} tabIndex={-1}>
           <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
@@ -434,7 +480,7 @@ function CharacterProfileLive({
                   </dl>
                 </section>
               ))}
-              <div hidden={session !== 'signed-in'}>
+              <div hidden={session !== 'signed-in' || !globalMutation}>
                 <SubjectFacts
                   key={character.subject.id}
                   initial={characterFacts(current)}
@@ -443,11 +489,11 @@ function CharacterProfileLive({
                   review={(property, token) => review(character.subject.id, property, token)}
                 />
               </div>
-              <div hidden={session !== 'signed-in'} className="space-y-4">
+              <div hidden={session !== 'signed-in' || !globalMutation} className="space-y-4">
                 <CatalogueCurrentReading
-                  visible={currentRead}
-                  ready={currentRead}
-                  revision={`${id}:${work ?? ''}:${query.dataUpdatedAt}:${query.fetchStatus}`}
+                  visible={globalMutation}
+                  ready={globalMutation}
+                  revision={`${id}:${work ?? ''}:${context ?? ''}:${realm ?? ''}:${query.dataUpdatedAt}:${query.fetchStatus}`}
                 >
                   <AuthoringDepartureBoundary>
                     <CharacterClassifications
