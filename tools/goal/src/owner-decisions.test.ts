@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultPolicy } from './policy.ts';
 import { MAX_WORKER_PROMPT_CHARACTERS, prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 import { temporaryDirectory } from './test-support.ts';
 import type { WorkerEvent } from './store.ts';
@@ -163,7 +164,8 @@ test('the decision shares the total prompt budget and omitted references remain 
       { taskId: 'task-a', attempt: 2 },
       prompt,
     );
-  const prepared = prepare('x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 400));
+  const availableBudget = Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.brief.bytes);
+  const prepared = prepare('x'.repeat(availableBudget - 400));
   expect(prepared.prompt.length).toBeLessThanOrEqual(MAX_WORKER_PROMPT_CHARACTERS);
   expect(prepared.prompt).toContain('1 document reference(s) remain pending');
   expect(prepared.delivery?.documentRefs).toEqual([]);
