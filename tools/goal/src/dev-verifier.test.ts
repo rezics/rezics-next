@@ -18,6 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLease } from './lease.ts';
 import { parseBrief } from './briefs.ts';
 import { bootSmokeEnvironment } from './verification.ts';
+import { executeCheck } from './dev-verifier-execution.ts';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import {
@@ -188,6 +189,84 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
     closure: ['apps/web/**'],
     cwd: 'apps/web',
   });
+});
+
+test('execution preserves caught runner output, transport retries, and source-bound log identity', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'goal-verifier-execution-'));
+  roots.push(root);
+  const stateDirectory = join(root, '.state');
+  const tree = join(root, 'candidate');
+  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(join(tree, 'apps/widget'), { recursive: true });
+  const runs = new Map<string, DevVerifierRun>();
+  const execution = {
+    settings: {
+      mainCheckout: root,
+      stateDirectory,
+      policy: readControlPolicy({ verifier: { checkAttempts: 2 } }),
+    },
+    readRun: (key: string) => runs.get(key)?.evidence,
+    saveRun: (run: DevVerifierRun) => runs.set(run.key, run),
+  };
+  const check: DevVerifierCheck = { command: ['node', 'widget.test.js'], closure: ['apps/widget/**'], cwd: 'apps/widget' };
+  const logs: string[] = [];
+  const retried = await executeCheck(
+    execution,
+    async (command, cwd, logPath) => {
+      expect(command).toEqual(check.command);
+      expect(cwd).toBe(join(tree, 'apps/widget'));
+      logs.push(logPath);
+      if (logs.length === 1) throw new Error('ETIMEDOUT while connecting to check host');
+      writeFileSync(logPath, 'retried successfully');
+      return { passed: true, output: 'retried successfully', timedOut: false };
+    },
+    check,
+    'head-commit',
+    tree,
+    'retry-run',
+    'retry-input',
+  );
+  expect(retried.output).toBe(
+    'attempt 1: ETIMEDOUT while connecting to check host\nattempt 2: retried successfully',
+  );
+  expect(retried.logPath).toBe(logs[1]!);
+  expect(readFileSync(retried.logPath, 'utf8')).toBe('retried successfully');
+  expect(logs[0]!).not.toBe(logs[1]!);
+
+  const thrown = await executeCheck(
+    execution,
+    async () => {
+      throw new Error('AssertionError: runner threw');
+    },
+    check,
+    'source-commit',
+    tree,
+    'product-run',
+    'product-input',
+  );
+  expect(thrown.output).toBe('AssertionError: runner threw');
+  expect(thrown.result).toBe('fail');
+  expect(runs.get('product-run')?.evidence).toEqual(thrown);
+  expect(runs.get('product-input')?.evidence.commit).toBe('source-commit');
+
+  let reran = false;
+  const rebound = await executeCheck(
+    execution,
+    async () => {
+      reran = true;
+      return { passed: true, output: '', timedOut: false };
+    },
+    check,
+    'later-commit',
+    tree,
+    'later-run',
+    'product-input',
+  );
+  expect(reran).toBe(false);
+  expect(rebound.commit).toBe('later-commit');
+  expect(rebound.cwd).toBe(check.cwd);
+  expect(rebound.logPath).toBe(thrown.logPath);
+  expect(rebound.output).toBe(thrown.output);
 });
 
 test('uses the candidate pinned Bun and falls back to the installed producer artifact only when absent', () => {

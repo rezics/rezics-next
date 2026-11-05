@@ -1,27 +1,37 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type {
   DevVerifierEvidence,
   DevVerifierFinding,
   DevVerifierResult,
-  DevVerifierRun,
   Settings,
   Task,
 } from './types.ts';
 import { defaultPolicy } from './policy.ts';
-import { runBoundedInstallProcess } from './install-process.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import { firstFailure, gateEnvironment, gateRunner, git, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { recordFlow } from './flow.ts';
 import type { Database } from 'bun:sqlite';
-import { isTransportTimeout } from './check-failure.ts';
-import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { hostname } from 'node:os';
-import { repositoryBun } from '../../../scripts/remote-check.ts';
+import {
+  classifyRun,
+  infraFailure,
+  stableAssertions,
+  tooManyAssertions,
+  truncatedOutput,
+  unavailableFailure,
+} from './dev-verifier-classification.ts';
+import {
+  createEvidence,
+  executeCheck,
+  installDependenciesCached,
+  reusableCheckResult,
+  type DevVerifierExecution,
+} from './dev-verifier-execution.ts';
 import {
   checkInputAreas,
   checkSourceFiles,
@@ -49,6 +59,8 @@ export {
   sourcePresentAt,
 } from './dev-verifier-plan.ts';
 export type { DevVerifierCheck, RevisionSource, SourceInterval, VerifierLandings } from './dev-verifier-plan.ts';
+export { classifyRun };
+export { withTreeBun } from './dev-verifier-execution.ts';
 import {
   cachedRun,
   knownExisting,
@@ -63,7 +75,6 @@ const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
 type Check = DevVerifierCheck;
 type IndexedCheck = Check & { index: number; signature: string };
-type GateOutcome = { passed: boolean; output: string; timedOut: boolean };
 type ComparedCheck = {
   check: IndexedCheck;
   baseline: DevVerifierEvidence | null;
@@ -108,54 +119,6 @@ function recordVerified(
       at,
     });
   }
-}
-function infraFailure(output: string, timedOut: boolean): boolean {
-  return timedOut || CHECK_HOST_TRANSPORT.test(output) || isTransportTimeout(output);
-}
-function unavailableFailure(output: string): boolean {
-  return (
-    /(?:command|executable|script|module|package|dependency).{0,50}(?:not found|missing|cannot be found|not configured|unknown)|cannot find (?:module|package)|module not found|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|no such file or directory|ENOENT|permission denied|not recognized as an internal or external command/i.test(
-      output,
-    ) || /pinned Bun: absent installed (?:package|binary)/i.test(output)
-  );
-}
-function truncatedOutput(output: string): boolean {
-  return /(?:output|log|result).{0,40}truncated|truncated.{0,40}(?:output|log|result)|\[TRUNCATED\]|<truncated>/i.test(
-    output,
-  );
-}
-function assertionLines(output: string): string[] {
-  const assertion = firstFailure(output).assertion;
-  if (!assertion || assertion === 'Gate exited unsuccessfully') return [];
-  return [
-    ...new Set(
-      assertion
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
-    ),
-  ];
-}
-function stableAssertions(output: string, policy = defaultPolicy.verifier): string[] {
-  return assertionLines(output).slice(0, policy.findingAssertions);
-}
-function tooManyAssertions(output: string, policy = defaultPolicy.verifier): boolean {
-  return assertionLines(output).length > policy.findingAssertions;
-}
-export function classifyRun(
-  result: Pick<DevVerifierEvidence, 'passed' | 'timedOut' | 'output'>,
-  policy = defaultPolicy.verifier,
-): DevVerifierResult {
-  if (result.passed) return 'pass';
-  if (
-    infraFailure(result.output, result.timedOut) ||
-    unavailableFailure(result.output) ||
-    truncatedOutput(result.output) ||
-    tooManyAssertions(result.output, policy) ||
-    !stableAssertions(result.output, policy).length
-  )
-    return 'infrastructure';
-  return 'fail';
 }
 function environmentIdentity(settings: Settings): NodeJS.ProcessEnv {
   return Object.fromEntries(
@@ -244,30 +207,6 @@ export function checkInput(
     environment: environmentIdentity(settings),
     toolchain: toolchainIdentity(settings, commit),
   });
-}
-function installDependencies(tree: string, stateDirectory: string, policy = defaultPolicy): boolean {
-  if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
-  const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
-  for (let attempt = 0; attempt < policy.verifier.installAttempts; attempt++) {
-    try {
-      // Bootstrap installs dependencies; official check runs resolve the candidate artifact after installation.
-      const executable = process.execPath;
-      appendFileSync(installLog, `$ ${executable} install --frozen-lockfile (attempt ${attempt + 1})\n`);
-      const result = runBoundedInstallProcess({
-        command: executable,
-        args: ['install', '--frozen-lockfile'],
-        cwd: tree,
-        step: 'bun install --frozen-lockfile',
-        purpose: 'preparation',
-        policy,
-      });
-      appendFileSync(installLog, `${result.stdout}${result.stderr}`);
-      return true;
-    } catch (error) {
-      appendFileSync(installLog, `${error instanceof Error ? error.message : String(error)}\n`);
-    }
-  }
-  return false;
 }
 
 export type BootSmokeRepair = {
@@ -378,65 +317,24 @@ async function mapBounded<T, R>(items: readonly T[], limit: number, run: (item: 
   return results;
 }
 
-function installDependenciesCached(
-  options: DevVerifierOptions,
-  commit: string,
-  tree: string,
-): { passed: boolean; output: string; logPath: string } {
-  const command = ['bun', 'install', '--frozen-lockfile'];
-  const key = hash({
+function dependencySetupKey(settings: Settings, commit: string): string {
+  return hash({
     version: 2,
     phase: 'dependency-setup',
     commit,
-    command,
+    command: ['bun', 'install', '--frozen-lockfile'],
     closure: ['package.json', 'bun.lock'],
-    environment: environmentIdentity(options.settings),
-    toolchain: toolchainIdentity(options.settings, commit),
+    environment: environmentIdentity(settings),
+    toolchain: toolchainIdentity(settings, commit),
   });
-  // A previous tree's successful install cannot populate this fresh tree's node_modules.
-  const { stateDirectory } = options.settings;
-  const logPrefix = 'dev-verify-install-';
-  const logSuffix = '.log';
-  const newLogPath = join(stateDirectory, `${logPrefix}${randomUUID()}${logSuffix}`);
-  let result: { passed: boolean; output: string; logPath: string };
-  if (!existsSync(join(tree, 'package.json'))) {
-    result = { passed: true, output: '', logPath: newLogPath };
-  } else if (!existsSync(join(tree, 'bun.lock'))) {
-    result = {
-      passed: false,
-      output: 'Baseline dependency setup failed: bun.lock is absent.',
-      logPath: newLogPath,
-    };
-  } else {
-    const previousLogs = new Set(
-      readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)),
-    );
-    const passed = installDependencies(tree, stateDirectory, options.settings.policy);
-    const logName = readdirSync(stateDirectory).find(
-      (name) => name.startsWith(logPrefix) && name.endsWith(logSuffix) && !previousLogs.has(name),
-    );
-    const logPath = logName ? join(stateDirectory, logName) : newLogPath;
-    let output = '';
-    try {
-      output = readFileSync(logPath, 'utf8');
-    } catch {}
-    result = { passed, output, logPath };
-  }
-  const run: DevVerifierRun = {
-    key,
-    createdAt: new Date().toISOString(),
-    evidence: {
-      commit,
-      command,
-      passed: result.passed,
-      timedOut: false,
-      output: result.output,
-      logPath: result.logPath,
-      result: result.passed ? 'pass' : 'infrastructure',
-    },
+}
+
+function verifierExecution(options: DevVerifierOptions): DevVerifierExecution {
+  return {
+    settings: options.settings,
+    readRun: (key) => cachedRun(options.store, key),
+    saveRun: (run) => saveRun(options.store, run, options.settings.policy?.verifier),
   };
-  if (result.passed) saveRun(options.store, run, options.settings.policy?.verifier);
-  return result;
 }
 function makeFinding(
   check: IndexedCheck,
@@ -475,108 +373,25 @@ function makeFinding(
   };
 }
 
-function evidence(
-  commit: string,
-  check: Check,
-  result: GateOutcome,
-  logPath: string,
-  policy = defaultPolicy.verifier,
-): DevVerifierEvidence {
-  return {
-    commit,
-    command: [...check.command],
-    passed: result.passed,
-    timedOut: result.timedOut,
-    output: result.output,
-    logPath,
-    result: classifyRun(result, policy),
-    ...(check.cwd ? { cwd: check.cwd } : {}),
-  };
+function runCacheKey(settings: Settings, commit: string, check: IndexedCheck, selection: string): string {
+  return checkRunKey(settings, commit, check, check.signature, selection);
 }
 
-export function withTreeBun(command: readonly string[], tree: string, fallbackRoot = tree): string[] {
-  let index = command[0] === 'env' ? 1 : 0;
-  while (command[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) index++;
-  if (command[index] !== 'bun') return [...command];
-  const artifactRoot = existsSync(join(tree, 'node_modules/bun/package.json')) ? tree : fallbackRoot;
-  const executable = repositoryBun(tree, artifactRoot).binary;
-  const bins = [...new Set([join(tree, 'node_modules/.bin'), join(fallbackRoot, 'node_modules/.bin')])];
-  const path = [...bins, process.env.PATH ?? ''].filter(Boolean).join(':');
-  return ['env', `PATH=${path}`, ...command.map((argument, position) => (position === index ? executable : argument))];
-}
-
-function forCheckAtCommit(result: DevVerifierEvidence, commit: string, check: Check): DevVerifierEvidence {
-  return {
-    ...result,
-    commit,
-    command: [...check.command],
-    ...(check.cwd ? { cwd: check.cwd } : {}),
-  };
-}
-
-function reusableCheckResult(
-  store: DevVerifierOptions['store'],
+function reusableAt(
+  execution: DevVerifierExecution,
   settings: Settings,
   commit: string,
   check: IndexedCheck,
   selection: string,
   source: RevisionSource,
 ): DevVerifierEvidence | undefined {
-  const cached = cachedRun(store, runCacheKey(settings, commit, check, selection));
-  if (cached && classifyRun(cached, settings.policy?.verifier) !== 'infrastructure')
-    return forCheckAtCommit(cached, commit, check);
-  const input = checkInput(settings, commit, check, source);
-  const failed = input ? cachedRun(store, input) : undefined;
-  return failed && classifyRun(failed, settings.policy?.verifier) === 'fail'
-    ? forCheckAtCommit(failed, commit, check)
-    : undefined;
-}
-
-function runCacheKey(settings: Settings, commit: string, check: IndexedCheck, selection: string): string {
-  return checkRunKey(settings, commit, check, check.signature, selection);
-}
-
-async function executeCheck(
-  options: DevVerifierOptions,
-  run: GateRunner,
-  check: IndexedCheck,
-  commit: string,
-  tree: string,
-  key: string,
-  input?: string,
-): Promise<DevVerifierEvidence> {
-  const cached = cachedRun(options.store, key);
-  if (cached && classifyRun(cached, options.settings.policy?.verifier) !== 'infrastructure')
-    return forCheckAtCommit(cached, commit, check);
-  const inputFailure = input ? cachedRun(options.store, input) : undefined;
-  if (inputFailure && classifyRun(inputFailure, options.settings.policy?.verifier) === 'fail')
-    return forCheckAtCommit(inputFailure, commit, check);
-  const policy = options.settings.policy ?? defaultPolicy;
-  const attempts: string[] = [];
-  let final: GateOutcome = { passed: false, output: '', timedOut: false };
-  let finalLog = '';
-  for (let attempt = 0; attempt < policy.verifier.checkAttempts; attempt++) {
-    finalLog = join(options.settings.stateDirectory, `dev-verify-${randomUUID()}.log`);
-    try {
-      final = await run(
-        withTreeBun(check.command, tree, options.settings.mainCheckout),
-        check.cwd ? join(tree, check.cwd) : tree,
-        finalLog,
-      );
-    } catch (error) {
-      final = { passed: false, output: error instanceof Error ? error.message : String(error), timedOut: false };
-    }
-    attempts.push(`attempt ${attempt + 1}: ${final.output}`);
-    if (final.passed || !infraFailure(final.output, final.timedOut)) break;
-  }
-  const fullOutput = attempts.length > 1 ? attempts.join('\n') : final.output;
-  const result = evidence(commit, check, { ...final, output: fullOutput }, finalLog, options.settings.policy?.verifier);
-  const createdAt = new Date().toISOString();
-  if (classifyRun(result, options.settings.policy?.verifier) !== 'infrastructure')
-    saveRun(options.store, { key, createdAt, evidence: result }, options.settings.policy?.verifier);
-  if (input && classifyRun(result, options.settings.policy?.verifier) === 'fail')
-    saveRun(options.store, { key: input, createdAt, evidence: result }, options.settings.policy?.verifier);
-  return result;
+  return reusableCheckResult(
+    execution,
+    commit,
+    check,
+    runCacheKey(settings, commit, check, selection),
+    checkInput(settings, commit, check, source),
+  );
 }
 
 function selectionIdentity(checks: readonly IndexedCheck[]): string {
@@ -588,6 +403,7 @@ function commandPresentAt(options: DevVerifierOptions, commit: string, check: Ch
 
 async function compareRange(options: DevVerifierOptions, history: VerifierLandings): Promise<Comparison> {
   const { settings, store } = options;
+  const execution = verifierExecution(options);
   const { base, target } = history.interval;
   const checks: IndexedCheck[] = createChecks(settings, history, target).map((check, index) => ({
     ...check,
@@ -609,20 +425,20 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
   try {
     const missingHeadRuns = checks.filter(
       (check) =>
-        !headMissing.includes(check) && !reusableCheckResult(store, settings, target, check, selection, targetSource),
+        !headMissing.includes(check) && !reusableAt(execution, settings, target, check, selection, targetSource),
     );
     let headSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingHeadRuns.length) {
       headTree = join(settings.worktreeRoot, `dev-verify-${randomUUID()}`);
       git(settings.mainCheckout, 'worktree', 'add', '--detach', headTree, target);
-      headSetup = installDependenciesCached(options, target, headTree);
+      headSetup = installDependenciesCached(execution, target, headTree, dependencySetupKey(settings, target));
     }
     const runner =
       options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).verifier.standaloneGateTimeoutMs);
     const headJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of checks) {
       if (!headMissing.includes(check)) {
-        const cached = reusableCheckResult(store, settings, target, check, selection, targetSource);
+        const cached = reusableAt(execution, settings, target, check, selection, targetSource);
         if (cached) results[check.index]!.head = cached;
         else if (headSetup?.passed && headTree) headJobs.push({ check, cwd: headTree });
         else if (headSetup && !headSetup.passed)
@@ -637,7 +453,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
         return {
           check: job.check,
           result: await executeCheck(
-            options,
+            execution,
             runner,
             job.check,
             target,
@@ -671,18 +487,18 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
       results[check.index]!.baselineReason = 'The selected command source is absent at the exact verified baseline.';
     const missingBaselineRuns = baselineChecks.filter(
       (check) =>
-        !baseMissing.includes(check) && !reusableCheckResult(store, settings, base, check, selection, baseSource),
+        !baseMissing.includes(check) && !reusableAt(execution, settings, base, check, selection, baseSource),
     );
     let baseSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingBaselineRuns.length) {
       baseTree = join(settings.worktreeRoot, `dev-verify-base-${randomUUID()}`);
       git(settings.mainCheckout, 'worktree', 'add', '--detach', baseTree, base);
-      baseSetup = installDependenciesCached(options, base, baseTree);
+      baseSetup = installDependenciesCached(execution, base, baseTree, dependencySetupKey(settings, base));
     }
     const baseJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of baselineChecks) {
       if (baseMissing.includes(check)) continue;
-      const cached = reusableCheckResult(store, settings, base, check, selection, baseSource);
+      const cached = reusableAt(execution, settings, base, check, selection, baseSource);
       if (cached) results[check.index]!.baseline = cached;
       else if (baseSetup?.passed && baseTree) baseJobs.push({ check, cwd: baseTree });
       else if (baseSetup && !baseSetup.passed)
@@ -696,7 +512,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
         return {
           check: job.check,
           result: await executeCheck(
-            options,
+            execution,
             runner,
             job.check,
             base,
@@ -827,22 +643,23 @@ async function probeAt(
   missingAsPass = false,
 ): Promise<DevVerifierEvidence | null> {
   const { settings } = options;
+  const execution = verifierExecution(options);
   const key = runCacheKey(settings, commit, check, selection);
   const cached = cachedRun(options.store, key);
   if (cached) return cached;
   if (missingAsPass && !commandPresentAt(options, commit, check))
-    return evidence(commit, check, { passed: true, output: '', timedOut: false }, '');
+    return createEvidence(commit, check, { passed: true, output: '', timedOut: false }, '');
   const tree = join(settings.worktreeRoot, `dev-verify-probe-${randomUUID()}`);
   mkdirSync(settings.worktreeRoot, { recursive: true });
   mkdirSync(settings.stateDirectory, { recursive: true });
   git(settings.mainCheckout, 'worktree', 'add', '--detach', tree, commit);
   try {
-    const installed = installDependenciesCached(options, commit, tree);
+    const installed = installDependenciesCached(execution, commit, tree, dependencySetupKey(settings, commit));
     if (!installed.passed) return null;
     if (!commandPresentAt(options, commit, check))
-      return missingAsPass ? evidence(commit, check, { passed: true, output: '', timedOut: false }, '') : null;
+      return missingAsPass ? createEvidence(commit, check, { passed: true, output: '', timedOut: false }, '') : null;
     const result = await executeCheck(
-      options,
+      execution,
       options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).verifier.standaloneGateTimeoutMs),
       check,
       commit,
@@ -1156,6 +973,7 @@ async function dispatchBootOwner(
 
 async function smokeHead(options: DevVerifierOptions, verified: string, target: string): Promise<boolean> {
   const { settings } = options;
+  const execution = verifierExecution(options);
   const checks = bootSmokeChecks(settings, target);
   if (!checks.length) return false;
   const selection = selectionIdentity(checks);
@@ -1168,13 +986,13 @@ async function smokeHead(options: DevVerifierOptions, verified: string, target: 
   mkdirSync(settings.stateDirectory, { recursive: true });
   git(settings.mainCheckout, 'worktree', 'add', '--detach', tree, target);
   try {
-    const setup = installDependenciesCached(options, target, tree);
+    const setup = installDependenciesCached(execution, target, tree, dependencySetupKey(settings, target));
     if (!setup.passed) return false;
     const source = revisionSource(options, target, checks);
     let failed = false;
     for (const check of checks) {
       const result = await executeCheck(
-        options,
+        execution,
         runner,
         check,
         target,
