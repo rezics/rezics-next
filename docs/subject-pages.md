@@ -1052,7 +1052,8 @@ classification, sealed classification handoffs and original creation/readback re
 Decision: Selected Screen readings retain their native Context and Realm for inspection and return; non-Global
 correction is read-only, and a named Global choice starts a fresh correction admission.
 Mounted acceptance follows the installed route from the public overview, treats each A/B/A admission as a fresh
-read, and returns through the public reader before restoring exact occurrence focus.
+read, and returns through the public reader before restoring exact occurrence focus. Installed canonical slug redirects
+retain Realm and visit intent; changed exact occurrences and spoiler-withheld evidence retire the old inspection.
 
 The installed `/screen` route accepts one independently validated `screenVisit` descriptor. It binds the canonical
 Subject ID, released Screen Type, native Context, optional Realm, locale, effective Definition, one same-origin
