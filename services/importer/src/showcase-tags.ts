@@ -642,6 +642,7 @@ export async function importShowcaseTags(input: {
     status: gaps.length ? 'imported-with-gaps' : imported.status,
     gaps,
     vocabulary: planned.vocabulary,
+    sourceParents: planned.sourceParents,
     truncated: planned.truncated,
     bindings,
     associationBindings: associationBindings(planned.admitted, bindings),
