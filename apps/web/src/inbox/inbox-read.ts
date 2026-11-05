@@ -614,6 +614,8 @@ export async function loadUnreadCount(
       count.count < 0 ||
       count.count > 100 ||
       typeof count.capped !== 'boolean' ||
+      (count.capped && count.basis === 'current-visible-unread' && count.count !== 100) ||
+      (!count.capped && count.basis === 'current-visible-lower-bound') ||
       (count.basis !== 'current-visible-unread' && count.basis !== 'current-visible-lower-bound') ||
       !isRecord(count.witness) ||
       !exactKeys(count.witness, ['kind', 'at']) ||
