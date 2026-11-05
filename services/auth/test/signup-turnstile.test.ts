@@ -67,7 +67,11 @@ const ports: AccountWorkflowPorts = {
   registrationTarget(key) {
     registrationCalls += 1;
     registrationOrder.push('registration-target');
-    return key === 'maximal-echo' ? '\u0001'.repeat(128) : `signup-account-${key}`;
+    return key === 'invalid-echo'
+      ? 'x'.repeat(129)
+      : key === 'maximal-echo'
+        ? '\u0001'.repeat(128)
+        : `signup-account-${key}`;
   },
   async reserveHandle(input) {
     registrationCalls += 1;
@@ -442,3 +446,12 @@ test('native registration projects maximal escaped IDs without a session', async
   expect(new TextEncoder().encode(text).byteLength).toBe(784);
   expect(JSON.parse(text)).toEqual({ accountId: '\u0001'.repeat(128) });
 }, 30000);
+
+test('an unsupported producer ID is rejected before registration effects', async () => {
+  resetSiteverify();
+  const response = await signup(body('invalid-echo'));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: 'registration_denied' });
+  expect(await stageCount('invalid-echo')).toBe(0);
+  expect(registrationOrder).toEqual(['registration-target']);
+});
