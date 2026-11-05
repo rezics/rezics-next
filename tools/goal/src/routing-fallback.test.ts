@@ -49,6 +49,44 @@ test('a routed CLI below its reserve falls back to the next profile on another C
   expect(chosen.pool.name).toBe('cursor');
 });
 
+test('interleaved growing allowance history keeps shared exhausted pacing out of fallback order', () => {
+  const codex = { ...pools[0]!, policy: { ...pools[0]!.policy, maxBurnPerHour: 2 } };
+  const codexAlias = { ...codex, name: 'codex-alias' };
+  const cursor = pools[1]!;
+  const observed = (pool: Pool, usedPercent: number, at: number): PoolReading => ({
+    ...reading(pool.name, usedPercent),
+    allowanceKey: pool.allowanceKey,
+    observedAt: new Date(at).toISOString(),
+    windows: [{ usedPercent, minutes: 300, resetsAt: now + 60 * 60 * 1000 }],
+  });
+  const history = Array.from({ length: 32 }, (_, index) => [
+    observed(codex, 10, now - 3 * 60 * 60 * 1000 + index * 1000),
+    observed(cursor, 5, now - 3 * 60 * 60 * 1000 + index * 1000),
+  ]).flat();
+  history.push(observed(codex, 30, now - 60 * 60 * 1000));
+  history.push(observed(cursor, 9, now - 60 * 60 * 1000));
+  history.push(observed(codexAlias, 99, now));
+  let historyIterations = 0;
+  const interleavedHistory = new Proxy(history, {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) historyIterations++;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  const chosen = choosePoolWithFallback(
+    luna,
+    [cursorLuna],
+    [codex, codexAlias, cursor],
+    [observed(codex, 40, now), observed(cursor, 10, now)],
+    { now, history: interleavedHistory },
+  );
+
+  expect(chosen.profile).toBe(cursorLuna);
+  expect(chosen.pool.name).toBe('cursor');
+  expect(historyIterations).toBe(1);
+});
+
 test('with no fallback that has quota the original refusal stands', () => {
   expect(() => choosePoolWithFallback(luna, [], pools, [reading('codex', 85)], { now })).toThrow('no allowed pool');
 });

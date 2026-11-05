@@ -285,10 +285,10 @@ worker cap or holds. Several workers run in the same module at once.
 Peers edit the tree at the same time. Workers commit their own work often with `git add <your paths>` (never `-A`
 or `.`), then a path-limited `git commit --only ... -- <your paths>` to leave a peer's staged files alone. The subject
 is `<task name>: <message>`; task name is the original brief's file name without `.md`. Every worker commit carries
-`Goal-Task: <task id>` as a Git trailer. Attribution uses Git's trailer parser, never subject text or the entire branch
-diff. Workers never reset, checkout, stash, clean or rebase. A failure in files they did not touch is a peer's work in
-progress: rerun later or check only their own tests. The controller never sweeps shared leftovers into a commit or
-stops processes merely because their working directory is shared. Frozen acceptance inputs retain their usual
+`Goal-Task: <task id>` as a Git trailer. Attribution projects one immutable `base..head` interval (trailers, NUL paths,
+no merges), never cached across heads. Workers never reset, checkout, stash, clean or rebase.
+A failure in files they did not touch is a peer's work in progress. The controller never sweeps shared leftovers into a
+commit or stops processes merely because their working directory is shared. Frozen acceptance inputs retain their usual
 protection and controller commits; undeclared risk areas remain closed.
 
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
@@ -421,6 +421,9 @@ than `maxAgeMs` excludes that allowance. A fresh reading with allowance left ret
 minutes; the attempt records the refusal and the primary and secondary windows it read. Three usage-limit refusals on
 one pool within an hour temporarily exclude its allowance for one hour. Other native quota failures exclude all
 aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
+
+Decision: each pool selection indexes current readings and reverse-array history predecessors once by allowance key,
+then reuses that projection across profile fallbacks.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
@@ -939,6 +942,8 @@ events stay unknown; reports do not backfill old tasks. Check-slot request,
 acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
 most waiting is named as the bottleneck.
 
+Decision: `report(records)` derives completed-attempt metrics from one in-memory projection, retaining latest-attempt landing attribution, first-pass duration, pending-gate, pool and consult semantics.
+
 The lifecycle JSON and hourly snapshots include conflict telemetry. The current producer records unresolved rebase
 outcomes and conflict retry setup, but does not identify every conflict, the original conflict occurrence time, or
 owner/rerere/replay resolution. Owner-landing capability is therefore `unavailable`; total conflicts, actual
@@ -981,6 +986,8 @@ current waits, orphaned landings, promotion state, quarantines and shared tool i
 records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
 product work.
+
+Decision: Guard-ending buckets use each worker record's own `endedAt` through a bounded index, independently of attempt timestamps, while retaining historical classifications and exact report text.
 
 Set `integration.hourlyReportNotifier` in untracked local settings to an argv array to enable one report per completed
 UTC hour. Goal appends the report as the final argument, runs without a shell, discards notifier output, and stops the

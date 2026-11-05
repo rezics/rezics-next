@@ -52,10 +52,25 @@ test('candidates on the same pool get the same pacing urgency, so route order de
 
 test('one pacing timestamp is shared across all pools in a route selection', () => {
   const urgencyTimes: number[] = [];
-  choosePoolWithFallback(sol, [sonnet], [codex, claude], [reading, claudeReading], { now }, (_pool, selectedAt) => {
-    urgencyTimes.push(selectedAt);
-    return 1;
+  let historyIterations = 0;
+  const history = new Proxy([reading, claudeReading], {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) historyIterations++;
+      return Reflect.get(target, property, receiver);
+    },
   });
+  choosePoolWithFallback(
+    sol,
+    [luna, sonnet],
+    [codex, claude],
+    [reading, claudeReading],
+    { now, history },
+    (_pool, selectedAt) => {
+      urgencyTimes.push(selectedAt);
+      return 1;
+    },
+  );
 
   expect(urgencyTimes).toEqual([now, now]);
+  expect(historyIterations).toBe(1);
 });

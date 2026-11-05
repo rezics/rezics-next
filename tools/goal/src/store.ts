@@ -32,6 +32,13 @@ import type {
   HistoricalProofAdmission,
 } from './verification.ts';
 
+export const workerRecordEndedAtExpression = "CASE WHEN json_valid(body) THEN json_extract(body, '$.endedAt') END";
+export const workerRecordEndedAtMigration = {
+  module: 'worker',
+  version: 12,
+  sql: `CREATE INDEX worker_records_ended_at ON worker_records (${workerRecordEndedAtExpression});`,
+} as const;
+
 export const workerMigrations = [
   {
     module: 'proof-admission',
@@ -215,6 +222,7 @@ CREATE TRIGGER worker_current_attempts_attempt_delete AFTER DELETE ON worker_att
   WHERE task_id=OLD.task_id AND current_attempt=OLD.attempt;
 END;`,
   },
+  workerRecordEndedAtMigration,
   checkResultsMigration(),
   {
     module: 'dev-verifier',

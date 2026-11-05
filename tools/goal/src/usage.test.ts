@@ -53,6 +53,37 @@ test('pacing measures only matching quota windows and never mistakes a reset for
   expect(burnPerHour(after, before)).toBe(0);
 });
 
+test('allowance indexing preserves reverse history predecessors across shared aliases', () => {
+  const pool = fixturePool(),
+    limited = { ...pool, policy: { ...pool.policy, maxBurnPerHour: 5 } },
+    alias = { ...limited, name: 'alias' },
+    other = { ...limited, name: 'other', allowanceKey: 'other' },
+    now = Date.parse('2026-10-28T12:00:00.000Z');
+  const observed = (source: typeof pool, used: number, at: number) => {
+    const result = reading(source, used);
+    result.observedAt = new Date(at).toISOString();
+    result.windows[0]!.resetsAt = now + 8 * 60 * 60 * 1000;
+    return result;
+  };
+  const history = [
+    observed(limited, 10, now - 60 * 60 * 1000),
+    observed(other, 55, now - 30 * 60 * 1000),
+    observed(alias, 95, now),
+  ];
+  let historyIterations = 0;
+  const interleavedHistory = new Proxy(history, {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) historyIterations++;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  expect(() =>
+    choosePool(profile, [limited, alias], [observed(limited, 40, now)], { now, history: interleavedHistory }),
+  ).toThrow('no allowed pool');
+  expect(historyIterations).toBe(1);
+});
+
 test('an observed exhaustion keeps its allowance out of routing for the pool maxAgeMs, then lapses', () => {
   const pool = fixturePool(),
     state = tempDirectory(),

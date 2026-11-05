@@ -10,10 +10,11 @@ import { makeRecord, readMeasurement } from './records.ts';
 import { settle } from './settle.ts';
 import { sameProcess } from './process.ts';
 import { git, WorkerTasks } from './tasks.ts';
-import { harness, markdown } from './test-support.ts';
+import { harness, markdown, tempDirectory } from './test-support.ts';
 import type { Task } from './types.ts';
 import {
   isAncestor,
+  projectWorkspaceInterval,
   readWebModules,
   taskCommits,
   taskChangedPaths,
@@ -589,4 +590,85 @@ test('later workspace landings preserve an already integrated stopped peer and i
   } finally {
     h.dispose();
   }
+});
+
+test('one immutable interval attributes trailers, NUL paths and merges with bounded Git reads', () => {
+  const root = tempDirectory();
+  const commit = (path: string, task: string) => {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), path);
+    git(root, ['add', '--', path]);
+    git(root, ['commit', '-m', path, '-m', `Goal-Task: ${task}`, '--', path]);
+    return git(root, ['rev-parse', 'HEAD']);
+  };
+  const naive = (base: string, head = 'HEAD') => {
+    const tasks = new Map<string, string[]>();
+    const files = new Map<string, string[]>();
+    for (const line of git(root, [
+      'log',
+      '--reverse',
+      '--no-merges',
+      '--format=%H%x09%(trailers:key=Goal-Task,valueonly,separator=%x09)',
+      `${base}..${head}`,
+    ]).split('\n')) {
+      const [sha, ...ids] = line.split('\t');
+      if (!sha) continue;
+      files.set(
+        sha,
+        git(root, ['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', sha])
+          .split('\0')
+          .filter(Boolean),
+      );
+      for (const id of new Set(ids.map((task) => task.trim()).filter(Boolean)))
+        tasks.set(id, [...(tasks.get(id) ?? []), sha]);
+    }
+    return { tasks, files };
+  };
+  git(root, ['init', '-b', 'main']);
+  git(root, ['config', 'user.name', 'Fixture']);
+  git(root, ['config', 'user.email', 'fixture@example.invalid']);
+  const origin = commit('seed.txt', 'seed');
+  const grown: string[] = [];
+  for (let index = 0; index < 16; index++) grown.push(commit(`t${index % 4}/${index}.ts`, `task-${index % 4}`));
+  const first = projectWorkspaceInterval(root, origin);
+  const expected = naive(origin);
+  expect(first.gitReads).toBe(2);
+  expect(first.commits).toEqual(grown);
+  expect([...first.tasks.entries()]).toEqual([...expected.tasks.entries()]);
+  expect([...first.filesByCommit.entries()]).toEqual([...expected.files.entries()]);
+  const task = { id: 'task-0', worktree: root, base: origin } as Task;
+  expect(taskChangedPaths(task)).toEqual(['t0/0.ts', 't0/4.ts', 't0/8.ts', 't0/12.ts']);
+  expect(projectWorkspaceInterval(root, origin, 'HEAD', undefined, origin).gitReads).toBe(3);
+  git(root, ['commit', '--allow-empty', '-m', `Goal-Task: ${grown[0]!}`, '-m', 'Goal-Task: prose\nOrdinary body.']);
+  expect(projectWorkspaceInterval(root, origin).tasks.get('task-0')).toEqual([
+    grown[0]!,
+    grown[4]!,
+    grown[8]!,
+    grown[12]!,
+  ]);
+  git(root, ['checkout', '--orphan', 'other']);
+  git(root, ['rm', '-rf', '--cached', '.']);
+  const orphanRoot = commit('orphan.txt', 'orphan');
+  const weird = commit('dir/new\nline.ts', 'weird');
+  git(root, ['checkout', '-b', 'side']);
+  const side = commit('side.ts', 'side');
+  git(root, ['checkout', 'other']);
+  git(root, ['merge', '--no-ff', 'side', '-m', 'merge', '-m', 'Goal-Task: merge-task']);
+  const merge = git(root, ['rev-parse', 'HEAD']);
+  const other = projectWorkspaceInterval(root, origin, merge);
+  expect(other.gitReads).toBe(2);
+  expect(other.filesByCommit.get(orphanRoot)).toEqual([]);
+  expect(other.filesByCommit.get(weird)).toEqual(['dir/new\nline.ts']);
+  expect(other.commits).not.toContain(merge);
+  expect(other.tasks.get('side')).toEqual([side]);
+  expect([...other.tasks.entries()]).toEqual([...naive(origin, merge).tasks.entries()]);
+  const frozen = projectWorkspaceInterval(root, origin, merge);
+  const later = commit('later.ts', 'later');
+  const after = projectWorkspaceInterval(root, origin);
+  expect(frozen.commits).not.toContain(later);
+  expect(after.commits).toContain(later);
+  const landed = projectWorkspaceInterval(root, origin, 'HEAD', undefined, merge);
+  expect(landed.gitReads).toBe(3);
+  expect(landed.landed.has(later)).toBe(false);
+  expect(landed.landed.has(merge)).toBe(true);
 });

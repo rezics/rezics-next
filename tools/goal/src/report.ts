@@ -38,6 +38,21 @@ export type Report = {
 
 const stepClasses: StepClass[] = ['decision', 'read', 'edit', 'wait', 'check', 'commit'];
 
+type TaskProjection = {
+  attempts: number;
+  earliestStartedAt: number;
+  firstPassing: AttemptRecord | null;
+  latestPassing: AttemptRecord | null;
+  passingAttempts: Set<number>;
+  firstAttemptPassed: boolean;
+  input: number;
+  cached: number;
+  output: number;
+  reasoning: number;
+  raw: number;
+  compactions: number;
+};
+
 function percentile(values: number[], fraction: number): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -50,16 +65,99 @@ function percentiles(values: number[]): Percentiles {
 
 /** Summarize measurements from completed attempt records, excluding attempts still waiting on a gate. */
 export function report(records: AttemptRecord[]): Report {
-  const measured = records.filter((record) => record.outcome !== 'pending-gate');
-  const byTask = new Map<string, AttemptRecord[]>();
-  for (const record of measured) {
-    if (record.taskKind === 'verification' || record.urgent) continue;
-    const group = byTask.get(record.taskId) ?? [];
-    group.push(record);
-    byTask.set(record.taskId, group);
+  const byTask = new Map<string, TaskProjection>();
+  const poolTotals = new Map<string, PoolReport>();
+  const reworkTotals = new Map<string, number>();
+  const stepTotals: Record<StepClass, number> = { decision: 0, read: 0, edit: 0, wait: 0, check: 0, commit: 0 };
+  const urgentTasks = new Set<string>();
+  const urgentPassedTasks = new Set<string>();
+  const verifiedProofs = new Set<string>();
+  const consultedAttempts: { taskId: string; attempt: number }[] = [];
+  let proofAttempts = 0;
+  let measuredAttempts = 0;
+  let totalRawTokens = 0;
+  let nonLandingRawTokens = 0;
+  let consultedCount = 0;
+  let consultHits = 0;
+  let earlyStops = 0;
+  let urgentAttempts = 0;
+
+  for (const record of records) {
+    if (record.taskKind === 'verification') proofAttempts++;
+    if (record.outcome === 'pending-gate') continue;
+
+    measuredAttempts++;
+    const input = record.usage?.input ?? record.tokens.input;
+    const cached = record.usage?.cachedInput ?? record.tokens.cached;
+    const output = record.usage?.output ?? record.tokens.output;
+    const raw = input + output;
+    totalRawTokens += raw;
+    if (record.outcome !== 'passed') nonLandingRawTokens += raw;
+
+    if (record.taskKind !== 'verification' && !record.urgent) {
+      const group = byTask.get(record.taskId) ?? {
+        attempts: 0,
+        earliestStartedAt: Number.POSITIVE_INFINITY,
+        firstPassing: null,
+        latestPassing: null,
+        passingAttempts: new Set<number>(),
+        firstAttemptPassed: false,
+        input: 0,
+        cached: 0,
+        output: 0,
+        reasoning: 0,
+        raw: 0,
+        compactions: 0,
+      };
+      group.attempts++;
+      group.earliestStartedAt = Math.min(group.earliestStartedAt, Date.parse(record.startedAt));
+      group.input += input;
+      group.cached += cached;
+      group.output += output;
+      group.reasoning += record.usage?.reasoning ?? 0;
+      group.raw += raw;
+      group.compactions += record.usage?.compactions ?? 0;
+      if (record.outcome === 'passed') {
+        group.passingAttempts.add(record.attempt);
+        if (!group.firstPassing || record.attempt < group.firstPassing.attempt) group.firstPassing = record;
+        if (!group.latestPassing || record.attempt > group.latestPassing.attempt) group.latestPassing = record;
+        if (record.attempt === 1) group.firstAttemptPassed = true;
+      }
+      byTask.set(record.taskId, group);
+    }
+
+    if (record.urgent) {
+      urgentTasks.add(record.taskId);
+      urgentAttempts++;
+      if (record.outcome === 'passed') urgentPassedTasks.add(record.taskId);
+    }
+    if (record.outcome === 'verified') verifiedProofs.add(record.taskId);
+    if (record.consulted) {
+      consultedCount++;
+      if (record.outcome === 'passed') consultHits++;
+      else consultedAttempts.push({ taskId: record.taskId, attempt: record.attempt });
+    }
+    if (record.earlyStop) earlyStops++;
+
+    const pool = poolTotals.get(record.pool) ?? { attempts: 0, passedTasks: 0, input: 0, cached: 0, output: 0 };
+    pool.attempts++;
+    if (record.outcome === 'passed' && !record.urgent) pool.passedTasks++;
+    pool.input += record.tokens.input;
+    pool.cached += record.tokens.cached;
+    pool.output += record.tokens.output;
+    poolTotals.set(record.pool, pool);
+
+    if (record.outcome !== 'passed') {
+      const key = record.escalation ?? record.outcome;
+      reworkTotals.set(key, (reworkTotals.get(key) ?? 0) + record.tokens.input);
+    }
+    for (const step of stepClasses) stepTotals[step] += record.stepClasses[step];
   }
 
-  const passedTasks = [...byTask.values()].filter((group) => group.some((record) => record.outcome === 'passed'));
+  for (const { taskId, attempt } of consultedAttempts) {
+    if (byTask.get(taskId)?.passingAttempts.has(attempt + 1)) consultHits++;
+  }
+
   const landedTotals = new Map<
     string,
     {
@@ -75,8 +173,18 @@ export function report(records: AttemptRecord[]): Report {
       compactions: number;
     }
   >();
-  for (const group of passedTasks) {
-    const winner = group.filter((record) => record.outcome === 'passed').sort((a, b) => b.attempt - a.attempt)[0]!;
+  const criticalPathDurations: number[] = [];
+  const otherDurations: number[] = [];
+  let passedTaskCount = 0;
+  let passedTaskAttempts = 0;
+  let firstAttemptPasses = 0;
+  for (const group of byTask.values()) {
+    if (group.firstAttemptPassed) firstAttemptPasses++;
+    if (!group.firstPassing) continue;
+
+    passedTaskCount++;
+    passedTaskAttempts += group.attempts;
+    const winner = group.latestPassing!;
     const taskClass = winner.taskClass;
     const model = winner.usage?.model ?? winner.profile.model;
     const key = JSON.stringify([taskClass, model]);
@@ -93,19 +201,18 @@ export function report(records: AttemptRecord[]): Report {
       compactions: 0,
     };
     total.landedTasks++;
-    total.attempts += group.length;
-    for (const record of group) {
-      const input = record.usage?.input ?? record.tokens.input;
-      const cached = record.usage?.cachedInput ?? record.tokens.cached;
-      const output = record.usage?.output ?? record.tokens.output;
-      total.input += input;
-      total.cached += cached;
-      total.output += output;
-      total.reasoning += record.usage?.reasoning ?? 0;
-      total.compactions += record.usage?.compactions ?? 0;
-      total.raw += input + output;
-    }
+    total.attempts += group.attempts;
+    total.input += group.input;
+    total.cached += group.cached;
+    total.output += group.output;
+    total.reasoning += group.reasoning;
+    total.compactions += group.compactions;
+    total.raw += group.raw;
     landedTotals.set(key, total);
+
+    const passingRecord = group.firstPassing;
+    const duration = Date.parse(passingRecord.endedAt) - group.earliestStartedAt;
+    (passingRecord.criticalPath ? criticalPathDurations : otherDurations).push(duration);
   }
   const tokensPerLandedTask = [...landedTotals.values()]
     .sort((a, b) => a.taskClass.localeCompare(b.taskClass) || a.model.localeCompare(b.model))
@@ -121,55 +228,6 @@ export function report(records: AttemptRecord[]): Report {
       rawPerTask: total.raw / total.landedTasks,
       compactionsPerTask: total.compactions / total.landedTasks,
     }));
-  const rawTokens = (record: AttemptRecord) =>
-    (record.usage?.input ?? record.tokens.input) + (record.usage?.output ?? record.tokens.output);
-  const totalRawTokens = measured.reduce((sum, record) => sum + rawTokens(record), 0);
-  const nonLandingRawTokens = measured
-    .filter((record) => record.outcome !== 'passed')
-    .reduce((sum, record) => sum + rawTokens(record), 0);
-  const attemptsPerPassedTask = passedTasks.length
-    ? passedTasks.reduce((sum, group) => sum + group.length, 0) / passedTasks.length
-    : null;
-  const firstAttemptPasses = [...byTask.values()].filter((group) =>
-    group.some((record) => record.attempt === 1 && record.outcome === 'passed'),
-  ).length;
-
-  const criticalPathDurations: number[] = [];
-  const otherDurations: number[] = [];
-  for (const group of passedTasks) {
-    const passingRecord = group
-      .filter((record) => record.outcome === 'passed')
-      .sort((a, b) => a.attempt - b.attempt)[0]!;
-    const earliestStart = Math.min(...group.map((record) => Date.parse(record.startedAt)));
-    const duration = Date.parse(passingRecord.endedAt) - earliestStart;
-    (passingRecord.criticalPath ? criticalPathDurations : otherDurations).push(duration);
-  }
-
-  const poolTotals = new Map<string, PoolReport>();
-  const reworkTotals = new Map<string, number>();
-  const stepTotals: Record<StepClass, number> = { decision: 0, read: 0, edit: 0, wait: 0, check: 0, commit: 0 };
-  for (const record of measured) {
-    const pool = poolTotals.get(record.pool) ?? { attempts: 0, passedTasks: 0, input: 0, cached: 0, output: 0 };
-    pool.attempts++;
-    if (record.outcome === 'passed' && !record.urgent) pool.passedTasks++;
-    pool.input += record.tokens.input;
-    pool.cached += record.tokens.cached;
-    pool.output += record.tokens.output;
-    poolTotals.set(record.pool, pool);
-
-    if (record.outcome !== 'passed') {
-      const key = record.escalation ?? record.outcome;
-      reworkTotals.set(key, (reworkTotals.get(key) ?? 0) + record.tokens.input);
-    }
-    for (const step of stepClasses) stepTotals[step] += record.stepClasses[step];
-  }
-
-  const consulted = measured.filter((record) => record.consulted);
-  const consultHits = consulted.filter(
-    (record) =>
-      record.outcome === 'passed' ||
-      byTask.get(record.taskId)?.some((next) => next.attempt === record.attempt + 1 && next.outcome === 'passed'),
-  ).length;
   const stepTotal = stepClasses.reduce((sum, step) => sum + stepTotals[step], 0);
   const stepShare = Object.fromEntries(
     stepClasses.map((step) => [step, stepTotal === 0 ? null : stepTotals[step] / stepTotal]),
@@ -177,23 +235,21 @@ export function report(records: AttemptRecord[]): Report {
 
   return {
     urgent: {
-      tasks: [...new Set(measured.filter((r) => r.urgent).map((r) => r.taskId))],
-      attempts: measured.filter((r) => r.urgent).length,
-      passedTasks: new Set(measured.filter((r) => r.urgent && r.outcome === 'passed').map((r) => r.taskId)).size,
+      tasks: [...urgentTasks],
+      attempts: urgentAttempts,
+      passedTasks: urgentPassedTasks.size,
     },
-    proofAttempts: records.filter((record) => record.taskKind === 'verification').length,
-    verifiedProofs: new Set(measured.filter((record) => record.outcome === 'verified').map((record) => record.taskId))
-      .size,
+    proofAttempts,
+    verifiedProofs: verifiedProofs.size,
     attempts: records.length,
     tasks: byTask.size,
-    passedTasks: passedTasks.length,
-    attemptsPerPassedTask,
+    passedTasks: passedTaskCount,
+    attemptsPerPassedTask: passedTaskCount ? passedTaskAttempts / passedTaskCount : null,
     firstAttemptPassRate: byTask.size === 0 ? null : firstAttemptPasses / byTask.size,
     wallClockToPassMs: { criticalPath: percentiles(criticalPathDurations), other: percentiles(otherDurations) },
     pools: Object.fromEntries(poolTotals),
-    consultHitRate: consulted.length === 0 ? null : consultHits / consulted.length,
-    earlyStopRate:
-      measured.length === 0 ? null : measured.filter((record) => record.earlyStop).length / measured.length,
+    consultHitRate: consultedCount === 0 ? null : consultHits / consultedCount,
+    earlyStopRate: measuredAttempts === 0 ? null : earlyStops / measuredAttempts,
     reworkInputTokens: Object.fromEntries(reworkTotals),
     stepShare,
     tokensPerLandedTask,
