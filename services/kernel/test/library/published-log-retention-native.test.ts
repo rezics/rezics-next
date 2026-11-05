@@ -150,10 +150,7 @@ test('native exact expiry purge keeps only permitted public structural identity 
   // A resumed scheduled episode retains the original deletion identity. Its
   // original cutoff can expire without granting authority over the restored log.
   time = Date.parse(originalLocator.restoreUntil);
-  const staleEpisode = await purgeExpiredPublishedLog(
-    { pool: f.pool, clock: () => new Date(time) },
-    originalLocator,
-  );
+  const staleEpisode = await purgeExpiredPublishedLog({ pool: f.pool, clock: () => new Date(time) }, originalLocator);
   expect(staleEpisode.value).toEqual({ purged: false });
   expect(await row(first.id)).toMatchObject({
     deleted: false,

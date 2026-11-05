@@ -137,7 +137,15 @@ export function publishedLogPagePlan(input: Parameters<typeof page.run>[1]): Pub
   return Object.freeze({
     kind: 'published-log.page',
     input: original,
-    total: leaf(page.sql, original, rows, examined, streams, pageProjection, sumBounds(bytes(examined), bytes(rows)).bytes),
+    total: leaf(
+      page.sql,
+      original,
+      rows,
+      examined,
+      streams,
+      pageProjection,
+      sumBounds(bytes(examined), bytes(rows)).bytes,
+    ),
   });
 }
 export function publishedLogDuePlan(input: Parameters<typeof due.run>[1]): PublishedLogDuePlan {

@@ -113,14 +113,17 @@ async function pageDuePublishedLogs(
     limit: number;
   },
 ): Promise<PublishedLogDueKey[]> {
-  const rows = await executePublishedLogDue(connection, publishedLogDuePlan({
-    partition_no: input.partition,
-    cutoff: input.cutoff,
-    after_time: input.after?.restoreUntil ?? null,
-    after_route: input.after?.route ?? null,
-    after_id: input.after?.logId ?? null,
-    limit: input.limit,
-  }));
+  const rows = await executePublishedLogDue(
+    connection,
+    publishedLogDuePlan({
+      partition_no: input.partition,
+      cutoff: input.cutoff,
+      after_time: input.after?.restoreUntil ?? null,
+      after_route: input.after?.route ?? null,
+      after_id: input.after?.logId ?? null,
+      limit: input.limit,
+    }),
+  );
   return rows.map((row) => {
     if (!row.accountId || !row.deletionId || !row.restoreUntil)
       throw new Error('Due log has no exact deletion locator');
