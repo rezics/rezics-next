@@ -42,8 +42,8 @@ test('screen overview uses its released reader label and description instead of 
   const html = renderToStaticMarkup(
     <ScreenProfileReader locale="en" release={loaded.release} public={loaded.public} />,
   );
-  expect(html).toContain(`<span>${label[0]!.toLocaleUpperCase('en')}${label.slice(1)}</span>`);
-  expect(html).toContain(description);
+  expect(html).toContain(`<span lang="en">${label[0]!.toLocaleUpperCase('en')}${label.slice(1)}</span>`);
+  expect(html).toContain(`lang="en">${description}</p>`);
   expect(html).not.toContain('schema:TVSeries');
   expect(html).not.toContain(m.screen_intro());
 });

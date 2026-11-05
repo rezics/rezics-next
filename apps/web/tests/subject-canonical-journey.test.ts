@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient, type SubjectRead } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import recordedSubject from '../src/kernel/recorded/subject.json';
@@ -166,21 +167,29 @@ test('anonymous typed public POST renders current terms without private SSR or i
   expect(selected?.subject.resolution).toEqual(recordedSubject.subject.resolution);
   expect(selected?.account).toEqual(recordedSubject.account);
   const queryClient = new QueryClient();
-  const html = renderToString(
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () =>
+        createElement(SubjectPage, {
+          page: result.page,
+          locale: 'en',
+          renderJsonLd: false,
+          messages: {
+            unknown: 'Unknown',
+            none: 'None',
+            unlabelled: 'Unlabelled',
+            sources: 'Sources',
+            aliases: 'Also known as',
+          },
+        }),
+    }),
+    history: createMemoryHistory({ initialEntries: [`/en/subjects/${recordedSubject.subject.id}`] }),
+  });
+  await router.load();
+  const html = renderToStaticMarkup(
     createElement(QueryClientProvider, {
       client: queryClient,
-      children: createElement(SubjectPage, {
-        page: result.page,
-        locale: 'en',
-        renderJsonLd: false,
-        messages: {
-          unknown: 'Unknown',
-          none: 'None',
-          unlabelled: 'Unlabelled',
-          sources: 'Sources',
-          aliases: 'Also known as',
-        },
-      }),
+      children: createElement(RouterProvider, { router }),
     }),
   );
   expect(html).toContain(recordedSubject.subject.labels.en!);
