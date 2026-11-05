@@ -349,6 +349,9 @@ export function useDiscoveryPersonalResults(input: {
             const { spaceEntries: _, ...publicPage } = installed.state.page;
             fresh = { state: { status: 'ready', page: { ...publicPage, viewerFacts: null } }, capabilities: null };
           }
+          const focused = document.activeElement;
+          if (pendingFocus.current && focused !== pendingFocus.current.element && focused !== document.body)
+            pendingFocus.current = null;
           install(fresh, !suppress ? rowKey : undefined);
         },
         spaceCommands: createSpaceEntryCommands({

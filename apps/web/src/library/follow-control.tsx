@@ -353,6 +353,7 @@ function FollowControlState({
                 <Button
                   type="button"
                   variant="ghost"
+                  aria-label={accessibleLabel(m.library_follow_conflict_recovery_remove({}, options))}
                   disabled={reviewing}
                   onClick={() => {
                     if (intent.current) recover(intent.current, { state: 'unavailable' });
@@ -362,7 +363,11 @@ function FollowControlState({
                   {m.library_follow_conflict_recovery_remove({}, options)}
                 </Button>
               ) : (
-                <a href="" className={buttonVariants({ variant: 'ghost' })}>
+                <a
+                  href=""
+                  aria-label={accessibleLabel(m.library_follow_conflict_recovery_reload({}, options))}
+                  className={buttonVariants({ variant: 'ghost' })}
+                >
                   {m.library_follow_conflict_recovery_reload({}, options)}
                 </a>
               )}
