@@ -323,8 +323,7 @@ export function createCollectionReads(
   dependencies: PreviewPreparationDependencies & {
     tokens: KeyRing;
     search?: SearchService;
-  } &
-    (
+  } & (
       | { viewerPersonalActions?: undefined }
       | { viewerPersonalActions: ViewerPersonalActionsReader; routeKey: Uint8Array }
     ),
@@ -954,10 +953,9 @@ export function createCollectionReads(
       if (!dependencies.viewerPersonalActions) {
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };
       } else {
-        const subjects = await readSubjectSummaryObservation(
-          { ...dependencies, actor: viewer, deadline },
-          [...new Set(result.members.map((member) => member.subjectId))],
-        );
+        const subjects = await readSubjectSummaryObservation({ ...dependencies, actor: viewer, deadline }, [
+          ...new Set(result.members.map((member) => member.subjectId)),
+        ]);
         // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
         const rows = result.members.flatMap((member, index) => {
           const subject = subjects.summaries.get(member.subjectId);

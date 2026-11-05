@@ -39,7 +39,14 @@ import {
   captureCollectionBulkOccurrencesForSubjects,
   explicitCollectionOccurrenceRemoval,
 } from './collection-bulk-occurrence-admission.ts';
-import type { BulkAdmission, BulkCounters, BulkReason, OperationResult, OutcomeQuery, TargetState } from './bulk-contract.ts';
+import type {
+  BulkAdmission,
+  BulkCounters,
+  BulkReason,
+  OperationResult,
+  OutcomeQuery,
+  TargetState,
+} from './bulk-contract.ts';
 import {
   captureCollectionBulkAddTargets,
   explicitCollectionBulkAdd,
@@ -429,7 +436,13 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                     );
                 return { ...base, kind: 'remove_from_collection' as const, input, targets };
               } catch (error) {
-                return { ...base, kind: 'remove_from_collection' as const, input, targets: [] as CollectionBulkTarget[], error };
+                return {
+                  ...base,
+                  kind: 'remove_from_collection' as const,
+                  input,
+                  targets: [] as CollectionBulkTarget[],
+                  error,
+                };
               }
             }
             if (executable.action === 'remove_from_library') {

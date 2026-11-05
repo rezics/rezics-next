@@ -167,7 +167,9 @@ export function clientDeclarations(
         incremental: true,
         tsBuildInfoFile: resolve(cacheDirectory, 'tsconfig.tsbuildinfo'),
       },
-      include: [resolve(kernelDirectory, 'src'), resolve(repositoryRoot, 'packages/search-text/src')].filter(existsSync),
+      include: [resolve(kernelDirectory, 'src'), resolve(repositoryRoot, 'packages/search-text/src')].filter(
+        existsSync,
+      ),
     }),
   );
   const result = spawnSync(compiler, ['-p', compilerConfig, '--runExternalCode'], {

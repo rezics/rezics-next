@@ -454,9 +454,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           }),
         deadline,
       );
-      const contributionByKey = new Map(
-        contributionRows.map((row): [string, Contribution] => [keyOf(row), row]),
-      );
+      const contributionByKey = new Map(contributionRows.map((row): [string, Contribution] => [keyOf(row), row]));
 
       const aggregateInputs = readable
         .filter(

@@ -166,8 +166,7 @@ export async function reconcileCollectionAddTarget(
   command: TargetCommand,
 ): Promise<AttemptResult | null> {
   const target = command.target;
-  if (target.kind !== 'subject' || !target.collectionId)
-    return { kind: 'stop', reason: 'evidence_missing' };
+  if (target.kind !== 'subject' || !target.collectionId) return { kind: 'stop', reason: 'evidence_missing' };
   const collectionRoute = routeOf(target.collectionId);
   if (collectionRoute === null || collectionRoute === command.source.route) return null;
   return withConnection(dependencies.pool, async (client) => {

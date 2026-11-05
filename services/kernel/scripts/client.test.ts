@@ -120,8 +120,14 @@ test('incremental client declarations match a clean emit after one source file c
     );
     writeFileSync(resolve(kernel, 'src/http/kernel.ts'), "export type { Response } from './response';\n");
     writeFileSync(resolve(kernel, 'src/http/request.ts'), 'export interface Request { id: string }\n');
-    writeFileSync(resolve(kernel, 'src/search/text.ts'), "import type { TextNode } from '@rezics/search-text';\nexport type SearchNode = TextNode;\n");
-    writeFileSync(resolve(fixture, 'packages/search-text/src/index.ts'), "export type TextNode = { kind: 'term'; value: string };\n");
+    writeFileSync(
+      resolve(kernel, 'src/search/text.ts'),
+      "import type { TextNode } from '@rezics/search-text';\nexport type SearchNode = TextNode;\n",
+    );
+    writeFileSync(
+      resolve(fixture, 'packages/search-text/src/index.ts'),
+      "export type TextNode = { kind: 'term'; value: string };\n",
+    );
     mkdirSync(resolve(fixture, 'packages/client/src'), { recursive: true });
     writeFileSync(
       resolve(fixture, 'packages/client/src/index.ts'),

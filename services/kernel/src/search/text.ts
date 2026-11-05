@@ -1,11 +1,5 @@
 import type { TextNode } from '@rezics/search-text';
-export {
-  TEXT_LIMITS,
-  TextSyntaxError,
-  parseText,
-  positiveText,
-  textSyntaxProblem,
-} from '@rezics/search-text';
+export { TEXT_LIMITS, TextSyntaxError, parseText, positiveText, textSyntaxProblem } from '@rezics/search-text';
 export type { TextNode } from '@rezics/search-text';
 
 type TextQuery =
