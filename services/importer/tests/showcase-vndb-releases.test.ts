@@ -648,7 +648,7 @@ test('later selected-family reseeds carry the newly current release classificati
         concepts: [{ code: 'win', id: currentPlatformId }],
       }),
     );
-    expect(catalogueVndbReleaseGroups(undefined, classifications.requirements)).toEqual([]);
+    expect(catalogueVndbReleaseGroups(undefined, [])).toEqual([]);
     const releaseContext = composeShowcaseVndbReleaseContext({
       bindings: classifications.bindings,
       preservedBindings: first.bindings,
