@@ -57,6 +57,24 @@ The ordinary session/unit/change limits remain default 20 and maximum 100; owner
 Raw sentinels and discarded candidates consume work and retain their original keyset frontier. No declaration
 permits refill, account-history scans, cap increases or a second native admission.
 
+# Shelf rebuild invocation custody
+
+Decision: snapshot the rebuild request before authorization and retain one absolute page deadline through
+preparation and the existing conflict reconciliation. Extend the native journey rather than add a plan-only suite.
+
+`shelf-maintenance-runtime.ts` retains the original owner, kind and request key for both the receipt digest and
+the native body. Reusing a caller's request container during authorization cannot change the requested generation
+kind. Request authorization and command execution share the same absolute deadline. A page captures its locator
+once; its one idempotency-conflict retry reloads the winner's header within the original five-second budget.
+Already advanced pages still reach ordinary Core replay without another source preparation. Current authorization,
+the original Pool, native account/gate/run locks and transaction cleanup remain with their existing owners.
+
+This custody boundary does not supply complete nine-axis rebuild operation plans. Those plans must include released
+source/type preparation, account/action/group checks, command and receipt work, phase SQL and repeated native points,
+validation, publication, bounded old-generation retirement, response serialization and successor/ack controls.
+Page and segment limits bound finite invocations; they do not bound the number of future durable pages. A completed
+phase or count cannot establish completed publication and retirement.
+
 # Library performance contract
 
 This leaf owns Collection operation bounds and custody across Library consumers. The detailed SQL derivations and
