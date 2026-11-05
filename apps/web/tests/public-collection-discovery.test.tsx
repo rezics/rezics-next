@@ -317,7 +317,7 @@ test('the localized route pages backward, retries its exact cursor, and retires 
       `/en/collections?keep=%2f&duplicate=a&duplicate=b&cursor=${encodeURIComponent(opaque)}#directory`,
     );
     await activate(view.host, 'continuation', true);
-    expect(readCalls.slice(0, 2)).toEqual([null, opaque]);
+    expect(readCalls).toEqual([null, opaque]);
     expect(view.host.textContent).toContain('Public Collections could not be loaded.');
     expect(view.router.history.location.href).toContain(`cursor=${encodeURIComponent(opaque)}`);
     await activate(view.host, 'retry', true);
