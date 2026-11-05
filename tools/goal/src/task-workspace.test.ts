@@ -29,7 +29,7 @@ test('dispatch creates a missing integration branch from main, and retry keeps l
     writeFileSync(join(worktree, 'leftover.txt'), 'kept leftover\n');
     await tasks.retry(task.id);
     expect(git(worktree, ['log', '--format=%s', '-1'])).toContain('wip: leftovers from attempt 1');
-    expect(git(worktree, ['show', 'HEAD:leftover.txt'])).toBe('kept leftover\n');
+    expect(git(worktree, ['show', 'HEAD:leftover.txt'])).toBe('kept leftover');
     const retained = git(worktree, ['rev-parse', 'HEAD']);
 
     git(h.root, ['worktree', 'remove', '--force', worktree]);
@@ -52,7 +52,7 @@ test('commitFinishedWork commits leftover isolated source and skips verification
     writeFileSync(join(task.worktree, 'uncommitted.txt'), 'left by the worker\n');
     expect(h.tasks.commitFinishedWork(task, 2)).toBe(true);
     expect(git(task.worktree, ['log', '--format=%s', '-1'])).toBe('chore: commit work left uncommitted by attempt 2');
-    expect(git(task.worktree, ['show', 'HEAD:uncommitted.txt'])).toBe('left by the worker\n');
+    expect(git(task.worktree, ['show', 'HEAD:uncommitted.txt'])).toBe('left by the worker');
     expect(h.tasks.commitFinishedWork(task, 2)).toBe(false);
 
     writeFileSync(join(task.worktree, 'again.txt'), 'dirty\n');
