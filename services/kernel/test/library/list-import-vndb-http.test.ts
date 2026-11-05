@@ -538,6 +538,13 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
 
   for (const units of [0, null]) {
     const next = await c.send('POST', base + ':preview', { xml: xml(vn('v999999999991', '<vote>8.2</vote>')) });
+    if (units === null) {
+      expect((await c.send('GET', `${base}/${next.uploadId}`)).rows[0].fields.score.kind).toBe('missing');
+      expect((await c.votes.readVoteReview(c.actor, STANDARD_QUESTION_ID, c.target)).currentVote).toMatchObject({
+        state: 'counted',
+        units: 0,
+      });
+    }
     const choice = await c.scoreReview(next.uploadId, units);
     const selection = { rows: [{ ordinal: 0, scoreReviewId: choice.reviewId }] };
     const expected = units === null ? { state: 'cleared' } : { state: 'set', units: 0 };
