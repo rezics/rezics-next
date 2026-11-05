@@ -94,7 +94,12 @@ function currentAddress(
   displayAddress: MusicContextAddress | undefined,
   requestedAddress: MusicContextAddress,
 ): string | undefined {
-  return addressHref(id, label, locale, displayAddress ?? requestedAddress);
+  return addressHref(
+    id,
+    label,
+    locale,
+    displayAddress ? { ...requestedAddress, ...displayAddress } : requestedAddress,
+  );
 }
 
 export function MusicContextReading(props: MusicContextReadingProps) {
