@@ -64,8 +64,15 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
       throw new Error('Native Follow growth exhausted distinct fixture partition placements');
     };
     const steward: Principal = { accountId: world.native.steward.id, credential: world.native.token('steward') };
-    const request: FollowCountsDriver['request'] = (credential, path, init) =>
-      world.native.bearerRequest(credential, path, init);
+    const request: FollowCountsDriver['request'] = (credential, path, init) => {
+      const headers = new Headers(init?.headers);
+      const commandKey = headers.get('idempotency-key');
+      // Conformance supplies a UUID; native HTTP requires its structured-field string encoding.
+      // The real Web transport already supplies the wire encoding.
+      if (commandKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(commandKey))
+        headers.set('idempotency-key', JSON.stringify(commandKey));
+      return world.native.bearerRequest(credential, path, { ...init, headers });
+    };
     const write = (as: Principal, method: string, path: string, body?: unknown) =>
       request(as.credential, path, {
         method,
