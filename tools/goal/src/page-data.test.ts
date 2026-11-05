@@ -236,7 +236,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 test('a non-resumable author task gets one Goal repair task for the cause', async () => {
   const h = harness();
   const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-  const inbox = new SqliteManagerInbox(h.store.db);
+  const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
   try {
     const original = h.tasks.dispatch(h.briefFile);
     const ref = { taskId: original.id, attempt: original.currentAttempt };
