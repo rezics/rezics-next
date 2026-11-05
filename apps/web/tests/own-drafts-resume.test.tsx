@@ -340,7 +340,7 @@ test('Return to drafts keeps edited server and browser writing on Stay and disca
         (node) => node.textContent === m.own_drafts_return({}, { locale: 'en' }),
       )!;
       await act(async () => user.click(returnButton));
-      expect(fixture.host.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      expect(fixture.window.document.querySelector('[role="alertdialog"]')?.textContent).toContain(
         m.thread_authoring_leave_unsaved(),
       );
       await fixture.click(m.thread_authoring_stay());
