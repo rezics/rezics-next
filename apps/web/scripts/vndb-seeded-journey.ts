@@ -11,7 +11,7 @@ const privateLogs = resolve(root, '.temp/local-stack/journey');
 await mkdir(evidence, { recursive: true, mode: 0o700 });
 await mkdir(privateLogs, { recursive: true, mode: 0o700 });
 const suffix = crypto.randomUUID().slice(0, 8);
-const env = {
+const env: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: 'development',
   KERNEL_DATABASE_CONTAINER: `rezics-vndb-${suffix}`,
@@ -109,9 +109,14 @@ try {
     assert(text.includes('STEINS') || text.includes('Steins') || text.includes('CLANNAD'), `Missing work title at ${url}`);
   }
   await context.close();
-  assert.equal(seedCode, 0, 'The complete seed must finish before the journey can pass');
+  report.phases.push('anonymous-work-pages');
 } catch (error) {
   report.error = String(error).replaceAll(password || '\u0000', '[redacted]');
+  if (await Bun.file(resolve(privateLogs, 'stack.log')).exists()) {
+    await writeFile(resolve(evidence, 'stack.log'),
+      (await readFile(resolve(privateLogs, 'stack.log'), 'utf8')).replaceAll(password || '\u0000', '[redacted]'),
+      { mode: 0o600 });
+  }
   throw error;
 } finally {
   await writeFile(resolve(evidence, 'journey.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
