@@ -211,7 +211,12 @@ function RouterDraftBoundary({
   useBlocker({
     shouldBlockFn: async ({ next }) => {
       if (protectedNow() && !(await confirm())) return true;
-      const href = `${next.pathname}${next.searchStr}${next.hash ?? ''}`;
+      const search = new URLSearchParams();
+      for (const [key, value] of Object.entries(next.search)) {
+        if (typeof value === 'string') search.set(key, value);
+      }
+      const query = search.toString();
+      const href = `${next.pathname}${query ? `?${query}` : ''}`;
       return departure ? !departure.beforeLeave(href) : false;
     },
     enableBeforeUnload: false,
