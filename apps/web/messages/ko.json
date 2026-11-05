@@ -10903,5 +10903,6 @@
   "library_anilist_score_outcome_stale": "네이티브 투표 검토가 오래되었습니다",
   "library_anilist_score_outcome_unsupported": "네이티브 투표를 지원하지 않습니다",
   "library_anilist_score_outcome_failed": "네이티브 투표 실패",
-  "library_anilist_score_outcome_unavailable": "네이티브 투표를 사용할 수 없습니다"
+  "library_anilist_score_outcome_unavailable": "네이티브 투표를 사용할 수 없습니다",
+  "library_anilist_replace_vote_and_state": "기존 네이티브 투표 및 상태 바꾸기"
 }
