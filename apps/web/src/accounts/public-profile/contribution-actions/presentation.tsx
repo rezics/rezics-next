@@ -120,7 +120,13 @@ export function ContributionWatch({
           })
         : 'unavailable';
   const lease = isCurrent() ? presentation.operation('watch') : undefined;
-  const ready = state === 'available' && !!reader && !!lease && lease.reader === reader && lease.operation === 'watch' && lease.current();
+  const ready =
+    state === 'available' &&
+    !!reader &&
+    !!lease &&
+    lease.reader === reader &&
+    lease.operation === 'watch' &&
+    lease.current();
   const [admitted, setAdmitted] = useState(ready);
   if (ready && !admitted) setAdmitted(true);
   const retaining = (ready || admitted) && isCurrent() && !!lease && lease.current();

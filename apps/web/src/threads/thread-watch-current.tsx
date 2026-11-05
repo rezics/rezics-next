@@ -88,8 +88,9 @@ function sameBinding(left: Binding, right: Binding, retainCommand = false): bool
     left.props.sessionKnown === right.props.sessionKnown &&
     left.props.sessionStamp === right.props.sessionStamp &&
     left.props.admitted === right.props.admitted &&
-    (retainCommand || (left.props.initialWatching === right.props.initialWatching &&
-    left.props.adviceState === right.props.adviceState)) &&
+    (retainCommand ||
+      (left.props.initialWatching === right.props.initialWatching &&
+        left.props.adviceState === right.props.adviceState)) &&
     left.props.observation === right.props.observation &&
     left.props.readAuthority === right.props.readAuthority
   );
@@ -185,11 +186,7 @@ export class ThreadWatchVisit {
     if (this.dead || this.accessLost || !this.connected || !this.ready) return false;
     const next = this.latest();
     const observed = binding(this.binding.props, this.binding.client);
-    if (
-      !this.matches(next) ||
-      !this.matches(observed) ||
-      !(this.binding.props.isCurrent?.() ?? true)
-    ) {
+    if (!this.matches(next) || !this.matches(observed) || !(this.binding.props.isCurrent?.() ?? true)) {
       this.retire();
       return false;
     }
@@ -277,12 +274,13 @@ export class ThreadWatchVisit {
   canBegin = () => {
     const page = this.binding.props.observation;
     return (
-      (this.latest().props.canStart?.() ?? true) && (!page ||
-      threadPageOperation(
-        page,
-        { kind: 'thread', id: this.owner.threadId },
-        this.view.watching ? 'thread.unwatch' : 'thread.watch',
-      ) === 'available')
+      (this.latest().props.canStart?.() ?? true) &&
+      (!page ||
+        threadPageOperation(
+          page,
+          { kind: 'thread', id: this.owner.threadId },
+          this.view.watching ? 'thread.unwatch' : 'thread.watch',
+        ) === 'available')
     );
   };
 
