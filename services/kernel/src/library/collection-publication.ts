@@ -25,10 +25,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import {
-  createSearchScopeForService,
-  type SearchService,
-} from '../search/service-scope.ts';
+import type { SearchService } from '../search/service-scope.ts';
 import type { PreparedSearchScope, ScopeNativeBudget } from '../search/scope-source.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import {
@@ -171,7 +168,7 @@ async function currentScope(
     throw unavailable();
 }
 
-type CatalogueSearchScope = ReturnType<typeof createSearchScopeForService>;
+type CatalogueSearchScope = ReturnType<typeof import('../search/service-scope.ts').createSearchScopeForService>;
 
 function searchNativeBudget(allowance: WorkAllowance): ScopeNativeBudget {
   const remaining = allowance.remaining;
@@ -302,6 +299,7 @@ async function prepareSelection(
           if (!deps.search || !deps.routeKey) throw unavailable();
           const sourceIdentity = binding.scope.key.source;
           if (sourceIdentity.kind !== 'library') throw unavailable();
+          const { createSearchScopeForService } = await import('../search/service-scope.ts');
           const search = createSearchScopeForService(deps.search, {
             access: deps.access,
             actor,
