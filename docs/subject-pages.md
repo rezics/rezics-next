@@ -923,7 +923,10 @@ Definition, locale, effective reader and disclosed occurrence still match.
 The ordinary Subject Game correction entry carries the actual Context, selected Realm, Type, effective release and
 reader identity when supplied by the page. It names an overview, never an implicitly selected classification
 occurrence. A supplied locator is accepted only when its holder, property and native statement ID all occur together
-in that fresh projection; equal-valued occurrences remain separate choices. The installed `/game` canonicalizer
+in that fresh projection; equal-valued occurrences remain separate choices. Each disclosed classification occurrence
+has its own Inspect control; inspection renders that occurrence's native value, rank, qualifiers and grouped
+references under the existing association spoiler gate. Closing inspection retires its selected intent across a
+refresh. The installed `/game` canonicalizer
 reads that Context, keeps validated intent across slug redirects, and the session rereads the Subject and active
 immutable Definition before presenting editing. Subject, Context or Type mismatch and changed effective release
 retire editing. The existing session/editor generation includes the full visit descriptor and effective reader, so
@@ -937,9 +940,11 @@ characters and 2,048 UTF-8 bytes after encoding, and the combined address respec
 retains at most one source and one exact selection/focus intent. Duplicate, unknown, oversized or contradictory
 fields, foreign subjects/locales, mismatched Realms and non-Global sources without a Realm address are rejected as a
 whole. The public destination rereads through its installed Subject and Game reader; an href never proves readback.
-Only the exact still-disclosed occurrence can receive focus. A changed or unsupported selection is announced and
-falls back to the current Game correction entry or reading heading; direct visits and missing descriptors offer an
-honest current restart. User interaction, a replaced reader or source, or a superseding return retires pending focus.
+Only the exact still-disclosed occurrence can receive focus. A one-use same-tab session marker binds deferred focus
+to the complete return address; a copied URL or new tab cannot restore it. A changed or unsupported selection is
+announced and falls back to the current Game correction entry or reading heading; direct visits and missing
+descriptors offer an honest current restart. User interaction, a replaced reader or source, or a superseding return
+retires pending focus.
 
 The canonicalizer issues one exact Subject GET. Destination admission uses three generated reads: Subject with
 explicit Context, active Definition pointer and immutable release. The Subject ceiling is 2 MiB and the release

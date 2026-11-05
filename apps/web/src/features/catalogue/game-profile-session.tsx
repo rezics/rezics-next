@@ -41,6 +41,7 @@ function GameProfileSessionLive({
     <GameProfile
       {...(id ? { id } : {})}
       locale={locale}
+      reader={state.state === 'signed-in' ? (state.subject ?? null) : null}
       visit={visit}
       address={address}
       session={state}

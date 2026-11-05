@@ -11,6 +11,10 @@ import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
 import { copiesSubjectId } from '../../library/copies-query';
 import { mangaOccurrenceFromFragment } from '../catalogue/manga-reader/navigation';
+import {
+  gameClassificationReturn,
+  gameClassificationReturnLimit,
+} from '../catalogue/game-current-visit-descriptor';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
@@ -844,6 +848,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
     const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
     const personBiography = subject?.[2] === 'people' ? personBiographyReturn(url.hash) : undefined;
+    const gameReturn = gameClassificationReturn(url.hash);
+    const gameReturnAddress = `${url.pathname}${url.search}${url.hash}`;
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     const literaryOverviewStream =
       !!subject &&
@@ -857,6 +863,18 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
       (personBiography !== undefined && selectedContext !== personBiography.context) ||
+      (gameReturn !== undefined &&
+        (gameReturnAddress.length > gameClassificationReturnLimit ||
+          new TextEncoder().encode(gameReturnAddress).byteLength > gameClassificationReturnLimit ||
+          encodeURIComponent(gameReturnAddress).length > gameClassificationReturnLimit ||
+          !subject ||
+          nested ||
+          subject[2] !== undefined ||
+          gameReturn.locale !== subject[1] ||
+          gameReturn.source !== `${url.pathname}${url.search}` ||
+          gameReturn.holder.toLowerCase() !== url.pathname.split('/')[3]?.toLowerCase() ||
+          gameReturn.realm !== (selectedRealm ?? undefined) ||
+          subjectVisitReturnAt(gameReturn.source, locale, true) !== `${gameReturn.source}#connections`)) ||
       (musicReturn &&
         (!subject ||
           (musicStream !== null && (!musicStream || musicStream.length > 256)) ||
@@ -924,6 +942,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject && connectionReturnWindow(fragment)) &&
       !(subject && workCastVisitReturn(fragment)) &&
       !(subject && summaryReadingReturn(fragment)) &&
+      !(subject && !subject[2] && gameReturn) &&
       fragment !== '#manga-reader' &&
       !(
         subject &&
