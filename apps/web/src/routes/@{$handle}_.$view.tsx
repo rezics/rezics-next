@@ -18,7 +18,10 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
 import { projectShareCardPage } from '../media/share-card-page';
-import { forwardContributionWindow, retireContributionWindow } from '../accounts/public-profile/contribution-windows/state';
+import {
+  forwardContributionWindow,
+  retireContributionWindow,
+} from '../accounts/public-profile/contribution-windows/state';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))

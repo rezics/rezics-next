@@ -88,8 +88,7 @@ export function ContributionWindowControls({
   const firstAvailable =
     snapshot.current !== null || cursor !== null || (snapshot.pending !== null && snapshot.pending.target !== null);
   const retryAvailable = failure !== 'invalid-cursor' && (failure !== undefined || snapshot.pending?.failed === true);
-  const showNavigation =
-    hasPrevious || firstAvailable || (outcome === 'admitted' && next !== null) || retryAvailable;
+  const showNavigation = hasPrevious || firstAvailable || (outcome === 'admitted' && next !== null) || retryAvailable;
 
   useLayoutEffect(() => {
     if (!snapshot.focusReady || !route) return;

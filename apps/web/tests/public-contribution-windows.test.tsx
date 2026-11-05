@@ -18,7 +18,8 @@ const fragment = '#part';
 const views: readonly ContributionWindowView[] = ['posts', 'reviews', 'discussion'];
 const native = createStoryRecordedKernelFetch();
 const pageReads: { view: string | undefined }[] = [];
-const listReads: { view: ContributionWindowView; cursor: string | null; limit: string | null; kind: string | null }[] = [];
+const listReads: { view: ContributionWindowView; cursor: string | null; limit: string | null; kind: string | null }[] =
+  [];
 const failOnce = new Set<string>();
 const failed = new Set<string>();
 const sparse = new Set<string>();
@@ -126,9 +127,10 @@ beforeAll(async () => {
       if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
         const input = record(await request.json());
         const target = record(input.target);
-        const view = target.view === 'posts' || target.view === 'reviews' || target.view === 'discussion'
-          ? target.view
-          : undefined;
+        const view =
+          target.view === 'posts' || target.view === 'reviews' || target.view === 'discussion'
+            ? target.view
+            : undefined;
         pageReads.push({ view });
         expect(request.headers.has('authorization')).toBe(false);
         return json(pagePayload(view));
@@ -199,9 +201,17 @@ async function open(page: Page, view: ContributionWindowView): Promise<void> {
 }
 
 async function move(page: Page, action: 'next' | 'previous' | 'first', cursor: string | null): Promise<void> {
-  await page.locator(`[data-slot="${action === 'next' ? 'continuation' : action === 'previous' ? 'previous-page' : 'first-page'}"]`).click();
+  await page
+    .locator(
+      `[data-slot="${action === 'next' ? 'continuation' : action === 'previous' ? 'previous-page' : 'first-page'}"]`,
+    )
+    .click();
   await page.waitForURL((address) => address.searchParams.get('cursor') === cursor, { timeout: 60_000 });
-  const pathView = page.url().includes('/reviews') ? 'reviews' : page.url().includes('/discussion') ? 'discussion' : 'posts';
+  const pathView = page.url().includes('/reviews')
+    ? 'reviews'
+    : page.url().includes('/discussion')
+      ? 'discussion'
+      : 'posts';
   await page.locator(`[data-slot="${listSlot(pathView)}-items"]`).waitFor();
 }
 
@@ -238,7 +248,9 @@ test('served Posts, Reviews and Discussion replace and reread native windows thr
         expect(await page.getByText('Posts window 1').count()).toBe(0);
         await page.getByRole('button', { name: 'Try again' }).click();
       }
-      await page.getByText(`${view === 'posts' ? 'Posts' : view === 'reviews' ? 'Reviews' : 'Discussion'} window 2`).waitFor();
+      await page
+        .getByText(`${view === 'posts' ? 'Posts' : view === 'reviews' ? 'Reviews' : 'Discussion'} window 2`)
+        .waitFor();
       await move(page, 'previous', cursor1);
       if (view === 'discussion') expect(await page.locator('[data-slot="account-threads-items"] li').count()).toBe(0);
       else await page.getByText(`${view === 'posts' ? 'Posts' : 'Reviews'} window 1 reread 2`).waitFor();
@@ -246,7 +258,9 @@ test('served Posts, Reviews and Discussion replace and reread native windows thr
       const firstHref = await page.locator('[data-slot="first-page"]').getAttribute('href');
       expect(firstHref).toBe(`${routePath}?${query}${fragment}`);
       await move(page, 'first', null);
-      await page.getByText(`${view === 'posts' ? 'Posts' : view === 'reviews' ? 'Reviews' : 'Discussion'} window 0`).waitFor();
+      await page
+        .getByText(`${view === 'posts' ? 'Posts' : view === 'reviews' ? 'Reviews' : 'Discussion'} window 0`)
+        .waitFor();
       expect(await page.evaluate(() => (window as unknown as Record<string, unknown>).__contributionWindowVisit)).toBe(
         'same-route-runtime',
       );
@@ -255,7 +269,11 @@ test('served Posts, Reviews and Discussion replace and reread native windows thr
       expect(listReads.map((read) => read.cursor)).toEqual(expected);
       expect(listReads.every((read) => read.limit === '20')).toBe(true);
       expect(listReads.every((read) => read.view === view)).toBe(true);
-      expect(listReads.every((read) => read.kind === (view === 'posts' ? null : view === 'reviews' ? 'review' : 'discussion'))).toBe(true);
+      expect(
+        listReads.every(
+          (read) => read.kind === (view === 'posts' ? null : view === 'reviews' ? 'review' : 'discussion'),
+        ),
+      ).toBe(true);
       expect(pageReads.filter((read) => read.view === view)).toHaveLength(view === 'posts' ? 6 : 5);
       expect(pageReads.filter((read) => read.view === undefined)).toHaveLength(view === 'posts' ? 6 : 5);
       expect(page.url()).toBe(initialUrl);

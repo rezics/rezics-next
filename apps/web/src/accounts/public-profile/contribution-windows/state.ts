@@ -191,8 +191,7 @@ export function contributionWindowSnapshot(input: {
     if (input.outcome === 'admitted') {
       commitMove(visit, move);
       visit.pending = null;
-      if (visit.focus && !visit.focus.cancelled && visit.focus.href === input.href)
-        visit.focus.target = input.cursor;
+      if (visit.focus && !visit.focus.cancelled && visit.focus.href === input.href) visit.focus.target = input.cursor;
       else releaseFocus(visit);
     } else if (input.outcome === 'failed') {
       move.failed = true;
@@ -283,11 +282,7 @@ export function consumeContributionWindowFocus(input: {
     return false;
 
   const active = host.document.activeElement;
-  if (
-    active === focus.source &&
-    focus.source.isConnected &&
-    focus.source.dataset.windowAction === focus.action
-  ) {
+  if (active === focus.source && focus.source.isConnected && focus.source.dataset.windowAction === focus.action) {
     releaseFocus(visit);
     return true;
   }

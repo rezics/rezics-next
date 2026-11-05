@@ -19,8 +19,7 @@ export function PublicProfilePage({
   reading?: ProfileReading;
   contributionWindowRoute?: ContributionWindowRoute;
 }) {
-  const isContributionView =
-    props.view === 'posts' || props.view === 'reviews' || props.view === 'discussion';
+  const isContributionView = props.view === 'posts' || props.view === 'reviews' || props.view === 'discussion';
   const handle = props.page.account?.handle;
   const windowRoute = isContributionView
     ? (contributionWindowRoute ?? {
