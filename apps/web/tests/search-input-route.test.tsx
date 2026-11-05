@@ -174,7 +174,8 @@ test('the mounted Search route retains multiple errors and a protected filter th
   expect(host.textContent).toContain('Language preferences');
   expect(host.textContent).toContain('Order');
   expect(host.textContent).toContain('Condition');
-  expect(host.textContent).toContain('Protected filter');
+  expect(host.textContent).not.toContain('Protected filter');
+  expect(router.state.location.search.filter).toMatchObject({ and: [{ realm: { id: '018f0000-0000-7000-8000-00a000000001' } }] });
   expect(document.activeElement).not.toBe(host.querySelector('[data-search-input-first] textarea'));
 
   const languageIssue = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"]')!;
