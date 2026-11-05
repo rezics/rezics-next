@@ -25,7 +25,7 @@ Each durable request keeps its original tuple, command key and bytes. If deliver
 
 ## Command line and recovery
 
-A normal run names one source, one native dump, one state file and the public API/Auth origins. Supply --source, --dump, --state, --api, --account-key, --account, --client and --auth. The direct entry is bun services/importer/src/cli.ts; --help prints usage without reading credentials, opening SQLite or contacting a service. Source choices are bangumi, vndb, openlibrary and wikidata.
+Run `bun services/importer/src/cli.ts` with --source/--dump/--state/--api/--account-key/--account/--client/--auth and one source, dump, state file and API/Auth origins. --help prints usage without credentials, SQLite or network. Sources: bangumi, vndb, openlibrary, wikidata.
 
 --dump - accepts plain stdin. Compression is explicit: gzip is supported for Open Library and Wikidata streamed dumps; zstd is supported for VNDB archives and Wikidata dumps. It is not inferred from the filename. zstd requires one local regular file and a trusted executable. The decoded-byte ceiling defaults to 256 GiB; source records default to 256 KiB with a hard 1 MiB maximum, subject to tighter native limits. API and Auth values must be HTTPS origins with no path, query, fragment or credentials. The disappearance threshold is from zero through one. Progress is opt-in and goes to stderr.
 
