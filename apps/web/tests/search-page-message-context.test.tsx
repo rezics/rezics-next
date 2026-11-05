@@ -136,7 +136,6 @@ function resourceLanguagePageData(editing = false): SearchPageData {
     ...pageData(editing),
     queryState,
     type: queryState.type,
-    condition: queryState.condition,
     discovery: {
       status: 'ready',
       page: {
