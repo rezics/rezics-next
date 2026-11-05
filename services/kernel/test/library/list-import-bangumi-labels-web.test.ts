@@ -31,15 +31,27 @@ async function json(method: 'GET' | 'POST', path: string, body?: unknown) {
 test('retained tag pages compose with exact native label review, replay and current assignment readback', async () => {
   const subjectId = await f.createSubject('game');
   const labels = createPersonalLabelCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
-  const existing = (await labels.createLabel(f.owner.actor, { name: 'Owned adoption target' }, randomUUID())).value.label;
+  const existing = (await labels.createLabel(f.owner.actor, { name: 'Owned adoption target' }, randomUUID())).value
+    .label;
   const colliding = (await labels.createLabel(f.owner.actor, { name: 'Name collision' }, randomUUID())).value.label;
-  const retainedTags = ['repeat source', 'repeat source', 'different source', 'Name collision', 'new native label', ...Array.from({ length: 60 }, (_, i) => `tag ${i}`)];
-  const uploaded = await json('POST', ':preview', wrapper([
-    { subject_type: 4, type: 1, tags: retainedTags },
-    { subject_type: 4, type: 1 },
-    { subject_type: 4, type: 1, tags: [] },
-    { subject_type: 4, type: 1, tags: ['admitted subset must not escape', 4] },
-  ]));
+  const retainedTags = [
+    'repeat source',
+    'repeat source',
+    'different source',
+    'Name collision',
+    'new native label',
+    ...Array.from({ length: 60 }, (_, i) => `tag ${i}`),
+  ];
+  const uploaded = await json(
+    'POST',
+    ':preview',
+    wrapper([
+      { subject_type: 4, type: 1, tags: retainedTags },
+      { subject_type: 4, type: 1 },
+      { subject_type: 4, type: 1, tags: [] },
+      { subject_type: 4, type: 1, tags: ['admitted subset must not escape', 4] },
+    ]),
+  );
   const uploadId = uploaded.uploadId as string;
   const rowReview = await json('POST', `/${uploadId}:review`, { ordinal: 0, target: subjectId });
   const rowRevision = rowReview.review.token as string;
@@ -78,9 +90,19 @@ test('retained tag pages compose with exact native label review, replay and curr
   const reviewed = await json('POST', `/${uploadId}:reviewLabels`, request);
   const labelReview = reviewed.labels.review;
   expect(labelReview).toMatchObject({ rowRevision, evidence: 'known' });
-  expect(labelReview.items.map((item: { status: string }) => item.status)).toEqual(['ready', 'duplicate', 'duplicate', 'ready']);
+  expect(labelReview.items.map((item: { status: string }) => item.status)).toEqual([
+    'ready',
+    'duplicate',
+    'duplicate',
+    'ready',
+  ]);
   const result = await json('POST', `/${uploadId}:applyLabels`, { ordinal: 0, reviewToken: labelReview.token });
-  expect(result.outcomes.map((item: { status: string }) => item.status)).toEqual(['assigned', 'duplicate', 'duplicate', 'assigned']);
+  expect(result.outcomes.map((item: { status: string }) => item.status)).toEqual([
+    'assigned',
+    'duplicate',
+    'duplicate',
+    'assigned',
+  ]);
   expect(result.outcomes[3]).toMatchObject({ created: true, label: { revision: 1 }, assignment: { revision: 1 } });
   expect(result.remaining).toEqual([]);
 
@@ -91,7 +113,10 @@ test('retained tag pages compose with exact native label review, replay and curr
     [existing.id, result.outcomes[3].label.id].sort(),
   );
   expect(assignments.assignments).toContainEqual(
-    expect.objectContaining({ labelId: result.outcomes[3].label.id, label: expect.objectContaining({ name: 'new native label' }) }),
+    expect.objectContaining({
+      labelId: result.outcomes[3].label.id,
+      label: expect.objectContaining({ name: 'new native label' }),
+    }),
   );
 
   await f.pool.query(
@@ -99,8 +124,14 @@ test('retained tag pages compose with exact native label review, replay and curr
      WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=0`,
     [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId],
   );
-  expect(await json('POST', `/${uploadId}:applyLabels`, { ordinal: 0, reviewToken: labelReview.token })).toEqual(result);
-  expect((await json('GET', `/v1/libraryLabelAssignments?subjectId=${subjectId}&view=FULL&limit=32`)).assignments).toHaveLength(2);
+  expect(await json('POST', `/${uploadId}:applyLabels`, { ordinal: 0, reviewToken: labelReview.token })).toEqual(
+    result,
+  );
+  expect(
+    (await json('GET', `/v1/libraryLabelAssignments?subjectId=${subjectId}&view=FULL&limit=32`)).assignments,
+  ).toHaveLength(2);
   expect((await send('GET', `/${uploadId}/rows/0/tags`, undefined, 'other')).status).toBe(404);
-  expect((await send('POST', `/${uploadId}:applyLabels`, { ordinal: 0, reviewToken: labelReview.token }, 'other')).status).toBe(404);
+  expect(
+    (await send('POST', `/${uploadId}:applyLabels`, { ordinal: 0, reviewToken: labelReview.token }, 'other')).status,
+  ).toBe(404);
 }, 180000);
