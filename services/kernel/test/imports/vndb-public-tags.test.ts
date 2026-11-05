@@ -19,6 +19,7 @@ import {
   readVndbPublicTagBindings,
 } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
+import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
@@ -234,7 +235,20 @@ async function openPublicTagWorld() {
     const bindings = await readVndbPublicTagBindings(runtime.importTransport, known);
     expect(bindings.releaseDigest).toBe(bundledDigest);
     expect(bindings.concepts.map((item) => item.id).sort()).toEqual([contId, eroId, techId].sort());
-    return { runtime, directory, editor, known, bindings, create, candidates, acceptAdopt, ballotsBefore };
+    return {
+      runtime,
+      directory,
+      editor,
+      known,
+      bindings,
+      create,
+      candidates,
+      acceptAdopt,
+      ballotsBefore,
+      contId,
+      eroId,
+      techId,
+    };
   } catch (error) {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
@@ -244,15 +258,7 @@ async function openPublicTagWorld() {
 
 test('production operator publishes authored VNDB public tags through ordinary accept and current reads', async () => {
   const { runtime, directory, editor, known, bindings, candidates, acceptAdopt, ballotsBefore, contId, eroId, techId } =
-    await (async () => {
-      const world = await openPublicTagWorld();
-      return {
-        ...world,
-        contId: world.known.concepts[0]!.id,
-        eroId: world.known.concepts[1]!.id,
-        techId: world.known.concepts[2]!.id,
-      };
-    })();
+    await openPublicTagWorld();
   try {
     const path = join(directory, 'state.sqlite');
     const first = await importVndbPublicTags({
@@ -399,6 +405,13 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
   const { runtime, editor, directory, create, candidates, acceptAdopt } = world;
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
+  const publicClient = createPublicBulkClient({
+    origin: runtime.origin,
+    fetch: async (input) => {
+      const url = new URL(String(input));
+      return runtime.request(`${url.pathname}${url.search}`);
+    },
+  });
   try {
     const schemeId = world.known.schemes[0]!.id;
     const concepts = [];
@@ -514,7 +527,7 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
         aliases: crossMediaAliases,
         journal,
         review: runtime.importTransport,
-        publicClient: runtime.publicClient,
+        publicClient: publicClient,
         tagWeightObservations: prepared.tagWeightObservations,
         tagWeightRefreshes: prepared.tagWeightRefreshes,
       });
@@ -522,7 +535,7 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
     expect(published.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
     const work = published.published.find((row) => row.sourceKey === 'v2002')!;
     expect(work).toBeTruthy();
-    const read = await runtime.publicClient.readSubject(work.subjectId);
+    const read = await publicClient.readSubject(work.subjectId);
     const genres = (
       read.subject as {
         statements: Record<
