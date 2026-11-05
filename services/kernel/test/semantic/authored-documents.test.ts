@@ -11,13 +11,23 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { revisionResource } from '../../src/semantic/authorship.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createRealAccess } from './real-access.ts';
+import { observeSql } from '../content/support/sql-observer.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const accounts = { editor: newId(0x5100) };
-const actions = ['subject:create', 'subject:read', 'statement:propose', 'moderation:hide', 'subject:batch_write'];
+const actions = [
+  'subject:create',
+  'subject:read',
+  'statement:propose',
+  'moderation:hide',
+  'subject:batch_write',
+  'document:erase',
+];
 const realAccess = await createRealAccess(admin, accounts, actions);
 
 function failOneSerializableCommit(target: Pool) {
@@ -73,6 +83,7 @@ function failOneSerializableCommit(target: Pool) {
 
 const commitFailure = failOneSerializableCommit(pool);
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool: commitFailure.pool,
   access: realAccess.access,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
@@ -126,7 +137,10 @@ const recipe = (value: unknown) => ({
 async function book() {
   const answer = await call('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'A cookbook' } });
   expect(answer.status).toBe(201);
-  return answer.body.subject.id as string;
+  const id = answer.body.subject.id as string;
+  for (const action of ['subject:read', 'statement:propose'])
+    await realAccess.grant({ route: routeOf(id)!, id }, 'editor', action);
+  return id;
 }
 async function stored(
   subject: string,
@@ -193,6 +207,7 @@ test('an editor creates a subject with a document value in one command', async (
   const answer = await call('POST', '/v1/subjects', recipe(value));
   expect(answer.status).toBe(201);
   const subject = answer.body.subject;
+  await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
   const read = await call('GET', `/v1/subjects/${subject.id}`);
   expect(read.status).toBe(200);
   expect(read.body.subject).toEqual(subject);
@@ -204,6 +219,130 @@ test('an editor creates a subject with a document value in one command', async (
     [subject.id],
   );
   expect(rows.rows).toEqual([{ same_command: true }]);
+});
+
+test('native exact Sources admits the second same-language document and loses its match after Content erasure', async () => {
+  const answer = await call('POST', '/v1/subjects', {
+    type: 'schema:Book',
+    labels: { en: 'Two synopses' },
+    statements: {
+      'schema:abstract': [
+        statement('schema:abstract', content()),
+        {
+          ...statement('schema:abstract', { ...content(), document: fromPlainText('Second synopsis.') }),
+          references: [],
+        },
+        statement('schema:abstract', { ...content(), language: 'ja', document: fromPlainText('第三の概要。') }),
+      ],
+    },
+  });
+  expect(answer.status).toBe(201);
+  const subject = answer.body.subject;
+  const second = subject.statements['schema:abstract'][1];
+  await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
+  const reference = second.value.content;
+  expect((await readAuthoredField(pool, routeOf(subject.id)!, reference.document))?.authorAccountId).toBe(
+    accounts.editor,
+  );
+  await realAccess.grant({ route: routeOf(reference.document)!, id: reference.document }, 'editor', 'document:erase');
+  const input = {
+    statement: second.id,
+    document: reference.document,
+    digest: reference.digest,
+    language: reference.language,
+    context: GLOBAL_CONTEXT,
+    release: subject.release,
+  };
+  const path = (value: unknown) =>
+    `/v1/subjects/${subject.id}?${new URLSearchParams({ selectedSynopsis: JSON.stringify(value) })}`;
+  const observer = observeSql(pool);
+  try {
+    const exact = await call('GET', path(input));
+    expect(exact.status).toBe(200);
+    expect(exact.body.selectedSynopsis).toEqual({
+      kind: 'matched',
+      context: GLOBAL_CONTEXT,
+      release: subject.release,
+      fact: {
+        id: second.id,
+        rank: second.rank,
+        property: second.property,
+        value: { type: 'somevalue' },
+        qualifiers: [],
+        references: [],
+      },
+    });
+    const serialized = JSON.stringify(exact.body.selectedSynopsis);
+    for (const secret of [reference.document, reference.digest, 'Second synopsis.', 'rezics'])
+      expect(serialized).not.toContain(secret);
+    for (const replacement of [
+      { digest: 'c'.repeat(64) },
+      { language: 'ja' },
+      { release: `sha256:${'d'.repeat(64)}` },
+    ]) {
+      const changed = await call('GET', path({ ...input, ...replacement }));
+      expect(changed.status).toBe(200);
+      expect(changed.body.selectedSynopsis).toEqual({ kind: 'changed' });
+    }
+    expect((await call('GET', path({ ...input, context: newId(0x5100) }))).status).toBe(409);
+    expect((await call('GET', path({ ...input, document: newId((routeOf(subject.id)! + 1) % 65536) }))).status).toBe(
+      400,
+    );
+    const metadata = observer.records.find(
+      (row) => row.statement.includes('content.authored_field') && row.parameters.includes(reference.document),
+    );
+    expect(metadata).toBeDefined();
+    const hold = observer.hold({ statement: metadata!.statement }, 'after');
+    const pending = call('GET', path(input));
+    await hold.entered;
+    const writerObserver = observeSql(admin);
+    const decisions: { action: string; allowed: boolean }[] = [];
+    try {
+      // A separate admin pool changes Content while the reader's real SQL is held.
+      const writer = createKernel({
+        receiptKeys: testReceiptKeys(),
+        pool: admin,
+        access: (config) => {
+          const native = realAccess.access(config);
+          return deriveAccess(native, {
+            async authorize(...args) {
+              const allowed = await native.authorize(...args);
+              decisions.push({ action: args[2], allowed });
+              return allowed;
+            },
+          });
+        },
+        tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
+        routeKey: new Uint8Array(32).fill(4),
+        writeRate: realAccess.writeRate,
+      });
+      const erased = await writer.handle(
+        new Request(`http://kernel.test/v1/documents/${reference.document}`, {
+          method: 'DELETE',
+          headers: {
+            authorization: `Bearer ${realAccess.bearer('editor')}`,
+            'idempotency-key': JSON.stringify(randomUUID()),
+          },
+        }),
+      );
+      expect(
+        erased.status,
+        JSON.stringify({
+          body: await erased.text(),
+          decisions,
+          queries: writerObserver.records.map(({ statement }) => statement.slice(0, 110)),
+        }),
+      ).toBe(204);
+    } finally {
+      hold.release();
+      await writerObserver.close();
+    }
+    const erased = await pending;
+    expect(erased.status).toBe(200);
+    expect(erased.body.selectedSynopsis).toEqual({ kind: 'missing' });
+  } finally {
+    await observer.close();
+  }
 });
 
 test('a failed document write leaves neither candidate nor document', async () => {

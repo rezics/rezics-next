@@ -57,8 +57,9 @@ export function useSourcesRetry({
 }) {
   const router = useRouter();
   const { href, busy } = useRouterState({ select: (state) => ({ href: state.location.href, busy: state.isLoading }) });
-  const partition = subjectReaderPartition(realm, reader, useSession());
-  const scope = JSON.stringify([href, realm, partition, locale]);
+  const session = useSession();
+  const partition = subjectReaderPartition(realm, reader, session);
+  const scope = JSON.stringify([href, realm, partition, locale, session.state, session.subject, session.csrfToken]);
   const retry = retryFor(router);
   const pending = useSyncExternalStore(retry.subscribe, retry.snapshot, () => false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -114,7 +115,10 @@ export function useSourcesRetry({
     const tabbed = (event: KeyboardEvent) => {
       if (event.key === 'Tab') cancelFocus();
     };
-    const leave = router.subscribe('onBeforeNavigate', retire);
+    const leave = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
+      // Invalidation rereads this address; only navigation leaves the retry's visit.
+      if (fromLocation?.href !== toLocation.href) retire();
+    });
     document.addEventListener('focusin', moved);
     document.addEventListener('keydown', tabbed, true);
     document.defaultView?.addEventListener('blur', cancelFocus);
@@ -131,7 +135,7 @@ export function useSourcesRetry({
     void (async () => {
       try {
         reset?.();
-        await router.invalidate();
+        await router.invalidate({ sync: true });
       } finally {
         retry.pending = false;
         if (!retry.listeners.size) retire();

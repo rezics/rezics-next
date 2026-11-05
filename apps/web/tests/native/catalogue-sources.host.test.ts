@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { expect } from 'bun:test';
 import type { Page } from 'playwright';
+import { fromPlainText } from '@rezics/document';
 import { createSourceRegistration } from '../../../../services/importer/src/source-registry.ts';
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { m } from '../../src/paraglide/messages.js';
@@ -154,6 +155,115 @@ nativeTest(
       auth = await startAuthStack(stack);
       await grantCatalogueReviewAuthority(stack);
       await grant(stack, 'alice', ['subject:batch_write']);
+
+      // Real authored proposals, acceptance and adoption precede the mounted public reading.
+      const reading = await createSubject(stack, `Native synopsis ${crypto.randomUUID().slice(0, 8)}`);
+      const synopsisIds: string[] = [];
+      const citations = ['https://example.org/first-synopsis', 'https://example.org/second-synopsis', null];
+      for (const [index, citation] of citations.entries()) {
+        const proposal = await command<{ candidate: string }>(
+          stack,
+          `/v1/subjects/${reading.id}/candidates`,
+          {
+            statement: {
+              property: { id: 'schema:abstract' },
+              value: {
+                type: 'value',
+                content: {
+                  document: fromPlainText(`Native synopsis ${index + 1}.`),
+                  licence: 'CC-BY-4.0',
+                  language: 'en',
+                },
+              },
+              references: citation
+                ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] }]
+                : [],
+            },
+          },
+          'alice',
+          201,
+        );
+        synopsisIds.push(proposal.candidate);
+        await acceptCatalogueReviewCandidate(stack, reading.id, proposal.candidate, null, 'bob');
+      }
+      const candidateResponse = await stack.kernel(
+        `/v1/subjects/${reading.id}/candidates?${new URLSearchParams({ property: 'schema:abstract', context: GLOBAL_CONTEXT })}`,
+        {},
+        'bob',
+      );
+      expect(candidateResponse.status).toBe(200);
+      const currentAdoption = (await candidateResponse.json()) as { adoption: { head: number | null } };
+      await command(
+        stack,
+        `/v1/subjects/${reading.id}:adopt`,
+        {
+          context: GLOBAL_CONTEXT,
+          property: 'schema:abstract',
+          mode: 'replace',
+          selection: synopsisIds.map((candidate) => ({ candidate, rank: 'preferred' })),
+          expected_head: currentAdoption.adoption.head,
+        },
+        'bob',
+        200,
+      );
+      const currentResponse = await stack.kernel(`/v1/subjects/${reading.id}`);
+      expect(currentResponse.status).toBe(200);
+      const current = (await currentResponse.json()) as {
+        subject: {
+          context: string;
+          release: string;
+          statements: Record<
+            string,
+            { id: string; value: { content: { document: string; digest: string; language: string } } }[]
+          >;
+        };
+      };
+      for (const persona of ['anonymous', 'alice'] as const) {
+        const exactPage = await (await auth.context(persona)).newPage();
+        try {
+          for (const index of [1, 2]) {
+            const candidate = current.subject.statements['schema:abstract']!.find(
+              (row) => row.id === synopsisIds[index],
+            )!;
+            const binding = candidate.value.content;
+            const response = await exactPage.goto(`${stack.web}${reading.path}`, { waitUntil: 'domcontentloaded' });
+            expect(response?.status()).toBe(200);
+            await hydrate(exactPage);
+            await exactPage.getByLabel(m.subject_synopsis_choice(), { exact: true }).selectOption(candidate.id);
+            const entry = exactPage
+              .locator('#subject-summary-evidence')
+              .getByRole('link', { name: m.subject_synopsis_evidence(), exact: true });
+            if (index === 1) await entry.click();
+            else
+              await exactPage.goto(new URL((await entry.getAttribute('href'))!, stack.web).href, {
+                waitUntil: 'domcontentloaded',
+              });
+            await hydrate(exactPage);
+            const detail = exactPage.locator('[data-slot="subject-sources-detail"]');
+            await detail.waitFor({ state: 'visible' });
+            const text = await detail.innerText();
+            expect(text).not.toContain(citations[0]!);
+            if (index === 1) expect(text).toContain(citations[1]!);
+            else {
+              expect(text).toContain(m.sources_no_citations());
+              expect(text).not.toContain(citations[1]!);
+            }
+            for (const secret of [binding.document, binding.digest, `Native synopsis ${index + 1}.`])
+              expect(await detail.innerHTML()).not.toContain(secret);
+            await exactPage.getByRole('link', { name: m.subject_synopsis_return(), exact: true }).click();
+            await hydrate(exactPage);
+            await exactPage
+              .locator('#subject-summary-reading')
+              .getByText(`Native synopsis ${index + 1}.`, { exact: true })
+              .waitFor({ state: 'visible' });
+            expect(await exactPage.getByLabel(m.subject_synopsis_choice(), { exact: true }).inputValue()).toBe(
+              candidate.id,
+            );
+          }
+        } finally {
+          await exactPage.close();
+        }
+      }
 
       const subject = await createSubject(stack, `Native Sources ${crypto.randomUUID().slice(0, 8)}`, {
         'schema:url': [
