@@ -20,6 +20,22 @@
 
 **Decision:** Private Profile reads consume the installed `{ profile, editing }` GET and PATCH `{ accountId }` acknowledgement; setup, serialization and unknown native bodies stay in the existing success/failure envelope. The original intent keeps its immutable credential, key, version and body for exact retry. Local preview stays local until the original acknowledgement; only later edits remain for review.
 
+Profile controls and whole-patch admission consume each field's `applicable` value and each admitted public-view
+flag. Null advice closes changes while preserving the local draft. Before every self or delegated dispatch, including
+an original retry, the server rereads the selected immutable account's private native advice without replacing the
+captured body or key. Advice preflight and PATCH share one ten-second deadline. Failed current reads after receipt
+remain read-only recovery; current values never manufacture command acknowledgement. The local preview labels a
+clean, confirmed current profile as saved and retains its draft label while command readback is unresolved.
+
+The preflight adds one exact-account private GET per dispatch; there is no directory, watch or profile-history
+scan. Profile editing retains one bounded profile, one draft and one original command; public-view admission examines
+at most four flags. Native Accounts and Content own the GET's nested authority and avatar work. Existing native
+watch listing, removal identity/revision and receipt contracts remain unchanged.
+
+Decision: keep the delivered native Profile and Watches contracts; enforce applicable field and public-view flag
+advice in controls and both write paths, preserve deliberate post-dispatch notification intent, and prove saved-preview
+and ten-second recovery behavior in the existing focused suites. Add no stories for these existing states.
+
 The profile reader accepts additive top-level response fields while keeping the consumed profile and editing advice
 closed, bounded and identity-bound. Editing advice stays in the private reader result; the command retains its strict
 profile projection and frozen idempotency key.
@@ -45,6 +61,11 @@ Subject lookup carries a private success/failure envelope with a safe localized 
 **Decision:** A transient failed status read neither grants nor proves denial of native admission; original-command retry stays unavailable until a fresh readable snapshot supplies that exact operation.
 
 **Decision:** Subject search maps native 403 `platform_closed` to closed, other native 4xx responses to refused, and malformed, deadline, transport or server failures to unavailable; valid Retry-After gates only a deliberate retry.
+
+Notification recovery records deliberate choices made after dispatch separately from the submitted intent. Toggling
+a choice away and back still preserves that later choice when an acknowledged original is consumed and a newer
+current page is adopted. Failed current reads keep the receipt, offer Reload and never replay that original. A later
+Save uses the adopted version and a new key. This retained intent is bounded by the current optional notification kinds.
 
 ## Profile avatar
 

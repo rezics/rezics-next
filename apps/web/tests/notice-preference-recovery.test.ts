@@ -574,3 +574,30 @@ test('unknown and pending unread counts use the same honest dot while ready coun
     expect(markup).toContain(`>${label}</span>`);
   }
 });
+
+test('a deliberate post-dispatch toggle back to the original choice survives a receipt and failed current read', async () => {
+  const journey = preferenceJourney();
+  await journey.editor.edit('reply', false, 7);
+  const original = journey.editor.snapshot().pending;
+  await journey.editor.edit('reply', true, 7);
+  await journey.editor.edit('reply', false, 7);
+  journey.readFails(true);
+  await journey.editor.retry();
+  expect(journey.editor.snapshot()).toMatchObject({ phase: 'failed', pending: null });
+  expect(journey.editor.snapshot().confirmedReceipt?.attempt).toBe(original);
+  journey.current({ ...notifications, reply: true }, 10);
+  journey.readFails(false);
+  await journey.editor.reload();
+  expect(journey.editor.snapshot()).toMatchObject({
+    phase: 'review',
+    pending: null,
+    confirmedReceipt: null,
+    known: { version: 10, notifications: { reply: true } },
+    draft: { reply: false },
+    intent: { reply: false },
+  });
+  expect(journey.calls.map(({ method }) => method)).toEqual(['PATCH', 'PATCH', 'GET', 'GET']);
+  await journey.editor.submit(10);
+  expect(JSON.parse(journey.calls[4]!.body)).toEqual({ expectedVersion: 10, notifications: { reply: false } });
+  expect(journey.calls[4]!.key).not.toBe(journey.calls[0]!.key);
+});

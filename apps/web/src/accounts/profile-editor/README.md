@@ -11,6 +11,9 @@ and token are unchanged; ordinary cache notifications preserve the draft.
 The cookie BFF uses the server-held authenticated viewer, rejects bearer replacement and binds every read/write
 to that viewer. Private native editable GET supplies the actual profile, including handleless targets and Content
 avatar summaries. Its advice binds viewer and target independently; a delegated viewer is not the edited account.
+Every dispatch rereads native field applicability and the admitted public-view flags for the selected target; an
+unadmitted whole patch stays unsent. Advice preflight and PATCH share one ten-second wait, and private setup or
+serialization failures use the shared plain failure envelope while Router control flow still throws.
 Native GET and PATCH evaluate existing current profile authority; the website does not request
 additional scopes. A denied native read shows refusal, including when current consent lacks `account:update`.
 
