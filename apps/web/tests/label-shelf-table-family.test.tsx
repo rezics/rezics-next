@@ -4,7 +4,7 @@ import { act, createElement } from 'react';
 import type { LabelShelfEntry } from '../src/library/label-shelf-read';
 import * as start from '../.storybook/react-start';
 
-// Focused component outcomes; broader native and rendered acceptance remains with the controller.
+// Focused table-family outcomes; broader native and rendered acceptance remains with the controller.
 // Keep the real table, menu and native form. Substitute only operation admission and server bindings.
 test('Label-shelf table respects supported selected columns, assignment identity, exact removal operands and honest unavailable facts', async () => {
   const { Window } = await import(
@@ -114,11 +114,6 @@ test('Label-shelf table respects supported selected columns, assignment identity
   let current = true;
   let mountKey = 0;
   let selection: string | undefined;
-  let readEnabled = false;
-  let readAdmitted = true;
-  let pageObservation: object = {};
-  let readingLocale = 'en';
-  let layout: 'grid' | 'list' | 'table' = 'table';
   const render = async (rows = entries) => {
     await act(async () => {
       root.render(
@@ -126,13 +121,12 @@ test('Label-shelf table respects supported selected columns, assignment identity
           key: mountKey,
           entries: rows,
           label,
-          locale: readingLocale,
-          layout,
+          locale: 'en',
+          layout: 'table',
           size: 'm',
           ...(selection ? { columns: selection } : {}),
           csrfToken: 'original-csrf',
           isCurrent: () => current,
-          ...(readEnabled ? { readIsCurrent: () => readAdmitted, readObservation: pageObservation } : {}),
         }),
       );
     });
@@ -260,110 +254,6 @@ test('Label-shelf table respects supported selected columns, assignment identity
     expect(rows()[0]!.textContent).toContain(m.library_other());
     expect(rows()[1]!.textContent).not.toContain(m.library_other());
     expect(host.querySelector('button')).toBeNull();
-
-    // Accessible reading is independent of the writer; native actions and columns above retain their contract.
-    readEnabled = true;
-    admitted = true;
-    label.name = '長いラベル名・'.repeat(30);
-    await render();
-    const reader = () => host.querySelector<HTMLElement>('[data-received-assignment-reader]');
-    const readButtons = () => [...host.querySelectorAll<HTMLButtonElement>('[data-received-assignment-trigger]')];
-    const click = async (element: HTMLElement) => {
-      await act(async () => element.click());
-    };
-    const read = async (index: number) => {
-      await click(readButtons()[index]!);
-    };
-    const originalRows = structuredClone(entries);
-    const requests = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Reading must not request'));
-    try {
-      const opening = readButtons()[1]!;
-      await read(1);
-      expect(reader()).not.toBeNull();
-      expect(reader()!.getAttribute('aria-labelledby')).toBeTruthy();
-      expect(window.document.activeElement?.tagName).toBe('H2');
-      expect(reader()!.querySelectorAll('article')).toHaveLength(1);
-      expect(reader()!.textContent).toContain('Recorded location');
-      expect(reader()!.textContent).toContain(label.name);
-      expect(reader()!.textContent).toContain(m.library_received_reading_state_unavailable());
-      expect(reader()!.textContent).toContain(m.library_received_reading_entry_unavailable());
-      expect(reader()!.textContent).toContain(m.library_received_reading_total_unknown());
-      expect(reader()!.querySelector('[data-received-work-destination]')?.getAttribute('href')).toBe(
-        links[0]!.getAttribute('href'),
-      );
-      expect(reader()!.querySelector('form, input, [role="checkbox"]')).toBeNull();
-      expect(reader()!.innerHTML).not.toContain('original-csrf');
-      expect(reader()!.innerHTML).not.toContain(entries[1]!.removeKey!);
-      await read(0);
-      const articles = () => [...reader()!.querySelectorAll('article')];
-      expect(articles()).toHaveLength(2);
-      expect(articles()[0]!.textContent).toContain('Recorded state');
-      expect(articles()[0]!.textContent).toContain('0%');
-      expect(articles()[1]!.textContent).toContain('Recorded location');
-      expect(reader()!.textContent).toContain(m.library_received_reading_count({ count: 2 }));
-      await read(2); // No implicit replacement or third retained snapshot.
-      expect(articles()).toHaveLength(2);
-      expect(articles()[1]!.textContent).toContain('Recorded location');
-      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-replace]')!);
-      expect(reader()!.textContent).toContain(m.library_received_reading_replacing({ position: 2 }));
-      await click(reader()!.querySelector<HTMLButtonElement>('[data-received-cancel-replacement]')!);
-      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-replace]')!);
-      await read(2);
-      expect(articles()).toHaveLength(2);
-      expect(articles()[1]!.textContent).toContain(m.library_subject_unavailable());
-      expect(articles()[1]!.querySelector('a')).toBeNull();
-      expect(articles()[1]!.textContent).not.toContain(entries[2]!.subjectId);
-      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-remove]')!);
-      expect(articles()).toHaveLength(1);
-      expect(reader()!.textContent).toContain(m.library_received_reading_count({ count: 1 }));
-      await click(reader()!.querySelector<HTMLButtonElement>('[data-received-close]')!);
-      expect(reader()).toBeNull();
-      expect(window.document.activeElement).toBe(opening);
-      expect(entries).toEqual(originalRows);
-      expect(requests).not.toHaveBeenCalled();
-
-      // Display changes preserve the exact observation; a replaced opening control uses the stable shelf fallback.
-      await read(0);
-      for (const next of ['grid', 'list', 'table'] as const) {
-        layout = next;
-        window.innerWidth = next === 'list' ? 360 : 1280;
-        await render();
-        expect(reader()).not.toBeNull();
-        expect(reader()!.querySelector('article')).not.toBeNull();
-      }
-      await act(async () =>
-        reader()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-      );
-      expect(reader()).toBeNull();
-      expect(window.document.activeElement).toBe(host.querySelector('[data-received-shelf]'));
-      await read(0);
-      pageObservation = {}; // Same IDs/array cannot keep an unrelated FULL response's reading.
-      await render();
-      expect(reader()).toBeNull();
-      await read(0);
-      await render(entries.map((entry) => ({ ...entry })));
-      expect(reader()).toBeNull();
-      await render();
-      await read(0);
-      readAdmitted = false;
-      await render();
-      expect(reader()).toBeNull();
-      expect(readButtons()).toHaveLength(0);
-      readAdmitted = true;
-      await render();
-      expect(reader()).toBeNull();
-      await read(0);
-      for (const locale of ['ja', 'zh-Hant']) {
-        readingLocale = locale;
-        await render();
-        expect(reader()).toBeNull();
-        await read(0);
-        expect(reader()!.textContent).toContain(label.name);
-        expect(reader()!.querySelector('h3')?.getAttribute('lang')).toBe('ja');
-      }
-    } finally {
-      requests.mockRestore();
-    }
   } finally {
     await act(async () => root.unmount());
     admission.mockRestore();
@@ -375,7 +265,7 @@ test('Label-shelf table respects supported selected columns, assignment identity
   }
 });
 
-test('received-assignment observations keep supplied state, exact progress and admitted work context without merging duplicate Subjects', async () => {
+test('received-assignment reading keeps exact supplied values, bounded comparison, accessible controls and focus independently of mutations', async () => {
   const { renderToStaticMarkup } = await import('react-dom/server');
   const { contextExampleRelease, shelfContextExamples } = await import('../src/library/shelf-work-context/examples');
   const { prepareShelfWorkContext } = await import('../src/library/shelf-work-context/context');
@@ -469,4 +359,215 @@ test('received-assignment observations keep supplied state, exact progress and a
   expect(selection.removeReceivedObservation(reading, reading.selected[0]!).selected).toHaveLength(1);
   visit.active = false;
   expect(current.receivedReadingIsCurrent(visit, source, reading)).toBe(false);
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library', width: 1280, height: 900 });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLFormElement: window.HTMLFormElement,
+    Element: window.Element,
+    Node: window.Node,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    KeyboardEvent: window.KeyboardEvent,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => start);
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const exposure = await import('../src/kernel/exposure');
+  let admitted = false;
+  const admission = spyOn(exposure, 'useOperation').mockImplementation(
+    (operation) => operation === 'library_label.unassign' && admitted,
+  );
+  const { LabelShelfEntries } = await import('../src/library/shelf-view');
+  const { subjectHref } = await import('../src/subject/subject-href');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { createRoot } = await import('react-dom/client');
+  const entries: LabelShelfEntry[] = [
+    {
+      ...rows[0]!,
+      subject: { ...sample.subject!, label: { value: '日本語の長い題名', language: 'ja' } },
+      stateLabel: 'Recorded state',
+      activeProgressSession: {
+        mode: 'scalar_amount',
+        unit: 'percent',
+        dimension: 'percent',
+        amount: '0',
+        total: null,
+        completedUnitCount: 0,
+        locator: null,
+      },
+    },
+    {
+      ...rows[1]!,
+      subject: { ...sample.subject!, label: { value: '日本語の長い題名', language: 'ja' } },
+      activeProgressSession: {
+        mode: 'cursor_position',
+        unit: 'page',
+        amount: null,
+        total: null,
+        completedUnitCount: 0,
+        locator: 'Recorded location',
+        position: null,
+      },
+    },
+    rows[2]!,
+  ];
+  delete entries[1]!.state;
+  delete entries[1]!.stateLabel;
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let readAdmitted = true;
+  let pageObservation: object = {};
+  let readingLocale = 'en';
+  let layout: 'grid' | 'list' | 'table' = 'table';
+  const render = async (received = entries) => {
+    await act(async () =>
+      root.render(
+        createElement(LabelShelfEntries, {
+          entries: received,
+          label,
+          locale: readingLocale,
+          layout,
+          size: 'm',
+          csrfToken: null,
+          isCurrent: () => false,
+          readIsCurrent: () => readAdmitted,
+          readObservation: pageObservation,
+        }),
+      ),
+    );
+  };
+  try {
+    // Accessible reading is independent of the writer; native actions and columns above retain their contract.
+    label.name = '長いラベル名・'.repeat(30);
+    await render();
+    const reader = () => host.querySelector<HTMLElement>('[data-received-assignment-reader]');
+    const readButtons = () => [...host.querySelectorAll<HTMLButtonElement>('[data-received-assignment-trigger]')];
+    const click = async (element: HTMLElement) => {
+      await act(async () => element.click());
+    };
+    const read = async (index: number) => {
+      await click(readButtons()[index]!);
+    };
+    const originalRows = structuredClone(entries);
+    const requests = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Reading must not request'));
+    try {
+      const opening = readButtons()[1]!;
+      await read(1);
+      expect(reader()).not.toBeNull();
+      expect(reader()!.getAttribute('aria-labelledby')).toBeTruthy();
+      expect(window.document.activeElement?.tagName).toBe('H2');
+      expect(reader()!.querySelectorAll('article')).toHaveLength(1);
+      expect(reader()!.textContent).toContain('Recorded location');
+      expect(reader()!.textContent).toContain(label.name);
+      expect(reader()!.textContent).toContain(m.library_received_reading_state_unavailable());
+      expect(reader()!.textContent).toContain(m.library_received_reading_entry_unavailable());
+      expect(reader()!.textContent).toContain(m.library_received_reading_total_unknown());
+      expect(reader()!.querySelector('[data-received-work-destination]')?.getAttribute('href')).toBe(
+        subjectHref({ id: entries[0]!.subject!.id, label: '日本語の長い題名' }, 'en').href,
+      );
+      expect(reader()!.querySelector('form, input, [role="checkbox"]')).toBeNull();
+      expect(reader()!.innerHTML).not.toContain('original-csrf');
+      expect(reader()!.innerHTML).not.toContain(entries[1]!.removeKey!);
+      await read(0);
+      const articles = () => [...reader()!.querySelectorAll('article')];
+      expect(articles()).toHaveLength(2);
+      expect(articles()[0]!.textContent).toContain('Recorded state');
+      expect(articles()[0]!.textContent).toContain('0%');
+      expect(articles()[1]!.textContent).toContain('Recorded location');
+      expect(reader()!.textContent).toContain(m.library_received_reading_count({ count: 2 }));
+      await read(2); // No implicit replacement or third retained snapshot.
+      expect(articles()).toHaveLength(2);
+      expect(articles()[1]!.textContent).toContain('Recorded location');
+      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-replace]')!);
+      expect(reader()!.textContent).toContain(m.library_received_reading_replacing({ position: 2 }));
+      await click(reader()!.querySelector<HTMLButtonElement>('[data-received-cancel-replacement]')!);
+      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-replace]')!);
+      await read(2);
+      expect(articles()).toHaveLength(2);
+      expect(articles()[1]!.textContent).toContain(m.library_subject_unavailable());
+      expect(articles()[1]!.querySelector('a')).toBeNull();
+      expect(articles()[1]!.textContent).not.toContain(entries[2]!.subjectId);
+      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-remove]')!);
+      expect(articles()).toHaveLength(1);
+      expect(reader()!.textContent).toContain(m.library_received_reading_count({ count: 1 }));
+      await click(reader()!.querySelector<HTMLButtonElement>('[data-received-close]')!);
+      expect(reader()).toBeNull();
+      expect(window.document.activeElement).toBe(opening);
+      expect(entries).toEqual(originalRows);
+      expect(requests).not.toHaveBeenCalled();
+
+      // Display changes preserve the exact observation; a replaced opening control uses the stable shelf fallback.
+      await read(0);
+      for (const next of ['grid', 'list', 'table'] as const) {
+        layout = next;
+        window.innerWidth = next === 'list' ? 360 : 1280;
+        await render();
+        expect(reader()).not.toBeNull();
+        expect(reader()!.querySelector('article')).not.toBeNull();
+      }
+      await act(async () =>
+        reader()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      );
+      expect(reader()).toBeNull();
+      expect(window.document.activeElement).toBe(host.querySelector('[data-received-shelf]'));
+      await read(0);
+      pageObservation = {}; // Same IDs/array cannot keep an unrelated FULL response's reading.
+      await render();
+      expect(reader()).toBeNull();
+      await read(0);
+      await render(entries.map((entry) => ({ ...entry })));
+      expect(reader()).toBeNull();
+      await render();
+      await read(0);
+      readAdmitted = false;
+      await render();
+      expect(reader()).toBeNull();
+      expect(readButtons()).toHaveLength(0);
+      readAdmitted = true;
+      await render();
+      expect(reader()).toBeNull();
+      await read(0);
+      for (const locale of ['ja', 'zh-Hant']) {
+        readingLocale = locale;
+        await render();
+        expect(reader()).toBeNull();
+        await read(0);
+        expect(reader()!.textContent).toContain(label.name);
+        expect(reader()!.querySelector('h3')?.getAttribute('lang')).toBe('ja');
+      }
+    } finally {
+      requests.mockRestore();
+    }
+  } finally {
+    await act(async () => root.unmount());
+    admission.mockRestore();
+    mock.restore();
+    for (const [key, descriptor] of previous)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    window.happyDOM.abort();
+  }
 });
