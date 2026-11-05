@@ -10719,5 +10719,10 @@
   "character_visit_unsupported": "此角色閱讀可用，但更正與候選審查僅支援 Global。",
   "character_visit_global": "另開 Global 角色更正",
   "work_franchise_stream_absent": "此頁面未請求此關係。請從頭開始讀取。",
-  "work_franchise_stream_historical": "此關係尚未同步最新變更。這些項目不代表完整的目前內容。"
+  "work_franchise_stream_historical": "此關係尚未同步最新變更。這些項目不代表完整的目前內容。",
+  "realm_question_window_previous": "上一個視窗",
+  "realm_question_window_first": "第一個視窗",
+  "realm_question_window_sparse": "此視窗沒有項目。可繼續查看下一個視窗。",
+  "realm_question_window_terminal": "已到結果結尾。可返回先前的視窗。",
+  "realm_question_history_empty": "目前尚無標題歷史。"
 }

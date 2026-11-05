@@ -10625,5 +10625,10 @@
   "character_visit_unsupported": "Diese Character-Lesung ist verfügbar, aber Korrekturen und Vorschlagsprüfung unterstützen nur Global.",
   "character_visit_global": "Eine separate Global-Character-Korrektur öffnen",
   "work_franchise_stream_absent": "Diese Beziehung wurde auf dieser Seite nicht angefordert. Beginnen Sie erneut, um sie zu lesen.",
-  "work_franchise_stream_historical": "Diese Beziehung ist noch nicht auf dem neuesten Stand. Diese Einträge zeigen keinen vollständigen aktuellen Stand."
+  "work_franchise_stream_historical": "Diese Beziehung ist noch nicht auf dem neuesten Stand. Diese Einträge zeigen keinen vollständigen aktuellen Stand.",
+  "realm_question_window_previous": "Vorheriges Fenster",
+  "realm_question_window_first": "Erstes Fenster",
+  "realm_question_window_sparse": "Keine Einträge in diesem Fenster. Weiter zum nächsten Fenster.",
+  "realm_question_window_terminal": "Ende der Ergebnisse. Kehren Sie zu einem früheren Fenster zurück.",
+  "realm_question_history_empty": "Es gibt noch keinen Beschriftungsverlauf."
 }

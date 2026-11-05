@@ -10812,5 +10812,10 @@
   "character_visit_unsupported": "This Character reading is admitted, but correction and candidate review are available only in Global.",
   "character_visit_global": "Open a separate Global Character correction",
   "work_franchise_stream_absent": "This stream was not requested on this page. Start again to read it.",
-  "work_franchise_stream_historical": "This stream has not caught up. These entries do not establish a complete current reading."
+  "work_franchise_stream_historical": "This stream has not caught up. These entries do not establish a complete current reading.",
+  "realm_question_window_previous": "Previous window",
+  "realm_question_window_first": "First window",
+  "realm_question_window_sparse": "No entries in this window. Continue to the next window.",
+  "realm_question_window_terminal": "End of these results. Return to an earlier window.",
+  "realm_question_history_empty": "No caption history is available yet."
 }

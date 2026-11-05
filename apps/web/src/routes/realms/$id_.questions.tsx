@@ -4,6 +4,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExterna
 import { m } from '../../paraglide/messages.js';
 import { prepareQuestionManagementVisit } from '../../ratings/question-management/actions';
 import { useQuestionManagementAddress } from '../../ratings/question-management/address';
+import { questionManagementWindows } from '../../ratings/question-management/window-navigation';
 import { QuestionManagementPage } from '../../ratings/question-management/page';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -103,6 +104,7 @@ function QuestionManagementRoute() {
     () => sessionStore.getSnapshot() === sessionObservation && sessionObservation.state === 'signed-in',
     [sessionStore, sessionObservation],
   );
+  const windows = questionManagementWindows(client, initial, sessionObservation, locale);
   const focusEpoch = useRef(0);
   const focusId = useRef(0);
   const focusTicketRef = useRef<QuestionManagementFocusTicket | null>(null);
@@ -136,6 +138,18 @@ function QuestionManagementRoute() {
     window.addEventListener('keydown', keyDown, true);
     window.addEventListener('focusin', focusIn, true);
     const unsubscribe = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      const target = toLocation.pathname
+        .replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '')
+        .replace(/\/$/, '');
+      windows.moving(
+        target === `/realms/${initial.realmId}/questions` && !('invalidAddress' in toLocation.search)
+          ? {
+              selectedQuestionId: toLocation.search.selectedQuestionId ?? null,
+              cursor: toLocation.search.cursor ?? null,
+            }
+          : null,
+      );
+      if (windows.focus?.region === 'directory') return;
       const pending = pendingSelection.current;
       if (pending && toLocation.search.selectedQuestionId === pending) {
         pendingSelection.current = null;
@@ -149,11 +163,11 @@ function QuestionManagementRoute() {
       window.removeEventListener('focusin', focusIn, true);
       unsubscribe();
     };
-  }, [router]);
+  }, [router, windows]);
   const navigateSearch = (next: { selectedQuestionId?: string; cursor?: string }) => {
     const pending = pendingSelection.current;
-    if (!pending || next.selectedQuestionId !== pending) interruptFocus();
-    void navigate({ search: next });
+    if ((!pending || next.selectedQuestionId !== pending) && windows.focus?.region !== 'directory') interruptFocus();
+    return navigate({ search: next });
   };
   const selectQuestion = (questionId: string) => {
     const alreadySelected = address?.selectedQuestionId === questionId;
@@ -199,6 +213,7 @@ function QuestionManagementRoute() {
         sessionObservation.state === 'signed-in' ? sessionObservation.observation.id : sessionObservation.state,
       ])}
       initial={initial}
+      windows={windows}
       address={address}
       locale={locale}
       navigate={navigateSearch}

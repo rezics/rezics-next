@@ -197,3 +197,20 @@ export const Desktop1280: Story = {
     await expect(canvas.getByRole('button', { name: m.container_lifecycle_confirm() })).toBeVisible();
   },
 };
+
+export const TerminalWindows: Story = {
+  args: {
+    page: { ...page, directory: { ratingQuestions: [], next: null } },
+    address: { selectedQuestionId: retiredId, cursor: 'illustrative terminal directory' },
+    history: {
+      state: 'ready',
+      questionId: retiredId,
+      cursor: 'illustrative terminal history',
+      page: { labels: [], next: null },
+    },
+    onPrevious: () => {},
+    onFirst: () => {},
+    onPreviousHistory: () => {},
+    onFirstHistory: () => {},
+  },
+};

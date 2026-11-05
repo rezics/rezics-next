@@ -10625,5 +10625,10 @@
   "character_visit_unsupported": "Esta lectura del personaje está disponible, pero las correcciones y la revisión de propuestas solo admiten Global.",
   "character_visit_global": "Abrir una corrección distinta del personaje en Global",
   "work_franchise_stream_absent": "Esta relación no se solicitó en esta página. Vuelve a empezar para leerla.",
-  "work_franchise_stream_historical": "Esta relación aún no está al día. Estas entradas no representan una lectura actual completa."
+  "work_franchise_stream_historical": "Esta relación aún no está al día. Estas entradas no representan una lectura actual completa.",
+  "realm_question_window_previous": "Ventana anterior",
+  "realm_question_window_first": "Primera ventana",
+  "realm_question_window_sparse": "No hay entradas en esta ventana. Continúa a la siguiente.",
+  "realm_question_window_terminal": "Fin de los resultados. Vuelve a una ventana anterior.",
+  "realm_question_history_empty": "Todavía no hay historial de títulos."
 }
