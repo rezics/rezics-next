@@ -1422,6 +1422,7 @@ same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `m
 `main`, formats its changes, installs root and `tools/goal/` dependencies, then runs
 `bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
 
+Decision: `launch-smoke.ts` remains the sole executable entry; lazy lifecycle scenarios live in `launch-smoke-scenarios.ts`, bounded evidence/report helpers live in `launch-smoke-evidence.ts`, and the inner child still dispatches through the candidate entry.
 Changes to the worker launch path also run `tools/goal/scripts/launch-smoke.ts` on the candidate after the control-plane checks.
 The smoke builds a disposable worktree with the candidate merged on top of current `dev`, dispatches one tiny task through
 the real worker launch and settle path, starts a real `scripts/worker-check.ts` command, and waits for its result before
