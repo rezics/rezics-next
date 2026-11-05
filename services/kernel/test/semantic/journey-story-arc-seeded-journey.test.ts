@@ -78,10 +78,23 @@ async function call(persona: keyof typeof accounts | null, method: string, path:
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
+const projection = linkProjection(pool);
+const holders = new Set<string>();
 async function create(type: string, name: string, statements: Record<string, unknown> = {}) {
   const answer = await call('editor', 'POST', '/v1/subjects', { type, labels: { en: name }, statements });
   expect(answer.status).toBe(201);
+  holders.add(answer.body.subject.id);
   return answer.body.subject as { id: string };
+}
+/** Relation and link pages read projected rows; drain each partition holding a created subject first. */
+async function catchUp() {
+  for (const partition of new Set([...holders].map((id) => routeOf(id)! >>> 4))) {
+    for (;;) {
+      const result = await projection.run(partition);
+      if (result.status === 'busy') continue;
+      if (result.envelopes === 0) break;
+    }
+  }
 }
 function pageSubject(page: Record<string, any>) {
   for (const result of Object.values(page.reads ?? {}) as { status?: number; body?: any }[])
@@ -112,6 +125,7 @@ test('a serial work lists its story arcs in native order beyond the preview, wit
       ),
     ),
   });
+  await catchUp();
   const found: Record<string, any>[] = [];
   let cursor: string | null = null;
   do {
@@ -142,7 +156,8 @@ test('a story arc correction is proposed, accepted and adopted, then read back a
   const proposed = await call('editor', 'POST', `/v1/subjects/${arc.id}/candidates`, {
     statement: cited('schema:genre', genre.id, 'https://guide.example.test/genre'),
   });
-  expect(proposed.status).toBe(201);
+  expect({ status: proposed.status, body: proposed.body }).toMatchObject({ status: 201 });
+  await catchUp();
   const pending = await readPage(null, arc.id);
   expect(pageSubject(pending.body).related).not.toHaveProperty(genre.id);
   const accepted = await call(

@@ -8,6 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -29,6 +30,7 @@ const kernel = createKernel({
     overrides: JSON.stringify({ 'new-account': { write: { maximum: 1000, seconds: 60 } } }),
   }),
   tokens: ring,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(81),
 });
 const projection = linkProjection(pool);
