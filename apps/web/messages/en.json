@@ -11146,5 +11146,7 @@
   "library_anilist_labels_current": "Current native assignments",
   "library_anilist_labels_read_pending": "Current assignments have not been read.",
   "library_anilist_labels_incomplete": "Adoption is incomplete. A created label alone is not an assignment.",
-  "library_anilist_labels_outcome": "Native outcome: {status}"
+  "library_anilist_labels_outcome": "Native outcome: {status}",
+  "library_anilist_retained_id": "Retained import ID",
+  "library_anilist_reopen": "Reopen retained import"
 }

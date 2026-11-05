@@ -11024,5 +11024,7 @@
   "library_anilist_labels_current": "目前的原生指派",
   "library_anilist_labels_read_pending": "尚未讀取目前的指派。",
   "library_anilist_labels_incomplete": "採用尚未完成。僅建立標籤不代表已完成指派。",
-  "library_anilist_labels_outcome": "原生結果：{status}"
+  "library_anilist_labels_outcome": "原生結果：{status}",
+  "library_anilist_retained_id": "保留的匯入 ID",
+  "library_anilist_reopen": "重新開啟保留的匯入"
 }

@@ -10925,5 +10925,7 @@
   "library_anilist_labels_current": "Asignaciones nativas actuales",
   "library_anilist_labels_read_pending": "Aún no se han leído las asignaciones actuales.",
   "library_anilist_labels_incomplete": "Adopción incompleta. Crear una etiqueta no equivale a asignarla.",
-  "library_anilist_labels_outcome": "Resultado nativo: {status}"
+  "library_anilist_labels_outcome": "Resultado nativo: {status}",
+  "library_anilist_retained_id": "ID de la importación conservada",
+  "library_anilist_reopen": "Volver a abrir la importación conservada"
 }

@@ -69,6 +69,8 @@ A bounded owned-label search offers live label IDs, while explicit proposals pre
 native review. Confirmation never calls the state/score writer. Results show per-item label and assignment identities,
 partial work and independent current assignments through the installed Subject assignment reader. Unknown delivery
 keeps its original command and encrypted sender; a current read cannot release it.
+The existing upload screen accepts an explicit retained import ID and calls the native page reader. The active
+import ID stays visible for reopening; no retained-upload catalogue or browser evidence cache is added.
 
 ## Cost
 

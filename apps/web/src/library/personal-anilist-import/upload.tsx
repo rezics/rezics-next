@@ -9,10 +9,12 @@ export function AniListUploadForm({
   busy,
   disabled,
   onUpload,
+  onReopen,
 }: {
   busy: boolean;
   disabled?: boolean;
   onUpload: (upload: string, scoreFormat: AniListScoreFormat | null) => void;
+  onReopen?: (importId: string) => void;
 }) {
   const inputId = useId();
   const helpId = useId();
@@ -21,6 +23,8 @@ export function AniListUploadForm({
   const scoreId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [scoreFormat, setScoreFormat] = useState<AniListScoreFormat | ''>('');
+  const [retainedId, setRetainedId] = useState('');
+  const retainedIdInput = useId();
   async function submit() {
     const file = input.current?.files?.[0];
     if (!file) {
@@ -89,6 +93,21 @@ export function AniListUploadForm({
       <AniListAction type="submit" disabled={busy || disabled} aria-busy={busy}>
         {busy ? m.library_anilist_uploading() : m.library_anilist_upload()}
       </AniListAction>
+      {onReopen ? (
+        <Field>
+          <FieldLabel htmlFor={retainedIdInput}>{m.library_anilist_retained_id()}</FieldLabel>
+          <input
+            id={retainedIdInput}
+            className="min-h-11 w-full rounded border px-3"
+            value={retainedId}
+            disabled={busy || disabled}
+            onChange={(event) => setRetainedId(event.target.value)}
+          />
+          <AniListAction type="button" disabled={busy || disabled || !retainedId} onClick={() => onReopen(retainedId)}>
+            {m.library_anilist_reopen()}
+          </AniListAction>
+        </Field>
+      ) : null}
     </form>
   );
 }

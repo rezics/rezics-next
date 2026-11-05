@@ -10937,5 +10937,7 @@
   "library_anilist_labels_current": "当前原生分配",
   "library_anilist_labels_read_pending": "尚未读取当前分配。",
   "library_anilist_labels_incomplete": "采用尚未完成。仅创建标签不代表已完成分配。",
-  "library_anilist_labels_outcome": "原生结果：{status}"
+  "library_anilist_labels_outcome": "原生结果：{status}",
+  "library_anilist_retained_id": "保留的导入 ID",
+  "library_anilist_reopen": "重新打开保留的导入"
 }

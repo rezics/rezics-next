@@ -10925,5 +10925,7 @@
   "library_anilist_labels_current": "현재 네이티브 할당",
   "library_anilist_labels_read_pending": "현재 할당을 아직 읽지 않았습니다.",
   "library_anilist_labels_incomplete": "가져오기가 미완료입니다. 레이블 생성만으로는 할당되지 않습니다.",
-  "library_anilist_labels_outcome": "네이티브 결과: {status}"
+  "library_anilist_labels_outcome": "네이티브 결과: {status}",
+  "library_anilist_retained_id": "보관된 가져오기 ID",
+  "library_anilist_reopen": "보관된 가져오기 다시 열기"
 }

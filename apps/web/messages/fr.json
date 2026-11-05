@@ -10925,5 +10925,7 @@
   "library_anilist_labels_current": "Affectations natives actuelles",
   "library_anilist_labels_read_pending": "Les affectations actuelles n’ont pas été lues.",
   "library_anilist_labels_incomplete": "Adoption incomplète. Créer un libellé ne suffit pas à l’affecter.",
-  "library_anilist_labels_outcome": "Résultat natif : {status}"
+  "library_anilist_labels_outcome": "Résultat natif : {status}",
+  "library_anilist_retained_id": "Identifiant de l’import conservé",
+  "library_anilist_reopen": "Rouvrir l’import conservé"
 }

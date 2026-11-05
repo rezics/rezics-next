@@ -11019,5 +11019,7 @@
   "library_anilist_labels_current": "現在のネイティブ割り当て",
   "library_anilist_labels_read_pending": "現在の割り当ては未読です。",
   "library_anilist_labels_incomplete": "取り込みは未完了です。ラベルの作成だけでは割り当てになりません。",
-  "library_anilist_labels_outcome": "ネイティブ結果：{status}"
+  "library_anilist_labels_outcome": "ネイティブ結果：{status}",
+  "library_anilist_retained_id": "保存済みインポートID",
+  "library_anilist_reopen": "保存済みインポートを開く"
 }
