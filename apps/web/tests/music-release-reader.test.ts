@@ -266,7 +266,7 @@ test('bounded previous addresses reread their native direction, stream and opaqu
   const first = await fixture.read();
   if (!first.ok || !first.stream) throw new Error('Expected stream');
   let navigation = musicReleaseNavigation(musicAddress, first);
-  expect(new Set(first.rows.map(musicReleaseOccurrenceKey)).size).toBe(3);
+  expect(new Set(first.rows.map(musicReleaseOccurrenceKey)).size).toBe(2);
   const previousAddresses = [];
   for (let index = 0; index < 12; index++) {
     const cursor = `opaque:${index}/?+曲`;

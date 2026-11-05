@@ -79,6 +79,10 @@ test('recording visit returns to its exact current stream, Context and row; Prev
     };
     const props = { ...musicAddress, locale: 'en', source: {}, reader: null, initial, transport };
     await ui.render(props);
+    const firstRow = ui.host.querySelector('[data-slot="music-release-row"]');
+    const gate = firstRow?.querySelector('details > summary');
+    if (!gate) throw new Error('Expected disclosed recording row');
+    await act(async () => gate.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
     const target = Array.from(ui.host.querySelectorAll<HTMLAnchorElement>('a')).find(
       (node) => node.textContent === m.album_tracks_open(),
     )!;
