@@ -57,6 +57,7 @@ test('selection uses exact account and interval, and a replacement page requires
     { realmId: 'realm', accountId: 'b', membershipInterval: 'producer-interval-b', authority: 'grant' },
   ]);
   current = page(['b', 'a']);
+  visit.closeSelection();
   await visit.refresh();
   expect(visit.snapshot().selection).toBeNull();
   await visit.select('a');
@@ -404,6 +405,7 @@ test('duplicate More reads once; failed Previous and First retry their staged cu
   });
   const stop = visit.connect();
   await settle();
+  expect(visit.snapshot().read.kind).toBe('ready');
   const advancing = visit.more();
   expect(await visit.more()).toBe(false);
   expect(addresses).toEqual([null, 'w1']);
