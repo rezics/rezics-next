@@ -1,15 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { setupContent } from '../../src/content/setup.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { setupSemantic } from '../../src/semantic/setup.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -77,7 +76,7 @@ type SubjectBody = {
   };
 };
 
-const sessions = new Map<Exclude<Actor, null>, string>();
+const sessions = new Map<string, string>();
 async function call(
   persona: Actor,
   method: string,
@@ -94,7 +93,7 @@ async function call(
       method,
       headers: {
         ...(persona ? { authorization: `Bearer ${real.bearer(persona)}` } : {}),
-        ...(persona && sessions.has(persona) ? { 'rezics-session-token': sessions.get(persona)! } : {}),
+        ...(sessions.has(idempotency) ? { 'rezics-session-token': sessions.get(idempotency)! } : {}),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         'idempotency-key': idempotency,
         ...extra,
@@ -103,7 +102,7 @@ async function call(
     }),
   );
   const session = response.headers.get('rezics-session-token');
-  if (persona && session) sessions.set(persona, session);
+  if (session) sessions.set(idempotency, session);
   return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
 }
 
@@ -191,7 +190,7 @@ async function inspectRevisions(subjectId: string) {
 }
 
 beforeAll(async () => {
-  await setupSemantic(pool, bundledRelease);
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
   await setupPresentation(pool);
   await setupContent(pool);
   for (const account of Object.values(accounts))

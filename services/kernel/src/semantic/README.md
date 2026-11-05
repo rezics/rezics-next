@@ -119,7 +119,9 @@ minimal current-disclosure revision explanations. `correctTerms` is the native c
 `TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.
 Ordinary authored text reads the mounted `subject.propose` operation on the fixed Global Context alongside the
 separate `subject.accept_candidate`, `subject.reject_candidate` and `subject.adopt` operations on their own current
-Context authorities. The proposal command still reauthorizes the exact admitted target and property at execution.
+Context authorities. Candidate proposal authorizes that Global Context parent as `semantic.context`; Access must not
+infer the child revision type for the grant. The proposal command still reauthorizes the exact admitted target and
+property at execution.
 The mounted `subject.terms` viewer-action binding observes `statement:propose` on the canonical Global Context;
 the Semantic Context resolver marks it applicable only there while Access decides the current grant. Subject Terms
 disclosure and revision stay on the separate Subject read, and command execution still reauthorizes natively.

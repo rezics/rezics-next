@@ -13,7 +13,7 @@ import { partitionOf } from '../route/route.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { resourceAuthorization } from './resource-authorization.ts';
+import { resourceAuthorization, resourceAuthorizationPage } from './resource-authorization.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import {
   creationManifestEntries,
@@ -29,6 +29,8 @@ import {
  */
 export type ParentAnchor = Readonly<{
   resource: Readonly<Resource>;
+  /** Declared holder type of this parent. Access must not infer a child command's unique created type. */
+  resourceType?: string;
   validate(client: AccessClient, time: AuthoritativeTime): Promise<boolean>;
 }>;
 /** The owning child module proves its unique resource INSERT belongs to this
@@ -192,6 +194,7 @@ export function parentCreationAuthorization(input: {
 }): CommandAuthorization {
   const { access, actor, action } = input;
   const parent = Object.freeze({ ...input.parent.resource });
+  const parentType = input.parent.resourceType;
   const manifest = input.context.manifest;
   const declared: readonly ResourceCreationEntry[] | undefined =
     manifest === undefined ? undefined : creationManifestEntries(manifest);
@@ -235,25 +238,49 @@ export function parentCreationAuthorization(input: {
       requireAccessDeadline(deadline);
       if (!bound(attempt)) throw denied();
       let proofDeadline = -Infinity;
+      const capture = async (evidence: unknown) => {
+        proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+        return evidence;
+      };
       // One helper per attempt lets the creation wrapper retain the exact evidence
       // deadline without exposing it or adding creation rights to the generic API.
-      const authorization = resourceAuthorization({
-        access: {
-          authenticate: access.authenticate.bind(access),
-          authorize: access.authorize.bind(access),
-          async prepare(...args) {
-            // Forward the exact context: its opaque live-attempt admission marker
-            // must reach the installed Access without copying or refreshing twice.
-            const evidence = await access.prepare?.(...args);
-            proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-            return evidence;
-          },
+      const forwarded: Access = {
+        authenticate: access.authenticate.bind(access),
+        authorize: access.authorize.bind(access),
+        async prepare(...args) {
+          // Forward the exact context: its opaque live-attempt admission marker
+          // must reach the installed Access without copying or refreshing twice.
+          return capture(await access.prepare?.(...args));
         },
-        actor,
-        action,
-        anchor: { resource: parent, validate },
-        context: { pool, deadline, partition: partitionOf(resource.route) },
-      });
+        ...(access.preparePage
+          ? {
+              preparePage: async (...args: Parameters<NonNullable<Access['preparePage']>>) =>
+                capture(await access.preparePage!(...args)),
+            }
+          : {}),
+        ...(access.authorizePage ? { authorizePage: access.authorizePage.bind(access) } : {}),
+      };
+      const authorization =
+        parentType !== undefined && forwarded.preparePage && forwarded.authorizePage
+          ? resourceAuthorizationPage({
+              access: forwarded,
+              actor,
+              action,
+              anchor: {
+                route: parent.route,
+                resourceType: parentType,
+                ids: Object.freeze([parent.id]),
+                validate,
+              },
+              context: { pool, deadline, partition: partitionOf(resource.route) },
+            })
+          : resourceAuthorization({
+              access: forwarded,
+              actor,
+              action,
+              anchor: { resource: parent, validate },
+              context: { pool, deadline, partition: partitionOf(resource.route) },
+            });
       const proof = await authorization.prepare!(attempt);
       requireAccessDeadline(deadline);
       if (typeof proof !== 'object' || proof === null || !bound(attempt)) throw denied();

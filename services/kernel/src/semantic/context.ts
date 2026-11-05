@@ -22,6 +22,7 @@ export const CREATE_CONTEXT = 'context.create';
 export const globalContextAnchor: ParentAnchor = Object.freeze({
   // Literal identity so this module can finish while definitions.ts is still evaluating.
   resource: Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' }),
+  resourceType: 'semantic.context',
   async validate(client, time) {
     authoritativeTimeValue(time);
     const found = await readGlobalContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
@@ -39,6 +40,7 @@ export function editorialContextAnchor(id: string): ParentAnchor {
   if (route === null) throw new RangeError('Context anchor id must carry a route');
   return Object.freeze({
     resource: Object.freeze({ route, id }),
+    resourceType: 'semantic.context',
     async validate(client, time) {
       authoritativeTimeValue(time);
       const found = await readCommunityContext.run(client, { route, context_id: id });
