@@ -71,19 +71,21 @@ function visit(): BangumiVisit {
   };
 }
 
-function page(ordinal: number, evidence: 'missing' | 'empty' | 'known' | 'invalid' | 'unknown'): NonNullable<Extract<BangumiTagPageResult, { kind: 'tags' }>['page']> {
+function page(ordinal: number, evidence: 'missing' | 'empty' | 'known' | 'invalid' | 'unknown', after = -1): NonNullable<Extract<BangumiTagPageResult, { kind: 'tags' }>['page']> {
   const all = Array.from({ length: 33 }, (_, index) => ({
     index,
     value: index === 0 ? 'cafe\u0301' : `tag-${index}`,
     status: evidence === 'known' ? 'supported' as const : 'invalid' as const,
     proposedName: evidence === 'known' ? (index === 0 ? 'café' : `tag-${index}`) : null,
   }));
+  const start = after + 1;
+  const tags = ordinal === 0 && evidence === 'known' ? all.slice(start, start + 32) : evidence === 'invalid' ? [all[0]!] : [];
   return {
     ordinal,
     rowRevision,
     evidence,
-    tags: ordinal === 0 && evidence === 'known' ? all.slice(0, 32) : evidence === 'known' ? all.slice(32) : evidence === 'invalid' ? [all[0]!] : [],
-    next: ordinal === 0 && evidence === 'known' ? 31 : null,
+    tags,
+    next: ordinal === 0 && evidence === 'known' && start + tags.length < all.length ? start + tags.length - 1 : null,
     labels: null,
   };
 }
@@ -107,7 +109,7 @@ function createPort(options: { evidence?: 'missing' | 'empty' | 'known' | 'inval
       tagCommands.push(command);
       return {
         kind: 'tags',
-        page: { ...page(command.ordinal, options.evidence ?? 'known'), labels: savedLabels },
+        page: { ...page(command.ordinal, options.evidence ?? 'known', command.after), labels: savedLabels },
         custody: command.custody ?? custody,
       };
     },

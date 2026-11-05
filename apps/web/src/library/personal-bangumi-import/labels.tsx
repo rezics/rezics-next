@@ -489,7 +489,7 @@ export function BangumiLabelAdoption({
               {outcomes.map((outcome) => (
                 <li key={outcome.index} className="space-y-1 rounded border p-3" data-bangumi-label-outcome={outcome.status}>
                   <p>{m.library_bangumi_label_tag_index({ index: outcome.index })}: {outcomeLabel(outcome.status)}</p>
-                  <p>{m.library_bangumi_label_created({ created: outcome.created ? m.library_bangumi_yes() : m.library_bangumi_no() })}</p>
+                  <p>{m.library_bangumi_label_created({ created: outcome.created ? m.library_bangumi_label_yes() : m.library_bangumi_label_no() })}</p>
                   {outcome.label ? <p className="break-all">{m.library_bangumi_label_identity({ id: outcome.label.id, revision: outcome.label.revision })}</p> : null}
                   {outcome.assignment ? <p className="break-all">{m.library_bangumi_label_assignment_identity({ id: outcome.assignment.id, revision: outcome.assignment.revision })}</p> : null}
                   {outcome.created && !outcome.assignment ? <p role="status">{m.library_bangumi_label_incomplete_adoption()}</p> : null}
