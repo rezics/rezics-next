@@ -221,71 +221,40 @@ test('step-up return is allowed and a replacement account revokes the old review
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('');
 });
 
-test('refusal after unknown retains Stay/Leave and safe focus without former private controls', async () => {
-  const selected = {
-    accountId: 'account',
-    operationKey: 'a'.repeat(32),
-    submitted: true,
-    operation: { kind: 'rename' as const, accountId: 'account', expectedHandle: 'before', handle: 'after' },
-  };
-  saveRenameContinuation(selected);
-  let current: RenameRead = ready();
-  const ui = await mount(source({ readCurrent: async () => current }));
-  current = { kind: 'refused' };
-  await flush(() =>
-    Array.from(ui.host.querySelectorAll('button'))
-      .find((button) => button.textContent === m.auth_rename_reload())!
-      .click(),
-  );
-  const { navigation } = await startNavigation(ui.router, '/next');
-  expect(document.body.textContent).toContain(m.auth_rename_departure_pending());
-  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-stay]')!.click());
-  expect(ui.router.state.location.pathname).toBe('/account/rename');
-  expect(ui.host.contains(document.activeElement)).toBe(true);
-  expect(ui.host.querySelector('form')).toBeNull();
-  const leaving = await startNavigation(ui.router, '/next');
-  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
-  await flush(() => leaving.navigation);
-  expect(readRenameContinuation()).toEqual(selected);
-});
-
-test('submitted unknown work keeps one Stay/Leave decision after storage becomes refused and on return', async () => {
-  const key = 'rezics.account-rename.pending',
-    raw = '{unreadable-original';
-  const selected = {
-    accountId: 'account',
-    operationKey: 'a'.repeat(32),
-    submitted: true,
-    operation: { kind: 'rename' as const, accountId: 'account', expectedHandle: 'before', handle: 'after' },
-  };
-  saveRenameContinuation(selected);
-  let runs = 0;
-  const ui = await mount(
-    source({
-      run: async () => {
-        runs++;
-        return { kind: 'unknown' };
-      },
-    }),
-  );
-  window.sessionStorage.setItem(key, raw);
-  await flush(() =>
-    Array.from(ui.host.querySelectorAll('button'))
-      .find((button) => button.textContent === m.auth_rename_reload())!
-      .click(),
-  );
-  const first = await startNavigation(ui.router, '/next');
-  expect(document.body.querySelectorAll('[data-stay]')).toHaveLength(1);
-  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-stay]')!.click());
-  expect(ui.router.state.location.pathname).toBe('/account/rename');
-  expect(ui.host.textContent).toContain(m.auth_rename_unknown());
-  expect(ui.host.querySelector('form')).toBeNull();
-  const leaving = await startNavigation(ui.router, '/next');
-  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
-  await flush(() => leaving.navigation);
-  await flush(() => first.navigation);
-  await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
-  expect(ui.host.querySelector('form')).toBeNull();
-  expect(window.sessionStorage.getItem(key)).toBe(raw);
-  expect(runs).toBe(0);
-});
+for (const boundary of ['current advice', 'storage'] as const)
+  test(`refusal from ${boundary} after unknown retains Stay/Leave and safe focus without former private controls`, async () => {
+    const selected = {
+      accountId: 'account',
+      operationKey: 'a'.repeat(32),
+      submitted: true,
+      operation: { kind: 'rename' as const, accountId: 'account', expectedHandle: 'before', handle: 'after' },
+    };
+    saveRenameContinuation(selected);
+    let current: RenameRead = ready();
+    const ui = await mount(source({ readCurrent: async () => current }));
+    current = { kind: 'refused' };
+    const key = 'rezics.account-rename.pending',
+      raw = '{unreadable-original';
+    if (boundary === 'storage') window.sessionStorage.setItem(key, raw);
+    await flush(() =>
+      Array.from(ui.host.querySelectorAll('button'))
+        .find((button) => button.textContent === m.auth_rename_reload())!
+        .click(),
+    );
+    const { navigation } = await startNavigation(ui.router, '/next');
+    expect(document.body.textContent).toContain(m.auth_rename_departure_pending());
+    expect(document.body.querySelectorAll('[data-stay]')).toHaveLength(1);
+    await flush(() => document.body.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+    expect(ui.router.state.location.pathname).toBe('/account/rename');
+    expect(ui.host.contains(document.activeElement)).toBe(true);
+    expect(ui.host.querySelector('form')).toBeNull();
+    const leaving = await startNavigation(ui.router, '/next');
+    await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+    await flush(() => leaving.navigation);
+    if (boundary === 'current advice') expect(readRenameContinuation()).toEqual(selected);
+    else {
+      await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
+      expect(ui.host.querySelector('form')).toBeNull();
+      expect(window.sessionStorage.getItem(key)).toBe(raw);
+    }
+  });

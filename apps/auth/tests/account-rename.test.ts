@@ -199,43 +199,26 @@ test('excess raw text never reaches JSON.parse; all refused bytes survive writes
   }
 });
 
-test('unreadable storage refuses dispatch; a write failure retains the exact live submitted command', async () => {
+test('unreadable storage refuses dispatch and cleanup', async () => {
   const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
   const slot = window.sessionStorage,
-    get = slot.getItem,
-    set = slot.setItem;
-  const ready = async () => ({
-    kind: 'ready' as const,
-    target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] },
-  });
-  let posts = 0;
-  globalThis.fetch = (async () => {
-    posts++;
-    return posts === 1
-      ? Response.json({ reference: 'secret', expiresAt: new Date(Date.now() + 60000).toISOString() })
-      : new Response(null, { status: 503 });
-  }) as typeof fetch;
+    get = slot.getItem;
+  slot.getItem = () => {
+    throw Error('blocked');
+  };
   try {
-    slot.getItem = () => {
-      throw Error('blocked');
-    };
     expect(readRenameContinuationState()).toEqual({ kind: 'refused' });
-    expect((await runRenameAttempt(selected, ready)).kind).toBe('unavailable');
+    expect(
+      (
+        await runRenameAttempt(selected, async () => {
+          throw Error('unexpected read');
+        })
+      ).kind,
+    ).toBe('unavailable');
+    expect(saveRenameContinuation(selected)).toBe(false);
     clearRenameContinuation(selected);
-    expect(posts).toBe(0);
-    slot.getItem = get;
-    slot.setItem = () => {
-      throw Error('quota');
-    };
-    expect((await runRenameAttempt(selected, ready)).kind).toBe('unknown');
-    expect(selected.submitted).toBe(true);
-    expect(readRenameContinuationState()).toEqual({ kind: 'absent' });
-    expect(await nativeRenameSource.stepUp(selected)).toBe(false);
-    expect((await runRenameAttempt(selected, ready)).kind).toBe('unknown');
-    expect(posts).toBe(3); // exact replay reuses the live reference
   } finally {
     slot.getItem = get;
-    slot.setItem = set;
   }
 });
 

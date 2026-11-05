@@ -296,10 +296,12 @@ test('a later conflicting handle preserves unknown work; a replacement draft can
   expect(host.textContent).toContain(m.auth_rename_unknown());
   expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
   const newer = createRenameAttempt({ ...target, handle: 'concurrent' }, 'newer')!;
+  newer.submitted = true;
   window.sessionStorage.setItem('rezics.account-rename.pending', JSON.stringify(newer));
   await flush(() => host.querySelector<HTMLButtonElement>('button[type=button]:last-child')!.click());
   expect(host.querySelector('form')).toBeNull();
   expect(readRenameContinuation()).toEqual(newer);
+  expect(host.textContent).toContain(m.auth_rename_unavailable());
   expect(host.textContent).toContain(m.auth_rename_unknown());
 });
 
@@ -365,21 +367,6 @@ for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
       crypto.getRandomValues = originalRandom;
     }
   });
-
-test('a replacement command cannot become the original submitted command’s retry', async () => {
-  const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
-  selected.submitted = true;
-  saveRenameContinuation(selected);
-  let current = ready();
-  const host = await mount(source({ readCurrent: async () => current }));
-  const replacement = createRenameAttempt({ ...target, handle: 'private_before' }, 'different')!;
-  replacement.submitted = true;
-  window.sessionStorage.setItem('rezics.account-rename.pending', JSON.stringify(replacement));
-  await flush(() => host.querySelector<HTMLButtonElement>('button[type=button]:last-child')!.click());
-  expect(host.querySelector('form')).toBeNull();
-  expect(host.textContent).toContain(m.auth_rename_unavailable());
-  expect(readRenameContinuation()).toEqual(replacement);
-});
 
 test('failed submitted-marker persistence keeps the original live unknown through unavailable review', async () => {
   let current = ready(),
