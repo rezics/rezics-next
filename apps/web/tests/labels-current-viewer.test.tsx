@@ -224,6 +224,8 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const { createRoot, hydrateRoot } = await import('react-dom/client');
     const { renderToString } = await import('react-dom/server');
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } =
+      await import('@tanstack/react-router');
     const menu = await import('@rezics/ui/menu');
     const dialogs = await import('@rezics/ui/shadcn/dialog');
     const inputs = await import('@rezics/ui/shadcn/input');
@@ -282,6 +284,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     );
     const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
     const Page = Route.options.component!;
+    const router = createRouter({
+      routeTree: createRootRoute({ component: Page }),
+      history: createMemoryHistory({ initialEntries: ['/en/library/labels'] }),
+    });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const host = document.createElement('div');
     document.body.append(host);
@@ -291,7 +297,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       <StrictMode>
         <QueryClientProvider client={queryClient}>
           <notifications.Toaster>
-            <Page />
+            <RouterProvider router={router} />
           </notifications.Toaster>
         </QueryClientProvider>
       </StrictMode>
@@ -365,6 +371,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       });
     };
     try {
+      await router.load();
       await show(session('A'));
       expect(pendingReads).toHaveLength(0); // Genuine loader provenance hydrates without an added read.
       const labelsAdmission = libraryWorkspaceAdmission(queryClient, [
