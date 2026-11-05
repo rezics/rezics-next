@@ -125,11 +125,16 @@ test.each([
     status,
     error: { status, value: code ? { code } : {} },
   });
-  const result = await removePersonalLibraryEntry(client, request, {}, {
-    subjectId,
-    revision: 7,
-    idempotencyKey: restoreKey,
-  });
+  const result = await removePersonalLibraryEntry(
+    client,
+    request,
+    {},
+    {
+      subjectId,
+      revision: 7,
+      idempotencyKey: restoreKey,
+    },
+  );
   expect(result).toEqual({ ok: false, reason });
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({
@@ -146,11 +151,18 @@ test.each([
   [new PlatformClosedError(403, { code: 'platform_closed' }), 'closed'],
 ] as const)('DELETE thrown refusal receives %s', async (error, reason) => {
   const { client } = clientFor(true, undefined, error);
-  expect(await removePersonalLibraryEntry(client, request, {}, {
-    subjectId,
-    revision: 7,
-    idempotencyKey: restoreKey,
-  })).toEqual({ ok: false, reason });
+  expect(
+    await removePersonalLibraryEntry(
+      client,
+      request,
+      {},
+      {
+        subjectId,
+        revision: 7,
+        idempotencyKey: restoreKey,
+      },
+    ),
+  ).toEqual({ ok: false, reason });
 });
 
 test('no-JavaScript undo form can submit the deletion id and revision', async () => {
