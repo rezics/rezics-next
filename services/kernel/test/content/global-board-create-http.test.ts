@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
-import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -203,7 +203,7 @@ beforeAll(async () => {
   await bootstrapGovernance(db.pool, governance.accountId);
   await bootstrapRelease(db.pool, bundledRelease);
   await grant(governance.accountId, 'subject:create');
-  await grant(governance.accountId, 'board:create');
+  await bootstrapLocalShowcaseBoardCreation(db.pool, governance.accountId);
   const concept = await call('POST', '/v1/subjects', {
     bearer: governance.bearer,
     key: crypto.randomUUID(),
@@ -439,6 +439,34 @@ test.serial(
     expect(unreadable.response.status).toBe(403);
     expect(unreadable.value.code).toBe('forbidden');
     expect(await snapshot()).toEqual(beforeHidden);
+    const withoutScope = await issue('governance@global-boards.test', ['subject:read']);
+    const beforePolicy = await snapshot();
+    const missingScope = await call('POST', '/v1/boards', { bearer: withoutScope, key: crypto.randomUUID(), body });
+    expect(missingScope.response.status).toBe(403);
+    expect(await snapshot()).toEqual(beforePolicy);
+    const account = (await readAccount(db.pool, routeOf(governance.accountId)!, governance.accountId))!;
+    for (const condition of ['inactive', 'floor'] as const) {
+      try {
+        if (condition === 'inactive')
+          await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1 AND route=$2", [
+            governance.accountId,
+            routeOf(governance.accountId),
+          ]);
+        else
+          await db.admin.query(
+            'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE account_id=$1 AND route=$2',
+            [governance.accountId, routeOf(governance.accountId)],
+          );
+        const denied = await createBoard('reviews');
+        expect(denied.response.status).toBe(condition === 'floor' ? 401 : 403);
+        expect(await snapshot()).toEqual(beforePolicy);
+      } finally {
+        await db.admin.query(
+          "UPDATE access.account SET state='active',minimum_authn_epoch=$3 WHERE account_id=$1 AND route=$2",
+          [governance.accountId, routeOf(governance.accountId), account.minimumAuthnEpoch.toString()],
+        );
+      }
+    }
     const key = crypto.randomUUID();
     const first = await createBoard('reviews', 'published', key);
     expect(first.response.status).toBe(201);
