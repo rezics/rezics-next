@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { subjectLabelInputIssue } from '../src/library/subject-label-input';
+import { subjectLabelInputIssue } from '../src/library/subject-label-input.ts';
 import {
   resolveSubjectLabelReviewChoice,
   subjectLabelAssignmentsKey,
