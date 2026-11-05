@@ -83,7 +83,7 @@ function attemptStorageStringUnits(reference: boolean) {
 }
 const automatedAttemptStorageVariants = [false, true].flatMap((reference) =>
   [false, true].map((submitted) =>
-    attemptStorageSkeleton(reference, submitted) + 6 * attemptStorageStringUnits(reference),
+    attemptStorageSkeleton(reference, submitted) + attemptStorageStringUnits(reference),
   ),
 );
 /** Maximum canonical JSON string length in UTF-16 code units, including all
