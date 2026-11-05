@@ -204,7 +204,7 @@ beforeAll(async () => {
     'board:create',
   ]);
   await grant(seller, PLATFORM_RESOURCE, ['subject:create']);
-  for (const group of ['purchases', 'selling'])
+  for (const group of ['personal_library', 'purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) =>
     kernel.handle(
