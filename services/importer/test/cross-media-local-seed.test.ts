@@ -11,16 +11,19 @@ test('downloads a pinned dump once, verifies it, and reuses its cache', async ()
   const tempRoot = join(root, '.temp');
   await mkdir(tempRoot, { recursive: true });
   const temp = await mkdtemp(join(tempRoot, 'cross-media-local-seed-'));
-  const bytes = new TextEncoder().encode('pinned public dump');
+  const bytes = Buffer.from('pinned public dump');
   const digest = createHash('sha256').update(bytes).digest('hex');
   let downloads = 0;
   try {
     await mkdir(temp, { recursive: true });
     const path = join(temp, 'dump.zip');
-    const fetchImpl: typeof fetch = async () => {
-      downloads++;
-      return new Response(bytes);
-    };
+    const fetchImpl: typeof fetch = Object.assign(
+      async () => {
+        downloads++;
+        return new Response(bytes);
+      },
+      { preconnect() {} },
+    );
     expect(await cacheDumpAsset('https://example.test/dump.zip', path, digest, { fetchImpl })).toBe(digest);
     expect(await cacheDumpAsset('https://example.test/dump.zip', path, digest, { fetchImpl })).toBe(digest);
     expect(downloads).toBe(1);
@@ -57,7 +60,11 @@ for (const configured of [true, false])
     let passedOptions: unknown;
     let fetches = 0;
     const credentialScopes: string[][] = [];
-    const report = { readings: [], workLinks: [], persona: { status: 'incomplete', collections: [] } };
+    const report = {
+      readings: [],
+      workLinks: [],
+      persona: { status: 'incomplete' as const, collections: [], sources: [], workLinks: [] },
+    };
     const xml = '<vndb-export version="1.0"><vns><vn id="v2002" /></vns></vndb-export>';
     const exportPath = join(keyDirectory, 'private-export.xml');
     await writeFile(exportPath, xml, { mode: 0o600 });
@@ -103,7 +110,7 @@ for (const configured of [true, false])
         },
         seedCatalogue: async () => ({ subjects: {}, facts: [] }),
         createTokenProvider: async (configuration) => {
-          credentialScopes.push([...configuration.scopes]);
+          credentialScopes.push([...(configuration.scopes ?? [])]);
           return async () => 'local-unit-credential';
         },
         runSeed: async (argv, seedOptions) => {
