@@ -566,36 +566,7 @@ async function startStack(): Promise<
       if (!Number.isInteger(port) || port <= 0)
         throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
       const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-      const deadline = Date.now() + 60_000;
-      while (true) {
-        const probe = new Pool({
-          connectionString: databaseUrl,
-          connectionTimeoutMillis: 1500,
-          max: 1,
-        });
-        try {
-          await probe.query('SELECT 1');
-          break;
-        } catch (error) {
-          if (Date.now() >= deadline) {
-            const inspect = Bun.spawnSync([
-              'docker',
-              'inspect',
-              '-f',
-              '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} err={{.State.Error}}',
-              postgresContainer,
-            ]);
-            const logs = Bun.spawnSync(['docker', 'logs', '--tail', '40', postgresContainer]);
-            throw new Error(
-              `Disposable PostgreSQL did not become ready. ${inspect.stdout.toString().trim()} ${logs.stdout.toString()}${logs.stderr.toString()}`.trim(),
-              { cause: error },
-            );
-          }
-          await Bun.sleep(500);
-        } finally {
-          await probe.end();
-        }
-      }
+      await waitForOwnedPostgres(postgresContainer, databaseUrl);
       process.env.DATABASE_URL = databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
       migrate(databaseUrl);
@@ -1280,6 +1251,53 @@ type HostCall = {
   options?: { publicOrigin: string; authIssuer?: string };
 };
 
+const OWNED_POSTGRES_READY_MS = 180_000;
+
+async function waitForOwnedPostgres(container: string, databaseUrl: string): Promise<void> {
+  const deadline = Date.now() + OWNED_POSTGRES_READY_MS;
+  let lastError: unknown = 'not probed';
+  while (true) {
+    const ready = Bun.spawnSync(['docker', 'exec', container, 'pg_isready', '-U', 'rezics', '-d', 'rezics']);
+    if (ready.exitCode === 0) {
+      const probe = new Pool({
+        connectionString: databaseUrl,
+        connectionTimeoutMillis: 2_000,
+        max: 1,
+      });
+      try {
+        await probe.query('SELECT 1');
+        return;
+      } catch (error) {
+        lastError = error;
+      } finally {
+        try {
+          await settledWithin(probe.end().then(() => true), 2_000);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+    } else {
+      lastError = (ready.stderr.toString() || ready.stdout.toString() || `pg_isready exit ${ready.exitCode}`).trim();
+    }
+    if (Date.now() >= deadline) {
+      const inspect = Bun.spawnSync([
+        'docker',
+        'inspect',
+        '-f',
+        '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} err={{.State.Error}}',
+        container,
+      ]);
+      const logs = Bun.spawnSync(['docker', 'logs', '--tail', '40', container]);
+      const last = lastError instanceof Error ? lastError.message : String(lastError);
+      throw new Error(
+        `Disposable PostgreSQL did not become ready. ${inspect.stdout.toString().trim()} ${logs.stdout.toString()}${logs.stderr.toString()} last=${last}`.trim(),
+        { cause: lastError instanceof Error ? lastError : undefined },
+      );
+    }
+    await Bun.sleep(500);
+  }
+}
+
 function reportStackProgress(message: string): void {
   console.info(message);
   if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ progress: message } satisfies HostReply);
@@ -1300,7 +1318,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) {
     const standalone = new NativeTestLifecycle('standalone native web stack');
-    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    const stack = await standalone.run('start native web stack', 480_000, () => startNativeWebStack(options), false);
     return {
       ...stack,
       async stop() {
