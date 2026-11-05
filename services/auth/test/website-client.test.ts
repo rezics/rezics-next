@@ -1,6 +1,15 @@
+import 'reylo/register';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createKernel } from '../../kernel/src/http/kernel.ts';
+import { actionCatalogue } from '../../kernel/src/http/request.ts';
+import { accessActionCatalogue } from '../../kernel/src/access/index.ts';
+import { mountedWebsiteConfiguration, registerWebsiteDeployment } from '../scripts/website-composition.ts';
+import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import * as authModule from '../src/index.ts';
@@ -113,8 +122,27 @@ async function token(fields: Record<string, string>) {
 }
 
 test('website first authorization materializes standing consent before code issuance and refresh preserves uploader proof', async () => {
+  const kernel = createKernel({ pool, routeKey: randomBytes(32) });
+  const extra = (path: string, action = 'composition:read') => ({
+    method: 'GET',
+    path,
+    hooks: {
+      detail: {
+        operationId: 'composition.probe',
+        'x-action': action,
+        security: [{}, { bearerAuth: [] }],
+      },
+    },
+  });
+  const mounted = { routes: [...kernel.routes, extra('/composition'), extra('/composition-alias')] };
+  options.siteActions = accessActionCatalogue(actionCatalogue(mounted));
+  const full = mountedWebsiteConfiguration(mounted);
+  expect(full.scopes.filter((scope) => scope === 'composition:read')).toHaveLength(1);
+  expect(full.scopes).not.toContain('composition.probe');
+  expect(full.scopes).toEqual(expect.arrayContaining(['rating:vote', 'library_entry:list', 'collection:update']));
   service = await authModule.createAuthService(options);
   await registerWebsite();
+  let requestedScopes = scopes;
   const discoveryResponse = await fetch(`${issuer}/.well-known/openid-configuration`);
   expect(discoveryResponse.status).toBe(200);
   expect(await discoveryResponse.json()).toMatchObject({
@@ -159,7 +187,7 @@ test('website first authorization materializes standing consent before code issu
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: scopes.join(' '),
+      scope: websiteRequestedScopes(requestedScopes.join(' ')),
       state,
       nonce: state,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
@@ -198,7 +226,35 @@ test('website first authorization materializes standing consent before code issu
       typ: 'at+jwt',
     });
     expect(access.payload).toMatchObject({ sub: accountId, client_id: clientId, authn_epoch: 1, amr: ['pwd'] });
-    expect(new Set(String(access.payload.scope).split(' '))).toContain('media:complete');
+    const originalScopes = String(access.payload.scope).split(' ').sort();
+    expect(originalScopes).toEqual([...requestedScopes].sort());
+    if (accountId === people[0]) {
+      const dir = await mkdtemp(resolve(import.meta.dir, '../../../.temp/website-registration-'));
+      const file = resolve(dir, 'configuration.json');
+      const registration = { publicJwks, redirectUris: [redirectUri], postLogoutRedirectUris: [`${issuer}/`] };
+      try {
+        await registerWebsiteDeployment(service, mounted, registration, file);
+        expect(websiteWorkerScopes({ WEBSITE_CONFIGURATION_FILE: file })).toBe(full.WEBSITE_SCOPES);
+        const registered = await pool.query('SELECT scopes FROM auth_client WHERE client_id=$1', [clientId]);
+        expect([...registered.rows[0].scopes].sort()).toEqual([...full.scopes].sort());
+        await expect(
+          registerWebsiteDeployment(
+            service,
+            { routes: [...mounted.routes, extra('/unmounted', 'unmounted:action')] },
+            registration,
+            file,
+          ),
+        ).rejects.toThrow('invalid_request');
+        expect(JSON.parse(await readFile(file, 'utf8')).WEBSITE_SCOPES).toBe(full.WEBSITE_SCOPES);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+      requestedScopes = full.scopes;
+      // Registration did not mutate the already issued access credential or its cookie-session ceiling.
+      expect(originalScopes).not.toContain('library_entry:list');
+      const oldSession = await fetch(`${issuer}/session`, { headers: { cookie } });
+      expect((await oldSession.json()).scope).not.toContain('library_entry:list');
+    }
     const id = await jwtVerify(issued.id_token, keys, { issuer, audience: clientId, algorithms: ['ES256'] });
     expect(id.payload).toMatchObject({ sub: accountId, nonce: state });
     expect(id.payload.sid).toBeTruthy();
@@ -209,6 +265,7 @@ test('website first authorization materializes standing consent before code issu
     const rotated = await refresh.json();
     expect(rotated.refresh_token).not.toBe(issued.refresh_token);
     const refreshed = await jwtVerify(rotated.access_token, keys, { issuer, audience, typ: 'at+jwt' });
+    expect(String(refreshed.payload.scope).split(' ').sort()).toEqual(originalScopes);
     expect(refreshed.payload).toMatchObject({
       sub: accountId,
       client_id: clientId,

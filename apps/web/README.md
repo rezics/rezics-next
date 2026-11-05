@@ -438,17 +438,13 @@ Configure these variables in the environment of `bun run dev`:
   Existing `/security` and `/account/delete` links retain their behavior.
 - `API_RESOURCE`: the API's RFC 8707 resource identifier and access token audience, exactly `https://api.rezics.com`
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
-- `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
-  Private creator sales use the mounted exact `commerce_sale:list` scope. Register it
-  and request renewed consent for this journey; an old consent or refresh token never widens.
-  Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
-  posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
-  `presentation:activate`; checkout start needs `order:create` and order pages and purchase history need `order:read`; the explicit known-order status check separately needs `order:reconcile`; the settings page needs
-  `account:read`, `account:update`, `collection:read` and `collection:update` (for the owner Collection list and visibility writes).
-  Auth's create-organization and self-deletion pages also need the exact operation scopes `organization:create`,
-  `account:manage` and `account:delete`.
-  Offer pages and other public reads need no scope. Sign-in requests
-  `openid offline_access` followed by these scopes, each once.
+- `WEBSITE_SCOPES`: exact canonical scopes emitted by trusted mounted-operation registration, including
+  `openid offline_access`, never a wildcard. All mounted actions contribute, including private branches of
+  anonymous-capable actions. Auth account flows add `organization:create`, `account:manage`, `account:delete`.
+  Creator offers/sales and Library reads and mutations require their actual action scopes too.
+- `WEBSITE_CONFIGURATION_FILE`: production build input, the public JSON artifact emitted after successful
+  `registerWebsiteDeployment`. Worker configuration reads its `WEBSITE_SCOPES` once; a supplied scope override
+  must match exactly. Missing production configuration or a mismatch fails the build at this trusted boundary.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
 - `SITE_ORIGINS`: comma-separated exact origins (scheme, host and optional port, with no trailing slash). Production
   requires this variable. Development uses the dev server's own origin when it is unset.
@@ -479,38 +475,41 @@ and `AUTH_ISSUER` to the deployment's canonical Auth issuer origin, without a tr
 Register exactly `https://rezics.com/auth/callback` and post-logout URI `https://rezics.com/`.
 The trusted Auth bootstrap entry is `createAuthService(options)` followed by
 `auth.internal.registerWebsiteClient(registration)`; it has no public registration endpoint.
-Use the mounted protected action catalogue supplied to Auth as `siteActions`:
+Use the actual mounted Kernel app supplied to Auth as `siteActions` through Access's action catalogue.
+The trusted helper resolves operation declarations to their real actions; it includes every mounted action,
+without filtering anonymous-capable actions or adding guessed operation-ID aliases. It adds the three existing
+Auth account-operation scopes and deduplicated OpenID scopes. A newly mounted operation contributes automatically.
+Browser modules import only `session/website-scopes.ts`; they never discover or import a service catalogue.
 
 ```ts
-import { websiteRegistrationScopes } from './src/session/website-scopes.ts';
+import { registerWebsiteDeployment } from '../../services/auth/scripts/website-composition.ts';
 
-const registration = {
-  publicJwks: { keys: [websitePublicJwk] },
-  redirectUris: ['https://rezics.com/auth/callback'],
-  postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: websiteRegistrationScopes([
-    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-    'organization:create',
-    'account:manage',
-    'account:delete',
-  ]),
-};
-await auth.internal.registerWebsiteClient(registration);
-// Deploy this exact string as the Worker's WEBSITE_SCOPES text variable.
-const websiteScopes = registration.scopes.join(' ');
+await registerWebsiteDeployment(
+  auth,
+  kernel,
+  {
+    publicJwks: { keys: [websitePublicJwk] },
+    redirectUris: ['https://rezics.com/auth/callback'],
+    postLogoutRedirectUris: ['https://rezics.com/'],
+  },
+  websiteConfigurationFile,
+);
 ```
 
-The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
-`reaction:set`,
-the curation scopes `presentation:publish` and `presentation:activate`, `order:create`, `order:read` and `order:reconcile`, the settings page's `account:read`, `account:update`, `collection:read` and `collection:update`, and Auth's account-operation scopes `organization:create`, `account:manage` and `account:delete`.
-Registration and `WEBSITE_SCOPES` must change together
-when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
-defines registration and key rotation.
-Rating writes also require the documented website client scope `rating:vote`.
-The shared registration helper retains only real mounted scopes, including `commerce_sale:list`.
-The existing native Web bootstrap uses that helper and deploys its exact joined list as `WEBSITE_SCOPES`;
-sign-in uses `websiteRequestedScopes` on that configured list. Auth refuses unknown scopes. Registration, configured scope requests and renewed consent must agree with the
-mounted catalogue; refreshing an old credential never adds this scope.
+The deployment owner supplies the actual composed `auth`, mounted `kernel`, public website JWK and
+`websiteConfigurationFile`. Pass that output file to the Worker build as `WEBSITE_CONFIGURATION_FILE`; keep it
+with the same registration release. It contains scope names only, no private key or credential. Do not hand-edit
+it or reuse an artifact from a different catalogue. This in-process bootstrap is the production registration
+entrypoint; there is no deployed registry or secret environment in the source tree. Production registration
+and this external artifact must be supplied by the deployment owner; source changes do not deploy them.
+
+The same `mountedWebsiteConfiguration` composition drives local setup's generated bindings, host registration,
+Web launch environment and the native Web fixture. Sign-in uses `websiteRequestedScopes` on the configured list,
+adding only deduplicated OpenID scopes. Auth still refuses unmounted scopes. Registration adds no resource grant,
+platform exposure, ownership or lifecycle permission. Existing consent, access tokens and refresh tokens retain
+their old ceilings. After registration and Web configuration are updated together, deliberately sign out of the
+website, sign in again and complete the ordinary Auth authorization/renewed-consent flow. Refreshing the old
+session cannot acquire new scopes; retain an old session separately when testing that negative control.
 
 Generate the website's own P-256 key from `apps/web`, keeping intermediate files under `.temp/`:
 
@@ -534,20 +533,12 @@ the Worker secret, then removing the old public key from registration.
 For local Auth, migrate a separate PostgreSQL database with Auth's documented `db migrate` command, then run
 the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'https://api.rezics.test'`,
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
-Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
-`http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation, checkout, settings and account-operation routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read order:reconcile account:read account:update organization:create account:manage account:delete`.
-From `apps/web`, run:
-
-```sh
-AUTH_ISSUER=http://127.0.0.1:4200 \
-API_RESOURCE=https://api.rezics.test \
-WEBSITE_CLIENT_ID=rezics-website \
-WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read order:reconcile account:read account:update organization:create account:manage account:delete' \
-KERNEL_ORIGIN=http://127.0.0.1:4300 \
-bun run dev --host 127.0.0.1 --port 3000 --strictPort
-```
+Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback` and
+post-logout URI `http://127.0.0.1:3000/` using the same mounted composition above. For the managed local stack,
+use the [local stack commands](../../docs/development/local-stack.md): setup generates `apps/web/.dev.vars`,
+the host registers that composition and Web launch supplies those same bindings. For a separate local
+bootstrap, use its emitted `WEBSITE_CONFIGURATION_FILE` when launching Web, with that bootstrap's own issuer,
+audience, client key and Kernel origin. Never copy a scope hand list from another stack.
 
 Use the same hostname throughout so Auth's session cookie reaches `/authorize` and `/logout`.
 Sign in with the person's password at Auth before following the site's sign-in link. Local HTTP changes neither

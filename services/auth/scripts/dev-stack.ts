@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { migrate } from './database.ts';
+import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 
@@ -24,28 +25,41 @@ export const origins = {
   kernel: 'http://127.0.0.1:4100',
   audience: 'https://api.rezics.test',
 };
-export const websiteScopes = [
-  'openid',
-  'offline_access',
-  'media:create',
-  'media:read_reservation',
-  'media:read',
-  'media:complete',
-  'media:erase',
-  'thread:create',
-  'post:create',
-  'reaction:set',
-  'presentation:publish',
-  'presentation:activate',
-  'order:create',
-  'order:read',
-  'order:reconcile',
-  'account:read',
-  'account:update',
-  'organization:create',
-  'account:manage',
-  'account:delete',
-];
+/** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
+export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
+  await import('reylo/register');
+  const [{ createKernel }, { readConfig }] = await Promise.all([
+    import('../../kernel/src/http/kernel.ts'),
+    import('../../kernel/src/server.ts'),
+  ]);
+  const config = readConfig(env ?? (await kernelEnvironment()));
+  const pool = new Pool({ connectionString: config.databaseUrl });
+  try {
+    return mountedWebsiteConfiguration(
+      createKernel({
+        pool,
+        tokens: config.tokens,
+        routeKey: config.routeKey,
+        ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+      }),
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Both generated local bindings and the Web child use this exact configuration. */
+export function developmentWebsiteBindings(keys: DevelopmentKeys, website: { WEBSITE_SCOPES: string }) {
+  return {
+    AUTH_ISSUER: origins.issuer,
+    API_RESOURCE: origins.audience,
+    WEBSITE_CLIENT_ID: 'rezics-website',
+    WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
+    WEBSITE_SCOPES: website.WEBSITE_SCOPES,
+    SITE_ORIGINS: origins.web,
+    KERNEL_ORIGIN: origins.kernel,
+  };
+}
 export const importerScopes = [
   'subject:create',
   'subject:batch_write',
@@ -282,15 +296,7 @@ async function setup() {
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),
-    developmentBindings({
-      AUTH_ISSUER: origins.issuer,
-      API_RESOURCE: origins.audience,
-      WEBSITE_CLIENT_ID: 'rezics-website',
-      WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
-      WEBSITE_SCOPES: websiteScopes.join(' '),
-      SITE_ORIGINS: origins.web,
-      KERNEL_ORIGIN: origins.kernel,
-    }),
+    developmentBindings(developmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env))),
   );
 }
 
@@ -331,6 +337,7 @@ export async function assemble(options?: {
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
   });
   const actions = accessActionCatalogue(actionCatalogue(kernel));
+  const website = mountedWebsiteConfiguration(kernel);
   let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,
@@ -382,7 +389,7 @@ export async function assemble(options?: {
     publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
     redirectUris: [`${origins.web}/auth/callback`],
     postLogoutRedirectUris: [`${origins.web}/`],
-    scopes: websiteScopes,
+    scopes: website.scopes,
   });
   await service.internal.registerClient({
     clientId: personaClient,
@@ -398,7 +405,7 @@ export async function assemble(options?: {
       await kernelPool.end();
     }
   };
-  return { host, kernel, access, kernelPool, database, keys, stop };
+  return { host, kernel, access, kernelPool, database, keys, website, stop };
 }
 
 const widgetScript = `window.turnstile={ready:function(callback){callback();},render:function(el,o){const box=document.createElement('span');box.textContent='Local development verification';el.appendChild(box);queueMicrotask(()=>o.callback('rezics-local-signup'));return 'local';},remove:function(){},reset:function(){}};`;
@@ -597,6 +604,8 @@ async function serveHost() {
 
 async function launch(action: 'pages' | 'web', args: string[]) {
   const pages = action === 'pages';
+  const website = await developmentWebsiteConfiguration();
+  const keys = await developmentKeys();
   const child = Bun.spawn(
     [
       'bun',
@@ -616,14 +625,8 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       env: {
         ...process.env,
         AUTH_ORIGIN: origins.native,
-        KERNEL_ORIGIN: origins.kernel,
-        AUTH_ISSUER: origins.issuer,
-        API_RESOURCE: origins.audience,
+        ...developmentWebsiteBindings(keys, website),
         PUBLIC_ORIGIN: origins.web,
-        SITE_ORIGINS: origins.web,
-        WEBSITE_CLIENT_ID: 'rezics-website',
-        WEBSITE_SCOPES: websiteScopes.join(' '),
-        WEBSITE_CLIENT_KEY: JSON.stringify((await developmentKeys()).website),
         TURNSTILE_SITE_KEY: 'local',
         TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
       },

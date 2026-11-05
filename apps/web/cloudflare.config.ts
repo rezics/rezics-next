@@ -1,3 +1,5 @@
+import { websiteWorkerScopes } from './scripts/website-configuration.ts';
+
 export default {
   worker: {
     name: 'rezics-web',
@@ -16,7 +18,7 @@ export default {
       PUBLIC_ORIGIN: { type: 'text', value: process.env.PUBLIC_ORIGIN ?? '' },
       SITE_ORIGINS: { type: 'text', value: process.env.SITE_ORIGINS ?? '' },
       API_RESOURCE: { type: 'text', value: process.env.API_RESOURCE ?? '' },
-      WEBSITE_SCOPES: { type: 'text', value: process.env.WEBSITE_SCOPES ?? '' },
+      WEBSITE_SCOPES: { type: 'text', value: websiteWorkerScopes(process.env) },
       WEBSITE_CLIENT_ID: { type: 'text', value: process.env.WEBSITE_CLIENT_ID ?? '' },
       NATIVE_MEDIA_STORAGE_TOKEN: {
         type: 'text',
