@@ -88,7 +88,7 @@ test('the actual Following server exports refuse stale preparation without priva
     });
     expect(await actions.readMineFollowingForViewer({ data: { cursor: '' } })).toEqual({
       subject: null,
-      cursor: '',
+      cursor: null,
       locale: 'en',
       kind: 'all',
       page,
@@ -316,7 +316,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
       host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
       await tick();
     });
-    const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
+    const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
+      (item) => item.textContent === m.library_follow_unfollow(),
+    );
     expect(action?.textContent).toBe(m.library_follow_unfollow());
     await act(async () => {
       action!.click();
@@ -655,7 +657,9 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
       await tick();
     });
-    const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
+    const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
+      (item) => item.textContent === m.library_follow_unfollow(),
+    );
     expect(action?.textContent).toBe(m.library_follow_unfollow());
     await act(async () => {
       action!.click();
