@@ -2,12 +2,14 @@ import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/react-router';
+import type { PageContinuation } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { RelationsView } from '../../features/pages/relations-view';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
+import { WorkFranchiseReading } from '../../features/pages/showcase-work';
 import { SubjectLibraryLeaf } from '../../features/pages/subject-library-leaf';
 import { pageRelationProperties, subjectPageType } from '../../features/pages/subject';
 import { subjectTabs } from '../../features/pages/views';
@@ -102,11 +104,29 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
   shouldReload: true,
   // Validate the cursor in the loader so invalid input answers the not-found document.
   validateSearch: (search: Record<string, unknown>) => {
+    const node = validatePageNode(search.node);
+    const streamProperty = search.streamProperty;
+    const streamDirection = search.streamDirection;
+    const validatedStreamDirection: 'forward' | 'inverse' | undefined =
+      streamDirection === 'forward' || streamDirection === 'inverse' ? streamDirection : undefined;
+    if (
+      (streamProperty !== undefined &&
+        (typeof streamProperty !== 'string' ||
+          !streamProperty.trim() ||
+          streamProperty.length > 256 ||
+          /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+      (streamDirection !== undefined && streamDirection !== 'forward' && streamDirection !== 'inverse') ||
+      ((streamProperty !== undefined || streamDirection !== undefined) &&
+        (node === undefined || streamProperty === undefined || streamDirection === undefined))
+    )
+      throw notFound();
     return {
       ...(typeof search.property === 'string' && search.property.length <= 128 ? { property: search.property } : {}),
       cursor: search.cursor,
       realm: validatePageRealm(search.realm),
-      node: validatePageNode(search.node),
+      node,
+      ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
+      ...(validatedStreamDirection ? { streamDirection: validatedStreamDirection } : {}),
       via: subjectVisitReturn(search.via, getLocale()),
     };
   },
@@ -115,6 +135,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
     cursor: search.cursor,
     realm: search.realm,
     node: search.node,
+    streamProperty: search.streamProperty,
+    streamDirection: search.streamDirection,
     via: search.via,
   }),
   loader: async ({ params, deps, location, context, abortController }) => {
@@ -189,6 +211,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         cursor,
         realm: deps.realm,
         via: deps.via,
+        node: deps.node,
+        streamProperty: deps.streamProperty,
+        streamDirection: deps.streamDirection,
       };
     }
     const [overview, links] = await awaitSubjectRoute(signal, () =>
@@ -273,6 +298,8 @@ function RelationsRoute() {
   };
   const data = Route.useLoaderData();
   const { frame, tabs, type, relations, realm } = data;
+  const currentHref = useLocation().publicHref;
+  const navigate = Route.useNavigate();
   const browserSession = useSession();
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm, data.reader, browserSession);
@@ -286,6 +313,13 @@ function RelationsRoute() {
   });
   const reader = personal.reader;
   const { property } = Route.useSearch();
+  const onWorkContinue = (continuation: PageContinuation) => {
+    void navigate({
+      search: (previous) => ({ ...previous, node: continuation.node, cursor: continuation.cursor }),
+      hash: '#work-franchise',
+      resetScroll: false,
+    });
+  };
   if (!currentReader) return <PendingPage />;
   const frameElement = (
     <SubjectFrame
@@ -310,6 +344,13 @@ function RelationsRoute() {
       <SubjectViewPage
         page={data.page}
         {...(data.via ? { returnTo: data.via } : {})}
+        currentHref={currentHref}
+        selectedNode={data.configured ? data.node : undefined}
+        selectedStreamProperty={data.configured ? data.streamProperty : undefined}
+        selectedStreamDirection={data.configured ? data.streamDirection : undefined}
+        selectedCursor={data.cursor}
+        onWorkContinue={onWorkContinue}
+        finiteWorkRegionReader={WorkFranchiseReading}
         subjectLabel={frame.title.text}
         locale={getLocale()}
         messages={subjectPageMessages()}

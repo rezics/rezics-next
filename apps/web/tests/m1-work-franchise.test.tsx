@@ -13,6 +13,7 @@ import type { RelationDefinition } from '../src/subject/relations';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectPage } = await import('../src/features/pages/subject');
+const { WorkFranchiseReading } = await import('../src/features/pages/showcase-work');
 
 const property = 'wdt:P144';
 const context = '00000000-0000-8000-8000-000000000000';
@@ -96,7 +97,7 @@ function read(
 function pageFor(source: SubjectRead): SubjectPageData {
   const content = [
     workDocument.content[0]!,
-    { type: 'OutgoingRelations', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8 } },
+    { type: 'OutgoingRelations', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8, paged: true } },
     ...Object.keys(source.subject.statements)
       .filter((key) => key !== property)
       .map((key) =>
@@ -176,7 +177,12 @@ function pageFor(source: SubjectRead): SubjectPageData {
   } satisfies SubjectPageData;
 }
 
-async function render(source: SubjectRead, page = pageFor(source), currentHref?: string) {
+async function render(
+  source: SubjectRead,
+  page = pageFor(source),
+  currentHref?: string,
+  selected?: { node: string; property: string; direction: 'forward' | 'inverse'; cursor?: string },
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const route = createRootRoute({
     component: () =>
@@ -184,7 +190,16 @@ async function render(source: SubjectRead, page = pageFor(source), currentHref?:
         page,
         currentHref,
         locale: 'ja',
-        view: 'overview',
+        view: selected ? 'relations' : 'overview',
+        ...(selected
+          ? {
+              selectedNode: selected.node,
+              selectedStreamProperty: selected.property,
+              selectedStreamDirection: selected.direction,
+              ...(selected.cursor !== undefined ? { selectedCursor: selected.cursor } : {}),
+              finiteWorkRegionReader: WorkFranchiseReading,
+            }
+          : {}),
         messages,
         relations,
         renderJsonLd: false,
@@ -435,6 +450,14 @@ test('each VN, anime and book relation stream keeps its selected region through 
   const { subjectVisitReturn, connectionReturnWindow, connectionReturnHref, withSubjectVisitReturn } =
     await import('../src/features/pages/subject-visit-navigation');
   const { workFranchiseReturn } = await import('../src/features/catalogue/work-franchise-reading/navigation');
+  const { Route: finiteRelationsRoute } = await import('../src/routes/subjects/$id_.$slug_.relations');
+  const { Route: finiteViewRoute } = await import('../src/routes/subjects/$id_.$slug_.$view');
+  const validateFiniteSearch = finiteRelationsRoute.options.validateSearch as (
+    search: Record<string, unknown>,
+  ) => Record<string, unknown>;
+  const validateViewSearch = finiteViewRoute.options.validateSearch as (
+    search: Record<string, unknown>,
+  ) => Record<string, unknown>;
   for (const type of ['wd:Q689445', 'schema:TVSeries', 'schema:Book']) {
     const source = read(type, publicBook.name, id(950), 'schema:Book', publicBook.name, id(951));
     const page = pageFor(source);
@@ -447,7 +470,10 @@ test('each VN, anime and book relation stream keeps its selected region through 
         { type: 'OutgoingRelations', props: { id: 'unavailable', property: 'schema:author', limit: 8 } },
       ],
     } as CompositionDocument;
-    const plan = planReads(platformRegistry, page.document as CompositionDocument, { subject: source.subject.id });
+    page.requestedRealm = id(960);
+    const plan = planReads(platformRegistry, page.document as CompositionDocument, {
+      subject: source.subject.id,
+    });
     const row = source.subject.statements[property]![0]!;
     page.reads[plan.nodes.franchise!] = {
       status: 200,
@@ -480,8 +506,8 @@ test('each VN, anime and book relation stream keeps its selected region through 
     };
     page.reads[plan.nodes.empty!] = { status: 200, body: { relations: [], next: null } };
     page.reads[plan.nodes.unavailable!] = { status: 503, body: {} };
-    const origin = `/ja/subjects/${id(950)}/book?realm=${id(960)}`;
-    const html = await render(source, page, origin);
+    const overviewOrigin = `/ja/subjects/${id(950)}/book?realm=${id(960)}`;
+    const html = await render(source, page, overviewOrigin);
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(
       (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.invalid'),
     );
@@ -510,7 +536,48 @@ test('each VN, anime and book relation stream keeps its selected region through 
       statement: id(101),
       holder: id(950),
       node: 'franchise',
+      stream: 'out:wdt:P144',
     });
+    expect(subjectVisitReturn(via, 'ja')).toBe(via);
+
+    const cursor = 'native+current-cursor';
+    const selectedPage = structuredClone(page);
+    selectedPage.continuation = { node: 'franchise', cursor };
+    const selectedPlan = planReads(platformRegistry, selectedPage.document as CompositionDocument, {
+      subject: source.subject.id,
+      continuation: selectedPage.continuation,
+    });
+    selectedPage.reads[selectedPlan.nodes.franchise!] = page.reads[plan.nodes.franchise!]!;
+    const origin =
+      `/ja/subjects/${id(950)}/book/relations?realm=${id(960)}&node=franchise` +
+      `&streamProperty=${encodeURIComponent(property)}&streamDirection=forward&cursor=${encodeURIComponent(cursor)}`;
+    const selection = { node: 'franchise', property, direction: 'forward' as const, cursor };
+    const routeSearch = Object.fromEntries(new URL(origin, 'https://rezics.invalid').searchParams);
+    for (const validate of [validateFiniteSearch, validateViewSearch])
+      expect(validate(routeSearch)).toMatchObject({ node: selection.node, streamProperty: property, streamDirection: 'forward', cursor, realm: id(960) });
+    expect(subjectVisitReturn(`${origin}#work-franchise`, 'ja')).toBe(`${origin}#work-franchise`);
+    const finiteHtml = await render(source, selectedPage, `${origin}#work-franchise`, selection);
+    const finiteHrefs = [...finiteHtml.matchAll(/href="([^"]+)"/g)].map(
+      (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.invalid'),
+    );
+    expect(finiteHtml.match(/data-work-stream=/g)).toHaveLength(1);
+    const finiteConnection = finiteHrefs.find((url) => connectionReturnWindow(url.hash)?.stream === 'out:wdt:P144');
+    expect(finiteConnection).toBeDefined();
+    const finiteVia = finiteConnection!.searchParams.get('via')!;
+    const finiteOrigin = new URL(finiteVia, finiteConnection);
+    expect(['realm', 'node', 'streamProperty', 'streamDirection', 'cursor'].map((key) => finiteOrigin.searchParams.get(key))).toEqual([id(960), selection.node, property, 'forward', cursor]);
+    const finiteInspection = finiteHrefs.find((url) => url.pathname.endsWith('/value'));
+    expect(finiteInspection).toBeDefined();
+    const inspectedVia = finiteInspection!.searchParams.get('via')!;
+    const inspectedOrigin = new URL(inspectedVia, finiteInspection!);
+    expect(workFranchiseReturn(inspectedOrigin.hash)).toMatchObject({ node: 'franchise', stream: 'out:wdt:P144' });
+    expect((await render(source, selectedPage, inspectedVia, selection)).match(/data-work-stream=/g)).toHaveLength(1);
+    for (const [key, value] of [['node', 'other'], ['streamProperty', 'schema:author']] as const) {
+      const mismatchedOrigin = new URL(inspectedVia, finiteInspection!);
+      mismatchedOrigin.searchParams.set(key, value);
+      const mismatchedAddress = `${mismatchedOrigin.pathname}${mismatchedOrigin.search}${mismatchedOrigin.hash}`;
+      expect(subjectVisitReturn(mismatchedAddress, 'ja')).toBeUndefined();
+    }
     const native = connectionReturnHref(source.subject.id, publicBook.name, 'ja', id(960), {
       stream: 'out:wdt:P144',
       cursor: 'opaque+cursor',
@@ -519,12 +586,13 @@ test('each VN, anime and book relation stream keeps its selected region through 
       holder: source.subject.id,
       control: 'evidence',
     });
-    const returned = withSubjectVisitReturn(native, via, 'ja');
+    const returned = withSubjectVisitReturn(native, inspectedVia, 'ja');
     expect(subjectVisitReturn(returned, 'ja')).toBe(returned);
     const restored = new URL(returned, 'https://rezics.invalid');
     expect(connectionReturnWindow(restored.hash)).toMatchObject({ cursor: 'opaque+cursor', control: 'evidence' });
-    expect(restored.searchParams.get('via')).toBe(via);
+    expect(restored.searchParams.get('via')).toBe(inspectedVia);
+    expect(new URL(inspectedVia, new URL(returned, 'https://rezics.invalid')).searchParams.get('cursor')).toBe(cursor);
     expect(subjectVisitReturn(returned, 'en')).toBeUndefined();
-    expect(workFranchiseReturn(`${new URL(via, inspection).hash}&focus=evidence`)).toBeUndefined();
+    expect(workFranchiseReturn(`${new URL(inspectedVia, finiteInspection!).hash}&focus=evidence`)).toBeUndefined();
   }
 });

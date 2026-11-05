@@ -5,6 +5,7 @@ import * as start from '../.storybook/react-start';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
 import type { RelationGroupRequest } from '../src/features/pages/relation-stream-query';
 import type { Reader } from '../src/subject/reader';
+import type { SubjectPageData } from '../src/features/pages/subject';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -1061,7 +1062,9 @@ test('work region return focuses its actual inspection control once and retires 
   const { createElement: h } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { OverviewContext } = await import('../src/features/pages/overview');
-  const { WorkFranchiseOverview } = await import('../src/features/pages/showcase-work/overview');
+  const { WorkFranchiseReading } = await import('../src/features/pages/showcase-work');
+  const { pageContext, subjectBody } = await import('../src/features/pages/subject');
+  const { planReads, platformRegistry } = await import('@rezics/composition');
   const { workFranchiseReturnHref, subjectVisitReturn, connectionReturnHref, connectionReturnWindow } =
     await import('../src/features/pages/subject-visit-navigation');
   const { defaultReader } = await import('../src/subject/reader');
@@ -1086,33 +1089,26 @@ test('work region return focuses its actual inspection control once and retires 
     qualifiers: [],
     references: [],
   };
-  const windows: import('../src/features/pages/views').ProfileRelationWindow[] = [
-    {
-      node: 'franchise',
-      property: 'wdt:P144',
-      direction: 'forward',
-      status: 200,
-      valid: true,
-      complete: false,
-      next: 'old-next',
-      rows: [
-        {
-          target: id(972),
-          statement,
-          summary: { id: id(972), type: 'schema:Book', label: { value: 'Related book', language: 'en' } },
-          related: {},
-        },
-      ],
-    },
-  ];
+  const relation = {
+    target: id(972),
+    statement,
+    summary: { id: id(972), type: 'schema:Book', label: { value: 'Related book', language: 'en' } },
+    related: {},
+  };
   const related = { [id(972)]: { type: 'schema:Book', labels: { en: 'Related book' } } };
   const definitions = {
     'wdt:P144': { label: 'Based on', forwardLabel: 'Based on', symmetric: false, group: 'derivation' as const },
+  };
+  const context = {
+    id: id(974),
+    population: { kind: 'realm' as const, id: id(975), title: 'Selected population' },
   };
   const value = {
     locale: 'en',
     subject: subject.id,
     subjectLabel: 'Book',
+    context,
+    realm: id(975),
     reader: defaultReader,
     labels: { spoilerShow: 'Show', cover: { withheld: '', reveal: '', credit: '', via: '' } },
     link: ({ children, ...props }: never) => h('a', props, children),
@@ -1121,8 +1117,34 @@ test('work region return focuses its actual inspection control once and retires 
     relationNodes: [],
     unlabelled: 'Untitled',
   } as unknown as OverviewValue;
-  const base = browser.location.pathname;
-  const selection = {
+  const page = {
+    subject: subject.id,
+    context,
+    requestedRealm: id(975),
+    requestedReader: null,
+    continuation: { node: 'franchise', cursor: 'current-cursor' },
+    profile: subject.release,
+    template: { scope: 'base', key: 'schema:CreativeWork' },
+    document: {
+      content: [
+        { type: 'SubjectHeader', props: { id: 'subject-header' } },
+        { type: 'OutgoingRelations', props: { id: 'franchise', property: 'wdt:P144', limit: 12, paged: true } },
+      ],
+    },
+    reads: {},
+  } as unknown as SubjectPageData;
+  const plan = planReads(platformRegistry, page.document as never, pageContext(page));
+  const subjectRead = Object.entries(plan.reads).find(([, read]) => read.kind === 'subject')![0];
+  page.reads[subjectRead] = { status: 200, body: { subject, related } };
+  page.reads[plan.nodes.franchise!] = { status: 200, body: { relations: [relation], next: 'old-next' } };
+  const region = {
+    node: 'franchise',
+    property: 'wdt:P144',
+    direction: 'forward' as const,
+    cursor: 'current-cursor',
+  };
+  const base = `/en/subjects/${subject.id}/book/relations?realm=${id(975)}&node=franchise&streamProperty=wdt%3AP144&streamDirection=forward&cursor=current-cursor`;
+  const focus = {
     stream: 'out:wdt:P144',
     node: 'franchise',
     statement: id(971),
@@ -1132,28 +1154,31 @@ test('work region return focuses its actual inspection control once and retires 
     release: subject.release,
     revision: 1,
   };
-  let href = workFranchiseReturnHref(base, base, 'en', selection);
+  let href = workFranchiseReturnHref(base, base, 'en', focus);
   const host = browser.document.createElement('div');
   browser.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const outside = browser.document.createElement('button');
   browser.document.body.append(outside);
-  let currentSubject = subject;
-  let currentWindows = windows;
-  const draw = (source = currentSubject, supplied = currentWindows, reader = defaultReader) =>
+  let currentPage = page;
+  let continued: unknown;
+  const draw = (source = currentPage, reader = defaultReader) =>
     act(async () =>
       root.render(
         h(
           OverviewContext.Provider,
           { value: { ...value, reader } },
-          h(WorkFranchiseOverview, {
-            subject: source,
-            windows: supplied,
-            related,
+          h(WorkFranchiseReading, {
+            page: source,
+            selection: region,
+            reading: subjectBody(source)!,
             definitions,
             locale: 'en',
             returnTo: base,
             currentHref: href,
+            onContinue: (continuation) => {
+              continued = continuation;
+            },
           }),
         ),
       ),
@@ -1162,41 +1187,42 @@ test('work region return focuses its actual inspection control once and retires 
     await draw();
     expect(browser.document.activeElement?.getAttribute('data-work-action')).toBe('evidence');
     expect(host.querySelector('details')?.open).toBe(false);
+    await act(async () => host.querySelector('button')!.click());
+    expect(continued).toEqual({ node: 'franchise', cursor: 'old-next' });
     await act(async () => {
       host.querySelector('details')!.open = true;
     });
     outside.focus();
-    await draw(structuredClone(subject), structuredClone(windows));
+    await draw(structuredClone(page));
     expect(host.querySelector('details')?.open).toBe(false);
     expect(browser.document.activeElement).toBe(outside);
     await draw(); // A/B/A keeps the old locator consumed.
     expect(browser.document.activeElement).toBe(outside);
     expect(host.querySelector('[data-work-action]')).toBeNull();
-    currentSubject = structuredClone(subject);
-    currentWindows = structuredClone(windows);
-    href = workFranchiseReturnHref(base, base, 'en', { ...selection, statement: id(979) });
+    currentPage = structuredClone(page);
+    href = workFranchiseReturnHref(base, base, 'en', { ...focus, statement: id(979) });
     await draw();
     expect(browser.document.activeElement?.tagName).toBe('H2');
     expect(host.textContent).toContain('Restart');
     expect(host.textContent).not.toContain(id(979));
-    href = workFranchiseReturnHref(base, base, 'en', { ...selection, revision: 2 });
+    href = workFranchiseReturnHref(base, base, 'en', { ...focus, revision: 2 });
     await draw();
     expect(browser.document.activeElement?.tagName).toBe('H2');
     outside.focus();
-    await draw(currentSubject, currentWindows, { ...defaultReader, spoilerLevel: 1 });
+    await draw(currentPage, { ...defaultReader, spoilerLevel: 1 });
     expect(host.textContent).not.toContain('Related book');
     expect(host.querySelector('[data-work-action]')).toBeNull();
     await draw();
     expect(host.querySelector('[data-work-action]')).toBeNull();
     expect(browser.document.activeElement).toBe(outside);
-    href = workFranchiseReturnHref(base, base, 'en', selection);
+    href = workFranchiseReturnHref(base, base, 'en', focus);
     await draw(); // A return arriving on the retired reader is consumed there.
-    await draw(structuredClone(subject), structuredClone(windows));
+    await draw(structuredClone(currentPage));
     expect(host.querySelector('[data-work-action="evidence"]')).not.toBeNull();
     expect(browser.document.activeElement).toBe(outside);
-    const origin = workFranchiseReturnHref(base, base, 'en', selection);
+    const origin = workFranchiseReturnHref(base, base, 'en', focus);
     const returnWindow = connectionReturnHref(subject.id, 'Book', 'en', undefined, {
-      stream: selection.stream,
+      stream: focus.stream,
       reading: 'a'.repeat(64),
       cursor: 'native-cursor',
       focus: statement.id,

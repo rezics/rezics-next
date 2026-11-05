@@ -238,8 +238,8 @@ states; definition/Subject labels retain their native fallback language.
 Decision: retain the supported same-work Subject address and a single-hop opener, with stream/node and separate
 browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart.
 
-Decision: keep finite-view work-region grammar closed until Web mounts the supported grouped component
-and its supplied native selected-region handoff; consume a return arriving on a retired reading before equal replacement.
+Decision: finite work-region returns preserve Realm, node, property, direction and cursor; admit them only when the
+fragment matches that selected native relation, then consume focus on the reading where it arrived.
 
 Decision: expose the existing overview and exact native region through `showcase-work/index.ts`; select only the requested node/property/direction/current cursor, and leave finite route grammar and outer composition with Web.
 
@@ -267,7 +267,8 @@ mounting its exact selection; no query field or independent Connections cursor s
 The component never fetches or prefetches. A source, release, selection or browser reader/credential observation
 replacement retires callbacks and disclosures; equal replacement consumes old focus intent and A/B/A cannot revive
 it. Missing selections show the current heading and restart. Independent drafts and unknown commands retain their
-owners. The route grammar stays closed until Web implements its own receiving composition.
+owners. Web admits only the selected native relation and matching work-region fragment, then mounts that page and
+selection in the existing reader.
 
 ### Group bounds and states
 
@@ -293,8 +294,10 @@ The component retains the supplied page, creates one selected-window array, and 
 
 The overview keeps the current grouped relation renderer at its existing placement. Web composes its target,
 Connections and value-inspection addresses through `subjectVisitReturn`; the receiving route validates the same
-address it consumes. Realm survives on overview returns; Connections retains its own exact native cursor/history. Finite-view
-node/property/cursor origins require the native reader handoff before work-region fragments are admitted there. No cursor is transplanted from a composition window into the independent Connections reader. Empty,
+address it consumes. Realm survives on overview and finite-view returns; Connections retains its own exact native
+cursor/history. A finite route carries the selected node/property/direction and current cursor to the same native
+selected-region consumer. Its fragment is admitted only for that node and stream. No cursor is transplanted from a
+composition window into the independent Connections reader. Empty,
 unavailable, historical and withheld streams keep their own current state and their own selected-stream entry.
 
 `WorkRelation` hands back the mounted browse link or evidence summary. Returning to evidence focuses its summary

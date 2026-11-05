@@ -72,7 +72,16 @@ import {
   type PageContinuation,
 } from '@rezics/composition';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
 import { accountOf } from './account-read';
@@ -103,6 +112,7 @@ import { subjectVisitReturn, withSubjectVisitReturn } from './subject-visit-navi
 import { MangaReaderEntry } from '../catalogue/manga-reader/entry';
 import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
+import type { WorkFranchiseReadingProps, WorkFranchiseSelection } from './showcase-work';
 import { WorkFranchiseOverview } from './showcase-work/overview';
 import { showcaseWorkKind } from './showcase-work/model';
 import { WorkConceptTagsRoute } from './showcase-work/tags-view';
@@ -668,6 +678,9 @@ export function SubjectPage({
   selectedNode,
   selectedStreamProperty,
   selectedStreamDirection,
+  selectedCursor,
+  onWorkContinue,
+  finiteWorkRegionReader: FiniteWorkRegionReader,
   currentHref,
   tabs,
   tabLabels,
@@ -725,6 +738,12 @@ export function SubjectPage({
   selectedNode?: string | undefined;
   selectedStreamProperty?: string | undefined;
   selectedStreamDirection?: 'forward' | 'inverse' | undefined;
+  /** Current opaque cursor of that same native stream, when the route continues it. */
+  selectedCursor?: string | undefined;
+  /** Re-enter the production pages.read route with this node's native continuation. */
+  onWorkContinue?: (continuation: PageContinuation) => void;
+  /** The route supplies the public grouped consumer without importing its producer entry back into this module. */
+  finiteWorkRegionReader?: ComponentType<WorkFranchiseReadingProps>;
   /** This Subject visit's supported address, including search and fragment state. */
   currentHref?: string | undefined;
   /** The views to offer, from `subjectTabs` of the subject's overview. */
@@ -936,6 +955,21 @@ export function SubjectPage({
     ],
   );
   const workWindows = useMemo(() => profileRelationWindows(page), [page]);
+  const workSelection = useMemo<WorkFranchiseSelection | undefined>(() => {
+    if (!selectedNode || !selectedStreamProperty || !selectedStreamDirection) return;
+    return {
+      node: selectedNode,
+      property: selectedStreamProperty,
+      direction: selectedStreamDirection,
+      ...(selectedCursor !== undefined ? { cursor: selectedCursor } : {}),
+    };
+  }, [selectedNode, selectedStreamProperty, selectedStreamDirection, selectedCursor]);
+  const finiteWorkRegionAddress = subjectVisitReturn(currentAddress, locale);
+  const finiteWorkRegionRequested = Boolean(
+    workSelection &&
+      finiteWorkRegionAddress &&
+      new URL(finiteWorkRegionAddress, 'https://rezics.invalid').hash.startsWith('#work-franchise'),
+  );
   const workReturn = workAddress ? contextHref(workAddress.href, realm) : undefined;
   const workRelationsHref =
     workAddress && page.views?.includes('relations') ? subjectUrlForView(workAddress, 'relations') : undefined;
@@ -1354,6 +1388,27 @@ export function SubjectPage({
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
+              />
+            ) : null}
+            {!overview &&
+            read &&
+            !page.account &&
+            finiteWorkRegionRequested &&
+            workReturn &&
+            workSelection &&
+            FiniteWorkRegionReader ? (
+              <FiniteWorkRegionReader
+                page={page}
+                selection={workSelection}
+                reading={read}
+                definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
+                locale={locale}
+                returnTo={workReturn}
+                currentHref={currentHref}
+                {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
+                readerSpoiler={reader?.spoilerLevel ?? 0}
+                link={ContextLink}
+                onContinue={onWorkContinue}
               />
             ) : null}
             {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
