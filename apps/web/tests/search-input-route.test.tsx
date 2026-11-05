@@ -117,6 +117,9 @@ async function replaceValue(article: Element, value: string) {
   await act(async () => {
     await Promise.resolve();
   });
+  await act(async () => {
+    await window.happyDOM.waitUntilComplete();
+  });
 }
 
 async function removeIssue(key: string) {
@@ -196,7 +199,7 @@ test('the mounted Search route retains multiple errors and a protected filter th
     ],
   });
   const firstRemainingInput = host.querySelector('[data-search-input-first] textarea');
-  expect(document.activeElement).toBe(firstRemainingInput);
+  expect(document.activeElement === firstRemainingInput).toBe(true);
   expect(router.state.location.search.cursor).toBeUndefined();
 
   router.history.back();
@@ -206,7 +209,7 @@ test('the mounted Search route retains multiple errors and a protected filter th
   });
   const returnedLanguage = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"] textarea')!;
   expect(returnedLanguage.value).toBe('bad_tag');
-  expect(document.activeElement).not.toBe(returnedLanguage);
+  expect(document.activeElement !== returnedLanguage).toBe(true);
   expect(reads).toHaveLength(0);
 
   await removeIssue('cursor');
