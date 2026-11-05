@@ -31,11 +31,14 @@ type Draft = {
   unresolved: () => boolean;
   discard: () => void;
   leave?: () => void;
+  localLeave?: (() => void) | undefined;
   messages?: () => NavigationMessages | undefined;
   navigationContext?: NavigationContext | undefined;
   kind?: DepartureKind | undefined;
 };
-type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
+type Decision =
+  | { kind: 'navigation'; local: boolean; resolve: (stay: boolean) => void }
+  | { kind: 'discard'; draftId: number };
 
 export type AuthoringLocation = { pathname: string; search: Record<string, unknown> };
 type NavigationContext = (location: AuthoringLocation) => string;
@@ -114,24 +117,24 @@ export class AuthoringDepartureState {
     if (decision?.kind !== 'navigation') return;
     this.decision = null;
     if (!stay) {
-      this.retireNavigation();
+      this.retireNavigation(decision.local);
     }
     this.leaving = !stay;
     this.notify();
     decision.resolve(stay);
   }
 
-  private retireNavigation() {
-    for (const draft of [...this.drafts.values()]) draft.leave?.();
+  private retireNavigation(local = false) {
+    for (const draft of [...this.drafts.values()]) (local ? (draft.localLeave ?? draft.leave) : draft.leave)?.();
     this.onNavigationLeave();
   }
 
   /** Local selectors and continuation buttons share the router's single decision. */
   requestNavigation = (proceed: () => void, focused: HTMLElement | null) => {
     if (!this.active) return;
-    const blocked = this.block('', 'local-navigation', focused);
+    const blocked = this.block('', 'local-navigation', focused, true);
     if (blocked === false) {
-      this.retireNavigation();
+      this.retireNavigation(true);
       proceed();
     } else if (blocked instanceof Promise) {
       void blocked.then((stay) => {
@@ -161,13 +164,13 @@ export class AuthoringDepartureState {
     this.notify();
   };
 
-  block = (currentContext: string, nextContext: string, focused: HTMLElement | null) => {
+  block = (currentContext: string, nextContext: string, focused: HTMLElement | null, local = false) => {
     if (!this.active || currentContext === nextContext || !this.needsDecision()) return false;
     if (this.decision) return true;
     this.focusTarget = focused;
     this.leaving = false;
     return new Promise<boolean>((resolve) => {
-      this.decision = { kind: 'navigation', resolve };
+      this.decision = { kind: 'navigation', local, resolve };
       this.notify();
     });
   };
@@ -470,15 +473,27 @@ export function useAuthoringDeparture(
   kind?: DepartureKind,
   messages?: NavigationMessages,
   navigationContext?: NavigationContext,
+  onLocalLeave?: () => void,
 ) {
   const navigation = useContext(DepartureContext);
-  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, messages, released: false });
+  const latest = useRef({
+    needsDecision,
+    unresolved,
+    signature,
+    onDiscard,
+    onLeave,
+    onLocalLeave,
+    kind,
+    messages,
+    released: false,
+  });
   if (latest.current.signature !== signature) latest.current.released = false;
   latest.current.needsDecision = needsDecision;
   latest.current.unresolved = unresolved;
   latest.current.signature = signature;
   latest.current.onDiscard = onDiscard;
   latest.current.onLeave = onLeave;
+  latest.current.onLocalLeave = onLocalLeave;
   latest.current.kind = kind;
   latest.current.messages = messages;
   const context = useRef(navigationContext);
@@ -495,6 +510,7 @@ export function useAuthoringDeparture(
       discard: () => latest.current.onDiscard?.(),
       messages: () => latest.current.messages,
       kind: latest.current.kind,
+      localLeave: onLocalLeave ? () => latest.current.onLocalLeave?.() : undefined,
       get navigationContext() {
         return context.current;
       },

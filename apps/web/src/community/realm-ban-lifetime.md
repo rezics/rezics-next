@@ -48,7 +48,7 @@ idempotency key. It does not perform a speculative new target lookup or invent a
 commands remain excluded until that uncertain result is resolved or its caller retires. A current success
 refreshes the list; a recoverable refresh failure preserves its definitive receipt. Native forbidden, closed,
 signed-out and role-required responses retain their existing meanings. Sparse empty pages retain `next`;
-invalid cursors offer explicit first-page refresh. Ban acceptance remains distinct from Accounts' membership
+invalid cursors require explicit first-page Restart. Ban acceptance remains distinct from Accounts' membership
 removal completion, and unban does not promise membership restoration or follow changes.
 
 ## Departure
@@ -69,6 +69,25 @@ receipt releases command protection immediately, including while list refresh is
 draft still protects departure. These registrations introduce no native reads, writes or polling.
 
 Decision: whitespace-only target input and reasons count as nonempty drafts until explicitly cleared.
+
+## Current window navigation
+
+Decision: retain eight preceding Realm/visit-bound opaque addresses, commit direction only on native success,
+and distinguish current-window Refresh from deliberate first-page Restart through the shared departure owner.
+
+Next pushes only its supplying address after success; Previous rereads the last retained address and pops it
+only after success. A failed direction retains its requested cursor and direction for exact Retry. Empty sparse
+pages remain continuable. Refresh rereads the active address without pushing; Restart clears preceding addresses
+and omits the cursor. Expiration requires Restart. After eight preceding addresses, older addresses are discarded;
+reaching that boundary explains first-page recovery. There is one replacing body, never cached page bodies,
+forward history, inferred offsets, prefetch, refill, persistence or hidden traversal.
+
+The departure owner's local-leave hook retires drafts and reviews before a page read while preserving this
+admitted visit's addresses and independent receipts. Stay preserves the page and reviewed confirmation. Route
+Leave still retires the entire visit. Sending/uncertain commands exclude all browse controls. Read generation
+retires selected inspection, confirmation and old callbacks even for equal successful replacements. Keyboard
+Previous/Next/Refresh/Restart/Retry use the existing read-focus intent; pointer or moved focus never steals focus.
+Revocation and source/Realm/session/locale/management retirement clear private navigation with the visit.
 
 ## Cost and verification boundary
 
@@ -123,13 +142,21 @@ bounded display is not native command history or workflow readback.
 
 ## Current-ban consumer cost and verification
 
-- Touches: one native composed page per explicit list/retry, one exact selection per explicit inspection/retry,
+- Touches: one native composed page per explicit Next/Previous/Refresh/Restart/Retry (including sparse pages), one exact selection per explicit inspection/retry,
   existing handle resolution and final revalidation only for a deliberate ban, and separate original commands.
   Identity/authority arrive from composition, with no per-row network fanout.
-- Bound: page20, one exact selected episode, one immutable uncertain command, two accepted receipts and one
-  opaque frontier; no retained pages/history, polling, hidden refill or global lookup. Rendering/copying is
+- Bound: page20, one exact selected episode, one immutable uncertain command, two accepted receipts, eight
+  preceding addresses, one active address and one pending/failed request. Each address pairs the admitted Realm
+  and visit with its native opaque cursor (at most 4,096 wire bytes): preceding cursors total at most 32,768
+  bytes, active plus pending/failed cursors add at most 8,192; the replacing page retains its existing next
+  cursor bound separately. Realm IDs add 36 ASCII bytes per address and visits are scalar references. No
+  retained bodies/history, polling, hidden refill or global lookup. Rendering/copying is
   O(page size plus admitted bytes), using the installed response's native bounds.
-- Growth: `tests/realm-ban-current-installed.test.tsx` exercises 1/10/20 composed rows through the actual
+- Growth check: `tests/realm-bans-window-navigation.test.tsx` advances beyond eight addresses and natively
+  revisits the retained prefix with one twenty-row replacing body, exact failure retries and explicit expiration
+  recovery. Each activation makes one page request, independent of prior windows; the focus group covers
+  committed read handoffs and caller retirement. Native 256/1024/4096 obligations below remain separate.
+  `tests/realm-ban-current-installed.test.tsx` exercises 1/10/20 composed rows through the actual
   default Panel/Control, original server validators/handlers, generated native HTTP client and QueryClient.
   It covers identities/destinations, explicit exact retry with the same frontier, unavailable/denied/current/
   absent selection, duplicate exclusion, uncertain unban retry, deliberate reban with a new episode/key,

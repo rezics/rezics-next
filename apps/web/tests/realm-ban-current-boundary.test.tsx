@@ -154,6 +154,7 @@ test('legacy pages retain unavailable exact observations through the installed a
     await click(m.realm_bans_inspect_retry());
     expect(requests.length).toBe(3);
     await click(m.realm_bans_next());
+    await click(m.thread_authoring_leave());
     expect(new URL(requests[3]!.url).searchParams.get('cursor')).toBe('opaque-next');
     expect(host.textContent).not.toContain(id(999));
     expect(host.querySelectorAll('li').length).toBe(count);
@@ -172,6 +173,7 @@ test('sparse continuation survives unavailable inspection; source replacement fe
   await mount();
   await select();
   await click(m.realm_bans_next());
+  await click(m.thread_authoring_leave());
   expect(new URL(requests[2]!.url).searchParams.get('cursor')).toBe('sparse-next');
   await close();
   let finish!: (value: { state: 'unavailable' }) => void;
