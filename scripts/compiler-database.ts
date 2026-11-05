@@ -89,10 +89,14 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     const port = docker(['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
     if (!port) throw new Error('Could not determine the compiler database port');
     const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-    await withCommandPhase('migrations', () => {
-      migrateKernel(url);
-      migrateAuth(url);
-    }, process.env);
+    await withCommandPhase(
+      'migrations',
+      () => {
+        migrateKernel(url);
+        migrateAuth(url);
+      },
+      process.env,
+    );
     return { url, container, remove };
   } catch (error) {
     try {

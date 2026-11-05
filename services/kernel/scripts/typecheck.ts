@@ -342,9 +342,7 @@ export async function prepareReyloAnalysisCache(
   let previous: ReyloCacheManifest = snapshot?.manifest ?? { version: 1, files: {} };
 
   const sourceFiles = [...new Bun.Glob('src/**/*.sql').scanSync({ cwd: workspace })].sort();
-  const hashes = Object.fromEntries(
-    sourceFiles.map((file) => [file, sha256(readFileSync(resolve(workspace, file)))]),
-  );
+  const hashes = Object.fromEntries(sourceFiles.map((file) => [file, sha256(readFileSync(resolve(workspace, file)))]));
   let changed = sourceFiles.filter((file) => previous.files[file] !== hashes[file]);
   const runRoot = join(repository, '.temp/typecheck/reylo-runs');
   mkdirSync(runRoot, { recursive: true });
@@ -422,7 +420,12 @@ async function typecheck(
         }
         const tsc = await withCommandPhase(
           'typecheck',
-          () => compilerCommand('tsc', ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'], typecheckEnv),
+          () =>
+            compilerCommand(
+              'tsc',
+              ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'],
+              typecheckEnv,
+            ),
           env,
         );
         if (tsc !== 0) return tsc;
