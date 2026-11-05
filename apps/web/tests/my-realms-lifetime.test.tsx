@@ -379,7 +379,8 @@ test('a session transition while the route import is queued skips the private re
       return pending;
     }) as typeof surface.client.fetchQuery;
     const loading = surface.load();
-    await expect(loading).rejects.toThrow();
+    await loading;
+    expect(surface.router.state.matches.some((match) => match.status === 'error')).toBe(true);
     expect(readCalls).toHaveLength(0);
     expect(surface.client.getQueryData(['my-realms', ''])).toBeUndefined();
   } finally {
@@ -489,7 +490,8 @@ test('a failed continuation keeps same-request retry and restarts through a fres
   });
   const denied = await createSurface({ cursor });
   try {
-    await expect(denied.load()).rejects.toThrow();
+    await denied.load();
+    expect(denied.router.state.matches.some((match) => match.status === 'error')).toBe(true);
     await denied.mount();
     expect(denied.host.querySelector('a[href="/en/realms"]')).toBeNull();
   } finally {
@@ -551,7 +553,7 @@ test('three guarded native windows return through sparse and terminal pages, ret
     failure = second;
     await moveInventory(surface, m.prq_previous(), true);
     expect(surface.router.state.location.search).toEqual({ cursor: second });
-    expect(surface.host.querySelector('section h1')).toBeNull();
+    expect(surface.host.querySelector('section[aria-labelledby] h1')).toBeNull();
     failure = undefined;
     await act(async () => surface.host.querySelector('button')!.click());
     await until(() => readCalls.length === 5 && surface.router.state.status === 'idle', 'exact Previous Retry');
