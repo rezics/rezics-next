@@ -231,6 +231,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         },
       });
     let result = await seed();
+    const initialResult = result;
     expect(result.gaps).toEqual([]);
     expect(result.unresolved).toEqual([]);
     const workIds = result.readings.map((reading) => reading.subject.subject!.id!);
@@ -703,7 +704,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     acceptanceRefusalStatus = 403;
     const permanentlyRefused = await publishShowcase({
       plan,
-      result,
+      result: initialResult,
       aliases: crossMediaAliases,
       journal,
       review,
@@ -723,7 +724,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     refuseAcceptance = false;
     const refusalReopened = await publishShowcase({
       plan,
-      result,
+      result: initialResult,
       aliases: crossMediaAliases,
       journal,
       review,
