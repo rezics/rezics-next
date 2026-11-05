@@ -105,7 +105,14 @@ test('mounted sort form retains score addresses until date selection and replace
       locale: 'en',
       state: 'completed',
       type: 'schema:Book',
-      display: { layout: 'table', size: 'l', columns: 'title,status' },
+      display: {
+        layout: 'table',
+        size: 'l',
+        columns: 'title,status',
+        layoutExplicit: true,
+        sizeExplicit: true,
+        columnsExplicit: true,
+      },
       sort: resolveShelfPresentation({}, { sorts: { all: { field, direction } } }).sort,
       isCurrent: () => client.getQueryData<{ subject: string }>(['session'])?.subject === 'A',
     };
