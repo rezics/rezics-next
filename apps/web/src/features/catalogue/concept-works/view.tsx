@@ -15,6 +15,7 @@ import { readDiscoveryPersonalPage } from '../../../search/discovery-personal-se
 import { localizedLabel } from '../../../search/results';
 import { catalogueEntries } from '../catalogue-entry';
 import type { ConceptRead } from '../source-concept-explorer';
+import { subjectVisitHref } from '../../pages/source-concept-reading/navigation';
 import {
   boundedConceptWorksState,
   conceptWorksExactEmpty,
@@ -50,6 +51,7 @@ type Props = {
   locale: string;
   route: ConceptWorksRouteState;
   onChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
+  conceptReturnForResult?: ((subject: SubjectHrefInput) => string | undefined) | undefined;
 };
 
 const loading: DiscoveryState = { status: 'loading' };
@@ -352,9 +354,11 @@ function ConceptWorksVisit({
             locale={locale}
             restartHref={restartHref}
             renderPersonal={personal.renderPersonal}
-            subjectHrefFor={(subject: SubjectHrefInput) =>
-              `${subjectHref(subject, locale).href}?${new URLSearchParams({ returnTo: routeHref(read.public.subject.id, title, locale, route, true) })}`
-            }
+            subjectHrefFor={(subject: SubjectHrefInput) => {
+              const returnAddress =
+                props.conceptReturnForResult?.(subject) ?? routeHref(read.public.subject.id, title, locale, route, false);
+              return subjectVisitHref(subjectHref(subject, locale).href, returnAddress);
+            }}
           />
           {page?.next && !continuationFailure && (
             <Button

@@ -7,6 +7,7 @@ import { m } from '../../../paraglide/messages.js';
 import { SourceConceptView } from '../../pages/source-concept-view';
 import { readSubjectConcept } from './actions';
 import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../concept-works/view';
+import type { ConceptHierarchyAddress, ConceptVisitDescriptor } from '../../pages/source-concept-reading/navigation';
 
 export const SourceConceptSession = candidateSession(function SourceConceptSessionLive({
   id,
@@ -16,6 +17,11 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   pinUnsupported,
   worksRoute,
   onWorksChange,
+  conceptVisit,
+  invalidConceptVisit,
+  hierarchyAddress,
+  invalidHierarchy,
+  onHierarchyChange,
 }: {
   id: string;
   locale: string;
@@ -24,6 +30,13 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   pinUnsupported?: boolean | undefined;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
+  conceptVisit?: ConceptVisitDescriptor | undefined;
+  invalidConceptVisit?: boolean | undefined;
+  hierarchyAddress?: ConceptHierarchyAddress | undefined;
+  invalidHierarchy?: boolean | undefined;
+  onHierarchyChange?:
+    | ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void)
+    | undefined;
 }) {
   const work = useCatalogueLifetime(JSON.stringify(['concept-explore', id, locale, role]));
   const { state } = useSession();
@@ -50,6 +63,11 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
       {...(pinUnsupported === undefined ? {} : { pinUnsupported })}
       worksRoute={worksRoute}
       onWorksChange={onWorksChange}
+      conceptVisit={conceptVisit}
+      invalidConceptVisit={invalidConceptVisit}
+      hierarchyAddress={hierarchyAddress}
+      invalidHierarchy={invalidHierarchy}
+      onHierarchyChange={onHierarchyChange}
       transport={{
         read: (next) =>
           readSubjectConcept({

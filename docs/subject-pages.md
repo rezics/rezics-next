@@ -2189,6 +2189,26 @@ readable source scheme automatically only when the Concept has exactly one sourc
 an explicit choice. Decision: a tag chip carries its exact released property, and a source scheme is auto-selected
 only when it is the Concept's sole readable source scheme.
 
+Decision: Concept returns use one validated 8 KiB descriptor with at most eight hierarchy addresses, currentness,
+filter intent and focus; the original work address remains separate, and tagged-work returns restart the filtered
+Search under fresh admission without restoring a work cursor.
+
+The source Concept reader supports the current Global view. A supplied historical pin remains explicitly unsupported;
+it never falls through to a different Concept binding. The URL-safe descriptor is capped at 8 KiB after encoding,
+including its current Concept identity, role, release/revision/context/type, work filters, section/row focus and up to
+eight hierarchy addresses. Each retained native continuation is at most 4,096 UTF-8 bytes. Older addresses are
+evicted with a visible truncation notice and a Restart action. The descriptor contains no session receipt, evidence
+snapshot, work cursor or nested return URL; the original work return is a separately validated local Subject address
+of at most 2,048 UTF-8 bytes.
+
+Child, scheme, association, tagged-work and browser-history returns first perform a current native read. The reader
+compares the saved Concept binding and requested role, then uses only the fresh session receipt for the saved native
+hierarchy continuation. It focuses a saved row only when that row is present in the newly admitted window; a missing
+row is announced and focus moves to its current section with Restart and any currently admitted Next control
+available. Filter intent is restored and Search executes again under current admission. Hierarchy and Search
+availability remain independent, and native
+lagging, preparing, unavailable, unsupported and exact-empty hierarchy states keep their separate meanings.
+
 The works request is capped at 24 Search rows, 65,536 serialized request bytes and 65,536 serialized response bytes.
 The current public result and viewer envelope share that response cap; the released work-admission metadata embedded
 in the Concept read is separately capped at 65,536 bytes. The work-list composition therefore retains at most

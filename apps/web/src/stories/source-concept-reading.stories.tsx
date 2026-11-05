@@ -6,6 +6,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { SourceConceptView } from '../features/pages/source-concept-view';
 import { readSourceConcept, type ConceptRead } from '../features/catalogue/source-concept-explorer';
 import { catalogueEntries } from '../features/catalogue/catalogue-entry';
+import type { ConceptHierarchyAddress, ConceptVisitDescriptor } from '../features/pages/source-concept-reading/navigation';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 
@@ -28,7 +29,8 @@ type State =
   | 'unavailable'
   | 'retained'
   | 'recovery'
-  | 'denied';
+  | 'denied'
+  | 'returning';
 
 /** Finite native response fixtures demonstrate caller states; they do not assert producer success. */
 function fixture(state: State, locale: string) {
@@ -168,6 +170,32 @@ function Example({ state }: { state: State }) {
   const locale = getLocale();
   const transport = useMemo(() => fixture(state, locale), [state, locale]);
   const origin = catalogueEntries.graph({ id: plainSubject, label: 'Classification', locale }).href;
+  const hierarchyAddress: ConceptHierarchyAddress | undefined =
+    state === 'returning'
+      ? {
+          subject: id,
+          role: originalRole,
+          current: { release: originalRelease, revision: 1, context: disclosed, type: 'skos:Concept' },
+          addresses: [null, 'native-next'],
+          index: 1,
+          truncated: false,
+          focus: { section: 'hierarchy', row: disclosed },
+        }
+      : undefined;
+  const conceptVisit: ConceptVisitDescriptor | undefined =
+    state === 'returning'
+      ? {
+          version: 1,
+          subject: plainSubject,
+          role: originalRole,
+          current: { release: originalRelease, revision: 1, context: disclosed, type: 'skos:Concept' },
+          addresses: [null, 'native-next'],
+          index: 1,
+          truncated: false,
+          focus: { section: 'hierarchy', row: disclosed },
+          works: { property: 'schema:genre', scheme: disclosed, includeChildren: true, spoilerThreshold: 1 },
+        }
+      : undefined;
   return (
     <main className="mx-auto min-w-0 max-w-screen-xl px-4 py-6 sm:px-8">
       <SourceConceptView
@@ -176,6 +204,8 @@ function Example({ state }: { state: State }) {
         locale={locale}
         role={originalRole}
         returnTo={origin}
+        {...(hierarchyAddress ? { hierarchyAddress } : {})}
+        {...(conceptVisit ? { conceptVisit } : {})}
         pinUnsupported={state === 'current'}
         transport={transport}
       />
@@ -187,13 +217,21 @@ const meta = {
   title: 'Catalogue/Source concept reading',
   component: Example,
   args: { state: 'current' },
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '960px' } },
+      },
+    },
+  },
   globals: { viewport: { value: 'phone390' } },
 } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const CurrentHierarchy: Story = {};
-export const DesktopHierarchy: Story = { globals: { viewport: { value: 'desktop1280' } } };
+export const DesktopHierarchy: Story = { globals: { viewport: { value: 'desktop1440' } } };
 export const SpoilerAssociation: Story = { args: { state: 'spoiler' } };
 export const InitialLoading: Story = { args: { state: 'loading' } };
 export const NoAdmittedConcept: Story = { args: { state: 'not-concept' } };
@@ -203,6 +241,11 @@ export const Lagging: Story = { args: { state: 'lagging' } };
 export const ExactEmpty: Story = { args: { state: 'empty' } };
 export const UnavailablePage: Story = { args: { state: 'unavailable' } };
 export const Denied: Story = { args: { state: 'denied' } };
+export const ReturningFromAChild: Story = { args: { state: 'returning' } };
+export const ReturningFromAChildDesktopDark: Story = {
+  args: { state: 'returning' },
+  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' },
+};
 export const RetainedAfterFailure: Story = {
   args: { state: 'retained' },
   play: async ({ canvasElement }) => {

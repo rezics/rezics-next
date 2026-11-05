@@ -1,15 +1,28 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import type { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
-import { appendChangePage, firstChangePage, type ChangePageHistory } from '../../catalogue/subject-changes-navigation';
+import { firstChangePage, type ChangePageHistory } from '../../catalogue/subject-changes-navigation';
 import { CONCEPT_PAGE_CAP } from '../graph-browser';
 import { conceptSourceFits, validConceptCursor, type ConceptRead } from '../../catalogue/source-concept-explorer';
+import {
+  conceptHierarchyAddressFor,
+  conceptVisitHistoryLimit,
+  currentnessMatches,
+  encodeConceptHierarchyAddress,
+  type ConceptFocus,
+  type ConceptHierarchyAddress,
+} from './navigation';
 
 export type ConceptPage = Extract<ConceptRead, { ok: true }>;
 export type ConceptInput = { cursor?: string | undefined; session?: string | undefined };
 export type ConceptTransport = { read: (input: ConceptInput) => Promise<ConceptRead> };
 type Position = { history: ChangePageHistory; index: number };
-type Destination = { input: ConceptInput; mode: 'next' | 'previous' | 'refresh'; index?: number };
+type Destination = {
+  input: ConceptInput;
+  mode: 'next' | 'previous' | 'refresh' | 'restore' | 'restart';
+  index?: number;
+  address?: ConceptHierarchyAddress;
+};
 export type FailedPage = Destination & { state: 'preparing' | 'unavailable' };
 type VisitState = Position & {
   read?: ConceptPage;
@@ -19,8 +32,19 @@ type VisitState = Position & {
   loading: boolean;
   busy: boolean;
   completed: number;
+  focus?: ConceptFocus;
+  notice?: 'currentness' | 'row-missing';
+  noticeSection?: ConceptFocus['section'];
 };
 type Admission = ReturnType<typeof useCatalogueLifetime>;
+
+function appendConceptPage(history: ChangePageHistory, cursor: string): ChangePageHistory {
+  if (!cursor || new TextEncoder().encode(cursor).byteLength > 4096 || history.addresses.at(-1) === cursor) return history;
+  const addresses = [...history.addresses, cursor];
+  const truncated = history.truncated || addresses.length > conceptVisitHistoryLimit;
+  if (addresses.length > conceptVisitHistoryLimit) addresses.shift();
+  return { addresses, truncated };
+}
 
 /** Retained rows belong to exactly this native revision and session receipt. */
 function samePageSource(left: ConceptPage | undefined, right: ConceptPage) {
@@ -46,6 +70,16 @@ function usablePage(page: ConceptPage | undefined) {
 
 function position(state: VisitState, page: ConceptPage, destination: Destination): Position {
   const { cursor } = destination.input;
+  if (destination.mode === 'restart') return { history: firstChangePage(), index: 0 };
+  if (destination.mode === 'restore' && destination.address && samePageSource(state.read, page)) {
+    return {
+      history: {
+        addresses: destination.address.addresses.map((address) => address ?? undefined),
+        truncated: destination.address.truncated,
+      },
+      index: destination.address.index,
+    };
+  }
   if (!samePageSource(state.read, page)) return { history: { addresses: [cursor], truncated: false }, index: 0 };
   if (destination.mode === 'previous' && destination.index !== undefined)
     return { history: state.history, index: destination.index };
@@ -53,7 +87,7 @@ function position(state: VisitState, page: ConceptPage, destination: Destination
     const existing = state.history.addresses[state.index + 1] === cursor;
     const history = existing
       ? state.history
-      : appendChangePage(
+      : appendConceptPage(
           {
             ...state.history,
             addresses: state.history.addresses.slice(0, state.index + 1),
@@ -91,6 +125,16 @@ function publish(
       error: result,
       failed: { ...destination, state: 'unavailable' },
     };
+  if (destination.mode === 'restore' && !samePageSource(state.read, result))
+    return {
+      ...done,
+      read: result,
+      history: firstChangePage(),
+      index: 0,
+      focus: undefined,
+      notice: 'currentness',
+      noticeSection: destination.address?.focus?.section ?? 'hierarchy',
+    };
   if (result.admitted && (result.narrower.state === 'preparing' || result.narrower.state === 'unavailable')) {
     const previous = usablePage(state.read) ?? state.retained;
     const retained = samePageSource(previous, result) ? previous : undefined;
@@ -103,7 +147,18 @@ function publish(
       failed: { ...destination, state: result.narrower.state },
     };
   }
-  return { ...done, read: result, ...position(state, result, destination) };
+  return {
+    ...done,
+    read: result,
+    ...position(state, result, destination),
+    focus: destination.mode === 'restore' ? destination.address?.focus : undefined,
+    notice: destination.mode === 'refresh' ? state.notice : undefined,
+    noticeSection: destination.mode === 'refresh' ? state.noticeSection : undefined,
+  };
+}
+
+function addressKey(address: ConceptHierarchyAddress | undefined) {
+  return address ? (encodeConceptHierarchyAddress(address) ?? 'invalid') : '';
 }
 
 /** One concept visit under the existing catalogue admission; no cache can resurrect a retired visit. */
@@ -113,12 +168,16 @@ export function useConceptVisit({
   transport,
   initial,
   admission,
+  address,
+  onAddressChange,
 }: {
   id: string;
   role: string | undefined;
   transport: ConceptTransport;
   initial: ConceptRead | undefined;
   admission: Admission;
+  address?: ConceptHierarchyAddress | undefined;
+  onAddressChange?: ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void) | undefined;
 }) {
   const seed: VisitState = {
     history: firstChangePage(),
@@ -151,6 +210,11 @@ export function useConceptVisit({
   const statusRef = useRef<HTMLParagraphElement>(null);
   const focus = useRef<{ trigger: Element | null; moved: boolean } | undefined>(undefined);
   const stopFocus = useRef<(() => void) | undefined>(undefined);
+  const routeAddressKey = useRef('');
+  const expectedAddressKey = useRef<string | undefined>(undefined);
+  const pendingRestore = useRef<
+    { address: ConceptHierarchyAddress | undefined; afterRequest: number; waitingForFreshRead: boolean } | undefined
+  >(undefined);
 
   useLayoutEffect(() => {
     if (state.busy || state.loading) return;
@@ -193,11 +257,45 @@ export function useConceptVisit({
     const published = publish(source, result, destination, id, role);
     stateRef.current = published;
     setState(published);
+    const pending = pendingRestore.current;
+    if (pending?.waitingForFreshRead) {
+      if (destination.mode === 'refresh' && request > pending.afterRequest) {
+        pendingRestore.current = { ...pending, waitingForFreshRead: false };
+      } else {
+        void run({ input: {}, mode: 'refresh' }, false, published);
+        return;
+      }
+    }
+    if (published.read && !published.error && !published.failed) {
+      if (destination.mode === 'next' || destination.mode === 'previous' || destination.mode === 'restart') {
+        const nextAddress = conceptHierarchyAddressFor(
+          published.read,
+          published.history,
+          published.index,
+        );
+        const key = addressKey(nextAddress);
+        expectedAddressKey.current = key;
+        onAddressChange?.(nextAddress, { replace: destination.mode === 'restart' });
+      }
+    }
   }
 
   useEffect(() => {
+    const key = addressKey(address);
+    if (key === routeAddressKey.current) return;
+    routeAddressKey.current = key;
+    if (expectedAddressKey.current === key) {
+      expectedAddressKey.current = undefined;
+      return;
+    }
+    pendingRestore.current = { address, afterRequest: sequence.current, waitingForFreshRead: true };
+    if (mounted.current && !stateRef.current.loading && !stateRef.current.busy)
+      void run({ input: {}, mode: 'refresh' }, false);
+  }, [address]);
+
+  useEffect(() => {
     mounted.current = true;
-    if (initial === undefined) void run({ input: {}, mode: 'refresh' }, false);
+    if (initial === undefined || pendingRestore.current) void run({ input: {}, mode: 'refresh' }, false);
     return () => {
       mounted.current = false;
       sequence.current++;
@@ -205,6 +303,64 @@ export function useConceptVisit({
       stopFocus.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    const pending = pendingRestore.current;
+    if (!pending || pending.waitingForFreshRead || state.loading || state.busy || !state.read || !admission.active()) return;
+    pendingRestore.current = undefined;
+    const wanted = pending.address;
+    if (!wanted) {
+      const reset = {
+        ...state,
+        history: firstChangePage(),
+        index: 0,
+        focus: undefined,
+        notice: undefined,
+        noticeSection: undefined,
+      };
+      stateRef.current = reset;
+      setState(reset);
+      return;
+    }
+    if (!currentnessMatches(state.read, wanted)) {
+      const changed = {
+        ...state,
+        history: firstChangePage(),
+        index: 0,
+        focus: undefined,
+        notice: 'currentness' as const,
+        noticeSection: wanted.focus?.section ?? 'hierarchy',
+      };
+      stateRef.current = changed;
+      setState(changed);
+      expectedAddressKey.current = '';
+      onAddressChange?.(undefined, { replace: true });
+      return;
+    }
+    const cursor = wanted.addresses[wanted.index] ?? undefined;
+    if (cursor && state.read.narrower.cursor !== cursor) {
+      void run(
+        {
+          input: { cursor, session: state.read.session },
+          mode: 'restore',
+          address: wanted,
+        },
+        false,
+        state,
+      );
+      return;
+    }
+    const restored = {
+      ...state,
+      history: { addresses: wanted.addresses.map((item) => item ?? undefined), truncated: wanted.truncated },
+      index: wanted.index,
+      focus: wanted.focus,
+      notice: undefined,
+      noticeSection: undefined,
+    };
+    stateRef.current = restored;
+    setState(restored);
+  }, [state.completed, state.loading, state.busy, state.read, admission]);
 
   const hierarchy = state.retained?.narrower ?? state.read?.narrower;
   return {
@@ -234,6 +390,22 @@ export function useConceptVisit({
         state,
       ),
     retry: () => state.failed && run(state.failed, true, state),
+    restart: () => run({ input: {}, mode: 'restart' }, true, state),
+    reportFocusMissing: () => {
+      if (!state.focus || !admission.active()) return;
+      const missing = {
+        ...state,
+        focus: undefined,
+        notice: 'row-missing' as const,
+        noticeSection: state.focus.section,
+      };
+      stateRef.current = missing;
+      setState(missing);
+      const position = conceptHierarchyAddressFor(missing.read!, missing.history, missing.index, undefined);
+      const key = addressKey(position);
+      expectedAddressKey.current = key;
+      onAddressChange?.(position, { replace: true });
+    },
     refresh: () =>
       state.failed
         ? run(state.failed, true, state)

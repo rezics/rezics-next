@@ -3,6 +3,7 @@ import { workTagOriginatingReturn } from '../subject-visit-navigation';
 
 /** Work tags retain an admitted visit address; ordinary classification origins keep the existing allowlist. */
 export function originatingConceptReturn(value: unknown, locale?: string): string | undefined {
+  if (typeof value !== 'string' || new TextEncoder().encode(value).byteLength > 2048) return;
   const work = workTagOriginatingReturn(value, locale);
   if (work) return work;
   const ordinary = originatingReturn(value);
@@ -15,6 +16,7 @@ export function originatingClassification(value: unknown): string | undefined {
   if (
     typeof value !== 'string' ||
     value.length > 2048 ||
+    new TextEncoder().encode(value).byteLength > 2048 ||
     !value.startsWith('/') ||
     value.startsWith('//') ||
     value.includes('\\') ||
@@ -50,6 +52,7 @@ export function originatingReturn(value: unknown): string | undefined {
   if (
     typeof value !== 'string' ||
     value.length > 2048 ||
+    new TextEncoder().encode(value).byteLength > 2048 ||
     !value.startsWith('/') ||
     value.startsWith('//') ||
     value.includes('\\') ||
