@@ -23,6 +23,13 @@ import type { ExecutedRegression, ScenarioEvidence } from '../test-support/lifec
 export const CHECK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type SmokePolicy = ControlPolicy['launchSmoke'];
 
+export function requireSmokeWaitingCheckId(checks: unknown): string {
+  if (!Array.isArray(checks) || checks.length !== 1 || typeof checks[0] !== 'string' || !CHECK_ID.test(checks[0]))
+    throw new Error('waiting result must contain one bare worker-check UUID');
+  return checks[0];
+}
+
+
 export type SmokeReport = {
   version: 1;
   status: 'running' | 'passed' | 'failed' | 'unverified';
@@ -115,16 +122,6 @@ function safeSmokeArgv(args: string[]): string[] {
   return safe;
 }
 
-export type SmokeLaunchEvidence = {
-  mode: 'start' | 'resume';
-  program: string;
-  argv: string[];
-  profile: AgentLaunchOptions['profile'];
-  pool: string;
-  worktree: string;
-  session: string | null;
-  configuredFeatures: Record<string, boolean>;
-};
 /** Observe the actual adapter return value without changing argv, routing, or session semantics. */
 export function observeSmokeAdapter(adapter: AgentAdapter, record: (value: SmokeLaunchEvidence) => void): AgentAdapter {
   const observe = (mode: 'start' | 'resume', options: AgentLaunchOptions, command: [string, string[]]) => {
@@ -202,7 +199,7 @@ export function smokeRunSuffix(
   }
 }
 
-function smokeStderrSuffix(path: string, policy: SmokePolicy): string {
+export function smokeStderrSuffix(path: string, policy: SmokePolicy): string {
   if (!existsSync(path)) return '';
   const fd = openSync(path, 'r');
   try {
@@ -216,17 +213,17 @@ function smokeStderrSuffix(path: string, policy: SmokePolicy): string {
   }
 }
 
-function reportLine(line: string): void {
+export function reportLine(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-function message(error: unknown, policy: SmokePolicy = defaultPolicy.launchSmoke): string {
+export function message(error: unknown, policy: SmokePolicy = defaultPolicy.launchSmoke): string {
   return (error instanceof Error ? error.message : String(error))
     .replace(/[\r\n]+/g, ' ')
     .slice(0, policy.diagnosticCharacters);
 }
 
-function stepFailure(
+export function stepFailure(
   step: string,
   error: unknown,
   report: Reporter,
@@ -237,7 +234,7 @@ function stepFailure(
   return new Error(`${step}: ${detail}`);
 }
 
-function smokeTools(policy: SmokePolicy) {
+export function smokeTools(policy: SmokePolicy) {
   const checked = (
     command: string,
     args: string[],
@@ -280,11 +277,11 @@ export function resolveSmokeReportPath(root: string, requested?: string): string
   return path;
 }
 
-function persistReport(root: string, path: string, report: SmokeReport): void {
+export function persistReport(root: string, path: string, report: SmokeReport): void {
   writeEvidenceAtomically(path, report, join(root, '.temp/goal/lifecycle-smoke'));
 }
 
-function readReport(path: string): SmokeReport {
+export function readReport(path: string): SmokeReport {
   const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('lifecycle report is not an object');
   const report = value as SmokeReport;
@@ -293,18 +290,18 @@ function readReport(path: string): SmokeReport {
   return report;
 }
 
-function upsertScenario(report: SmokeReport, scenario: ScenarioEvidence): void {
+export function upsertScenario(report: SmokeReport, scenario: ScenarioEvidence): void {
   report.scenarios = report.scenarios.filter(({ id }) => id !== scenario.id);
   report.scenarios.push(scenario);
 }
 
-function timeoutFailure(error: unknown): boolean {
+export function timeoutFailure(error: unknown): boolean {
   return /ETIMEDOUT|capacity timeout|infrastructure\/unverified|exceeded .*budget|deadline|timed? ?out|timeout/i.test(
     message(error),
   );
 }
 
-function parseJsonLine(text: string, label: string): Record<string, unknown> {
+export function parseJsonLine(text: string, label: string): Record<string, unknown> {
   const line = text.trim().split(/\r?\n/).at(-1) ?? '';
   try {
     const value: unknown = JSON.parse(line);
@@ -351,7 +348,7 @@ function isWorkerResultObject(value: Record<string, unknown>): boolean {
   return JSON.stringify(Object.keys(value).sort()) === JSON.stringify(keys);
 }
 
-async function waitForCheck(
+export async function waitForCheck(
   resultPath: string,
   deadline: number,
   policy: SmokePolicy,
@@ -376,7 +373,7 @@ async function waitForCheck(
   throw new Error('worker-check result did not arrive before the smoke deadline');
 }
 
-function persistFailureLog(reportPath: string, step: string, contents: string): string {
+export function persistFailureLog(reportPath: string, step: string, contents: string): string {
   const filename = `lifecycle-${step.replace(/[^a-z0-9.-]+/gi, '-')}-${randomUUID()}.log`;
   const path = join(dirname(reportPath), filename);
   mkdirSync(dirname(path), { recursive: true });

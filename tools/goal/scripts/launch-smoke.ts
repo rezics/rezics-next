@@ -17,12 +17,12 @@ import {
   realpathSync,
   rmdirSync,
   unlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { loadSettings, mainCheckout } from '../src/config.ts';
-import { parseWorkerResult } from '../test-support/lifecycle-fixture.ts';
+import { parseJsonLines, parseWorkerResult, requireWorkerCheck } from '../test-support/lifecycle-fixture.ts';
 import {
-  CHECK_ID,
   message,
   parseJsonLine,
   parseProviderObject,
@@ -41,7 +41,7 @@ import {
   type SmokeReport,
 } from './launch-smoke-evidence.ts';
 
-export { observeSmokeAdapter, smokeRunSuffix, type SmokeLaunchEvidence } from './launch-smoke-evidence.ts';
+export { observeSmokeAdapter, requireSmokeWaitingCheckId, smokeRunSuffix, type SmokeLaunchEvidence } from './launch-smoke-evidence.ts';
 export { parseProviderObject, resolveSmokeReportPath, saveSmokeEvidence };
 
 export type SmokeOptions = {
@@ -82,12 +82,6 @@ waiting: []
 ---
 Run the acceptance command once with the worker-check wrapper's \`--local\` option for this disposable smoke. The wrapper is \`bun ${JSON.stringify(workerCheckScript)}\` if this worktree has no local runner. If that invocation returns a check id before it finishes, use the exact UUID it returned; do not wait before the wrapper has started the check. Do not edit files.
 `;
-}
-
-export function requireSmokeWaitingCheckId(checks: unknown): string {
-  if (!Array.isArray(checks) || checks.length !== 1 || typeof checks[0] !== 'string' || !CHECK_ID.test(checks[0]))
-    throw new Error('waiting result must contain one bare worker-check UUID');
-  return checks[0];
 }
 
 /** Owns only a newly created smoke directory, including its disposable immutable dependency store. */
@@ -162,55 +156,6 @@ export function createSmokeDirectory(
       }
     },
   };
-}
-
-function assertCodexArgv(
-  launches: string[][],
-  options: { model: string; effort: string; serviceTier: string; session: string; worktree: string; schema: string },
-): void {
-  if (launches.length !== 2) throw new Error(`expected two actual Codex CLI invocations, observed ${launches.length}`);
-  const [start, resume] = launches;
-  if (!start || !resume) throw new Error('actual Codex CLI argv log is missing a start or resume call');
-  const has = (args: string[], ...values: string[]) => values.every((value) => args.includes(value));
-  const schemaIndex = start.indexOf('--output-schema');
-  const resumeSchemaIndex = resume.indexOf('--output-schema');
-  const tier = `service_tier=${JSON.stringify(options.serviceTier)}`;
-  if (
-    start[0] !== 'exec' ||
-    !has(
-      start,
-      '--json',
-      '-m',
-      options.model,
-      '-c',
-      `model_reasoning_effort=${options.effort}`,
-      '-C',
-      options.worktree,
-    ) ||
-    !has(start, '-c', tier) ||
-    schemaIndex < 0 ||
-    start[schemaIndex + 1] !== options.schema ||
-    start.includes('resume')
-  )
-    throw new Error(
-      'actual Codex start argv did not preserve the selected model, effort, service tier, schema, and worktree',
-    );
-  const resumeIndex = resume.indexOf('resume');
-  const directoryIndex = resume.indexOf('-C');
-  if (
-    resume[0] !== 'exec' ||
-    directoryIndex < 0 ||
-    resume[directoryIndex + 1] !== options.worktree ||
-    resumeIndex !== directoryIndex + 2 ||
-    resume[resumeIndex + 1] !== options.session ||
-    resumeSchemaIndex < 0 ||
-    resume[resumeSchemaIndex + 1] !== options.schema ||
-    !has(resume, '--json', '-m', options.model, '-c', `model_reasoning_effort=${options.effort}`, '-c', tier) ||
-    !existsSync(options.schema)
-  )
-    throw new Error(
-      'actual Codex resume argv did not preserve exec option order, session, selected settings, and schema',
-    );
 }
 
 function fakeStep(
@@ -455,8 +400,9 @@ async function runRealSmoke(
   report(`evidence: ${reportPath}`);
   report(`run evidence: ${runEvidencePath}`);
   try {
-    candidate = git(root, 'rev-parse', 'HEAD');
-    evidence.candidate = candidate;
+    const candidateHead = git(root, 'rev-parse', 'HEAD');
+    candidate = candidateHead;
+    evidence.candidate = candidateHead;
     persistReport(root, reportPath, evidence);
     saveRunEvidence();
     git(root, 'diff', '--quiet', 'HEAD', '--');
