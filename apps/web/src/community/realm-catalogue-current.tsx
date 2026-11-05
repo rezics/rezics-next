@@ -5,6 +5,7 @@ import { useSession } from '../session/query';
 import type { SpacePageData } from './space';
 import { useSpacePageLifetime } from './space-page-lifetime';
 import { RealmCatalogueNavigation } from './realm-catalogue-navigation';
+import { RealmCatalogueSearch } from '../search/search';
 
 /**
  * The route host owns read/session admission. This smaller boundary owns only a local entry visit:
@@ -71,11 +72,21 @@ export function RealmCatalogueCurrent({
     (!lifetime || lifetime.current());
   const community = realm?.presentation?.state === 'available' ? realm.presentation.value : null;
   return (
-    <RealmCatalogueNavigation
-      key={source.serial}
-      realm={admitted && realm ? { id: realm.id, name: community?.name ?? realm.title } : null}
-      locale={locale}
-      isCurrent={isCurrent}
-    />
+    <>
+      <RealmCatalogueNavigation
+        key={`navigation-${source.serial}`}
+        realm={admitted && realm ? { id: realm.id, name: community?.name ?? realm.title } : null}
+        locale={locale}
+        isCurrent={isCurrent}
+      />
+      {admitted && realm ? (
+        <RealmCatalogueSearch
+          key={`catalogue-${source.serial}`}
+          realmId={realm.id}
+          locale={locale}
+          isCurrent={isCurrent}
+        />
+      ) : null}
+    </>
   );
 }

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Access, Actor, AccessCheck, AccessClient } from '../request/access.ts';
 import { accessCheck } from '../request/access.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { AccessWorkAccounting } from '../access/work.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { realmReadEligibility } from '../community/realm.ts';
@@ -50,6 +51,7 @@ export type RealmSubjectDisclosure = Readonly<{
 }>;
 
 type Observation = Readonly<{ signature: string; anchors: readonly AnchoredPosition[] }>;
+export type RealmSubjectParentObservation = Observation;
 type PreparedSource = Awaited<ReturnType<typeof prepareRealmSubjectThreadDisclosure>>;
 type Prepared = Readonly<{
   source: PreparedSource;
@@ -93,6 +95,12 @@ function route(id: string): number {
 
 function denied(error: unknown): boolean {
   return error instanceof ContentNotFoundError || (error instanceof ProblemError && error.code === 'not_found');
+}
+
+function expectedState(error: unknown): 'withheld' | 'unknown' {
+  if (denied(error)) return 'withheld';
+  if (error instanceof AccessUnavailableError) return 'unknown';
+  throw error;
 }
 
 /** Native original read eligibility supplies all permissions. This helper only
@@ -205,6 +213,34 @@ async function observeParent(
   return { signature: hash(parent), anchors: [initial.anchor, checked.anchor, spaceChecked.anchor] };
 }
 
+/** Current Realm and Space read authority, native lifecycle binding and public ban check.
+ * The observation stays Content-owned and carries lossless native home positions.
+ */
+export function observeRealmSubjectParent(
+  dependencies: RealmSubjectDisclosureDependencies,
+  realmId: string,
+  context: RealmSubjectDisclosureContext,
+): Promise<RealmSubjectParentObservation | null> {
+  return observeParent(dependencies, realmId, context);
+}
+
+/** Unrelated native commits may advance the homes; an exact dependency change may not. */
+export function sameCurrentRealmSubjectParent(
+  before: RealmSubjectParentObservation,
+  after: RealmSubjectParentObservation,
+): boolean {
+  return before.signature === after.signature && currentHome(before, after);
+}
+
+/** Current identity/readability for a terminal Subject candidate. */
+export function observeRealmSubjectSubject(
+  dependencies: RealmSubjectDisclosureDependencies,
+  subjectId: string,
+  context: RealmSubjectDisclosureContext,
+): Promise<RealmSubjectParentObservation | null> {
+  return observeSubject(dependencies, subjectId, context);
+}
+
 /** The native reference plan reads the original identity and its latest single
  * redirect target. It does not walk history or redirect chains. A terminality
  * change cannot be mistaken for a reference to a replacement Subject.
@@ -286,7 +322,7 @@ export async function prepareRealmSubjectDisclosure(
       prepared.push(source.state === 'withheld' ? { state: 'withheld' } : { source, parent, subject });
     }
   } catch (error) {
-    const state = denied(error) ? 'withheld' : 'unknown';
+    const state = expectedState(error);
     prepared.splice(0, prepared.length, ...request.candidates.map(() => ({ state }) as RealmSubjectEvidence));
   }
   // A consumed handle cannot be used to renew evidence after its fixed deadline
@@ -351,10 +387,11 @@ export async function prepareRealmSubjectDisclosure(
     } catch (error) {
       // No partial success after a dependency failure. In particular an absent
       // producer cannot masquerade as a complete empty population.
+      const state = expectedState(error);
       return Object.freeze(
         request.candidates.map(() =>
           Object.freeze({
-            state: denied(error) ? ('withheld' as const) : ('unknown' as const),
+            state,
           }),
         ),
       );

@@ -218,6 +218,7 @@ test('unknown and withheld membership cannot establish a tautological Realm OR',
 test('public Search routes a Realm request through its registered service scope and request reader', async () => {
   const reader = { deadline: Date.now() + 60_000 } as LeafOptions;
   const resolved: string[] = [];
+  const factoryReaders: LeafOptions[] = [];
   const readers: LeafOptions[] = [];
   const realmSubjects: RealmSubjectSource = {
     async resolve(id, options) {
@@ -240,7 +241,10 @@ test('public Search routes a Realm request through its registered service scope 
     client: {} as never,
     prefix: 'realm-reader',
     source: {} as never,
-    realmSubjects,
+    realmSubjectsForReader(options) {
+      factoryReaders.push(options);
+      return realmSubjects;
+    },
     cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) },
     release: async () => release,
   });
@@ -254,9 +258,77 @@ test('public Search routes a Realm request through its registered service scope 
     ),
   ).rejects.toMatchObject({ code: 'semantic_not_ready' });
   expect(resolved).toEqual([realm]);
+  expect(factoryReaders).toEqual([reader]);
   expect(readers).toHaveLength(1);
   expect(readers[0]).toBe(reader);
 });
+
+test('scoped Realm facets apply selected kinds through the released current type condition', async () => {
+  const reader = { deadline: Date.now() + 60_000 } as LeafOptions;
+  const observation = Object.freeze({ realm, revision: '1' });
+  const subjects: RealmSubjectSource = {
+    async resolve() {
+      return { state: 'ready', observation };
+    },
+    async current() {
+      return 'current';
+    },
+    async prefix() {
+      return { subjects: [], after: null, exhausted: true };
+    },
+    async match(_observation, candidates) {
+      return candidates.map(() => 'discussed' as const);
+    },
+  };
+  let capturedFilter: unknown;
+  const service = createSearchService({
+    pool: {} as Pool,
+    client: {} as never,
+    prefix: 'realm-facet-kinds',
+    source: {} as never,
+    realmSubjectsForReader: () => subjects,
+    cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) },
+    release: async () => release,
+    facetProvider: async () =>
+      ({
+        source: 'realm-facets',
+        meaning: { release },
+        generation: 1,
+        operations: {
+          async captureFacet({ plan }: { plan: { filterDocument?: unknown } }) {
+            capturedFilter = plan.filterDocument;
+            return { status: 'unready', reason: 'registration_missing', cost: zeroFacetCost };
+          },
+        },
+      }) as never,
+  });
+
+  await expect(
+    service.facets(
+      'anonymous',
+      {
+        scope: { kind: 'realm', id: realm },
+        kinds: ['schema:Book'],
+        facets: [{ property: 'type' }],
+      },
+      Date.now(),
+      { deadline: reader.deadline, scope: reader },
+    ),
+  ).rejects.toMatchObject({ code: 'index_not_ready' });
+  expect(capturedFilter).toEqual({ type: { in: ['schema:Book'] } });
+});
+
+const zeroFacetCost = {
+  inputKeys: 0,
+  candidates: 0,
+  accessPoints: 0,
+  dependencyPoints: 0,
+  engineSearches: 0,
+  engineIteratorSteps: 0,
+  outputSlots: 0,
+  resultWrites: 0,
+  frontierWrites: 0,
+};
 
 test('the Content factory without live composition stays unavailable, including under OR', async () => {
   const reader = { deadline: Date.now() + 60_000 } as LeafOptions;

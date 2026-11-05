@@ -22,6 +22,7 @@ import { createRatedSubjectSource } from './search/rated-source.ts';
 import { createRealmRatingNativeSource } from './search/realm-rating-native.ts';
 import { setupSemantic } from './semantic/setup.ts';
 import { setupContent } from './content/setup.ts';
+import { createRealmSubjectSearchSource } from './content/index.ts';
 import { createOpenSearch } from './search/opensearch.ts';
 import { createSearchService } from './search/service.ts';
 import { readSearchConfig, type SearchConfig } from './search/work.ts';
@@ -224,6 +225,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
                 prefix: searchConfig.prefix,
                 tokens: config.tokens,
               }),
+              realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
               cursors: config.tokens,
               clock: defaults.clock,
               publicFilters: () => {

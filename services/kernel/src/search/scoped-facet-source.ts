@@ -7,6 +7,9 @@ import { ScopeWork, zeroScopeWork } from './scope-execution.ts';
 import type { ScopeEvaluationProgress, PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
 import { subjectPartition } from './source.ts';
+import type { PreparedRealmScope } from './realm-scope.ts';
+import { ProblemError } from '../http/problem.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 
 type SearchResourceScope = FacetDiscoveryScope;
 
@@ -73,6 +76,17 @@ type ServiceScopeFacetRequest = {
   work: ScopeWork;
   identity: ScopedFacetIdentity;
   progress: ScopeEvaluationProgress | null;
+  reported: ReturnType<typeof zeroScopeWork>;
+  pendingPage?: Readonly<{ after: string | null; inputLimit: number; page: ScopedFacetCandidatePage }>;
+};
+
+type RealmFacetFrontier = Readonly<{ basis: string; anchor: number; after: string | null }>;
+type ServiceRealmFacetRequest = {
+  scope: ReturnType<typeof createSearchScopeForService>;
+  prepared: PreparedRealmScope;
+  realms: readonly string[];
+  work: ScopeWork;
+  identity: ScopedFacetIdentity;
   reported: ReturnType<typeof zeroScopeWork>;
   pendingPage?: Readonly<{ after: string | null; inputLimit: number; page: ScopedFacetCandidatePage }>;
 };
@@ -267,6 +281,15 @@ function scopeWorkCost(request: ServiceScopeFacetRequest): PublicFilterCost {
   };
 }
 
+function scopeFailure(error: unknown): 'changed' | 'unready' | 'unavailable' | undefined {
+  if (error instanceof AccessUnavailableError) return 'unready';
+  if (!(error instanceof ProblemError)) return undefined;
+  if (error.code === 'search_restart_required') return 'changed';
+  if (error.code === 'not_found') return 'unavailable';
+  if (['semantic_not_ready', 'index_not_ready', 'dependency_unavailable'].includes(error.code)) return 'unready';
+  return undefined;
+}
+
 function evaluationReservation(work: ScopeWork, subjects: readonly string[]) {
   const allowance = work.remaining();
   return {
@@ -325,8 +348,10 @@ export function createServiceScopeFacetPorts(_resource: SearchResourceScope): Sc
         return result && result.basis.canonical === request.prepared.basis.canonical
           ? { status: 'observed', identity: request.identity, cost: scopeWorkCost(request) }
           : { status: 'unready', cost: scopeWorkCost(request) };
-      } catch {
-        return { status: 'unready', cost: scopeWorkCost(request) };
+      } catch (error) {
+        const status = scopeFailure(error);
+        if (!status) throw error;
+        return { status, cost: scopeWorkCost(request) };
       }
     },
     async readCandidates(opaque, after, inputLimit, _context) {
@@ -361,8 +386,10 @@ export function createServiceScopeFacetPorts(_resource: SearchResourceScope): Sc
         };
         request.pendingPage = { after, inputLimit, page: result };
         return result;
-      } catch {
-        return { status: 'unready', cost: scopeWorkCost(request) };
+      } catch (error) {
+        const status = scopeFailure(error);
+        if (!status) throw error;
+        return { status, cost: scopeWorkCost(request) };
       }
     },
     async readMembership(opaque, subjects, _context) {
@@ -381,8 +408,10 @@ export function createServiceScopeFacetPorts(_resource: SearchResourceScope): Sc
           subjects: subjects.map((subject, index) => ({ subject, member: result.values[index] ?? 'not_proven' })),
           cost: scopeWorkCost(request),
         };
-      } catch {
-        return { status: 'unready', cost: scopeWorkCost(request) };
+      } catch (error) {
+        const status = scopeFailure(error);
+        if (!status) throw error;
+        return { status, cost: scopeWorkCost(request) };
       }
     },
   };
@@ -428,4 +457,213 @@ export function serviceScopeFacetAdmission(
     identity,
     request: bindScopedFacetPorts(createServiceScopeFacetPorts(input.resource), request),
   };
+}
+
+function realmFacetFrontier(value: RealmFacetFrontier): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function readRealmFacetFrontier(
+  value: string | null,
+  basis: string,
+  realms: readonly string[],
+): RealmFacetFrontier | undefined {
+  if (value === null) return { basis, anchor: 0, after: null };
+  if (value.length > 2048 || !/^[A-Za-z0-9_-]+$/.test(value)) return undefined;
+  const bytes = Buffer.from(value, 'base64url');
+  if (bytes.toString('base64url') !== value) return undefined;
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(bytes.toString('utf8'));
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+  if (!decoded || typeof decoded !== 'object') return undefined;
+  const frontier = decoded as Partial<RealmFacetFrontier>;
+  if (
+    frontier.basis !== basis ||
+    !Number.isSafeInteger(frontier.anchor) ||
+    frontier.anchor! < 0 ||
+    frontier.anchor! > realms.length ||
+    (frontier.anchor === realms.length && frontier.after !== null) ||
+    (frontier.anchor! < realms.length &&
+      frontier.after !== null &&
+      (typeof frontier.after !== 'string' || frontier.after.length === 0 || frontier.after.length > 1024))
+  )
+    return undefined;
+  return frontier as RealmFacetFrontier;
+}
+
+function realmScopeWorkCost(request: ServiceRealmFacetRequest): PublicFilterCost {
+  const { used } = request.work.receipt();
+  const previous = request.reported;
+  const delta = {
+    candidateKeys: used.candidateKeys - previous.candidateKeys,
+    identityMetadataRows: used.identityMetadataRows - previous.identityMetadataRows,
+    nativePoints: used.nativePoints - previous.nativePoints,
+    witnessKeys: used.witnessKeys - previous.witnessKeys,
+  };
+  request.reported = { ...used };
+  return {
+    ...emptyCost(),
+    inputKeys: delta.candidateKeys,
+    candidates: delta.candidateKeys,
+    accessPoints: delta.identityMetadataRows,
+    dependencyPoints: delta.nativePoints + delta.witnessKeys,
+  };
+}
+
+function realmScopeResult(error: unknown): 'changed' | 'unready' | 'unavailable' | undefined {
+  if (error instanceof AccessUnavailableError) return 'unready';
+  if (!(error instanceof ProblemError)) return undefined;
+  if (error.code === 'search_restart_required') return 'changed';
+  if (error.code === 'not_found') return 'unavailable';
+  if (['semantic_not_ready', 'index_not_ready', 'dependency_unavailable'].includes(error.code)) return 'unready';
+  return undefined;
+}
+
+/** Adapt Content Realm population and the shared current Realm/Subject evaluator to retained facets. */
+export function createServiceRealmScopeFacetPorts(): ScopedFacetPorts {
+  async function observe(request: ServiceRealmFacetRequest): Promise<ScopedFacetObservation> {
+    try {
+      const work = await request.scope.realm.revalidate(request.prepared, request.work.remaining());
+      request.work.native(work);
+      return { status: 'observed', identity: request.identity, cost: realmScopeWorkCost(request) };
+    } catch (error) {
+      const status = realmScopeResult(error);
+      if (!status) throw error;
+      return { status, cost: realmScopeWorkCost(request) };
+    }
+  }
+
+  return {
+    async observe(opaque, _context) {
+      return observe(opaque as ServiceRealmFacetRequest);
+    },
+    async readCandidates(opaque, after, inputLimit, _context) {
+      const request = opaque as ServiceRealmFacetRequest;
+      if (!Number.isInteger(inputLimit) || inputLimit < 1 || inputLimit > 100)
+        throw new RangeError('Invalid Realm facet input limit');
+      if (request.pendingPage?.after === after && request.pendingPage.inputLimit === inputLimit)
+        return { ...request.pendingPage.page, cost: emptyCost() };
+      const start = readRealmFacetFrontier(after, request.prepared.basis, request.realms);
+      if (!start) return { status: 'unready', cost: realmScopeWorkCost(request) };
+      try {
+        let anchor = start.anchor;
+        let contentAfter = start.after;
+        let steps = 0;
+        while (anchor < request.realms.length && steps < 16) {
+          const remaining = request.work.remaining();
+          if (remaining.remaining.candidateKeys < 1)
+            return { status: 'unready', cost: realmScopeWorkCost(request) };
+          const prefix = await request.scope.realm.sourcePrefix(
+            request.prepared,
+            request.realms[anchor]!,
+            contentAfter,
+            Math.min(inputLimit, 32),
+            remaining,
+          );
+          request.work.native(prefix.work);
+          if (prefix.basis !== request.prepared.basis)
+            return { status: 'changed', cost: realmScopeWorkCost(request) };
+          steps++;
+          const next: RealmFacetFrontier = prefix.exhausted
+            ? { basis: request.prepared.basis, anchor: anchor + 1, after: null }
+            : { basis: request.prepared.basis, anchor, after: prefix.after };
+          if (prefix.subjects.length) {
+            const complete = next.anchor === request.realms.length;
+            const frontier = realmFacetFrontier(next);
+            const page: ScopedFacetCandidatePage = {
+              status: complete ? 'complete' : 'progress',
+              identity: request.identity,
+              subjects: prefix.subjects,
+              frontier,
+              cost: realmScopeWorkCost(request),
+            };
+            request.pendingPage = { after, inputLimit, page };
+            return page;
+          }
+          anchor = next.anchor;
+          contentAfter = next.after;
+        }
+        const next = { basis: request.prepared.basis, anchor, after: contentAfter } satisfies RealmFacetFrontier;
+        const complete = anchor === request.realms.length;
+        const page: ScopedFacetCandidatePage = {
+          status: complete ? 'complete' : 'progress',
+          identity: request.identity,
+          subjects: [],
+          frontier: realmFacetFrontier(next),
+          cost: realmScopeWorkCost(request),
+        };
+        request.pendingPage = { after, inputLimit, page };
+        return page;
+      } catch (error) {
+        const status = realmScopeResult(error);
+        if (!status) throw error;
+        return { status, cost: realmScopeWorkCost(request) };
+      }
+    },
+    async readMembership(opaque, subjects, _context) {
+      const request = opaque as ServiceRealmFacetRequest;
+      const pending = request.pendingPage;
+      if (
+        !pending ||
+        pending.page.subjects.length !== subjects.length ||
+        pending.page.subjects.some((subject, index) => subject !== subjects[index])
+      )
+        return { status: 'unready', cost: realmScopeWorkCost(request) };
+      try {
+        const result = await request.scope.realm.evaluate(request.prepared, subjects, request.work.remaining());
+        request.work.native(result.work);
+        if (result.basis !== request.prepared.basis) {
+          delete request.pendingPage;
+          return { status: 'changed', cost: realmScopeWorkCost(request) };
+        }
+        if (result.values.length !== subjects.length) throw new TypeError('Realm facet membership alignment changed');
+        delete request.pendingPage;
+        return {
+          status: 'matched',
+          identity: request.identity,
+          subjects: subjects.map((subject, index) => ({
+            subject,
+            member: result.values[index] === 'not_proven' ? 'not_proven' : result.values[index] === true,
+          })),
+          cost: realmScopeWorkCost(request),
+        };
+      } catch (error) {
+        const status = realmScopeResult(error);
+        if (!status) throw error;
+        return { status, cost: realmScopeWorkCost(request) };
+      }
+    },
+  };
+}
+
+export function serviceRealmScopeFacetAdmission(
+  input: Readonly<{
+    resource: SearchResourceScope;
+    scope: ReturnType<typeof createSearchScopeForService>;
+    prepared: PreparedRealmScope;
+    realms: readonly string[];
+    work: ScopeWork;
+    principal: string;
+    meaning: unknown;
+  }>,
+): ScopedFacetAdmission {
+  const identity: ScopedFacetIdentity = {
+    source: hash({ resource: input.resource, source: 'content.realm-subjects-discussed.v1' }),
+    meaning: hash({ release: input.prepared.basis, meaning: input.meaning }),
+    population: hash({ basis: input.prepared.basis, realms: input.realms }),
+    authorization: hash({ principal: input.principal, basis: input.prepared.basis }),
+  };
+  const request: ServiceRealmFacetRequest = {
+    scope: input.scope,
+    prepared: input.prepared,
+    realms: Object.freeze([...input.realms]),
+    work: input.work,
+    identity,
+    reported: zeroScopeWork(),
+  };
+  return { identity, request: bindScopedFacetPorts(createServiceRealmScopeFacetPorts(), request) };
 }

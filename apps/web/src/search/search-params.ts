@@ -119,7 +119,11 @@ export function removeSearchInput<Search extends object>(search: Search, key: st
 }
 
 /** Native opaque tokens are only encoded for transport, never decoded, trimmed or regenerated. */
-export function discoverySearchHref(locale: string, state: SearchLoaderDeps): string {
+export function discoverySearchHref(
+  locale: string,
+  state: SearchLoaderDeps,
+  target: Readonly<{ pathname?: string; cursorParam?: string }> = {},
+): string {
   const params = new URLSearchParams(
     searchFormFields({
       q: state.query,
@@ -138,6 +142,6 @@ export function discoverySearchHref(locale: string, state: SearchLoaderDeps): st
     }),
   );
   if (state.query) params.set('q', state.query);
-  if (state.cursor) params.set('cursor', state.cursor);
-  return `/${encodeURIComponent(locale)}/search${params.size ? `?${params}` : ''}`;
+  if (state.cursor) params.set(target.cursorParam ?? 'cursor', state.cursor);
+  return `${target.pathname ?? `/${encodeURIComponent(locale)}/search`}${params.size ? `?${params}` : ''}`;
 }

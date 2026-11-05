@@ -122,29 +122,35 @@ resource references remain rejected, without recursion. No query-time account se
   revalidation, rather than cloning their visible Realm/revision locator.
 
   The request caller uses `createSearchScopeForService(service, actualLeafOptions)` and its
-  `realm.prepare`, `realm.sourcePrefix` and `realm.evaluate` methods. `createSearchService` accepts the
-  Content source as `realmSubjects`, or both native capabilities as `realmSubjectCapabilities`; the installed
-  Scope constructs the same Content factory when no source is supplied. Neither field is a request operand.
+  `realm.prepare`, `realm.sourcePrefix` and `realm.evaluate` methods. Content exports
+  `createRealmSubjectSearchSource` from its `index.ts` boundary and the default Search service creates it for
+  each actual reader. Injected `realmSubjects` remain a test/composition seam, not a request operand. Search
+  retains the source's opaque current observation only within its request-bound scope.
   Decision: retain Search's 100-candidate evaluation API by splitting into native batches of at most 32 on
   one unchanged caller root; raw preparation prefixes accept only 1–32 and retain Content's opaque frontier.
   Catalogue leaves use the existing native current matcher and the shared three-valued Boolean planner.
   The closed operand is admitted only by the request discovery parser; saved/dynamic filters reject it.
   Realm scope applies to Subject candidates only. Mixed-kind public index compilation still rejects it.
 
-  Content's structural census is installed, but its actual current-disclosure/live-maintenance composition
-  remains unavailable. Without both capabilities, the factory returns typed unavailability and supplies no
+  Content composes its structural census, current disclosure and live maintenance in the request-bound adapter.
+  Missing maintenance coverage or uncertain authority still returns typed unavailability and supplies no
   population or negative. Search consumes finite Content Realm prefixes into retained canonical candidates,
   refines the complete current text/catalogue predicate, then publishes first/next/final pages from indexed
-  actual-name tuples. Raw prefixes are input only. Each request advances at most one 32-row prefix under one fixed
-  allowance; incomplete preparation stays unavailable. Search reobserves the current Realm, subject identity,
-  indexed tuple and catalogue predicate at page consumption. Unknown or withheld evidence remains unavailable,
-  including under NOT or a true OR branch.
+  actual-name tuples. Raw prefixes are input only. Search refinement advances bounded 32-row prefixes under one
+  fixed allowance; scoped facet discovery may consume at most 16 bounded prefixes per retained step and resumes
+  the full raw frontier when sparse. Both paths reobserve the current Realm, subject identity, indexed tuple and
+  catalogue predicate before disclosure. Unknown or withheld evidence remains unavailable, including under NOT
+  or a true OR branch. Realm facet membership is evaluated against the same committed predicate as its rows.
 
   Decision: Realm-filtered Search defaults to canonical name order and supports explicit `name`; other sort orders
   stay unsupported until their retained native tuples are delivered. A `population_ready` observation remains
   preparation input only. No Home Space publication membership, `subject_thread` scan or known-candidate batch
-  substitutes for Content's prefix. Native discussion/review, protected-board grant, ban, withdrawal and hidden-
-  reference outcomes remain unmeasured until Content supplies the live disclosure/maintenance composition.
+  substitutes for Content's prefix. Native association, disclosure and maintenance behavior has focused owner tests;
+  real production route, seeded-corpus and browser verification remain part of the integrated acceptance.
+
+  Decision: Search owns Realm catalogue query, facets and continuation; Content owns native subjects-discussed
+  membership/disclosure and community composition; Web keeps the shared page shell and mounts Search's section with
+  the actual Realm identity.
 
 - Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
   definition revision. Original `definitions:read` precedes enumeration for every reference, including under

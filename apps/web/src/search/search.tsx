@@ -28,7 +28,7 @@ import { parseQueryShare, shareUnavailable } from './query-share';
 
 import { facetProperties, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
-import { useRouter } from '@tanstack/react-router';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -38,7 +38,7 @@ import { SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
@@ -47,15 +47,25 @@ import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 import { localizedLabel } from './results.tsx';
 
-import { discoveryRequest } from './search-request.ts';
-import { applicableRefinementProperties, refinementProperties } from './refinement/model';
+import { discoveryRequest, realmSearchRequest } from './search-request.ts';
+import {
+  applicableRefinementProperties,
+  refinementProperties,
+  type RefinementApplicability,
+} from './refinement/model';
 import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { scopedRefinementRequests } from './refinement/scoped-refinement';
 import { Refinement, type RefinementData } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
 import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import { readDiscoveryKinds, type LegacySearchPage, type DiscoveryState } from './discovery';
+import {
+  readDiscoveryKinds,
+  type DiscoveryKinds,
+  type DiscoveryKindsState,
+  type LegacySearchPage,
+  type DiscoveryState,
+} from './discovery';
 import {
   facetSearchInvalidation,
   readSearchOutcome,
@@ -66,7 +76,7 @@ import {
 } from './search-recovery';
 
 import { useSearchRetryFocus } from './search-retry-focus';
-import { discoverySearchHref, searchUrlIntake, type SearchLoaderDeps } from './search-params';
+import { discoverySearchHref, searchLoaderDeps, searchUrlIntake, type SearchLoaderDeps } from './search-params';
 import {
   isSearchResourceScope,
   parseSearchResourceScope,
@@ -95,8 +105,10 @@ import {
   withoutResourceLanguageSelection,
   type ResourceLanguageRefinement,
 } from './language-refinement';
-import { searchRequiresCurrentReader } from './scoped-search-lifetime';
-import { sessionCsrfToken } from '../session/query';
+import { searchRequiresCurrentReader, searchSessionLifetime } from './scoped-search-lifetime';
+import { sessionCsrfToken, useSession } from '../session/query';
+import { searchSessionOwner } from './search-session-owner';
+import { useSearchQuery } from './use-search-query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import {
   conditionAdmission,
@@ -140,6 +152,7 @@ export type SearchPageData = {
   condition?: FilterDocument | undefined;
   result?: SearchResult;
   discovery?: DiscoveryState;
+  refinementApplicability?: RefinementApplicability;
   type?: string | undefined;
   typeLabels?: Record<string, string>;
   hitTypes: Record<string, Record<string, string>>;
@@ -388,6 +401,49 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
     const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
     if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
       return { status: 'unavailable' as const, recovery: { status: 'session' as const } };
+    if (data.resourceScope?.kind === 'realm') {
+      const request = {
+        ...realmSearchRequest({ ...requestParams(data), cursor: undefined }, requestLanguages(data.locale)),
+        kindCursor: data.kindCursor,
+        limit: 1,
+      };
+      const outcome = await readSearchOutcome(
+        request,
+        (body) =>
+          kernelClient(data.locale).subjects.$search.post(body, {
+            ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+            fetch: { signal: requestContext.signal, cache: 'no-store' },
+          }),
+        requestContext.signal,
+        'subjects',
+      );
+      if (outcome.result?.kinds) {
+        const { values, omitted, next } = outcome.result.kinds;
+        return {
+          status: 'ready' as const,
+          kinds: {
+            values: values.map(({ count: _count, ...kind }) => kind),
+            ...(omitted ? { omitted } : {}),
+            next,
+          },
+          asOf: outcome.result.as_of,
+        };
+      }
+      const recovery = outcome.recovery;
+      const status: Exclude<DiscoveryKindsState['status'], 'ready'> =
+        recovery.status === 'closed'
+          ? 'closed'
+          : recovery.status === 'denied' || recovery.status === 'session'
+            ? 'denied'
+            : recovery.status === 'restart'
+              ? 'restart'
+              : recovery.status === 'invalid' || recovery.status === 'invalid-cursor'
+                ? 'invalid'
+                : recovery.status === 'index-not-ready' || recovery.status === 'source-not-ready'
+                  ? 'preparing'
+                  : 'unavailable';
+      return { status, ...(status === 'unavailable' ? { retryable: true } : {}), recovery };
+    }
     let recovery: SearchRecoveryState | undefined;
     const state = await readDiscoveryKinds(
       discoveryRequest(requestParams(data), requestLanguages(data.locale)),
@@ -428,6 +484,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const requestContext = getRequest();
     const signal = requestContext.signal;
     const queryState = requestParams(data);
+    const realmCatalogue = queryState.resourceScope?.kind === 'realm';
     const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
     if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
       return { ...searchUnavailablePage(queryState), recovery: { status: 'session' } };
@@ -494,11 +551,14 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
           // No installed Content complete-order adapter exists yet. Never ask Global Search and relabel it.
           if (realmRatingUnavailable) return { recovery: { status: 'unavailable' } as SearchRecoveryState };
           if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
-          const request = {
-            ...body,
-            ...(!hasSearch || !properties.length ? {} : { properties }),
-            ...(!hasSearch ? { limit: 1 } : {}),
-          };
+          if (realmCatalogue) {
+            const request = {
+              ...realmSearchRequest(queryState, requestLanguages(data.locale)),
+              ...(properties.length ? { properties } : {}),
+            };
+            return readSearchOutcome(request, sendSearch, signal, 'subjects');
+          }
+          const request = { ...body, ...(!hasSearch || !properties.length ? {} : { properties }), ...(!hasSearch ? { limit: 1 } : {}) };
           if (data.representation !== 'subjects-v1') {
             return readSearchOutcome(request, sendSearch, signal);
           }
@@ -510,7 +570,12 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const outcome = await searchPromise;
     const result = hasSearch && outcome && 'result' in outcome ? outcome.result : undefined;
     const discovery = outcome && 'discovery' in outcome ? outcome.discovery : undefined;
-    const applicability = discovery?.status === 'ready' ? discovery.page.applicability : undefined;
+    const applicability =
+      discovery?.status === 'ready'
+        ? discovery.page.applicability
+        : realmCatalogue && outcome?.recovery.status === 'ready'
+          ? ({ type: 'all', statement: 'all' } satisfies RefinementApplicability)
+          : undefined;
     const eligibleFacets = applicableRefinementProperties(roster, applicability).filter(
       (entry) => entry.mode === 'values' || entry.mode === 'types',
     );
@@ -521,7 +586,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       .slice(0, 8)
       .map(({ property }) => ({ property, size: 10 }));
     let facetResult: FacetState | undefined;
-    if (body && discovery?.status === 'ready' && requestedFacets.length) {
+    if (body && (discovery?.status === 'ready' || (realmCatalogue && result !== undefined)) && requestedFacets.length) {
       try {
         const optionRequest = scopedRefinementRequests(
           withoutResourceLanguageSelection(queryState),
@@ -568,6 +633,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       ...(problem ? { problem } : {}),
       ...(result ? { result } : {}),
       ...(discovery ? { discovery } : {}),
+      ...(applicability ? { refinementApplicability: applicability } : {}),
       ...(type ? { type } : {}),
       ...(knownType && release ? { typeLabels: release.types[knownType]?.labels ?? {} } : {}),
       hitTypes,
@@ -723,6 +789,12 @@ export function SearchPage({
   session = null,
   readerOwner,
   searchHref,
+  fixedResourceScope,
+  hrefForState,
+  formAction,
+  heading,
+  embedded = false,
+  isCurrent = () => true,
 }: {
   query: string;
   cursor?: string;
@@ -736,6 +808,13 @@ export function SearchPage({
   session?: string | null;
   readerOwner?: string | undefined;
   searchHref?: string | undefined;
+  /** Embedded scope owners keep the native resource fixed while sharing Search controls. */
+  fixedResourceScope?: SearchResourceScope | undefined;
+  hrefForState?: ((state: SearchLoaderDeps) => string) | undefined;
+  formAction?: string | undefined;
+  heading?: ReactNode;
+  embedded?: boolean;
+  isCurrent?: (() => boolean) | undefined;
 }) {
   const sourceData = data;
   const currentData = useRef(data);
@@ -777,7 +856,7 @@ export function SearchPage({
   const discovery = data?.discovery;
   const selectedFacets = data?.selectedFacets ?? {};
   const resourceLanguage = data?.resourceLanguage;
-  const committedState: SearchLoaderDeps = data?.queryState ?? {
+  const committedInput: SearchLoaderDeps = data?.queryState ?? {
     query,
     type,
     facets: selectedFacets,
@@ -785,16 +864,33 @@ export function SearchPage({
     sort: data?.sort === 'rating' ? 'rating' : undefined,
     ratingPopulation: data?.ratingPopulation,
   };
+  const committedState: SearchLoaderDeps = fixedResourceScope
+    ? {
+        ...committedInput,
+        resourceScope: fixedResourceScope,
+        filter: searchFilterWithScope(committedInput.filter, fixedResourceScope),
+      }
+    : committedInput;
+  const hrefFor = (state: SearchLoaderDeps) => {
+    const fixed = fixedResourceScope
+      ? {
+          ...state,
+          resourceScope: fixedResourceScope,
+          filter: searchFilterWithScope(state.filter, fixedResourceScope),
+        }
+      : state;
+    return hrefForState?.(fixed) ?? discoverySearchHref(locale, fixed);
+  };
   const windowNavigation = useSearchWindow({
     cursor: committedState.cursor,
-    href: (cursor) => discoverySearchHref(locale, { ...committedState, cursor }),
+    href: (cursor) => hrefFor({ ...committedState, cursor }),
     locale,
     session,
     ready: data?.recovery?.status === 'ready',
     settled: data?.recovery?.status !== 'loading',
     recoverable: ['unavailable', 'index-not-ready', 'source-not-ready'].includes(data?.recovery?.status ?? ''),
     checkpoint: discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of,
-    enabled: !filtersOnly,
+    enabled: !filtersOnly && isCurrent(),
   });
   const stateKey = JSON.stringify([committedState, locale]);
   const composition = useConditionComposition(stateKey);
@@ -1063,6 +1159,7 @@ export function SearchPage({
     />
   );
   const navigate = (href: string, removingCondition = false) => {
+    if (!isCurrent()) return;
     setDraft((previous) => ({ ...previous, attempted: true }));
     if (!removingCondition && localIssues.length) {
       requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
@@ -1072,7 +1169,7 @@ export function SearchPage({
   };
   const removeScope = () =>
     navigate(
-      discoverySearchHref(locale, {
+      hrefFor({
         ...committedState,
         filter: removeSearchResourceScope(committedState.filter),
         resourceScope: undefined,
@@ -1081,7 +1178,7 @@ export function SearchPage({
     );
   const clearResourceLanguage = () =>
     navigate(
-      discoverySearchHref(locale, {
+      hrefFor({
         ...committedState,
         facets: Object.fromEntries(
           Object.entries(selectedFacets).filter(([property]) => property !== RESOURCE_LANGUAGE_PROPERTY),
@@ -1090,6 +1187,10 @@ export function SearchPage({
       }),
     );
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!isCurrent()) {
+      event.preventDefault();
+      return;
+    }
     if (composition.isComposing()) {
       event.preventDefault();
       return;
@@ -1105,7 +1206,9 @@ export function SearchPage({
       const params = new URLSearchParams();
       for (const [key, value] of new FormData(event.currentTarget))
         if (typeof value === 'string' && value !== '') params.append(key, value);
-      navigate(`/${locale}/search?${params}`);
+      const action = new URL(formAction ?? `/${locale}/search`, 'https://rezics.invalid');
+      for (const [key, value] of params) action.searchParams.append(key, value);
+      navigate(`${action.pathname}${action.search}`);
     }
   };
   const revertDraft = () => {
@@ -1165,7 +1268,7 @@ export function SearchPage({
                   },
                   options,
                 )}
-                href={discoverySearchHref(locale, state)}
+                href={hrefFor(state)}
               >
                 <span lang={lang} className="min-w-0 text-start wrap-anywhere">
                   {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
@@ -1217,7 +1320,14 @@ export function SearchPage({
         options,
       )
     : undefined;
-  const filterApplicability = data?.discovery?.status === 'ready' ? data.discovery.page.applicability : undefined;
+  const filterApplicability =
+    data?.refinementApplicability ?? (data?.discovery?.status === 'ready' ? data.discovery.page.applicability : undefined);
+  const kindDirectory =
+    data?.discovery?.status === 'ready'
+      ? { initial: data.discovery.page.kinds, checkpoint: data.discovery.page.as_of }
+      : data?.queryState?.resourceScope?.kind === 'realm' && data.result?.kinds
+        ? { initial: data.result.kinds, checkpoint: data.result.as_of }
+        : undefined;
   const typeApplicability = filterApplicability?.type ?? 'unknown';
   const statementApplicability = filterApplicability?.statement ?? 'unknown';
   const typeRefinementAvailable = typeApplicability === 'all' || typeApplicability === 'partial';
@@ -1271,13 +1381,21 @@ export function SearchPage({
       {committedState.ratingPopulation && (
         <input type="hidden" name={RATING_POPULATION_FIELD} value={committedState.ratingPopulation} />
       )}
-      <AdvancedScope
-        key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
-        filter={data?.queryState?.filter}
-        scope={data?.queryState?.resourceScope}
-        locale={locale}
-        onRemove={removeScope}
-      />
+      {fixedResourceScope ? (
+        <input
+          type="hidden"
+          name="filter"
+          value={searchFilterWithScope(data?.queryState?.filter ?? committedState.filter, fixedResourceScope) ?? ''}
+        />
+      ) : (
+        <AdvancedScope
+          key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
+          filter={data?.queryState?.filter}
+          scope={data?.queryState?.resourceScope}
+          locale={locale}
+          onRemove={removeScope}
+        />
+      )}
       {resourceLanguage?.applicability === 'not-applicable' && (type || resourceLanguage.selected.length > 0) && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.search_resource_language_not_applicable({}, options)}
@@ -1304,7 +1422,7 @@ export function SearchPage({
           {data?.queryState && (
             <a
               className={linkClass}
-              href={discoverySearchHref(locale, { ...data.queryState, kinds: undefined, cursor: undefined })}
+              href={hrefFor({ ...data.queryState, kinds: undefined, cursor: undefined })}
             >
               {m.search_kind_navigation_all({}, options)}
             </a>
@@ -1326,7 +1444,7 @@ export function SearchPage({
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
-      {(data?.discovery?.status !== 'ready' ? (data?.queryState?.kinds ?? []) : []).map((kind) => (
+      {(!kindDirectory ? (data?.queryState?.kinds ?? []) : []).map((kind) => (
         <input key={kind} type="hidden" name="kinds" value={kind} />
       ))}
       {(!data?.refinement ||
@@ -1341,11 +1459,11 @@ export function SearchPage({
             : [],
         )}
       {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
-      {data?.discovery?.status === 'ready' && data.queryState && (
+      {kindDirectory && data?.queryState && (
         <DiscoveryKinds
-          key={JSON.stringify([data.queryState, locale, session, readerOwner, data.discovery.page])}
-          initial={data.discovery.page.kinds}
-          checkpoint={data.discovery.page.as_of}
+          key={JSON.stringify([data.queryState, locale, session, readerOwner, kindDirectory])}
+          initial={kindDirectory.initial}
+          checkpoint={kindDirectory.checkpoint}
           locale={locale}
           selected={data.queryState.kinds ?? []}
           hydrated={hydrated}
@@ -1489,7 +1607,7 @@ export function SearchPage({
         <input type="hidden" name="condition" value={JSON.stringify(draft.condition)} />
       ) : null}
       {!data?.conditionMetadata && (
-        <a className={linkClass} href={discoverySearchHref(locale, committedState)}>
+        <a className={linkClass} href={hrefFor(committedState)}>
           {m.search_facet_retry({}, options)}
         </a>
       )}
@@ -1548,7 +1666,7 @@ export function SearchPage({
             id="desktop-filter-form"
             method="get"
             onSubmit={submit}
-            action={`/${locale}/search`}
+            action={formAction ?? `/${locale}/search`}
           >
             {filterContents('desktop')}
           </form>
@@ -1568,7 +1686,7 @@ export function SearchPage({
             {...composition.handlers}
             id="search-filters"
             method="get"
-            action={`/${locale}/search`}
+            action={formAction ?? `/${locale}/search`}
             onSubmit={submit}
             onClick={follow}
           >
@@ -1601,7 +1719,7 @@ export function SearchPage({
         retryAt={data?.recovery && 'retryAt' in data.recovery ? data.recovery.retryAt : undefined}
         onApply={(value) => {
           void router?.navigate({
-            href: discoverySearchHref(locale, { ...committedState, query: value, cursor: undefined }),
+            href: hrefFor({ ...committedState, query: value, cursor: undefined }),
           });
         }}
       />
@@ -1618,8 +1736,8 @@ export function SearchPage({
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">
-      <PageHeading>{m.search_heading({}, options)}</PageHeading>
-      {data?.recovery?.status === 'ready' && data.queryState && (
+      {heading ?? <PageHeading>{m.search_heading({}, options)}</PageHeading>}
+      {!embedded && data?.recovery?.status === 'ready' && data.queryState && (
         <QuerySharePreview
           key={JSON.stringify([stateKey, locale, session])}
           locale={locale}
@@ -1658,6 +1776,128 @@ export function SearchPage({
         content
       )}
     </section>
+  );
+}
+
+/** Search-owned Realm catalogue section mounted by the existing Realm page composition. */
+export function RealmCatalogueSearch({
+  realmId,
+  locale,
+  isCurrent,
+}: {
+  realmId: string;
+  locale: string;
+  isCurrent: () => boolean;
+}) {
+  const location = useLocation();
+  const browserSession = useSession();
+  const reader = searchSessionOwner(browserSession);
+  const search = location.search as Record<string, unknown>;
+  const authored = searchLoaderDeps({ ...search, cursor: search.searchCursor });
+  const resourceScope: SearchResourceScope = { kind: 'realm', id: realmId.toLowerCase() };
+  const queryState: SearchLoaderDeps = {
+    ...authored,
+    resourceScope,
+    filter: authored.invalidInput
+      ? authored.filter
+      : searchFilterWithScope(authored.filter, resourceScope),
+  };
+  const pathname = `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(realmId)}`;
+  const pageSearch = new URLSearchParams();
+  if (search.node === 'boards' || search.node === 'publications') pageSearch.set('node', search.node);
+  if (typeof search.cursor === 'string' && search.cursor) pageSearch.set('cursor', search.cursor);
+  const action = `${pathname}${pageSearch.size ? `?${pageSearch}` : ''}`;
+  const hrefForState = (state: SearchLoaderDeps) => {
+    const url = new URL(
+      discoverySearchHref(locale, state, { pathname, cursorParam: 'searchCursor' }),
+      'https://rezics.invalid',
+    );
+    if (search.node === 'boards' || search.node === 'publications') url.searchParams.set('node', search.node);
+    if (typeof search.cursor === 'string' && search.cursor) url.searchParams.set('cursor', search.cursor);
+    url.hash = 'search-results';
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+  const currentHref = hrefForState(queryState);
+  const heading = <h2 className="text-xl font-semibold">{m.realm_catalogue_heading({}, messageOptions(locale))}</h2>;
+  if (searchRequiresCurrentReader(queryState) && (browserSession.state !== 'signed-in' || !reader))
+    return (
+      <SearchPage
+        query={queryState.query}
+        data={{ ...searchUnavailablePage(queryState), recovery: { status: 'session' } }}
+        locale={locale}
+        session={null}
+        searchHref={currentHref}
+        fixedResourceScope={resourceScope}
+        hrefForState={hrefForState}
+        formAction={action}
+        heading={heading}
+        embedded
+        isCurrent={isCurrent}
+      />
+    );
+  return (
+    <LoadedRealmCatalogueSearch
+      key={searchSessionLifetime(locale, { ...queryState, cursor: undefined }, reader ?? undefined)}
+      queryState={queryState}
+      locale={locale}
+      reader={reader ?? undefined}
+      pathname={pathname}
+      searchHref={currentHref}
+      hrefForState={hrefForState}
+      formAction={action}
+      heading={heading}
+      isCurrent={isCurrent}
+    />
+  );
+}
+
+function LoadedRealmCatalogueSearch({
+  queryState,
+  locale,
+  reader,
+  pathname,
+  searchHref,
+  hrefForState,
+  formAction,
+  heading,
+  isCurrent,
+}: {
+  queryState: SearchLoaderDeps;
+  locale: string;
+  reader?: string;
+  pathname: string;
+  searchHref: string;
+  hrefForState: (state: SearchLoaderDeps) => string;
+  formAction: string;
+  heading: ReactNode;
+  isCurrent: () => boolean;
+}) {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    setActive(isCurrent());
+  }, [isCurrent]);
+  const { data, readerOwner, retry } = useSearchQuery(locale, queryState, reader, {
+    pathname,
+    cursorParam: 'searchCursor',
+  }, active);
+  return (
+    <SearchPage
+      query={queryState.query}
+      data={data}
+      locale={locale}
+      session={reader ?? null}
+      readerOwner={readerOwner}
+      searchHref={searchHref}
+      onRetry={() => {
+        if (isCurrent()) retry();
+      }}
+      fixedResourceScope={queryState.resourceScope}
+      hrefForState={hrefForState}
+      formAction={formAction}
+      heading={heading}
+      embedded
+      isCurrent={isCurrent}
+    />
   );
 }
 

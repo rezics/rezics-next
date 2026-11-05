@@ -85,6 +85,7 @@ export async function readSearchOutcome(
   request: Request,
   send: (request: Request) => Promise<SearchWireResponse>,
   signal?: AbortSignal,
+  responseFormat: 'request' | 'subjects' = 'request',
 ): Promise<SearchOutcome> {
   const submittedText = request.text;
   try {
@@ -111,7 +112,7 @@ export async function readSearchOutcome(
       }
       return { recovery };
     }
-    if (request.representation === 'discovery-v1') {
+    if (responseFormat === 'request' && request.representation === 'discovery-v1') {
       const page = parseDiscoveryPage(response.data);
       if (page && request.cursor && page.hits.length === 0 && page.next === null)
         return { recovery: { status: 'exhausted', asOf: page.as_of } };
