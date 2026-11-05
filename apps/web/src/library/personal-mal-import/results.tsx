@@ -95,7 +95,12 @@ export function MalResultPage({
         )
         .map((row) => {
           const subjectId = row.review?.target ?? row.target;
-          return subjectId ? <MalCurrentAssignments key={`${row.index}:${subjectId}`} subjectId={subjectId} /> : null;
+          return subjectId ? (
+            <MalCurrentAssignments
+              key={`${row.index}:${subjectId}:${JSON.stringify(result.outcomes)}`}
+              subjectId={subjectId}
+            />
+          ) : null;
         })}
       <div className="flex flex-wrap gap-3">
         <MalAction type="button" variant="outline" disabled={busy} onClick={onReview}>
