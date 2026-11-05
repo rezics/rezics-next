@@ -1,15 +1,22 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from '../../../services/kernel/test/library/support/profile-entry-fixture';
-import { createPersonalLabelCommands } from '../../../services/kernel/src/library/label-commands';
-import { createLabelAssignmentCommands } from '../../../services/kernel/src/library/label-assignment-commands';
-import { routeOf } from '../../../services/kernel/src/route/route';
 import { consolidationClient } from '../src/library/label-consolidation/client';
 import { ConsolidationReview } from '../src/library/label-consolidation/review';
 import { ConsolidationVisit } from '../src/library/label-consolidation/visit';
 
-let f: NativeProfileFixture;
-beforeAll(async () => { f = await createProfileEntryFixture(); }, 120_000);
+// Load the native runtime at execution time: Web's compiler owns the receiver, while Kernel owns
+// the fixture and its SQL/Worker compilation environment.
+let f: any;
+let createPersonalLabelCommands: any, createLabelAssignmentCommands: any, routeOf: any;
+const entryKey = () => crypto.randomUUID();
+beforeAll(async () => {
+  const native = '../../../services/kernel/';
+  const fixture = await import(native + 'test/library/support/profile-entry-fixture.ts');
+  ({ createPersonalLabelCommands } = await import(native + 'src/library/label-commands.ts'));
+  ({ createLabelAssignmentCommands } = await import(native + 'src/library/label-assignment-commands.ts'));
+  ({ routeOf } = await import(native + 'src/route/route.ts'));
+  f = await fixture.createProfileEntryFixture();
+}, 120_000);
 afterAll(async () => { await f?.close(); });
 
 async function journey() {
