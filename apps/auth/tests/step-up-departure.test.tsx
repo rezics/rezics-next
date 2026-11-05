@@ -2,6 +2,7 @@ import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import type { PasskeySignInResult } from '../src/passkeys';
+import { nativeSignInProof } from './sign-in-fixture';
 
 creationFixture();
 let cleanup = () => {};
@@ -103,7 +104,7 @@ test('Leave retires a dispatched password continuation without cancelling its si
   await page.navigate('/away');
   await page.choose('Leave');
   expect(page.cancel).not.toHaveBeenCalled();
-  page.calls[0]!.resolve(Response.json({ success: true }));
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await flush(() => Promise.resolve());
   expect(page.assign).not.toHaveBeenCalled();
 });
@@ -128,7 +129,7 @@ test('successful confirmation releases a blocked departure and continues to its 
   });
   await page.navigate('/away');
   expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
-  page.calls[0]!.resolve(Response.json({ success: true }));
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await flush(() => Promise.resolve());
   expect(page.router.history.location.pathname).toBe('/step-up');
   expect(page.assign).toHaveBeenCalledTimes(1);
@@ -190,8 +191,10 @@ for (const method of ['password', 'passkey'] as const)
           const observed = Promise.withResolvers<Response>();
           const observing = Promise.withResolvers<void>();
           const paths: string[] = [];
-          const request = spyOn(globalThis, 'fetch').mockImplementation((path) => {
+          let signInBody: { client_id: string; scope: string[] } | undefined;
+          const request = spyOn(globalThis, 'fetch').mockImplementation((path, init) => {
             paths.push(String(path));
+            if (String(path) === '/signin') signInBody = JSON.parse(String(init?.body));
             if (path === '/session') {
               observing.resolve();
               return observed.promise;
@@ -201,7 +204,7 @@ for (const method of ['password', 'passkey'] as const)
           const passkey = Promise.withResolvers<PasskeySignInResult>();
           const ceremony = spyOn(passkeys, 'signInWithPasskey').mockImplementation(() => passkey.promise);
           const authenticate = () => {
-            authentication.resolve(Response.json({ success: true }));
+            authentication.resolve(Response.json(nativeSignInProof(signInBody!)));
             passkey.resolve({ ok: true });
           };
           try {

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { nativeSignInProof } from './sign-in-fixture';
 
 if (!process.env.RENAME_COST_CHILD) {
   test('installed rename transport costs with the admitted common session BFF', async () => {
@@ -218,7 +219,8 @@ if (!process.env.RENAME_COST_CHILD) {
       const name = new URL(String(path), 'https://auth.test').pathname;
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       requests.push({ path: name, body });
-      if (name === '/signin') return Response.json({});
+      if (name === '/signin')
+        return Response.json(nativeSignInProof(body as { client_id: string; scope: string[] }, 'pwd', accountId));
       if (name === '/session')
         return Response.json({
           account_id: accountId,

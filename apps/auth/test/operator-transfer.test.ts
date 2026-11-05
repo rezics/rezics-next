@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { nativeSignInProof } from '../tests/sign-in-fixture';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
   parseTransferRequest,
@@ -221,7 +222,13 @@ test('stale step-up retains the account tuple key and opaque reference and requi
         ...OPERATOR_MANAGEMENT_PROFILE,
       });
       fresh = true;
-      return Response.json({});
+      return Response.json(
+        nativeSignInProof(
+          JSON.parse(String(init?.body)) as { client_id: string; scope: string[] },
+          'pwd',
+          attempt.accountId,
+        ),
+      );
     }
     approvals++;
     return fresh

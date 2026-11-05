@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { nativeSignInProof } from '../tests/sign-in-fixture';
 import {
   AUTH_MANAGEMENT_CLIENT_ID,
   type ManagementOperation,
@@ -88,7 +89,10 @@ test('Least-scope Auth account management composition and typed transport preser
   let session = proof();
   const calls = respond((call) => {
     if (call.path === '/session') return Response.json(session);
-    if (call.path === '/signin') return Response.json({});
+    if (call.path === '/signin')
+      return Response.json(
+        nativeSignInProof(call.body as { client_id: string; scope: string[] }, 'pwd', input.accountId),
+      );
     if (call.path.endsWith('/approve')) return Response.json(approval());
     return Response.json({ accountId: 'managed' });
   });

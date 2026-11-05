@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, createRef, StrictMode, type ReactNode } from 'react';
 import type { TurnstileHandle } from '../src/turnstile.tsx';
+import { nativeSignInProof } from './sign-in-fixture';
 
 // Use the installed DOM implementation already used by mounted Web regressions. No server or script fetches.
 const { Window } = await import(
@@ -683,7 +684,7 @@ test('default signup success still sends the original signup and signin protocol
     requests.push({ path, init, body: JSON.parse(String(init.body)) });
     return path === '/signup'
       ? Response.json({ accountId: 'account-id' }, { status: 201 })
-      : Response.json({ success: true });
+      : Response.json(nativeSignInProof(JSON.parse(String(init.body))));
   }) as typeof fetch;
   try {
     await page.fillAll();
@@ -939,9 +940,9 @@ test('created accounts keep sign-in failure feedback and finish through login wi
         targets.push(String(target));
       };
       try {
-        globalThis.fetch = (async (path: string) => {
+        globalThis.fetch = (async (path: string, init: RequestInit) => {
           paths.push(path);
-          return Response.json({ success: true });
+          return Response.json(nativeSignInProof(JSON.parse(String(init.body))));
         }) as typeof fetch;
         await page.fill('email', 'reader@example.test');
         await page.fill('password', 'private-password');
@@ -972,10 +973,12 @@ for (const stage of ['creation', 'sign-in'])
           targets.push(String(target));
         };
         let release!: (response: Response) => void;
-        globalThis.fetch = (async (path: string) => {
+        let signInBody: { client_id: string; scope: string[] } | undefined;
+        globalThis.fetch = (async (path: string, init: RequestInit) => {
           paths.push(path);
           if (stage === 'sign-in' && path === '/signup')
             return Response.json({ accountId: 'account-id' }, { status: 201 });
+          if (path === '/signin') signInBody = JSON.parse(String(init.body));
           return new Promise<Response>((resolve) => {
             release = resolve;
           });
@@ -1003,9 +1006,16 @@ for (const stage of ['creation', 'sign-in'])
             });
           await flush(() =>
             release(
-              Response.json(status === 200 ? { accountId: 'account-id' } : { error: 'unavailable' }, {
+              Response.json(
+                status === 200
+                  ? stage === 'creation'
+                    ? { accountId: 'account-id' }
+                    : nativeSignInProof(signInBody!)
+                  : { error: 'unavailable' },
+                {
                 status: stage === 'creation' && status === 200 ? 201 : status,
-              }),
+                },
+              ),
             ),
           );
           expect(paths).toEqual(stage === 'creation' ? ['/signup'] : ['/signup', '/signin']);

@@ -3,6 +3,7 @@ import { createBrowserHistory, createRootRoute, createRouter, RouterProvider } f
 import * as browser from '@simplewebauthn/browser';
 import * as passkeys from '../src/passkeys';
 import { Route } from '../src/routes/login';
+import { nativeSignInOptions, nativeSignInProof } from './sign-in-fixture';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 creationFixture();
 const scroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
@@ -86,7 +87,7 @@ test('retained password dispatch clears private DOM synchronously, ignores late 
   await p.restore();
   expect(p.calls.map((c) => c.path)).toEqual(['/signin/page', '/signin', '/signin/page']);
   expect(p.calls.at(-1)!.body).toEqual(p.calls[0]!.body);
-  await flush(() => command.resolve(Response.json({})));
+  await flush(() => command.resolve(Response.json(nativeSignInProof(command.body))));
   expect(p.assign).not.toHaveBeenCalled();
   await p.reply(advice('replacement', false));
   expect(p.host.textContent).toContain('replacement@example.test');
@@ -120,13 +121,28 @@ test('unknown survives repeated read failure, replacement viewer, and a later cr
   expect(p.host.textContent).not.toContain('Earlier sign-in');
 });
 
+test.each(['empty', 'wrong-profile'] as const)(
+  'HTTP 200 with %s proof cannot acknowledge password sign-in or navigate',
+  async (invalid) => {
+    const p = await setup();
+    await p.enter();
+    await flush(() => send(p.host));
+    const request = p.calls.at(-1)!;
+    const proof = nativeSignInProof(request.body);
+    await p.reply(invalid === 'empty' ? {} : { ...proof, client_id: 'other-client' });
+    expect(p.assign).not.toHaveBeenCalled();
+    expect(p.host.textContent).toContain('outcome could not be confirmed');
+    expect(p.calls.map((call) => call.path)).toEqual(['/signin/page', '/signin']);
+  },
+);
+
 test.each(['options', 'prompt', 'dispatched'] as const)(
   'explicit passkey %s return never resumes a retired ceremony',
   async (phase) => {
     const p = await setup();
     await p.click('Sign in with a passkey');
     const options = p.calls.at(-1)!;
-    if (phase !== 'options') await p.reply({ challenge: 'private-challenge' });
+    if (phase !== 'options') await p.reply(nativeSignInOptions());
     if (phase === 'dispatched') await flush(() => p.prompt.resolve({ private: 'assertion' }));
     const pending = p.calls.at(-1)!;
     await p.hide();
@@ -140,9 +156,9 @@ test.each(['options', 'prompt', 'dispatched'] as const)(
     await p.restore();
     await p.reply(advice());
     await flush(() => {
-      options.resolve(Response.json({ challenge: 'late' }));
+      options.resolve(Response.json(nativeSignInOptions()));
       p.prompt.resolve({ private: 'late-assertion' });
-      if (phase === 'dispatched') pending.resolve(Response.json({}));
+      if (phase === 'dispatched') pending.resolve(Response.json(nativeSignInProof(pending.body, 'pop')));
     });
     expect(p.assign).not.toHaveBeenCalled();
     expect(p.calls.filter((c) => c.path === '/signin/passkey')).toHaveLength(phase === 'dispatched' ? 1 : 0);

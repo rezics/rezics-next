@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { nativeSignInProof } from '../tests/sign-in-fixture';
 import {
   AUTOMATED_PROFILE,
   createAutomatedAttempt,
@@ -134,9 +135,10 @@ test('foreign human and uninstalled or wrong management profile never approve or
   session = { ...proof(), client_id: 'login', scope: [] };
   expect(await submitAutomatedAttempt(input)).toEqual({ kind: 'step-up' });
   expect(calls.filter((call) => call.path.includes('/account-operations/'))).toHaveLength(0);
-  const reauthCalls = respond((path) => {
+  const reauthCalls = respond((path, body) => {
     if (path === '/session') return Response.json(proof());
-    if (path === '/signin') return Response.json({});
+    if (path === '/signin')
+      return Response.json(nativeSignInProof(body as { client_id: string; scope: string[] }, 'pwd', human));
     throw new Error('Sign-in must not approve or execute');
   });
   expect(await reauthenticateAutomated(human, 'human@example.test', 'transient-password')).toBeNull();

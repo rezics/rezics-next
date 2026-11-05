@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import type { PasskeySignInResult } from '../src/passkeys';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { nativeSignInProof } from './sign-in-fixture';
 
 // Reuse the mounted Auth DOM fixture and story input helpers, without a server.
 const { Window } = await import(
@@ -65,6 +66,7 @@ async function open(path = '/login') {
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: parent.addChildren([route, stepUp, away]) });
   const requests: ReturnType<typeof Promise.withResolvers<Response>>[] = [];
+  const requestBodies: { client_id: string; scope: string[] }[] = [];
   const ceremonies: ReturnType<typeof Promise.withResolvers<PasskeySignInResult>>[] = [];
   globalThis.fetch = ((path, init) => {
     if (path === '/recovery/page')
@@ -83,6 +85,7 @@ async function open(path = '/login') {
       );
     const call = Promise.withResolvers<Response>();
     requests.push(call);
+    requestBodies.push(JSON.parse(String(init?.body)));
     return call.promise;
   }) as typeof fetch;
   const supported = spyOn(passkeys, 'passkeysSupported').mockReturnValue(true);
@@ -103,6 +106,7 @@ async function open(path = '/login') {
   return {
     host,
     requests,
+    requestBodies,
     ceremonies,
     assign,
     cancel,
@@ -151,12 +155,12 @@ test('replacement and destination changes keep old password and autofill results
     await page.password();
     await flush(() => page.requests[1]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 })));
     const error = page.host.querySelector('[role="alert"]')!.textContent;
-    await flush(() => page.requests[0]!.resolve(Response.json({})));
+    await flush(() => page.requests[0]!.resolve(Response.json(nativeSignInProof(page.requestBodies[0]!))));
     await flush(() => page.ceremonies[1]!.resolve({ ok: false, reason: 'unavailable' }));
     expect(page.host.querySelector('[role="alert"]')!.textContent).toBe(error);
     expect(page.assign).not.toHaveBeenCalled();
     await page.password();
-    await flush(() => page.requests[2]!.resolve(Response.json({})));
+    await flush(() => page.requests[2]!.resolve(Response.json(nativeSignInProof(page.requestBodies[2]!))));
     expect(page.assign).toHaveBeenCalledWith('https://auth.test/authorize?client_id=reader&scope=openid&scope=');
   } finally {
     await page.close();
@@ -178,7 +182,7 @@ test('dismissed prompts recover, and departure or cached restoration retires pen
     expect(page.requests).toHaveLength(1);
     expect(page.host.querySelector<HTMLInputElement>('#login-email')!.value).toBe('');
     expect(page.host.querySelector<HTMLInputElement>('#login-password')!.value).toBe('');
-    await flush(() => page.requests[0]!.resolve(Response.json({})));
+    await flush(() => page.requests[0]!.resolve(Response.json(nativeSignInProof(page.requestBodies[0]!))));
     expect(page.assign).not.toHaveBeenCalled();
     await page.navigate('/away');
     await flush(() => page.ceremonies.at(-1)!.resolve({ ok: true }));
@@ -186,7 +190,7 @@ test('dismissed prompts recover, and departure or cached restoration retires pen
     await page.navigate('/login');
     await page.password();
     expect(page.requests).toHaveLength(2);
-    await flush(() => page.requests[1]!.resolve(Response.json({})));
+    await flush(() => page.requests[1]!.resolve(Response.json(nativeSignInProof(page.requestBodies[1]!))));
     expect(page.assign).toHaveBeenCalledWith('https://auth.test/security');
   } finally {
     await page.close();
@@ -213,14 +217,14 @@ test('validation, replacement, failure and retry resume only the current authori
     expect(page.host.querySelector<HTMLInputElement>('#step-up-password')!.value).toBe('');
     await page.password();
     expect(page.requests).toHaveLength(2);
-    await flush(() => page.requests[0]!.resolve(Response.json({})));
+    await flush(() => page.requests[0]!.resolve(Response.json(nativeSignInProof(page.requestBodies[0]!))));
     expect(page.assign).not.toHaveBeenCalled();
     expect(button(page.host, 'Verify your identity')!.disabled).toBe(true);
     await flush(() => page.requests[1]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 })));
     expect(page.host.querySelector('[role="alert"]')).not.toBeNull();
     expect(page.host.querySelector<HTMLInputElement>('#step-up-password')!.value).toBe('');
     await page.password();
-    await flush(() => page.requests[2]!.resolve(Response.json({})));
+    await flush(() => page.requests[2]!.resolve(Response.json(nativeSignInProof(page.requestBodies[2]!))));
     expect(page.assign).toHaveBeenCalledWith(
       'https://auth.test/authorize?client_id=reader&scope=openid&scope=&max_age=60',
     );
@@ -237,7 +241,8 @@ test.each(['password', 'passkey'])(
       method === 'password' ? page.password() : flush(() => button(page.host, 'Verify with a passkey')!.click());
     const complete = (index: number) =>
       flush(() => {
-        if (method === 'password') page.requests[index]!.resolve(Response.json({}));
+        if (method === 'password')
+          page.requests[index]!.resolve(Response.json(nativeSignInProof(page.requestBodies[index]!)));
         else page.ceremonies[index]!.resolve({ ok: true });
       });
     try {

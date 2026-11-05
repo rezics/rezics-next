@@ -10,6 +10,7 @@ import {
 } from '../src/management-operation-step-up';
 import { managementOperationProfile } from '../src/management-operations';
 import * as managementOperations from '../src/management-operations';
+import { nativeSignInProof } from './sign-in-fixture';
 
 creationFixture();
 const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
@@ -227,7 +228,7 @@ test('a replaced management marker preserves replacement after a fresh exact hum
   });
   expect(page.assign).not.toHaveBeenCalled();
 
-  page.calls[0]!.resolve(Response.json({ success: true }));
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await settle();
   expect(page.host.textContent).toContain(m.auth_step_up_return_unknown());
   expect(page.assign).not.toHaveBeenCalled();

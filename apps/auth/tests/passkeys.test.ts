@@ -1,6 +1,7 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { readRegistrationPage } from '../../../services/auth/src/registration-page';
 import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
+import { nativeSignInOptions, nativeSignInProof } from './sign-in-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -150,19 +151,19 @@ const fake = Bun.serve({
       const body = parsed();
       if (body.email !== email || body.password !== password) return json({ error: 'authentication_denied' }, 401);
       if (!issueSession(body)) return json({ error: 'invalid_scope' }, 400);
-      return json({});
+      return json(nativeSignInProof(body, 'pwd', sessionAccountId));
     }
 
     if (url.pathname === '/signin/passkey/options' && request.method === 'POST') {
       const challenge = base64url(randomBytes(32));
       issued.set(challenge, 'webauthn.get');
-      return json({ challenge, rpId: 'localhost', timeout: 60_000, userVerification: 'required' });
+      return json(nativeSignInOptions(challenge));
     }
     if (url.pathname === '/signin/passkey' && request.method === 'POST') {
       const body = parsed();
       if (!acceptsResponse(body.response)) return json({ error: 'authentication_denied' }, 401);
       if (!issueSession(body)) return json({ error: 'invalid_scope' }, 400);
-      return json({});
+      return json(nativeSignInProof(body, 'pop', sessionAccountId));
     }
 
     if (url.pathname.startsWith('/credential-effects/') && request.method === 'POST') {
@@ -188,7 +189,7 @@ const fake = Bun.serve({
       issued.set(challenge, 'webauthn.create');
       return json({
         challenge,
-        rp: { id: 'localhost', name: 'REZICS' },
+        rp: { id: 'rezics.com', name: 'REZICS' },
         user: { id: base64url(Buffer.from('a'.repeat(32))), name: email, displayName: email },
         pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key', alg })),
         extensions: { credProps: true },
@@ -301,7 +302,7 @@ async function addVirtualAuthenticator(cdp: CDPSession): Promise<Authenticator> 
   return { cdp, id: added.authenticatorId };
 }
 
-// An IP address cannot be a relying party ID, so the pages are opened at localhost.
+// The native RP is rezics.com, so browser pages use that hostname while Vite binds loopback.
 async function open(
   path: string,
   options: BrowserContextOptions & {
@@ -313,7 +314,7 @@ async function open(
 ): Promise<{ page: Page; origin: string; authenticator: Authenticator | null }> {
   const { webauthn = true, signedIn = true, pendingOperation, autofill = true, ...contextOptions } = options;
   const port = await site();
-  const origin = `http://localhost:${port}`;
+  const origin = `http://rezics.com:${port}`;
   browser ??= await chromium.launch();
   const context = await browser.newContext({
     viewport: { width: 1280, height: 860 },
@@ -324,7 +325,7 @@ async function open(
   });
   if (signedIn)
     await context.addCookies([
-      { name: 'auth_session', value: session, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' },
+      { name: 'auth_session', value: session, domain: 'rezics.com', path: '/', httpOnly: true, sameSite: 'Lax' },
     ]);
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -365,7 +366,7 @@ async function addResidentCredential({ cdp, id }: Authenticator) {
     credential: {
       credentialId: randomBytes(16).toString('base64'),
       isResidentCredential: true,
-      rpId: 'localhost',
+      rpId: 'rezics.com',
       privateKey: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
       userHandle: Buffer.from(accountId).toString('base64'),
       signCount: 0,
@@ -374,8 +375,13 @@ async function addResidentCredential({ cdp, id }: Authenticator) {
 }
 
 beforeAll(async () => {
-  await site();
-  browser = await chromium.launch();
+  const port = await site();
+  browser = await chromium.launch({
+    args: [
+      '--host-resolver-rules=MAP rezics.com 127.0.0.1',
+      `--unsafely-treat-insecure-origin-as-secure=http://rezics.com:${port}`,
+    ],
+  });
 }, timeout);
 
 afterAll(async () => {

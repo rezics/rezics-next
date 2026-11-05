@@ -3,6 +3,7 @@ import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvi
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { Route } from '../src/routes/signup';
 import type { RegistrationPage } from '../src/registration-page';
+import { nativeSignInProof } from './sign-in-fixture';
 
 creationFixture();
 const originalScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
@@ -215,7 +216,7 @@ test('confirmed creation with pending or failed automatic sign-in returns as cre
   expect(p.host.textContent).toContain('Your account was created');
   expect(p.host.textContent).not.toContain('Your earlier account creation may have completed');
   expect(p.host.querySelector('form')).toBeNull();
-  await flush(() => pendingSignIn.resolve(Response.json({ ok: true })));
+  await flush(() => pendingSignIn.resolve(Response.json(nativeSignInProof(pendingSignIn.body))));
   expect(p.calls.map((call) => call.path)).toEqual(['/signup', '/signin']);
 
   await p.transition('pagehide');

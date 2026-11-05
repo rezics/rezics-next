@@ -14,6 +14,8 @@ import {
   type ManagementSession,
 } from '@rezics/auth-contract';
 import { authPost } from './api';
+import { signInResult } from './sign-in';
+import { submitSignIn } from './sign-in-transport';
 import { loadManagementSession } from './management-operations';
 import { normalizeSignupHandle } from './signup';
 import { privateAuthRead } from './private-auth-read';
@@ -565,9 +567,9 @@ export async function reauthenticateAutomated(
   const before = await loadManagementSession(signal);
   if (!current()) return { kind: 'unavailable' };
   if (before.kind !== 'ready' || before.accountId !== accountId) return { kind: 'refused' };
-  const result = await authPost('/signin', { email, password, ...AUTOMATED_PROFILE });
+  const result = await submitSignIn('/signin', { email, password, ...AUTOMATED_PROFILE }, AUTOMATED_PROFILE);
   if (!current()) return { kind: 'unavailable' };
-  if (!result.ok) return { kind: 'unavailable' };
+  if (!result.ok) return signInResult(result).reason === 'unavailable' ? { kind: 'unavailable' } : { kind: 'refused' };
   const sessionAfterSignIn = await boundSession(accountId, signal);
   return current() ? sessionAfterSignIn : { kind: 'unavailable' };
 }

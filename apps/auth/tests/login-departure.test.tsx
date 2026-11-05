@@ -10,6 +10,7 @@ import { creationFixture, button, dom, fill, flush, open, send } from './creatio
 import { Route } from '../src/routes/login';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
+import { nativeSignInProof } from './sign-in-fixture';
 creationFixture();
 const originalScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
 beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
@@ -104,7 +105,7 @@ test('Stay retains the same dispatched sign-in; completion while prompting uses 
   expect(p.calls).toHaveLength(1);
   expect(button(p.host, 'Sign in')!.disabled).toBe(true);
   await p.navigate();
-  await flush(() => p.calls[0]!.resolve(Response.json({})));
+  await flush(() => p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body))));
   expect(p.assign).toHaveBeenCalledWith('https://auth.test/authorize?client_id=reader&scope=openid&scope=');
   expect(p.unload()).toBe(false);
   expect(document.querySelector('[role=alertdialog]')).toBeNull();
@@ -121,7 +122,8 @@ test.each(['password', 'passkey'])(
     await p.navigate();
     await p.choose('Leave');
     await flush(() => {
-      if (method === 'password') p.calls[0]!.resolve(Response.json({}));
+      if (method === 'password')
+        p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body)));
       else p.ceremony.resolve({ ok: true });
     });
     expect(p.assign).not.toHaveBeenCalled();
@@ -134,7 +136,7 @@ test('replacement authentication revokes a pending attempt and its open departur
   await flush(() => send(p.host));
   await p.navigate();
   await p.navigate('/login?client_id=new&scope=&sig=new');
-  await flush(() => p.calls[0]!.resolve(Response.json({})));
+  await flush(() => p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body))));
   expect(p.input('password').value).toBe('');
   expect(p.assign).not.toHaveBeenCalled();
   expect(p.unload()).toBe(false);

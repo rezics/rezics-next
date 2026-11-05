@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import { nativeSignInProof } from './sign-in-fixture';
 import {
   creationFixture,
   automatedOperatorPage,
@@ -101,7 +102,7 @@ for (const stage of ['review', 'approval', 'signin'] as const)
             ? automatedOperatorPage(human, operator)
             : stage === 'approval'
               ? approval()
-              : Response.json({}),
+              : Response.json(nativeSignInProof(page.calls.at(-1)!.body, 'pwd', human)),
         ),
     );
     expect(restoreAutomatedAttempt()).toEqual(replacement);
@@ -124,7 +125,7 @@ test('ordinary advice authenticates the exact normalized draft, rereads native r
   await authenticate(page.host);
   expect(page.host.querySelector<HTMLInputElement>('#automated-password')!.value).toBe('');
   Object.assign(session, body);
-  await flush(() => page.calls[0]!.resolve(Response.json({})));
+  await flush(() => page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body, 'pwd', human))));
   expect(page.calls[1]!.body).toEqual({ operatorAccountId: operator.id });
   await flush(() => page.calls[1]!.resolve(automatedOperatorPage(human, { ...operator, handle: null })));
   expect(page.host.textContent).toContain('Operator without a public name');

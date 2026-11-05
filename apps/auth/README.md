@@ -110,16 +110,22 @@ or a required preference write. Native/browser and integrated acceptance remain 
 
 ## Sign-in
 
-Decision: introduce the shared fixed-profile receiver before migrating installed sign-in callers and fixtures.
-`src/sign-in-transport.ts` receives the closed native options, SessionProof and error contracts defined under
-[Passkeys and credential freshness](../../services/auth/README.md#passkeys-and-credential-freshness).
-Each request has one five-second lifetime through fetch and streamed bounded body completion; cancellation and
-abort-ignoring transports settle at that same deadline. It preserves same-origin cookies, no-store and redirect
-rejection, and performs no retry or additional native read. Lost/malformed/excess replies remain unavailable;
-only a complete proof bound to the submitted profile and password/passkey method acknowledges authentication.
-Installed callers and their four-minute shared options cache still use the existing transport pending the
-continuation migration; these receiver tests alone establish neither installed return custody nor real-browser
-or native authenticator acceptance.
+Decision: installed password and passkey journeys share `src/sign-in-transport.ts`; only the exact six-field native
+SessionProof for the submitted fixed profile and password/passkey method acknowledges authentication. This covers
+ordinary login, account-operation step-up, management and rename review, automated-account creation, operator
+transfer and organization membership reauthentication. Each HTTP call has one five-second lifetime through fetch
+and streamed bounded body completion, including abort-ignoring transports; it preserves same-origin cookies,
+no-store and redirect rejection and performs no retry or extra read. Native 429 `authentication_denied` retains
+Retry-After; supported older `rate_limited` envelopes remain accepted. A native suspension response is a known
+refusal and uses existing credential-denied copy. Lost, malformed or excess replies remain unavailable.
+
+A password attempt still makes one `/signin` POST. Passkey authentication still makes one options POST and one
+assertion POST. The validated discoverable options response is shared for four minutes across conditional mediation
+and an explicit prompt; failed entries are evicted by identity, and dispatching the assertion consumes the challenge.
+Account-operation reauthentication only confirms the existing human/profile and then follows its original review or
+return; it never approves or executes the protected command. Mounted return history remains generic and keeps the
+first unresolved attempt across later reads or authentication. These installed fixtures do not establish real-browser
+or native-authenticator qualification.
 
 The sign-in page first reads `POST /signin/page` with only its current route query; the entered email is never sent to
 this read. Auth returns the installed password and passkey methods, the current viewer from the existing native session
@@ -175,7 +181,7 @@ same-origin hint for an already signed-in visitor; the native authorization rout
 Recovery links to `/recovery`; sign-up preserves the login query.
 
 Where the browser has WebAuthn, the page also offers passkeys. `src/passkeys.ts` holds every WebAuthn call, using
-`@simplewebauthn/browser` and the shared `authPost`. A "Sign in with a passkey" button asks `POST /signin/passkey/options`
+`@simplewebauthn/browser` and the shared bounded sign-in receiver. A "Sign in with a passkey" button asks `POST /signin/passkey/options`
 with `{}` for discoverable-credential options, prompts, and sends `{ response, client_id: "login", scope: [] }` to
 `POST /signin/passkey`, which answers like `/signin`; success resumes with `signInTarget`. Where the browser supports
 conditional mediation, the email field carries `autocomplete="username webauthn"` and the same ceremony runs in the

@@ -1,4 +1,4 @@
-import { authPost, failureMessage } from './api';
+import { failureMessage } from './api';
 import {
   selectOrganizationDeleteStepUp,
   organizationDeleteSessionMatches,
@@ -12,6 +12,7 @@ import {
 } from './account-operation-step-up';
 import { passkeySignInFailure, signInWithPasskey } from './passkeys';
 import { signIn, signInForAccountOperation, signInTarget, signInResult, type SignInResult } from './sign-in';
+import { submitSignIn } from './sign-in-transport';
 import { m } from './paraglide/messages.js';
 import {
   loadManagementSession,
@@ -175,7 +176,8 @@ function passkeyCurrentCheck(isCurrent: () => boolean, observer?: StepUpAttemptO
 
 // 401, 429 and 503 stay on the page. signIn already collapsed the Auth result to these three outcomes.
 export function stepUpFailure(result: Exclude<SignInResult, { ok: true }>): string {
-  if (result.reason === 'credentials') return failureMessage(401, 'authentication_denied', null);
+  if (result.reason === 'credentials' || result.reason === 'suspended')
+    return failureMessage(401, 'authentication_denied', null);
   if (result.reason === 'rate-limited') return failureMessage(429, 'rate_limited', result.retryAfter);
   return failureMessage(503, 'unavailable', null);
 }
@@ -192,9 +194,8 @@ export async function confirmStepUp(
   if (management.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   if (management.kind === 'management') {
     notify(observer?.onDispatch);
-    const result = signInResult(
-      await authPost('/signin', { email, password, ...managementOperationProfile(management.pending.kind) }),
-    );
+    const profile = managementOperationProfile(management.pending.kind);
+    const result = signInResult(await submitSignIn('/signin', { email, password, ...profile }, profile));
     if (!isCurrent()) return { ok: false, message: null };
     observeResult(result, observer);
     if (!result.ok) return { ok: false, message: stepUpFailure(result) };
@@ -202,9 +203,8 @@ export async function confirmStepUp(
   }
   if (management.kind === 'review') {
     notify(observer?.onDispatch);
-    const result = signInResult(
-      await authPost('/signin', { email, password, ...managementOperationProfile('rename') }),
-    );
+    const profile = managementOperationProfile('rename');
+    const result = signInResult(await submitSignIn('/signin', { email, password, ...profile }, profile));
     if (!isCurrent()) return { ok: false, message: null };
     observeResult(result, observer);
     if (!result.ok) return { ok: false, message: stepUpFailure(result) };
