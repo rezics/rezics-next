@@ -55,7 +55,14 @@ export function PersonalVndbImportPage({
   const current = visit === undefined ? observed : visit;
   useEffect(() => () => current?.retire(), [current]);
   if (!current) return <VndbSignedOut />;
-  return <VndbImportAccess visit={current} libraryReturn={libraryReturn} address={address} onAddressChange={onAddressChange} />;
+  return (
+    <VndbImportAccess
+      visit={current}
+      libraryReturn={libraryReturn}
+      address={address}
+      onAddressChange={onAddressChange}
+    />
+  );
 }
 
 const importOperations = ['library_entry.put'] as const;
@@ -90,7 +97,15 @@ function VndbImportAccess({ visit, libraryReturn, address, onAddressChange }: Vn
   }, [visit, store, version]);
   const identity = [visit.subject, visit.csrfToken, getLocale(), version].join(':');
   if (!value.allowed[0]) return <VndbUnavailable />;
-  return <VndbImportSession key={identity} visit={scoped} libraryReturn={libraryReturn} address={address} onAddressChange={onAddressChange} />;
+  return (
+    <VndbImportSession
+      key={identity}
+      visit={scoped}
+      libraryReturn={libraryReturn}
+      address={address}
+      onAddressChange={onAddressChange}
+    />
+  );
 }
 
 function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: VndbSessionProps) {
@@ -131,10 +146,15 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
       <PageHeading>{m.library_vndb_title()}</PageHeading>
       {snap.page && snap.reviewCurrent ? (
         <p className="text-sm">
-          <a className="underline underline-offset-2" href={vndbReviewHref({ uploadId: snap.page.uploadId, offset: snap.offset })} target="_blank" rel="noreferrer">
+          <a
+            className="underline underline-offset-2"
+            href={vndbReviewHref({ uploadId: snap.page.uploadId, offset: snap.offset })}
+            target="_blank"
+            rel="noreferrer"
+          >
             {m.library_vndb_reopen_review()}
-          </a>
-          {' '}{m.library_vndb_reopen_help()}
+          </a>{' '}
+          {m.library_vndb_reopen_help()}
         </p>
       ) : null}
       {libraryReturn && snap.stage === 'upload' ? <CurrentImportLibrary visit={visit} returned /> : null}
@@ -258,10 +278,8 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
         locked={locked}
         onLeave={async () => {
           if (snap.retryCommand || snap.busy) return false;
-          if (snap.cancelled) return true;
-          const result = await journey.current?.cancelAdmission();
-          if (result) setSnap(result);
-          return result?.cancelled === true;
+          journey.current?.retire();
+          return true;
         }}
       />
     </main>

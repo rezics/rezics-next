@@ -187,9 +187,7 @@ export function VndbRowReview({
                   setReplace(false);
                 }}
               >
-                {row.match.status === 'matched'
-                  ? m.library_vndb_use_match()
-                  : m.library_vndb_use_reviewed_target()}
+                {row.match.status === 'matched' ? m.library_vndb_use_match() : m.library_vndb_use_reviewed_target()}
               </VndbAction>
             </div>
           ) : null}

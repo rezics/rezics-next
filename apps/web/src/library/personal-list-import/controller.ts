@@ -306,7 +306,9 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     const decision = row.decision;
     if (
       decision &&
-      (decision.status === 'applied' || decision.status === 'stale' || decision.status === 'failed' ||
+      (decision.status === 'applied' ||
+        decision.status === 'stale' ||
+        decision.status === 'failed' ||
         (decision.action === 'state' && (decision.status === 'skipped' || decision.status === 'unsupported')))
     ) {
       const outcome = {

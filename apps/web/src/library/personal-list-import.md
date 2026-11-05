@@ -77,7 +77,9 @@ Decision: the mounted review address carries only the native upload UUID and bou
 that owner's retained upload through the existing native page endpoint, restores acknowledged state outcomes, and
 keeps unresolved rows reviewable without uploading again. Previously reviewed targets appear only when the current
 native page independently discloses them; source titles never bind identities. Counts distinguish loaded entries
-needing review from source rows not yet loaded. Progress and vote adoption retain their native admission policy.
+needing review from source rows not yet loaded. Ordinary departure retires local callbacks and preserves the native
+upload; explicit Cancel still stops its native admission. An applying state decision can only resume its original
+review ID, rather than offer replacement operands. Progress and vote adoption retain their native admission policy.
 
 - Touches: the existing upload, one addressed page and its current target/decision observations; no browser storage.
 - Bound: one native page request per reopen or page navigation, at most eight rows; URL input admits a native UUID

@@ -37,12 +37,14 @@ function VndbImportRoute() {
   const navigate = Route.useNavigate();
   const libraryReturn = useLocation({ select: (location) => location.hash.replace(/^#/, '') === importLibraryAnchor });
   if (!available) return <VndbUnavailable />;
-  return <PersonalVndbImportPage
-    libraryReturn={libraryReturn}
-    address={search.uploadId ? { uploadId: search.uploadId, offset: search.offset ?? 0 } : undefined}
-    onAddressChange={(address) => {
-      if (search.uploadId !== address.uploadId || search.offset !== address.offset)
-        void navigate({ search: address, replace: true, ignoreBlocker: true, resetScroll: false });
-    }}
-  />;
+  return (
+    <PersonalVndbImportPage
+      libraryReturn={libraryReturn}
+      address={search.uploadId ? { uploadId: search.uploadId, offset: search.offset ?? 0 } : undefined}
+      onAddressChange={(address) => {
+        if (search.uploadId !== address.uploadId || search.offset !== address.offset)
+          void navigate({ search: address, replace: true, ignoreBlocker: true, resetScroll: false });
+      }}
+    />
+  );
 }

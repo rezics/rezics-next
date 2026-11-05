@@ -59,7 +59,7 @@ export function VndbReviewPage({
             <li key={`${snap.uploadId}:${row.ordinal}`}>
               <VndbRowReview
                 row={row}
-                busy={busy || snap.cancelled}
+                busy={busy || snap.cancelled || row.decision?.status === 'applying'}
                 {...(scoreNotice ? { scoreNotice } : {})}
                 onReview={onReview}
               />
