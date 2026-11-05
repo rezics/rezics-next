@@ -32,6 +32,7 @@ import { m } from '../paraglide/messages.js';
 import { metaText } from '@rezics/ui/meta-line';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
+import { subjectHref, subjectViewPaths } from '../subject/subject-href';
 
 function zoneLabel(zone: ZonePublic, locale: string): { text: string; lang?: string } | undefined {
   const label = pickZoneName(zone, locale);
@@ -102,10 +103,20 @@ export function ZoneShell({
 }
 
 function retryDelay(value: string): number {
-  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const maxTimerDelay = 2_147_483_647;
+  if (/^\d+$/.test(value)) return Math.min(Number(value) * 1000, maxTimerDelay);
   const at = Date.parse(value);
-  return Number.isNaN(at) ? 1000 : Math.max(0, at - Date.now());
+  return Number.isNaN(at) ? 1000 : Math.min(Math.max(0, at - Date.now()), maxTimerDelay);
 }
+
+const maxAutomaticContinuations = 4;
+
+type ZoneReadBoundaryState = {
+  visit: string;
+  outcome: ZonePageRouteOutcome;
+  automaticContinuations: number;
+  retrying: boolean;
+};
 
 /** Keep the last server cursor in component state and resume the public read after hydration. */
 export function ZoneReadBoundary({
@@ -117,50 +128,146 @@ export function ZoneReadBoundary({
   request: Omit<ZonePageInput, 'cursor'>;
   children: (page: Extract<ZonePageRouteOutcome, { kind: 'page' }>) => ReactNode;
 }) {
-  const [state, setState] = useState({ initial, outcome: initial });
-  // A fresh loader result replaces any page retained by this mounted boundary immediately.
-  if (state.initial !== initial) setState({ initial, outcome: initial });
-  const outcome = state.initial === initial ? state.outcome : initial;
-  const [continuation, setContinuation] = useState(0);
+  const targetKey = JSON.stringify(request.target);
+  const requestKey = JSON.stringify([request.id, request.locale, targetKey, request.credentialMode ?? null]);
+  const visitRef = useRef({ requestKey, initial, revision: 0 });
+  if (visitRef.current.requestKey !== requestKey || visitRef.current.initial !== initial) {
+    visitRef.current = {
+      requestKey,
+      initial,
+      revision: visitRef.current.revision + 1,
+    };
+  }
+  const visit = JSON.stringify([requestKey, visitRef.current.revision]);
+  const [state, setState] = useState<ZoneReadBoundaryState>(() => ({
+    visit,
+    outcome: initial,
+    automaticContinuations: 0,
+    retrying: false,
+  }));
+  if (state.visit !== visit)
+    setState({ visit, outcome: initial, automaticContinuations: 0, retrying: false });
+  const current = state.visit === visit ? state : { visit, outcome: initial, automaticContinuations: 0, retrying: false };
+  const outcome = current.outcome;
   const kind = outcome.kind;
   const cursor = outcome.kind === 'preparing' ? outcome.cursor : undefined;
-  const retryAfter = outcome.kind === 'preparing' ? outcome.retryAfter : undefined;
-  const targetKey = JSON.stringify(request.target);
+  const retryAfter = outcome.kind === 'preparing' || outcome.kind === 'unavailable' ? outcome.retryAfter : undefined;
+  const retryKey = JSON.stringify([visit, kind, cursor ?? null, retryAfter ?? null, current.retrying]);
+  const [retryReadiness, setRetryReadiness] = useState({ key: '', ready: false });
+  const retryReady = retryReadiness.key === retryKey && retryReadiness.ready;
+  const activeVisit = useRef(visit);
+  activeVisit.current = visit;
+  const retrySequence = useRef(0);
 
   useEffect(() => {
-    if (kind !== 'preparing') return;
+    if (kind !== 'preparing' && kind !== 'unavailable') return;
+    setRetryReadiness({ key: retryKey, ready: false });
+    const timer = setTimeout(() => setRetryReadiness({ key: retryKey, ready: true }), retryDelay(retryAfter ?? '1'));
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [kind, retryAfter, retryKey, current.retrying]);
+
+  useEffect(() => {
+    if (kind !== 'preparing' || current.automaticContinuations >= maxAutomaticContinuations || current.retrying) return;
     let active = true;
-    const timer = setTimeout(
-      async () => {
-        try {
-          const next = await continueZonePageRequest({
-            data: {
-              id: request.id,
-              locale: request.locale,
-              target: JSON.parse(targetKey) as ZonePageInput['target'],
-              ...(request.credentialMode === undefined ? {} : { credentialMode: request.credentialMode }),
-              ...(cursor === undefined ? {} : { cursor }),
-            },
-          });
-          if (active) {
-            setState({ initial, outcome: next });
-            if (next.kind === 'preparing') setContinuation((step) => step + 1);
-          }
-        } catch {
-          if (active) setState({ initial, outcome: { kind: 'error' } });
-        }
-      },
-      retryDelay(retryAfter ?? '1'),
-    );
+    const sequence = retrySequence.current;
+    const timer = setTimeout(() => {
+      void continueZonePageRequest({
+        data: {
+          id: request.id,
+          locale: request.locale,
+          target: JSON.parse(targetKey) as ZonePageInput['target'],
+          ...(request.credentialMode === undefined ? {} : { credentialMode: request.credentialMode }),
+          ...(cursor === undefined ? {} : { cursor }),
+        },
+      }).then(
+        (next) => {
+          if (!active || activeVisit.current !== visit || retrySequence.current !== sequence) return;
+          setState((previous) =>
+            previous.visit === visit
+              ? {
+                  ...previous,
+                  outcome: next,
+                  automaticContinuations: previous.automaticContinuations + 1,
+                }
+              : previous,
+          );
+        },
+        () => {
+          if (!active || activeVisit.current !== visit || retrySequence.current !== sequence) return;
+          setState((previous) => (previous.visit === visit ? { ...previous, outcome: { kind: 'error' } } : previous));
+        },
+      );
+    }, retryDelay(retryAfter ?? '1'));
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [initial, kind, cursor, retryAfter, request.id, request.locale, request.credentialMode, targetKey, continuation]);
+  }, [
+    visit,
+    kind,
+    cursor,
+    retryAfter,
+    request.id,
+    request.locale,
+    request.credentialMode,
+    targetKey,
+    current.automaticContinuations,
+    current.retrying,
+  ]);
+
+  const retry = () => {
+    const sequence = ++retrySequence.current;
+    setRetryReadiness({ key: '', ready: false });
+    setState((previous) =>
+      previous.visit === visit ? { ...previous, retrying: true, automaticContinuations: maxAutomaticContinuations } : previous,
+    );
+    void continueZonePageRequest({
+      data: {
+        id: request.id,
+        locale: request.locale,
+        target: JSON.parse(targetKey) as ZonePageInput['target'],
+        ...(request.credentialMode === undefined ? {} : { credentialMode: request.credentialMode }),
+        ...(cursor === undefined ? {} : { cursor }),
+      },
+    }).then(
+      (next) => {
+        if (activeVisit.current !== visit || retrySequence.current !== sequence) return;
+        setState((previous) =>
+          previous.visit === visit ? { ...previous, outcome: next, retrying: false } : previous,
+        );
+      },
+      () => {
+        if (activeVisit.current !== visit || retrySequence.current !== sequence) return;
+        setState((previous) =>
+          previous.visit === visit ? { ...previous, outcome: { kind: 'error' }, retrying: false } : previous,
+        );
+      },
+    );
+  };
 
   if (outcome.kind === 'page') return children(outcome);
   if (outcome.kind === 'preparing')
-    return <StatusPage heading={m.zone_preparing_heading()} message={m.zone_preparing_message()} />;
+    return (
+      <StatusPage
+        heading={m.zone_preparing_heading()}
+        message={m.zone_preparing_message()}
+        onRetry={current.automaticContinuations >= maxAutomaticContinuations ? retry : undefined}
+        retrying={current.retrying}
+        retryDisabled={!retryReady}
+      />
+    );
+  if (outcome.kind === 'unavailable')
+    return (
+      <StatusPage
+        heading={m.zone_unavailable_heading()}
+        message={m.zone_unavailable_message()}
+        onRetry={retry}
+        retrying={current.retrying}
+        retryDisabled={!retryReady}
+      />
+    );
   if (outcome.kind === 'missing') return <NotFoundPage />;
   return <StatusPage heading={m.error_heading()} message={m.error_message()} />;
 }
@@ -184,20 +291,24 @@ export function ZonePageSurface({
 
 const subjectInputId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const personalInput = (input: unknown) => {
+  const allowedKeys = new Set(['id', 'subjectType', 'expectedReader', 'locale', 'overview']);
   const subjectType =
     typeof input === 'object' && input !== null && 'subjectType' in input ? input.subjectType : undefined;
   if (
     typeof input !== 'object' ||
     input === null ||
+    Array.isArray(input) ||
+    Object.keys(input).some((key) => !allowedKeys.has(key)) ||
     !('id' in input) ||
     typeof input.id !== 'string' ||
     !subjectInputId.test(input.id) ||
-    (subjectType !== undefined && (typeof subjectType !== 'string' || subjectType.length > 128)) ||
+    (subjectType !== undefined && (typeof subjectType !== 'string' || !subjectType || subjectType.length > 128)) ||
     ('expectedReader' in input &&
       input.expectedReader !== undefined &&
       (typeof input.expectedReader !== 'string' || !input.expectedReader || input.expectedReader.length > 128)) ||
     !('locale' in input) ||
     typeof input.locale !== 'string' ||
+    !locales.includes(input.locale as (typeof locales)[number]) ||
     !('overview' in input) ||
     typeof input.overview !== 'boolean'
   )
@@ -283,10 +394,21 @@ function ZoneSubjectPage({
   const zone = outcome.page.zone;
   const subjectId = outcome.page.subject;
   const common = outcome.common;
-  const routeSignature = JSON.stringify([subjectId, locale, view]);
-  const routeVisit = useRef({ signature: routeSignature, revision: 0 });
-  if (routeVisit.current.signature !== routeSignature) {
-    routeVisit.current = { signature: routeSignature, revision: routeVisit.current.revision + 1 };
+  const browserSession = useSession();
+  const { state: session } = browserSession;
+  const sessionObservation = JSON.stringify([
+    session,
+    browserSession.subject ?? null,
+    browserSession.csrfToken,
+  ]);
+  const routeSignature = JSON.stringify([zone.id, zone.revision, subjectId, locale, view, sessionObservation]);
+  const routeVisit = useRef({ signature: routeSignature, page: outcome.page, revision: 0 });
+  if (routeVisit.current.signature !== routeSignature || routeVisit.current.page !== outcome.page) {
+    routeVisit.current = {
+      signature: routeSignature,
+      page: outcome.page,
+      revision: routeVisit.current.revision + 1,
+    };
   }
   const currentPersonalTarget = JSON.stringify([routeSignature, routeVisit.current.revision]);
   const [personalObservation, setPersonalObservation] = useState<{
@@ -301,8 +423,6 @@ function ZoneSubjectPage({
     transport: ZoneSubjectPersonalTransport;
     active: boolean;
   } | null>(null);
-  const browserSession = useSession();
-  const { state: session } = browserSession;
   const reactionReader = useSubjectReactionReader({
     subjectId: subjectId ?? '',
     locale,
@@ -352,7 +472,7 @@ function ZoneSubjectPage({
     return () => {
       if (load) load.active = false;
     };
-  }, [subjectId, locale, view, subjectType, currentPersonalTarget, personalTransport]);
+  }, [subjectId, locale, view, subjectType, currentPersonalTarget, sessionObservation, personalTransport]);
 
   if (!zone || !subjectId || !common) return <StatusPage heading={m.error_heading()} message={m.error_message()} />;
 
@@ -482,21 +602,45 @@ function ZoneSubjectPage({
 
 export { ZoneSubjectPage };
 
-export type ZoneSubjectRouteData = { outcome: ZonePageRouteOutcome; paths: PagePaths };
+export type ZoneSubjectRouteData = { outcome: ZonePageRouteOutcome; paths: PagePaths; view: View };
 
-export async function readZoneSubjectRoute(input: { id: string; subjectId: string; view?: View }) {
-  const locale = getLocale();
+export async function readZoneSubjectRoute(input: {
+  id: string;
+  subjectId: string;
+  locale?: string;
+  credentialMode?: ReadCredentialMode;
+  view?: View;
+}) {
+  const locale = input.locale ?? getLocale();
   const target: ZonePageInput['target'] = {
     subject: input.subjectId,
     ...(input.view && input.view !== 'overview' ? { view: input.view } : {}),
   };
-  const outcome = await readZonePageRequest({ data: { id: input.id, locale, target } });
-  const path = `/subjects/${encodeURIComponent(input.subjectId)}`;
-  const paths = Object.fromEntries(locales.map((language) => [language, path])) as PagePaths;
-  return { outcome, paths };
+  const outcome = await readZonePageRequest({
+    data: {
+      id: input.id,
+      locale,
+      target,
+      ...(input.credentialMode === undefined ? {} : { credentialMode: input.credentialMode }),
+    },
+  });
+  const view = input.view ?? 'overview';
+  const overview = outcome.kind === 'page' ? outcome.common?.overview : undefined;
+  const basePaths = Object.fromEntries(
+    locales.map((language) => {
+      const path = overview
+        ? subjectHref(
+            { id: outcome.page.subject, label: subjectPageTitle(overview, language) },
+            language,
+          ).href
+        : `/${encodeURIComponent(language)}/subjects/${encodeURIComponent(input.subjectId)}`;
+      return [language, path.slice(`/${encodeURIComponent(language)}`.length)];
+    }),
+  ) as PagePaths;
+  return { outcome, paths: subjectViewPaths(basePaths, view), view };
 }
 
-export function zoneSubjectHead(data: ZoneSubjectRouteData | undefined, view: View = 'overview') {
+export function zoneSubjectHead(data: ZoneSubjectRouteData | undefined, view: View = data?.view ?? 'overview') {
   const locale = getLocale();
   const page = data?.outcome.kind === 'page' ? data.outcome.common?.overview : undefined;
   const title = page ? subjectPageTitle(page, locale) : m.not_found_heading();
@@ -508,21 +652,27 @@ export function ZoneSubjectRoute({
   data,
   id,
   subjectId,
+  locale,
+  credentialMode,
   view,
 }: {
   data: ZoneSubjectRouteData;
   id: string;
   subjectId: string;
+  locale: string;
+  credentialMode?: ReadCredentialMode;
   view?: View;
 }) {
-  const locale = getLocale();
   const pageView = view ?? 'overview';
   const target: ZonePageInput['target'] = {
     subject: subjectId,
     ...(pageView !== 'overview' ? { view: pageView } : {}),
   };
   return (
-    <ZoneReadBoundary initial={data.outcome} request={{ id, locale, target }}>
+    <ZoneReadBoundary
+      initial={data.outcome}
+      request={{ id, locale, target, ...(credentialMode === undefined ? {} : { credentialMode }) }}
+    >
       {(outcome) => <ZoneSubjectPage outcome={outcome} locale={locale} view={pageView} />}
     </ZoneReadBoundary>
   );

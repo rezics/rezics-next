@@ -1992,6 +1992,8 @@
   "zone_navigation": "Navigation de la zone",
   "zone_preparing_heading": "Préparation de cette page de zone",
   "zone_preparing_message": "Cette page est en cours de préparation. Réessayez dans un instant.",
+  "zone_unavailable_heading": "Cette page de zone est temporairement indisponible",
+  "zone_unavailable_message": "Cette page de zone n’a pas pu être chargée. Réessayez dans un instant.",
   "inbox_heading": "Notifications",
   "inbox_sign_in": "Connectez-vous pour consulter vos notifications.",
   "inbox_loading": "Chargement des notifications…",

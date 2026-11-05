@@ -51,6 +51,9 @@ Browser paths are `/zones/{id}` (home), `/zones/{id}/{relativeRoute}` (configure
 `/zones/{id}/subjects/{subjectId}/{view?}` (eligible subject, common subject renderer). Web applies its
 existing locale prefixes. An absent subject view means `overview`. Global subject URLs remain canonical;
 ordinary related-subject links may leave the Zone. There are no custom domains or host claims in this scope.
+Decision: Zone Subject visits keep their localized Zone URL and render only after the current native `readPage`
+admits the exact subject and view; Global Subject paths remain canonical metadata destinations, and visible facts
+continue to come from the admitted Zone page.
 Configured routes are decoded once, relative, case-sensitive and canonical: no leading/trailing slash,
 empty segment, dot segment, query, fragment, encoded slash, backslash or URL. The empty string means home.
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured

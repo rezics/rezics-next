@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import type { View } from '@rezics/composition';
+import { isView, type View } from '@rezics/composition';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
@@ -65,26 +65,42 @@ export type ZonePageInput = {
 };
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// Keep the browser boundary aligned with the native search cursor schema.
+const maxCursorLength = 4864;
+const cursorPattern = /^[A-Za-z0-9_-]{1,4864}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function validTarget(value: unknown): value is Extract<ZonePageRequest['target'], { route: string }> {
-  return (
-    isRecord(value) && Object.keys(value).length === 1 && typeof value.route === 'string' && value.route.length <= 255
-  );
+function validTarget(value: unknown): value is ZonePageRequest['target'] {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length === 1 && keys[0] === 'route' && typeof value.route === 'string')
+    return value.route.length <= 255;
+  if (
+    (keys.length === 1 || keys.length === 2) &&
+    keys.includes('subject') &&
+    (keys.length === 1 || keys.includes('view')) &&
+    typeof value.subject === 'string' &&
+    idPattern.test(value.subject) &&
+    (keys.length === 1 || isView(value.view))
+  )
+    return true;
+  return false;
 }
 
-function validateInput(input: unknown): ZonePageInput {
+export function validateZonePageInput(input: unknown): ZonePageInput {
+  const allowedKeys = new Set(['id', 'locale', 'target', 'cursor', 'credentialMode']);
   if (
     !isRecord(input) ||
+    Object.keys(input).some((key) => !allowedKeys.has(key)) ||
     typeof input.id !== 'string' ||
     !idPattern.test(input.id) ||
     typeof input.locale !== 'string' ||
     !locales.includes(input.locale as (typeof locales)[number]) ||
     !validTarget(input.target) ||
-    ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
+    ('cursor' in input && input.cursor !== undefined && !validCursor(input.cursor)) ||
     ('credentialMode' in input &&
       input.credentialMode !== undefined &&
       input.credentialMode !== 'anonymous' &&
@@ -98,6 +114,10 @@ function validateInput(input: unknown): ZonePageInput {
     ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
     ...(input.credentialMode === 'session' ? { credentialMode: 'session' } : {}),
   };
+}
+
+function validCursor(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= maxCursorLength && cursorPattern.test(value);
 }
 
 function retryAfter(response: Response): string {
@@ -127,7 +147,7 @@ export async function readZonePage(
     if (result.status === 404) return { kind: 'missing' };
     if (result.status === 200 && result.data) return { kind: 'page', page: result.data as ZonePageResponse };
     if (result.status === 503) return { kind: 'unavailable', retryAfter: retryAfter(result.response) };
-    if (result.status !== 202 || !result.data || typeof (result.data as ZonePageReadProgress).next !== 'string')
+    if (result.status !== 202 || !result.data || !validCursor((result.data as ZonePageReadProgress).next))
       return { kind: 'error' };
     cursor = (result.data as ZonePageReadProgress).next;
     if (!follow || attempt === 4) return { kind: 'preparing', cursor, retryAfter: retryAfter(result.response) };
@@ -226,7 +246,7 @@ async function readForRequest(input: ZonePageInput, followContinuations: boolean
 }
 
 export const readZonePageRequest = createServerFn({ method: 'GET', strict: false })
-  .validator(validateInput)
+  .validator(validateZonePageInput)
   .handler(async ({ data }) => {
     const outcome = await readForRequest(data, true);
     if (outcome.kind === 'missing') throw notFound();
@@ -237,7 +257,7 @@ export const readZonePageRequest = createServerFn({ method: 'GET', strict: false
   });
 
 export const continueZonePageRequest = createServerFn({ method: 'GET', strict: false })
-  .validator(validateInput)
+  .validator(validateZonePageInput)
   .handler(async ({ data }) => {
     const outcome = await readForRequest(data, false);
     if (outcome.kind === 'redirect')
