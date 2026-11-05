@@ -30,6 +30,7 @@ export class ArchiveEntryRecoveryJourney {
   #readback: { ordinal: number; value: unknown } | null = null;
   #cancelRequest: RecoveryRequest | null = null;
   #cancelAcknowledged = false;
+  #cancelNeedsReconcile = false;
   #pendingUpload: { text: string; key: string; request: RecoveryRequest } | null = null;
   #evidenceId: string | null = null;
   #expiry: ReturnType<typeof setTimeout> | undefined;
@@ -42,7 +43,7 @@ export class ArchiveEntryRecoveryJourney {
   #emit() { if (!this.#retired) for (const listener of this.#listeners) listener(); }
   snapshot() {
     const state = this.visit.state;
-    return { state, busy: this.#busy, notice: this.#notice, reviewed: state?.review ? this.#reviewed : [], readback: state ? this.#readback : null, uploadUncertain: this.#pendingUpload !== null };
+    return { state, busy: this.#busy, notice: this.#notice, reviewed: state?.review ? this.#reviewed : [], readback: state ? this.#readback : null, uploadUncertain: this.#pendingUpload !== null, retryOriginal: !!state && (['uncertain', 'recoverable'].includes(state.phase) || state.phase === 'cancelling' && this.#cancelNeedsReconcile) };
   }
   retire() {
     this.#retired = true;
@@ -80,6 +81,7 @@ export class ArchiveEntryRecoveryJourney {
     const request = this.visit.startUpload();
     this.#cancelRequest = null;
     this.#cancelAcknowledged = false;
+    this.#cancelNeedsReconcile = false;
     this.#readback = null;
     this.#reviewed = [];
     await this.#run(async () => {
@@ -159,6 +161,7 @@ export class ArchiveEntryRecoveryJourney {
       const results = selectedArchiveRecoveryResults({ uploadId: reply.value.uploadId, state: cancelling ? 'cancelled' : 'ready', results: reply.value.applied.map(row => ({ ...row, section: state.choices.find(choice => choice.ordinal === row.ordinal)!.section })), next: null }, state.choices);
       const unresolved = reply.value.applied.some(row => row.status === 'applying');
       const changed = reply.value.applied.some(row => ['current_conflict', 'unresolved', 'unsupported'].includes(row.status));
+      if (cancelling && !unresolved) this.#cancelNeedsReconcile = false;
       this.visit.settleApply(original.request, unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete', this.#retainAcknowledged(results));
       if (unresolved) this.#notice = 'uncertain';
       if (this.#cancelRequest && this.#cancelAcknowledged) this.visit.admitCancel(this.#cancelRequest);
@@ -185,6 +188,7 @@ export class ArchiveEntryRecoveryJourney {
     });
   }
   async cancel() {
+    if (!this.#cancelRequest) this.#cancelNeedsReconcile = ['applying', 'uncertain', 'recoverable'].includes(this.visit.state!.phase);
     const request = this.#cancelRequest ?? this.visit.startCancel();
     this.#cancelRequest = request;
     const id = this.visit.state!.upload!.id;

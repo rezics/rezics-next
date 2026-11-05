@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "待处理",
   "library_filtered_occurrence_remove_receipt": "删除凭据 {id} · 修订版 {revision} · 原始撤销期限 {deadline}",
   "library_archive_title": "从书库归档恢复",
-  "library_archive_intro": "使用您自己已完成的 REZICS 书库导出文件（第 1 版）。恢复、创建导出文件和导入服务商列表是不同操作。",
+  "library_archive_intro": "使用您自己已完成的 REZICS 书库导出文件。恢复、创建导出文件和导入服务商列表是不同操作。",
   "library_archive_steps": "恢复步骤",
   "library_archive_upload_step": "上传",
   "library_archive_review_step": "检查所选更改",

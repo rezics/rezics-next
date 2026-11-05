@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "Ausstehend",
   "library_filtered_occurrence_remove_receipt": "Löschbeleg {id} · Revision {revision} · ursprüngliche Rückgängig-Frist {deadline}",
   "library_archive_title": "Aus einem Bibliotheksarchiv wiederherstellen",
-  "library_archive_intro": "Verwende deinen eigenen abgeschlossenen REZICS-Bibliotheksexport in Version 1. Wiederherstellung, Export und Import einer Anbieterliste sind getrennte Vorgänge.",
+  "library_archive_intro": "Verwende deinen eigenen abgeschlossenen REZICS-Bibliotheksexport. Wiederherstellung, Export und Import einer Anbieterliste sind getrennte Vorgänge.",
   "library_archive_steps": "Schritte zur Wiederherstellung",
   "library_archive_upload_step": "Hochladen",
   "library_archive_review_step": "Ausgewählte Änderungen prüfen",

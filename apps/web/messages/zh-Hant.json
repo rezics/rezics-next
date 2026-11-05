@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "待處理",
   "library_filtered_occurrence_remove_receipt": "刪除憑據 {id} · 修訂版 {revision} · 原始復原期限 {deadline}",
   "library_archive_title": "從書庫封存檔復原",
-  "library_archive_intro": "使用您自己已完成的 REZICS 書庫匯出檔（第 1 版）。復原、建立匯出檔和匯入服務商清單是不同操作。",
+  "library_archive_intro": "使用您自己已完成的 REZICS 書庫匯出檔。復原、建立匯出檔和匯入服務商清單是不同操作。",
   "library_archive_steps": "復原步驟",
   "library_archive_upload_step": "上傳",
   "library_archive_review_step": "檢視所選變更",

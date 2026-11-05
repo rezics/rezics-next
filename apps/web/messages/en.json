@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "Pending",
   "library_filtered_occurrence_remove_receipt": "Deletion receipt {id} · revision {revision} · original Undo deadline {deadline}",
   "library_archive_title": "Recover from a Library archive",
-  "library_archive_intro": "Use your own completed REZICS Library export, version 1. Recovery is separate from creating an export or importing a provider list.",
+  "library_archive_intro": "Use your own completed REZICS Library export. Recovery is separate from creating an export or importing a provider list.",
   "library_archive_steps": "Recovery steps",
   "library_archive_upload_step": "Upload",
   "library_archive_review_step": "Review selected changes",

@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "処理待ち",
   "library_filtered_occurrence_remove_receipt": "削除レシート {id} · リビジョン {revision} · 元の取り消し期限 {deadline}",
   "library_archive_title": "ライブラリアーカイブから復元",
-  "library_archive_intro": "ご自身で完了した REZICS ライブラリのエクスポート（バージョン 1）を使用します。復元、エクスポートの作成、外部サービスのリストのインポートは別々の操作です。",
+  "library_archive_intro": "ご自身で完了した REZICS ライブラリのエクスポートを使用します。復元、エクスポートの作成、外部サービスのリストのインポートは別々の操作です。",
   "library_archive_steps": "復元の手順",
   "library_archive_upload_step": "アップロード",
   "library_archive_review_step": "選択した変更を確認",

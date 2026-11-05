@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "Pendiente",
   "library_filtered_occurrence_remove_receipt": "Recibo de eliminación {id} · revisión {revision} · plazo original para deshacer {deadline}",
   "library_archive_title": "Recuperar desde un archivo de la biblioteca",
-  "library_archive_intro": "Usa tu propia exportación completa de la biblioteca de REZICS, versión 1. Recuperar, crear una exportación e importar una lista de un proveedor son acciones distintas.",
+  "library_archive_intro": "Usa tu propia exportación completa de la biblioteca de REZICS. Recuperar, crear una exportación e importar una lista de un proveedor son acciones distintas.",
   "library_archive_steps": "Pasos de recuperación",
   "library_archive_upload_step": "Subir",
   "library_archive_review_step": "Revisar los cambios seleccionados",

@@ -6,7 +6,7 @@ import { archiveRecoveryNative } from '../src/library/archive-entry-recovery/nat
 import { createKernelClient } from '@rezics/client';
 import { libraryNavigation } from '../src/library/navigation';
 import { m } from '../src/paraglide/messages.js';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
 const binding = { viewer: 'owner', credentialEpoch: 'epoch', csrfEpoch: 'epoch', source: 'archive', route: '/library/recover-archive', locale: 'en', exposure: 'open' };
 
@@ -17,12 +17,12 @@ test('Library offers a distinct signed-in archive recovery destination beside ex
 });
 
 test('Every locale mounts native file admission and explains the supported branch and limits', () => {
-  const previous = getLocale();
+  const previous = getLocale;
   const native = archiveRecoveryNative(createKernelClient('https://kernel.test'), 'Bearer owner');
   const journey = new ArchiveEntryRecoveryJourney(native, () => binding, Date.now() + 60_000);
   try {
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={journey} />);
       const escaped = (text: string) => renderToStaticMarkup(<span>{text}</span>).slice(6, -7);
       for (const text of [m.library_archive_entry_upload_help(), m.library_archive_entry_scope(), m.library_archive_deliberate()]) expect(html).toContain(escaped(text));
@@ -34,5 +34,5 @@ test('Every locale mounts native file admission and explains the supported branc
       expect(html).toContain(`href="/${locale}/library/export"`);
       expect(html).not.toContain('data-upload-id');
     }
-  } finally { journey.retire(); setLocale(previous, { reload: false }); }
+  } finally { journey.retire(); overwriteGetLocale(previous); }
 });

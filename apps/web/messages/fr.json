@@ -197,7 +197,7 @@
   "library_filtered_occurrence_remove_pending": "En attente",
   "library_filtered_occurrence_remove_receipt": "Reçu de suppression {id} · révision {revision} · échéance d’annulation initiale {deadline}",
   "library_archive_title": "Restaurer depuis une archive de bibliothèque",
-  "library_archive_intro": "Utilisez votre propre export REZICS de bibliothèque terminé, en version 1. La restauration, la création d’un export et l’importation d’une liste de fournisseur sont des actions distinctes.",
+  "library_archive_intro": "Utilisez votre propre export REZICS de bibliothèque terminé. La restauration, la création d’un export et l’importation d’une liste de fournisseur sont des actions distinctes.",
   "library_archive_steps": "Étapes de restauration",
   "library_archive_upload_step": "Téléverser",
   "library_archive_review_step": "Examiner les modifications choisies",
