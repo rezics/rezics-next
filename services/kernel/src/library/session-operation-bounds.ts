@@ -799,7 +799,11 @@ export function sessionSourceWork(subjectId: string, withProfile: boolean): Boun
     // terminal can differ from the requested ID, but both UUID binds have the same width.
     sqlWork(
       itemTypes.sql,
-      { partition_no: partitionOf(routeOf(subjectId)!), routes: [routeOf(subjectId)!], subject_ids: [subjectId] },
+      {
+        partition_no: partitionOf(routeOf(subjectId) ?? 65535),
+        routes: [routeOf(subjectId) ?? 65535],
+        subject_ids: [subjectId],
+      },
       2,
       2,
       size({ id: uuid, type: '', agent_account_id: uuid, agent_verified: false }) + 6 * RELEASE_LIMITS.bytes,

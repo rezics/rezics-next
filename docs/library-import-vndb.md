@@ -51,8 +51,10 @@ revision and incarnation for explicit review. Confirmation names that immutable 
 account authority, chosen identity, readability, release, cancellation and native admission. A changed basis returns
 `stale`; refresh review. The source fingerprint is identity epoch, accepting type and profile pin, not the
 observation cursor position. Native commands freeze target, state, revision, incarnation, review guard and command key.
-An unknown failure retries that original command; it cannot be re-reviewed into different operands. Exact native
-receipt replay remains possible after an acknowledgement is lost. Applied rows are never applied again.
+An unknown failure retries that original command; it cannot be re-reviewed into different operands. Apply records the
+entry-start receipt before the native put; a lost later acknowledgement returns `failed` and retries those same
+operands. Exact native receipt replay remains possible after an acknowledgement is lost. Applied rows are never
+applied again.
 
 Refreshing a source review retires its metadata tokens rather than carrying them into a corrected match. An
 unresolved state, metadata or date dispatch must settle before review replacement.
@@ -86,6 +88,8 @@ remain private evidence; a matching unit word alone cannot establish VNDB meanin
 
 Decision: adopt only the exported `minutes` scalar into a current released profile admitting `minute`, using the
 shared Progress helper; retain Content's exact counted vote review and original command operands for guarded dispatch.
+Preview `rows` counts every retained container plus the export-metadata row. Session work bounds use route 65535 when
+a placeholder ID is not routable, so Progress record and presented-session reads can plan.
 
 A Progress-only review selects `field: "minutes"` and one existing occurrence by session ID, or explicitly selects
 `occurrence: {kind: "start", primaryUnit: "minute"}`. State review remains independent. Only selected measures are

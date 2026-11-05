@@ -267,30 +267,60 @@ test('VNDB Progress requires its declared current-profile unit, uses exported pl
   await json('DELETE', `${base}/${unsupportedId}`);
 }, 120000);
 test('a changed export updates the same matched Library entry and current readback without creating another entry', async () => {
+  const localVn = `v${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  const created = await json(
+    'POST',
+    '/v1/subjects:batchWrite',
+    {
+      commands: [
+        {
+          op: 'create',
+          key: entryKey(),
+          source: {
+            source: 'vndb',
+            external_id: localVn,
+            record_revision: '1',
+            digest: 'b'.repeat(64),
+            converter_revision: 'vndb@1',
+            field_group: 'facts',
+          },
+          subject: { type: 'ex:Child', labels: { en: 'Changed export' } },
+        },
+      ],
+    },
+    producerBearer,
+  );
+  expect(created.results[0]).toMatchObject({ status: 201 });
+  const localMatched = created.results[0].value.id as string;
   const before = await f.inspect();
   const firstUpload = await upload(
-    xml(vn(vnId, '<label label="Playing"/><vote>8.5</vote><progress unit="chapter">4</progress>')),
+    xml(vn(localVn, '<label label="Playing"/><vote>8.5</vote><progress unit="chapter">4</progress>')),
   );
   const firstPage = await json('GET', `${base}/${firstUpload.uploadId}`);
-  expect(firstPage.rows[0].match).toEqual({ status: 'matched', candidates: [matched] });
+  expect(firstPage.rows[0].match).toEqual({ status: 'matched', candidates: [localMatched] });
   expect(firstPage.rows[0].fields).toMatchObject({
     score: { value: 8.5 },
     progress: { value: '4' },
     progressMeasure: { value: 'chapter' },
   });
-  const firstReview = await review(firstUpload.uploadId, { ordinal: 0, action: 'state', state: 'playing' });
+  const firstReview = await review(firstUpload.uploadId, {
+    ordinal: 0,
+    action: 'state',
+    targetId: localMatched,
+    state: 'playing',
+  });
   const firstApplied = await apply(firstUpload.uploadId, [{ ordinal: 0, reviewId: firstReview.reviewId }]);
   expect(firstApplied.outcomes[0].status).toBe('applied');
-  const firstEntry = await f.commands.readEntry(f.owner.actor, matched);
+  const firstEntry = await f.commands.readEntry(f.owner.actor, localMatched);
   expect(firstEntry.state).toBe('playing');
   const afterFirst = await f.inspect();
   expect(afterFirst.entries).toHaveLength(before.entries.length + 1);
 
   const changedUpload = await upload(
-    xml(vn(vnId, '<label label="Finished"/><vote>9.2</vote><progress unit="chapter">12</progress>')),
+    xml(vn(localVn, '<label label="Finished"/><vote>9.2</vote><progress unit="chapter">12</progress>')),
   );
   const changedPage = await json('GET', `${base}/${changedUpload.uploadId}`);
-  expect(changedPage.rows[0].match).toEqual({ status: 'matched', candidates: [matched] });
+  expect(changedPage.rows[0].match).toEqual({ status: 'matched', candidates: [localMatched] });
   expect(changedPage.rows[0].fields).toMatchObject({
     score: { value: 9.2 },
     progress: { value: '12' },
@@ -299,12 +329,13 @@ test('a changed export updates the same matched Library entry and current readba
   const changedReview = await review(changedUpload.uploadId, {
     ordinal: 0,
     action: 'state',
+    targetId: localMatched,
     state: 'completed',
     replace: true,
   });
   const changedApplied = await apply(changedUpload.uploadId, [{ ordinal: 0, reviewId: changedReview.reviewId }]);
   expect(changedApplied.outcomes[0].status).toBe('applied');
-  const current = await f.commands.readEntry(f.owner.actor, matched);
+  const current = await f.commands.readEntry(f.owner.actor, localMatched);
   expect(current).toMatchObject({ state: 'completed', incarnationId: firstEntry.incarnationId });
   expect(current.revision).toBeGreaterThan(firstEntry.revision);
   const afterChanged = await f.inspect();
@@ -508,7 +539,7 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     '<reviews><review id="r1"><text>private</text></review></reviews>',
   );
   const { uploadId, rows } = await c.importUpload(source);
-  expect(rows).toBe(2);
+  expect(rows).toBe(3);
   const page = await c.send('GET', `${base}/${uploadId}`);
   expect(page.rows[0].match.status).toBe('unmatched');
   expect(page.rows[0].fields.score).toEqual({

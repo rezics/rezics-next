@@ -1702,6 +1702,35 @@ export function createVndbImport(config: Config) {
     const action = stateActionOf(decision)!;
     let status = decision.status;
     const pendingEntry = decision.status === 'applying' || decision.status === 'failed';
+    async function dispatchStateEntry(current: Decision) {
+      try {
+        const result = await entries.putEntry(
+          actor,
+          current.targetId!,
+          {
+            state: current.state!,
+            ...(current.baseline
+              ? { revision: current.baseline.revision, incarnationId: current.baseline.incarnationId }
+              : {}),
+          },
+          current.commandKey,
+          current.guard!,
+        );
+        record(result);
+        return 'applied' as const;
+      } catch (error) {
+        if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+        if (
+          error instanceof LibraryConflictError ||
+          error instanceof LibraryNotFoundError ||
+          error instanceof LibraryEntryInvalidError ||
+          (error instanceof ProblemError &&
+            ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
+        )
+          return 'stale' as const;
+        return 'failed' as const;
+      }
+    }
 
     if (action === 'skip') status = 'skipped';
     else if (action === 'retain') status = 'unsupported';
@@ -1731,7 +1760,7 @@ export function createVndbImport(config: Config) {
         status = 'skipped';
       } else {
         const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
-        await mutation(
+        const started = await mutation(
           actor,
           'apply-entry-start',
           startKey,
@@ -1753,63 +1782,12 @@ export function createVndbImport(config: Config) {
             return { ordinal: choice.ordinal, reviewId: choice.reviewId, status: 'applying' as const };
           },
         );
+        record(started);
         decision = { ...decision, status: 'applying' };
-        try {
-          const result = await entries.putEntry(
-            actor,
-            decision.targetId!,
-            {
-              state: decision.state,
-              ...(decision.baseline
-                ? { revision: decision.baseline.revision, incarnationId: decision.baseline.incarnationId }
-                : {}),
-            },
-            decision.commandKey,
-            decision.guard!,
-          );
-          record(result);
-          status = 'applied';
-        } catch (error) {
-          if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
-          if (
-            error instanceof LibraryConflictError ||
-            error instanceof LibraryNotFoundError ||
-            error instanceof LibraryEntryInvalidError ||
-            (error instanceof ProblemError &&
-              ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
-          )
-            status = 'stale';
-          else throw error;
-        }
+        status = await dispatchStateEntry(decision);
       }
     } else if (action === 'state' && pendingEntry) {
-      try {
-        const result = await entries.putEntry(
-          actor,
-          decision.targetId!,
-          {
-            state: decision.state!,
-            ...(decision.baseline
-              ? { revision: decision.baseline.revision, incarnationId: decision.baseline.incarnationId }
-              : {}),
-          },
-          decision.commandKey,
-          decision.guard!,
-        );
-        record(result);
-        status = 'applied';
-      } catch (error) {
-        if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
-        if (
-          error instanceof LibraryConflictError ||
-          error instanceof LibraryNotFoundError ||
-          error instanceof LibraryEntryInvalidError ||
-          (error instanceof ProblemError &&
-            ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
-        )
-          status = 'stale';
-        else throw error;
-      }
+      status = await dispatchStateEntry(decision);
     }
 
     let progress: ReturnType<typeof progressView> | null = null;
@@ -1974,7 +1952,8 @@ export function createVndbImport(config: Config) {
           sourceChanged =
             !target ||
             target.source !== score.targetFingerprint ||
-            entryImportMetadataDigest(retained.matching) !== score.matchDigest;
+            entryImportMetadataDigest(retained.matching) !== score.matchDigest ||
+            entryImportMetadataDigest(retained.row) !== score.sourceDigest;
         } catch (error) {
           if (!(error instanceof LibraryNotFoundError)) throw error;
           sourceChanged = true;
@@ -2108,7 +2087,12 @@ export function createVndbImport(config: Config) {
       if (result.component) record(result.component);
     } catch (error) {
       if (error instanceof VoteReviewUnavailableError) return outcome('unavailable');
-      if (error instanceof VoteReviewStaleError || error instanceof LibraryConflictError) status = 'stale';
+      if (
+        error instanceof VoteReviewStaleError ||
+        error instanceof LibraryConflictError ||
+        (error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
+      )
+        status = 'stale';
       else throw error;
     }
     const reviewed = status === 'applied' ? await votes.readVoteReview(actor, score.question.id, score.targetId) : null;
