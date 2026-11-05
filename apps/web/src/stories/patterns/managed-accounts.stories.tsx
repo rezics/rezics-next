@@ -146,7 +146,7 @@ export const IndependentCursors: Story = {
       await expect(heading).toBeVisible();
       const row = within(heading.closest('li')!);
       await expect(row.getAllByRole('heading')).toHaveLength(1);
-      await expect(row.queryByRole('link')).toBeNull();
+      await expect(row.getByRole('link', { name })).toBeVisible();
     }
     await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await organizations.findByRole('alert');
@@ -193,8 +193,7 @@ export const ReconcilingAndUnavailableIdentity: Story = {
     await expect(unavailable.getByText(m.managed_reconciling())).toBeVisible();
     await expect(canvas.queryByText(m.managed_current())).toBeNull();
     await expect(canvas.getAllByText(m.managed_reconciling())).toHaveLength(2);
-    await expect(canvas.queryByRole('link')).toBeNull();
-    await expect(canvas.getByText(m.settings_managed_navigation_unavailable())).toBeVisible();
+    await expect(canvas.getAllByRole('link')).toHaveLength(4);
   },
 };
 
