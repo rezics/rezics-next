@@ -136,41 +136,30 @@ verification state alone do not establish the final public-page outcome.
 
 ### Managed-account detail presentation
 
-Standalone management feed navigation keeps up to eight admitted prior cursor coordinates plus the current
-coordinate per feed (each at most 4096 characters) only in the mounted locale/target/private-reader visit.
-Next, Previous and First each perform one existing native replacement read (at most 20 rows per feed); inventory
-also retains its one optional exposure read. There are no additional row reads, cached page bodies, page counts,
-prefetches or persistent history. Previous rereads the admitted predecessor; a direct cursor has none. First removes
-only the selected cursor. Refresh and failed movements leave admitted history unchanged; Retry rereads the exact
-failed address, including a failed cursor-free First. Reader/credential observation changes, sign-out, target,
-locale and disposal permanently retire coordinates, rows, pending work and focus handoffs. Router search navigation
-keeps this narrowly local visit alive; unavailable native navigation remains unavailable under its existing owner.
-Existing localized Previous/First labels are reused across all eight locales; keyboard admission focuses the selected
-feed only while the activating control retains the handoff. Original phone, recovery and Settings acceptance remains
-owned separately; focused window tests supplement it.
+Standalone native reads have ten-second decoding deadlines with cancellation. Optional exposure gets two seconds;
+failure returns unknown, preserving readable inventory and localized recovery.
 
-Standalone management inventory and detail reads use a ten-second deadline through response decoding, composed with caller cancellation; optional exposure discovery uses two seconds and returns unknown on failure, preserving valid inventory and the existing localized unavailable/retry controls without granting permission.
+Feeds retain eight admitted prior cursors plus current per feed, each at most 4096 characters, only in the
+mounted locale/target/reader visit. Router search navigation preserves the visit. Next/Previous/First
+use one native replacement read, at most 20 rows/feed; inventory retains one optional exposure read. No extra bodies,
+reads, prefetch, totals or storage. Previous rereads an admitted predecessor; direct addresses invent
+none. First removes only the selected cursor. Refresh/failure preserve history; Retry rereads the failed target,
+including cursor-free First. Reader/credential changes, sign-out, locale, target and disposal retire rows, coordinates,
+pending reads and focus permanently. Keyboard admission focuses the selected feed only while its activator owns the
+handoff. Reuse eight-locale labels; retain original phone/recovery and Settings acceptance.
 
-The native Settings directory supplies closed current-human viewer and allowed-navigation observations, with at
-most 20 rows per feed. Only current membership or management of a current active, unfenced responsibility target
-admits private detail navigation; a concealed target has no destination and a reconciling hold remains coordination
-evidence. Unavailable optional management preparation preserves an independently authorized readable inventory
-with unavailable navigation. Detail `authActions` retains its existing action authority. Content's official serial
-publisher derives the complete generated envelope and installed callable/root from the mounted Kernel source;
-handwritten client mirrors and method overrides are not substitutes. After publication, the retained consumer
-finishes independent replacement pages, cursor-free restart and admitted detail/back navigation. Installed
-transport, rendering and growth acceptance remain deferred.
+Settings' closed current-human viewer/navigation observations admit detail only through current membership or
+management of an active, unfenced responsibility target. Concealed targets have no destination; reconciling holds
+are coordination evidence. Optional preparation failure preserves independently readable inventory with unavailable
+navigation. Detail `authActions` retains authority. Content's serial publisher derives the generated envelope
+and installed callable/root from mounted Kernel; no handwritten mirrors or overrides. Until installation, directory
+identities stay unlinked. Then finish independent replacement, cursor-free restart and admitted detail/back navigation;
+Transport/rendering/growth acceptance remains deferred. First duplicate wins; Next replaces its selected feed;
+failed cursor-free restart retries exactly.
 
-Within each native directory page, the first duplicate identity wins; every Next replaces only its selected feed's
-20-row window, and a transient failure of a cursor-free restart retains that exact cursor-free retry. Directory
-identities remain unlinked until the official installed viewer/navigation observation can admit the fixed detail route.
-
-Managed-account settings lead with the supplied display name or handle and an initials avatar. A supplied
-identity without either label uses the unnamed-account treatment; an absent identity uses Identity unavailable.
-Exact supplied account IDs remain selectable inside closed account-detail disclosures for the target, operator,
-members and responsibilities. Back navigation and read recovery controls wrap localized labels and retain
-phone-sized targets. Feed recovery remains independent; this presentation grants no management authority and
-does not change the separately owned action catalogue.
+Settings show supplied name/handle and initials avatar, unnamed if neither exists, Identity unavailable if absent.
+Supplied target/operator/member/responsibility IDs stay selectable in closed detail disclosures. Localized
+back/recovery labels wrap with phone-sized targets. No authority or action-catalogue change.
 
 ## 2. Operators and automated accounts
 
