@@ -1,42 +1,38 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ArchiveEntryRecoveryPage } from '../src/library/archive-entry-recovery';
+import { ArchiveEntryRecoveryView } from '../src/library/archive-entry-recovery/page';
+import { ArchiveEntryRecoveryJourney } from '../src/library/archive-entry-recovery/controller';
+import { archiveRecoveryNative } from '../src/library/archive-entry-recovery/native';
+import { createKernelClient } from '@rezics/client';
 import { libraryNavigation } from '../src/library/navigation';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
+const binding = { viewer: 'owner', credentialEpoch: 'epoch', csrfEpoch: 'epoch', source: 'archive', route: '/library/recover-archive', locale: 'en', exposure: 'open' };
+
 test('Library offers a distinct signed-in archive recovery destination beside export and provider imports', () => {
-  const recovery = libraryNavigation.find((item) => item.href === '/library/recover-archive');
-  expect(recovery).toMatchObject({ signedIn: true, match: 'exact', group: 'personal' });
-  expect(libraryNavigation.some((item) => item.href === '/library/export')).toBe(true);
-  expect(libraryNavigation.some((item) => item.href === '/library/import-mal')).toBe(true);
+  expect(libraryNavigation.find(item => item.href === '/library/recover-archive')).toMatchObject({ signedIn: true, match: 'exact', group: 'personal' });
+  expect(libraryNavigation.some(item => item.href === '/library/export')).toBe(true);
+  expect(libraryNavigation.some(item => item.href === '/library/import-mal')).toBe(true);
 });
 
-test('Every locale explains unavailable upload, explicit mapping and unsupported scope without accepting a file', () => {
+test('Every locale mounts native file admission and explains the supported branch and limits', () => {
   const previous = getLocale();
+  const native = archiveRecoveryNative(createKernelClient('https://kernel.test'), 'Bearer owner');
+  const journey = new ArchiveEntryRecoveryJourney(native, () => binding, Date.now() + 60_000);
   try {
     for (const locale of locales) {
       setLocale(locale, { reload: false });
-      const html = renderToStaticMarkup(<ArchiveEntryRecoveryPage />);
+      const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={journey} />);
       const escaped = (text: string) => renderToStaticMarkup(<span>{text}</span>).slice(6, -7);
-      for (const text of [
-        m.library_archive_unavailable(),
-        m.library_archive_keep_file(),
-        m.library_archive_supported(),
-        m.library_archive_outside(),
-        m.library_archive_inventory(),
-        m.library_archive_deliberate(),
-      ])
-        expect(html).toContain(escaped(text));
-      expect(html).toMatch(/<input[^>]*type="file"[^>]*disabled=""/);
+      for (const text of [m.library_archive_entry_upload_help(), m.library_archive_entry_scope(), m.library_archive_deliberate()]) expect(html).toContain(escaped(text));
+      expect(html).toMatch(/<input[^>]*type="file"/);
+      expect(html).not.toMatch(/<input[^>]*type="file"[^>]*disabled/);
       expect(html).toContain('aria-describedby="archive-file-help"');
       expect(html).toContain('aria-current="step"');
       expect(html).toContain(`href="/${locale}/library"`);
       expect(html).toContain(`href="/${locale}/library/export"`);
-      expect(html).not.toContain('<form');
       expect(html).not.toContain('data-upload-id');
     }
-  } finally {
-    setLocale(previous, { reload: false });
-  }
+  } finally { journey.retire(); setLocale(previous, { reload: false }); }
 });

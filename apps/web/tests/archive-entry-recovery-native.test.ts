@@ -4,9 +4,8 @@ import { selectedArchiveRecoveryResults } from '../src/library/archive-entry-rec
 import { RecoverySelection } from '../src/library/archive-entry-recovery/selection';
 import { ArchiveRecoveryVisit, type RecoveryBinding } from '../src/library/archive-entry-recovery/visit';
 
-test('Archive admission stays unavailable until exact reviewed selections can cross the native boundary', () => {
-  // A mounted implementation or Eden runtime property alone must not enable file transfer.
-  expect(archiveRecoveryAdmission()).toEqual({ available: false });
+test('Archive admission uses the installed exact review contract', () => {
+  expect(archiveRecoveryAdmission()).toEqual({ available: true });
 });
 
 // Local state scenarios only: these are not native receipts or an admitted artifact fixture.
