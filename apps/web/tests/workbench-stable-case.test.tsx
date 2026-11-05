@@ -5,20 +5,22 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { Appeal } from '../src/moderation/appeals-read';
 import type { Report } from '../src/moderation/reports-read';
 import { workbenchAppealFromPage } from '../src/moderation/workbench-appeal';
-import {
-  parseWorkbenchCaseSearch,
-  workbenchCaseFromPage,
-  workbenchCaseHref,
-  workbenchCaseInput,
-  workbenchCaseQueueHref,
-} from '../src/moderation/workbench-case/read-model';
-import { WorkbenchCaseDetail } from '../src/moderation/workbench-case';
-import { WorkbenchQueueWindowHistory, workbenchReaderFence } from '../src/moderation/workbench-queue/window-history';
 import type { WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+const {
+  parseWorkbenchCaseSearch,
+  workbenchCaseFromPage,
+  workbenchCaseHref,
+  workbenchCaseInput,
+  workbenchCaseQueueHref,
+} = await import('../src/moderation/workbench-case/read-model');
+const { WorkbenchCaseDetail } = await import('../src/moderation/workbench-case');
+const { WorkbenchQueueWindowHistory, workbenchReaderFence } = await import(
+  '../src/moderation/workbench-queue/window-history'
+);
 const {
   workbenchCaseHref: workbenchRowHref,
   workbenchQueueHref,
