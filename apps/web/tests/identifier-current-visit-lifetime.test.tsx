@@ -73,10 +73,12 @@ test('the public origin binds the exact returned Realm and Context and gates dis
 
 const deferred = () => {
   let resolve!: (read: IdentifierEvidenceRead) => void;
-  const promise = new Promise<IdentifierEvidenceRead>((done) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<IdentifierEvidenceRead>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 test('mounted visits retire delayed A/B/A, equal-principal observations, new review intent and source replacement; fresh return never steals focus', async () => {
@@ -224,6 +226,22 @@ test('mounted visits retire delayed A/B/A, equal-principal observations, new rev
     await flush();
     focusFrames();
     expect(window.document.activeElement?.textContent).toBe('Public identifier evidence');
+    await click('Inspect this exact assertion');
+    await click('Return to the refreshed public reading');
+    await finish();
+    expect(frames.size).toBe(1);
+    host.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(frames.size).toBe(0);
+    await click('Inspect this exact assertion');
+    await click('Return to the refreshed public reading');
+    await act(async () => requests.at(-1)!.reject(new Error('Origin response disconnected')));
+    await flush();
+    focusFrames();
+    expect(host.querySelector('[data-slot="identifier-exact-occurrence"]')).toBeNull();
+    expect(button('Inspect this exact assertion')).toBeUndefined();
+    expect(host.textContent).toContain('unavailable');
+    await click('Reload current values');
+    await finish();
     await click('Inspect this exact assertion');
     await click('Return to the refreshed public reading');
     await finish();
