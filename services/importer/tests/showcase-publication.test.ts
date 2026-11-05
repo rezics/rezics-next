@@ -417,7 +417,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
       publicClient,
       ...tagOptions,
     });
-    expect(replayed.status).toBe('published');
+    if (replayed.status !== 'published') throw new Error(JSON.stringify(replayed.omissions));
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
