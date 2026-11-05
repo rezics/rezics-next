@@ -3697,6 +3697,33 @@ export class MergeTrain {
             return finish();
           }
         }
+        if (!stabilize && integratesIntoDev) {
+          // Before the derived generators: the contracts run migrates the same throwaway database, so a broken migration
+          // returns to the worker here rather than failing the attempt in that run.
+          const composed = this.git(trainTree, 'rev-parse', 'HEAD');
+          const composedChanges = changedFiles(trainTree, base, this.options.policy?.merge);
+          const schema = await regenerateLandingSchema({
+            cwd: trainTree,
+            changedFiles: composedChanges,
+            taskId: request.taskId,
+            logPath,
+            policy: this.options.policy?.merge,
+          });
+          if (schema.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${composed} was not published; returning its schema regeneration error to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return schemaHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? composed,
+              base,
+              composedChanges,
+              schema,
+            );
+          }
+          if (schema.outcome === 'committed') recountCandidate(result, trainTree, base, this.options.policy?.merge);
+        }
         if (!stabilize && integratesIntoDev)
           regenerateLandingDerivedFiles(
             trainTree,
@@ -3816,7 +3843,7 @@ export class MergeTrain {
             if (!workspace) this.checkScope(formattedScopeCheckedFiles, request, logPath);
           }
         }
-        let candidate = this.git(trainTree, 'rev-parse', 'HEAD');
+        const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
         const taskPaths = workspace
           ? taskChangedPaths(sharedStore!.task(request.taskId), sourceTip, this.options.policy?.merge)
           : changedPathsBetween(o.mainCheckout, originalBase, sourceTip, this.options.policy?.merge);
@@ -3838,17 +3865,6 @@ export class MergeTrain {
         // Direct dev landings honor the configurable root compiler guard and the policy boot check when paths match.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {
-          const schema = await regenerateLandingSchema({
-            cwd: trainTree,
-            changedFiles: result.changedFiles,
-            taskId: request.taskId,
-            logPath,
-            policy: this.options.policy?.merge,
-          });
-          if (schema.outcome === 'committed') {
-            candidate = schema.candidate;
-            recountCandidate(result, trainTree, base, this.options.policy?.merge);
-          }
           const transpiled = await transpileLandingCandidate({
             cwd: trainTree,
             base,
@@ -3858,19 +3874,6 @@ export class MergeTrain {
           });
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
-          if (schema.outcome === 'diagnostic') {
-            appendFileSync(
-              logPath,
-              `Candidate ${candidate} was not published; returning its schema regeneration error to task ${request.taskId} attempt ${request.attempt}.\n`,
-            );
-            return schemaHandoff(
-              entry,
-              workerCommit ?? request.workerCommit ?? candidate,
-              base,
-              result.changedFiles,
-              schema,
-            );
-          }
           if (transpiled.outcome === 'diagnostic') {
             appendFileSync(
               logPath,
