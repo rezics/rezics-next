@@ -484,7 +484,8 @@ Their Global visits use the existing Subject `via` return facility. File and Cha
 single return link without changing their reader or command controllers. A missing target label is unavailable.
 Release relations retain their released property and direction; qualified duplicate occurrences remain separate.
 Work binding and exact association inspection include their supplied qualifier and reference parts and historical
-release pin. Whole-association spoiler controls cover labels, links and evidence.
+release pin. File associations inspect that current row locally and restore its evidence control without reading the
+File as a release detail; the File destination keeps its existing producer. Whole-association spoiler controls cover labels, links and evidence.
 
 One closed `#release-reading?visit=` locator identifies the original release UUID, Context, definition digest,
 subject revision, current stream/cursor, exact holder/statement/target and statement revision, and intended focus.
@@ -497,7 +498,7 @@ No later page is scanned. Destination detail failure retains the independently a
 return intent starts a usable current stream. Restart discards the old locator and cursor history.
 
 The reader retains one current projection, eight cursor addresses and one return locator. It preserves the 20-row
-association request, native maximum of 100 and four installed visit components. Each component has a Web projection
+association request, native maximum of 100 and four installed visit components. Decision: each release component has a Web projection
 byte ceiling equal to the installed descriptor limit (4 MiB), subordinate to any tighter native limits. The complete
 encoded payload, including summaries, qualifiers and references, is charged before expansion. Existing descriptor,
 subject property, association and selected-detail row ceilings remain 1,024, 64, 20 and one. These ceilings describe
@@ -552,6 +553,9 @@ envelope. The Subject read and finite relation pages are reused from the page co
 definition request, relation continuation or per-target detail reads. Its association rows are already included in the
 ordinary page's composition bounds.
 
+The following native caps remain producer-owned; the release companion additionally enforces the complete Web
+component byte ceilings above. The File controller retains its existing admission.
+
 | Component   | L_i (rows)                                       | B_i (bytes) | Source                                                                                                             |
 | ----------- | ------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------ |
 | descriptor  | 1,024 types                                      | 4 MiB       | `RELEASE_LIMITS.types` / `RELEASE_LIMITS.bytes` in [definitions portable](../packages/definitions/src/portable.ts) |
@@ -572,7 +576,7 @@ Decision: companion files follow the existing nested `$id_.$slug_.release.tsx` /
 Decision: related destinations open the exact disclosed ordinary Subject in the same locale and carry one validated
 `fileSource` identity and a bounded reader fragment back to the current reading; only the admitted correction entry opens the existing `/file` profile.
 
-Decision: selected release detail and its correction-return receipt stay local to the admitted release visit; after reload or in a new tab, the current release is the fallback and the lost selection is explained without claiming restoration.
+Decision: selected release detail and its correction-return receipt stay local to the admitted release visit. A validated release locator revalidates the occurrence through a fresh native visit; without one, reload or a new tab starts the current release without claiming restoration. Correction receipts and command payloads never travel in the locator.
 
 Decision: VNDB release completeness uses scheme URI `https://rezics.com/schemes/vndb/release-types` because the
 importer does not declare a scheme URI for `releases_vn.rtype`; development status keeps `https://vndb.org/development-status`.
