@@ -182,7 +182,7 @@ function availableInWorktree(worktree: string, path: string): boolean {
 }
 
 type DecisionDeliveryState = { summaryDelivered: boolean; deliveredDocumentPaths: Set<string> };
-type OwnerDecisionProjection = { decision?: OwnerDecision; delivery: DecisionDeliveryState };
+type OwnerDecisionProjection = { decision: OwnerDecision | undefined; delivery: DecisionDeliveryState };
 
 function decisionDeliveryKey(decisionId: string, decisionSequence: number): string {
   return JSON.stringify([decisionId, decisionSequence]);
@@ -211,8 +211,9 @@ function projectOwnerDecision(
     } catch {
       continue;
     }
-    const decisionId = body?.decisionId;
-    const decisionSequence = body?.decisionSequence;
+    if (!body) continue;
+    const decisionId = body.decisionId;
+    const decisionSequence = body.decisionSequence;
     if (
       typeof decisionId !== 'string' ||
       typeof decisionSequence !== 'number' ||
