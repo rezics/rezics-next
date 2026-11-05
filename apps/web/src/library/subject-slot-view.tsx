@@ -362,9 +362,9 @@ function SubjectLibrarySlotView({
   const [labelNotice, setLabelNotice] = useState<string | undefined>(data.labelResult);
   const [labelUndo, setLabelUndo] = useState(data.labelUndo);
   const [labelReview, setLabelReview] = useState<ReviewedSubjectLabel | null>(null);
-  const labelReviewHeading = useRef<HTMLHeadingElement | null>(null);
+  const labelReviewAction = useRef<HTMLButtonElement | null>(null);
   const labelReviewTrigger = useRef<HTMLButtonElement | null>(null);
-  const focusLabelReviewHeading = useRef(false);
+  const focusLabelReviewAction = useRef(false);
   const restoreLabelReviewFocus = useRef(false);
   const labelUndoKeys = useRef(new Map<string, string>());
   const restoredLabelEpisodes = useRef(new Set<string>());
@@ -465,7 +465,7 @@ function SubjectLibrarySlotView({
     });
   if (labelReview && !labelReviewCurrent) {
     setLabelReview(null);
-    focusLabelReviewHeading.current = false;
+    focusLabelReviewAction.current = false;
     restoreLabelReviewFocus.current = false;
     labelReviewTrigger.current = null;
   }
@@ -508,9 +508,9 @@ function SubjectLibrarySlotView({
   ]);
   useEffect(() => setHydrated(true), []);
   useLayoutEffect(() => {
-    if (focusLabelReviewHeading.current && labelReview && labelReviewCurrent) {
-      focusLabelReviewHeading.current = false;
-      labelReviewHeading.current?.focus();
+    if (focusLabelReviewAction.current && labelReview && labelReviewCurrent) {
+      focusLabelReviewAction.current = false;
+      labelReviewAction.current?.focus();
       return;
     }
     if (!restoreLabelReviewFocus.current || labelReview) return;
@@ -1251,7 +1251,7 @@ function SubjectLibrarySlotView({
       return;
     labelReviewTrigger.current = event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]');
     restoreLabelReviewFocus.current = false;
-    focusLabelReviewHeading.current = true;
+    focusLabelReviewAction.current = true;
     setLabelReview(review);
   }
 
@@ -1265,7 +1265,7 @@ function SubjectLibrarySlotView({
         originKey: labelReviewOrigin,
         lifetime: labelLifetime,
       });
-    focusLabelReviewHeading.current = false;
+    focusLabelReviewAction.current = false;
     setLabelReview(null);
   }
 
@@ -1285,13 +1285,13 @@ function SubjectLibrarySlotView({
       })
     ) {
       setLabelReview(null);
-      focusLabelReviewHeading.current = false;
+      focusLabelReviewAction.current = false;
       restoreLabelReviewFocus.current = false;
       labelReviewTrigger.current = null;
       return;
     }
     setLabelReview(null);
-    focusLabelReviewHeading.current = false;
+    focusLabelReviewAction.current = false;
     restoreLabelReviewFocus.current = false;
     labelReviewTrigger.current = null;
     void removeLabel({
@@ -1572,7 +1572,7 @@ function SubjectLibrarySlotView({
                 !labelActionBlocked &&
                 !uncertainLabel.current
               }
-              headingRef={labelReviewHeading}
+              actionRef={labelReviewAction}
               onConfirm={confirmLabelReview}
               onCancel={cancelLabelReview}
             />

@@ -74,13 +74,13 @@ export function subjectLabelReviewIsCurrent(
 export function SubjectLabelUnassignmentReview({
   review,
   canConfirm,
-  headingRef,
+  actionRef,
   onConfirm,
   onCancel,
 }: {
   review: ReviewedSubjectLabel | null;
   canConfirm: boolean;
-  headingRef?: Ref<HTMLHeadingElement>;
+  actionRef?: Ref<HTMLButtonElement>;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -92,7 +92,7 @@ export function SubjectLabelUnassignmentReview({
       data-subject-label-review-card
       className="min-w-0 max-w-2xl basis-full rounded-md border border-border p-3 [overflow-wrap:anywhere]"
     >
-      <h3 ref={headingRef} id={headingId} tabIndex={-1} className="m-0 text-sm font-semibold">
+      <h3 id={headingId} className="m-0 text-sm font-semibold">
         {m.library_subject_label_review_heading()}
       </h3>
       <p className="mt-2 mb-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
@@ -103,6 +103,7 @@ export function SubjectLabelUnassignmentReview({
         <button
           type="button"
           data-subject-label-review-confirm
+          ref={actionRef}
           disabled={!canConfirm}
           className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
           onClick={() => {

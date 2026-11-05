@@ -450,7 +450,7 @@ test('Two 200-character Label identities keep their anchors while one exact assi
   const review = host.querySelector<HTMLElement>('[data-subject-label-review-card]')!;
   expect(review.textContent).toContain(longLabel);
   expect(review.textContent).toContain(subject.label);
-  expect(window.document.activeElement).toBe(review.querySelector('h3'));
+  expect(window.document.activeElement).toBe(review.querySelector('[data-subject-label-review-confirm]'));
   const reviewActions = [...review.querySelectorAll<HTMLButtonElement>('button')];
   expect(reviewActions).toHaveLength(2);
   expect(reviewActions.every((action) => action.className.includes('min-h-[44px]'))).toBe(true);
