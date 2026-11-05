@@ -167,6 +167,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
       locale: 'en',
       origin: { subject, context, realm, locale: 'en', returnHref: unsupportedReturn },
     }).href;
+    expect(parse(unsupportedHref)).toMatchObject({ kind: 'origin', origin: { context, realm } });
     const selectedAddress = new URL(unsupportedHref, 'https://site.test');
     selectedAddress.searchParams.set('property', 'wdt:P31');
     selectedAddress.searchParams.set('direction', 'both');
