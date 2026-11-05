@@ -242,7 +242,7 @@ test('mounted criteria reserve IME keys, then Apply ordered labels without chang
       const request = new window.FormData(form as never);
       expect(request.getAll('language')).toEqual(['pt-BR', 'en']);
       expect(Object.fromEntries(request)).toEqual({
-        q: committed.query, type: committed.type, kinds: 'subject', sort: 'rating', language: 'en',
+        q: committed.query, type: committed.type, kinds: 'subject', sort: 'rating', language: 'en', filter: '',
         'f.schema:inLanguage': 'ja', condition: JSON.stringify(committed.condition),
         'r.schema:numberOfPages': JSON.stringify(committed.ranges['schema:numberOfPages']),
       });
