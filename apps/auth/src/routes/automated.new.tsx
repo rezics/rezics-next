@@ -407,7 +407,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     };
     const saved = binding();
     return {
-      signal,
+      ...(signal ? { signal } : {}),
       isCurrent: () => {
         if (current === null || lifetime.current !== current) return false;
         if (binding() !== saved) {
