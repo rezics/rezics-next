@@ -34,6 +34,12 @@ export interface RealmSubjectDisclosure {
   ): Promise<Readonly<{ state: 'ready'; dependency: string }> | Readonly<{ state: 'concealed' | 'unavailable' }>>;
   current(realm: string, dependency: string, context: Context): Promise<Current>;
   candidate(candidate: RealmSubjectCandidate, dependency: string, context: Context): Promise<RealmSubjectMembership>;
+  /** Production adapters prepare at most eight exact candidates with one parent observation. */
+  candidates?(
+    candidates: readonly RealmSubjectCandidate[],
+    dependency: string,
+    context: Context,
+  ): Promise<readonly RealmSubjectMembership[]>;
   subject(
     subject: string,
     dependency: string,
@@ -196,21 +202,41 @@ export function createRealmSubjectSource(input: {
         emitted = cursor?.emitted ?? null,
         consumed = 0;
       const context = { reader, work };
-      for (const row of rows) {
-        // An emitted terminal remains deduplicated even across a sparse raw frontier.
-        if (row.terminal !== emitted) {
-          const result = await bounded(context, disclosure!.bounds.candidate, () =>
-            disclosure!.candidate(row, state.dependency, context),
-          );
-          if (result === 'unknown' || result === 'withheld') unavailable();
-          if (result === 'discussed') {
-            subjects.push(row.terminal!);
-            emitted = row.terminal;
-          }
+      for (let offset = 0; offset < rows.length && subjects.length < limit; offset += 8) {
+        const batchRows = rows.slice(offset, offset + 8);
+        const unique = new Map<string, RealmSubjectCandidate>();
+        for (const row of batchRows) {
+          if (row.terminal !== emitted && !unique.has(row.terminal!)) unique.set(row.terminal!, row);
         }
-        key = { terminal: row.terminal!, original: row.original, thread: row.thread };
-        consumed++;
-        if (subjects.length === limit) break;
+        const candidates = [...unique.values()];
+        const matches = candidates.length
+          ? disclosure!.candidates
+            ? await bounded(context, disclosure!.bounds.candidate, () =>
+                disclosure!.candidates!(candidates, state.dependency, context),
+              )
+            : await Promise.all(
+                candidates.map((candidate) =>
+                  bounded(context, disclosure!.bounds.candidate, () =>
+                    disclosure!.candidate(candidate, state.dependency, context),
+                  ),
+                ),
+              )
+          : [];
+        if (matches.length !== candidates.length) throw new TypeError('Realm disclosure candidate alignment changed');
+        const byTerminal = new Map(candidates.map((candidate, index) => [candidate.terminal!, matches[index]!]));
+        for (const row of batchRows) {
+          if (row.terminal !== emitted) {
+            const result = byTerminal.get(row.terminal!);
+            if (result === 'unknown' || result === 'withheld') unavailable();
+            if (result === 'discussed') {
+              subjects.push(row.terminal!);
+              emitted = row.terminal;
+            }
+          }
+          key = { terminal: row.terminal!, original: row.original, thread: row.thread };
+          consumed++;
+          if (subjects.length === limit) break;
+        }
       }
       await requireCurrent(observation, reader, work);
       const exhausted = consumed === rows.length && rows.length < REALM_SUBJECT_RAW_LIMIT;
@@ -248,15 +274,27 @@ export function createRealmSubjectSource(input: {
           chargeRows(work, rows.length);
           remaining -= rows.length;
           value = rows.length < limit ? 'not_published' : 'unknown';
-          for (const row of rows) {
-            const result = await bounded(context, disclosure!.bounds.candidate, () =>
-              disclosure!.candidate(row, state.dependency, context),
-            );
-            if (result === 'discussed') {
-              value = result;
-              break;
+          for (let offset = 0; offset < rows.length && value !== 'discussed'; offset += 8) {
+            const batch = rows.slice(offset, offset + 8);
+            const results = disclosure!.candidates
+              ? await bounded(context, disclosure!.bounds.candidate, () =>
+                  disclosure!.candidates!(batch, state.dependency, context),
+                )
+              : await Promise.all(
+                  batch.map((candidate) =>
+                    bounded(context, disclosure!.bounds.candidate, () =>
+                      disclosure!.candidate(candidate, state.dependency, context),
+                    ),
+                  ),
+                );
+            if (results.length !== batch.length) throw new TypeError('Realm disclosure candidate alignment changed');
+            for (const result of results) {
+              if (result === 'discussed') {
+                value = result;
+                break;
+              }
+              if (result === 'withheld' || result === 'unknown') value = result;
             }
-            if (result === 'withheld' || result === 'unknown') value = result;
           }
         }
         cache.set(subject, value);

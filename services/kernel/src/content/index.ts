@@ -16,3 +16,5 @@ export type {
   ReviewDiscoverySummary,
 } from './review-discovery.ts';
 export type { ReviewDiscoveryRefresh } from './review-discovery-changes.ts';
+export { createRealmSubjectSearchSource } from './realm-subject-search.ts';
+export type { RealmSubjectSource } from './realm-subject-source.ts';

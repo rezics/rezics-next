@@ -1,4 +1,6 @@
 import { realmReadingSearch } from '../../community/realm-reading-return';
+import { searchParams } from '../../search/search-params';
+import * as v from 'valibot';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
@@ -26,9 +28,20 @@ import type { SpacePageAdmission, SpacePageTarget } from '../../community/space-
 
 type RealmLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 
+/** Preserve Search intent beside the independent shelf cursor without reloading the Realm page. */
+function realmRouteSearch(value: Record<string, unknown>) {
+  const search = { ...v.parse(searchParams, value) };
+  delete search.node;
+  delete search.cursor;
+  return {
+    ...search,
+    ...realmReadingSearch(value),
+  };
+}
+
 export const Route = createFileRoute('/realms/$id')({
   staticData: { publicCache: true },
-  validateSearch: realmReadingSearch,
+  validateSearch: realmRouteSearch,
   loaderDeps: ({ search }) => realmReadingSearch(search),
   loader: async ({ params, context, abortController }) => {
     const locale = getLocale();

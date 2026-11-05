@@ -2,9 +2,12 @@ import { ProblemError } from '../http/problem.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { createSearchScopeSource } from './scope-source.ts';
 import type { createSearchService } from './service.ts';
+import type { RealmSubjectSource } from '../content/index.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
-export type ScopeRuntime = Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'>;
+export type ScopeRuntime = Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'> & {
+  realmSubjectsForReader?: (reader: LeafOptions) => RealmSubjectSource | undefined;
+};
 
 const runtimes = new WeakMap<SearchService, ScopeRuntime>();
 
@@ -33,5 +36,11 @@ export function createSearchScopeForService(
 ): ReturnType<typeof createSearchScopeSource> {
   const runtime = runtimes.get(service);
   if (!runtime) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-  return createSearchScopeSource({ ...runtime, evidence: options });
+  const { realmSubjects: installedSubjects, realmSubjectsForReader, ...scopeRuntime } = runtime;
+  const realmSubjects = realmSubjectsForReader ? realmSubjectsForReader(options) : installedSubjects;
+  return createSearchScopeSource({
+    ...scopeRuntime,
+    ...(realmSubjects ? { realmSubjects } : {}),
+    evidence: options,
+  });
 }

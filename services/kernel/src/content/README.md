@@ -544,8 +544,7 @@ The installed Community target variants use the same closed entry shape as the p
 
 `realm-subject-disclosure.ts` exports `prepareRealmSubjectDisclosure(dependencies, input, context)`.
 The sole `realm-subject-source.ts` census/factory owner supplies original keys; this evaluator creates no
-population, candidate storage, bootstrap, event consumer or registration. Until that composition lands,
-Realm population enumeration remains unavailable. `listSubjectThreads` is not a census.
+population, candidate storage, bootstrap, event consumer or registration. `listSubjectThreads` is not a census.
 
 Exported types are `RealmSubjectCandidate = Readonly<{ threadId: string; openingPostId: string;
 subjectId: string }>`, `RealmSubjectDisclosureInput = Readonly<{ realmId: string;
@@ -577,6 +576,13 @@ a missing producer refuses the attempt. The deadline is capped at the caller roo
 `expiresAt` caps evidence at 1,000 ms from preparation and the fixed deadline; consumers must not reuse it afterward. Public Realm
 bans include the actual actor and authenticated delegating principal. Protected grants, account fences,
 source/parent revisions, takedown and restoration retain native read authority at both rounds.
+
+`realm-subject-search.ts` exports `createRealmSubjectSearchSource`, re-exported from the Content `index.ts` boundary.
+The service supplies the actual request `LeafOptions`; Content binds that reader's Access and actor to the exact
+disclosure evaluator and live lifecycle before Search creates its Realm scope. Prefix candidate disclosure is batched
+in groups of at most eight, with one existing Access work ledger bridged into Search's caller-owned `ScopeWork`.
+Resolve, currentness, candidate batches and terminal Subject reads stay request-bound; no native locator or copied
+authorization observation leaves Content. The default service runtime creates this composition per reader.
 
 ## Mixed Home summaries
 
@@ -3701,10 +3707,10 @@ Decision: ancestor scope changes advance a monotone Realm/Space/board-set genera
 
 Production worker composition is live: `registerContent` mounts the effect, and Content work registers the identity
 continuation workflow and bounded census schedule. `createRealmSubjectLifecycle` exposes the maintenance and scope
-capabilities consumed by `createRealmSubjectSource`. The current `realm-subject-disclosure.ts` exports only its
-prepared evaluator, not the source adapter required by `RealmSubjectDisclosure`; inject that delivered adapter when
-it lands. Until then `createRealmSubjectSource` remains unavailable/preparing and this lifecycle cannot claim a
-ready population. The factory and disclosure owners remain the sole owners of their writer and reader contracts.
+capabilities consumed by `createRealmSubjectSearchSource`, which supplies the exact current disclosure port to
+`createRealmSubjectSource`. Missing native maintenance coverage, current Access authority or disclosure remains
+unavailable; a structural census alone never claims a ready population. The factory, lifecycle and disclosure owners
+remain the sole owners of their writer and reader contracts.
 
 ### Lifecycle operation bounds
 

@@ -78,7 +78,7 @@ import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingS
 import { subjectConsumer } from './runner.ts';
 import { registerSearchScopeRuntime, createSearchScopeForService } from './service-scope.ts';
 import { readScopedFacetDiscovery } from './scoped-facet-admission.ts';
-import { serviceScopeFacetAdmission } from './scoped-facet-source.ts';
+import { serviceRealmScopeFacetAdmission, serviceScopeFacetAdmission } from './scoped-facet-source.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
@@ -460,6 +460,7 @@ export function createSearchService({
   source,
   ratings,
   realmSubjects,
+  realmSubjectsForReader,
   realmRatings,
   realmSubjectCapabilities,
   cursors,
@@ -478,6 +479,7 @@ export function createSearchService({
   source: SubjectSource & Partial<{ canonicalNames: SubjectCanonicalNames }>;
   ratings?: PublicRatingSource;
   realmSubjects?: RealmSubjectSource;
+  realmSubjectsForReader?: (reader: LeafOptions) => RealmSubjectSource | undefined;
   realmRatings?: RealmRatingSource;
   realmSubjectCapabilities?: RealmSubjectCapabilities;
   cursors: KeyRing;
@@ -1053,7 +1055,11 @@ export function createSearchService({
         if (realmScopedRequest) {
           if (containsUnsupportedDiscoveryLeaf(admitted)) unsupported('/filter');
           const preparedRealm = await sourceRequest(() =>
-            scope!.realm.prepare(admitted as DiscoveryFilterDocument, scopeWork!.remaining()),
+            scope!.realm.prepare(
+              admitted as DiscoveryFilterDocument,
+              scopeWork!.remaining(),
+              kindDigest(current!),
+            ),
           );
           scopeWork.native(preparedRealm.work);
           const generation = await indexRequest(aliasGeneration);
@@ -1710,7 +1716,15 @@ export function createSearchService({
           )
             invalid('/conditions', 'invalid_format');
           const submitted = scopedRequest.conditions ?? scopedRequest.filter;
-          const effectiveFilter = scopedCatalogueCondition(submitted, scopedRequest.scope);
+          const catalogueCondition = scopedCatalogueCondition(submitted, scopedRequest.scope);
+          const kindCondition = scopedRequest.kinds?.length
+            ? { type: { in: [...scopedRequest.kinds] } }
+            : undefined;
+          const effectiveFilter = kindCondition
+            ? catalogueCondition === undefined
+              ? kindCondition
+              : { and: [catalogueCondition, kindCondition] }
+            : catalogueCondition;
           const normalized = validate({
             ...(scopedRequest.text === undefined ? {} : { text: scopedRequest.text }),
             filter: effectiveFilter,
@@ -1724,10 +1738,40 @@ export function createSearchService({
           if (!admitted) throw indexNotReady();
           const catalogue = catalogueFilter(admitted);
 
-          // Content owns Realm enumeration. Keep its scoped facet factory closed until that source is installed.
-          if (scopedRequest.scope.kind !== 'collection') throw indexNotReady();
           const scope = createSearchScopeForService(service, context.scope);
           const scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+          const meaning = {
+            text: normalized.text ?? null,
+            filter: admitted,
+            kinds: scopedRequest.kinds ?? null,
+            release: kindDigest(current),
+            languages: languages ?? null,
+          };
+          if (scopedRequest.scope.kind === 'realm') {
+            const prepared = await sourceRequest(() =>
+              scope.realm.prepare(catalogue, scopeWork.remaining(), kindDigest(current)),
+            );
+            scopeWork.native(prepared.work);
+            return {
+              principal,
+              text: normalized.text,
+              filter: catalogue,
+              originalFilter: normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
+              release: current,
+              languages,
+              now,
+              context: { deadline: context.deadline },
+              scope: serviceRealmScopeFacetAdmission({
+                resource: scopedRequest.scope,
+                scope,
+                prepared: prepared.scope,
+                realms: scope.realm.realms(prepared.scope),
+                work: scopeWork,
+                principal,
+                meaning,
+              }),
+            };
+          }
           const prepared = await sourceRequest(() =>
             scope.prepare(catalogue, {
               releaseDigest: kindDigest(current),
@@ -1750,13 +1794,7 @@ export function createSearchService({
               prepared,
               work: scopeWork,
               principal,
-              meaning: {
-                text: normalized.text ?? null,
-                filter: admitted,
-                kinds: scopedRequest.kinds ?? null,
-                release: kindDigest(current),
-                languages: languages ?? null,
-              },
+              meaning,
             }),
           };
         });
@@ -2033,6 +2071,7 @@ export function createSearchService({
     clock,
     ...(realmRelease ? { realmRelease } : {}),
     ...(realmSubjects ? { realmSubjects } : {}),
+    ...(realmSubjectsForReader ? { realmSubjectsForReader } : {}),
     ...(realmSubjectCapabilities ? { realmSubjectCapabilities } : {}),
   });
   return service;

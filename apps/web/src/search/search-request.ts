@@ -2,6 +2,9 @@ import { problemCode } from './refinement/request';
 import { searchFilterWithScope } from './advanced-scope';
 import type { DiscoveryRequest } from './discovery';
 import type { SearchLoaderDeps } from './search-params';
+import type { KernelClient } from '@rezics/client';
+
+type SubjectSearchRequest = Parameters<KernelClient['subjects']['$search']['post']>[0];
 
 export type SearchRequestPage = { sort?: string; cursor?: string; kindCursor?: string };
 export type SearchResponsePage = { status: number; error?: unknown };
@@ -60,4 +63,43 @@ export function discoveryRequest(params: SearchLoaderDeps, languages: string[]):
     ...(emptyRecoveryActions.length ? { emptyRecoveryActions } : {}),
     kindPage: { limit: 8 },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sameStrings(value: unknown, expected: readonly string[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((entry, index) => entry === expected[index])
+  );
+}
+
+/** Native Search evaluates the shared kind selection through its released Subject type predicate. */
+function nativeKindFilter(value: unknown, selected: readonly string[]): unknown {
+  if (Array.isArray(value)) return value.map((entry) => nativeKindFilter(entry, selected));
+  if (!isRecord(value)) return value;
+  if (
+    Object.keys(value).length === 1 &&
+    isRecord(value.kind) &&
+    Object.keys(value.kind).length === 1 &&
+    sameStrings(value.kind.in, selected)
+  )
+    return { type: { in: [...selected] } };
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, nativeKindFilter(entry, selected)]));
+}
+
+/** Build the native Search request used by a Realm catalogue, without Discovery-only fields. */
+export function realmSearchRequest(params: SearchLoaderDeps, languages: string[]): SubjectSearchRequest {
+  const {
+    representation: _representation,
+    kindPage: _kindPage,
+    kindCountLeaf: _kindCountLeaf,
+    emptyRecoveryActions: _emptyRecoveryActions,
+    ...request
+  } = discoveryRequest(params, languages);
+  if (!params.kinds?.length || request.filter === undefined) return request;
+  return { ...request, filter: nativeKindFilter(request.filter, params.kinds) as typeof request.filter };
 }

@@ -159,6 +159,7 @@ export function createRealmScopeSource(input: {
     async prepare(
       filter: DiscoveryFilterDocument,
       allowance: WorkAllowance,
+      expectedReleaseDigest?: string,
     ): Promise<Readonly<{ scope: PreparedRealmScope; work: WorkReceipt }>> {
       const work = new ScopeWork(allowance);
       const context = reader();
@@ -169,7 +170,7 @@ export function createRealmScopeSource(input: {
         nativeRows: 1,
         bytes: 262144,
       });
-      const release = await input.release();
+      const release = await input.release(expectedReleaseDigest);
       if (!release) notReady();
       const admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), release.release, new Set(), { owner: true });
       const plan = compileCurrentRealmFilter(admitted);

@@ -4,15 +4,20 @@ import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { isSearchResourceScope } from './advanced-scope';
 import { RATING_POPULATION_FIELD } from './rating-population';
 import { searchLoaderDeps, searchParams } from './search-params';
+import { realmReadingSearch } from '../community/realm-reading-return';
 
 const origin = 'https://rezics.invalid';
 const returnFragment = '#search-results';
 const returnLimit = 2048;
 const searchPath = new RegExp(`^/(${locales.join('|')})/search$`);
+const realmPath = new RegExp(
+  `^/(${locales.join('|')})/realms/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`,
+);
 const searchIntentKeys = new Set([
   'q',
   'type',
   'cursor',
+  'searchCursor',
   'kinds',
   'language',
   'condition',
@@ -33,7 +38,9 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
     return;
   try {
     const url = new URL(value, origin);
-    const path = searchPath.exec(url.pathname);
+    const search = searchPath.exec(url.pathname);
+    const realm = realmPath.exec(url.pathname);
+    const path = search ?? realm;
     if (
       url.origin !== origin ||
       !path ||
@@ -43,14 +50,29 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
       return;
     const params: Record<string, unknown> = Object.create(null);
     for (const key of new Set(url.searchParams.keys())) {
-      if (!searchIntentKeys.has(key) && !key.startsWith('f.') && !key.startsWith('r.')) return;
+      const shelfKey = realm && (key === 'node' || key === 'cursor');
+      const realmSearchCursor = realm && key === 'searchCursor';
+      if (!shelfKey && !realmSearchCursor && !searchIntentKeys.has(key) && !key.startsWith('f.') && !key.startsWith('r.'))
+        return;
       const values = url.searchParams.getAll(key);
       params[key] = values.length === 1 ? values[0] : values;
     }
+    if (search && ('searchCursor' in params || 'node' in params)) return;
+    const shelf = realm ? realmReadingSearch(params) : undefined;
+    if (
+      realm &&
+      ((params.node !== undefined && params.node !== shelf?.node) ||
+        (params.cursor !== undefined && params.cursor !== shelf?.cursor))
+    )
+      return;
     const parsed = v.safeParse(searchParams, params);
     if (!parsed.success) return;
-    const deps = searchLoaderDeps(parsed.output as Record<string, unknown>);
+    const deps = searchLoaderDeps({
+      ...(parsed.output as Record<string, unknown>),
+      cursor: realm ? params.searchCursor : params.cursor,
+    });
     if (deps.invalidInput || !isSearchResourceScope(deps.resourceScope) || deps.resourceScope.kind !== 'realm') return;
+    if (realm && deps.resourceScope.id.toLowerCase() !== realm[2]!.toLowerCase()) return;
     return `${url.pathname}${url.search}${returnFragment}`;
   } catch {
     return;

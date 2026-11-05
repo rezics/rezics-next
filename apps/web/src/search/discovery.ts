@@ -385,7 +385,7 @@ const page = v.object({
 
 export type DiscoveryPage = v.InferOutput<typeof page>;
 export type EmptyRecovery = NonNullable<DiscoveryPage['emptyRecovery']>;
-export type LegacySearchPage = v.InferOutput<typeof legacyPage>;
+export type LegacySearchPage = v.InferOutput<typeof legacyPage> & { kinds?: DiscoveryKinds };
 export type DiscoveryKinds = v.InferOutput<typeof kinds>;
 export type DiscoveryHit = DiscoveryPage['hits'][number];
 export type AccountDiscoverySummary = v.InferOutput<typeof accountSummary>;
@@ -633,6 +633,12 @@ function validKinds(value: DiscoveryKinds): boolean {
  * make the whole legacy page unavailable without synthesizing or fetching replacement rows.
  */
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
+  let directory: DiscoveryKinds | undefined;
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'kinds')) {
+    const parsedKinds = v.safeParse(kinds, value.kinds);
+    if (!parsedKinds.success || !validKinds(parsedKinds.output)) return;
+    directory = parsedKinds.output;
+  }
   const parsed = v.safeParse(legacyPage, normalizeMissingEvidence(value, true));
   if (!parsed.success) return;
   if (
@@ -659,7 +665,7 @@ export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefi
     parsed.output.subjects.some((hit) => !currentEvidenceMatches(hit.matchEvidence ?? { state: 'unavailable' }, hit.id))
   )
     return;
-  return parsed.output;
+  return { ...parsed.output, ...(directory ? { kinds: directory } : {}) };
 }
 
 function problemCode(error: unknown): string | undefined {

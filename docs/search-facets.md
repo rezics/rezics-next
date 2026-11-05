@@ -28,14 +28,16 @@ binds the submitted scope and complete condition tree into the static cursor req
 admission or released metadata as `search_restart_required`. A different principal, static query, scope reference,
 language or size cannot authenticate the cursor. Shared admission runs before cursor validation or provider I/O.
 
-Readiness remains partial: native facet plans already carry an admitted scope, and native storage consumes it only
-through the optional `ScopedFacetSource` ports. Missing or unready scoped ports leave the request preparing and the
-existing runtime returns `503 index_not_ready`; it never falls through to Global values. The public service handler
-does not yet call this adjacent adapter, so the public endpoint remains unscoped. Once wired, configured native
-scope ports can execute the admitted capture. The unscoped route keeps its existing wire, eight-distinct-property
-limit, sizes 1 through 20, count-free values and native value ordering.
+The public service handler calls this adapter after shared scope admission and before provider work. Collection uses
+its current native Scope ports. Realm binds the actual prepared Realm scope and its Content-backed
+subjects-discussed source to one retained request, then advances at most 16 bounded native prefixes per facet step.
+Each candidate window is revalidated and evaluated by Search's current Realm predicate before the provider sees its
+subjects. Sparse and rejected raw rows retain the complete Content frontier, including terminal seeks; continuation
+binds the Realm references, committed predicate, release, principal and authorization observation. Missing or
+unready native source work returns `503 index_not_ready`; it never falls through to Global values. The unscoped route
+keeps its existing wire, eight-distinct-property limit, sizes 1 through 20, count-free values and native value order.
 
-Decision: scoped facets use the additive Realm/Collection reference and the same Search condition tree through shared `ScopedFacetAdmission`; until the public route adopts the adapter, it remains unscoped and native unready work fails closed.
+Decision: Realm and Collection facets use the additive scoped reference and the same committed Search condition tree through shared `ScopedFacetAdmission`; current native membership and the complete query predicate must agree before values are released.
 
 The successful `200` envelope is:
 
