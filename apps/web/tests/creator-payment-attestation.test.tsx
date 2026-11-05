@@ -8,7 +8,7 @@ import { CreatorPaymentAttempt } from '../src/checkout/creator-payment-attestati
 import { m } from '../src/paraglide/messages.js';
 
 const subject = statement.creatorAccountId;
-const csrf = 'c'.repeat(43);
+const csrf = 'c'.repeat(22);
 let credential = 'current-creator';
 let viewer = subject;
 const env = {
@@ -41,9 +41,25 @@ const request = () =>
     },
   });
 mock.module('cloudflare:workers', () => ({ env }));
-mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn() {
+    let server: (...args: unknown[]) => unknown = () => undefined;
+    const chain = {
+      server(handler: typeof server) {
+        server = handler;
+        return chain;
+      },
+      client() {
+        return (...args: unknown[]) => server(...args);
+      },
+    };
+    return chain;
+  },
+}));
+start.setStoryRequestContext({ visitor: 'Signed In', url: 'https://site.test/en/creator/statements' });
 mock.module('@tanstack/react-start/server', () => ({
-  getRequest: request,
+  getRequest: () => start.requestForStory(request()),
   setResponseHeader: () => {},
 }));
 const { paymentAttestationInput, submitPaymentAttestation } =

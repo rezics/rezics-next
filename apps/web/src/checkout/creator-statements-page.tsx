@@ -1,6 +1,5 @@
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Link } from '@tanstack/react-router';
 import type { MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -139,6 +138,7 @@ export function CreatorStatementsPage({
   const href = statementsHref(locale, cursor);
   const noticeRetry = onRetry ? { onRetry } : {};
   const pagination = {
+    locale,
     ...(cursor !== undefined ? { cursor } : {}),
     ...(navigation ? { navigation } : {}),
     ...(onMovement ? { onMovement } : {}),
@@ -206,11 +206,13 @@ export function CreatorStatementsPage({
 }
 
 function StatementListPagination({
+  locale,
   cursor,
   page,
   navigation,
   onMovement,
 }: {
+  locale: string;
   cursor?: string;
   page: CreatorStatementsData | { kind: 'preparing' };
   navigation?: StatementWindowControls;
@@ -227,14 +229,7 @@ function StatementListPagination({
           variant="outline"
           className="min-h-11 min-w-11"
           nativeButton={false}
-          render={
-            <Link
-              preload={false}
-              to="/creator/statements"
-              search={navigation!.previous ? { cursor: navigation!.previous } : {}}
-              onClick={onMovement}
-            />
-          }
+          render={<a href={statementsHref(locale, navigation!.previous ?? undefined)} onClick={onMovement} />}
         >
           {m.statements_previous()}
         </Button>
@@ -244,7 +239,7 @@ function StatementListPagination({
           variant="outline"
           className="min-h-11 min-w-11"
           nativeButton={false}
-          render={<Link preload={false} to="/creator/statements" search={{}} onClick={onMovement} />}
+          render={<a href={statementsHref(locale)} onClick={onMovement} />}
         >
           {m.statements_restart()}
         </Button>
@@ -254,7 +249,7 @@ function StatementListPagination({
           variant="outline"
           className="min-h-11 min-w-11"
           nativeButton={false}
-          render={<Link preload={false} to="/creator/statements" search={{ cursor: next }} onClick={onMovement} />}
+          render={<a href={statementsHref(locale, next)} onClick={onMovement} />}
         >
           {m.statements_next()}
         </Button>

@@ -195,7 +195,9 @@ export const UnknownHistoricalMoney: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
-    await expect((await view.findAllByText(m.statements_amount_unavailable()))[0]).toBeVisible();
+    await expect(
+      (await view.findAllByText(m.money_raw_minor_unknown_unit({ amount: '675', currency: 'USD' })))[0],
+    ).toBeVisible();
     await expect(view.getByText(historicalCreatorStatementFixture.paidReference!)).toBeVisible();
   },
 };

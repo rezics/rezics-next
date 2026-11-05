@@ -20,7 +20,22 @@ let token = 'current-list-viewer';
 let preparation: 'active' | 'absent' | 'unavailable' = 'active';
 let preparations = 0;
 const responseHeaders = new Headers();
-mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn() {
+    let server: (...args: unknown[]) => unknown = () => undefined;
+    const chain = {
+      server(handler: typeof server) {
+        server = handler;
+        return chain;
+      },
+      client() {
+        return (...args: unknown[]) => server(...args);
+      },
+    };
+    return chain;
+  },
+}));
 mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => currentRequest,
   setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
@@ -50,6 +65,8 @@ const { readCreatorStatements, readCreatorStatement } = await import('../src/che
 const { viewerCredential } = await import('../src/session/request');
 const { CreatorStatementsPage, StatementAmount } = await import('../src/checkout/creator-statements-page');
 const { CreatorStatementPage } = await import('../src/checkout/creator-statement-page');
+const { setLocale } = await import('../src/paraglide/runtime.js');
+setLocale('en', { reload: false });
 
 test('default private statement reads use current credentials without caching or redirects and conceal refused preparation and native denial', async () => {
   const calls: Request[] = [];
@@ -197,7 +214,7 @@ test('pending detail keeps the requested statement and exact list return page', 
   }
 });
 
-test('healthy captured USD/EUR and negative lines format while historical money stays unavailable with external-payment evidence intact', async () => {
+test('healthy captured USD/EUR and negative lines format while historical money keeps unknown-unit recorded amounts with external-payment evidence intact', async () => {
   const list = await render(
     createElement(CreatorStatementsPage, {
       locale: 'en',
@@ -248,15 +265,15 @@ test('healthy captured USD/EUR and negative lines format while historical money 
       },
     }),
   );
-  expect(historicalList).toContain('Amount unavailable');
+  expect(historicalList).toContain('Recorded amount 675 USD; unit meaning is unknown.');
   expect(historicalList).not.toContain('$6.75');
-  expect(historical).toContain('Amount unavailable');
+  expect(historical).toContain('Recorded amount 675 USD; unit meaning is unknown.');
   expect(historical).not.toContain('$6.75');
   expect(historical).not.toContain('$7.50');
   expect(historical).toContain(historicalCreatorStatementFixture.paidReference!);
   expect(historical).toContain(historicalCreatorLineFixture.balanceTransactionId);
   expect(historical).toContain('does not confirm that you received the payment');
   expect(renderToString(createElement(StatementAmount, { value: 675, currency: 'usd', locale: 'en' }))).toContain(
-    'Amount unavailable',
+    'Recorded amount 675 USD; unit meaning is unknown.',
   );
 });

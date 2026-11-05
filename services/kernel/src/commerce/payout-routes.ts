@@ -122,10 +122,11 @@ export function payoutRoutes(
   {
     pool,
     access,
+    clock,
     tokens = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) },
-  }: { pool: Pool; access: () => Access; tokens?: KeyRing },
+  }: { pool: Pool; access: () => Access; clock?: () => Date; tokens?: KeyRing },
 ) {
-  const payouts = createPayouts({ pool });
+  const payouts = createPayouts({ pool, clock });
   return app
     .get(
       '/v1/payoutStatements',

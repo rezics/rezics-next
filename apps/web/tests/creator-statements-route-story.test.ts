@@ -40,7 +40,7 @@ test('A later empty creator statement page keeps the actual route, first-page re
   expect(story).toContain('m.statements_page_empty()');
   expect(story).toContain('m.statements_empty()');
   expect(story).toContain('click(restart)');
-  expect(story).toContain('constructed presentation responses');
+  expect(story).toContain('Constructed presentation responses');
   expect(story).toContain('do not establish native authorization');
 
   selectCreatorStatementStory('later-empty');

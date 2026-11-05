@@ -98,6 +98,8 @@ export type NativeWebStack = {
   request(url: string, persona?: string, headers?: Record<string, string>): Promise<Response>;
   credentials(persona: string): Promise<NativeCredentials>;
   advanceAuthClock(seconds: number): Promise<void>;
+  /** Advance the native Kernel command clock used by royalty recording and markPaid. */
+  advanceKernelClock(seconds: number): Promise<void>;
   /** Flushes kernel requests made by the production Worker into this observer. */
   refreshKernelRequests(): Promise<void>;
   kernelRequests(): readonly NativeKernelRequest[];
@@ -708,6 +710,8 @@ async function startStack(): Promise<
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
+    let kernelNow = Date.now();
+    const kernelClock = () => new Date(kernelNow);
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
     const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
     const searchConfig = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: searchPrefix });
@@ -792,11 +796,12 @@ async function startStack(): Promise<
           : dependencies;
         kernel = createKernel({
           ...observedDependencies,
+          clock: kernelClock,
           ...(commerce
             ? {
                 commerce: {
                   ...commerce,
-                  stripe: createStripePort({ ...commerce.stripe, clock: () => new Date() }),
+                  stripe: createStripePort({ ...commerce.stripe, clock: kernelClock }),
                   work: {
                     async enqueueStripeEvent(ref) {
                       await createCommerceWork(await commerceWorkClient!).enqueueStripeEvent(ref);
@@ -1065,6 +1070,9 @@ async function startStack(): Promise<
       async advanceAuthClock(seconds) {
         advanceNativeAuthClock(seconds);
       },
+      async advanceKernelClock(seconds) {
+        kernelNow += seconds * 1000;
+      },
       async enableAccountOperations() {
         const probe = await authHandler(
           new Request(`${auth.issuer}/account-operations/approve`, {
@@ -1260,6 +1268,7 @@ type HostCall = {
     | 'createAutomatedActor'
     | 'routeAuthPages'
     | 'advanceAuthClock'
+    | 'advanceKernelClock'
     | 'restartWeb'
     | 'injectKernelFailureOnce'
     | 'injectCreatedSubjectReadFailureOnce'
@@ -1594,6 +1603,10 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         lifecycle.assertOpen('advance native Auth clock');
         return call('advanceAuthClock', String(seconds)).then(() => undefined);
       },
+      advanceKernelClock(seconds) {
+        lifecycle.assertOpen('advance native Kernel clock');
+        return call('advanceKernelClock', String(seconds)).then(() => undefined);
+      },
       async enableAccountOperations() {
         lifecycle.assertOpen('check native account-operation boundary');
         await call('enableAccountOperations');
@@ -1783,6 +1796,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
           value = await stack.createAutomatedActor(input.operator, input.handle, input.authCookie);
         } else if (method === 'routeAuthPages') value = await stack.routeAuthPages(argument);
         else if (method === 'advanceAuthClock') await stack.advanceAuthClock(Number(argument));
+        else if (method === 'advanceKernelClock') await stack.advanceKernelClock(Number(argument));
         else if (method === 'injectKernelFailureOnce')
           stack.injectKernelFailureOnce(JSON.parse(argument!) as NativeKernelFailureInjection);
         else if (method === 'injectCreatedSubjectReadFailureOnce')

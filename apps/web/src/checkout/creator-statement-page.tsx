@@ -1,7 +1,6 @@
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@rezics/ui/shadcn/accordion';
-import { Link } from '@tanstack/react-router';
 import type { MouseEvent, ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -57,6 +56,7 @@ export function CreatorStatementPage({
   const href = statementHref(locale, id, cursor, from);
   const noticeRetry = onRetry ? { onRetry } : {};
   const pagination = {
+    locale,
     ...(from !== undefined ? { from } : {}),
     ...(cursor !== undefined ? { cursor } : {}),
     ...(navigation ? { navigation } : {}),
@@ -78,14 +78,12 @@ export function CreatorStatementPage({
     : [];
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="statement-heading">
-      <Link
-        preload={false}
-        to="/creator/statements"
-        search={from ? { cursor: from } : {}}
+      <a
+        href={statementsHref(locale, from)}
         className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
       >
         {m.statements_back()}
-      </Link>
+      </a>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">
           <PageHeading id="statement-heading" tabIndex={-1}>
@@ -294,6 +292,7 @@ export function CreatorStatementPage({
 }
 
 function StatementLinePagination({
+  locale,
   id,
   from,
   cursor,
@@ -301,6 +300,7 @@ function StatementLinePagination({
   navigation,
   onMovement,
 }: {
+  locale: string;
   id: string;
   from?: string;
   cursor?: string;
@@ -320,13 +320,7 @@ function StatementLinePagination({
           className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
           nativeButton={false}
           render={
-            <Link
-              preload={false}
-              to="/creator/statements/$id"
-              params={{ id }}
-              search={{ ...(navigation!.previous ? { cursor: navigation!.previous } : {}), ...(from ? { from } : {}) }}
-              onClick={onMovement}
-            />
+            <a href={statementHref(locale, id, navigation!.previous ?? undefined, from)} onClick={onMovement} />
           }
         >
           {m.statements_previous_lines()}
@@ -337,15 +331,7 @@ function StatementLinePagination({
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
           nativeButton={false}
-          render={
-            <Link
-              preload={false}
-              to="/creator/statements/$id"
-              params={{ id }}
-              search={from ? { from } : {}}
-              onClick={onMovement}
-            />
-          }
+          render={<a href={statementHref(locale, id, undefined, from)} onClick={onMovement} />}
         >
           {m.statements_restart_lines()}
         </Button>
@@ -355,15 +341,7 @@ function StatementLinePagination({
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal break-words"
           nativeButton={false}
-          render={
-            <Link
-              preload={false}
-              to="/creator/statements/$id"
-              params={{ id }}
-              search={{ cursor: next, ...(from ? { from } : {}) }}
-              onClick={onMovement}
-            />
-          }
+          render={<a href={statementHref(locale, id, next, from)} onClick={onMovement} />}
         >
           {m.statements_next_lines()}
         </Button>

@@ -89,6 +89,7 @@ export type NativeCreatorStatementsFixture = {
     suspendedList: Response;
     webList: Response;
     webDetail: Response;
+    webPaidDetail: Response;
     otherCreatorWebDetail: Response;
   };
   addresses: {
@@ -96,6 +97,7 @@ export type NativeCreatorStatementsFixture = {
     listContinuation: string;
     detail: string;
     detailLineContinuation: string;
+    paidDetail: string;
     otherCreatorDetail: string;
   };
   close(): Promise<void>;
@@ -291,6 +293,9 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
     const beforePaid = await stack.kernel(`/v1/payoutStatements/${paidStatement.id}`, {}, 'alice');
     await expectStatus(beforePaid, 200, 'Read open creator statement');
     const originalStatement = (await json<{ statement: NativeStatement }>(beforePaid)).statement;
+    const now = new Date();
+    const nextMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+    await stack.advanceKernelClock(Math.ceil((nextMonth - now.getTime()) / 1000));
     const paidReference = `external-test-reference:${randomUUID()}`;
     const markPaidKey = keyed('mark-paid:alice-usd');
     const markPaid = await stack.kernel(
@@ -351,6 +356,7 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
     const listContinuationAddress = statementsHref('en', listCursor);
     const detailAddress = statementHref('en', pagedStatement.id, undefined, listCursor);
     const detailLineContinuationAddress = statementHref('en', pagedStatement.id, lineCursor, listCursor);
+    const paidDetailAddress = statementHref('en', paidStatement.id);
     const otherCreatorDetailAddress = statementHref('en', paidStatement.id);
     const aliceJourney = await auth.signIn('alice');
     const bobJourney = await auth.signIn('bob');
@@ -372,13 +378,15 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
         redirect: 'manual',
         signal: AbortSignal.timeout(120_000),
       });
-    const [webList, webDetail, otherCreatorWebDetail] = await Promise.all([
+    const [webList, webDetail, webPaidDetail, otherCreatorWebDetail] = await Promise.all([
       readWeb(aliceCookie, listContinuationAddress),
       readWeb(aliceCookie, detailLineContinuationAddress),
+      readWeb(aliceCookie, paidDetailAddress),
       readWeb(bobCookie, otherCreatorDetailAddress),
     ]);
     await expectStatus(webList, 200, 'Read served creator statement list with Auth session');
     await expectStatus(webDetail, 200, 'Read served creator statement detail with Auth session');
+    await expectStatus(webPaidDetail, 200, 'Read served attested statement as the creator');
     await expectStatus(otherCreatorWebDetail, 200, 'Read concealed other-creator detail with Auth session');
 
     return {
@@ -410,6 +418,7 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
         suspendedList,
         webList,
         webDetail,
+        webPaidDetail,
         otherCreatorWebDetail,
       },
       addresses: {
@@ -417,6 +426,7 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
         listContinuation: new URL(listContinuationAddress, stack.web).href,
         detail: new URL(detailAddress, stack.web).href,
         detailLineContinuation: new URL(detailLineContinuationAddress, stack.web).href,
+        paidDetail: new URL(paidDetailAddress, stack.web).href,
         otherCreatorDetail: new URL(otherCreatorDetailAddress, stack.web).href,
       },
       async close() {

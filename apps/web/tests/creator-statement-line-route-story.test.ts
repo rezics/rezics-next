@@ -118,7 +118,7 @@ test('later line stale and empty keep the admitted paid statement while global p
     selectCreatorStatementStory('later-empty-lines');
     expect(await answer('/v1/payoutStatements')).toMatchObject({
       status: 200,
-      payoutStatements: [{ id: creatorStatementFixture.id }],
+      payoutStatements: [{ id: creatorStatementFixture.id }, { currency: 'eur' }],
       next: listFrom,
     });
     expect(await answer(`/v1/payoutStatements?cursor=${listFrom}`)).toEqual({

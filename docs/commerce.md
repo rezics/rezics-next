@@ -38,6 +38,11 @@ The known benefit's primary reader link requires an active, associated current n
 and matching captured terms. The Content reader reauthorizes the viewer and source when opened. Status polling
 updates only settlement and marks access for refresh; it cannot authorize a reader link.
 
+Creator statement and line amounts use the same recorded-money formatter. A missing or unknown unit keeps the signed
+minor amount and the unknown-unit message; it is never replaced by a generic unavailable label or a current currency
+exponent. HTTP `markPaid` uses the Kernel command clock, matching royalty recording, so an authorized external
+reference can close only a prior UTC month.
+
 The five current-access examples use the existing `PatternStory` provider harness. The recorded-charge page example
 uses `PageStory` and the ordinary loader with explicitly constructed financial inputs; those amounts do not amend
 the older native recordings or establish native financial evidence. Named terminal stories retain their states.
