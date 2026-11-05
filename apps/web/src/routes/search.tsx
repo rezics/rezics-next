@@ -24,7 +24,7 @@ import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/re
 import { PageHeading } from '../shell/page-heading';
 import { pageHead } from '../shell/head';
 import { validatePublicOrigin } from '../shell/origin';
-import { useSession } from '../session/query';
+import { sessionQuery, useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 
