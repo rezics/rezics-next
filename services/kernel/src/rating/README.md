@@ -1265,9 +1265,7 @@ counted zero, clear and proven absence stay distinct and current. The returned g
 frozen. Consumers retain that exact guard and idempotency key through an uncertain write retry; they do not sample a
 new review or substitute `readOwnVotes`.
 
-Decision: Content exposes `readVoteReview` as the sole provider review entry over the bounded counted reader. This
-attempt defers guarded-write binding to the continuation until Semantic's same-home identity participant and actual
-provider caller heads are available; a local remapping query is not accepted as a commit fence.
+Decision: `readVoteReview` extends the counted witness with Semantic's exact reviewed operand; fresh guarded effects compose the native question and identity participants on the authorized executor, while historical guards retain replay only.
 
 Each available counted-reader observation now includes `review: VoteReviewGuard`, with version 1,
 `question: {revision, lifecycleRevision}`, `subject: {canonicalId, epochs: [{partition, epoch}]}` and
@@ -1278,7 +1276,13 @@ The opaque observation is canonical JSON of the fixed tuple
 Each slot is null for proven absence, or
 `[sourceTargetId, units, revision, countedRevision, countedTarget, changedAt, transactionId]`.
 It retains explicit clears, zero, source replacement and revision-only changes, with a 4096-byte input ceiling.
-Consumers retain it unchanged. This is review evidence across bounded native snapshots, not an atomic fence.
+Consumers retain it unchanged. The provider entry additionally includes `subject.identity`, the version-1
+`IdentityRatingReviewOperand` returned by `readIdentityRatingReview` from `semantic/index.ts` for the exact
+requested/canonical pair. Its ordered source identities, sorted source homes, sorted persisted control locators
+and strict evidence string remain intact in the normalized guard and digest. Semantic owns validation and
+classification; Content does not reconstruct its proof or replace it at command time. Preparation freezes the
+operand without authority. Old guards omit this field and keep their original encoding and digest for historical
+replay; a fresh command using one requires a new explicit review. Neither preparation nor review holds a lock.
 
 The complete closed, copied guard participates in the existing vote receipt digest. Current native account and
 Access admission precede receipt lookup. Fresh execution compares question meaning/lifecycle, canonical target,
@@ -1288,18 +1292,22 @@ missing published epoch evidence throws `VoteReviewUnavailableError`. Errors cre
 unchanged unavailable attempt may retry the original input/key. Guard validation rejects malformed versions,
 unsafe revisions, incomplete or extra identity-home evidence and oversized observations as `VoteInvalidError('guard')`.
 
-Decision: guarded provider effects remain `atomic_guard_unavailable` until question lifecycle and identity
-publication supply commit-held native participant fences; reviewed evidence alone never installs adoption.
+Fresh execution admits `createQuestionVoteAdmission` and
+`createIdentityRatingCommitParticipant` before matching no-op, counted-source cleanup, vote writes and events.
+Both participants use the original authorized transaction and release their locks only at its COMMIT/ROLLBACK.
+The question participant holds the owning definition tuple and compares its lifecycle head; Semantic holds the
+local core owner row and compares the complete reviewed source/control/publication evidence. Content then
+recompares the native published-home epochs under that fence. Existing account sharing and the shelf gate serialize
+absence and counted-source replacement with the owning Library/merge writers. No additional vote writer or
+participant connection is introduced. Unconditional vote admission retains its existing behavior.
 
-The missing owner contracts are a Rating question-home revision/lifecycle hold joined to the voter command commit,
-and a Semantic requested/canonical-home mapping and exact published-epoch hold joined to that same commit,
-including identity admission, publication and reconciliation writers. The current question writer locks its own
-question row; `identityEpochStore.readEpoch` and `admitIdentityRatingEffect` observe identity without such a hold.
-Account sharing, the shelf write gate and local vote row locks do not fence these foreign authorities. Even a
-matching guarded no-op therefore returns typed `atomic_guard_unavailable`; no guarded effect is installed or
-advertised to Library consumers. Guarded success/replay, absent-slot first-writer serialization and full native
-race/growth acceptance remain delivery work under those owner contracts. Bangumi, MAL and AniList independently
-retain unavailable adoption and do not depend on one another's publication.
+Only a question, source or persisted control in another logical home remains `atomic_guard_unavailable` under
+the existing foreign enrollment/movement/abort deferral. PostgreSQL co-residence does not satisfy this condition.
+Current authorization and disclosure precede receipt lookup; fresh participant admission never runs for historical
+success replay or `reconcilePutVote`. A replay returns its original vote/component after business state changes;
+readback from `readVoteReview` reports the current counted value. Matching no-op still returns `component:null`.
+Providers keep the returned guard/key through uncertain retries. VNDB, Bangumi, MAL and AniList consume this same
+entry and writer; their original native effects/readback and growth acceptance remain with integration verification.
 
 #### Native question participant
 
@@ -1335,8 +1343,8 @@ Decision: question admission supports the command's own logical home only; cross
 no multi-home participant enrollment/completion/abort protocol. Its owning command infrastructure must provide
 deterministically ordered native home fences held through the _same_ owner commit, including movement and failure
 cleanup, before cross-home installation. Neither an arbitrary foreign checkout nor local SERIALIZABLE installs it.
-The original guarded vote journey remains unavailable until its writer integrates this participant and Semantic's
-separate exact-epoch participant. This source factory is not generated client delivery or provider adoption.
+The retained vote writer composes this participant with Semantic's exact reviewed-identity participant. The source
+factory alone does not establish provider adoption; original provider journeys verify effects and readback.
 
 #### Native vote receipt reconciliation
 
@@ -1376,9 +1384,9 @@ integration verification.
 
 #### Provider vote review Cost
 
-- **Touches:** One current account and disclosed question read, followed by the existing counted-reader preparation, one account-home snapshot, and finish confirmation for one requested Subject. Identity mappings and requested/canonical epochs use the reader's released bounded observations; the snapshot reads at most one counted row and two exact original/canonical slots.
-- **Bound:** One question and one raw Subject key. All identity, Access, account, row, statement and byte bounds are the existing one-key `createOwnCountedVoteReader` bounds plus one exact question disclosure; no vote-history scan, extra checkout, or second own-vote reader is introduced.
-- **Growth check:** `test/rating/vote-review.test.ts` pins absent, counted-zero and clear output through the owner export. `test/rating/growth-own-votes-counted.test.ts` retains the reader's independent 256/1024/4096 prefixes; the composed export's native measurement remains controller-owned.
+- **Touches:** One current account and disclosed question read, the existing counted-reader preparation/read/finish for one requested Subject, and Semantic's double-collected exact identity review. The account snapshot reads at most one counted row and two exact original/canonical slots. Fresh commands add the question and Semantic participants on the existing executor connection before effects.
+- **Bound:** One question and one raw Subject key. The one-key counted-reader bounds and question disclosure remain; Semantic adds at most two identities, two homes, two control locators, 24 bounded read statements/24 evidence rows across its double collection and a 16,384 UTF-8 byte operand. Own-vote evidence remains capped at 4096 bytes. Commit admission retains each participant's documented fixed-key bounds; no vote-history scan or second own-vote reader is introduced.
+- **Growth check:** `test/rating/vote-review.test.ts` pins absent, counted-zero and clear output, committed same-home writes, exact replay and foreign-home deferral through the owner export. `test/rating/growth-own-votes-counted.test.ts` retains the reader's independent 256/1024/4096 prefixes; the composed export's native measurement remains controller-owned.
 
 Within one home (including different routes in that home), admission takes a PostgreSQL share lock on the actual
 question, then reads its lifecycle head. Absence of that head means active revision 1 under the owning question

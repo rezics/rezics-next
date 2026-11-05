@@ -3,6 +3,10 @@ import { createVoteCommands, STANDARD_QUESTION_ID, type VoteReviewGuard } from '
 import { admitIdentityRatingEffect } from '../../src/semantic/identity-rating-admission.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
 import type { AccountActor } from '../../src/request/access.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import {
   createSourceStatisticLifecycleFixture,
   type SourceStatisticLifecycleFixture,
@@ -13,6 +17,7 @@ let actor: AccountActor;
 let commands: ReturnType<typeof createVoteCommands>;
 beforeAll(async () => {
   fixture = await createSourceStatisticLifecycleFixture();
+  await installIdentityEpochBootstrap(fixture.database.pool);
   actor = (await fixture.identityCommand('rating:vote')).actor;
   commands = createVoteCommands({ pool: fixture.database.pool, access: fixture.access });
 }, 180_000);
@@ -21,7 +26,15 @@ afterAll(async () => {
 }, 180_000);
 
 async function reviewOutput(targetId: string) {
+  await bootstrap(fixture, targetId);
   return commands.readVoteReview(actor, STANDARD_QUESTION_ID, targetId);
+}
+async function bootstrap(f: SourceStatisticLifecycleFixture, targetId: string) {
+  const home = partitionOf(routeOf(targetId)!);
+  for (let page = 0; page < 1000; page++) {
+    if ((await stepIdentityEpochBootstrap(f.database.pool, home)).state === 'caught-up') return;
+  }
+  throw new Error('Native identity bootstrap did not finish');
 }
 async function review(targetId: string) {
   return (await reviewOutput(targetId)).guard;
@@ -56,7 +69,7 @@ async function refused(
   expect(await snapshot()).toEqual(before);
 }
 
-test('native absence and matching no-op remain unavailable without atomic owner fences; unchanged retries have no effects', async () => {
+test('foreign question/source homes remain unavailable; unchanged retries have no effects', async () => {
   const target = await fixture.createSubject();
   const reviewed = await reviewOutput(target);
   const guard = reviewed.guard;
@@ -80,6 +93,76 @@ test('native absence and matching no-op remain unavailable without atomic owner 
     vote: written.vote,
     component: null,
   });
+}, 180_000);
+
+test('supported native guarded effects retain exact retries, current readback and no-op semantics', async () => {
+  const local = await createSourceStatisticLifecycleFixture({ accountRoute: 1 });
+  try {
+    await installIdentityEpochBootstrap(local.database.pool);
+    const voter = (await local.identityCommand('rating:vote')).actor;
+    const votes = createVoteCommands({ pool: local.database.pool, access: local.access });
+    // Select an ordinary native creation key; do not rewrite a Subject or its home.
+    async function createLocalSubject() {
+      let key = crypto.randomUUID();
+      while (partitionOf(subjectTarget(local.routeKey, voter.accountId, key).route) !== 0) key = crypto.randomUUID();
+      const target = await local.createSubject(undefined, key);
+      await bootstrap(local, target);
+      return target;
+    }
+    const target = await createLocalSubject();
+    const before = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
+    expect(before.guard.subject.identity).toMatchObject({
+      version: 1, requestedOriginalId: target, canonicalTerminalId: target, sourceHomes: [0],
+    });
+    expect(Object.isFrozen(before.guard.subject.identity!.controlLocators)).toBe(true);
+    expect(await votes.putVoteOutcome(voter, input(target, null, before.guard), crypto.randomUUID()))
+      .toEqual({ vote: null, component: null });
+    const legacy = { ...before.guard, subject: { canonicalId: target, epochs: before.guard.subject.epochs } };
+    await expect(votes.putVoteOutcome(voter, input(target, 0, legacy), crypto.randomUUID())).rejects.toMatchObject({
+      reason: 'atomic_guard_unavailable',
+    });
+    const prepared = votes.preparePutVote(voter, input(target, 0, before.guard), crypto.randomUUID());
+    const committed = await votes.putVoteOutcome(voter, prepared.input, prepared.receipt.requestKey);
+    expect(committed.vote).toMatchObject({ units: 0, revision: 1 });
+    expect(committed.component).not.toBeNull();
+    const current = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
+    expect(current.currentVote).toMatchObject({ state: 'counted', units: 0, countedRevision: 1 });
+    expect(await votes.putVoteOutcome(voter, input(target, 0, current.guard), crypto.randomUUID())).toEqual({
+      vote: committed.vote, component: null,
+    });
+    const cleared = await votes.putVoteOutcome(voter, input(target, null, current.guard), crypto.randomUUID());
+    expect(cleared.vote?.units).toBeNull();
+    expect((await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target)).currentVote.state).toBe('clear');
+    // An uncertain retry uses precisely the original input/key after business state changes.
+    expect(await votes.putVoteOutcome(voter, prepared.input, prepared.receipt.requestKey)).toEqual(committed);
+    expect(await votes.reconcilePutVote(voter, prepared.receipt)).toEqual(committed);
+    await expect(votes.putVoteOutcome(voter, input(target, 0, current.guard), prepared.receipt.requestKey))
+      .rejects.toMatchObject({ name: 'IdempotencyConflictError' });
+    await expect(votes.putVoteOutcome(voter, input(target, 5, before.guard), crypto.randomUUID()))
+      .rejects.toMatchObject({ reason: 'own_vote_changed' });
+    const competing = await createLocalSubject();
+    const absent = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, competing);
+    const writers = await Promise.allSettled([3, 4].map((units) =>
+      votes.putVoteOutcome(voter, input(competing, units, absent.guard), crypto.randomUUID()),
+    ));
+    expect(writers.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(writers.find((outcome) => outcome.status === 'rejected')).toMatchObject({
+      reason: { code: 'vote_review_stale', reason: 'own_vote_changed' },
+    });
+    const changed = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
+    await local.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+    try {
+      expect(await votes.putVoteOutcome(voter, prepared.input, prepared.receipt.requestKey)).toEqual(committed);
+      await expect(votes.putVoteOutcome(voter, input(target, 5, changed.guard), crypto.randomUUID()))
+        .rejects.toMatchObject({ reason: 'question_changed' });
+      await local.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [voter.accountId]);
+      await expect(votes.reconcilePutVote(voter, prepared.receipt)).rejects.toMatchObject({ name: 'GrantDeniedError' });
+    } finally {
+      await local.database.admin.query('UPDATE rating.question SET revision=revision-1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+    }
+  } finally {
+    await local.close();
+  }
 }, 180_000);
 
 test('native review export returns counted zero and clear through the bounded reader', async () => {

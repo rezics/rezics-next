@@ -32,7 +32,7 @@ export type SourceStatisticLifecycleFixture = Awaited<ReturnType<typeof createSo
 /** Production Kernel and shared Access with signed account tokens over a migrated isolated database.
  * The optional native figure fixture
  * supplies real public figures and worker-produced rating controls for the composed lifecycle acceptance. */
-export async function createSourceStatisticLifecycleFixture(options: { nativeFigures?: boolean } = {}) {
+export async function createSourceStatisticLifecycleFixture(options: { nativeFigures?: boolean; accountRoute?: number } = {}) {
   let database: GrowthDatabase | undefined;
   let nativeFigures: FigureFixture | undefined;
   let closeBase: (() => Promise<void>) | undefined;
@@ -47,7 +47,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
     }
     const routeKey =
       nativeFigures === undefined ? new Uint8Array(32).fill(121) : communityFixtureRuntime().system.routeKey;
-    const accountId = newId(0x23a1);
+    const accountId = newId(options.accountRoute ?? 0x23a1);
     await database.admin.query(
       `INSERT INTO access.account
          (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch, membership_inverse_complete)
@@ -145,8 +145,10 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
         return access;
       },
       identityCommand,
-      async createSubject(item: unknown = { type: 'schema:Book', labels: { en: 'Alias lifecycle subject' } }) {
-        const key = crypto.randomUUID();
+      async createSubject(
+        item: unknown = { type: 'schema:Book', labels: { en: 'Alias lifecycle subject' } },
+        key = crypto.randomUUID(),
+      ) {
         const command = await identityCommand('subject:create');
         const result = await createSubject(database!.pool, {
           ...command,
