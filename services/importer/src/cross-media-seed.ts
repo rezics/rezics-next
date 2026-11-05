@@ -25,6 +25,7 @@ import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabul
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest, sourceWebsiteUrl } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
+import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
 import {
   CrossMediaGraph,
   citedProviderBinding,
@@ -3171,7 +3172,11 @@ export async function runCrossMediaSeedCli(
   );
   ensure(!showcasePath || !showcaseConflictPaths.includes(showcasePath), 'Showcase state must not overlap seed files');
   await mkdir(dirname(statePath), { recursive: true });
-  const importPort = createImportTransport({ origin: api, tokenProvider });
+  const importPort = createImportTransport({
+    origin: api,
+    tokenProvider,
+    onDeniedResponse: createSeedDenialDiagnostics(join(dirname(statePath), 'diagnostics')),
+  });
   let characterProfileBindings = await readVndbCharacterProfileBindings(importPort, vndbCharacterProfileReferences);
   let bangumiCareerBindings = characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] };
   if (characterBindingsPath)

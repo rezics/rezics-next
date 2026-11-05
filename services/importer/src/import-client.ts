@@ -65,6 +65,14 @@ export type ImportTransportOptions = Omit<ImportHttpOptions, 'token'> & {
   onSession?: (token: string) => void;
   pollAttempts?: number;
   pollDelayMs?: number;
+  onDeniedResponse?: (denial: ImportDeniedResponse) => Promise<void>;
+};
+
+/** Opt-in private evidence sink; never receives request headers, bodies or credentials. */
+export type ImportDeniedResponse = {
+  method: string;
+  path: string;
+  response: Response;
 };
 
 const BODY_BYTES = 65536;
@@ -323,10 +331,24 @@ export function createImportTransport(options: ImportTransportOptions) {
       !origin.hash,
   );
   const importFetch = options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider });
+  const observedFetch: typeof fetch = options.onDeniedResponse
+    ? async (input, init) => {
+        const request = new Request(input, init);
+        const reply = await importFetch(request);
+        if (reply.status === 401 || reply.status === 403) {
+          await options.onDeniedResponse!({
+            method: request.method,
+            path: new URL(request.url).pathname,
+            response: reply.clone(),
+          });
+        }
+        return reply;
+      }
+    : importFetch;
   const client =
     options.client ??
     createKernelClient(options.origin, {
-      fetch: importFetch,
+      fetch: observedFetch,
       ...(options.session === undefined ? {} : { session: options.session }),
       ...(options.onSession === undefined ? {} : { onSession: options.onSession }),
     });

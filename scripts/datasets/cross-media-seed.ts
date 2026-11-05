@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
 import { createImportTransport } from '../../services/importer/src/import-client.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
+import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
 
 /** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
@@ -53,7 +54,11 @@ export async function runDevelopmentSeed(
   });
   const reviewedCatalogue = await (options.seedCatalogue ?? seedReviewedCatalogue)({
     path: state,
-    port: createImportTransport({ origin: api, tokenProvider }),
+    port: createImportTransport({
+      origin: api,
+      tokenProvider,
+      onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
+    }),
   });
   const args = [
     '--bangumi',
