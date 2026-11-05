@@ -460,9 +460,12 @@ async function uploadImage(
       throw new UploadRefusal('unavailable');
     mediaId = reserved.id;
     throwIfAborted(signal);
-    onStage?.('transfer', mediaId);
-    await putBytes(reserved, file, signal, credential, onResponseWait ?? options?.onResponseWait);
-    throwIfAborted(signal);
+    if (reserved.state === 'rejected') throw new UploadRefusal('rejected');
+    if (reserved.state === 'reserved') {
+      onStage?.('transfer', mediaId);
+      await putBytes(reserved, file, signal, credential, onResponseWait ?? options?.onResponseWait);
+      throwIfAborted(signal);
+    }
     onStage?.('processing', mediaId);
     return await readUploadedImage(
       mediaId,
