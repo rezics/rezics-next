@@ -508,7 +508,8 @@ test('a dev compile defect returns to the original worker session, repairs in pl
     expect(diagnostic.compilerDiagnostic).toMatchObject({ file: join(task.worktree, file), line: 2 });
     expect(readFileSync(diagnostic.logPath, 'utf8')).toContain('Dev landing transpile diagnostic:');
     expect(diagnostic.diagnostic).toContain('constant');
-    expect(h.store.record({ taskId: task.id, attempt: 1 })).toMatchObject({ outcome: 'pending-gate' });
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.outcome).toBe('superseded');
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('superseded');
     expect(h.store.events(task.id, 1).filter((event) => event.kind === 'gate-outcome')).toHaveLength(0);
     expect(h.store.record({ taskId: task.id, attempt: 1 })?.guardIds).toContain('dev-landing-transpile');
     expect(h.store.task(task.id).state).toBe('integrated');
