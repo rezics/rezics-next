@@ -219,6 +219,8 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const { createRoot, hydrateRoot } = await import('react-dom/client');
     const { renderToString } = await import('react-dom/server');
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    const { browserObservation } = await import('../src/session/observation');
+    const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
     const menu = await import('@rezics/ui/menu');
     const dialogs = await import('@rezics/ui/shadcn/dialog');
     const inputs = await import('@rezics/ui/shadcn/input');
@@ -275,6 +277,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
     const Page = Route.options.component!;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const stopBrowserObservation = browserObservation(queryClient).subscribeCache(() => {});
     const host = document.createElement('div');
     document.body.append(host);
     let root: ReturnType<typeof createRoot> | undefined;
@@ -296,7 +299,12 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       menus.length = 0;
       await act(async () => {
         queryClient.setQueryData(['session'], viewer);
-        queryClient.setQueryData(['exposure', 'viewer'], admitted);
+        const current = browserObservation(queryClient).getSnapshot();
+        if (current.state === 'signed-in')
+          queryClient.setQueryData(viewerExposureQuery(current.observation).queryKey, {
+            subject: current.observation.subject,
+            admitted,
+          });
         if (!root) {
           const html = renderToString(tree());
           expect(html).toContain('Private A');
@@ -639,6 +647,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(hydrationErrors).toEqual([]);
     } finally {
       if (root) await act(async () => root!.unmount());
+      stopBrowserObservation();
       queryClient.clear();
       host.remove();
       for (const restore of [menuRead, inputRead, dialogRead, toastRead, transport, write, loader, address])
