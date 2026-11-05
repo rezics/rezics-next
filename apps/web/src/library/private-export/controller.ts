@@ -1,4 +1,5 @@
 import { ExportAssembly, deliverLocalFile } from './artifact';
+import { holdCompletedArchive } from './custody';
 import {
   exportCoverage,
   isExportPage,
@@ -251,6 +252,7 @@ export function createExportJourney(input: {
       if ('kind' in file) return enterTerminal(file.kind === 'limit' ? 'limit' : 'unavailable');
       cost.recordFinalize(file.bytes.byteLength);
       manifest = page.manifest;
+      holdCompletedArchive(visit.subject, file, page.manifest);
       rememberCoverage(page.manifest);
       stage = page.manifest.rows === 0 ? 'empty' : 'ready';
       busy = false;

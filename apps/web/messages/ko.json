@@ -11149,5 +11149,13 @@
   "library_mal_score_source_details": "값: {value}; MAL 척도: {scale}",
   "library_mal_score_source_scale": "MAL 척도 {min}~{max}, 간격 {step}",
   "subject_rating_control_uncertain": "결과를 확인할 수 없습니다. 같은 요청을 다시 시도하거나 요청을 버리고 현재 평가를 다시 불러오세요.",
-  "subject_rating_control_discard": "요청을 버리고 평가 다시 불러오기"
+  "subject_rating_control_discard": "요청을 버리고 평가 다시 불러오기",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }

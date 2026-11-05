@@ -5,3 +5,4 @@ export { createArchiveCollectionRecoveryJourney } from './controller';
 export { RECOVERY_APPLY_COMMANDS, RECOVERY_PAGE_ROWS } from './contract';
 export type { RecoveryPort, RecoveryStatus, RecoveryOccurrence, RecoveryCollection } from './contract';
 export type { RecoveryVisit } from './visit';
+export type { ReceivingCollectionReadback } from './readback';

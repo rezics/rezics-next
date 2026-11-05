@@ -10,6 +10,7 @@ import {
   type RecoveryPort,
   type RecoveryResult,
 } from './contract';
+import { projectReceivingCollection, RECEIVING_COLLECTION_PAGE } from './readback';
 
 type Api = KernelClient['libraryArchiveCollectionRecoveries'];
 type Root = ReturnType<Api>;
@@ -170,6 +171,34 @@ export function kernelArchiveCollectionRecoveryPort(
         mutation: command,
         send: (api, authorization) =>
           api({ id: command.uploadId }).delete(undefined, { headers: effectHeaders(authorization) }),
+      });
+    },
+    receivingCollection(collectionId, cursor) {
+      const id = idOf(collectionId);
+      if (!id) return Promise.resolve({ kind: 'not-found' });
+      if (cursor && cursor.length > 4_096) return Promise.resolve({ kind: 'invalid' });
+      return call({
+        send: async (_api, authorization) => {
+          const headers = { authorization };
+          const collection = await client.collections({ collectionId: id }).get({
+            query: { view: 'FULL' },
+            headers,
+          });
+          if (collection.error) return collection;
+          const members = await client.collections({ collectionId: id }).members.get({
+            query: cursor
+              ? { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE, cursor }
+              : { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE },
+            headers,
+          });
+          if (members.error) return members;
+          if (collection.data === null || members.data === null)
+            return { data: null, error: collection.error, status: collection.status };
+          const value = projectReceivingCollection(collection.data.collection, members.data);
+          return value
+            ? { data: value, error: null, status: 200 }
+            : { data: null, error: { value: { code: 'unavailable' } }, status: 503 };
+        },
       });
     },
   };

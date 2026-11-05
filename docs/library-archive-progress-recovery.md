@@ -206,8 +206,9 @@ existing current-profile choices, independent-measure readout and exact episode 
 creates a native review for only the ten displayed archived IDs; it never confirms them. The final review binds
 only the owner's selected IDs and measure mappings. Refresh always creates a new review epoch and apply key.
 
-The authenticated `/library/recover-progress` journey is adjacent to private export. Original file bytes travel in a
-base64 server-function envelope and then a JSON Blob through the generated native upload method. The page never
+The authenticated `/library/recover-progress` journey is adjacent to private export. Cancel then Restart keeps the
+original file for a new upload key; a completed export from this signed-in owner is the same source. Original file
+bytes travel in a base64 server-function envelope and then a JSON Blob through the generated native upload method. The page never
 parses or clones the complete archive. The shared client preserves top-level Blob bytes across Eden serialization;
 raw JSON whitespace and Unicode bytes remain unchanged. On acknowledgement Web drops that envelope and keeps only one holdings,
 occurrence and unit page, one selected occurrence, at most twenty selected IDs and the displayed review/result.

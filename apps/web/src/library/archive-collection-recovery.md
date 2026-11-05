@@ -71,7 +71,12 @@ remains capped at `3R + 2` attempts. Upload transfer remains `O(U)`. The visit d
 each row, reconstruct rank keys, or load the archive into browser storage. Subject suggestions run only after an
 explicit search term.
 
+Decision: keep the original encoded archive after a successful read so Cancel then Restart can reuse it; a completed
+export from this signed-in owner is the same source. Results reopen the current Collection reader for actual title,
+privacy, member identities, notes and order.
+
 Stories cover upload, local preparation, file-read failure, reviewed selection, stale conflict and partial result.
-Focused Web acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer
-acceptance remains owned by Commerce.
+Journey tests pin original-archive restart, native Collection readback and other-member denial. Focused Web
+acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer acceptance
+remains owned by Commerce.
 Preparation decoders and producer implementation are not Web delivery; this guide describes the delivered consumer.

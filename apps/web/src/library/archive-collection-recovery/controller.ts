@@ -17,6 +17,7 @@ import {
   type RecoveryUnknown,
 } from './contract';
 import { RecoveryCostLedger, type RecoveryCost } from './cost';
+import type { ReceivingCollectionReadback } from './readback';
 import { makeReviewBody, type OccurrenceSelection } from './selection';
 import type { RecoveryVisit } from './visit';
 import {
@@ -63,6 +64,8 @@ export type RecoverySnapshot = {
   occurrencesWindow: RecoveryWindowSnapshot;
   outcomesWindow: RecoveryWindowSnapshot;
   readRetry: RecoveryReader | null;
+  receiving: ReceivingCollectionReadback | null;
+  hasOriginalArchive: boolean;
   cost: RecoveryCost;
 };
 
@@ -90,6 +93,8 @@ export type ArchiveCollectionRecoveryJourney = {
   cancel: () => Promise<void>;
   retryUnknown: () => Promise<void>;
   restart: () => void;
+  adoptOriginalArchive: () => Promise<void>;
+  readReceivingCollection: (cursor?: string) => Promise<void>;
   expire: () => void;
   retire: () => void;
 };
@@ -123,6 +128,8 @@ export function createArchiveCollectionRecoveryJourney(input: {
     outcomes: emptyRecoveryReadWindow(),
   };
   let readRetry: RecoveryReader | null = null;
+  let receiving: ReceivingCollectionReadback | null = null;
+  let originalArchiveBase64: string | null = null;
   let unknown: RecoveryEffectCommand | null = null;
   let expiredTimer: ReturnType<typeof setTimeout> | undefined;
   let retired = false;
@@ -153,6 +160,8 @@ export function createArchiveCollectionRecoveryJourney(input: {
       },
       outcomesWindow: { canPrevious: windows.outcomes.previous.length > 0, revision: windows.outcomes.revision },
       readRetry,
+      receiving,
+      hasOriginalArchive: originalArchiveBase64 !== null,
       cost: ledger.snapshot(),
     };
   }
@@ -171,6 +180,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
     targets = new Map();
     review = null;
     outcomePageData = null;
+    receiving = null;
     unknown = null;
     clearReadWindows();
   }
@@ -543,6 +553,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
       return () => listeners.delete(listener);
     },
     upload(archiveBase64: string) {
+      originalArchiveBase64 = archiveBase64;
       const command: Extract<RecoveryEffectCommand, { kind: 'upload' }> = {
         kind: 'upload',
         key: newRecoveryCommandKey(),
@@ -681,12 +692,47 @@ export function createArchiveCollectionRecoveryJourney(input: {
     },
     restart() {
       if (!live() || busy || unknown) return;
+      const archive = originalArchiveBase64;
       clearPrivateEvidence();
+      originalArchiveBase64 = archive;
       uploadId = null;
       status = null;
       notice = null;
       setExpiry(null);
       stage = 'upload';
+      publish();
+    },
+    adoptOriginalArchive() {
+      if (!live() || busy || unknown || !originalArchiveBase64) return Promise.resolve();
+      return dispatch({
+        kind: 'upload',
+        key: newRecoveryCommandKey(),
+        body: { archiveBase64: originalArchiveBase64 },
+      });
+    },
+    async readReceivingCollection(cursor) {
+      const collectionId = outcomePageData?.collection?.id ?? status?.collectionId;
+      if (!collectionId || !live() || busy || unknown) return;
+      const ticket = generation;
+      busy = true;
+      notice = null;
+      ledger.call('readback');
+      publish();
+      let result: Awaited<ReturnType<RecoveryPort['receivingCollection']>>;
+      try {
+        result = await port.receivingCollection(collectionId, cursor);
+      } catch {
+        result = { kind: 'unavailable' };
+      }
+      if (ticket !== generation || !live()) return;
+      busy = false;
+      if (result.kind !== 'ok') {
+        fail(result.kind === 'unknown' ? { kind: 'unavailable' } : result);
+        publish();
+        return;
+      }
+      receiving = result.value;
+      ledger.pageResult(result.value.members.length);
       publish();
     },
     expire,

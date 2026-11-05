@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
-import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { createExportJourney, type ExportJourney, type ExportJourneySnapshot } from './controller';
 import type { ExportFileDelivery } from './contract';
 import { ExportAction } from './controls';
 import { ExportCoverage } from './coverage';
+import { bindArchiveCustodyOwner } from './custody';
+import { ArchiveRecoveryDestinations } from './destinations';
 import { ExportDeparture } from './departure';
 import { exportFailureLabel } from './meaning';
 import { useLibraryExportPort } from './port';
@@ -63,6 +64,7 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
     setSnap(await run(journey.current));
   }
 
+  bindArchiveCustodyOwner(visit.subject);
   const locked = snap.notice?.kind === 'unknown';
   const terminal =
     snap.stage === 'cancelled' ||
@@ -77,12 +79,7 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
   return (
     <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_export_title()}</PageHeading>
-      <a
-        className="inline-flex min-h-11 items-center rounded-md border px-3 py-2"
-        href={localizeHref('/library/recover-progress')}
-      >
-        {m.library_archive_progress_title()}
-      </a>
+      <ArchiveRecoveryDestinations current="export" />
       {text ? (
         <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite">
           {text}
