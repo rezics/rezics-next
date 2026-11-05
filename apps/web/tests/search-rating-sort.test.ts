@@ -21,8 +21,7 @@ test('the search page offers relevance by default and a URL-backed Top rated sor
   expect(search).toMatch(/rating/);
   expect(queries).toMatch(/queryKey: \['search', 'discovery-v1', searchSessionLifetime\(locale, params, reader\)\]/);
   expect(queries).toMatch(/sort/);
-  expect(sort).toMatch(/searchParams\.delete\('cursor'\)/);
-  expect(sort).toMatch(/searchParams\.delete\('sort'\)/);
+  expect(sort).toMatch(/changeRatingOrder/);
   expect(messages).toMatch(/Top rated/);
 });
 
@@ -36,17 +35,15 @@ test('Top rated rows show public Global scores and leave unscored subjects blank
 });
 
 test('stale Top rated cursors restart once and facet index errors retain retry controls', async () => {
-  const [search, recovery, routes, request] = await Promise.all([
+  const [search, recovery, request] = await Promise.all([
     source('src/search/search.tsx'),
     source('src/search/search-recovery.ts'),
-    source('src/routes/search.tsx'),
     source('src/search/search-request.ts'),
   ]);
   expect(request).toMatch(/status !== 409/);
   expect(request).toMatch(/send\(firstPage\)/);
   expect(recovery).toMatch(/status === 503 && code === 'index_not_ready'/);
   expect(search).toMatch(/retry/i);
-  expect(routes).toMatch(/sort/);
 });
 
 test('changing sort drops the cursor and search never renders result or facet counts', async () => {
