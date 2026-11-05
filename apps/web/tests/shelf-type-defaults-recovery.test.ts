@@ -368,20 +368,20 @@ test('a retried receipt survives a stalled GET and a later current read defeats 
   let finishLateRead!: (page: { signedIn: true; preferences: ReadingPreferences; securityHref: null }) => void;
   const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 1,
     shelf: { layouts: { all: 'list' }, gridSize: 'large' } });
-  const receipt = withShelfAdvice({ ...initial, version: 2,
-    shelf: { layouts: { all: 'table' }, gridSize: 'large' } });
-  const later = withShelfAdvice({ ...initial, version: 3,
-    shelf: { layouts: { all: 'grid' }, gridSize: 'medium' } });
+  const receipt = withShelfAdvice({ ...initial, version: 2, shelf: { layouts: { all: 'table' }, gridSize: 'large' } });
+  const later = withShelfAdvice({ ...initial, version: 3, shelf: { layouts: { all: 'grid' }, gridSize: 'medium' } });
   const draft = new ShelfPreferenceDraftRecovery(
     initial,
     {
-      save: async (input) => (commands.push(input), ++saves === 1
-        ? { ok: false, reason: 'unavailable' } : { ok: true, preferences: receipt }),
+      save: async (input) => (commands.push(input), ++saves === 1 ? { ok: false, reason: 'unavailable' }
+        : { ok: true, preferences: receipt }),
       read: async () => {
         reads++;
         if (reads === 1) return { signedIn: true, preferences: initial, securityHref: null };
         if (reads === 2)
-          return await new Promise<{ signedIn: true; preferences: ReadingPreferences; securityHref: null }>(resolve => { finishLateRead = resolve; });
+          return await new Promise<{ signedIn: true; preferences: ReadingPreferences; securityHref: null }>(
+            (resolve) => { finishLateRead = resolve; },
+          );
         return { signedIn: true, preferences: later, securityHref: null };
       },
     },
@@ -389,7 +389,9 @@ test('a retried receipt survives a stalled GET and a later current read defeats 
       canRead: () => true,
       canWrite: () => true,
       version: () => version,
-      onVersionChange: (next) => (version = next),
+      onVersionChange: (next) => {
+        version = next;
+      },
     },
   );
   try {
@@ -400,18 +402,17 @@ test('a retried receipt survives a stalled GET and a later current read defeats 
     await draft.reload();
     const before = timers.delays().length;
     let settled = false;
-    const retrying = draft.retry().then(() => (settled = true));
+    const retrying = draft.retry().then(() => { settled = true; });
     await timers.flush();
     expect(timers.delays().slice(before)).toEqual([10_000, 10_000]);
     expect(commands[1]).toBe(original);
     expect(draft.snapshot()).toMatchObject({ pending: null, confirmedWrite: { input: original }, current: false,
       readBusy: true, writeReceipt: { version: 2 } });
     expect(draft.canSubmit()).toBe(false);
-    timers.fireNext();
-    await timers.flush();
+    timers.fireNext(); await timers.flush();
     expect(settled).toBe(true);
     await retrying;
-    expect(draft.snapshot()).toMatchObject({ readBusy: false, current: false, pending: null,
+    expect(draft.snapshot()).toMatchObject({ readBusy: false, current: false, pending: null, advice: undefined,
       confirmedWrite: { input: original }, readResponse: { failure: { status: null, code: 'local_timeout' }, retryAt: 0 } });
     expect(draft.canSubmit()).toBe(false);
     await draft.reload();
