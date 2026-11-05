@@ -373,7 +373,11 @@ test(
       expect(await controls.email.getAttribute('autocomplete')).toBe('email');
       expect(await controls.password.getAttribute('autocomplete')).toBe('new-password');
       expect(await controls.password.getAttribute('type')).toBe('password');
-      await page.getByRole('button', { name: 'Show password', exact: true }).click();
+      await page
+        .getByRole('group')
+        .filter({ has: controls.password })
+        .getByRole('button', { name: 'Show password', exact: true })
+        .click();
       expect(await controls.password.getAttribute('type')).toBe('text');
       expect(await controls.password.getAttribute('autocomplete')).toBe('new-password');
       await page.getByRole('button', { name: 'Hide password', exact: true }).click();
@@ -547,6 +551,9 @@ test(
         ),
         retry.click(),
       ]);
+      await page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+      );
       expect(bodies).toHaveLength(2);
       const first = JSON.parse(bodies[0]!) as { key: string; turnstile_token: string; handle: string; email: string };
       const second = JSON.parse(bodies[1]!) as {
@@ -791,7 +798,15 @@ test(
         (window as unknown as { __issueTurnstileToken: () => boolean }).__issueTurnstileToken(),
       );
       for (const value of ['short7', 'x'.repeat(129)]) {
-        await controls.password.fill(value);
+        if (value.length > 128) {
+          await controls.password.evaluate((input, next) => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            setter.call(input, next);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }, value);
+        } else {
+          await controls.password.fill(value);
+        }
         await waitEnabled(page);
         await controls.submit.click();
         await page.waitForFunction(() => {
