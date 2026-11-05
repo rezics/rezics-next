@@ -90,7 +90,9 @@ mock.module('@tanstack/react-start/server', () => ({
 mock.module('cloudflare:workers', () => ({ env }));
 // The only controlled boundary is the delayed native page response; server validation, session preparation,
 // query keys, render admission and mounted reader lifetime stay real.
+const originalKernel = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({
+  ...originalKernel,
   kernelClient: () =>
     createKernelClient('https://kernel.test', {
       fetch: async (input, init) => {
@@ -150,7 +152,7 @@ test('configured full lists retire private reads across reader, target, node, cu
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-  const [{ createRoot }, { QueryClient, QueryClientProvider }, sessionModule, pageModule, composition] =
+  const [{ createRoot }, { QueryClient, QueryClientProvider, QueryObserver }, sessionModule, pageModule, composition] =
     await Promise.all([
       import('react-dom/client'),
       import('@tanstack/react-query'),
@@ -383,7 +385,15 @@ test('configured full lists retire private reads across reader, target, node, cu
     config = { ...config, cursor: 'public-next' };
     await render();
     await until(() => nativeReads.length === 7, 'public continuation');
+    const shared = client
+      .getQueryCache()
+      .getAll()
+      .find((query) => query.queryKey[4] === 'public-next')!;
+    const subscriber = new QueryObserver(client, { queryKey: shared.queryKey, enabled: false });
+    const unsubscribe = subscriber.subscribe(() => {});
     await act(async () => root.render(null));
+    expect(nativeReads[6]!.signal.aborted).toBe(false);
+    unsubscribe();
     expect(nativeReads[6]!.signal.aborted).toBe(true);
     await render();
     await until(() => nativeReads.length === 8, 'fresh public return');
@@ -395,6 +405,7 @@ test('configured full lists retire private reads across reader, target, node, cu
   } finally {
     await act(async () => root.unmount());
     client.clear();
+    mock.module('../src/kernel/client', () => originalKernel);
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
