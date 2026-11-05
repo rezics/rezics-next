@@ -279,7 +279,7 @@ test('only the exact admitted refusal DTO and status can settle a phase', async 
         '{"error":"credential_effect_denied","effect_status":"applied","effect_status":"not_applied"}',
         { status: 409 },
       )) as typeof fetch,
-    async () => expect((await dispatchPasswordChangePhase(attempt)).kind).toBe('unknown'),
+    async () => expect((await dispatchPasswordChangePhase(attemptAt('stage'))).kind).toBe('unknown'),
   );
 });
 

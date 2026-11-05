@@ -147,8 +147,10 @@ test('cached return reads current advice once, keeps generic history, and requir
   expect(ui.identityReads).toBe(2);
   expect(ui.inventoryReads).toHaveLength(4);
 
+  expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.calls[0]!.resolve(stageResponse(ui.calls[0]!.body)));
   expect(ui.calls).toHaveLength(1);
+  expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-password-return-acknowledge]')!.click());
   expect(ui.host.querySelector('#security-new-password')).not.toBeNull();
   expect(document.activeElement).toBe(ui.host.querySelector('#security-new-password'));
