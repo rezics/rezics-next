@@ -289,16 +289,16 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     );
     return button;
   };
+  const until = (check: () => void) => act(async () => void (await waitFor(check)));
   try {
     await draw();
-    await waitFor(() => expect(host.querySelector('[data-literary-assertion-inspection] select')).not.toBeNull());
+    await until(() => expect(host.querySelector('[data-literary-assertion-inspection] select')).not.toBeNull());
     expect(profileRequests.at(-1)).toEqual({
       id: literaryWorkId,
       type: 'schema:Book',
       context: candidateContext,
       expectedReader: reader,
     });
-    expect(correctionRequests[0]?.expectedReader).toBe(reader);
     const returnLink = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
       (link) => link.textContent === m.literary_visit_return({}, { locale: 'en' as never }),
     )!;
@@ -306,7 +306,8 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
 
     await select(duplicate.id);
     await inspect();
-    await waitFor(() => expect(inspection().querySelector('article')).not.toBeNull());
+    await until(() => expect(inspection().querySelector('article')).not.toBeNull());
+    expect(correctionRequests.at(-1)?.expectedReader).toBe(reader);
     const evidence = inspection().querySelector('article details') as HTMLDetailsElement;
     evidence.open = true;
     expect(evidence.querySelector('a[href="https://selected.example/work"]')).not.toBeNull();
@@ -324,14 +325,14 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
       keyboardRead.resolve(structuredClone(current));
       await keyboardRead.promise;
     });
-    await waitFor(() => expect(inspection().querySelector('article')).not.toBeNull());
+    await until(() => expect(inspection().querySelector('article')).not.toBeNull());
     expect(window.document.activeElement).toBe(returnLink);
 
     const removed = structuredClone(current);
     removed.public.subject.statements['schema:wordCount'] = statements.filter((item) => item.id !== duplicate.id);
     freshAnswer = removed;
     await inspect();
-    await waitFor(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
+    await until(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
     expect(inspection().querySelector('article')).toBeNull();
     expect(host.textContent).toContain('An original literary work');
 
@@ -339,7 +340,7 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     delete lostDescriptor.release.properties['schema:wordCount'];
     freshAnswer = lostDescriptor;
     await inspect();
-    await waitFor(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
+    await until(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
     expect(inspection().querySelector('article')).toBeNull();
 
     freshAnswer = {
@@ -347,7 +348,7 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
       actions: { ...actions, subject: { state: 'available', actions: [] } },
     };
     await inspect();
-    await waitFor(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
+    await until(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
     expect(inspection().querySelector('article')).toBeNull();
 
     freshAnswer = structuredClone(current);
@@ -363,8 +364,8 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     address = globalAddress;
     const priorLoads = profileRequests.length;
     await draw();
-    await waitFor(() => expect(profileRequests.length).toBeGreaterThan(priorLoads));
-    await waitFor(() => expect(inspection().querySelector('select')).not.toBeNull());
+    await until(() => expect(profileRequests.length).toBeGreaterThan(priorLoads));
+    await until(() => expect(inspection().querySelector('select')).not.toBeNull());
     await act(async () => {
       late.resolve(structuredClone(current));
       await late.promise;
