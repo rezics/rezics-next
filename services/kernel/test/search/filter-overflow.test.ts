@@ -4,7 +4,6 @@ import {
   parseFilter,
   type FilterDocument,
   type FilterRelease,
-  type NumericFilterRange,
 } from '@rezics/filter';
 import { compileFilter } from '../../src/search/filter.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -146,8 +145,8 @@ function matches(filter: FilterDocument, type: string | undefined, facts: Fact[]
     if ('in' in statement) {
       if (fact.value === undefined || !statement.in.includes(fact.value)) return false;
     } else {
-      // These fixtures contain numeric year/quantity bounds, not typed calendar endpoints.
-      const range = statement.range as NumericFilterRange;
+      const range = statement.range;
+      if ('type' in range && range.type === 'time') throw new Error('Fixtures use numeric range bounds');
       const value = range.unit === undefined ? fact.year : fact.amount;
       if (value === undefined || (range.unit !== undefined && range.unit !== fact.unit)) return false;
       if (range.gte !== undefined && value < range.gte) return false;
