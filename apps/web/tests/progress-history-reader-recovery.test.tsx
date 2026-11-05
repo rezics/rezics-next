@@ -371,7 +371,9 @@ test('First/later empty pages are honest and each first/next link preserves the 
 });
 
 test('Absent operations hide only their navigation and retired origin/capture/locale reject each recovery and continuation', async () => {
-  for (const retirement of ['origin', 'capture', 'locale'] as const) {
+  for (const retirement of ['origin', 'capture', 'locale'] as const)
+  for (const index of [0, 1, 2, 3])
+  for (const type of ['click', 'auxclick']) {
     let current = true;
     const initial = {
       ...page({ changesNext: 'next-changes', unitsNext: 'next-units' }),
@@ -392,16 +394,14 @@ test('Absent operations hide only their navigation and retired origin/capture/lo
       if (retirement === 'locale') setLocale('ja', { reload: false });
       else current = false;
       await act(async () => {
-        for (const link of links)
-          for (const type of ['click', 'auxclick']) {
-            const event = new window.MouseEvent(type, {
-              bubbles: true,
-              cancelable: true,
-              button: type === 'click' ? 0 : 1,
-            });
-            link.dispatchEvent(event as unknown as MouseEvent);
-            expect({ retirement, type, prevented: event.defaultPrevented }).toEqual({ retirement, type, prevented: true });
-          }
+        // A dispatch may render new handlers; each stale callback gets its own retained render.
+        const event = new window.MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          button: type === 'click' ? 0 : 1,
+        });
+        links[index]!.dispatchEvent(event as unknown as MouseEvent);
+        expect({ retirement, type, prevented: event.defaultPrevented }).toEqual({ retirement, type, prevented: true });
       });
       expect(h.router.state.location.search).toEqual({});
       expect(unexpectedRequest).not.toHaveBeenCalled();

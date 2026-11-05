@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, Fragment, StrictMode, useState, type ReactNode } from 'react';
+import { act, Fragment, StrictMode, useLayoutEffect, useState, type ReactNode } from 'react';
 import type {
   ProgressFailure,
   ProgressFinishInput,
@@ -171,13 +171,14 @@ async function mount(initial: LoadedPage, phone = false) {
   let renderPage: () => void;
   const rootRoute = createRootRoute({ component: function Page() {
     const [, render] = useState(0);
-    renderPage = () => render((value) => value + 1);
+    useLayoutEffect(() => { renderPage = () => render((value) => value + 1); });
     return shown && <ProgressSessionPage page={shown} logsCursor="logs:independent/==" />;
   } });
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
   const destinationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/destination' });
   window.history.replaceState({}, '', '/');
   const router = createRouter({
-    routeTree: rootRoute.addChildren([destinationRoute]),
+    routeTree: rootRoute.addChildren([indexRoute, destinationRoute]),
     history: createBrowserHistory({ window: window as unknown as Window }),
   });
   const originalMatchMedia = window.matchMedia;
@@ -747,7 +748,7 @@ test('decimal corrections explain invalid operands before review and retain exac
           : { locator: ' ', position: '999999999999.123456' },
       );
       await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
-      expect(h.field(label).disabled).toBe(true);
+      expect(h.field(label).matches(':disabled')).toBe(true);
       expect(h.field(label).value).toBe('999999999999.123456');
       await h.submit('record');
       expect(commands[1]!.data).toEqual(original.data);
