@@ -1,4 +1,9 @@
 {
+  "addon_origin_invalid": "Diese Korrekturadresse ist ungültig. Öffne die Korrektur erneut auf der aktuellen öffentlichen Seite der Erweiterung.",
+  "addon_origin_unsupported": "Der Context oder Realm dieser Erweiterungsansicht wird vom reinen Global-Editor nicht unterstützt. Kehre zur öffentlichen Seite zurück oder öffne bewusst eine neue, separate Global-Korrektur.",
+  "addon_origin_changed": "Die Erweiterung oder ihre Definition hat sich seit dieser öffentlichen Ansicht geändert. Lies die Seite erneut oder öffne eine neue Global-Korrektur mit aktuellen Bearbeitungshinweisen.",
+  "addon_origin_return": "Zur aktuellen öffentlichen Seite der Erweiterung zurückkehren",
+  "addon_origin_global": "Separate Global-Korrektur öffnen",
   "literary_visit_invalid": "Diese Korrekturadresse ist ungültig. Öffne die Korrektur erneut aus der aktuellen Werkansicht.",
   "literary_visit_global_only": "Dieser Editor unterstützt nur globale Korrekturen. Öffne eine separate globale Ansicht, um aktuelle Korrekturhinweise zu erhalten.",
   "literary_visit_return": "Zur Werkansicht zurückkehren",

@@ -1,4 +1,9 @@
 {
+  "addon_origin_invalid": "この修正アドレスは無効です。現在のアドオンの公開ページから修正を開き直してください。",
+  "addon_origin_unsupported": "このアドオンを表示した Context または Realm は、Global 専用の編集画面では扱えません。公開ページに戻るか、別途 Global の修正を開いてください。",
+  "addon_origin_changed": "公開ページの閲覧後に、アドオンまたは Definition が変更されました。戻って読み直すか、Global の修正を新たに開いて現在の操作案内を取得してください。",
+  "addon_origin_return": "現在のアドオンの公開ページに戻る",
+  "addon_origin_global": "別途 Global の修正を開く",
   "literary_visit_invalid": "この修正アドレスは無効です。現在の文学作品の閲覧ページから修正を開き直してください。",
   "literary_visit_global_only": "このエディターはグローバルの修正のみ対応しています。別のグローバル修正を開き、現在の修正案内を取得してください。",
   "literary_visit_return": "文学作品の閲覧に戻る",

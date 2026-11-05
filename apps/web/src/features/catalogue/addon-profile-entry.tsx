@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import type { AddonPublicOrigin } from './addon-public-visit';
 import { catalogueEntries } from './catalogue-entry';
 
 export type AddonProfileEntryProps = {
@@ -6,6 +7,7 @@ export type AddonProfileEntryProps = {
   label?: string | undefined;
   work?: string | undefined;
   locale: string;
+  origin?: AddonPublicOrigin | undefined;
 };
 export function AddonProfileEntry(props: AddonProfileEntryProps) {
   const entry = catalogueEntries.addon(props);

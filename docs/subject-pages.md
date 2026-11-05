@@ -952,6 +952,36 @@ The People profile groups multilingual authored biography, occupations and worki
 Decision: Person and Character fact visits filter only displayed text in the active local window (20 rows), with explicit previous/next controls over the supplied native current selection; the whole added projection must fit 1 MiB of UTF-8 and 64 fields/4096 facts. This is not catalogue, candidate or source completeness. One embedded existing ValueExplanationSession retains the original Subject/property/assertion/Context and retires with its profile reading. Modified clicks retain the existing value URL. Close returns to the original row, or its field with a changed-reading notice; existing correction and Sources destinations cannot restore detailed local state after navigation.
 Screen correction also retains only private editor holders across refusal, including concealment; only a fresh matching read restores identity, selected evidence, nested editors and explicit sealed retries.
 
+### Add-on correction origin and return
+
+Decision: preserve one observed Addon overview origin through its existing correction entry; unsupported selected
+Context or Realm stops before the Global profile mounts, with a separately named fresh Global correction visit.
+
+The existing Subject action and contribution menu carry the actual Addon UUID and Type, current read's Context,
+actual admitted Realm when present, effective Definition digest and one same-locale immediate public overview
+return. The existing public/editorial mount restrictions remain unchanged. The HTTP boundary rejects malformed,
+duplicate, recursive, contradictory, wrong-Subject/type/locale and overbudget intent. Both the full encoded canonical
+address and its intent fit 2,048 characters and 2,048 UTF-8 bytes; nothing is truncated. Overview selects no assertion,
+fragment or exact Sources receipt. General Sources navigation keeps its independent owner.
+
+The descriptor is public intent, never mutation authority. The supported visit uses the original Global profile
+read and current candidate advice; mismatching Subject, Context, Type or effective Definition retires origin editing.
+The existing catalogue/session address includes the whole descriptor, so caller/credential changes, source replacement
+and A/B/A navigation retire incompatible work. Retained private holders and exact unresolved commands remain with
+the original fact, relation, classification and creation controllers. Opening a link never submits or retries them.
+A separately named Global visit drops the selected correction intent and obtains a fresh native read and advice,
+retaining only the validated public return. Legacy direct visits and creation/work callers keep their Global meaning.
+Slug redirects preserve valid intent; identity redirects refuse its transfer to another Subject.
+
+Explicit return and browser history use the original public navigation owner and fresh public address admission and
+reading. Without a compatible field receipt, return names the current public heading, with no new focus effect;
+connected visitor interaction and retirement keep their existing precedence.
+
+Cost: one bounded descriptor adds no endpoint or native read. Deliberate Global acquisition and public return each
+use their existing current read. Native fact, base-Work, relation and candidate page/byte bounds and document hydration
+stay unchanged; no history scan, per-row request or extra retained response is introduced. Base-Work identity and
+classification, sealed classification handoffs and original creation/readback return operands remain independent.
+
 ### Screen correction visit and return
 
 Decision: Selected Screen readings retain their native Context and Realm for inspection and return; non-Global

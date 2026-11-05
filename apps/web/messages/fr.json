@@ -1,4 +1,9 @@
 {
+  "addon_origin_invalid": "Cette adresse de correction est invalide. Rouvrez la correction depuis la page publique actuelle du contenu additionnel.",
+  "addon_origin_unsupported": "Le Context ou Realm de cette lecture du contenu additionnel n’est pas pris en charge par cet éditeur limité à Global. Revenez à la page publique ou ouvrez une nouvelle correction Global distincte.",
+  "addon_origin_changed": "Le contenu additionnel ou sa Definition a changé depuis cette lecture publique. Relisez la page ou ouvrez une nouvelle correction Global pour obtenir les indications actuelles.",
+  "addon_origin_return": "Revenir à la page publique actuelle du contenu additionnel",
+  "addon_origin_global": "Ouvrir une correction Global distincte",
   "literary_visit_invalid": "Cette adresse de correction est invalide. Rouvrez la correction depuis la lecture littéraire actuelle.",
   "literary_visit_global_only": "Cet éditeur prend uniquement en charge les corrections globales. Ouvrez une visite globale distincte pour obtenir les indications actuelles.",
   "literary_visit_return": "Revenir à la lecture littéraire",

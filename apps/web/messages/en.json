@@ -1,4 +1,9 @@
 {
+  "addon_origin_invalid": "This correction address is invalid. Open correction again from the current add-on reading.",
+  "addon_origin_unsupported": "This add-on was read in a selected Context or Realm that this Global-only editor does not support. Return to the public reading, or deliberately start a fresh Global visit.",
+  "addon_origin_changed": "The add-on or its Definition has changed since this public reading. Return to read it again, or start a fresh Global visit for current correction advice.",
+  "addon_origin_return": "Return to the current public add-on reading",
+  "addon_origin_global": "Start a separate Global correction",
   "literary_visit_invalid": "This correction address is invalid. Open correction again from the current literary reading.",
   "literary_visit_global_only": "This editor supports Global correction only. Start a separate Global visit to obtain current correction advice.",
   "literary_visit_return": "Return to the literary reading",

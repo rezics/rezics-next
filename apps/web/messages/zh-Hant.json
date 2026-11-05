@@ -1,4 +1,9 @@
 {
+  "addon_origin_invalid": "此修正網址無效。請從目前的附加內容頁面重新開啟修正。",
+  "addon_origin_unsupported": "此附加內容是在已選取的 Context 或 Realm 中閱讀，本編輯器僅支援 Global。請返回公開頁面，或另行開啟全新的 Global 修正。",
+  "addon_origin_changed": "自上次公開閱讀後，此附加內容或其 Definition 已變更。請返回重新閱讀，或另行開啟 Global 以取得目前的修正建議。",
+  "addon_origin_return": "返回目前的附加內容公開頁面",
+  "addon_origin_global": "另行開啟 Global 修正",
   "literary_visit_invalid": "此修正網址無效。請從目前的文學作品閱讀頁重新開啟修正。",
   "literary_visit_global_only": "此編輯器僅支援全域修正。請另行開啟全域修正，以取得目前的修正建議。",
   "literary_visit_return": "返回文學作品閱讀頁",
