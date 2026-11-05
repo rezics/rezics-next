@@ -178,6 +178,7 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
   expect(loadValidator?.validator?.({ id: subjectId })).toEqual({ id: subjectId });
   const selectedRead = await actions.loadScreenProfile({ data: { id: subjectId, context: contextId } });
   expect(selectedRead).toMatchObject({ ok: true, public: { subject: { id: subjectId, context: contextId } } });
+  responseContext = PAGE_GLOBAL_CONTEXT;
   const globalRead = await actions.loadScreenProfile({ data: { id: subjectId } });
   expect(globalRead).toMatchObject({ ok: true, public: { subject: { context: PAGE_GLOBAL_CONTEXT } } });
   expect(queryContexts).toEqual([contextId, PAGE_GLOBAL_CONTEXT]);
