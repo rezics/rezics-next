@@ -20,20 +20,17 @@ export function useCopiesWindows({
   viewer: number;
   active: boolean;
 }) {
-  const [state, setState] = useState(() => createCopiesWindows(address, reader, viewer));
-  const current = useRef(state);
+  const [, setRevision] = useState(0);
+  const current = useRef(createCopiesWindows(address, reader, viewer));
   const reconciled = reconcileCopiesWindows(current.current, address, reader, viewer, active);
-  if (reconciled !== current.current) {
-    current.current = reconciled;
-    setState(reconciled);
-  }
+  current.current = reconciled;
 
   const move = useCallback(
     (direction: CopiesWindowMove, target: string | null, keyboard: boolean) => {
       const next = stageCopiesWindowMove(current.current, address, direction, target, keyboard);
       if (next === current.current) return false;
       current.current = next;
-      setState(next);
+      setRevision((revision) => revision + 1);
       return true;
     },
     [address],
@@ -45,7 +42,7 @@ export function useCopiesWindows({
       const result = admitCopiesWindowRead(current.current, address, reader, viewer, page);
       if (result.state !== current.current) {
         current.current = result.state;
-        setState(result.state);
+        setRevision((revision) => revision + 1);
       }
       if (result.focus && stillCurrent()) {
         document.getElementById('copies-inventory-heading')?.focus();
