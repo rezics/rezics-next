@@ -417,7 +417,19 @@ test('selected dump candidates publish only by exact intent and resume a refused
       publicClient,
       ...tagOptions,
     });
-    if (replayed.status !== 'published') throw new Error(JSON.stringify(replayed.omissions));
+    if (replayed.status !== 'published') {
+      const replayedV2Id = result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v2')!
+        .subject.subject!.id!;
+      throw new Error(
+        JSON.stringify({
+          omissions: replayed.omissions,
+          assertions: replayed.manifest.records.find((record) => record.sourceKey === 'v2')?.assertions,
+          publicGenre: subjects.get(replayedV2Id)?.statements['schema:genre'],
+          adoption: adopted.get(`${replayedV2Id}\0schema:genre`),
+          acceptanceCalls: acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId),
+        }),
+      );
+    }
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
