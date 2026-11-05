@@ -91,6 +91,7 @@ const schemeIds = {
 const conceptIds = {
   g311: '00000000-0000-4000-8000-000000000030',
   g44: '00000000-0000-4000-8000-000000000031',
+  g12: '00000000-0000-4000-8000-000000000032',
 };
 const subjects: Record<string, object> = {
   [schemeIds.cont]: {
@@ -113,6 +114,16 @@ const subjects: Record<string, object> = {
       type: 'skos:Concept',
       statements: {
         'schema:url': [{ value: { content: vndbPublicTagConceptUri('cont', 'g311') } }],
+        'skos:inScheme': [{ value: { content: schemeIds.cont } }],
+      },
+    },
+  },
+  [conceptIds.g12]: {
+    subject: {
+      id: conceptIds.g12,
+      type: 'skos:Concept',
+      statements: {
+        'schema:url': [{ value: { content: vndbPublicTagConceptUri('cont', 'g12') } }],
         'skos:inScheme': [{ value: { content: schemeIds.cont } }],
       },
     },
@@ -203,6 +214,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     ],
     concepts: [
       { category: 'cont', code: 'g311', id: conceptIds.g311 },
+      { category: 'cont', code: 'g12', id: conceptIds.g12 },
       { category: 'ero', code: 'g44', id: conceptIds.g44 },
     ],
   });
@@ -393,6 +405,7 @@ test('COPY votes never become weights and conflicting or unavailable Kana rating
     ],
     concepts: [
       { category: 'cont', code: 'g311', id: conceptIds.g311 },
+      { category: 'cont', code: 'g12', id: conceptIds.g12 },
       { category: 'ero', code: 'g44', id: conceptIds.g44 },
     ],
   });
@@ -935,7 +948,10 @@ test('selected rating evidence survives response loss and reopen before terminal
   };
   const known = {
     schemes: [{ category: 'cont' as const, id: schemeIds.cont }],
-    concepts: [{ category: 'cont' as const, code: 'g311', id: conceptIds.g311 }],
+    concepts: [
+      { category: 'cont' as const, code: 'g311', id: conceptIds.g311 },
+      { category: 'cont' as const, code: 'g12', id: conceptIds.g12 },
+    ],
   };
   const fetchRatings: VndbTagRatingFetch = async () => {
     fetches++;
