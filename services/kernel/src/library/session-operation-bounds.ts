@@ -309,7 +309,7 @@ export function sessionPresentationWork(measures: number, sessions = 1): Bound {
 export type SessionOperationKind = 'start' | 'record' | 'complete' | 'abandon' | 'reopen' | 'retire' | 'journal';
 export type SessionCommandPlan = Readonly<{
   kind: SessionOperationKind;
-  original: Readonly<{ accountId: string; kind: string; key: string; input: unknown }>;
+  original: Readonly<{ accountId: string; clientId: string; requestedBy: string | null; kind: string; key: string; input: unknown }>;
   /** Full Library attempt, including its closed preparation/mutation branches.
    * Native Access producers compose through their existing independent work port. */
   total: Bound;
@@ -352,7 +352,7 @@ export function sessionCommandPlan(kind: SessionOperationKind, original: Session
     // event fence: partition old/new heap + PK; outbox heap + all five indexes;
     // History basis heap + its three indexes; receipt heap + three indexes.
     sqlWork(eventFence.sql, { partition_no: 4095, transaction_id: uuid, receipt,
-      basis: { principal: { kind: 'account', id: retained.accountId }, clientId: '', requestedBy: uuid },
+      basis: { principal: { kind: 'account', id: retained.accountId }, clientId: retained.clientId, requestedBy: retained.requestedBy },
       events: [{ type: 'com.rezics.library.progress_session.updated.v1', subject: retained.accountId,
         id: uuid, data: { sessionId: uuid } }] }, 4 + 6 + 4 + 4, 1 + 5 + 3 + 3,
       size({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
@@ -388,7 +388,7 @@ export function sessionSnapshotWork(accountId: string): Bound {
 
 export function sessionPartitionWork(partition: number): Bound {
   return sqlWork(partitionRead.sql, { partition_no: partition }, 1, 1,
-    size({ partitionNo: 4095, node: text(255), movedTo: text(255), writeState: 'active', epoch: 2_147_483_647, position: '-9223372036854775808' }));
+    size({ partitionNo: 4095, node: text(256), movedTo: text(256), writeState: 'active', epoch: 2_147_483_647, position: '-9223372036854775808' }));
 }
 
 /** Cache hit/miss are both native points. Cold validation/digest parsing is

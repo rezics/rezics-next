@@ -131,7 +131,8 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const identity = principalCommandIdentity(owner);
     const deadline = request.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
     const plan = request.sessionOperation === undefined ? undefined : sessionCommandPlan(request.sessionOperation,
-      { accountId: owner.accountId, kind: request.kind, key: request.requestKey, input: request.input },
+      { accountId: owner.accountId, clientId: owner.clientId, requestedBy: owner.requestedBy ?? null,
+        kind: request.kind, key: request.requestKey, input: request.input },
       receiptKeysFor(pool).keys.size, request.sessionPreparation ?? false, Math.max(0, deadline - Date.now()));
     // Capture original command identity before any permission preparation awaits.
     const commandInput = plan?.original.input ?? request.input;
