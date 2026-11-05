@@ -331,12 +331,14 @@ function envelopeKey(source: BatchCommand['source']): string {
 
 function selectedEnvelopes(
   plan: CrossMediaPlan,
+  readings: readonly CrossMediaReading[],
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>,
   requirements: readonly ShowcaseVocabularyRequirement[],
   mediaOutcomes: readonly CrossMediaMediaOutcome[],
   tagWeightObservations: readonly VndbTagRatingObservation[],
 ): Set<string> {
   const allowed = new Set<string>();
+  const readingIndex = new Map(readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]));
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSelectedFamilySourceRegistration(provider, aliases[provider]);
     for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
@@ -344,9 +346,10 @@ function selectedEnvelopes(
         provider === 'bangumi'
           ? showcaseMediaContext({ plan, outcomes: mediaOutcomes, alias: aliases[provider], externalId: row.key })
           : undefined;
+      const subject = currentSubject(readingIndex.get(`${provider}\0${row.key}`));
       const converted = registration.convert(
         { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
-        { source: aliases[provider], ...(context ?? {}) },
+        { source: aliases[provider], ...(subject ? { subjectId: subject.id } : {}), ...(context ?? {}) },
       );
       for (const command of converted.proposals) allowed.add(envelopeKey(command.source));
     }
@@ -617,7 +620,14 @@ export function buildShowcaseManifest(input: {
     vocabularyRequirements.push(requirement);
   }
   const mediaOutcomes = input.mediaOutcomes ?? [];
-  const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes, tagWeightObservations);
+  const allowedSources = selectedEnvelopes(
+    plan,
+    readings,
+    aliases,
+    vocabularyRequirements,
+    mediaOutcomes,
+    tagWeightObservations,
+  );
   for (const acknowledgement of acknowledgements) {
     const assertion = candidateAssertion(acknowledgement);
     if (
