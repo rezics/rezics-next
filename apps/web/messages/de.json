@@ -3035,6 +3035,7 @@
   "public_account_more": "Weitere Kontoseiten",
   "public_account_cursor_expired": "Dieser Seitenlink ist abgelaufen oder ungültig. Beginne auf der ersten Seite.",
   "public_account_start_again": "Erste Seite",
+  "public_account_previous_page": "Vorherige Seite",
   "public_account_realm_owner": "Eigentümer",
   "public_account_realm_member": "Mitglied",
   "public_account_realms_more": "Auf dieser Seite sind keine Realms sichtbar. Gehe zur nächsten Seite.",

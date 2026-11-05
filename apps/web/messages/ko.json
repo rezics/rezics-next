@@ -3035,6 +3035,7 @@
   "public_account_more": "다른 계정 페이지",
   "public_account_cursor_expired": "페이지 링크가 만료되었거나 올바르지 않습니다. 첫 페이지부터 확인해 주세요.",
   "public_account_start_again": "첫 페이지",
+  "public_account_previous_page": "이전 페이지",
   "public_account_realm_owner": "소유자",
   "public_account_realm_member": "구성원",
   "public_account_realms_more": "이 페이지에 표시할 영역이 없습니다. 다음 페이지를 확인해 주세요.",

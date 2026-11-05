@@ -14,6 +14,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
 import { projectShareCardPage } from '../media/share-card-page';
+import { forwardContributionWindow, retireContributionWindow } from '../accounts/public-profile/contribution-windows/state';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -56,6 +57,8 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
       throw error;
     });
     if (page.kind === 'redirect') {
+      if (typeof window !== 'undefined' && (view === 'posts' || view === 'reviews' || view === 'discussion'))
+        retireContributionWindow(window);
       throw redirect({
         href: keepSearch(page.redirectTo, '', location.hash),
         statusCode: 302,
@@ -68,9 +71,15 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     const canonicalHandle = page.page.account?.handle;
     if (!canonicalHandle) throw notFound();
     if (canonicalHandle !== params.handle) {
-      throw redirect(
-        canonicalRedirect(agentPath(locale, canonicalHandle, view), location.searchStr, location.hash, 308),
-      );
+      const target = canonicalRedirect(agentPath(locale, canonicalHandle, view), location.searchStr, location.hash, 308);
+      if (typeof window !== 'undefined' && (view === 'posts' || view === 'reviews' || view === 'discussion'))
+        forwardContributionWindow({
+          owner: { accountId: page.page.account.id, view, locale, published: true },
+          cursor: deps.cursor ?? null,
+          fromHref: `${location.pathname}${location.searchStr}${location.hash}`,
+          toHref: target.href,
+        });
+      throw redirect(target);
     }
     return {
       ...page,
@@ -102,7 +111,7 @@ function AgentViewRoute() {
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
-  const { searchStr } = useLocation();
+  const { pathname, searchStr, hash } = useLocation();
   const { data } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
   const reading = useProfileReading({
     handle,
@@ -132,6 +141,12 @@ function AgentViewRoute() {
       page={data.page}
       cursor={data.cursor ?? null}
       locale={locale}
+      contributionWindowRoute={{
+        pathname,
+        search: searchStr,
+        hash,
+        retry: () => void router.invalidate(),
+      }}
       messages={subjectPageMessages()}
       reading={reading}
       relations={data.relations}

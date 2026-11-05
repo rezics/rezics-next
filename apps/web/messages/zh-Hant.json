@@ -3035,6 +3035,7 @@
   "public_account_more": "更多帳號檢視",
   "public_account_cursor_expired": "此分頁連結已過期或無效，請從第一頁開始。",
   "public_account_start_again": "第一頁",
+  "public_account_previous_page": "上一頁",
   "public_account_realm_owner": "擁有者",
   "public_account_realm_member": "成員",
   "public_account_realms_more": "此頁沒有可見的領域，可繼續查看下一頁。",

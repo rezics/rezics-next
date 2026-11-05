@@ -3035,6 +3035,7 @@
   "public_account_more": "更多账号视图",
   "public_account_cursor_expired": "此分页链接已过期或无效，请从第一页开始。",
   "public_account_start_again": "第一页",
+  "public_account_previous_page": "上一页",
   "public_account_realm_owner": "所有者",
   "public_account_realm_member": "成员",
   "public_account_realms_more": "此页没有可见的领域，可继续查看下一页。",

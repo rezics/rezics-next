@@ -3035,6 +3035,7 @@
   "public_account_more": "Más páginas de la cuenta",
   "public_account_cursor_expired": "Este enlace ha caducado o no es válido. Empieza desde la primera página.",
   "public_account_start_again": "Primera página",
+  "public_account_previous_page": "Página anterior",
   "public_account_realm_owner": "Propietario",
   "public_account_realm_member": "Miembro",
   "public_account_realms_more": "No hay Realms visibles en esta página. Continúa a la siguiente.",

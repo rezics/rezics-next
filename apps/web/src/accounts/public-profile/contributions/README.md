@@ -37,6 +37,8 @@ total), each within the route's 4096-character cursor limit. A direct cursor add
 Only an admitted native replacement moves the history; failure keeps the exact attempted target for Retry and leaves
 the last accepted coordinates in place. The rendered replacement contains at most twenty contributions. Tab-local
 state does not contain rows, excerpts, disclosures, private advice or action state, and does not survive a reload.
+Canonical handle redirects carry a pending coordinate only when the resolved canonical account, view and locale match;
+a different account retires the prior visit.
 
 ## Cost: public contribution cursor movement
 

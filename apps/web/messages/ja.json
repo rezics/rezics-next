@@ -3035,6 +3035,7 @@
   "public_account_more": "その他のアカウントページ",
   "public_account_cursor_expired": "このページリンクは期限切れか無効です。最初のページからご覧ください。",
   "public_account_start_again": "最初のページ",
+  "public_account_previous_page": "前のページ",
   "public_account_realm_owner": "所有者",
   "public_account_realm_member": "メンバー",
   "public_account_realms_more": "このページに表示できるレルムはありません。次のページをご覧ください。",
