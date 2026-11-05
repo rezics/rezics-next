@@ -127,6 +127,8 @@ test('installed readers alone manage Recent and History through native settlemen
     host.querySelector<HTMLElement>(`[data-surface="${index ? 'history' : 'recent'}"]`)!;
   const remove = (index: number) => surface(index).querySelector<HTMLButtonElement>('[data-history-action]')!;
   const announcement = (index: number) => surface(index).querySelector('[aria-live="polite"]')!.textContent;
+  let regionFocus = 0;
+  for (const region of host.querySelectorAll('section')) region.addEventListener('focus', () => regionFocus++);
   try {
     await act(async () => history[0]!.remember('Keep'));
     expect(history[1]!.entries.map((entry) => entry.query)).toEqual(['Keep']);
@@ -134,7 +136,7 @@ test('installed readers alone manage Recent and History through native settlemen
       const retired = [...history];
       await act(async () => {
         if (replacement === 'A/B/A') session('019f0000-0000-7000-8000-734100000002');
-        session(account, replacement);
+        session(account, 'credentials');
         const before = io();
         for (let index = 0; index < 2; index++) {
           remove(index).focus();
@@ -176,6 +178,7 @@ test('installed readers alone manage Recent and History through native settlemen
         }
       });
       expect(host.textContent).not.toContain('Retired private');
+      expect(regionFocus).toBe(0);
       for (let index = 0; index < 2; index++) expect(announcement(index)).toBe('');
       const before = io();
       await act(async () => {
