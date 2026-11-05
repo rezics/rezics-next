@@ -64,8 +64,9 @@ async function waitFor(condition: () => boolean) {
 
 async function stop(run: ReturnType<typeof start>, code = 0) {
   await run.child.stdin.end();
-  expect(await run.child.exited).toBe(code);
+  const exit = await run.child.exited;
   await run.done;
+  expect(exit, run.output.stderr).toBe(code);
 }
 
 async function take(env: Record<string, string>) {
