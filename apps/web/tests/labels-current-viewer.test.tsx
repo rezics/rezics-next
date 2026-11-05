@@ -414,8 +414,8 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(writes[2]!.data).toEqual(uncertain);
       expect(writes[2]!.csrf).toBe('session-B');
       initial = response('B', search, 23);
-      await show(session('B', 'another-nonempty-csrf'));
-      busy(); // Ordinary same-viewer loader/CSRF refresh preserves the outstanding attempt.
+      await show(session('B', 'session-B-rotated'));
+      busy(); // A same-viewer loader refresh preserves the outstanding attempt.
       await settleWrite(2, { ok: false, reason: 'conflict' });
       expect(pendingReads[1]!.data).toEqual({ cursor: search.cursor, query: search.q });
       await settleRead(1, response('B', search, 24));
