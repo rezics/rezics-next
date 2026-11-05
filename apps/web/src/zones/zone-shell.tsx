@@ -15,10 +15,12 @@ import { loadSubjectLibrarySlot } from '../library/subject-slot';
 import type { SubjectReactions } from '../features/pages/subject-reactions';
 import type { SubjectLibrarySlotData } from '../library/subject-slot';
 import type { SessionEnv } from '../session/client';
+import type { ReadCredentialMode } from '../kernel/credential';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NotFoundPage, StatusPage } from '../shell/shell';
+import { RouteState } from '../shell/route-state';
 import type { PagePaths } from '../shell/head';
 import {
   continueZonePageRequest,
@@ -250,7 +252,7 @@ export function ZoneReadBoundary({
   if (outcome.kind === 'page') return children(outcome);
   if (outcome.kind === 'preparing')
     return (
-      <StatusPage
+      <RouteState
         heading={m.zone_preparing_heading()}
         message={m.zone_preparing_message()}
         onRetry={current.automaticContinuations >= maxAutomaticContinuations ? retry : undefined}
@@ -260,7 +262,7 @@ export function ZoneReadBoundary({
     );
   if (outcome.kind === 'unavailable')
     return (
-      <StatusPage
+      <RouteState
         heading={m.zone_unavailable_heading()}
         message={m.zone_unavailable_message()}
         onRetry={retry}
@@ -625,15 +627,16 @@ export async function readZoneSubjectRoute(input: {
     },
   });
   const view = input.view ?? 'overview';
+  const admittedSubjectId = outcome.kind === 'page' ? outcome.page.subject : input.subjectId;
   const overview = outcome.kind === 'page' ? outcome.common?.overview : undefined;
   const basePaths = Object.fromEntries(
     locales.map((language) => {
       const path = overview
         ? subjectHref(
-            { id: outcome.page.subject, label: subjectPageTitle(overview, language) },
+            { id: admittedSubjectId, label: subjectPageTitle(overview, language) },
             language,
           ).href
-        : `/${encodeURIComponent(language)}/subjects/${encodeURIComponent(input.subjectId)}`;
+        : `/${encodeURIComponent(language)}/subjects/${encodeURIComponent(admittedSubjectId)}`;
       return [language, path.slice(`/${encodeURIComponent(language)}`.length)];
     }),
   ) as PagePaths;
