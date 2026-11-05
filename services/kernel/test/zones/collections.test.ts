@@ -189,7 +189,10 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
   );
   expect(anonymousSecond.collections.map(({ id }) => id)).toEqual([sources[8]!.id]);
 
-  const fetcher: typeof fetch = (input, init) => f.app.handle(new Request(input, init));
+  const fetcher: typeof fetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) => f.app.handle(new Request(input, init)),
+    { preconnect() {} },
+  );
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${f.access.bearer('editor')}` },
     fetch: fetcher,
