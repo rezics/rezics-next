@@ -116,9 +116,10 @@ test('clean pages leave freely; Stay keeps a masked password and Leave clears it
   expect(document.activeElement).toBe(dialog.querySelector('[data-stay]'));
   const stay = dialog.querySelector<HTMLButtonElement>('[data-stay]')!;
   const leave = dialog.querySelector<HTMLButtonElement>('[data-leave]')!;
-  const key = (value: string, shiftKey = false) => document.activeElement!.dispatchEvent(
-    new dom.KeyboardEvent('keydown', { key: value, shiftKey, bubbles: true, cancelable: true }),
-  );
+  const key = (value: string, shiftKey = false) =>
+    document.activeElement!.dispatchEvent(
+      new dom.KeyboardEvent('keydown', { key: value, shiftKey, bubbles: true, cancelable: true }),
+    );
   key('Tab', true);
   expect(document.activeElement).toBe(leave);
   key('Tab');
@@ -276,7 +277,9 @@ test('Stay preserves a passkey prompt phase and focus; Leave retires it without 
   await tick();
   const { navigation: staying } = await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
-  await flush(() => document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await flush(() =>
+    document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+  );
   await tick();
   expect(ui.host.textContent).toContain(m.auth_security_passkey_prompt_pending());
   expect(document.activeElement).toBe(ui.host.querySelector('[data-passkey-enrollment-status]'));
@@ -303,7 +306,6 @@ test('Stay preserves a passkey prompt phase and focus; Leave retires it without 
   expect(ui.calls.filter(({ path }) => path === '/passkeys/register')).toHaveLength(0);
   void staying;
 });
-
 
 test('pagehide and replacement restore preexisting inert and scroll without taking replacement focus', async () => {
   const retained = document.body.appendChild(document.createElement('aside'));

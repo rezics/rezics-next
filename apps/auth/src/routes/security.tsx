@@ -1468,7 +1468,9 @@ function SecurityPageView({
                             <Button
                               type="button"
                               variant="outline"
-                              aria-describedby={session.revoke === 'allowed' ? undefined : `session-advice-${session.id}`}
+                              aria-describedby={
+                                session.revoke === 'allowed' ? undefined : `session-advice-${session.id}`
+                              }
                               onClick={() => void revoke(session)}
                               disabled={operationBlocked || !canAct(session.revoke)}
                               aria-busy={sessionPending === session.id}
@@ -1522,7 +1524,9 @@ function SecurityPageView({
         <SecurityDepartureDialog
           onStay={stay}
           onLeave={leave}
-          captureFocus={(target) => { departureFocus.current = target; }}
+          captureFocus={(target) => {
+            departureFocus.current = target;
+          }}
         />
       ) : null}
     </>

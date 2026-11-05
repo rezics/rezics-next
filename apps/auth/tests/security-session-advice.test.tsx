@@ -9,11 +9,29 @@ creationFixture();
 test('session actions describe exact native advice without an authority read or command', async () => {
   let reads = 0;
   let commands = 0;
-  const ui = await open(<SecurityPage initial={adviceInitial} inventorySource={populatedInventory}
-    identitySource={async () => ({ kind: 'unavailable' })}
-    securitySource={{ read: async () => { reads++; return { kind: 'unavailable' }; },
-      act: async () => { commands++; return { kind: 'denied' }; } }} />, { account_id: 'account' });
-  const expected = [m.auth_security_passkey_last_credential(), m.auth_inventory_unavailable(), m.auth_security_step_up_advice()];
+  const ui = await open(
+    <SecurityPage
+      initial={adviceInitial}
+      inventorySource={populatedInventory}
+      identitySource={async () => ({ kind: 'unavailable' })}
+      securitySource={{
+        read: async () => {
+          reads++;
+          return { kind: 'unavailable' };
+        },
+        act: async () => {
+          commands++;
+          return { kind: 'denied' };
+        },
+      }}
+    />,
+    { account_id: 'account' },
+  );
+  const expected = [
+    m.auth_security_passkey_last_credential(),
+    m.auth_inventory_unavailable(),
+    m.auth_security_step_up_advice(),
+  ];
   for (const [i, row] of adviceInitial.sessions.entries()) {
     const hint = document.getElementById(`session-advice-${row.id}`)!;
     expect(hint.textContent).toBe(expected[i]);

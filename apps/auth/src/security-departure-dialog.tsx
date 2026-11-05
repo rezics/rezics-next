@@ -66,8 +66,12 @@ export function SecurityDepartureDialog({ onStay, onLeave, captureFocus }: Props
         event.preventDefault();
         event.stopImmediatePropagation();
         const next = event.shiftKey
-          ? doc.activeElement === stay.current ? leave.current : stay.current
-          : doc.activeElement === leave.current ? stay.current : leave.current;
+          ? doc.activeElement === stay.current
+            ? leave.current
+            : stay.current
+          : doc.activeElement === leave.current
+            ? stay.current
+            : leave.current;
         next!.focus();
       }
     }
