@@ -15,89 +15,128 @@
           "native": {
             "method": "POST",
             "path": "/v1/pages:read",
-            "body": { "target": { "route": "/" }, "languages": ["en"] },
+            "body": {
+              "target": {
+                "route": "/"
+              },
+              "languages": [
+                "en"
+              ]
+            },
             "items": "/reads"
           }
         },
         {
           "id": "public-feed",
           "name": "Public feed",
-          "personas": ["anonymous"],
+          "personas": [
+            "anonymous"
+          ],
           "selector": "section[aria-label]",
           "heading": "Home",
           "itemSelector": "[data-feed-id]",
           "native": {
             "method": "GET",
             "path": "/v1/feedItems",
-            "query": { "stream": "home", "limit": "20" },
+            "query": {
+              "stream": "home",
+              "limit": "20"
+            },
             "items": "/feedItems"
           }
         },
         {
           "id": "home-feed",
           "name": "Home feed",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "section[data-feed-result-state], section[aria-label]",
           "heading": "Home",
           "itemSelector": "[data-feed-id]",
           "native": {
             "method": "GET",
             "path": "/v1/feedItems",
-            "query": { "stream": "home", "limit": "20" },
+            "query": {
+              "stream": "home",
+              "limit": "20"
+            },
             "items": "/feedItems"
           }
         },
         {
           "id": "following-feed",
           "name": "Following feed",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "section[data-feed-result-state], section[aria-label]",
           "heading": "Home",
           "itemSelector": "[data-feed-id]",
           "native": {
             "method": "GET",
             "path": "/v1/feedItems",
-            "query": { "stream": "following", "limit": "20" },
-            "items": "/feedItems"
+            "query": {
+              "stream": "following",
+              "limit": "20"
+            },
+            "items": "/feedItems",
+            "action": {
+              "role": "button",
+              "name": "Following"
+            }
           }
         },
         {
           "id": "follows",
           "name": "Following communities",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "nav",
           "heading": "Following",
           "itemSelector": "a[href*='/realms'], a[href*='/spaces']",
           "native": {
             "method": "GET",
             "path": "/v1/follows",
-            "query": { "view": "FULL", "limit": "100" },
+            "query": {
+              "view": "FULL",
+              "limit": "100"
+            },
             "items": "/follows"
           }
         },
         {
           "id": "library-nav",
           "name": "Library navigation",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "nav a[href*='/library']:not([href*='collections']), nav [role='link'][aria-disabled='true']",
-          "itemSelector": "a[href*='/library']",
+          "itemSelector": "a[href*='/library']:not([href*='collections'])",
           "native": {
             "method": "GET",
             "path": "/v1/platform/exposure",
-            "items": "/admitted"
-          }
+            "items": "/admitted",
+            "admission": "library_entry.list"
+          },
+          "heading": "Library"
         },
         {
           "id": "collections-nav",
           "name": "Collections navigation",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "nav a[href*='/library/collections'], nav [role='link'][aria-disabled='true']",
           "itemSelector": "a[href*='/library/collections']",
           "native": {
             "method": "GET",
             "path": "/v1/platform/exposure",
-            "items": "/admitted"
-          }
+            "items": "/admitted",
+            "admission": "collection.list"
+          },
+          "heading": "Collections"
         }
       ]
     },
@@ -115,13 +154,20 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:exampleOfWork", "limit": "12" },
+            "query": {
+              "property": "schema:exampleOfWork",
+              "limit": "12"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-editions",
@@ -132,13 +178,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "schema:exampleOfWork", "limit": "12" },
+            "query": {
+              "property": "schema:exampleOfWork",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-side-stories",
@@ -149,13 +203,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "rezics:sideStoryOf", "limit": "12" },
+            "query": {
+              "property": "rezics:sideStoryOf",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-adaptations",
@@ -166,13 +228,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "wdt:P144", "limit": "12" },
+            "query": {
+              "property": "wdt:P144",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-alternative",
@@ -183,13 +253,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "rezics:alternativeVersion", "limit": "12" },
+            "query": {
+              "property": "rezics:alternativeVersion",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-bangumi",
@@ -200,13 +278,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "rezics:bangumiRelatedTo", "limit": "12" },
+            "query": {
+              "property": "rezics:bangumiRelatedTo",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-characters",
@@ -217,13 +303,20 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:character", "limit": "12" },
+            "query": {
+              "property": "schema:character",
+              "limit": "12"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-contributors",
@@ -234,48 +327,62 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:contributor", "limit": "12" },
+            "query": {
+              "property": "schema:contributor",
+              "limit": "12"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "game-reader",
           "name": "Game work and released editions",
           "selector": "[data-slot='game-reader']",
-          "itemSelector": "[data-slot='cover-card'], [data-slot='game-reader'] h2",
+          "itemSelector": "[data-game-current-assertion]",
           "property": "schema:exampleOfWork",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}",
-            "query": { "context": "{GLOBAL}", "language": "en", "includeViewerActions": "true" },
-            "items": "/subject/labels"
+            "query": {
+              "context": "{GLOBAL}",
+              "language": "en",
+              "includeViewerActions": "true"
+            },
+            "items": "/subject/statements"
           }
         },
         {
           "id": "tags",
           "name": "Tags",
-          "selector": "[data-slot='subject-concept-tags'], [data-slot='work-tag-evidence']",
-          "itemSelector": "a, [data-slot='cover-card']",
+          "selector": "[data-slot='subject-concept-tags']",
+          "itemSelector": "li",
           "native": {
-            "method": "POST",
-            "path": "/v1/pages:read",
-            "body": {
-              "target": { "subject": "01a1a8fe-b84b-749c-a651-806639d32394" },
-              "languages": ["en"]
-            },
-            "items": "/subject"
+            "method": "GET",
+            "path": "/v1/subjects/{subject}",
+            "items": "/subject/statements/schema:genre"
+          },
+          "property": "schema:genre",
+          "sql": {
+            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
+            "params": [
+              "subject",
+              "property"
+            ]
           }
         },
         {
           "id": "synopsis",
           "name": "About / synopsis",
-          "selector": "[data-slot='subject-frame']",
-          "heading": "About",
-          "itemSelector": "p",
+          "selector": "[data-slot='subject-summary']",
+          "itemSelector": "[data-slot='summary-disclosure'], #subject-summary-reading > .max-w-prose",
           "property": "schema:abstract",
           "native": {
             "method": "GET",
@@ -284,18 +391,23 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
+            "params": [
+              "subject",
+              "property"
+            ]
           }
         },
         {
           "id": "ratings",
           "name": "Rating population directory",
           "selector": "[data-slot='rating-populations']",
-          "itemSelector": "[data-slot='rating-comparison']",
+          "itemSelector": "input[type='checkbox']",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/ratings/populations",
-            "query": { "question": "{QUESTION}" },
+            "query": {
+              "question": "{QUESTION}"
+            },
             "items": "/populations"
           }
         },
@@ -303,11 +415,15 @@
           "id": "reviews",
           "name": "Reviews",
           "selector": "[data-slot='review-list']",
-          "itemSelector": "[data-slot='community-native-author'], [data-slot='cover-card']",
+          "itemSelector": "li[data-row-key]",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "review", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "review",
+              "limit": "6"
+            },
             "items": "/threads"
           }
         },
@@ -315,64 +431,95 @@
           "id": "discussion",
           "name": "Discussion",
           "selector": "[data-slot='thread-list']",
-          "itemSelector": "[data-slot='community-native-author']",
+          "itemSelector": "li[data-row-key]",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "discussion", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "discussion",
+              "limit": "6"
+            },
             "items": "/threads"
           }
         },
         {
           "id": "connections-relations",
           "name": "Connections: Relations",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Relations",
           "property": "wdt:P144",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "wdt:P144", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P144",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
         {
           "id": "connections-characters",
           "name": "Connections: Characters",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Characters",
           "property": "schema:character",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:character", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "schema:character",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
         {
           "id": "connections-credits",
           "name": "Connections: Credits / voice actors",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Credits",
           "property": "wdt:P725",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "wdt:P725", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P725",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
       ]
     },
@@ -390,13 +537,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "wdt:P179", "limit": "12" },
+            "query": {
+              "property": "wdt:P179",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "related-episodes",
@@ -407,35 +562,51 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "schema:isPartOf", "limit": "12" },
+            "query": {
+              "property": "schema:isPartOf",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "seasons",
           "name": "Seasons and episodes",
           "selector": "[data-slot='screen-profile-reader']",
-          "itemSelector": "[data-slot='cover-card'], li",
+          "itemSelector": "[data-slot='cover-card'], li[data-episode-id]",
           "property": "schema:isPartOf",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "schema:isPartOf", "language": "en", "limit": "20" },
+            "query": {
+              "property": "schema:isPartOf",
+              "language": "en",
+              "limit": "20"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
           }
         },
         {
           "id": "synopsis",
           "name": "About / synopsis",
-          "selector": "[data-slot='subject-frame']",
+          "selector": "[data-slot='subject-summary']",
           "property": "schema:abstract",
           "native": {
             "method": "GET",
@@ -444,32 +615,43 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-slot='summary-disclosure'], #subject-summary-reading > .max-w-prose"
         },
         {
           "id": "tags",
           "name": "Tags",
-          "selector": "[data-slot='subject-concept-tags'], [data-slot='work-tag-evidence']",
+          "selector": "[data-slot='subject-concept-tags']",
           "native": {
-            "method": "POST",
-            "path": "/v1/pages:read",
-            "body": {
-              "target": { "subject": "01a1a8f0-7edf-77a4-899b-f42edb681fd8" },
-              "languages": ["en"]
-            },
-            "items": "/subject"
+            "method": "GET",
+            "path": "/v1/subjects/{subject}",
+            "items": "/subject/statements/schema:genre"
+          },
+          "itemSelector": "li",
+          "property": "schema:genre",
+          "sql": {
+            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
+            "params": [
+              "subject",
+              "property"
+            ]
           }
         },
         {
           "id": "ratings",
           "name": "Rating population directory",
           "selector": "[data-slot='rating-populations']",
-          "itemSelector": "[data-slot='rating-comparison']",
+          "itemSelector": "input[type='checkbox']",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/ratings/populations",
-            "query": { "question": "{QUESTION}" },
+            "query": {
+              "question": "{QUESTION}"
+            },
             "items": "/populations"
           }
         },
@@ -480,9 +662,14 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "review", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "review",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "discussion",
@@ -491,59 +678,93 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "discussion", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "discussion",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "connections-relations",
           "name": "Connections: Relations",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "property": "wdt:P144",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "wdt:P144", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P144",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
+          "heading": "Relations"
         },
         {
           "id": "connections-characters",
           "name": "Connections: Characters",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Characters",
           "property": "schema:character",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:character", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "schema:character",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
         {
           "id": "connections-credits",
           "name": "Connections: Credits / screenwriters",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Credits",
           "property": "wdt:P58",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "wdt:P58", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P58",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
       ]
     },
@@ -561,13 +782,20 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:exampleOfWork", "limit": "12" },
+            "query": {
+              "property": "schema:exampleOfWork",
+              "limit": "12"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "literary-reader",
@@ -577,33 +805,46 @@
             "method": "POST",
             "path": "/v1/pages:read",
             "body": {
-              "target": { "subject": "01a1a8f0-a734-762b-b0ef-adbbf390a859" },
-              "languages": ["en"]
+              "target": {
+                "subject": "01a1a8f0-a734-762b-b0ef-adbbf390a859"
+              },
+              "languages": [
+                "en"
+              ]
             },
             "items": "/catalogue/directions"
-          }
+          },
+          "itemSelector": "li"
         },
         {
           "id": "editions",
           "name": "Editions section",
-          "selector": "[data-slot='literary-reader'], [data-slot='type-list']",
+          "selector": "[data-slot='type-list']",
           "heading": "Editions",
           "property": "schema:exampleOfWork",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "schema:exampleOfWork", "limit": "12" },
+            "query": {
+              "property": "schema:exampleOfWork",
+              "limit": "12"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "synopsis",
           "name": "About / synopsis",
-          "selector": "[data-slot='subject-frame']",
+          "selector": "[data-slot='subject-summary']",
           "property": "schema:abstract",
           "native": {
             "method": "GET",
@@ -612,13 +853,17 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-slot='summary-disclosure'], #subject-summary-reading > .max-w-prose"
         },
         {
           "id": "tags",
           "name": "Tags",
-          "selector": "[data-slot='subject-concept-tags'], [data-slot='work-tag-evidence']",
+          "selector": "[data-slot='subject-concept-tags']",
           "property": "schema:genre",
           "native": {
             "method": "GET",
@@ -627,18 +872,24 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "li"
         },
         {
           "id": "ratings",
           "name": "Rating population directory",
           "selector": "[data-slot='rating-populations']",
-          "itemSelector": "[data-slot='rating-comparison']",
+          "itemSelector": "input[type='checkbox']",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/ratings/populations",
-            "query": { "question": "{QUESTION}" },
+            "query": {
+              "question": "{QUESTION}"
+            },
             "items": "/populations"
           }
         },
@@ -649,9 +900,14 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "review", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "review",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "discussion",
@@ -660,42 +916,67 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "discussion", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "discussion",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "connections-relations",
           "name": "Connections: Relations",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "property": "wdt:P144",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "wdt:P144", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P144",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
+          "heading": "Relations"
         },
         {
           "id": "connections-credits",
           "name": "Connections: Credits / authors",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Credits",
           "property": "schema:author",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "schema:author", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "schema:author",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
       ]
     },
@@ -707,12 +988,12 @@
         {
           "id": "profile",
           "name": "Character profile",
-          "selector": "[data-slot='person-reader'], [data-slot='character-identity-visit']",
-          "itemSelector": "h1, h2, [data-slot='person-reader-facts']",
+          "selector": "[data-slot='character-reader']",
+          "itemSelector": "[data-fact-text]",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}",
-            "items": "/subject/labels"
+            "items": "/subject/statements"
           }
         },
         {
@@ -722,48 +1003,73 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "discussion", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "discussion",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "connections-father",
           "name": "Connections: father",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "property": "wdt:P22",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "wdt:P22", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P22",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "params": [
+              "subject",
+              "property"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
+          "heading": "Character identities and relationships"
         },
         {
           "id": "connections-works",
           "name": "Connections: Work appearances",
-          "selector": "[data-slot='subject-connections']",
-          "heading": "Work",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
+          "heading": "Work appearances",
           "property": "schema:character",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "schema:character", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "schema:character",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
         {
           "id": "connections-voice",
           "name": "Connections: Voice performances",
-          "selector": "[data-slot='subject-connections']",
-          "heading": "Voice",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
+          "heading": "Voice performances",
           "property": "wdt:P725",
           "native": {
             "method": "GET",
@@ -778,9 +1084,14 @@
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
       ]
     },
@@ -792,12 +1103,12 @@
         {
           "id": "about",
           "name": "About this person",
-          "selector": "[data-slot='person-reader']",
-          "itemSelector": "[data-slot='person-reader-facts']",
+          "selector": "[data-slot='person-reader-facts']",
+          "itemSelector": "[data-fact-text]",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}",
-            "items": "/subject/labels"
+            "items": "/subject/statements"
           }
         },
         {
@@ -807,63 +1118,92 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "discussion", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "discussion",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "connections-credits",
           "name": "Connections: Credits / Screenwriter of",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Credits",
           "property": "wdt:P58",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "wdt:P58", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P58",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
         {
           "id": "connections-occupation",
           "name": "Connections: occupation",
-          "selector": "[data-slot='subject-connections']",
-          "heading": "occupation",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
+          "heading": "Relations",
           "property": "wdt:P106",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/relations",
-            "query": { "property": "wdt:P106", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P106",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/relations"
-          }
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
         {
           "id": "library-nav",
           "name": "Library navigation",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "nav a[href*='/library']:not([href*='collections']), nav [role='link'][aria-disabled='true']",
-          "itemSelector": "a[href*='/library']",
+          "itemSelector": "a[href*='/library']:not([href*='collections'])",
           "native": {
             "method": "GET",
             "path": "/v1/platform/exposure",
-            "items": "/admitted"
-          }
+            "items": "/admitted",
+            "admission": "library_entry.list"
+          },
+          "heading": "Library"
         },
         {
           "id": "collections-nav",
           "name": "Collections navigation",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "nav a[href*='/library/collections'], nav [role='link'][aria-disabled='true']",
           "itemSelector": "a[href*='/library/collections']",
           "native": {
             "method": "GET",
             "path": "/v1/platform/exposure",
-            "items": "/admitted"
-          }
+            "items": "/admitted",
+            "admission": "collection.list"
+          },
+          "heading": "Collections"
         }
       ]
     },
@@ -880,13 +1220,21 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "schema:genre", "limit": "24" },
+            "query": {
+              "property": "schema:genre",
+              "limit": "24"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-slot='cover-card']"
         },
         {
           "id": "discussion",
@@ -895,30 +1243,46 @@
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/threads",
-            "query": { "place": "{GLOBAL}", "kind": "discussion", "limit": "6" },
+            "query": {
+              "place": "{GLOBAL}",
+              "kind": "discussion",
+              "limit": "6"
+            },
             "items": "/threads"
-          }
+          },
+          "itemSelector": "li[data-row-key]"
         },
         {
           "id": "connections-releases",
           "name": "Connections: Releases of this type",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "property": "wdt:P31",
           "native": {
             "method": "GET",
             "path": "/v1/subjects/{subject}/links",
-            "query": { "property": "wdt:P31", "language": "en", "limit": "12", "context": "{GLOBAL}" },
+            "query": {
+              "property": "wdt:P31",
+              "language": "en",
+              "limit": "12",
+              "context": "{GLOBAL}"
+            },
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
+          "heading": "Relations"
         },
         {
           "id": "connections-credits",
           "name": "Connections: Credits / Screenwriter of",
-          "selector": "[data-slot='subject-connections']",
+          "selector": "[data-slot='subject-connections'] > section[aria-labelledby]",
           "heading": "Credits",
           "property": "wdt:P58",
           "native": {
@@ -934,9 +1298,14 @@
             "items": "/links"
           },
           "sql": {
-            "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": ["subject", "property"]
-          }
+            "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
+            "params": [
+              "subject",
+              "property",
+              "filter"
+            ]
+          },
+          "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
       ]
     },
@@ -948,7 +1317,7 @@
           "id": "results",
           "name": "Results for Steins",
           "selector": "[data-slot='discovery-results']",
-          "itemSelector": "[data-slot='list-row-link'], [data-slot='member-list-row-title']",
+          "itemSelector": "[data-slot='list-row-link']",
           "native": {
             "method": "POST",
             "path": "/v1/subjects:search",
@@ -956,9 +1325,13 @@
               "representation": "discovery-v1",
               "text": "Steins",
               "limit": 100,
-              "languages": ["en"],
+              "languages": [
+                "en"
+              ],
               "descriptions": true,
-              "kindPage": { "limit": 8 }
+              "kindPage": {
+                "limit": 8
+              }
             },
             "items": "/hits"
           }
@@ -967,7 +1340,7 @@
           "id": "kinds",
           "name": "Result kinds / counts",
           "selector": "[data-slot='view-tabs'], [data-slot='discovery-results']",
-          "itemSelector": "[data-slot='count']",
+          "itemSelector": "[data-slot=count]",
           "native": {
             "method": "POST",
             "path": "/v1/subjects:search",
@@ -975,9 +1348,13 @@
               "representation": "discovery-v1",
               "text": "Steins",
               "limit": 100,
-              "languages": ["en"],
+              "languages": [
+                "en"
+              ],
               "descriptions": true,
-              "kindPage": { "limit": 8 }
+              "kindPage": {
+                "limit": 8
+              }
             },
             "items": "/kindPage/values"
           }
@@ -999,16 +1376,26 @@
             "body": {
               "representation": "discovery-v1",
               "limit": 24,
-              "languages": ["en"],
+              "languages": [
+                "en"
+              ],
               "descriptions": true,
-              "filter": { "and": [{ "kind": { "in": ["collection"] } }] },
-              "kindPage": { "limit": 8 }
+              "filter": {
+                "and": [
+                  {
+                    "kind": {
+                      "in": [
+                        "collection"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "kindPage": {
+                "limit": 8
+              }
             },
             "items": "/hits"
-          },
-          "sql": {
-            "text": "SELECT count(*)::int AS n FROM library.collection",
-            "params": []
           }
         }
       ]
@@ -1016,18 +1403,25 @@
     {
       "id": "library",
       "path": "/en/library",
-      "personas": ["member"],
+      "personas": [
+        "member"
+      ],
       "sections": [
         {
           "id": "shelf",
           "name": "Personal library shelf",
-          "personas": ["member"],
+          "personas": [
+            "member"
+          ],
           "selector": "main, [data-slot='cover-grid'], [data-slot='cover-card']",
           "itemSelector": "[data-slot='cover-card'], [data-slot='list-row']",
           "native": {
             "method": "GET",
             "path": "/v1/libraryEntries",
-            "query": { "view": "FULL", "limit": "20" },
+            "query": {
+              "view": "FULL",
+              "limit": "20"
+            },
             "items": "/libraryEntries"
           }
         }

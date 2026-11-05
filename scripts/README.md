@@ -2,21 +2,26 @@
 
 ## Page data check
 
-`bun scripts/page-data-check.ts --base-url <web> --kernel <kernel>` opens each M1 page in
-`scripts/page-data-sections.json` as the anonymous visitor and the signed-in development persona. For every declared
-section it calls the native Kernel endpoint with that persona's authorization, optionally runs a read-only SQL count,
-and prints one line: `page persona section CLASS`. Classes are DATA (the page renders seeded data); EMPTY,
-UNAUTHORIZED or UNAVAILABLE where the native API states that outcome; and defects API (the native endpoint errors or
-refuses), WEB (the native endpoint returns data the section does not render) or SEED (the database holds no such data).
-The process exits 1 when any defect is printed, 2 on usage or infrastructure failure, and 0 otherwise. Credentials never
-appear in output.
+Run `bun scripts/page-data-check.ts --base-url <web> --kernel <kernel> [--auth-origin <auth>] [--database-url <seed-db>]`.
+The checker opens the complete manifest in `scripts/page-data-sections.json`; each browser section is paired with the
+native response made as the same anonymous or signed-in persona. It prints `page persona section CLASS`. DATA means
+the settled reader renders native data; EMPTY means the native list and settled reader are empty without SQL proof
+that an expected seed is missing; UNAUTHORIZED and UNAVAILABLE preserve the explicit native or reader state. API means a request,
+serialization, authenticated 403 or other native error. WEB requires a successful native response with relevant data
+and a settled reader that omits it. SEED requires a manifest-declared expected relation, a zero count from its matching
+read-only SQL relation, and a settled empty reader. A candidate count alone is not API evidence.
 
-Empty native lists with a seed SQL count of zero are SEED. Surfaces that may legitimately be empty omit SQL and
-classify EMPTY when the page shows empty, WEB when it hides that empty reading. HTTP 400/5xx and an authenticated 403
-are API. Unauthenticated 401/403 is UNAUTHORIZED. Native 200 that states preparing or unavailable is UNAVAILABLE.
-`--database-url` and `DATABASE_URL` (or `services/kernel/.env`) supply the count connection; `--member-token` or
-`PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the signed-in Kernel bearer; otherwise the local persona keys are used without
-being printed. A seeded local run over this manifest is expected to finish in under five minutes.
+Decision: keep routed judgment for native/page/seed contracts; pair every page section with the same persona's native
+response, and classify SEED only for a declared expected SQL relation whose count is zero after the reader settles.
+Unauthenticated 401/403 is UNAUTHORIZED; authenticated 403 is API. Native `index_not_ready`, preparing and unavailable
+states are UNAVAILABLE. HTTP requests, page navigation, reader readiness and SQL queries are bounded. A timeout or
+missing SQL evidence is reported, does not produce WEB or SEED, and makes an otherwise clean run exit 2; defects exit
+1 and a complete non-defect run exits 0. Credentials and tokens never appear in output.
+
+`--database-url`, `DATABASE_URL` or `services/kernel/.env` supplies SQL access. `--member-token` or
+`PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the member Kernel bearer; otherwise the local development persona credentials
+are used with the Auth app's `login` client and empty scope. The seeded complete manifest is expected to finish in under
+five minutes.
 
 ## Check hosts
 
