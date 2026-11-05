@@ -24,6 +24,7 @@ import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
 import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
 import { candidateContext } from '../../subject/candidates';
 import type { KernelClient } from '@rezics/client';
+import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import {
   planReads,
   platformRegistry,
@@ -131,13 +132,20 @@ export async function loadViewPages(
   view: View,
   locale = 'en',
   cursor?: string,
-  options: { realm?: string | undefined; node?: string | undefined; authorization?: string | undefined } = {},
+  options: {
+    realm?: string | undefined;
+    node?: string | undefined;
+    authorization?: string | undefined;
+    signal?: SubjectPageReadLifetime | undefined;
+  } = {},
 ): Promise<ViewPagesLoad> {
+  assertSubjectPageReadActive(options.signal);
   // Resolve a node from the current template; the continued request independently resolves and guards it again.
   const first = await loadSubjectPage(client, id, view, locale, {
     ...options,
     ...(cursor !== undefined && options.node ? { continuation: { node: options.node, cursor } } : {}),
   });
+  assertSubjectPageReadActive(options.signal);
   if (first.kind !== 'page') return first;
   const plan = planReads(platformRegistry, first.page.document as CompositionDocument, pageContext(first.page));
   const primary = Object.entries(plan.nodes).find(([node, key]) => {
@@ -156,10 +164,13 @@ export async function loadViewPages(
     const primaryRead = plan.reads[primary[1]];
     if (primaryRead?.kind === 'collections') {
       if (first.page.context?.population.kind === 'realm') throw new PageReadError('dependency_unavailable', 503);
+      assertSubjectPageReadActive(options.signal);
       const response = await client.subjects({ id }).collections.get({
         query: { limit: primaryRead.limit, cursor },
         ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
+        ...(options.signal ? { fetch: { signal: options.signal } } : {}),
       });
+      assertSubjectPageReadActive(options.signal);
       if (response.status === 400) return { kind: 'missing' };
       first.page.reads[primary[1]] = { status: response.status, body: response.error ? {} : response.data };
     } else {
@@ -167,12 +178,15 @@ export async function loadViewPages(
         ...options,
         continuation: { node: primary[0], cursor },
       });
+      assertSubjectPageReadActive(options.signal);
       if (continued.kind !== 'page') return continued;
       assertSamePageContext(first.page, continued.page);
       result = continued;
     }
   }
+  assertSubjectPageReadActive(options.signal);
   const overview = await loadSubjectPage(client, id, undefined, locale, options);
+  assertSubjectPageReadActive(options.signal);
   if (overview.kind !== 'page') return overview;
   assertSamePageContext(result.page, overview.page);
   const currentPlan = planReads(

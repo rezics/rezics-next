@@ -51,6 +51,7 @@ import { AlbumCurrentVisitReturn } from '../catalogue/album-current-visit';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
+import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import {
   planReads,
@@ -273,10 +274,10 @@ export async function loadSubjectPage(
     realm?: string | undefined;
     continuation?: PageContinuation | undefined;
     authorization?: string | undefined;
-    /** Transport lifetime stays outside the serialized page-read input. */
-    signal?: AbortSignal | undefined;
+    signal?: SubjectPageReadLifetime | undefined;
   } = {},
 ): Promise<SubjectPageLoad> {
+  assertSubjectPageReadActive(options.signal);
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
   const result = await client.pages.$read.post(
     {
@@ -289,6 +290,7 @@ export async function loadSubjectPage(
       ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
     },
   );
+  assertSubjectPageReadActive(options.signal);
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 308) {
     const body = result.data ?? result.error?.value;
@@ -328,11 +330,18 @@ export async function loadSubjectPage(
       reading &&
       currentPage.catalogue?.state === 'released' &&
       supportsReleasedWorkNames(reading.subject.type, currentPage.catalogue.definitions);
-    const termsAuthority = eligible
-      ? await (
-          await import('../catalogue/subject-terms-request')
-        ).readTermsPageAuthority(client, options.authorization ? 'signed-in' : 'signed-out', options.authorization)
-      : undefined;
+    let termsAuthority;
+    if (eligible) {
+      const { readTermsPageAuthority } = await import('../catalogue/subject-terms-request');
+      assertSubjectPageReadActive(options.signal);
+      termsAuthority = await readTermsPageAuthority(
+        client,
+        options.authorization ? 'signed-in' : 'signed-out',
+        options.authorization,
+        options.signal,
+      );
+      assertSubjectPageReadActive(options.signal);
+    }
     return {
       kind: 'page',
       page: {

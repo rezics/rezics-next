@@ -23,14 +23,20 @@ export async function readTermsPageAuthority(
   client: KernelClient,
   viewer: TermsViewerState,
   authorization?: string,
+  signal?: AbortSignal,
 ): Promise<TermsPageAuthority> {
+  signal?.throwIfAborted();
   if (viewer === 'signed-out') return { viewer, actions: { state: 'ready', actions: [] } };
   if (viewer !== 'signed-in' || !authorization) return { viewer: 'unavailable', actions: { state: 'unavailable' } };
   try {
     const result = await client.viewerActions.post(
       { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT }] },
-      { headers: { authorization }, fetch: { cache: 'no-store', redirect: 'manual' } },
+      {
+        headers: { authorization },
+        fetch: { cache: 'no-store', redirect: 'manual', ...(signal ? { signal } : {}) },
+      },
     );
+    signal?.throwIfAborted();
     if (result.status === 401) return { viewer: 'signed-out', actions: { state: 'ready', actions: [] } };
     if (result.error || result.status !== 200) return { viewer, actions: { state: 'unavailable' } };
     const resources = result.data?.resources;
@@ -58,6 +64,7 @@ export async function readTermsPageAuthority(
       },
     };
   } catch {
+    signal?.throwIfAborted();
     return { viewer, actions: { state: 'unavailable' } };
   }
 }

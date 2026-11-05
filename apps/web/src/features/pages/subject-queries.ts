@@ -24,6 +24,7 @@ import { readReactionCounts, readOwnReaction, type SubjectOwnReaction } from './
 import { communityOverview, withComposedCommunity } from './subject-community';
 import { projectShareCardPage } from '../../media/share-card-page';
 import { locales } from '../../paraglide/runtime.js';
+import { assertSubjectPageReadActive } from './subject-page-read-lifetime';
 
 export const subjectKernelClient = createServerOnlyFn(
   async (locale: string, realm?: string, expectedReader?: string | null) => {
@@ -85,16 +86,25 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    const signal = getRequest().signal;
     setResponseHeader('cache-control', 'private, no-store');
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    const loaded = await loadSubjectPage(client, data.id, data.view, data.locale, { realm: data.realm, authorization });
+    assertSubjectPageReadActive(signal);
+    const loaded = await loadSubjectPage(client, data.id, data.view, data.locale, {
+      realm: data.realm,
+      authorization,
+      signal,
+    });
+    assertSubjectPageReadActive(signal);
     if (loaded.kind === 'page') loaded.page.requestedReader = data.reader;
     const cardLocale = locales.find((locale) => locale === data.locale);
     const shareCard =
       data.realm === undefined && authorization === undefined && cardLocale !== undefined
         ? projectShareCardPage(loaded, { id: data.id, locale: cardLocale })
         : undefined;
-    return { ...(await withComposedCommunity(client, loaded)), shareCard };
+    const composed = await withComposedCommunity(client, loaded, signal);
+    assertSubjectPageReadActive(signal);
+    return { ...composed, shareCard };
   });
 
 /** Read one public Subject document without refreshing the rest of its configured page. */
@@ -152,14 +162,19 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    const signal = getRequest().signal;
     setResponseHeader('cache-control', 'private, no-store');
     const { loadViewPages } = await import('./subject-frame');
+    assertSubjectPageReadActive(signal);
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    assertSubjectPageReadActive(signal);
     const loaded = await loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
       realm: data.realm,
       node: data.node,
       authorization,
+      signal,
     });
+    assertSubjectPageReadActive(signal);
     if (loaded.kind !== 'page') return loaded;
     const cardLocale = locales.find((locale) => locale === data.locale);
     const shareCard =
@@ -168,7 +183,8 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
         : undefined;
     loaded.page.requestedReader = data.reader;
     loaded.overview.requestedReader = data.reader;
-    const result = await withComposedCommunity(client, { kind: 'page', page: loaded.page });
+    const result = await withComposedCommunity(client, { kind: 'page', page: loaded.page }, signal);
+    assertSubjectPageReadActive(signal);
     if (result.kind !== 'page') return result;
     return {
       ...loaded,
@@ -510,8 +526,8 @@ export const subjectPageQuery = (
     gcTime: 0,
     queryKey: [...key('subject-page', id, locale, view), realm ?? null, reader],
     retry: false,
-    queryFn: async () =>
-      readSubjectPage({ data: { id, locale, realm, reader, ...(view !== 'overview' ? { view } : {}) } }),
+    queryFn: async ({ signal }) =>
+      readSubjectPage({ data: { id, locale, realm, reader, ...(view !== 'overview' ? { view } : {}) }, signal }),
   });
 
 export const subjectViewPagesQuery = (
@@ -530,9 +546,10 @@ export const subjectViewPagesQuery = (
     gcTime: 0,
     queryKey: ['subject-view-pages', id, locale, view, cursor ?? null, realm ?? null, node ?? null, reader] as const,
     retry: false,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       readSubjectViewPages({
         data: { id, locale, view, realm, node, reader, ...(cursor !== undefined ? { cursor } : {}) },
+        signal,
       }),
   });
 

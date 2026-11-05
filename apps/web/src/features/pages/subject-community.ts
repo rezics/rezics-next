@@ -6,6 +6,7 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/pla
 import type { ReactionKind } from '../../threads/reaction-request';
 import { GLOBAL } from './subject-ratings';
 import { pageContext, type SubjectPageData, type SubjectPageLoad } from './subject';
+import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import { isRecord } from './shared';
 import {
   COMMUNITY_POSITION_LIMIT,
@@ -440,7 +441,12 @@ export function composedCommunityRegion(
 }
 
 /** Use the guarded composition leaves and their exact cursor, with one shared public identity batch. */
-export async function withComposedCommunity(client: KernelClient, loaded: SubjectPageLoad): Promise<SubjectPageLoad> {
+export async function withComposedCommunity(
+  client: KernelClient,
+  loaded: SubjectPageLoad,
+  signal?: SubjectPageReadLifetime,
+): Promise<SubjectPageLoad> {
+  assertSubjectPageReadActive(signal);
   if (loaded.kind !== 'page' || !loaded.page.subject || loaded.page.account) return loaded;
   const plan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
   const reader = loaded.page.requestedReader ?? null;
@@ -459,6 +465,9 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
       ? region.threads.filter((thread) => !thread.nativeCard).map((thread) => thread.authorId)
       : [],
   );
+  assertSubjectPageReadActive(signal);
+  const authors = await readPageAuthors(client, authorIds, signal);
+  assertSubjectPageReadActive(signal);
   return {
     ...loaded,
     page: {
@@ -467,7 +476,7 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
       community: {
         nodes,
         regions,
-        authors: await readPageAuthors(client, authorIds),
+        authors,
         now: new Date().toISOString(),
         reader,
         contextId: loaded.page.context?.id ?? null,
