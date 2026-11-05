@@ -182,8 +182,10 @@ test('native empty Retry focuses the current recovery action after its exact req
   });
   await activate(retry()!);
   expect(retries).toBe(1);
+  const elsewhere = host.querySelector<HTMLButtonElement>('[data-move-focus]')!;
+  elsewhere.focus();
   await show(emptyRecoveryPage('unavailable'));
-  expect(document.activeElement === retry()).toBe(false);
+  expect(document.activeElement === elsewhere).toBe(true);
 
   await activate(retry()!);
   await show(page({ status: 'loading' }));

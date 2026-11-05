@@ -9,7 +9,11 @@ import type { SearchRecoveryState } from '../src/search/search-recovery';
 
 const retryHref = '/en/search?q=kept';
 const restartHref = '/en/search?q=kept';
-const options = { en: { locale: 'en' as const }, 'zh-Hans': { locale: 'zh-Hans' as const } };
+const options = {
+  en: { locale: 'en' as const },
+  'zh-Hans': { locale: 'zh-Hans' as const },
+  ja: { locale: 'ja' as const },
+};
 
 function recoveryMarkup(locale: 'en' | 'zh-Hans', state: SearchRecoveryState) {
   return renderToStaticMarkup(createElement(SearchRecovery, { state, retryHref, restartHref, locale, onRetry() {} }));
@@ -25,11 +29,11 @@ test('search recovery messages and actions follow the owning locale against the 
     expect(english).toContain(m.search_reader_results_unavailable({}, options.en));
     expect(english).toContain(m.search_facet_retry({}, options.en));
     expect(english).toContain(m.search_recovery_wait({}, options.en));
-    expect(english).not.toContain(m.search_reader_results_unavailable());
+    expect(english).not.toContain(m.search_reader_results_unavailable({}, options.ja));
     expect(chinese).toContain(m.search_reader_results_unavailable({}, options['zh-Hans']));
     expect(chinese).toContain(m.search_facet_retry({}, options['zh-Hans']));
     expect(chinese).toContain(m.search_recovery_wait({}, options['zh-Hans']));
-    expect(chinese).not.toContain(m.search_reader_results_unavailable());
+    expect(chinese).not.toContain(m.search_reader_results_unavailable({}, options.ja));
 
     const both = renderToStaticMarkup(
       createElement(
@@ -70,8 +74,8 @@ test('search recovery messages and actions follow the owning locale against the 
     expect(both).toContain(m.search_recovery_edit({}, options.en));
     expect(both).toContain(m.discovery_invalid({}, options['zh-Hans']));
     expect(both).toContain(m.search_recovery_edit({}, options['zh-Hans']));
-    expect(both).not.toContain(m.search_recovery_session());
-    expect(both).not.toContain(m.discovery_restart());
+    expect(both).not.toContain(m.search_recovery_session({}, options.ja));
+    expect(both).not.toContain(m.discovery_restart({}, options.ja));
     expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
@@ -162,8 +166,8 @@ test('kind continuation recovery text follows each instance locale through the s
     expect(host.textContent).toContain(m.result_kind_unavailable({}, options.en));
     expect(host.textContent).toContain(m.search_recovery_wait({}, options.en));
     expect(host.textContent).toContain(m.search_recovery_session({}, options['zh-Hans']));
-    expect(host.textContent).not.toContain(m.result_kind_unavailable());
-    expect(host.textContent).not.toContain(m.search_recovery_session());
+    expect(host.textContent).not.toContain(m.result_kind_unavailable({}, options.ja));
+    expect(host.textContent).not.toContain(m.search_recovery_session({}, options.ja));
     expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
