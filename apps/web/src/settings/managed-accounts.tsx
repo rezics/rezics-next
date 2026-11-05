@@ -271,6 +271,7 @@ export function ManagedAccountsView({
   active = true,
   onVisit,
   navigation = () => snapshot.navigation,
+  reader,
   more,
   previousPage,
   firstPage,
@@ -281,6 +282,7 @@ export function ManagedAccountsView({
   active?: boolean | undefined;
   onVisit?: ((href: string) => void) | undefined;
   navigation?: (() => ManagedAccountsSnapshot['navigation']) | undefined;
+  reader?: ManagedAccountsInventory | undefined;
   snapshot: ManagedAccountsSnapshot;
   settingsHref: string;
   more: (feed: ManagedFeed) => void;
@@ -299,6 +301,7 @@ export function ManagedAccountsView({
   const container = useRef<HTMLDivElement>(null);
   const source = useRef<{ feed: RowFeed; key: string; keyboard: boolean } | null>(null);
   const wasActive = useRef(active);
+  useLayoutEffect(() => { source.current = null; }, [reader]);
   const admitted = (feed: RowFeed, key: string) => {
     const latest = navigation();
     return current() && (feed === 'self' ? latest?.self === key : latest?.[feed].includes(key) === true);
@@ -569,6 +572,7 @@ function ViewerInventory({
       active={active}
       onVisit={onVisit}
       navigation={() => inventory.snapshot().navigation}
+      reader={inventory}
       current={() => (!owner || owner.isCurrent()) && inventory.snapshot().account !== null}
       settingsHref={settingsHref}
       more={(feed) => void inventory.more(feed)}

@@ -188,8 +188,7 @@ endpoint deadline guards every new detail read, including captured callbacks, fe
 whole-detail refresh. Already admitted sibling responses may settle without shortening that wait. Expiry only enables
 deliberate controls; it never dispatches. Missing or malformed headers add no delay. Failed first-page reads retain a
 cursor-free recovery request, and blocked controls preserve failure feedback, retained pages and native action advice.
-Installed-navigation continuation owns official viewer/navigation admission and directory/detail/back integration;
-detail response-wait recovery is owned by this existing reader and is outside that continuation's scope.
+Directory navigation and direct detail selection use the native observations described below; detail response-wait recovery remains with its existing reader.
 
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
 
@@ -201,7 +200,7 @@ presentation timer serves all directory controls, and reattachment never restart
 the observation with the private pages; detail, Auth and independent Settings endpoints remain independent.
 
 **Decision:** Directory Refresh is a separate deliberate cursor-free action; Retry preserves the failed feed request,
-and both obey the longest response deadline. Refresh clears old pages only when dispatch is eligible.
+and both obey the longest response deadline. A successful Refresh resets both feed coordinates; a failed Refresh retains usable pages and coordinates for deliberate recovery.
 
 Managed action reads publish their response-time Retry-After deadline in the viewer/target snapshot. The recovery
 control uses that same absolute deadline after reattachment; expiry enables deliberate retry only.
