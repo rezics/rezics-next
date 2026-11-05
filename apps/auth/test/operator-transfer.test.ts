@@ -520,6 +520,8 @@ test('The default operator-transfer page supports request and acceptance file ha
     const writesBeforeRefusal = mutations.length;
     expect(uncertain.phase).toBe('execute');
     expect(host.textContent).toContain(m.auth_transfer_uncertain());
+    expect(host.querySelector('#transfer-acceptance-file') === null).toBe(true);
+    await click(m.auth_transfer_recovery_review());
     expect(host.querySelector<HTMLInputElement>('#transfer-acceptance-file')!.disabled).toBe(true);
     await select('acceptance', [new File(['replacement'], 'response.txt')]);
     expect(saved()).toEqual(uncertain);

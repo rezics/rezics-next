@@ -223,6 +223,7 @@ no service bypass.
 Decision: compose the bounded native transfer acknowledgement with retained exact-attempt recovery. Approval
 expiry uses the native canonical timestamp; execution acknowledges the exact subject UUID. Protocol fixtures
 retain immutable snapshots through the persistence callback, separately from native and browser acceptance.
+Unknown-result handoff inputs stay concealed until an explicit current recovery review; review never sends a command.
 
 Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source
 relation nor its approval or execution; those require the original native source and exact-intent commands.
