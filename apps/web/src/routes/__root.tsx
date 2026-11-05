@@ -175,6 +175,7 @@ function Root({ children }: { children: ReactNode }) {
   const nonce = router.options.ssr?.nonce;
   const href = useRouterState({ select: (state) => state.location.publicHref });
   const locale = getLocale();
+  router.options.context.buyerHistory?.observeLocale(locale);
   const options = { locale };
   const { state: session } = useSession();
   const platformClosed = useRouterState({

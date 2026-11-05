@@ -599,6 +599,7 @@ test('mounted paired buyer windows survive exact receipt/Edition return and comm
   const { subjectCover } = await import('../src/checkout/subject-cover');
   const { purchaseHistorySearch } = await import('../src/checkout/purchase-return');
   const { EditionRoute } = await import('../src/routes/editions/$id');
+  const { fromPlainText } = await import('@rezics/document');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const visit = new BuyerHistoryVisit(client);
   const rootRoute = createRootRoute();
@@ -620,7 +621,7 @@ test('mounted paired buyer windows survive exact receipt/Edition return and comm
       editionRevision: '1', state: 'published' as const, targetSubjectId: mappedEntitlement.targetSubjectId,
       creatorAccountId: fixedEditionTerms.creatorAccountId, revisionId: fixedEditionTerms.benefit.version.revisionId,
       sha256: fixedEditionTerms.benefit.version.sha256, licence: 'CC-BY-SA-4.0' },
-      body: { version: 1 as const, doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Fixed Edition body' }] }] } },
+      body: fromPlainText('Fixed Edition body', 'blocks'),
       subject: null, creator: null, media: { kind: 'ready' as const, images: [] } }), component: EditionRoute });
   const router = createRouter({ routeTree: rootRoute.addChildren([ordersRoute, receiptRoute, benefitsRoute, benefitRoute, editionRoute]),
     context: { queryClient: client, buyerHistory: visit }, history: createMemoryHistory({ initialEntries: ['/en/orders'] }),

@@ -175,7 +175,10 @@ function EntitlementsRead<T extends Page>({
       if (!origin.isCurrent()) return null;
       try {
         const value = await read(address);
-        if (!origin.isCurrent() || !matches(value, subject, address)) return null;
+        if (!origin.isCurrent() || !matches(value, subject, address)) {
+          navigation.failed();
+          return null;
+        }
         if (address.kind === 'list') {
           if (value.page.kind === 'ready') navigation.ready();
           else navigation.failed();
