@@ -1852,6 +1852,8 @@ The Person page keeps inverse wdt:P725 voice credits separate from author, contr
 current Definition labels for that window's original properties, qualifiers and reference parts; no creator alias or
 forward cast admission is added. `CreditInspectionSession` and `CreditInspection` retain the exact holder, assertion,
 revision, release and slot, shared value rendering, citations, revision metadata and native bounded correction editor.
+Public inspect reads the page's current session cache and does not start another session fetch; a failed or in-flight
+session read cannot dismiss the original credit window.
 The readable inspection links the original work and Sources, keeps Character-qualified voices separate, and uses
 released field labels rather than property identifiers. Partial dates keep the shared renderer's exact precision.
 Missing field labels have an unavailable label; identifiers live only in explicit technical details. Unknown source
