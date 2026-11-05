@@ -1,14 +1,17 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { m } from '../src/paraglide/messages.js';
 import { builtinCollectionDestinations } from '../src/library/builtin-collections';
 import { LibraryNavigation } from '../src/library/library-nav';
-import { libraryPinsListExposed, loadLibraryNavigation, readLibraryPins } from '../src/library/pins-read';
-import { deleteLibraryPin, putLibraryPin } from '../src/library/pins-actions';
 import { PlatformClosedError } from '../src/kernel/platform-closed';
 import { operationIsAdmitted } from '../src/kernel/exposure';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+afterAll(() => mock.restore());
+const { libraryPinsListExposed, loadLibraryNavigation, readLibraryPins } = await import('../src/library/pins-read');
+const { deleteLibraryPin, putLibraryPin } = await import('../src/library/pins-actions');
 
 const collection = (id: string, title: string, builtinKind?: 'everything' | 'liked' | 'state') => ({
   id,
