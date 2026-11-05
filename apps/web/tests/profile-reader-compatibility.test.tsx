@@ -509,7 +509,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       writableEditor.edit({ displayName: 'Later name' });
       writableEditor.edit({
         displayName: originalAttempt.before.displayName,
-        publicViews: { ...nativeProfile.publicViews, reviews: false },
+        publicViews: {
+          ...originalAttempt.after.publicViews,
+          reviews: !originalAttempt.after.publicViews.reviews,
+        },
       });
     });
     const matchingRead = readRequests.length;
