@@ -131,6 +131,7 @@ export type ProgressDetailOrigin = {
 const detailReads = detailOperations.slice(0, 4);
 type HistoryNavigation = {
   paths: HistoryPaths;
+  refresh: (changes: string | undefined, units: string | undefined) => void;
   stage: (target: HistoryTarget, address: ProgressDetailAddress, keyboard: boolean) => () => void;
 };
 const HistoryNavigationContext = createContext<HistoryNavigation | undefined>(undefined);
@@ -442,6 +443,10 @@ export function CurrentProgressDetail({
     <HistoryNavigationContext.Provider
       value={{
         paths: visit.paths,
+        refresh: (changes, units) => {
+          if (visitRef.current === visit && originating.isCurrent())
+            admitHistory(visit.paths, undefined, changes, units);
+        },
         stage: (target, destination, keyboard) => {
           const staged = { target, address: destination, keyboard, focus: document.activeElement };
           visit.staged = staged;
@@ -844,6 +849,8 @@ function SessionEditor({
   originating?: ProgressDetailOrigin | undefined;
   returnContext?: ProgressReturnContext | undefined;
 }) {
+  const historyNavigation = useContext(HistoryNavigationContext);
+  const [positions, setPositions] = useState({ changes: page.changesCursor, units: page.unitsCursor });
   const lifetime = useRef<EditorLifetime | null>(null);
   const draftBaseline = useRef<ProgressDraftBaseline | null>(null);
   lifetime.current ??= editorLifetime(page, originating);
@@ -960,6 +967,7 @@ function SessionEditor({
   const originChanged = lifetime.current !== null && lifetime.current.originating !== originating;
   if (page !== seenPage || originChanged) {
     setSeenPage(page);
+    setPositions({ changes: page.changesCursor, units: page.unitsCursor });
     if (originating && !originChanged) {
       // A current refresh reconciles revision without rebuilding an unresolved command.
       if (page.session.revision >= session.revision) setSession(page.session);
@@ -1089,12 +1097,16 @@ function SessionEditor({
         : await readProgressSession({
             data: {
               id: session.id,
-              ...(page.changesCursor ? { changes: page.changesCursor } : {}),
-              ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+              ...(positions.changes ? { changes: positions.changes } : {}),
+              ...(positions.units ? { units: positions.units } : {}),
             },
           });
       if (!isLatest()) return;
       if (fresh.signedIn) {
+        if (!originating || fresh.session.revision >= session.revision) {
+          setPositions({ changes: fresh.changesCursor, units: fresh.unitsCursor });
+          historyNavigation?.refresh(fresh.changesCursor, fresh.unitsCursor);
+        }
         setSession((current) => (!originating || fresh.session.revision >= current.revision ? fresh.session : current));
         setReadDenied(false);
         setAlert(null);
@@ -1837,7 +1849,7 @@ function SessionEditor({
           {m.library_progress_changes()}
         </h2>
         {session.changes.length ? (
-          <ol key={JSON.stringify([session.id, page.changesCursor])} className="space-y-1">
+          <ol key={JSON.stringify([session.id, positions.changes])} className="space-y-1">
             {session.changes.map((change, occurrence) => (
               <ContentItem
                 key={change.id}
@@ -1854,20 +1866,20 @@ function SessionEditor({
           </ol>
         ) : (
           <p className="text-muted-foreground">
-            {page.changesCursor || session.changesNext
+            {positions.changes || session.changesNext
               ? m.library_progress_history_reader_changes_page_empty()
               : m.library_progress_changes_empty()}
           </p>
         )}
         <ProgressHistoryControls
           section="changes"
-          cursor={page.changesCursor}
+          cursor={positions.changes}
           next={session.changesNext}
           id={session.id}
           originating={originating}
           search={{
             ...(logsCursor ? { logs: logsCursor } : {}),
-            ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+            ...(positions.units ? { units: positions.units } : {}),
           }}
         />
       </section>
@@ -1884,7 +1896,7 @@ function SessionEditor({
           <ul
             // Native unit rows have no IDs. Scope occurrence identity to this exact ordered page,
             // so an open disclosure cannot migrate to another record after page replacement.
-            key={JSON.stringify([session.id, page.unitsCursor, session.units])}
+            key={JSON.stringify([session.id, positions.units, session.units])}
             className="space-y-3"
           >
             {session.units.map((unit, occurrence) => (
@@ -1895,20 +1907,20 @@ function SessionEditor({
           </ul>
         ) : (
           <p className="text-muted-foreground">
-            {page.unitsCursor || session.unitsNext
+            {positions.units || session.unitsNext
               ? m.library_progress_history_reader_units_page_empty()
               : m.library_progress_units_empty()}
           </p>
         )}
         <ProgressHistoryControls
           section="units"
-          cursor={page.unitsCursor}
+          cursor={positions.units}
           next={session.unitsNext}
           id={session.id}
           originating={originating}
           search={{
             ...(logsCursor ? { logs: logsCursor } : {}),
-            ...(page.changesCursor ? { changes: page.changesCursor } : {}),
+            ...(positions.changes ? { changes: positions.changes } : {}),
           }}
         />
       </section>
