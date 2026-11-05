@@ -386,7 +386,14 @@ export function SubjectFrame({
       </header>
       <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
       <SubjectExploreSlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
-      <ReleaseFidelitySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+      <ReleaseFidelitySlot
+        subjectId={frame.id}
+        subjectType={frame.type}
+        label={title}
+        locale={locale}
+        context={observedContext}
+        returnHref={releaseOrigin}
+      />
       <CatalogueFileSlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
       {library ? (
         <div
