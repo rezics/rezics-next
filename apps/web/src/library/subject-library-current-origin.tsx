@@ -17,7 +17,7 @@ const operations = {
   labels: ['library_label.assignment_list', 'library_label.list'],
   collections: ['collection.list', 'collection_member.create'],
 } as const;
-const allOperations = [
+const allOperations: readonly Operation[] = [
   ...operations.entry,
   ...operations.labels,
   'library_label.assign',
