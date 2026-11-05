@@ -151,9 +151,7 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
   expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
   expect(classifyRun({ passed: false, timedOut: false, output: 'assertion failed' })).toBe('fail');
   expect(classifyRun({ passed: false, timedOut: true, output: 'ETIMEDOUT' })).toBe('infrastructure');
-  expect(classifyRun({ passed: false, timedOut: false, output: 'cannot find module fixture' })).toBe(
-    'infrastructure',
-  );
+  expect(classifyRun({ passed: false, timedOut: false, output: 'cannot find module fixture' })).toBe('infrastructure');
   expect(classifyRun({ passed: false, timedOut: false, output: 'output truncated after 32 MiB' })).toBe(
     'infrastructure',
   );
