@@ -4,6 +4,7 @@ import { preferenceRetryDeadline } from '../settings/preference-failure-retry';
 import {
   DEFAULT_INBOX_SELECTION,
   InboxSeenError,
+  inboxReadFailure,
   markInboxItemSeen,
   markInboxSeen,
   readInboxPage,
@@ -16,6 +17,10 @@ import {
   type InboxSelection,
   type UnreadCount,
 } from './inbox-read';
+import {
+  inboxObservationRecovery,
+  type InboxObservationRecovery,
+} from './inbox-acknowledgement-recovery';
 import { forInboxViewer, inboxViewerCsrfToken, type InboxViewer } from './inbox-viewer';
 
 const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');
@@ -145,27 +150,65 @@ async function forInboxCredential<T>(
   }
 }
 
+function inboxCredentialRetired(client: QueryClient, viewer: InboxViewer, csrfToken: string) {
+  return !viewer.isCurrent() || inboxViewerCsrfToken(client, viewer) !== csrfToken;
+}
+
+async function followInboxAcknowledgementRead(
+  client: QueryClient,
+  viewer: InboxViewer,
+  csrfToken: string,
+  refresh: () => Promise<unknown>,
+): Promise<InboxObservationRecovery | null> {
+  try {
+    await forInboxCredential(client, viewer, csrfToken, refresh);
+    return null;
+  } catch (error) {
+    if (inboxCredentialRetired(client, viewer, csrfToken))
+      throw error instanceof DOMException && error.name === 'AbortError'
+        ? error
+        : new DOMException('Inbox viewer changed', 'AbortError');
+    return inboxObservationRecovery(inboxReadFailure(error).failure);
+  }
+}
+
+async function acknowledgeInboxViewer(
+  client: QueryClient,
+  viewer: InboxViewer,
+  csrfToken: string,
+  send: () => Promise<InboxSeenResult>,
+): Promise<InboxObservationRecovery | null> {
+  return forInboxCredential(client, viewer, csrfToken, async () => {
+    const result = await forInboxViewer(viewer, send);
+    if ('failure' in result) throw new InboxSeenError(result.failure);
+    if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
+    const [countObservation, pageObservation] = await Promise.all([
+      followInboxAcknowledgementRead(client, viewer, csrfToken, () =>
+        client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
+      ),
+      followInboxAcknowledgementRead(client, viewer, csrfToken, () =>
+        client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
+      ),
+    ]);
+    if (!countObservation && !pageObservation) return null;
+    return inboxObservationRecovery((pageObservation ?? countObservation)!.failure, {
+      page: pageObservation !== null,
+      count: countObservation !== null,
+    });
+  });
+}
+
 export async function markInboxViewerNoticeSeen(
   client: QueryClient,
   viewer: InboxViewer,
   attempt: InboxNoticeSeenAttempt,
   csrfToken: string,
   send: NoticeSeenTransport = markInboxItemSeen,
-) {
+): Promise<InboxObservationRecovery | null> {
   if (attempt.accountId !== viewer.subject) throw new InboxSeenError({ status: 403, code: 'forbidden' });
-  return forInboxCredential(client, viewer, csrfToken, async () => {
-    const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
-    if ('failure' in result) throw new InboxSeenError(result.failure);
-    if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
-    await Promise.all([
-      forInboxCredential(client, viewer, csrfToken, () =>
-        client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
-      ),
-      forInboxCredential(client, viewer, csrfToken, () =>
-        client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
-      ),
-    ]);
-  });
+  return acknowledgeInboxViewer(client, viewer, csrfToken, () =>
+    send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+  );
 }
 
 export async function markInboxViewerSeen(
@@ -174,18 +217,8 @@ export async function markInboxViewerSeen(
   attempt: InboxSeenAttempt,
   csrfToken: string,
   send: SeenTransport = markInboxSeen,
-) {
-  return forInboxCredential(client, viewer, csrfToken, async () => {
-    const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
-    if ('failure' in result) throw new InboxSeenError(result.failure);
-    if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
-    await Promise.all([
-      forInboxCredential(client, viewer, csrfToken, () =>
-        client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
-      ),
-      forInboxCredential(client, viewer, csrfToken, () =>
-        client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
-      ),
-    ]);
-  });
+): Promise<InboxObservationRecovery | null> {
+  return acknowledgeInboxViewer(client, viewer, csrfToken, () =>
+    send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+  );
 }
