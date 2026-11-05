@@ -169,7 +169,6 @@ export async function readAuthoredField(
   address: AuthoredAddress,
   locale: string,
   authorization?: string,
-
 ): Promise<AuthoredRead> {
   const visit = synopsisVisit(address.via, address.id, locale);
   if (visit.kind === 'invalid') return { ok: false, reason: 'invalid', inspection: 'invalid' };
@@ -216,9 +215,10 @@ export async function readAuthoredField(
       ) ?? null;
     if (inspection) {
       const choices = synopsisChoices(current.data.subject, locale);
-      const exact = choices.kind === 'ready'
-        ? choices.choices.find((choice) => synopsisReturnMatches(choice, inspection))
-        : undefined;
+      const exact =
+        choices.kind === 'ready'
+          ? choices.choices.find((choice) => synopsisReturnMatches(choice, inspection))
+          : undefined;
       if (
         !exact ||
         (inspection.release !== undefined && inspection.release !== active.data.digest) ||
@@ -293,8 +293,11 @@ export async function readAuthoredReview(
   locale: string,
 ): Promise<AuthoredReview> {
   const visit = synopsisVisit(address.via, address.id, locale);
-  if (visit.kind === 'invalid' || (visit.kind === 'selected' &&
-    (visit.selection.realm || visit.selection.context !== candidateContext || address.property !== SUMMARY_PROPERTY)))
+  if (
+    visit.kind === 'invalid' ||
+    (visit.kind === 'selected' &&
+      (visit.selection.realm || visit.selection.context !== candidateContext || address.property !== SUMMARY_PROPERTY))
+  )
     return { comparison: candidateFailure(400), body: null };
   const [comparison, form] = await Promise.all([
     readCandidates(client, authorization, address.id, address.property, address.cursor, undefined, address.session),

@@ -29,8 +29,9 @@ function address(value: unknown): AuthoredAddress {
     !uuid.test(input.id) ||
     (input.property !== undefined && (typeof input.property !== 'string' || input.property.length > 256)) ||
     (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384)) ||
-    (input.via !== undefined && (typeof input.via !== 'string' ||
-      new TextEncoder().encode(input.via).byteLength > SUMMARY_VISIT_ADDRESS_BYTE_CAP))
+    (input.via !== undefined &&
+      (typeof input.via !== 'string' ||
+        new TextEncoder().encode(input.via).byteLength > SUMMARY_VISIT_ADDRESS_BYTE_CAP))
   )
     throw new Error('Invalid authored address');
   return {
