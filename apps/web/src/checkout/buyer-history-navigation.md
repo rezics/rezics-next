@@ -37,6 +37,7 @@ There is no second session observer, registry, global archive or storage. Privat
 
 Canonical buyer links retain normal modified/new-tab behavior. An ordinary same-app click after the originating
 control's admitted departure decision uses the existing router; it does not invoke another command decision.
+List controls resolve their canonical href after staging and recheck the original buyer origin immediately before navigation.
 List/detail/Edition return keeps coordinates only. Browser list loaders defer to the existing current reader in
 this composition, so deliberate movement makes one bounded read, with no loader admission, replay or prefetch.
 A successful direct coordinate change admits a new path without inferred predecessors. Malformed/stale First

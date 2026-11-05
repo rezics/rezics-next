@@ -7,8 +7,7 @@ import type { OrderHistorySearch } from '../src/checkout/order-history-address';
 import type { SessionEnv } from '../src/session/client';
 import { order } from './factories/buyer-history';
 
-// UNRUN at this source boundary. Mounted actual route and real prepared/generated server reads;
-// original acceptance, native services, receipt reconciliation and browser proof remain deferred.
+// Focused mounted-route coverage; original native, receipt reconciliation and browser acceptance remain deferred.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );

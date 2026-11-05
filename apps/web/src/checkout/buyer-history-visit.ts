@@ -170,6 +170,7 @@ export class BuyerHistoryVisit {
     this.focus = keyboard && document.activeElement === initiator ? { ticket, initiator } : undefined;
   }
   move(
+    router: AnyRouter,
     windows: BuyerHistoryWindows,
     origin: BuyerCurrentOrigin,
     list: BuyerHistoryList,
@@ -178,17 +179,16 @@ export class BuyerHistoryVisit {
     event: ReactMouseEvent<HTMLAnchorElement>,
   ) {
     if (!ordinary(event, event.currentTarget)) return;
+    event.preventDefault();
     if (!this.connected || this.windows !== windows || !origin.isCurrent()) {
-      event.preventDefault();
       return;
     }
     const ticket = windows.stage(list, movement, cursor);
-    if (!ticket) {
-      event.preventDefault();
-      return;
-    }
+    if (!ticket) return;
     this.initiateFocus(ticket, event.detail === 0, event.currentTarget);
     this.publish();
+    const href = event.currentTarget.getAttribute('href')!;
+    if (this.windows === windows && origin.isCurrent()) void router.navigate({ href });
   }
   retryFocus(
     windows: BuyerHistoryWindows,
@@ -259,7 +259,7 @@ export function useBuyerHistoryNavigation(
         ? {
             previous: path?.previous,
             move: (movement: BuyerHistoryMovement, next: string | null, event: ReactMouseEvent<HTMLAnchorElement>) =>
-              visit.move(windows, origin, list, movement, next, event),
+              visit.move(router!, windows, origin, list, movement, next, event),
           }
         : undefined,
     retry: (event: ReactMouseEvent<HTMLElement>) => {
