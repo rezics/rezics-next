@@ -195,22 +195,22 @@ export function useSearchWindow({
     const to = target ?? null;
     focus.current?.capture(request, to, action, event.currentTarget);
     const from = searchWindowPosition(current.history, requestedCursor).current ? cursor : current.attemptedFrom;
-    pending.current = { request, from, to, action };
+    const transition = { request, from, to, action };
+    pending.current = transition;
     current.attemptedFrom = from;
     setBusy(true);
     const targetHref = href(target);
     void router.navigate({ href: targetHref }).then(
       () => {
         // Successful results settle in the layout effect. Route errors may resolve without that render.
-        if (pending.current?.request !== request || pending.current.to !== to) return;
-        if (address.isCurrent() && readerCurrent() && !router.state.matches.some((match) => match.status === 'error'))
-          return;
+        if (pending.current !== transition) return;
+        if (readerCurrent() && !router.state.matches.some((match) => match.status === 'error')) return;
         pending.current = undefined;
         setBusy(false);
         focus.current?.retire();
       },
       () => {
-        if (pending.current?.request !== request || pending.current.to !== to) return;
+        if (pending.current !== transition) return;
         pending.current = undefined;
         setBusy(false);
         focus.current?.retire();
