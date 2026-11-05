@@ -610,8 +610,9 @@ The producer constants derive at most 91 mixed candidates plus 21 author keys (s
 at most one avatar and one verified-agent Subject), 123 anonymous candidates, or 20 Following candidates plus
 60 author keys; the composed maxima 112, 123 and 80 remain below the 160 ceiling.
 
-Decision: Keep Search's bounded public owner summaries authoritative; translate only validated owner keys and leave
-Collection curator/cover and Review rating absent until their current public summaries supply those fields. Producer
+Decision: Keep Search's bounded public owner summaries authoritative; translate only validated owner keys and reuse
+its closed Collection response schema so supplied curator, cover and preview facts survive mounted Home transport.
+Review rating remains absent until its current public summary supplies it. Producer
 readiness remains authoritative; installation, an empty page or a preparing census never certifies it.
 
 #### Cost: native mixed Discovery feed projection
