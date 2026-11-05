@@ -12,6 +12,7 @@ import { m } from '../../paraglide/messages.js';
 import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sources';
 import { SourceObservationReader } from './source-observation/reader';
 import type { SourceObservationInspect, SourceObservationProvider } from './source-observation/contract';
+import { NamesReturnAnchor } from './work-names/navigation';
 
 type SourceObservationMount = {
   source: SourceObservationProvider;
@@ -101,9 +102,9 @@ export function SubjectSourcesPage({
           </Button>
         )}
         {returnTo && (
-          <a className={linkClassName} href={returnTo}>
+          <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
             {m.subject_synopsis_return({}, o)}
-          </a>
+          </NamesReturnAnchor>
         )}
       </article>
     );
@@ -153,9 +154,9 @@ export function SubjectSourcesPage({
               {m.sources_back({}, o)}
             </a>
             {returnTo && (
-              <a className={linkClassName} href={returnTo}>
+              <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
                 {m.subject_synopsis_return({}, o)}
-              </a>
+              </NamesReturnAnchor>
             )}
             <a className={linkClassName} href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}>
               {m.subject_details({}, o)}

@@ -2459,17 +2459,24 @@ candidate and authority and retains its existing draft/uncertain-command recover
 Decision: supplied-name return uses one bounded browser history value and the existing validated same-locale `via`
 address; filters stay out of URLs, and changed caller, Context or release refuses restoration.
 The shared handoff restores the expanded disclosure, mounted language groups, group/row window, filter and Terms
-focus on work and people names, plus the Sources focus anchor. Its binding includes Subject, actual Context, selected Realm, locale,
+or Sources focus on work and people names. Its binding includes Subject, actual Context, selected Realm, locale,
 release/revision and browser session-cache incarnation metadata (including weak query identity, so replacing a cache entry cannot revive a return); it contains no credentials or editing state.
 A returned fresh page may restore the view, but a mounted retired source object never becomes current again,
 including A-to-B-to-A, locale replacement and session refresh. Late copy and advice callbacks cannot update it.
 Ordinary browser history owns the value; there is no return registry, retained catalogue or former reading list.
 
-Decision: work-name Sources activation uses the existing validated same-locale `via` address with the actual selected
-Realm and stores its closed view descriptor only in ordinary browser history. Browser Back restores after a fresh
-current work reading; the existing `SubjectSourcesPage` `returnTo` anchor carries no history state, so an explicit
-state-less return focuses the newly admitted names section and restarts its local window. That anchor is the exact
-state-transfer seam for coordination; the Sources owner remains unchanged here.
+Decision: shared exact-name focus carries only language, label/alias role and a SHA-256 identity of the exact JSON
+spelling, never copied spelling or a former row index. The fresh finite projection must contain that address and its
+current mounted copy control before focus returns there. Removed, moved-language, changed-role or unmounted names
+show changed-reading recovery at the connected language summary, or the names summary if its group is absent.
+Restoration leaves an already focused connected control alone. The shared presentation exposes only current group
+and name targets; no second handoff or retained name registry is added.
+
+Decision: name Sources activation uses the existing validated same-locale `via` address with the actual selected
+Realm and stores its closed view descriptor only in ordinary browser history. Back, Forward and the explicit
+`SubjectSourcesPage.returnTo` link transfer the same validated descriptor through the existing Names return adapter.
+A state-less return or new tab focuses the newly admitted names section and restarts its local window. Sources
+continues to own native disclosure and provider selection.
 
 ### Supplied names Cost
 
@@ -2504,8 +2511,9 @@ Names retain one admitted O(T + E) projection (T <= 262,144), a filter of at mos
 Copy state is per mounted control. Return decoding accepts at most 8,192 UTF-8 bytes with at most eight bounded group
 descriptors, the current query/window, and one finite focus intent; browser Back retains one such value in its
 history entry, with no traversal of obsolete entries. Sources uses its existing validated `via` address and current
-bounded request; returning uses the ordinary current work read. The Sources `returnTo` anchor does not transmit local
-history metadata, so that path starts a clean local window. Three-scale composition cases
+bounded request; returning uses the ordinary current work read. Exact-name departure hashes one admitted spelling;
+restoration hashes only names with the current language and role, at O(T + E) cost and O(E) temporary digests.
+Connected targets are bounded by the mounted window and released on unmount. Three-scale composition cases
 at 64/512/4096 unrelated Subjects and obsolete history charge the same local projection, action refresh and handoff
 work. They establish no native examined-row bound or executed browser/visual result; native and browser acceptance
 remain integration-owned.
@@ -2572,7 +2580,7 @@ The original address fields are locale, Subject UUID/slug, native `context`, fin
 `#supplied-names`. Destination `via` contains that address, without a nested return or copied spellings. Sources
 accepts `realm` and `via`, but no selected-Context input; Terms accepts `via` and reads Global with fresh authority.
 The entry explains that limit. The installed `NamesHandoff` and `PeopleNamesView.captureSourcesVisit` carry the
-query (250 UTF-16 units), page, expansion, at most eight group descriptors and Sources/Terms focus through ordinary
+query (250 UTF-16 units), page, expansion, at most eight group descriptors and exact-name or Sources/Terms focus through ordinary
 history. The whole closed descriptor is charged in UTF-8 by `namesReturn` against 8,192 bytes, tighter than the
 shared return address's 32,768-character limit; the destination search budget adds encoded `via` to its fixed
 2,048-character allowance. The final Realm is included in real hrefs before modifier/new-tab activation.
@@ -2584,11 +2592,9 @@ spelling or old authorized payload enters a locator. Filtering/copying adds no r
 single independent explicit retry. Advice always observes the reader in Global, independently of source
 provenance; the unsupported-Context notice identifies that scope rather than inventing a native denial.
 
-The installed shared focus grammar is only `terms | sources`; exact surviving-name focus and protection against
-stealing an already connected control's focus require its original owner's additive hook. The Sources owner's
-plain `returnTo` anchor still transfers no history metadata: explicit return and a new tab restart honestly; Back
-can restore a current finite window. That state-transfer seam remains with Sources. The Person/Character consumer
-does not add another handoff, source read or Terms authority implementation.
+The Person/Character consumer supplies its fresh finite projection to the shared focus grammar and connects the
+shared presentation targets. Sources explicit return preserves only the already validated closed history state;
+new tabs still restart honestly. The consumer adds no other handoff, source read or Terms authority implementation.
 
 ## Choose a supplied work synopsis
 
