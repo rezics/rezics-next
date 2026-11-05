@@ -4,6 +4,7 @@ import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { PersonalLibraryCurrentRead, PersonalContinueRead } from '../src/library/personal-library-server';
 import type { LibraryMutationResult, PersonalLibraryEntry } from '../src/library/entries-read';
+import { nativeCollection } from './factories/collections';
 import type { ShelfDisplay, ShelfSearch } from '../src/library/shelf-params';
 
 // UNRUN: controller integration owns execution. These use the installed DOM, actual combined
@@ -182,7 +183,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     if (url.pathname === '/v1/collections') {
       expect(url.searchParams.get('limit')).toBe('100');
       expect(url.searchParams.get('curatorAccountId')).toBeTruthy();
-      return Response.json({ collections: [{ id: id(5), title: 'Private collection', curator: null }], next: null });
+      return Response.json({ collections: [nativeCollection({ id: id(5), title: 'Private collection' })], next: null });
     }
     // Optional definitions naming has no fixture release; native readers still keep their failure semantics.
     return Response.json({}, { status: 503 });
@@ -205,7 +206,11 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/libraryEntries')).toHaveLength(1);
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/libraryContinue')).toHaveLength(1);
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/collections')).toHaveLength(1);
-    expect(calls.every((call) => call.headers.get('authorization') === 'Bearer credential-A')).toBe(true);
+    expect(
+      calls
+        .filter((call) => new URL(call.url).pathname !== '/v1/openapi.json')
+        .every((call) => call.headers.get('authorization') === 'Bearer credential-A'),
+    ).toBe(true);
     expect(headers.get('cache-control')).toBe('private, no-store');
     stale = true;
     const restarted = await reads.readPersonalLibraryCurrent({ data: { cursor: 'stale' } });
@@ -261,6 +266,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   const { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
   const { PersonalLibraryCurrent } = await import('../src/library/personal-library-current');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { EntriesWindowNavigation } = await import('../src/library/entries-window-navigation');
   const windows = new EntriesWindowNavigation();
   const { Route } = await import('../src/routes/library/index');
@@ -321,6 +327,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     return 'test-undo';
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const stopObservation = viewerExposureLifetime(client).subscribe(() => {});
   client.setQueryData(['library-navigation', 'en', 8, 'session'], {
     pins: response('STALE').navigation.pins,
     collections: [],
@@ -350,12 +357,14 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   const show = async (viewer: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     await act(async () => {
       client.setQueryData(['session'], viewer);
-      client.setQueryData(
-        ['exposure', 'viewer'],
-        admitted
-          ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
-          : [],
-      );
+      const observation = viewerExposureLifetime(client).getSnapshot();
+      if (observation.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
+          subject: observation.observation.subject,
+          admitted: admitted
+            ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
+            : [],
+        });
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
         const html = renderToString(tree());
@@ -647,6 +656,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());
+    stopObservation();
     client.clear();
     host.remove();
     for (const spy of [observeRows, transport, continueTransport, write, remove, restore, assign, picker, toast])
