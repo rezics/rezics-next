@@ -1936,6 +1936,9 @@ cleanup, retaining its locator until removal so a restart resumes child-before-p
 Reconciliation retries preserve the original Source tuple and the retained alias intent.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
+native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
+examined input keys, as in Source's maintenance-step bound, rather than serving candidates. Serving retains
+its candidate-based bound. Both retain the 1000-input and 4 MiB ceilings without resetting between owners.
 steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
 only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
