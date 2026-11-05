@@ -81,6 +81,7 @@ function installWindow(window: InstanceType<typeof import('happy-dom').Window>) 
     MouseEvent: window.MouseEvent,
     KeyboardEvent: window.KeyboardEvent,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: () => {},
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
