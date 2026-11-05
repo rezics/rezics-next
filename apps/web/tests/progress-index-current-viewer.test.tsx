@@ -213,7 +213,7 @@ mock.module('../src/subject/definitions', () => ({
     for (const subject of subjects) if (subject) subject.typeLabel = 'Named Book';
   },
 }));
-mock.module('../src/session/query', () => ({ useSession: () => browser }));
+mock.module('../src/session/query', () => ({ sessionQuery: { queryKey: ['session'] }, useSession: () => browser }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': browser.csrfToken }) }));
 mock.module('../src/kernel/exposure', () => ({
   operationIsAdmitted: () => admitted,
@@ -290,6 +290,9 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
 const { CurrentViewerProgressIndexPage } = await import('../src/library/progress-page');
 const { readProgressIndex, readCurrentViewerProgressIndex } = await import('../src/library/progress-server');
 const { prepareSession } = await import('../src/session/request');
+const { sessionQuery } = await import('../src/session/query');
+const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { viewerExposureLifetime } = await import('../src/session/observation');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
@@ -321,6 +324,17 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
   let loader = initialLoader ?? (await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } }));
   let requested: { subjectId?: string; cursor?: string } = { subjectId: id(1) };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  client.setQueryData(sessionQuery.queryKey, browser);
+  const lifetime = viewerExposureLifetime(client);
+  const stopObservation = lifetime.subscribeCache(() => {});
+  const seedExposure = () => {
+    const current = lifetime.getSnapshot();
+    if (current.state !== 'signed-in') return;
+    const query = viewerExposureQuery(current.observation);
+    if (!client.getQueryState(query.queryKey))
+      client.setQueryData(query.queryKey, { subject: current.observation.subject, admitted: [] });
+  };
+  seedExposure();
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/library/progress'] }),
@@ -355,7 +369,12 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
     root = createRoot(host as unknown as HTMLElement);
     await tick(() => root.render(tree()));
   }
-  const show = () => tick(() => root.render(tree()));
+  const show = () =>
+    tick(() => {
+      if (client.getQueryData(sessionQuery.queryKey) !== browser) client.setQueryData(sessionQuery.queryKey, browser);
+      seedExposure();
+      root.render(tree());
+    });
   const submit = () =>
     tick(() => {
       const form = host.querySelector('form')!;
@@ -405,6 +424,7 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
       }),
     close: async () => {
       await tick(() => root.unmount());
+      stopObservation();
       host.remove();
       redirect.mockRestore();
       client.clear();
