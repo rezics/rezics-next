@@ -14,7 +14,6 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -510,7 +509,7 @@ async function startDriver(
     async function grantAccount(
       account: Account,
       actions: string[],
-      resourceId = PLATFORM_RESOURCE.id,
+      resourceId: string = GLOBAL_CONTEXT,
       grantor: Account = governor,
     ) {
       const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
@@ -528,7 +527,9 @@ async function startDriver(
         { 'Idempotency-Key': key() },
       );
       if (response.status !== 201)
-        throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
+        throw new Error(
+          `Grant administration failed for ${actions.join(',')} on ${resourceId}: ${response.status}: ${JSON.stringify(response.body)}`,
+        );
     }
 
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
