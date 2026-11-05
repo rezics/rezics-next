@@ -268,7 +268,7 @@ function LabelShelfVisit(props: {
     clearFocusHandoff();
     setWindows((current) => {
       if (current.pending?.target === target) return current;
-      if (current.current === target) return { ...current, pending: null };
+      if (current.current === target) return current.pending === null ? current : { ...current, pending: null };
       if (current.current === null && current.pending === null && current.predecessors.length === 0) return current;
       return emptyLabelShelfWindow();
     });
