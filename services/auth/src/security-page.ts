@@ -1,3 +1,5 @@
+import { securityResponseLimits as limits } from '@rezics/auth-contract';
+import { securityId, securityDisplay, securityDate, securityPasskey } from './security-response-bounds.ts';
 import type { Pool } from 'pg';
 
 /** Observations of the existing own-human command guards, never an authorization. */
@@ -40,10 +42,6 @@ function record(value: unknown): value is Record<string, unknown> {
 function text(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
-function date(value: unknown): string | null {
-  const result = value instanceof Date ? value.toISOString() : value;
-  return typeof result === 'string' && Number.isFinite(Date.parse(result)) ? result : null;
-}
 
 /** One finite page, no cursor or selected account input. Owner/id seeks use
  * erasure_session_0 and passkey_userid_idx. Read one sentinel beyond each window;
@@ -56,7 +54,7 @@ export async function composeSecurityPage(database: Pool, viewer: Viewer): Promi
       ? 'allowed'
       : 'step-up-required';
   const page: SecurityPageEnvelope = {
-    viewer: { account_id: viewer.account_id, session_id: viewer.session_id, client_id: viewer.client_id },
+    viewer: { account_id: securityId(viewer.account_id), session_id: securityId(viewer.session_id), client_id: securityId(viewer.client_id) },
     sessions: { kind: 'unavailable' },
     passkeys: { kind: 'unavailable' },
     actions: {
@@ -86,17 +84,17 @@ export async function composeSecurityPage(database: Pool, viewer: Viewer): Promi
         (row.user_agent !== null && typeof row.user_agent !== 'string')
       )
         throw new Error('Invalid session');
-      const created = date(row.created_at),
-        expires = date(row.expires_at);
+      const created = securityDate(row.created_at),
+        expires = securityDate(row.expires_at);
       if (!created || !expires) throw new Error('Invalid session date');
       seen.add(row.id);
       valid.push({
-        id: row.id,
-        client_id: row.client_id,
-        client_display_name: row.client_display_name,
+        id: securityId(row.id),
+        client_id: securityId(row.client_id),
+        client_display_name: securityDisplay(row.client_display_name, limits.displayName),
         created_at: created,
         expires_at: expires,
-        user_agent: row.user_agent,
+        user_agent: securityDisplay(row.user_agent, limits.userAgent),
         current: row.id === viewer.session_id,
         revoke: 'allowed',
       });
@@ -124,15 +122,12 @@ export async function composeSecurityPage(database: Pool, viewer: Viewer): Promi
     for (const row of rows) {
       if (!record(row) || !text(row.id) || seen.has(row.id) || (row.name !== null && typeof row.name !== 'string'))
         throw new Error('Invalid passkey');
-      const created = date(row.created_at),
-        used = row.last_used_at === null ? null : date(row.last_used_at);
+      const created = securityDate(row.created_at),
+        used = row.last_used_at === null ? null : securityDate(row.last_used_at);
       if (!created || (row.last_used_at !== null && !used)) throw new Error('Invalid passkey date');
       seen.add(row.id);
       valid.push({
-        id: row.id,
-        name: typeof row.name === 'string' ? row.name : '',
-        created_at: created,
-        last_used_at: used,
+        ...securityPasskey(row),
         remove: credential === 'allowed' && !password.rows.length && rows.length === 1 ? 'last-credential' : credential,
       });
     }

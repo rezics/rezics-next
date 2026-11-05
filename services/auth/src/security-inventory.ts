@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { validConsentScopes } from './current-consent.ts';
+import { securityResponseLimits } from '@rezics/auth-contract';
+import { securityId, securityDisplay, securityScopes } from './security-response-bounds.ts';
 import {
   SecurityInventoryDenied,
   securityCursors,
@@ -42,24 +43,24 @@ type ClientRow = {
   reducing: boolean;
 };
 type ConsentRow = { client_id: string; scopes: unknown; pending_scopes: unknown };
-function current(client: ClientRow | undefined): client is ClientRow & { scopes: string[] } {
+function current(client: ClientRow | undefined, scopeLimit: number): client is ClientRow & { scopes: string[] } {
   return (
     !!client &&
     client.disabled === false &&
     !client.erasure_fenced &&
     client.ready &&
     !client.reducing &&
-    validConsentScopes(client.scopes)
+    securityScopes(client.scopes, scopeLimit)
   );
 }
 function display(client: ClientRow | undefined): string | null {
   // Only the native configured service label, never provider name/free metadata.
-  return client && !client.erasure_fenced ? client.display_name : null;
+  return client && !client.erasure_fenced ? securityDisplay(client.display_name, securityResponseLimits.displayName) : null;
 }
 
 /** Private native reader. Account/session bindings are supplied only by the
  * service's current human proof, never by a public request parameter. */
-export function securityInventory(database: Pool, secret: string, issuer: string, now: () => number) {
+export function securityInventory(database: Pool, secret: string, issuer: string, now: () => number, scopeLimit = 1000) {
   const cursors = securityCursors(secret, issuer, now);
   async function page<T>(
     view: SecurityView,
@@ -102,13 +103,15 @@ export function securityInventory(database: Pool, secret: string, issuer: string
         );
         const selected = rows.slice(0, limit);
         return {
-          rows: selected.map((client) => ({
-            client_id: client.client_id,
+          rows: selected.map((client) => {
+            if (!client.erasure_fenced && !securityScopes(client.scopes, scopeLimit)) throw new SecurityInventoryDenied(503);
+            return ({
+            client_id: securityId(client.client_id),
             display_name: display(client),
             disabled: client.disabled !== false || client.erasure_fenced,
             scopes:
-              !client.erasure_fenced && validConsentScopes(client.scopes) ? [...new Set(client.scopes)].sort() : [],
-          })),
+              !client.erasure_fenced && securityScopes(client.scopes, scopeLimit) ? [...new Set(client.scopes)].sort() : [],
+          }); }),
           last: rows.length > limit ? selected.at(-1)!.client_id : null,
         };
       });
@@ -140,9 +143,9 @@ export function securityInventory(database: Pool, secret: string, issuer: string
           rows: selected.map((consent): SecurityConsent => {
             const client = clients.get(consent.client_id);
             const available =
-              current(client) &&
-              validConsentScopes(consent.scopes) &&
-              (consent.pending_scopes === null || validConsentScopes(consent.pending_scopes));
+              current(client, scopeLimit) &&
+              securityScopes(consent.scopes, scopeLimit) &&
+              (consent.pending_scopes === null || securityScopes(consent.pending_scopes, scopeLimit));
             const granted = available
               ? [
                   ...new Set(
@@ -155,7 +158,7 @@ export function securityInventory(database: Pool, secret: string, issuer: string
                 ].sort()
               : [];
             return {
-              client_id: consent.client_id,
+              client_id: securityId(consent.client_id),
               display_name: display(client),
               granted,
               status: !available ? 'unavailable' : granted.length ? 'current' : 'inactive',
