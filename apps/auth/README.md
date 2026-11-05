@@ -448,6 +448,17 @@ extra requests.
 Decision: selected Security inventory and `/session` share trusted `AUTH_SECURITY_SCOPE_CONFIGURATION` and the
 existing five-second whole-call signal.
 
+Decision: the human management proof reader is a server function over the same trusted configuration and native
+issuer transport. It admits the complete `/session` proof with `securityResponseByteBudgets(C).session` through
+`readJsonBounded` before decoding or parsing. The allowance is the closed DTO formula
+`O({account_id:S(1024),client_id:S(1024),scope:A(C,S(128)),authn_epoch:17,auth_time:17,amr:A(1,S(15))})`; the
+native response section in [services/auth](../../services/auth/README.md#native-private-response-bounds-and-composition)
+defines `S`, `A` and `O`. `C` comes only from the mounted native `siteActions` union, including protocol scopes. The
+reader keeps one native GET and the existing five-second lifetime, with no retry, discovery or command. Its complete
+proof remains advice: exact client, ordered profile scopes, actor, one human `pwd` or `pop` method and ten-minute
+freshness still gate the explicit review; native approval remains authority.
+Unavailable, invalid or retired advice cannot approve or advance an old return.
+
 The public `@rezics/auth-contract` exports are `securityResponseLimits`, `securityScopeLimit(siteActions?)`,
 `securityJsonStringBytes(units)` and `securityResponseByteBudgets(scopeLimit, selectedLimit=20)`. The required,
 nonsecret `AUTH_SECURITY_SCOPE_CONFIGURATION` Worker binding is `catalogue:<C>`, where deployment derives
@@ -1157,6 +1168,11 @@ restoration retires its callbacks and clears private inputs. Password submission
 cancelling the browser ceremony without undoing a dispatched server sign-in or automatically replaying it.
 
 Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
+
+The management return consumes the full bounded human proof without reducing it to account-session advice. Only the
+exact management client, complete ordered profile, selected actor and fresh human method qualify. The original
+operation snapshot and `returned` continuation phase remain required through deliberate confirmation and native
+approval; a matching observation cannot replace those checks or create approval by itself.
 
 Decision: stored account, management and rename-review envelopes are limited to 65,536, 262,144 and 256 UTF-16 code units (`String.length`), respectively. The account allowance covers both 4,096-code-unit account ID fields at six JSON output code units per input unit plus fixed envelope fields; the management allowance covers the largest closed descriptor with eight 4,096-code-unit strings, worst-case JSON escaping and fixed fields; the UUID-only review envelope fits within 256. The initiating account ID uses the existing 4,096-code-unit native descriptor text ceiling without adding an identifier format rule. Each reader checks the retained string length before `JSON.parse`; malformed or oversized values remain untouched and refuse the old return before session observation or an operation. Account envelopes retain compatibility with a missing optional `submitted` marker and reject unknown outer fields. Writers serialize only closed canonical fields. Account storage access errors remain absent; management and rename-review storage access errors remain invalid.
 

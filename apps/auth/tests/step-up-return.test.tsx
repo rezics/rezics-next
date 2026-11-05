@@ -177,7 +177,7 @@ test('a failed Continue recheck requires a fresh advice read before authenticati
   page.calls[0]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
 });
 
-test('a replaced management marker fails its released read without consuming replacement state', async () => {
+test('a replaced management marker preserves replacement after a fresh exact human proof returns', async () => {
   const firstAccount = '00000000-0000-4000-8000-000000000011';
   const replacementAccount = '00000000-0000-4000-8000-000000000022';
   const search = new URL(managementOperationStepUpUrl('rename'), 'https://auth.test').search;

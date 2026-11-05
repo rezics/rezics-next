@@ -1,13 +1,7 @@
+import { createServerFn } from '@tanstack/react-start';
+import { securityResponseLimits } from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
-export {
-  managementOperationProfile,
-  type ManagementOperation,
-  type ManagementOperationInput,
-  type ManagementOperationResult,
-  type ManagementSession,
-  type ManagementSessionResult,
-} from '@rezics/auth-contract';
-
+import { readJsonBounded } from './private-auth-json';
 import {
   isManagementOperation,
   managementOperationProfile,
@@ -21,56 +15,74 @@ import {
   pendingManagementOperationMatches,
   pendingManagementOperationStepUpState,
 } from './management-operation-step-up';
+import { readSecurityIssuerResponse, trustedSecurityResponseConfiguration } from './security-response-config';
+
+export {
+  managementOperationProfile,
+  type ManagementOperation,
+  type ManagementOperationInput,
+  type ManagementOperationResult,
+  type ManagementSession,
+  type ManagementSessionResult,
+} from '@rezics/auth-contract';
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Reads the real native proof projection; no fabricated identity or empty-success fallback. */
-export async function loadManagementSession(signal?: AbortSignal): Promise<ManagementSessionResult> {
-  try {
-    return await privateAuthRead(async (readSignal) => {
-      const response = await fetch('/session', {
-        signal: readSignal,
-        credentials: 'same-origin',
-        redirect: 'error',
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
+function parseManagementSession(body: unknown, scopeLimit: number): ManagementSessionResult {
+  if (
+    !record(body) ||
+    Object.keys(body).some(
+      (key) => !['account_id', 'client_id', 'scope', 'authn_epoch', 'auth_time', 'amr'].includes(key),
+    ) ||
+    typeof body.account_id !== 'string' ||
+    !body.account_id ||
+    body.account_id.length > securityResponseLimits.id ||
+    typeof body.client_id !== 'string' ||
+    !body.client_id ||
+    body.client_id.length > securityResponseLimits.id ||
+    !Array.isArray(body.scope) ||
+    body.scope.length > scopeLimit ||
+    !body.scope.every((scope) => typeof scope === 'string' && scope.length <= securityResponseLimits.scope) ||
+    !Number.isSafeInteger(body.authn_epoch) ||
+    (body.authn_epoch as number) < 0 ||
+    !Number.isSafeInteger(body.auth_time) ||
+    (body.auth_time as number) < 0 ||
+    (body.auth_time as number) > Math.floor(Date.now() / 1000) ||
+    !Array.isArray(body.amr) ||
+    body.amr.length !== 1 ||
+    (body.amr[0] !== 'pwd' && body.amr[0] !== 'pop')
+  )
+    return { kind: 'unavailable' };
+  return {
+    kind: 'ready',
+    accountId: body.account_id,
+    clientId: body.client_id,
+    scopes: body.scope as string[],
+    authTime: body.auth_time as number,
+    authnEpoch: body.authn_epoch as number,
+    amr: body.amr as ('pwd' | 'pop')[],
+  };
+}
+
+const readManagementSession = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<ManagementSessionResult> => {
+    const configuration = await trustedSecurityResponseConfiguration();
+    if (!configuration) return { kind: 'unavailable' };
+    return readSecurityIssuerResponse('/session', undefined, async (response, signal) => {
       if (response.status === 401) return { kind: 'signed-out' };
       if (response.status !== 200) return { kind: 'unavailable' };
-      const body: unknown = await response.json();
-      if (
-        !record(body) ||
-        Object.keys(body).some(
-          (key) => !['account_id', 'client_id', 'scope', 'authn_epoch', 'auth_time', 'amr'].includes(key),
-        ) ||
-        typeof body.account_id !== 'string' ||
-        !body.account_id ||
-        typeof body.client_id !== 'string' ||
-        !body.client_id ||
-        !Array.isArray(body.scope) ||
-        !body.scope.every((scope) => typeof scope === 'string') ||
-        !Number.isSafeInteger(body.authn_epoch) ||
-        (body.authn_epoch as number) < 0 ||
-        !Number.isSafeInteger(body.auth_time) ||
-        (body.auth_time as number) < 0 ||
-        (body.auth_time as number) > Math.floor(Date.now() / 1000) ||
-        !Array.isArray(body.amr) ||
-        body.amr.length !== 1 ||
-        !['pwd', 'pop'].includes(body.amr[0])
-      )
-        return { kind: 'unavailable' };
-      return {
-        kind: 'ready',
-        accountId: body.account_id,
-        clientId: body.client_id,
-        scopes: body.scope,
-        authTime: body.auth_time as number,
-        authnEpoch: body.authn_epoch as number,
-        amr: body.amr as ('pwd' | 'pop')[],
-      };
-    }, signal);
+      const body = await readJsonBounded(response, configuration.sessionBytes, signal);
+      return parseManagementSession(body, configuration.scopeLimit);
+    });
+  },
+);
+
+/** Reads the full native human proof for advice; native approval remains authoritative. */
+export async function loadManagementSession(signal?: AbortSignal): Promise<ManagementSessionResult> {
+  try {
+    return await privateAuthRead((readSignal) => readManagementSession({ signal: readSignal }), signal);
   } catch {
     return { kind: 'unavailable' };
   }

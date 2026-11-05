@@ -427,11 +427,16 @@ decoding and JSON parsing. Its complete DTO budget is
 `O(F)=2+Σ(JSON.stringify(key).length+1+F[key])+max(0,|F|−1)`. This includes emitted keys, colons, commas and the
 maximum safe-integer widths. Actual bytes are checked with absent or dishonest Content-Length.
 
-The existing five-second private read signal covers issuer headers, body consumption and BFF delivery. The session
-receiver forwards the original cookie only to the configured issuer and adds no metadata request, kernel/SQL read,
-retry, poll or command. It validates only consumed account/client identifiers and scope entries; native proof fields
-remain native authority. Overflow, malformed input, missing configuration, stalled or retired reads remain failure;
-native 401 remains signed-out. Neither response Content-Length nor another response header raises a cap. These
+The existing five-second private read signal covers issuer headers, body consumption and BFF delivery. Both
+account-session advice and the full human management proof reader use this same trusted configuration and issuer
+transport; each makes one native `GET /session`, forwards the original cookie only to the configured issuer and adds
+no metadata request, kernel/SQL read, retry, poll or command. Account-session validates only its consumed
+account/client identifiers and scope entries. The management reader retains the closed proof fields, bounds opaque
+account/client IDs, scope count and entries, safe epoch/time and a single human `pwd` or `pop` method, while native
+approval remains authoritative. Both apply `securityResponseByteBudgets(C).session` before parsing actual bytes,
+including absent or dishonest Content-Length. Overflow, malformed input, missing configuration, stalled or retired
+reads remain failure; native 401 remains signed-out. Neither response Content-Length nor another response header
+raises a cap. These
 receivers add no per-row read, polling or storage migration. Fixed `GET /security-page`, both `GET /passkeys` reads
 and both `GET /registration-page` reads use their C-independent `securityFixedResponseByteBudgets` through
 `readJsonBounded`; inventory and session use C-derived budgets. The page/BFF imports only public pure helpers, never
