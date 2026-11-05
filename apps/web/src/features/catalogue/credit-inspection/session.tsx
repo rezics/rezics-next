@@ -1,6 +1,13 @@
-import { useMemo } from 'react';
-import { candidateSession, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
-import { useSession } from '../../../session/query';
+import { useMemo, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { CandidateReaderBoundary, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
+import { browserObservation } from '../../../session';
+import {
+  normalizeSessionObservation,
+  sessionStateSnapshot,
+  unknownSession,
+  type BrowserSession,
+} from '../../../session/browser-state';
 import { csrfHeaders } from '../../../threads/composer';
 import { editorRequest } from '../editor-request';
 import { relationTargetSearch } from '../relation-editor-search';
@@ -9,7 +16,13 @@ import { loadCreditRevision } from './actions';
 import { CreditInspection } from './view';
 import type { CreditAssertion, CreditVisit } from './model';
 
-export const CreditInspectionSession = candidateSession(function CreditInspectionSession({
+function cachedSession(client: ReturnType<typeof useQueryClient>): BrowserSession {
+  const state = sessionStateSnapshot(client);
+  if (!state || state.status !== 'success') return unknownSession;
+  return normalizeSessionObservation(state.data);
+}
+
+function CreditInspectionBody({
   credit,
   visit,
   locale,
@@ -17,9 +30,8 @@ export const CreditInspectionSession = candidateSession(function CreditInspectio
   propertyLabel,
   onClose,
   returnFocus,
+  observed,
 }: {
-  id: string;
-  address: string;
   credit: CreditAssertion;
   visit: CreditVisit;
   locale: string;
@@ -27,23 +39,24 @@ export const CreditInspectionSession = candidateSession(function CreditInspectio
   propertyLabel: string;
   onClose: () => void;
   returnFocus?: (() => HTMLElement | null) | undefined;
+  observed: BrowserSession;
 }) {
   const work = useCatalogueLifetime('credit-inspection');
-  const observed = useSession();
-  const transport = useMemo(
-    () => ({
+  const csrf = observed.csrfToken;
+  const transport = useMemo(() => {
+    const headers = csrf ? { 'X-CSRF-Token': csrf } : csrfHeaders();
+    return {
       read: (slot?: import('../../../subject/relation-candidates').RelationSlot, cursor?: string, session?: string) =>
         readSubjectRelationEditor({
           data: editorRequest({ id: credit.holder, slot, cursor, session }, work),
-          headers: csrfHeaders(),
+          headers,
         }),
       propose: (data: import('../../../subject/relation-candidates').RelationProposal) =>
-        proposeSubjectRelation({ data: editorRequest(data, work), headers: csrfHeaders() }),
+        proposeSubjectRelation({ data: editorRequest(data, work), headers }),
       confirm: (data: import('../../../subject/relation-candidates').RelationConfirmation) =>
-        confirmSubjectRelation({ data: editorRequest(data, work), headers: csrfHeaders() }),
-    }),
-    [credit.holder, work],
-  );
+        confirmSubjectRelation({ data: editorRequest(data, work), headers }),
+    };
+  }, [credit.holder, csrf, work]);
   return (
     <CreditInspection
       credit={credit}
@@ -71,4 +84,54 @@ export const CreditInspectionSession = candidateSession(function CreditInspectio
       }}
     />
   );
-});
+}
+
+/** Public inspect reads the page session cache. It does not start another session fetch. */
+export function CreditInspectionSession({
+  id,
+  address,
+  credit,
+  visit,
+  locale,
+  title,
+  propertyLabel,
+  onClose,
+  returnFocus,
+}: {
+  id: string;
+  address: string;
+  credit: CreditAssertion;
+  visit: CreditVisit;
+  locale: string;
+  title: string;
+  propertyLabel: string;
+  onClose: () => void;
+  returnFocus?: (() => HTMLElement | null) | undefined;
+}) {
+  const client = useQueryClient();
+  const store = browserObservation(client);
+  const revision = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+  const observed = cachedSession(client);
+  const admission = useMemo(
+    () => ({ reader: observed.subject ?? '', live: () => store.getSnapshot() === revision }),
+    [observed.subject, revision, store],
+  );
+  return (
+    <CandidateReaderBoundary
+      admission={admission}
+      observed={observed}
+      address={JSON.stringify([id, locale, address])}
+    >
+      <CreditInspectionBody
+        credit={credit}
+        visit={visit}
+        locale={locale}
+        title={title}
+        propertyLabel={propertyLabel}
+        onClose={onClose}
+        returnFocus={returnFocus}
+        observed={observed}
+      />
+    </CandidateReaderBoundary>
+  );
+}
