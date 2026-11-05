@@ -522,9 +522,9 @@ test('definite removal refusal keeps its wait visible and disables current rows 
     await click(m.settings_watches_stop());
     expect(writes).toBe(1);
     expect(host.textContent).toContain(m.settings_retry_wait());
-    expect(button(m.settings_watches_stop())?.disabled).toBe(true);
+    expect(button(m.settings_watches_stop())).toBeUndefined();
 
-    await click(m.settings_watches_refresh());
+    await click(m.settings_retry());
     expect(host.textContent).toContain(m.settings_retry_wait());
     expect(button(m.settings_watches_stop())?.disabled).toBe(true);
 
