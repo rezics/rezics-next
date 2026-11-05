@@ -197,6 +197,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const notice = useRef<HTMLDivElement>(null);
 
   const retired = useRef(false);
+  const lifetime = useRef(new AbortController());
   const recoveryKind = useRef<TransferRecoveryKind>('none');
   // Only a review created here is known to be unsent. Restored commands may be unresolved.
   const unsent = useRef<TransferAttempt | null>(null);
@@ -254,6 +255,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   function retire(synchronous = true) {
     if (retired.current) return;
     retired.current = true;
+    lifetime.current.abort();
     view.current++;
     fileRead.current++;
     const discardUnsent = unsent.current && JSON.stringify(restoreTransferAttempt()) === JSON.stringify(unsent.current);
@@ -316,7 +318,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setConfirmed(false);
     setRecoveryReviewed(false);
     setNativeAdvice(null);
-    const caller = await loadAccountSession();
+    const caller = await loadAccountSession(lifetime.current.signal);
     if (started !== view.current) return;
     if (caller.kind === 'failure') {
       offerReadRetry(() => validateCaller());
@@ -332,7 +334,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       return;
     }
     if (caller.kind !== 'ready') return;
-    const readiness = await readOperatorTransferPage({ kind: 'readiness' }, owner.accountId);
+    const readiness = await readOperatorTransferPage({ kind: 'readiness' }, owner.accountId, lifetime.current.signal);
     if (started !== view.current) return;
     if (isTransferFailure(readiness)) {
       if (readiness.reason === 'unavailable') offerReadRetry(() => validateCaller());
@@ -380,6 +382,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   useLayoutEffect(() => {
     view.current++;
     retired.current = false;
+    lifetime.current = new AbortController();
     unsent.current = null;
     busy.current = false;
     liveAttempt.current = null;
@@ -422,7 +425,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
 
   async function loadPageSession(supplied?: AccountSessionResult, recover = false): Promise<TransferFailure | void> {
     const started = view.current;
-    const value = await (supplied ?? loadAccountSession());
+    const value = await (supplied ?? loadAccountSession(lifetime.current.signal));
     if (started !== view.current) return;
     setSession(value);
     setNativeReady(false);
@@ -449,6 +452,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     const readiness = await readOperatorTransferPage(
       { kind: 'readiness' },
       value.kind === 'ready' ? value.accountId : undefined,
+      lifetime.current.signal,
     );
     if (started !== view.current) return;
     if (isTransferFailure(readiness)) {
@@ -472,7 +476,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       setRecoveryReviewed(false);
       if (recover && saved.phase !== 'approve') return reviewRecovery(saved);
       if (saved.phase === 'approve') {
-        const advice = await refreshTransferAdvice(saved);
+        const advice = await refreshTransferAdvice(saved, lifetime.current.signal);
         if (
           started !== view.current ||
           retired.current ||
@@ -530,7 +534,11 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       replacedAttemptFeedback();
       return;
     }
-    const relation = await readOperatorRelation(value.request.previous.subjectAccountId, value.accountId);
+    const relation = await readOperatorRelation(
+      value.request.previous.subjectAccountId,
+      value.accountId,
+      lifetime.current.signal,
+    );
     if (started !== view.current || retired.current) return;
     if (stored !== JSON.stringify(restoreTransferAttempt())) {
       replacedAttemptFeedback();
@@ -577,7 +585,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       replacedAttemptFeedback();
       return;
     }
-    const outcome = await readTransferRecovery(value);
+    const outcome = await readTransferRecovery(value, lifetime.current.signal);
     if (started !== view.current || retired.current) return;
     if (stored !== JSON.stringify(restoreTransferAttempt())) {
       replacedAttemptFeedback();
@@ -716,13 +724,18 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       return;
     readPage(async () => {
       const started = view.current;
-      const value = await prepareTransfer(subject.trim(), destination.trim(), session.accountId);
+      const value = await prepareTransfer(
+        subject.trim(),
+        destination.trim(),
+        session.accountId,
+        lifetime.current.signal,
+      );
       if (started !== view.current) return;
       if ('kind' in value) {
         if (value.reason === 'unavailable')
           offerReadRetry(async () => {
             const reading = view.current;
-            const relation = await readOperatorRelation(subject.trim(), session.accountId);
+            const relation = await readOperatorRelation(subject.trim(), session.accountId, lifetime.current.signal);
             if (reading !== view.current) return;
             if (relation.kind !== 'ready') return relation;
             setCurrent(relation.relation);
@@ -769,7 +782,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       return;
     readPage(async () => {
       const started = view.current;
-      const failure = await reviewDestinationTransfer(request, session.accountId);
+      const failure = await reviewDestinationTransfer(request, session.accountId, lifetime.current.signal);
       if (started !== view.current) return;
       if (failure) return failure;
       install({ accountId: session.accountId, request, side: 'destination', phase: 'approve' });
@@ -782,7 +795,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     const selected = attempt;
     readPage(async () => {
       const started = view.current;
-      const failure = await refreshTransferAdvice(selected);
+      const failure = await refreshTransferAdvice(selected, lifetime.current.signal);
       if (started !== view.current) return;
       if (!failure) setNativeAdvice(selected.side);
       return failure ?? undefined;
@@ -792,7 +805,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (value.phase === 'execute' || value.phase === 'readback') return readCurrent(value);
     if (value.phase === 'accepted') return reviewRecovery(value);
     const started = view.current;
-    const failure = await refreshTransferAdvice(value);
+    const failure = await refreshTransferAdvice(value, lifetime.current.signal);
     if (started !== view.current || retired.current) return;
     if (!failure && storedAttemptMatches(value)) {
       setNativeAdvice(value.side);
@@ -814,22 +827,35 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       (attempt.phase === 'execute' && (!recoveryReviewed || nativeAdvice !== 'source'))
     )
       return;
+    if (!storedAttemptMatches(attempt)) {
+      retire();
+      return;
+    }
     const started = view.current;
+    let command = JSON.stringify(liveAttempt.current);
     void perform(async () => {
-      const value = { ...attempt, ...(attempt.side === 'source' ? { acceptance } : {}) };
+      const value = { ...attempt, ...(attempt.side === 'source' && attempt.phase === 'approve' ? { acceptance } : {}) };
       unsent.current = null;
       const outcome = await submitTransferAttempt(
         value,
         (next) => {
-          if (started !== view.current) return false;
+          if (started !== view.current || retired.current) return false;
           liveAttempt.current = { ...next };
+          command = JSON.stringify(liveAttempt.current);
           if (next.phase === 'readback') remember('source-acknowledged');
           setAttempt(liveAttempt.current);
           return storeTransferAttempt(next);
         },
-        () => started === view.current && !retired.current,
+        () => started === view.current && !retired.current && JSON.stringify(liveAttempt.current) === command,
+        lifetime.current.signal,
       );
       if (started !== view.current) return;
+      if (!storedAttemptMatches(liveAttempt.current ?? value)) {
+        // Preserve evidence in generic history, without exposing the replaced command.
+        if (outcome.kind === 'acknowledged') remember('source-acknowledged');
+        retire();
+        return;
+      }
       setConfirmed(false);
       if (outcome.kind === 'failure') {
         showFailure(outcome);
@@ -854,18 +880,28 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     event.preventDefault();
     const started = view.current;
     void perform(async () => {
-      const caller = session?.kind === 'ready' ? session : await loadAccountSession();
+      const caller = session?.kind === 'ready' ? session : await loadAccountSession(lifetime.current.signal);
       if (started !== view.current) return;
       if (caller.kind !== 'ready') {
         showFailure({ kind: 'failure', reason: 'account-changed' });
         return;
       }
-      const outcome = await reauthenticateTransfer(caller.accountId, email, password, () => started === view.current);
+      const outcome = await reauthenticateTransfer(
+        caller.accountId,
+        email,
+        password,
+        () => started === view.current,
+        lifetime.current.signal,
+      );
       if (started !== view.current) return;
       setPassword('');
       if (outcome) showFailure(outcome);
       else {
-        const readiness = await readOperatorTransferPage({ kind: 'readiness' }, caller.accountId);
+        const readiness = await readOperatorTransferPage(
+          { kind: 'readiness' },
+          caller.accountId,
+          lifetime.current.signal,
+        );
         if (started !== view.current) return;
         if (isTransferFailure(readiness)) {
           showFailure(readiness);
@@ -889,6 +925,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
           return;
         }
         retired.current = false;
+        lifetime.current = new AbortController();
         setSession(caller);
         setNativeReady(true);
         setNeedsProof(false);
@@ -932,6 +969,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (busy.current) return;
     // A new read lifetime never reuses a retired callback or its private bindings.
     retired.current = false;
+    lifetime.current = new AbortController();
     fileRead.current++;
     setInvalidContinuation(false);
     setNeedsProof(false);

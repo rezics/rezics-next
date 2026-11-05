@@ -3,6 +3,9 @@ import {
   MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES,
   parseMembershipApprovalResponse,
   parseMembershipExecutionResponse,
+  TRANSFER_APPROVAL_MAX_RESPONSE_BYTES,
+  TRANSFER_EXECUTION_MAX_RESPONSE_BYTES,
+  parseAccountOperationApproval,
 } from '@rezics/auth-contract';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -461,6 +464,16 @@ test('a transfer is approved by the source manager accepted by the destination m
     }),
   );
   expect(result).toEqual({ accountId: subject.accountId });
+  expect(parseAccountOperationApproval(accepted)).toEqual(accepted);
+  expect(JSON.stringify(accepted).length).toBeLessThanOrEqual(ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES);
+  expect(JSON.stringify(result).length).toBe(TRANSFER_EXECUTION_MAX_RESPONSE_BYTES);
+  const replay = await execute(source, {
+    operationKey: key,
+    operation: { kind: 'transfer', ...transfer },
+    reference: sourceApproval.reference,
+    acceptance: accepted.reference,
+  });
+  expect(await done(replay)).toEqual(result);
   expect(
     (
       await kernelPool.query('SELECT operator_account_id::text FROM access.account WHERE route=$1 AND account_id=$2', [
@@ -780,4 +793,47 @@ test('incompatible organization producer output never fabricates a not-applied g
     503,
     { error: 'unavailable' },
   );
+});
+
+test('transfer native seam closes incompatible producer output without asserting not_applied after workflow entry', async () => {
+  const subject = '00000000-0000-7000-8000-000000000001';
+  const service = {
+    verifier: { issuer },
+    internal: {
+      withFreshHuman: async (_: unknown, work: (proof: unknown) => Promise<unknown>) => work({}),
+      accessTokenForProof: async () => 'native',
+    },
+  } as unknown as Parameters<typeof accountOperationTransport>[0];
+  const operation = {
+    kind: 'transfer',
+    previous: { subjectAccountId: subject },
+    expectedVersion: '1',
+    operatorAccountId: subject,
+    acceptance: 'acceptance',
+  };
+  for (const result of [
+    { accountId: subject, expired: true },
+    { accountId: subject, pending: true },
+    { accountId: subject, extra: 'private' },
+    { accountId: 'other' },
+  ]) {
+    const workflows = { transferOperator: async () => result } as unknown as Parameters<
+      typeof accountOperationTransport
+    >[1];
+    const transport = accountOperationTransport(service, workflows, async () => new Response(), {
+      context: () => ({ pool: null, deadline: 0 }),
+      approve: async () => ({ reference: 'reference', expiresAt: new Date().toISOString() }),
+      resolveForCaller: async () => ({}),
+      admitGroup: async () => true,
+    });
+    const response = await transport(
+      new Request(`${issuer}/account-operations/execute`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({ operationKey: 'key', operation, reference: 'reference' }),
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'account_operation_unavailable' });
+  }
 });
