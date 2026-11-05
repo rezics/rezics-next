@@ -12,13 +12,9 @@ export type SlotFamily = 'entry' | 'labels' | 'collections';
 export type SlotLifetime = { seed: string; active: boolean; current: (...operations: Operation[]) => boolean };
 const operations = {
   entry: ['library_entry.get', 'library_entry.put', 'library_entry.delete', 'library_entry.restore'],
-  labels: [
-    'library_label.assignment_list',
-    'library_label.list',
-    'library_label.assign',
-    'library_label.create',
-    'library_label.unassign',
-  ],
+  // The received assignment list has its own lifetime. Picker and write admission are checked at use time so
+  // closing one label action does not hide a still-admitted read or retire another action's private state.
+  labels: ['library_label.assignment_list'],
   collections: ['collection.list', 'collection_member.create'],
 } as const;
 const families = ['entry', 'labels', 'collections'] as const;
@@ -51,6 +47,7 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
     let identity: string | undefined;
     let episode: string | undefined;
     let exposureData: unknown;
+    let previousAdmission: string | undefined;
     let validGates: Partial<Record<SlotFamily, string>> = {};
     let previousGates: Partial<Record<SlotFamily, string>> = {};
     let invalid = false;
@@ -109,7 +106,8 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
           JSON.stringify(operations[family].map((operation) => operationIsAdmitted(operation, admitted))),
         ]),
       );
-      const gateChange = families.some((family) => previousGates[family] !== nextGates[family]);
+      const currentAdmission = JSON.stringify(admitted);
+      const gateChange = currentAdmission !== previousAdmission;
       for (const family of families) {
         const gates = nextGates[family]!;
         if (identityChanged || (changed && !gateChange) || previousGates[family] !== gates) next[family]++;
@@ -125,6 +123,7 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
       identity = nextIdentity;
       episode = nextEpisode;
       exposureData = exposure?.data;
+      previousAdmission = currentAdmission;
       invalid = nextInvalid;
       if (Object.keys(next).some((key) => next[key as keyof typeof next] !== value[key as keyof typeof value]))
         value = next;

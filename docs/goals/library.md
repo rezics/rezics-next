@@ -5,6 +5,8 @@
 People collect subjects, manage private states, labels, progress and holdings, curate or follow Collections and
 explicitly publish only what they choose. Every compatible vertical uses the same definition-driven capability.
 
+Decision: Subject Label removal reviews one supplied assignment's exact identity and name; confirmed removal and Undo keep using the existing native unassign and restore path.
+
 ## Done when
 
 - Curated and built-in Collections share identity, visibility, common members/filtering, ordering where applicable,
