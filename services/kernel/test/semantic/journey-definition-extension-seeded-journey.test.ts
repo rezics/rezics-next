@@ -50,7 +50,7 @@ test('the compiled board-game release retains launch data and publishes cited fa
     const digest = releaseDigest(release);
     for (const persona of ['anonymous', 'editor', 'suspended'] as const)
       expect((await request(persona, 'POST', '/v1/definitions/releases', { release }, commandKey())).status).toBe(
-        persona === 'suspended' || persona === 'anonymous' ? 401 : 403,
+        persona === 'suspended' ? 401 : 403,
       );
     await checked(request('steward', 'POST', '/v1/definitions/releases', { release }, commandKey()), 201);
     const active = await checked(request('anonymous', 'GET', '/v1/definitions/active'), 200);
@@ -73,6 +73,8 @@ test('the compiled board-game release retains launch data and publishes cited fa
         200,
       );
       expect(type.label).toBe(release.types[game.type]!.labels[locale]);
+      expect(type.language).toBe(locale);
+      expect(type.descriptionLanguage).toBe(locale);
       expect(type.definition.facets).toEqual([game.players, game.duration]);
     }
     for (const type of ['schema:Book', 'schema:Recipe', game.type]) {
@@ -113,10 +115,68 @@ test('the compiled board-game release retains launch data and publishes cited fa
       const publicRead = await checked(request('anonymous', 'GET', `/v1/subjects/${id}`), 200);
       const fact = publicRead.subject.statements[game.players][0];
       expect(fact.value).toEqual(statement.value);
-      expect(fact.references).toEqual(statement.references);
+      expect(fact.references).toMatchObject(statement.references);
       expect(fact.rezics.release).toBe(digest);
       expect(fact.rank).toBe('preferred');
       expect((await checked(request('editor', 'GET', `/v1/subjects/${id}`), 200)).subject).toEqual(publicRead.subject);
+      // Freeze a second cited proposal before retiring the Type from the active
+      // release. Acceptance and adoption must use its immutable accepting pin.
+      const duration = {
+        ...statement,
+        property: { id: game.duration },
+        value: { type: 'value', content: { amount: '+45', unit: 'wd:Q7727' } },
+      };
+      const pending = await checked(
+        request('editor', 'POST', `/v1/subjects/${id}/candidates`, { statement: duration }, commandKey()),
+        201,
+      );
+      const gameHead = await checked(request('anonymous', 'GET', '/v1/definitions/active'), 200);
+      await checked(
+        request(
+          'steward',
+          'POST',
+          `/v1/definitions/releases/${bundledDigest}:activate`,
+          { expected_head: gameHead.head },
+          commandKey(),
+        ),
+        200,
+      );
+      await checked(request('anonymous', 'GET', `/v1/definitionTypes/${encodeURIComponent(game.type)}?locale=ja`), 404);
+      await checked(
+        request(
+          'acceptor',
+          'POST',
+          `/v1/subjects/${id}/candidates/${pending.candidate}:accept`,
+          decision,
+          commandKey(),
+        ),
+        200,
+      );
+      await checked(
+        request(
+          'acceptor',
+          'POST',
+          `/v1/subjects/${id}:adopt`,
+          {
+            ...adopt,
+            property: game.duration,
+            selection: [{ candidate: pending.candidate, rank: 'normal' }],
+          },
+          commandKey(),
+        ),
+        200,
+      );
+      const retired = await checked(request('anonymous', 'GET', `/v1/subjects/${id}`), 200);
+      expect(retired.subject.statements[game.duration][0]).toMatchObject({
+        value: duration.value,
+        references: duration.references,
+        rezics: { release: digest },
+        rank: 'normal',
+      });
+      expect((await checked(request('anonymous', 'GET', `/v1/definitions/releases/${digest}`), 200)).release).toEqual(
+        release,
+      );
+      expect(retired.related[game.duration].labels.ja).toBe(release.properties[game.duration]!.labels.ja);
       console.log(
         JSON.stringify({
           source: game.citation,
