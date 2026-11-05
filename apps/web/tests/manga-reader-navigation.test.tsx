@@ -259,7 +259,9 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
     );
     const unselected = host.querySelector('button')!;
     unselected.focus();
-    await act(async () => root.render(createElement(MangaReaderEntry, { ...props, key: 'unselected-focus', source: {} })));
+    await act(async () =>
+      root.render(createElement(MangaReaderEntry, { ...props, key: 'unselected-focus', source: {} })),
+    );
     expect(browser.document.activeElement).not.toBe(host.querySelector('h2'));
   } finally {
     await act(async () => root.unmount());
