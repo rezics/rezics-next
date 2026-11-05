@@ -2053,14 +2053,20 @@ export function createVndbImport(config: Config) {
         review ? nativeVoteView(review.currentVote.state === 'absent' ? null : review.currentVote) : undefined,
       );
     }
+    const live = owner(actor);
+    if (
+      score.commandActor &&
+      (score.commandActor.accountId !== live.accountId || score.commandActor.clientId !== live.clientId)
+    )
+      throw new GrantDeniedError();
     const retry = !!score.commandActor;
     if (!score.commandActor) {
-      const commandActor = structuredClone(owner(actor));
+      const commandActor = structuredClone(live);
       const command = votes.preparePutVote(
-        commandActor,
+        live,
         scoreCommandInput(score),
         score.commandKey,
-        scoreAdmission(commandActor, score),
+        scoreAdmission(live, score),
       );
       const frozen = { ...score, status: 'applying' as const, commandActor, command };
       const started = await mutation(
@@ -2091,14 +2097,14 @@ export function createVndbImport(config: Config) {
       // Pending dispatches may settle their exact receipt without re-admitting a fresh effect.
       // Historical dispatches predate producer-prepared receipt retention.
       const reconciled =
-        retry && score.command ? await votes.reconcilePutVote(score.commandActor!, score.command.receipt) : null;
+        retry && score.command ? await votes.reconcilePutVote(live, score.command.receipt) : null;
       const result =
         reconciled ??
         (await votes.putVoteOutcome(
-          score.commandActor!,
+          live,
           score.command?.input ?? scoreCommandInput(score),
           score.commandKey,
-          scoreAdmission(score.commandActor!, score),
+          scoreAdmission(live, score),
         ));
       if (result.component) record(result.component);
     } catch (error) {
