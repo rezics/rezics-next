@@ -169,4 +169,30 @@ test('filtered page cost stays bounded while matching and nonmatching native pop
     ]);
     assertGrowth(samples, { statements: 'constant', rows: 'constant', blocks: 'logarithmic' });
   }
+
+  const firstMaximum = await commands.listCopies(matchingOwner, {
+    subjectId: target,
+    kind: 'physical',
+    status: 'ordered',
+    limit: 100,
+  });
+  expect(firstMaximum.copies).toHaveLength(100);
+  expect(firstMaximum.next).toBeString();
+  const nextMaximum = await commands.listCopies(matchingOwner, {
+    subjectId: target,
+    kind: 'physical',
+    status: 'ordered',
+    limit: 100,
+    cursor: firstMaximum.next!,
+  });
+  expect(nextMaximum.copies).toHaveLength(100);
+  expect(nextMaximum.next).toBeString();
+  const firstIds = new Set(firstMaximum.copies.map((copy) => copy.id));
+  expect(nextMaximum.copies.every((copy) => !firstIds.has(copy.id))).toBe(true);
+  const lastFirst = firstMaximum.copies.at(-1)!;
+  const firstNext = nextMaximum.copies[0]!;
+  expect(
+    lastFirst.createdAt < firstNext.createdAt ||
+      (lastFirst.createdAt === firstNext.createdAt && lastFirst.id < firstNext.id),
+  ).toBe(true);
 });

@@ -133,6 +133,27 @@ async function restore(id: string, body: { deletionId: string; revision: number 
   return commands.restoreCopy(owner.actor, id, body, key);
 }
 
+test('Undo keeps the retained original subject when its current identity redirects', async () => {
+  const subjects = [await f.createSubject('game'), await f.createSubject('game')].sort();
+  const terminal = subjects[0]!;
+  const original = subjects[1]!;
+  const copy = await commands.createCopy(
+    owner.actor,
+    { subjectId: original, kind: 'installation', status: 'licensed' },
+    entryKey(),
+  );
+  const deletion = await clear(copy);
+  const merged = await f.send('steward', 'POST', '/v1/subjects:merge', { subjects: [original, terminal] });
+  expect(merged.status).toBe(200);
+
+  await expect(restore(copy.value.id, deletion.body)).rejects.toMatchObject({ name: 'LibraryNotFoundError' });
+  expect(await row(copy.value.id)).toMatchObject({
+    subject_id: original,
+    deletion_id: deletion.body.deletionId,
+    revision: deletion.body.revision,
+  });
+});
+
 test('native exact copies retain original pins/times, suppress live facts, and replay only under current authorization', async () => {
   const copy = await made();
   const sibling = await commands.createCopy(
