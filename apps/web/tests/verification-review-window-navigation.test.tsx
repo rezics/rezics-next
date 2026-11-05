@@ -145,11 +145,14 @@ test('review windows browse only admitted targets, retry exact failures, cap his
     const index = lastReadIndex + 1;
     return { index, read: await startRead(index) };
   };
-  const settleRead = async (index: number, result: ReviewRead) => {
+  const resolveRead = async (index: number, result: ReviewRead) => {
     await act(async () => {
       reads[index]!.resolve(result);
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     });
+  };
+  const settleRead = async (index: number, result: ReviewRead) => {
+    await resolveRead(index, result);
     await waitFor(() => expect(host.querySelector('[role="region"]')?.getAttribute('aria-busy')).toBe('false'));
     await waitFor(() => expect(queryClient.isFetching({ queryKey: ['account-verification', 'review'] })).toBe(0));
     await flush();
@@ -249,7 +252,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
     await flush();
     const { index: replacementIndex, read: replacementRead } = await nextRead();
     expect(replacementRead.cursor).toBeUndefined();
-    await settleRead(detachedIndex, ready(reviewerA, 'cursor-obsolete', [pageRow('Obsolete reader data')]));
+    await resolveRead(detachedIndex, ready(reviewerA, 'cursor-obsolete', [pageRow('Obsolete reader data')]));
     expect(host.textContent).not.toContain('Obsolete reader data');
     await settleRead(replacementIndex, ready(reviewerB, 'cursor-b1'));
     expect(host.textContent).not.toContain('Obsolete reader data');
