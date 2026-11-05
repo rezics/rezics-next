@@ -9,6 +9,15 @@ import {
   rawIdentifier,
 } from '../src/features/catalogue/catalogue-file-profile/model';
 import { CatalogueFileProfileEntry } from '../src/features/catalogue/catalogue-file-profile/entry';
+import { CatalogueFileProfileContextUnavailable } from '../src/features/catalogue/catalogue-file-profile/session';
+import {
+  admittedCatalogueFileSelection,
+  catalogueFileCorrectionOriginExpired,
+  catalogueFileCorrectionOriginParam,
+  catalogueFileGlobalHref,
+  parseCatalogueFileCorrectionOrigin,
+  type CatalogueFileCorrectionOrigin,
+} from '../src/features/catalogue/catalogue-file-profile/origin';
 import { RELEASE_ASSOCIATION_LIMIT } from '../src/features/catalogue/release-fidelity/model';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
 import {
@@ -123,6 +132,31 @@ test('file companion entry needs current type admission and eight locales keep t
   );
   expect(html).toContain('/file');
   expect(html).toContain(`fileSource=${catalogueFile}`);
+  expect(html).toContain('Open a fresh Global correction visit');
+  const origin: CatalogueFileCorrectionOrigin = {
+    subject: catalogueFile,
+    type: 'schema:MediaObject',
+    context: admitted.public.subject.context,
+    definition: admitted.digest,
+    returnHref: `/en/subjects/${catalogueFile}/episode-file#catalogue-file-reader`,
+  };
+  const originEntry = renderToStaticMarkup(
+    createElement(CatalogueFileProfileEntry, {
+      id: catalogueFile,
+      type: 'schema:MediaObject',
+      label: 'Episode 1 file A',
+      locale: 'en',
+      release: admitted.release,
+      returnSourceId: catalogueFile,
+      origin,
+    }),
+  );
+  const entryHref = /href="([^"]+)"/u.exec(originEntry)![1]!.replaceAll('&amp;', '&');
+  const entryUrl = new URL(entryHref, 'https://rezics.invalid');
+  expect(parseCatalogueFileCorrectionOrigin(entryUrl.searchParams.get('origin'), 'en', catalogueFile)).toMatchObject({
+    kind: 'valid',
+    origin,
+  });
   expect(
     renderToStaticMarkup(
       createElement(CatalogueFileProfileEntry, {
@@ -149,5 +183,44 @@ test('file companion entry needs current type admission and eight locales keep t
   for (const locale of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const) {
     const text = m.catalogue_file_disclaimer({}, { locale });
     expect(text.length).toBeGreaterThan(20);
+    expect(m.catalogue_file_context_unsupported({}, { locale }).length).toBeGreaterThan(0);
   }
+});
+
+test('correction origin stays bounded and an exact current Global selection expires with its reading', async () => {
+  const page = await catalogueFileProfileFixture('ready').read();
+  if (!page.ok) throw new Error('Expected a current file reading');
+  const statement = page.public.subject.statements['wdt:P4092']![0]!;
+  const origin: CatalogueFileCorrectionOrigin = {
+    subject: page.public.subject.id,
+    type: page.public.subject.type,
+    context: page.public.subject.context,
+    definition: page.digest,
+    returnHref: `/en/subjects/${catalogueFile}/episode-file#catalogue-file-reader`,
+    selection: { property: 'wdt:P4092', statement: statement.id, holder: page.public.subject.id },
+  };
+  const descriptor = catalogueFileCorrectionOriginParam(origin, 'en', catalogueFile);
+  expect(descriptor).toBeDefined();
+  expect(descriptor!.length).toBeLessThanOrEqual(2048);
+  expect(parseCatalogueFileCorrectionOrigin(descriptor, 'en', catalogueFile)).toMatchObject({ kind: 'valid', origin });
+  expect(admittedCatalogueFileSelection(page, origin)).toEqual({ property: 'wdt:P4092', candidate: statement.id });
+  expect(catalogueFileCorrectionOriginExpired(page, origin)).toBe(false);
+  expect(catalogueFileCorrectionOriginExpired({ ...page, digest: 'changed' }, origin)).toBe(true);
+  expect(parseCatalogueFileCorrectionOrigin('x'.repeat(2049), 'en', catalogueFile).kind).toBe('invalid');
+});
+
+test('selected Context refusal offers a fresh Global visit without the selected origin or locator', () => {
+  const returnHref = `/en/subjects/${catalogueFile}/episode-file#catalogue-file-reader`;
+  const globalHref = catalogueFileGlobalHref(catalogueFile, 'en', catalogueFile, returnHref);
+  const global = new URL(globalHref, 'https://rezics.invalid');
+  expect(global.searchParams.get('fileSource')).toBe(catalogueFile);
+  expect(global.searchParams.get('via')).toBe(returnHref);
+  expect(global.searchParams.has('origin')).toBe(false);
+  expect(global.searchParams.has('property')).toBe(false);
+  const html = renderToStaticMarkup(
+    createElement(CatalogueFileProfileContextUnavailable, { locale: 'en', returnHref, globalHref }),
+  );
+  expect(html).toContain('correction writer supports Global only');
+  expect(html).toContain(`href="${returnHref}"`);
+  expect(html).toContain(`href="${globalHref.replaceAll('&', '&amp;')}"`);
 });

@@ -37,6 +37,11 @@ import {
   type FileStream,
 } from './model';
 import { type CatalogueFileRead, type FileRow } from './read';
+import {
+  admittedCatalogueFileSelection,
+  catalogueFileCorrectionOriginExpired,
+  type CatalogueFileCorrectionOrigin,
+} from './origin';
 
 export type CatalogueFileTransport = {
   read: (stream?: string, cursor?: string, detail?: string, session?: string) => Promise<CatalogueFileRead>;
@@ -88,6 +93,10 @@ function CatalogueFileProfileLive({
   search,
   initialReview,
   returnSourceId,
+  returnHref,
+  origin,
+  originInvalid = false,
+  restartWithoutOrigin = false,
 }: {
   id: string;
   locale: string;
@@ -95,6 +104,10 @@ function CatalogueFileProfileLive({
   search: EntityPickerSearch;
   initialReview?: { property: string; candidate: string } | undefined;
   returnSourceId?: string | undefined;
+  returnHref?: string | undefined;
+  origin?: CatalogueFileCorrectionOrigin | undefined;
+  originInvalid?: boolean | undefined;
+  restartWithoutOrigin?: boolean | undefined;
 }) {
   const headingId = useId();
   const lifetime = useEditorLifetime();
@@ -111,6 +124,7 @@ function CatalogueFileProfileLive({
   const [page, setPage] = useState<Extract<CatalogueFileRead, { ok: true }>>();
   const [failure, setFailure] = useState<Extract<CatalogueFileRead, { ok: false }>>();
   const [busy, setBusy] = useState(false);
+  const [acknowledgedRefresh, setAcknowledgedRefresh] = useState(false);
   const [draft, setDraft] = useState<{
     holder: string;
     slot: RelationSlot;
@@ -178,6 +192,7 @@ function CatalogueFileProfileLive({
         return;
       }
       setPage(value);
+      setAcknowledgedRefresh(false);
       session.current = value.session ?? session.current;
       streamKey.current = value.stream?.key;
       cursor.current = continuation;
@@ -194,6 +209,14 @@ function CatalogueFileProfileLive({
       setBusy(false);
     }
   }
+  async function refreshAcknowledged<T extends { ok: boolean }>(operation: () => Promise<T>): Promise<T> {
+    const result = await operation();
+    if (result.ok) {
+      setAcknowledgedRefresh(true);
+      await load();
+    }
+    return result;
+  }
   useLayoutEffect(() => {
     if (query.data?.ok && !page) {
       setPage(query.data);
@@ -204,7 +227,10 @@ function CatalogueFileProfileLive({
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const href = subjectHref({ id, label: title.text }, locale).href;
   const sourceId = catalogueFileSourceId(returnSourceId);
-  const sourceReturnHref = sourceId ? catalogueFileSourceReturnHref(sourceId, locale) : undefined;
+  const sourceReturnHref = returnHref ?? (sourceId ? catalogueFileSourceReturnHref(sourceId, locale) : undefined);
+  const expiredOrigin = !!(readable && read && origin && catalogueFileCorrectionOriginExpired(read, origin));
+  const originReview = readable && read && origin ? admittedCatalogueFileSelection(read, origin) : undefined;
+  const activeReview = origin ? originReview : readable ? initialReview : undefined;
   const codec = read ? codecProperty(read.release, read.public.subject.type) : undefined;
   const codecEnum = (() => {
     const schema = codec ? read?.release.properties[codec]?.value : undefined;
@@ -227,6 +253,18 @@ function CatalogueFileProfileLive({
           </a>
         </p>
       ) : null}
+      {acknowledgedRefresh && !readable && (
+        <p role="status">{m.catalogue_file_correction_refresh_failed({}, o)}</p>
+      )}
+      {(originInvalid || restartWithoutOrigin || expiredOrigin) && (
+        <p role="status" data-slot="catalogue-file-correction-restart">
+          {originInvalid
+            ? m.catalogue_file_correction_origin_invalid({}, o)
+            : expiredOrigin
+              ? m.catalogue_file_correction_origin_expired({}, o)
+              : m.catalogue_file_correction_origin_missing({}, o)}
+        </p>
+      )}
       {!readable && (
         <div className="flex flex-col gap-4 p-6">
           <ViewHeading label={m.catalogue_file_title({}, o)} headingClassName="font-sans" headingRef={heading} />
@@ -234,9 +272,11 @@ function CatalogueFileProfileLive({
             <EditorFailure reason="unavailable" locale={locale} />
           ) : error ? (
             <p ref={readFailure} tabIndex={-1} role="status">
-              {error.reason === 'invalid'
-                ? m.catalogue_file_not_file({}, o)
-                : m.catalogue_file_episode_concealed({}, o)}
+              {origin && error.reason === 'stale'
+                ? m.catalogue_file_correction_origin_expired({}, o)
+                : error.reason === 'invalid'
+                  ? m.catalogue_file_not_file({}, o)
+                  : m.catalogue_file_episode_concealed({}, o)}
             </p>
           ) : (
             <p role="status">{m.candidate_loading({}, o)}</p>
@@ -481,7 +521,16 @@ function CatalogueFileProfileLive({
                     id={draft.holder}
                     locale={locale}
                     search={search}
-                    transport={transport.relation(draft.holder)}
+                    transport={(() => {
+                      const current = transport.relation(draft.holder);
+                      return {
+                        ...current,
+                        propose: (...args: Parameters<typeof current.propose>) =>
+                          refreshAcknowledged(() => current.propose(...args)),
+                        confirm: (...args: Parameters<typeof current.confirm>) =>
+                          refreshAcknowledged(() => current.confirm(...args)),
+                      };
+                    })()}
                     composition={{
                       statement: draft.statement,
                       slot: draft.slot,
@@ -506,9 +555,20 @@ function CatalogueFileProfileLive({
                   <SubjectFacts
                     initial={{ ok: true, public: read.public, release: read.release, source: null }}
                     locale={locale}
-                    transport={transport.facts}
-                    review={transport.review}
-                    initialReview={initialReview}
+                    transport={{
+                      ...transport.facts,
+                      propose: (...args: Parameters<typeof transport.facts.propose>) =>
+                        refreshAcknowledged(() => transport.facts.propose(...args)),
+                    }}
+                    review={(property, currentSession) => {
+                      const current = transport.review(property, currentSession);
+                      return {
+                        ...current,
+                        confirm: (...args: Parameters<typeof current.confirm>) =>
+                          refreshAcknowledged(() => current.confirm(...args)),
+                      };
+                    }}
+                    initialReview={activeReview}
                     embedded
                     profile={{
                       properties: (current) => fileScalarFields(current.release, current.public.subject.type),
