@@ -127,12 +127,7 @@ rejects incomplete coverage and, when enabled, emits only a closed technical ver
 lists the concrete remaining producer, scope, consumer and routing proof gaps. These local pages do not establish
 Commerce's mandatory unused-account `none` result.
 
-Ordinary record purge is a distinct owner exchange: Semantic's selected `record-purge-authority.ts` owns native
-ordinary deletion/generation/hold/restore validation; Content locks that same opaque authority for its own bytes;
-Accounts' selected `history/record-purge.ts` owns copied history and receiving consumers. Accounts publishes the
-selected signatures, but Semantic's source methods, Content's minimizer and the producer-recorded record-to-copy
-inventory/receiving implementation are unavailable here. Account-role custody or account erasure cannot authorize
-or certify ordinary record purge.
+Ordinary record purge remains a distinct owner exchange: Semantic's `record-purge-authority.ts` validates committed ordinary deletion, and Content and Accounts consume that exact opaque authority for their own bytes and history. Account-role custody or account erasure cannot authorize ordinary purge. Zone cleanup has separate branch admission and Zone CAS ownership; [Zones](zones.md#deletion-restoration-withholding-and-durable-cleanup) records the pending Access grant, Content order-scope and History receipt/outbox/work dispositions without claiming those interfaces are delivered.
 
 ### Access and Auth participants
 

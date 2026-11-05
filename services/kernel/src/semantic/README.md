@@ -10,35 +10,15 @@ Content, Library and Search. The policy and stored-tag behavior remain unchanged
 
 ## Canonical identity boundary
 
-The pure kernel-identity-core leaf inside native Semantic owns mapping DTOs, bounded evidence classification and immutable merge, unmerge and repoint transforms. identity-core/index.ts is its public entry and has no SQL, runtime, command or Access effects. It indexes acquired evidence once and performs O(N) work for at most 100 originals.
+Subject IDs are permanent and never reused. Global subject:create creates revision 1 with its self mapping in the source transaction; import also needs batch authority. Creation is independent of Search, and compact facts do not create another revision target. subject:merge asserts duplicate identity only, with the optional atomic [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition) precondition. Editions, translations and formats remain distinct subjects linked by relations. Durable completion requires mapping and both fixed participants.
 
-Effectful adapters remain in kernel-semantic. The lightweight identity read entry maps native results without loading the store or binding effects; the main store index remains effectful, and callers use the narrow public binding entry. Adapters keep SQL, authorization, independent observations, custody proofs, hashing, pre-arm, admission, publication and jobs. Deferred loading, error identity and function identity remain unchanged. The [identity epoch contract](identity-epoch-contract.md) owns the detailed native schedule and cost.
+The pure kernel-identity-core leaf owns mapping DTOs, bounded evidence classification and immutable merge/unmerge/repoint transforms. Its public entry is identity-core/index.ts: no SQL, runtime, command, Access, environment, clock, randomness or crypto. It indexes acquired evidence once and performs O(N) time/space for at most 100 originals; its four states and reasons are unchanged, and pending never implies self.
 
-No wildcard custody export, new package, module or protocol, second Library resolver, permission cache or baseline exception is introduced.
-Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,
-while `identity-adapters/read.ts` is the lightweight native mapping entry and `identity-adapters/index.ts`
-is the native store entry of the existing `kernel-semantic` adapter module. The existing
-`identity-adapters/identity-epoch-binding.ts` implementation is the exact public binding entry; callers retain the
-same named binding functions, proof objects and WeakMaps.
-Read-only callers use `read.ts` for `readIdentityMappings` and `readIdentityRatingReview`; both avoid loading the store or binding graph. Rating's exact reviewed identity operand and same-home COMMIT participant are documented in [identity-rating-currentness.md](identity-rating-currentness.md).
-The current static edges are `retention -> binding -> retention`, `binding -> index -> binding`,
-`binding -> identity -> retention`, and `reversal -> binding`. Deferred edges are `identity -> binding` for undo and
-lookup and `binding -> identity` for reversal verification. Declaring the existing file adds no node or value edge,
-preserves those static/deferred loads, and leaves `read.ts` and `index.ts` cold-load behavior unchanged. Remove only the
-four replaced Access-to-binding rule 2 exceptions; retain the existing rule 3 cycle records.
-The adapter remains in that module because its admission, closure and participant mechanisms already share native authority.
+Effectful adapters remain in kernel-semantic. The exact entries are identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, and identity-adapters/identity-epoch-binding.ts for the public binding. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings and readIdentityRatingReview stay on read.ts and do not load the store or binding graph; the [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
 
-The core owns mapping DTOs, bounded evidence classification, exact observation values and immutable merge/unmerge/repoint
-transforms. Evidence, requested source homes and the installed support job arrive explicitly. It imports no SQL, runtime,
-command/access authority, environment, clock, randomness or crypto. Its four states and existing reasons are unchanged;
-pending never implies self. Classification indexes the capped acquired evidence once, then uses bounded per-original
-lookups: O(N) time and space for at most 100 originals, without acquisition or query changes.
+Static edges remain retention → binding → retention, binding → index → binding, binding → identity → retention, and reversal → binding. Deferred edges remain identity → binding for undo/lookup and binding → identity for reversal verification. Existing read.ts and index.ts cold-load behavior is unchanged. Remove only the four replaced Access-to-binding rule 2 exceptions; keep rule 3 cycle records. The adapter stays in kernel-semantic because admission, closure and participant mechanisms share its native authority.
 
-Adapters own independent repeatable-read collection, route/home selection, ambient support jobs, SQL, authorization,
-prearm, native receipt hashing, opaque binding proofs, admission and publication. Control home zero remains compatibility
-topology. Compatibility entries retain callers of the former contract/read/store/binding paths. Library keeps originals
-and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps
-lifecycle writes. Native mapping/store/publication/admission and three-scale growth acceptance remain with their owners.
+Adapters own independent repeatable-read collection, route/home selection, support jobs, SQL, authorization, prearm, native receipt hashing, binding proofs, admission and publication. Library keeps originals and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps lifecycle writes. Mapping/store/publication/admission and three-scale growth remain owner acceptance. No wildcard custody export, new package, module, protocol, second Library resolver, permission cache or baseline exception is introduced.
 
 ## Bounded current relation visits
 
@@ -740,8 +720,6 @@ slots; the old SAME256, final replay, alias-window and home-certificate prescrip
 
 ## Identity
 
-Subject IDs permanently name catalogue records and are never reused. Creation requires Global subject:create and installs revision 1 with its self mapping at the source home. Merge requires subject:merge and asserts duplicate identity only; editions, translations and formats remain separate subjects linked by relations.
-
 Native account-context reading brackets anonymous hydration with two repeatable-read observations. Pending, unavailable or differing positive epochs refuse the result. Terminal values grouped by one query do not establish that separate native calls share a snapshot. Native SQL and Access authority remain unchanged.
 
 Mapping and publication retain opaque proofs, exact hash and custody rules, pre-arm, independently observed native state, and resumable jobs. Participant classification remains O(N) for N≤100. Cross-home enrollment, movement and abort remain deferred wherever atomic_guard_unavailable applies; no partial protocol is promised. Detailed execution, SQL and publication custody remain in the [identity epoch contract](identity-epoch-contract.md).
@@ -756,11 +734,6 @@ receipt locator: it cannot publish without the two fixed participant receipts. A
 full positive undo/publication, generation minimization/erasure and inclusive native cost evidence remain
 pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
 
-Subject IDs permanently name catalogue records and are never reused. Creation requires Global `subject:create`
-(and import batch authority where applicable), writes revision 1 and is independent of Search. Compact facts do not create a separate revision target. Merging requires `subject:merge` and asserts
-duplicate identity only; [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition)
-adds an optional atomic precondition. Distinct editions, translations and formats remain separate subjects linked by relations.
-Native revision-1 creation installs the self mapping in its source transaction. Asynchronous merge completion requires mapping and both fixed participants.
 
 ### Durable publication and caller contract
 
@@ -782,7 +755,7 @@ before approval/page/finish/pending-clear. No worker is held through an outage. 
 same intent, never denies review. Access now records immutable account-home decision/reversal intents in the
 original native transaction/receipt and verifies them before releasing the home for admission. The original
 wrappers use the typed native coordinator adapter and require actual mapping and both participant publication.
-The coordinator module is absent in this checkout, so its absence retains retryable work without a successful DTO.
+Current dev includes identity-epoch-coordinator.ts, registered by semantic/work-module.ts. registerIdentityEpochCoordinator wires persisted read/admission, mapping, the configured Search canonical-index and Library private-follow-counts participants, receipt reconciliation, publication and bounded workflow segments of at most 100 pages before yielding and resuming outside a durable step. resumeIdentityEpochJob re-enqueues the original immutable job with return-existing; waitIdentityEpochPublished checks committed native published custody, not SDK success. This confirms installed wiring only: independent native observations, both participant receipts and complete publication acceptance remain required, and unresolved custody/generation evidence stays pending.
 Historical missing custody and consumer-aware source minimization remain pending owner obligations; exact keys,
 delivered guards and integration debt are in the owning contract.
 No queue, public pending DTO, permission change or second operation protocol is introduced.

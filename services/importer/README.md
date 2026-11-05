@@ -74,8 +74,6 @@ Public tags need COPY rows and current reviewed Scheme/Concept bindings. Kana we
 
 Selected-family release seeds read only selected works/releases and current reviewed development-status/platform/medium groups. Reseeds reuse the current seed result, latest verified groups, released states and exact keys. Changed bindings reseed the same plan; missing/retracted classification gaps withhold only that association. Dates, names and editorial choices survive; TBA/unknown never means unreleased.
 
-### Wikidata exact values
-
 ### Selected release context
 
 Only finite selected records and their direct, admitted graph relations enter a showcase plan. Release facts stay on their exact Release or Work identities, and current platform or medium bindings are reread for the selected plan. Source-keyed work links and showcase publication are separate results; neither title matching nor a work-link result establishes publication.
@@ -86,15 +84,90 @@ Bangumi PersonDetail fallback reads only selected actual Persons missing the rel
 
 Content owns media rights, image processing, identity and serving; see [Content covers](../kernel/src/content/README.md#covers). Metadata rights do not license images. A source cover requires rights-holder and via-source credit. Content re-encodes admitted URLs into available media variants; originals are not public. Candidate adoption and current public identity/readback are separate from media completion. Takedown fences the source cover field so refresh cannot restore it.
 
+### Selected source acquisition and publication
+
+Development dump acquisition fixes VNDB to the November 4 archive, SHA-256 and TIMESTAMP documented in
+[local stack](../../docs/development/local-stack.md#cross-media-dump-cache); a rotating dump or older cached manifest
+cannot replace that source generation. General unpinned acquisition remains separate. The existing dump-fetch
+suite covers exact cache reopen, stale-manifest replacement, extraction repair, checksum and timestamp refusal.
+The development wrapper returns and persists acquired `sourceSnapshots` alongside current publication results,
+including an incomplete seed, without exporting private persona data.
+
+External files and third-party responses enter through bounded, provider-specific acquisition. The importer owns source-key and request journals, sealing, replay, current source metadata, publication fences and the recovery of acknowledged or unknown writes. Exact response identity and source revision are retained; malformed or unavailable data yields a bounded omission and never substitutes a different record. Graph traversal and resolved identities come from their existing owners; this importer does not search labels or infer identity from titles or URLs.
+
+A trusted caller supplies selected normalized records and exact released bindings to Conversion. The mapper validates the profile, property, qualifiers, exact citations and current descriptor without acquiring data or authorizing writes. Importer keeps its provider registration revisions and source journals, then prepares only ordinary create and proposal commands. Pending and unknown publication reuses the original sealed response and command identity before any source reacquisition.
+
+Reviewed vocabulary lookup is finite and exact. Current subject, source identifier, selected candidate and disclosure checks determine whether a binding can be reused; local journal identifiers are read anchors only. No label search, catalogue scan or fallback resolver is added. Current native actions authorize acceptance and adoption, which remain separate from proposal acknowledgement and independent public readback.
+
 ### Common journal, replay and graph publication
 
 The common publisher records exact create and proposal request bodies before sending and stores native IDs only after acknowledged responses. Pending or unknown sends retain the sealed response evidence and unresolved command/key. Reopen replays that exact request before source reacquisition; a changed terminal response receives a distinct immutable receipt. Current source and tuple-home fences are checked before replay and publication. Unavailable, refused and fenced outcomes are not success; retryable 503/429 responses remain bounded.
 
-Canonical Person identifier checks belong to common showcase publication. A Person or Organization binding must reconcile the selected source key, current Subject and database binding before dependent creator or voice credits can publish. A missing, ambiguous, pending or unknown identity withholds dependent credits while independent facts remain eligible. Visible names, overlapping credits or prereads do not establish identity.
+Canonical Person identifier checks belong to common showcase publication. A Person or Organization binding must reconcile the selected source key, current Subject and database binding before dependent creator or voice credits can publish. A missing, ambiguous, pending or unknown identity withholds dependent credits while independent facts remain eligible.
+
+### Reuse reviewed Person identity across provider credits
+
+Bangumi `person:N` and VNDB `sN` remain separate source identities until a reviewer confirms them with independent
+public evidence. Names and overlapping credits only help locate candidates. Credit publication checks the current
+Person for the exact provider identifier; a missing, conflicting, or non-Person identity withholds that provider's
+credits. Durable import bindings and work citations keep their original provider keys after a canonical merge.
+
+Decision: the existing seed result carries private `personReviewSources` with the admitted source record, exact
+converter digest/revision and original bound UUID, independently of current canonical reads. The existing persona
+composition receives that same result. `selectPersonReviewPair` selects exact provider keys for comparison and
+reports absent records; it neither infers a human bridge nor confirms a merge. Only current exact identifier reads
+enable credits. The handoff does not claim pinned archive verification or coherent native review evidence.
+
+The selected acquisition pair is Bangumi `person:1916` and VNDB `s224` (Jun Maeda). The independently retrieved
+[CDJournal profile](https://artist.cdjournal.com/a/maeda-jun/842760) corroborates the pinned records' birth date
+(1975-01-03), Mie birthplace, legal name and Key affiliation. This supports choosing one human for deliberate
+review; names or overlapping credits alone do not. The source retains Bangumi `麻枝准`, VNDB preferred alias
+`28069` (`前田 純`, `Maeda Jun`) and credited alias `386` (`麻枝 准`, `Maeda Jun`) separately.
+
+Pinned acquisition uses the existing dump operator/cache: Bangumi `dump-2026-10-20.210332Z.zip`
+(`9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93`) and VNDB `vndb-db-2026-11-04.tar.zst`
+(`fadbe611c4d6475ef63a0c1861512bc9ff64d21c6c9804a988522c7c65f6fa85`). Selected rows are Bangumi person1916 and
+subject-persons `(1851,1916)` positions32/31/10/6/3/1, plus VNDB staff s224, staff_alias386/28069 and
+vn_staff `(v4,386)` scenario/music/staff. The scenario note remains
+`Common route, Nagisa, Fuuko, Tomoyo, Misae, first half of Yukine, After Story routes`.
+The sole seed result's `personReview` returns the selected pair or exact missing keys, with the independent citation;
+`sourceDigests` retains actual table digests. Original UUIDs come only from acknowledged native bindings. Visible names, overlapping credits or prereads do not establish identity.
 
 Candidate acceptance and adoption are separately authorized native actions. Adoption uses exact candidate IDs and preserves unrelated editorial choices. Independent current reads verify subject identities, endpoints, statements, qualifiers, source citations and reader routes. Literary conversion proposals do not establish native acceptance or readback; those remain independent stages. A changed or hidden dependency withholds only its dependent result.
 
 Graph publication is limited to selected direct edges and current selected endpoints. It retains the existing 8,192-edge, 8 MiB total and 1 MiB per-edge caps; overflow is a bounded gap. The publisher reads exact current identities and complete relation statements after separate review and adoption. Exact tag keys, spoiler qualifiers, source request identity and receipt identity remain sealed through refresh and recovery.
+
+### Selected showcase publication
+
+`task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
+
+The development wrapper mounts the existing [private VNDB list preview](../../docs/development/local-stack.md#upload-the-development-personas-private-vndb-list)
+through the authenticated generated Kernel client and common showcase journal. Missing private input is unavailable;
+the report carries only the actual upload UUID and row count, never inferred personal activity or export contents.
+
+[Seed denial diagnostics](seed-diagnostics.md).
+
+Selected Bangumi synopsis proposals use the exact source record and document snapshot, keep the converter's `und`
+language and CC-BY-SA-3.0 attribution and ShareAlike obligations, and remain private until the matching candidate is
+accepted and selected for Global. The common publisher rereads the exact subject, candidate, rights and source citation
+before acceptance, then checks the public statement and authored document separately; an unadopted proposal never
+becomes public synopsis text.
+
+Ordinary imports prepare proposals only. Selected showcase plans reuse the source records, current bindings and common journal; they do not add a second converter, publisher or identity resolver. Source records retain exact keys, source and converter digests, selected candidate identities and caller routes. Current facts fences apply to unchanged and cached results as well as refreshes.
+
+Creator and voice candidates retain their exact selected source relationships, credited Person identity and released role qualifiers. Candidate preparation withholds a dependent credit when current source-to-Person reconciliation fails; it does not suppress unrelated facts. Source aggregate weights, votes or ranks are not native votes, confidence, acceptance, adoption or publication.
+
+Publication accepts each selected candidate through the existing review API, adopts only those exact IDs, preserves previous selections, and independently reads back the current public identity and complete statement. Literary native acceptance and readback remain separate from conversion and candidate preparation. Unsupported records, malformed fields and unavailable third-party responses produce bounded omissions without substituting guessed values.
+
+Book, Manga, Person, Character and game-specific values follow the mappings in [Conversion](../../packages/conversion/README.md). The importer keeps PersonDetail acquisition bounds in [Cost](#cost); acquisition and publication prose does not redefine those mappings.
+
+## Native execution boundary
+
+Importer prepares source records and candidate commands through its bounded APIs. Native runtime, authorization, command execution and public acceptance remain Kernel-owned. Source conversion, native acceptance, adoption and independent readback are separate stages. The [Imports capability acceptance map](../../docs/goals/imports.capabilities.md) describes coverage without recording prior attempt results here.
+
+Decision: reviewed Person merges remain bound to the generated asynchronous admission contract. A paired original-identity read only prepares explicit confirmation; HTTP 202 admission starts separate publication and current public readback. A synchronous HTTP 200 merge result or an application-side reread cannot stand in for that boundary, so dependent credits stay withheld until current identity and independent reads establish publication.
+
+Generate and bind the producer's read, query, merge and error types together when its asynchronous admission and independent publication routes are available. Until then, retain the original source bindings and sealed records; do not simulate the missing admission with a local response type or treat a synchronous merge as publication.
 
 ## Deletion
 
@@ -110,7 +183,6 @@ R is source records, B binding/journal rows, N input bytes, M record/request/res
 - **Bound:** requests are sequential with a 250 ms gap under the shared deadline; each response is at most 64 KiB and contains at most seven bounded careers. No archive revision is invented.
 - **Growth check:** services/importer/tests/showcase-bangumi-person-careers.test.ts covers archive precedence, receipt, malformed response and sealed replay; services/kernel/test/imports/bangumi-person-careers.test.ts covers review/adoption and current reads. Native execution remains integration-owned.
 
-### Cost: selected showcase media acquisition and publication
 
 ### Interrupted source acquisition cleanup
 
@@ -217,34 +289,6 @@ At most 64 credit rows, 511 role Concepts plus one Scheme, 512 vocabulary record
 ### Identify an imported VNDB contributor by preferred and additional source names
 
 At most 64 selected names and 65 name commands including the identifier.
-
-### Reuse reviewed Person identity across provider credits
-
-Bangumi `person:N` and VNDB `sN` remain separate source identities until a reviewer confirms them with independent
-public evidence. Names and overlapping credits only help locate candidates. Credit publication checks the current
-Person for the exact provider identifier; a missing, conflicting, or non-Person identity withholds that provider's
-credits. Durable import bindings and work citations keep their original provider keys after a canonical merge.
-
-Decision: the existing seed result carries private `personReviewSources` with the admitted source record, exact
-converter digest/revision and original bound UUID, independently of current canonical reads. The existing persona
-composition receives that same result. `selectPersonReviewPair` selects exact provider keys for comparison and
-reports absent records; it neither infers a human bridge nor confirms a merge. Only current exact identifier reads
-enable credits. The handoff does not claim pinned archive verification or coherent native review evidence.
-
-The selected acquisition pair is Bangumi `person:1916` and VNDB `s224` (Jun Maeda). The independently retrieved
-[CDJournal profile](https://artist.cdjournal.com/a/maeda-jun/842760) corroborates the pinned records' birth date
-(1975-01-03), Mie birthplace, legal name and Key affiliation. This supports choosing one human for deliberate
-review; names or overlapping credits alone do not. The source retains Bangumi `麻枝准`, VNDB preferred alias
-`28069` (`前田 純`, `Maeda Jun`) and credited alias `386` (`麻枝 准`, `Maeda Jun`) separately.
-
-Pinned acquisition uses the existing dump operator/cache: Bangumi `dump-2026-10-20.210332Z.zip`
-(`9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93`) and VNDB `vndb-db-2026-11-04.tar.zst`
-(`fadbe611c4d6475ef63a0c1861512bc9ff64d21c6c9804a988522c7c65f6fa85`). Selected rows are Bangumi person1916 and
-subject-persons `(1851,1916)` positions32/31/10/6/3/1, plus VNDB staff s224, staff_alias386/28069 and
-vn_staff `(v4,386)` scenario/music/staff. The scenario note remains
-`Common route, Nagisa, Fuuko, Tomoyo, Misae, first half of Yukine, After Story routes`.
-The sole seed result's `personReview` returns the selected pair or exact missing keys, with the independent citation;
-`sourceDigests` retains actual table digests. Original UUIDs come only from acknowledged native bindings.
 
 ### Import authored VNDB contributor, producer and release websites
 
@@ -426,50 +470,3 @@ When deferred cover recovery finds a currently bound candidate whose exact comma
 
 Bound: Run-store and resolver descriptor validation examines O(K) own keys supplied by the caller, the changes side of the O(changes × log stored N) criterion; this work is independent of stored R/B/H and catalogue/history. Direct in-process callers pay for the objects their code builds, so validation does not reject an arbitrarily wide host object in constant time or cap its pre-validation allocation. External source records are guarded at 1 MiB (256 KiB default), parsed API responses at 1 MiB, and public envelopes and binding snapshots at 65,536 bytes. Private record plans remain capped at 2 MiB and are not public envelopes.
 The concrete media resolver bounds calls and scheduled waits per invocation, while injected coordinator providers and repeated run invocations have no lifetime API-call bound.
-
-## Native execution boundary
-
-Importer prepares source records and candidate commands through its bounded APIs. Native runtime, authorization, command execution and public acceptance remain Kernel-owned. Source conversion, native acceptance, adoption and independent readback are separate stages. The [Imports capability acceptance map](../../docs/goals/imports.capabilities.md) describes coverage without recording prior attempt results here.
-
-Decision: reviewed Person merges remain bound to the generated asynchronous admission contract. A paired original-identity read only prepares explicit confirmation; HTTP 202 admission starts separate publication and current public readback. A synchronous HTTP 200 merge result or an application-side reread cannot stand in for that boundary, so dependent credits stay withheld until current identity and independent reads establish publication.
-
-Generate and bind the producer's read, query, merge and error types together when its asynchronous admission and independent publication routes are available. Until then, retain the original source bindings and sealed records; do not simulate the missing admission with a local response type or treat a synchronous merge as publication.
-
-## Selected source acquisition and publication
-
-Development dump acquisition fixes VNDB to the November 4 archive, SHA-256 and TIMESTAMP documented in
-[local stack](../../docs/development/local-stack.md#cross-media-dump-cache); a rotating dump or older cached manifest
-cannot replace that source generation. General unpinned acquisition remains separate. The existing dump-fetch
-suite covers exact cache reopen, stale-manifest replacement, extraction repair, checksum and timestamp refusal.
-The development wrapper returns and persists acquired `sourceSnapshots` alongside current publication results,
-including an incomplete seed, without exporting private persona data.
-
-External files and third-party responses enter through bounded, provider-specific acquisition. The importer owns source-key and request journals, sealing, replay, current source metadata, publication fences and the recovery of acknowledged or unknown writes. Exact response identity and source revision are retained; malformed or unavailable data yields a bounded omission and never substitutes a different record. Graph traversal and resolved identities come from their existing owners; this importer does not search labels or infer identity from titles or URLs.
-
-A trusted caller supplies selected normalized records and exact released bindings to Conversion. The mapper validates the profile, property, qualifiers, exact citations and current descriptor without acquiring data or authorizing writes. Importer keeps its provider registration revisions and source journals, then prepares only ordinary create and proposal commands. Pending and unknown publication reuses the original sealed response and command identity before any source reacquisition.
-
-Reviewed vocabulary lookup is finite and exact. Current subject, source identifier, selected candidate and disclosure checks determine whether a binding can be reused; local journal identifiers are read anchors only. No label search, catalogue scan or fallback resolver is added. Current native actions authorize acceptance and adoption, which remain separate from proposal acknowledgement and independent public readback.
-
-## Selected showcase publication
-
-`task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
-
-The development wrapper mounts the existing [private VNDB list preview](../../docs/development/local-stack.md#upload-the-development-personas-private-vndb-list)
-through the authenticated generated Kernel client and common showcase journal. Missing private input is unavailable;
-the report carries only the actual upload UUID and row count, never inferred personal activity or export contents.
-
-[Seed denial diagnostics](seed-diagnostics.md).
-
-Selected Bangumi synopsis proposals use the exact source record and document snapshot, keep the converter's `und`
-language and CC-BY-SA-3.0 attribution and ShareAlike obligations, and remain private until the matching candidate is
-accepted and selected for Global. The common publisher rereads the exact subject, candidate, rights and source citation
-before acceptance, then checks the public statement and authored document separately; an unadopted proposal never
-becomes public synopsis text.
-
-Ordinary imports prepare proposals only. Selected showcase plans reuse the source records, current bindings and common journal; they do not add a second converter, publisher or identity resolver. Source records retain exact keys, source and converter digests, selected candidate identities and caller routes. Current facts fences apply to unchanged and cached results as well as refreshes.
-
-Creator and voice candidates retain their exact selected source relationships, credited Person identity and released role qualifiers. Candidate preparation withholds a dependent credit when current source-to-Person reconciliation fails; it does not suppress unrelated facts. Source aggregate weights, votes or ranks are not native votes, confidence, acceptance, adoption or publication.
-
-Publication accepts each selected candidate through the existing review API, adopts only those exact IDs, preserves previous selections, and independently reads back the current public identity and complete statement. Literary native acceptance and readback remain separate from conversion and candidate preparation. Unsupported records, malformed fields and unavailable third-party responses produce bounded omissions without substituting guessed values.
-
-Book, Manga, Person, Character and game-specific values follow the mappings in [Conversion](../../packages/conversion/README.md). The importer keeps PersonDetail acquisition bounds in [Cost](#cost); acquisition and publication prose does not redefine those mappings.

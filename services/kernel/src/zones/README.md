@@ -73,22 +73,9 @@ hidden source ordinals are read or retained.
 
 ## Owner dependencies and verification boundary
 
-The selected declarations now exist in `../search/scope-ordered.ts` and are re-exported by `scope-source.ts`:
-`ScopeNativeOrder`, name/count tuples, ordered prepare controls, and `orderedPrefix` with covered range, work and
-public cost. In this input, `scope-source.ts` ordered `prepare` and `orderedPrefix` validate these requests then
-return unavailability. Their first actual native bodies/preparation/physical/current-source implementation remains
-a Search dependency. The consumer calls those exact methods and cannot turn their declaration into readiness.
-Existing underlying Source `metadata_missing` also remains honest. There is no alternate ordered engine here.
+Search has native ordered preparation and orderedPrefix bodies. They restore/capture complete observations, validate privacy-reduction coverage and currentness, read bounded ordered rows, verify native hits and revalidate before return. Collection input additionally requires a complete bounded population and current membership. Missing source or privacy evidence and unaffordable work still produce readiness; this implementation does not prove every ordered journey.
 
-The existing acceptance case in `test/zones/static-page-runtime.test.ts` names this composition and uses the same
-released fixture/governor setup, actual curated Source, duplicate Book occurrences and a reread current header.
-It follows real 202 to a complete page and compares owner name/count results, direct membership and source removal.
-`outcome-driver.ts` already admits only `zone_sources` through explicit closed `setup.openFeatures`; default
-openings and ungranted 403 assertions remain unchanged. Existing acceptance tests are not rewritten.
-
-Local delivery runs Kernel typing only. Native six-surface, Source publication, physical/growth, privacy repair,
-GET lists, withholding/purge/account cleanup and worker/default-world completion remain their existing obligations;
-source integration does not certify them. No external reference implementation is named by this contract.
+The native Subject GET design is owned by [Zones](../../../../docs/zones.md#routes-and-native-declarations) and [Zone membership](../../../../docs/zone-membership.md). It is not mounted; sparse preparation, replay, generated installed client, native API and growth acceptance remain pending. Zone cleanup follows the [adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup). Proposed prepareZoneCleanup and lockZoneCleanup are not callable exports; the current ordinary record authority remains unchanged. Native six-surface, source publication, physical/growth, privacy repair, withholding, purge, account cleanup and default-world outcomes are not established by helper setup or type evidence.
 
 ## Authored names
 

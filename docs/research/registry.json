@@ -713,6 +713,13 @@
       "decision": "docs/architecture.md#modules-and-boundaries"
     },
     {
+      "path": "docs/research/exact-sources-public-binding.md",
+      "topic": "exact-sources-public-binding",
+      "researcher": "unknown",
+      "state": "adopted",
+      "decision": "docs/subject-pages.md#choose-a-supplied-work-synopsis"
+    },
+    {
       "path": "docs/research/first-scope-remaining-backlog.md",
       "topic": "first-scope-remaining-backlog",
       "researcher": "unknown",
@@ -1374,6 +1381,13 @@
       "state": "open"
     },
     {
+      "path": "docs/research/merge-reviewed-identity-atomic-boundary.md",
+      "topic": "merge-reviewed-identity-atomic-boundary",
+      "researcher": "codex",
+      "state": "adopted",
+      "decision": "services/kernel/src/semantic/identity-epoch-contract.md#reviewed-person-identity-precondition"
+    },
+    {
       "path": "docs/research/native-eligible-key-index-design.md",
       "topic": "native-eligible-key-index-design",
       "researcher": "unknown",
@@ -1850,10 +1864,24 @@
       "state": "open"
     },
     {
+      "path": "docs/research/zone-protected-cleanup-transaction.md",
+      "topic": "zone-protected-cleanup-transaction",
+      "researcher": "unknown",
+      "state": "adopted",
+      "decision": "docs/zones.md#deletion-restoration-withholding-and-durable-cleanup"
+    },
+    {
       "path": "docs/research/zone-scopes-and-mounts.md",
       "topic": "zone-scopes-and-mounts",
       "researcher": "unknown",
       "state": "open"
+    },
+    {
+      "path": "docs/research/zone-subject-list-native-contract.md",
+      "topic": "zone-subject-list-native-contract",
+      "researcher": "unknown",
+      "state": "adopted",
+      "decision": "docs/zones.md#routes-and-native-declarations"
     },
     {
       "path": "docs/research/zone-type-list-order-current.md",
@@ -1896,13 +1924,6 @@
       "topic": "zones-site-journey-design",
       "researcher": "unknown",
       "state": "open"
-    },
-    {
-      "path": "docs/research/merge-reviewed-identity-atomic-boundary.md",
-      "topic": "merge-reviewed-identity-atomic-boundary",
-      "researcher": "codex",
-      "state": "adopted",
-      "decision": "services/kernel/src/semantic/identity-epoch-contract.md#reviewed-person-identity-precondition"
     }
   ]
 }

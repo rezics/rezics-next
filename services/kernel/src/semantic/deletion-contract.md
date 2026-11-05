@@ -141,7 +141,8 @@ The opaque authority is held in a private identity registry, never in JSON or a 
 Both reads return actual source version, deletion transaction/time and original expiry, or null only for
 ineligible/stale native lifecycle. A changed/unavailable source home or absent native commit remains an error.
 Hold, restoration, generation and current takedown serialize before removal. This ordinary authority supplies
-no early/legal-order or account-erasure permission.
+no early/legal-order or account-erasure permission. Zone's branch-specific admitted operand and Zone CAS remain a
+separate [Zones-owned contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); its Content order scope, Access grant minimization and History consumer closure are pending owner interfaces, not extensions of this ordinary authority.
 
 Content alone implements `purgeAuthoredFieldForDeletedRecord(tx,authority)` and exact body/binding validation.
 Accounts alone supplies

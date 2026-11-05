@@ -1,5 +1,7 @@
 # Zones
 
+Decision: This owner edit adopts the Zone cleanup and default-profile Subject GET contracts, consolidates the linked Identity/importer and synopsis Sources owners, and records design only; required native delivery remains pending.
+
 A Zone is an owner-controlled routed site over saved catalogue scopes and mounted Collections. It uses the
 one catalogue, the one Collection model and the common composition renderer. It is neither a Realm nor a
 Space, grants no rights in its sources, and creates no vertical-specific backend. This document owns the
@@ -191,7 +193,7 @@ to `invalid_format`, prefixed with `/configuration`. Unknown envelope fields use
 | `PUT /v1/zones/{id}/configuration`              | `ConfigureZone` → 200 `ZoneResponse`                         | `zone:configure`; authenticated                                          |
 | `POST /v1/zones/{id}:publish`                   | `PublishZone` → 200 `ZoneResponse`                           | `zone:publish`; authenticated                                            |
 | `POST /v1/zones/{id}:readPage`                  | `PageRequest` → 200 `ZonePageResponse`                       | `zone:read`, public exposure                                             |
-| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | 200 `{subjects,next}`                                        | `zone:read`, current source Access                                       |
+| `GET /v1/zones/{id}/subjects?limit=&cursor=`    | adopted: 200 `{subjects,next}`, 202 `{next}`, or dependency 503 | `zone:read`, anonymous floor and current source Access; route not mounted |
 | `GET /v1/zones/{id}/collections?limit=&cursor=` | 200 `{collections,next}`                                     | `zone:read`, current source Access                                       |
 | `DELETE /v1/zones/{id}`                         | no body → 200 `ZoneResponse`                                 | `zone:delete`; authenticated                                             |
 | `POST /v1/zones/{id}:restore`                   | `{}` → 200 `ZoneResponse`                                    | current owner role and `zone:restore`; authenticated                     |
@@ -254,10 +256,7 @@ implement scans or an unreviewed query engine to fill this dependency. Refer als
 ## Configuration, publication and Access
 
 The resource base mounts create, metadata, owned listing, configuration, publish, delete and restore.
-The single mounted `readPage` runtime composes static documents and native source union/current-membership
-providers. Native ordered provider bodies remain dependencies described in the
-[runtime inventory](../services/kernel/src/zones/README.md); GET source lists and destructive lifecycle work
-remain separate implementations.
+The mounted readPage runtime composes static documents and native source union/current-membership providers. The Subject GET is an adopted route design, not a mounted route; its native sparse preparation, replay, generated client and growth proof remain pending. Ordered Scope readiness and destructive lifecycle delivery are described in the [runtime inventory](../services/kernel/src/zones/README.md).
 The code-first `Zone*Schema` exports in `src/zones/contract.ts` define the resource envelopes.
 
 Creation authorizes the parent before touching the new partition. Allocate a routed Zone ID and copy the
@@ -496,156 +495,36 @@ The [shared acceptance matrix](filtered-lists.md#shared-acceptance-matrix) requi
 
 ## Deletion, restoration, withholding and durable cleanup
 
-Delete is soft deletion at authoritative domain time T. Set `deleted_at=T`, `restore_until=T+30 days`,
-retain the previous visibility for restoration, suppress all public and owner page/metadata reads immediately,
-remove discovery eligibility, and leave tombstones in referring systems. The owned deleted listing and
-configuration route may return the current owner's tombstone and retained configuration inside the window; editor
-read/configure grants alone do not bypass deletion. Restore is available only through the current owner role with
-current `zone:restore` and T strictly before `restore_until`; exactly at the deadline it returns 409
-`conflict` even if cleanup has not run. Restoration preserves configuration, prior visibility and all current withholding decisions; it never
-releases a takedown. A purged
-or unknown resource returns 404. Delete does not delete a mounted Collection, catalogue subject or grant
-in another resource. Account erasure has a DIFFERENT clock: confirmation is final in first scope, not a new 30-day
-account grace. The existing `com.rezics.access.account-tombstoned.v1` barrier hands off bounded Zone
-payload cleanup immediately. Private payload is eligible at that barrier, including an individually
-deleted Zone still inside its restore window; account deletion ends its owner restore authority.
-There is no account restore endpoint or synthetic non-human deletion authority here. The consumer
-uses primary owner metadata, current account terminal state and the committed barrier, not creator
-privilege. It must fence writers against payload resurrection and checkpoint cleanup; Access confirmation
-does not wait for physical cleanup. This handoff still respects current takedown retention and legal holds.
+Delete is soft deletion at authoritative time T: retain the original visibility, set restore_until to T+30 days, suppress public page/metadata reads, remove discovery eligibility and leave tombstones in referring systems. Inside the window, only the current owner may read the deleted listing/configuration; read/configure grants alone do not bypass deletion. Delete never removes a mounted Collection, catalogue subject or grant in another resource. Restore requires the current owner role and zone:restore strictly before the original deadline; at the deadline it returns 409 even if cleanup has not run. It preserves configuration, prior visibility and current withholding, never releases a takedown, and unknown/purged resources return 404. Holds do not extend restoreUntil. A restore committed before first destructive CAS cancels deletion-bound work. Once destructive work wins, its CAS advances the Zone revision/lifecycle revision and enters purge_pending. Account erasure is terminal immediately and has no individual restore period.
 
-After an individual Zone's window (or immediately on the terminal account barrier for private payload),
-bounded durable work automatically purges personal/private payload with no platform
-permission or manual action. Remove configuration/documents, labels, mounts, owner/author links and resource grants, historical
-payload and payload-bearing receipt responses. Events/audit retain identifiers and decisions only; no
-page text, original labels, complaint contents, owner link or private source references survive in evidence
-past the applicable window, except material retained under a current takedown or legal hold, kept as
-restricted evidence only. Prefer command receipts that contain only nonpayload outcome references from the outset;
-cleanup must also scrub any responses that originally contained labels. A replay after the window cannot
-resurrect or disclose the erased response. Previously publicly readable (public or unlisted) Zones keep only a nonpersonal ID/type,
-revision, deletion/tombstone state and nonpersonal relation/count skeleton. Always-private
-sites have a personal skeleton (it reveals a private site/owner relationship): erase their whole Zone row
-once no takedown-retained payload or legal hold requires it.
-Do not preserve private mount edges under the name of relations. Whole-row erasure is this narrow exception,
-not the general purge algorithm. Purged public tombstones retain no owner authorization link.
+The committed access.erasure barrier makes private Zone payload eligible immediately, including an individually deleted Zone inside its window; account deletion ends owner restore authority. The consumer uses primary-owner metadata, terminal account state and the committed barrier, not creator privilege or an event alone. Access confirmation does not wait for physical cleanup. Public/unlisted-ever Zones retain a nonpersonal tombstone; always-private rows are removed only after children and protection settle. No ownerless-read exception is added for an active account-retained public Zone.
 
-Legal holds suspend cleanup without changing restore deadlines. Purge requests before the window, and
-legal-order purges of active data, use the separate Platform route; default delete accepts no purge flag.
-Requests commit durable intent; workers recheck a current hold immediately before each destructive batch.
-An unheld automatic batch needs no actor admission; its authority is the committed individual deletion
-and deadline or terminal account barrier. A current takedown excludes its covered original from automatic
-and early privacy purge even after the deadline. Purge uncovered personal/private fields only, retaining
-the minimum protected payload and locator needed for reversal; do not mark covered payload purged.
-Only the explicit `legal_order` intent branch with an order reference can purge that covered original,
-and a legal hold still blocks it. Removing a takedown on an already expired deleted record makes that
-payload eligible for automatic cleanup; it does not create a fresh restore window.
-Failures resume from a sealed source-key continuation. Count examined keys before eligibility/hold filters,
-so a page of held keys cannot cause an unbounded scan. A batch examines at most `limit` source keys plus
-one lookahead; `limit` is 1–100. It must advance past held/ineligible keys while preserving a durable retry
-for holds/deadlines. Completion and per-key effects are idempotent under worker replay and CAS races.
+Takedown withholds only the least necessary original at structurally interpreted RFC 6901 pointers. Covered originals survive ordinary expiry, early privacy and account cleanup, with version-specific array reversal locators retained. Editing rebinds protected originals to the edited configuration; it never guesses a replacement location. Named release removes only its own coverage. Holds block every destructive branch. A takedown uses 1–16 unique pointers into existing configuration fields, validated against the admitted revision and field type before commit. Covered text renders as safe empty text; a covered page/document is omitted and answers 404; a covered label is omitted. Other fields remain readable, and ordinary grants never reveal the retained original. Releasing the same pointers removes only those decisions. Takedown keeps active/deleted state and the existing deletion clock unchanged, creates no destructive work or 30-day clock, and never releases a source fence owned by another module. Events and audit keep IDs and decisions only; restricted evidence retains protected originals and exact reversal locators. Platform intent is committed separately from ordinary delete, with holds rechecked before every destructive batch.
 
-Takedown is separate least-field withholding, never deletion. `fields` has 1–16 unique RFC 6901 pointers
-into configuration (for example `/labels/en` or `/pages/0/document/content/0/props/text`): a label, a page text field, a whole page document, or `""` for the whole resource only
-when nothing smaller serves the notice. Validate existence and allowed field types before committing.
-Store original data unchanged with separate withholding decisions. Covered text renders as empty safe text;
-a withheld document/page is omitted from navigation and answers 404, and a covered label is omitted from
-public labels (the public label map may therefore have fewer than eight keys during withholding). Other
-labels/pages/fields remain readable. Whole-resource withholding answers the normal 404. Never return the
-covered original through public document, navigation, search, metadata, receipt or audit endpoints. Owner
-configuration is restricted evidence; ordinary read grants do not reveal withheld originals. Releasing the
-same pointers removes only those decisions and reveals retained data again. Takedown on an active Zone leaves `state=active`, `deleted_at=null`, `restore_until=null`; on a deleted
-Zone it preserves the existing deletion clock. It schedules no destructive work and starts no 30-day
-clock. Source fences belong to Content: a Zone forwards current source disclosure outcomes, never
-releases a source fence or erases a mounted source to implement its own takedown/purge.
+### Zone cleanup authority and protection
 
-## Storage seams, bounds and implementation splits
+Zone cleanup requires a Zone-only admitted operand, distinct from the unchanged ordinary RecordPurgeAuthority. Its common binding includes the committed intent/barrier, original home and epoch, Zone revision and lifecycle revision, deletion generation, durable progress, and protection revision. Proposed prepareZoneCleanup and lockZoneCleanup interfaces are not delivered callable exports.
 
-Production work belongs in `services/kernel/src/zones/` (`http.ts`, `contract.ts`, `commands.ts`, `reads.ts`,
-`eligibility.ts`, `purge.ts` and colocated SQL) and `services/kernel/db/zones/` with additive migrations.
-Use Zone-home keyed state and page heads, not a vertical table. Account-erasure-triggered `purgeZonePage` must check the real terminal account barrier and primary owner
-metadata before bypassing the individual deadline; merely invoking the worker is never erasure authority.
-The raw-effect acceptance seam is
-`zones.zone(route,zone_id,revision,state,owner_id,configuration,mounts,deleted_at,restore_until)`; the payload
-columns become NULL on a public tombstone. Page/history/withholding storage may be split further but is
-subject to the same payload erasure. The bounded production worker seam is:
+The operand has four branches: ordinary expiry uses the real committed ordinary deletion; early_privacy uses committed Platform intent on a deleted Zone; legal_order uses explicit intent plus a Content-admitted exact Zone/generation/scope/decision reference; terminal_account uses the committed access.erasure identity and barrier, terminal account state, and captured primary-owner evidence. An event, reason string, timestamp or asserted type cannot authorize cleanup. The ordinary authority remains ordinary-only; it grants none of the other branches.
 
-```ts
-purgeZonePage({pool, clock, route, zoneId, cursor, limit}): Promise<{next: string | null}>
-```
+All protection, intent, configuration, account and payload-copy writers lock the exact Zone parent before child rows, including insertion of an absent decision. Hold head, protection, source and copy fences stay locked through destructive COMMIT or ROLLBACK. Recheck current authorization on retry. An already accepted receiving effect pins its source until native release; protection completes after that release while preserving original command custody. This extends existing Zone branch validation and committed completion verification, without creating a protocol, scheduler, receipt family, Source, custodian or foreign-home scope.
 
-It performs a real durable cleanup step using native commands; cursor is opaque and bound to the Zone and
-cleanup generation. The scheduler must use this same step, register it in `src/work/modules.ts`, and persist
-its continuation; tests call the step with a domain clock and inspect actual rows/events/receipts, not a
-simulated model. `next:null` ends this traversal; a held Zone still has a durable wakeup when released.
+Own CAS advances expected progress. Active legal cleanup receives its own generation. The first destructive CAS fences writers, enters purge_pending and preserves deletion identity. Restore that wins before it cancels deletion-bound work; restore never moves the original 30-day deadline. Always-private Zone rows are removed only after children and protection settle; no unbounded cascade or resurrection is allowed. Closed minimal source identity remains after always-private payload removal.
 
-Register additive actions `zone:create/read/configure/publish/delete/restore/purge`, the
-`semantic.zone.owner` role and resource type in existing Access composition. Reuse `moderation:takedown`;
-register no new permission formula. Register event schemas for `com.rezics.zone.{created,configured,published,
-deleted,restored,withheld,withholding_released,purge_requested,purged,hold_changed}.v1` with existing event
-registration. Events carry `{id,revision}` and only the decision metadata needed by consumers; no payload
-or owner ID. Outbox subject is the Zone UUID. Do not emit duplicate events on replay or enqueue a purge on
-takedown. Read/create/update tests must verify ordinary grant initialization, current source checks and
-receipt/outbox raw effects before claiming that the routes are implemented.
+### Bounded cleanup and completion
 
-| Independent task  | Files/callsites and required handoff                                                                                                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Header/ABI first  | Add `src/zones/contract.ts` and `test/zones/header-contract.test.ts`; export the common page schema from `src/presentation/http/pages.ts` as `pageResponse`. Exact exports and focused checks below. No route registration or database work in this split. |
-| Resource commands | Add Zone migration, commands and HTTP metadata/configuration/create/publish/CAS; compose `src/http/kernel.ts`, `src/http/write-rate-routes.ts`, Access resource roles/action declarations and schema derivation. Parent initializer is mandatory.          |
-| Routed page read  | Add Zone read/eligibility and reuse presentation `planReads`/`readPage`, credential/session forwarding and profile lookup. Preserve existing routes and renderer. Depends on query eligibility probe, not on lifecycle worker.                             |
-| Lifecycle         | Add delete/restore/withholding and bounded `purge.ts`/worker registration, account-erasure adapter, receipt/evidence scrubbing and platform authorization. Depends on resource commands, not on Web.                                                       |
-| Native growth     | Exercise fixed reads at 64/512/4096 unrelated Zone/page/history scales through unchanged shared growth capture; constant rows/statements and logarithmic blocks. Add bounded cleanup pages with held/ineligible keys, real CAS races and retry effects.    |
+One invocation selects K+1 raw ordered keys before eligibility or hold filtering, with K=1–100; it processes at most K and retains the lookahead without effects. Keyed durable wakeups avoid wrapping over held populations. Keep separate history, physical-copy, grant and preparation cursors. Share at most 16 payload targets, four history members and one physical copy across the whole invocation, not per selected key.
 
-The resource base keeps one authoritative row in `zones.zone`. `resource-store.ts` owns all row SQL.
-`readZoneHead(client, route, id)` reads an exact point; `lockZoneHead(tx, route, id)` locks the current head.
-`compareAndSetZone(tx, before, next, {at, transactionId})` updates payload/state against both the resource
-and lifecycle revisions. Callers own the surrounding native command transaction, including receipt,
-grants and outbox; these ports never open or commit a transaction. Ordinary mutations retain independent
-withholding, hold and write-fence evidence. New lifecycle writers must use these ports.
-Zones use the owner's route for the bounded `(route, owner_id, state, zone_id)` owned index. Index attribution
-never replaces current owner-role evidence and native Access. Owned cursors also bind the partition epoch
-and position plus the actor's current security snapshot; concurrent writes may require restarting a list.
+Proposed internal byte admission is 1,024 bytes per raw key descriptor, 4,096 per control/progress row and 2,097,152 canonical UTF-8 bytes for one selected current/history payload unit. These are work allowances, not accepted-input caps. Oversized historical material is paged by its custodian. Coverage adds at most 16 × (D+1) indexed existence probes for maximum admitted pointer-token depth D, reserved before effects. Derive BEGIN, settings, COMMIT/ROLLBACK, callbacks, triggers, constraints, empty seeks, authorization, replay, progress, receipt/outbox, rows, points, statements, UTF-8 bytes and engine requests separately; failed attempts remain charged. No complete path price or native pass is established by these reservations.
 
-Read cost follows [Filtered lists](filtered-lists.md#cost), including one internal cost object per page/step and separate shared harness captures. It touches Zone-home metadata and current page points, at most 16 shared reads and 128 TOTAL output slots, and separately
-anchored source Access probes for at most 16 scopes and 16 mounts. No full owner/library/Zone/history scan,
-cross-home SQL join, global count or scan-for-authority. Lifecycle cost is changed keys times index depth
-plus receipt/outbox/ordinary grants in one command partition; cleanup is bounded examined source-key pages.
-Use the existing growth harness accounting unchanged, with native API-created fixtures, not elapsed time
-or worker-provided counters. The expected-red native resource tests name the missing HTTP availability
-assertion before any new-action grants or future-module imports. Their lifecycle checks use the injected
-domain clock, actual retained/erased payload, unchanged outbox on replay and a real bounded purge capture.
-Full scheduler, all held-key growth and concurrent CAS coverage are implementation-task acceptance additions,
-not evidence that the specification tests already prove a running scheduler.
+Completion requires closed source inventory, actual minimized copies, released receiving holds and resolved late effects. Empty traversal is not completion. Public-ever deleted Zones retain only nonpersonal ID/type, revision, deletion/tombstone state and relation/count skeleton; always-private rows disappear after child/protection settlement. Backup expiry is separate. Active account-retained public readability remains an owner policy dependency; add no ownerless-read exception.
 
-Cross-owner dependencies to agree through the manager before implementation: Commerce supplies current
-Collection summary/member Access and built-in dynamic Collection reads without copying personal facts;
-Search/query supplies bounded scope-union eligibility, restricted search and freshness/cursor witnesses;
-Accounts supplies parent/ordinary-role integration, account-erasure continuation and platform admission;
-Content supplies moderation notice/hold evidence retention integration; Web consumes the top-level common
-page wrapper, the preserved path routes and effective tokens. No new route shape changes an existing API:
-all Zone paths are additive. Manager assumptions are explicit: one immediate configuration head (no draft),
-public-only discovery, owner-only index, exact 30-day exclusive restore boundary, always-private skeleton
-removal and publication action controlling visibility only. These choices follow this resource scope and
-must not silently become a new publishing workflow, discovery service or query engine.
+### Storage seams and owner responsibilities
 
-### Small Header/ABI handoff
+The authoritative row remains zones.zone. resource-store.ts owns its SQL: readZoneHead, lockZoneHead and compareAndSetZone bind resource and lifecycle revisions in the surrounding native command. Ordinary mutations retain independent withholding, hold and write-fence evidence. Account-erasure's direct Zone UPDATE and retention's final direct UPDATE must move through this writer; the current ordinary RecordPurgeAuthority predicate and candidate/Context consumers remain unchanged.
 
-The next independent implementation changes exactly `services/kernel/src/zones/contract.ts`,
-`services/kernel/src/presentation/http/pages.ts` (export the existing `pageResponse` unchanged), and
-`services/kernel/test/zones/header-contract.test.ts`. `contract.ts` exports the code-first schema values
-`zonePublicSchema`, `zoneOwnedSchema`, `createZoneSchema`, `configureZoneSchema`,
-`configurationResponseSchema`, `zoneResponseSchema`, `zoneMetadataResponseSchema`, `pageRequestSchema`,
-`zonePageResponseSchema`, `zoneListSchema`, `publishZoneSchema`, `takedownSchema`,
-`releaseTakedownSchema`, `purgeSchema`, and their inferred types named as in the ABI above. Export
-`publicLabelsSchema` for the closed partial safe locale map, and reuse composition validators for the
-saved configuration name map described above; inert starters still require all eight names. The common page schema includes optional `account` for its existing
-account-target responses; the Zone schema excludes that property and permits only Zone page targets.
-Do not mutate the common response schema while deriving the Zone extension.
+Access owns paged resource-grant minimization; Content owns committed order scope and exact reversal evidence; History owns Zone receipt/outbox/work dispositions and physical closure; Accounts supplies the committed terminal barrier, captured owner evidence and its copy minimization. Each exact receiving interface remains pending delivery. Minimize configuration/history/mount/owner/preparation copies through their owners; keep protected originals and reversal locators until their disposition commits. Replay must not restore payload or reveal old receipt responses. No retention or account completion is inferred from an empty cursor or receipt status. Backup expiry remains separate.
 
-A meaningful focused test is `bun run --cwd services/kernel check test/zones/header-contract.test.ts`:
-"Zone header schemas distinguish complete configuration from withheld public labels" validates a real
-book starter with all eight labels as legacy create/configuration input, rejects a missing legacy input locale and an
-unknown locale, accepts an explicit primary name with optional translations, accepts the public shell with `en` withheld, rejects unsafe public labels, and validates
-a top-level common page plus Zone shell while rejecting nested `page`, `account` and private mount fields.
-It also rejects a target naming both route and subject. This can pass before any Zone API/table/query
-implementation exists. Shared `validateZoneStarter` plus resource-layer route validation still enforce
-reserved `subjects`; the header split does not widen the inert composition validator.
+Register Zone lifecycle events through the existing event composition with only ID, revision and needed decision metadata; never owner links or payload. Do not emit a second event on replay or enqueue destructive work on takedown. Owned-resource indexes and cursors remain keyed by Zone home/owner and current security evidence; attribution alone is not authority. Read and preparation bounds follow [Filtered lists](filtered-lists.md#cost): at most 16 shared reads and 128 output slots, with separate current probes for up to 16 scopes and 16 mounts.
+
+Cleanup growth still requires native two-connection COMMIT/ROLLBACK schedules and fixed selected-work growth across 64/512/4096 unrelated Zones and independently growing histories, copies, viewers, preparation and grants. Those outcomes remain unproved by this adoption. The relevant general owner contracts are [Deletion](deletion.md), [semantic deletion](../services/kernel/src/semantic/deletion-contract.md#ordinary-owner-issued-purge-authority) and [History](../services/kernel/src/history/README.md).

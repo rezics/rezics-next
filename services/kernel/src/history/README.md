@@ -475,10 +475,4 @@ The delivered Core lifetime is now bound by the selected adapter and is not a mi
 term. Missing complete partitions still refuse before affected child I/O, and missing
 physical/native enrollment refuses the affected final proof. No complete Account erasure
 or all-copy completion is asserted.
-Focused prepaid callback/declaration and authentic selected-original regressions are
-provided in the History and shared-History context tests. The new native command suite
-exercises the delivered executor binding. The retained older prepaid suite includes a
-historical unconditional-executor-refusal assertion that predates this supported binding;
-it is preserved unchanged under the acceptance-test freeze and needs owner reconciliation.
-Native acceptance remains
-unrun at this source delivery boundary; typechecking does not establish native proof.
+History's Zone responsibility is the disposition of actual Zone receipt, outbox and work consumers, including physical closure of those artifacts. The required branch-aware disposition remains a pending extension of the existing minimizer: it must bind the same generation/version and close only after source inventory, source-set pages, copies, released receiving holds and late effects resolve. No new receipt or ACK family is adopted. See the [Zones cleanup contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); current History support does not assert complete Zone cleanup.

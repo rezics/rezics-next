@@ -2686,76 +2686,35 @@ new tabs still restart honestly. The consumer adds no other handoff, source read
 
 ## Choose a supplied work synopsis
 
-The ordinary About section for Visual Novels (`wd:Q689445`), anime films and series (`schema:Movie` and
-`schema:TVSeries`), and books (`schema:Book`) admits only the already disclosed best-rank `schema:abstract`
-assertions. It groups supplied document languages using their native tags and retains each assertion as a separate
-choice. The default uses the current supported language fallback; an explicit choice does not change the interface
-locale. A language describes the supplied text only. It does not claim source language, authorship, verification or a
-translation relationship. Person and Character pages keep their existing reading owners.
+The About section for Visual Novels (wd:Q689445), anime films and series (schema:Movie and schema:TVSeries), and books (schema:Book) offers only already-disclosed, best-rank schema:abstract assertions. Each document language remains a separate choice; language fallback selects the initial choice without changing interface locale or implying source language, authorship, verification or translation. Person and Character pages keep their existing readers.
 
-The selected document must bind to that Subject, candidate, document ID, digest, language and available state through
-the existing `statementDocument` contract. Filled text requires no request. Selecting a missing body or retrying makes
-one explicit `readPublicSubjectDocument` request; a fresh response repeats the exact binding before display. Empty
-documents remain successful reads. Unavailable references, missing bodies and failed reads stay separate, and a short
-description remains labeled as a separate fallback. Candidate qualifiers and references render only from the selected
-assertion; no page-level source record is attributed to synopsis text. Spoiler disclosure covers both text and evidence.
+A selected document remains bound to its Subject, candidate, document ID, digest, exact language and available state under statementDocument. A filled body needs no request. Selecting a missing body or retrying makes one explicit readPublicSubjectDocument request, whose fresh response must repeat that binding. Empty documents are successful; unavailable references, missing bodies and failed reads remain distinct, and a short description stays labeled as fallback. Qualifiers and references belong to the selected assertion, never a page-level source record. Text and evidence share the whole-association spoiler gate.
 
-Decision: each Summary Retry attempt owns an AbortSignal; replacing its selected target or visit and unmounting retire that signal. A fresh attempt has a new lifetime, and currentness plus the exact document binding still govern settlement.
+Summary Retry owns an AbortSignal. Reader/session, Subject, Context/Realm, release, locale, selection, navigation or unmount retires the attempt; unique attempt identity prevents A/B/A revival and ignores late results even if abort is ignored. Same-language candidates stay separate in native order unless disclosed citation metadata distinguishes them. General Sources and authored-field correction retain only selection, expansion, safe focus and bounded via return intent for the current candidate, digest, language, Subject Context, Realm, locale and observed release. The complete retained address stays within 2,048 characters and 2,048 UTF-8 bytes. It stores no prose, body, credential or editor state and restores only an exact current candidate. General Sources remains independent. Exact selected-synopsis Sources receiving is unsupported until the native and mounted journey below is delivered.
 
-General Sources and the existing authored-field correction route receive a bounded `via` descriptor for the current
-candidate, document digest, language, Subject context, Realm, locale and release when present. It retains only selection,
-expansion and a safe focus target; it contains no prose, body, credentials or editor state. Return restores only an exact
-current candidate match. For general Sources this descriptor is return intent only, never destination identity or
-native admission; exact selected-synopsis Sources receiving is unsupported. Correction links use the page's bounded
-`statementPropose` advice and do not infer authority from public reading.
+### Exact selected-synopsis Sources contract
 
-Decision: Keep same-language synopsis candidates separate and label them by native order unless disclosed citation
-metadata gives a clearer distinction; show evidence only for the selected assertion.
+The adopted comparison binds one original tuple: Subject, holder equal to Subject, schema:abstract, statement, resolved Global Context, Subject release, Content document ID/digest and exact supplied language, plus observed page release/Realm constraints. Fresh native rank/adoption and Subject currentness must still admit that exact tuple. Never substitute a sibling, preferred assertion, replacement document, merged holder or language. The request is comparison intent, not authority.
 
-### Cost
+The adopted producer design compares the original tuple, Content independently admits the exact document under its current rights and source fences, and Semantic revalidates the selected slot before serialization. Return one redacted exact fact plus the freshly admitted Context/release. Document operands, body, identity locators, native revisions and fence evidence stay server-side and never enter DTOs, DOM, accessible names, telemetry or errors. Qualifiers/references come only from the matched statement; an admitted empty citation list remains empty. Do not attach page sourceRecords or a sibling assertion's citations. Content body rights never follow from a citation.
 
-The selector consumes only the existing disclosed Subject assertions and makes no language, reference, paragraph or
-render requests. It admits the complete choice metadata projection up to 256 KiB and 512 entries; larger projections
-make the selector unavailable instead of dropping choices. This Web consumer limit is separate from native statement,
-provenance and document bounds. It retains one selected body, one active explicit read and one bounded return
-descriptor; no cross-visit body cache is added. Composition growth and native producer checks remain separate acceptance.
+Only an exact Global selection is supported; a non-Global Context or Realm is unsupported before Global resolution. Malformed input is invalid, concealed absence is missing, a changed binding is changed, actual denial is denied, and timeout/dependency failure is unavailable. None of these states reveals tuple details. A changed rank, retired assertion, replacement digest/language/document, merge, withheld body or erasure cannot bind another row; a rank change that still admits the exact row requires a new native evaluation. Final Content reference/fence checks remain intact.
+
+The installed projection cannot yet prove this binding: explainSubjectSources redacts document values, omits document/digest/language and resolved Global Context, and may filter a selected non-default language. Exact receiving stays unsupported until the complete native projection, generated client and mounted Sources consumer are delivered. General Sources correction remains independent. Adoption records a design, not native or browser evidence.
+
+### Cost and acceptance bounds
+
+Keep the existing 512-entry and 262,144 UTF-8-byte selector admission; never drop a choice to fit. Native definitions allow 64 properties per Type, 32 slot entries, at most 16 qualifiers and 16 references of 16 parts each. Exact synopsis lookup examines at most the 32 current slot entries and emits one fact; one statement has at most 273 snaks and 256 unique related targets. Charge the full exact component, including labels, against 262,144 UTF-8 bytes. The document body limit remains 2,097,152 bytes and imported source references retain their 128 limit.
+
+One exact attempt uses one Subject operation, one internal Content document admission and one final selected-slot validation, with no per-reference calls or alternative-document search. Existing readPage limits stay 16 native reads, cost 128 and 15 dependent documents; exact lookup does not consume those 15 to search for another synopsis. Definitions use at most two uncached pointer/release reads. SSR and hydration are distinct attempts; together the exact path makes at most six external native requests. Keep Pool concurrency at one. Source-record attribution remains based on actual contributing proof points; no universal 32/128 cap or broader Sources byte limit is inferred.
+
+Retain growth checks at 64/512/4096 irrelevant same-Subject candidates, slot/revision history and source records with selected fact/document/evidence fixed. Require fixed rows/bytes and constant examined rows/statements, logarithmic blocks across native Access/Content/merge homes, and measure removed rows. Repair exercised history, merge support and target fanout within existing authority or refuse before overbudget fanout; do not raise caps.
 
 ### Selected synopsis correction visits
 
-Decision: a synopsis correction visit inspects the exact current Global assertion named by the existing bounded
-return locator. It never substitutes the ordinary language default for an explicit selection. Realm and other
-unsupported Contexts explain the Global-only destination before canonical Global label reads or editor reads;
-return remains a real link to the originating reading. Malformed, duplicate and mismatched visit locators cannot
-start an editor. A separate current Global field link retires the selection and starts an ordinary visit.
+Correction retains the exact validated via locator through authored addresses and refresh/review, but it is intent only. Inspect only the current Global best-rank assertion after matching active release and exact candidate/document/digest/language. Unsupported Context/Realm is explained before Global labels or editor reads; an explicit fresh Global visit drops selection. Inspection creates no draft or action. Authoring still owns current advice, proposals, confirmation and uncertain-result recovery. Replaced visits, including A/B/A, retire old payload and focus; return rereads and restores only an exact current match, otherwise announcing changed/unavailable. The full retained authored search stays within both 2,048 characters and 2,048 UTF-8 bytes; existing 512-entry/262,144-byte metadata and 2,048-character summary-fragment limits remain.
 
-Synopsis correction retains its exact validated `via` through the authored address and its refresh/review transport;
-generic public intent never becomes that operand. The current native Subject, best-rank synopsis admission, active
-Definition release and exact candidate/document/digest/language binding must match before inspection. Failed body
-binding leaves a changed/unavailable view with a deliberate current-field link. Inspection does not initialize an
-editable draft or grant an action; the original authoring controller still owns independent drafts, current native
-advice, proposals, confirmation and uncertain-result recovery. Subject, locale, selection and observed reader changes
-retire the synopsis visit, including A/B/A revisits. The complete retained authored search is charged after encoding
-against both the 2,048-character and 2,048-byte ceilings, while any tighter existing bound remains in force. The
-512-entry, 262,144-byte metadata admission and 2,048-character summary fragment bounds remain unchanged. Generic
-admission adds no native request; a deliberate fresh Global visit runs only the original current authored reads.
-
-The return reading announces a changed or unavailable selection and focuses the current synopsis when the saved
-binding no longer matches. Correction and sign-in hrefs are enclosed by the selected assertion's spoiler gate.
-
-Decision: show the unsupported exact synopsis Sources visit beside the selected evidence controls, with a separately
-named “Visit general Sources” link. The general visit shows independently admitted current Subject facts; it does not
-claim to reopen or verify the selected assertion, document, language or citations. The notice, link and accessible
-text share the whole-association spoiler gate; selected references, qualifiers and the no-citation notice remain.
-Use the existing same-locale Subject/Realm address and bounded immediate return without changing the Sources reader.
-
-Exact Sources receiving remains dependent on the Sources projection owner: `explainSubjectSources` currently
-redacts document values to `somevalue`, omits their document/digest/language binding and omits the Global resolved
-Context. Its language filter can also exclude a selected non-default-language assertion. `SubjectSourcesPage` cannot
-verify the required exact current binding from that result. The Sources reader and route remain unchanged until
-that owner supplies a compatible bounded projection; row indices, citation text and provider provenance cannot
-replace that seam. Future mounted exact receiving requires admitted Context/document/digest/language metadata from
-the existing public contract. Native and browser acceptance remains integration-owned; general navigation and return
-do not establish an exact receiving or native/browser pass.
+The return reading focuses the current synopsis when its saved binding changed. Correction and sign-in links remain inside the selected association's spoiler gate. Imports owns Sources/editor integration, Web owns mounted lifetime/navigation, Semantic owns exact public fact meaning, and Content owns document admission, erasure and publication.
 
 ## Person correction current visit
 

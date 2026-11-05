@@ -243,9 +243,11 @@ refers to retained preparation/current generation, not cached authority, per-lea
 Preserve cursor ownership and codecs. POST uses the existing Search cursor profile for every viewer: timed,
 confidential, bound to stable operation/route, Zone, viewer and request; mutable bases belong inside the encrypted
 position. Valid-shaped unusable progress starts fresh current authorization and returns preparation or a complete
-page; invalid body/query and current denial retain their existing outcomes. GET keeps its existing default profile.
-Search retains native tuple types, stable binding and principal reauthorization. No schema, status/body or codec
-change is authorized here. Current source/fact/grant revocation applies on every continuation.
+page; invalid body/query and current denial retain their existing outcomes. The adopted Subject GET uses the default
+profile and returns a complete page/EOF, retained preparation or dependency readiness; see [Zones](zones.md#routes-and-native-declarations)
+and [Zone membership](zone-membership.md#preserved-transport-and-cursor-ownership). It remains unmounted until its native journey lands.
+Search retains native tuple types, stable binding and principal reauthorization. GET status details are Zone-owned;
+shared current source/fact/grant revocation applies on every continuation.
 
 ## Shared acceptance matrix
 
