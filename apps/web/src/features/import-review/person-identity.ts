@@ -115,7 +115,7 @@ export async function mergePersonComparison(
     ...(signal === undefined ? {} : { fetch: { signal } }),
   });
   if (response.status !== 202 || !response.data) return providerFailure(response.status, response.headers);
-  const admission = response.data as ReviewedPersonAdmission;
+  const admission = response.data as unknown as ReviewedPersonAdmission;
   if (!admission.operation || !uuid.test(admission.operation.id))
     throw new TypeError('Invalid native identity admission');
   return { ok: true, admission };

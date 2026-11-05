@@ -97,7 +97,7 @@ test('a current Person page reflects withdrawn and conflicting identifiers even 
     'wdt:P6298': [statement('8')],
     'wdt:P3180': [statement('s7')],
     'wdt:P725': [statement(uuid(50))],
-  } as ReviewedPersonRead['subject']['statements'];
+  } as unknown as ReviewedPersonRead['subject']['statements'];
   expect(personCrossSourceIdentity(read)).toBe('current');
   delete read.subject.statements['wdt:P3180'];
   expect(personCrossSourceIdentity(read)).toBe('unconfirmed');
