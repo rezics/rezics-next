@@ -55,7 +55,8 @@ that XML. The handle stays outside the URL and browser storage. Native reads rea
 The existing review accepts optional `labels` with exact native source indices and owned ID/revision or proposed
 name targets. Web consumes `tagEvidence`, never tokenizes rendered tags, and shows native selection states before
 confirmation. Apply includes `tags` for an explicitly reviewed selection and preserves omission for status-only
-work. The result shows native per-value outcomes, assignment identities and remaining source indices. A separate
+work. Explicit status deselection survives the saved review and confirmation, so tags can apply independently.
+The result shows native per-value outcomes, assignment identities and remaining source indices. A separate
 exact canonical Subject assignment read reports current facts after acknowledgement and does not settle an
 uncertain dispatch. Encrypted original sender custody is captured before apply; native receipts own replay.
 Native limits, reservations, expiry, authorization and cancellation remain authoritative; see the

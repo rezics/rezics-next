@@ -25,7 +25,7 @@ const { MalImportPortContext } = await import('../src/library/personal-mal-impor
 const { labelReviewRow: row } = await import('../src/library/personal-mal-import/labels.fixture');
 const { admittedFields } = await import('../src/library/personal-mal-import/meaning');
 const { m } = await import('../src/paraglide/messages.js');
-import type { MalImportPort, MalReviewInput } from '../src/library/personal-mal-import/contract';
+import type { MalImportPort } from '../src/library/personal-mal-import/contract';
 const host = document.createElement('div');
 document.body.append(host);
 let root = createRoot(host);
@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 test('native evidence indices and reviewed identities survive explicit selection without parsing display tags', async () => {
-  let saved: MalReviewInput | undefined;
+  let saved: import('../src/library/personal-mal-import/row').RowDraft | undefined;
   await act(() =>
     root.render(
       <MalRowReview
@@ -54,6 +54,14 @@ test('native evidence indices and reviewed identities survive explicit selection
   const save = [...host.querySelectorAll('button')].find((b) => b.textContent === m.library_mal_save_review())!;
   await act(() => save.click());
   expect(saved?.labels).toEqual(row.review!.labels!.selections.map((s) => ({ value: s.value, target: s.target! })));
+  const statusLabel = [...host.querySelectorAll('label')].find(
+    (label) => label.textContent === m.library_mal_select_status(),
+  )!;
+  await act(async () => {
+    statusLabel.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  });
+  await act(() => save.click());
+  expect(saved?.fields).toEqual(['tags']);
   expect(admittedFields(row)).toEqual(['status', 'tags']);
   expect(admittedFields({ ...row, selectedFields: ['tags'] })).toEqual(['tags']);
   expect(admittedFields({ ...row, review: (({ labels, ...review }) => review)(row.review!) })).toEqual(['status']);
