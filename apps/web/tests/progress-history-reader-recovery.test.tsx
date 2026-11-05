@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, Fragment, StrictMode, type ReactNode } from 'react';
+import { act, Fragment, StrictMode, useState, type ReactNode } from 'react';
 import type { ProgressDetailOrigin } from '../src/library/progress-session';
 import type { ProgressChange, ProgressSessionPage as Page } from '../src/library/progress-reads';
 
@@ -66,7 +66,7 @@ mock.module('../src/library/progress-server', () => ({
 }));
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
@@ -137,7 +137,13 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
-  const route = createRootRoute();
+  let shown = initial;
+  let renderPage: () => void;
+  const route = createRootRoute({ component: function Page() {
+    const [, render] = useState(0);
+    renderPage = () => render((value) => value + 1);
+    return <ProgressSessionPage page={shown} logsCursor={cursors.logs} originating={originating} />;
+  } });
   const detail = createRoute({
     getParentRoute: () => route,
     path: '/library/progress/$id',
@@ -149,19 +155,10 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   await router.load();
-  const show = (p = initial) =>
-    act(async () =>
-      root.render(
-        <StrictMode>
-          <QueryClientProvider client={client}>
-          <RouterContextProvider router={router}>
-            <ProgressSessionPage page={p} logsCursor={cursors.logs} originating={originating} />
-          </RouterContextProvider>
-          </QueryClientProvider>
-        </StrictMode>,
-      ),
-    );
-  await show();
+  await act(async () => root.render(
+    <StrictMode><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></StrictMode>,
+  ));
+  const show = (p = initial) => act(async () => { shown = p; renderPage(); });
   const view = within(host as unknown as HTMLElement);
   const region = (kind: 'changes' | 'units') =>
     view.getByRole('region', {
