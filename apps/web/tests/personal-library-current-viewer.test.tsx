@@ -297,7 +297,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     await import('@tanstack/react-router');
   const { PersonalLibraryCurrent } = await import('../src/library/personal-library-current');
   const { Route } = await import('../src/routes/library/index');
-  expect(String(Route.options.component)).toContain('PersonalLibraryCurrent');
+  expect(String(Route.options.component)).toContain('LibraryPresentationBoundary');
   const actions = await import('../src/library/entries-actions');
   const labelActions = await import('../src/library/subject-slot-actions');
   const labelReads = await import('../src/library/labels-actions');
