@@ -59,7 +59,11 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress, win
       const scoped = store.read();
       const subject = scoped.subject;
       const admitted = scoped.allowed;
-      if (live) windows?.bind(JSON.stringify([subject, scoped.viewer, scoped.episodes[0], scoped.episodes[1], scoped.dispatch[0], scoped.dispatch[1]]), boundAddress);
+      if (live) {
+        if (previous && (scoped.dispatch[0] !== value.dispatch[0] || scoped.dispatch[1] !== value.dispatch[1]))
+          windows?.leave();
+        windows?.bind(JSON.stringify([subject, scoped.observation?.id, admitted[0], admitted[1]]), boundAddress);
+      }
       // A nonempty token rotation belongs to the same viewer; loss and subsequent restoration does not.
       const actor = JSON.stringify([subject, scoped.viewer, actual]);
       if (

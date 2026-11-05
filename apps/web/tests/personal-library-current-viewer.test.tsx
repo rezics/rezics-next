@@ -565,7 +565,13 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     const moveWindow = async (label: string, cursor?: string, fail = false) => {
       await act(async () => link(label)!.click());
       expect(windows.pending).toBeDefined();
-      search = { type: 'core:Book', state: 'planned', orderBy: 'createdAt', direction: 'desc', ...(cursor ? { cursor } : {}) };
+      search = {
+        type: 'core:Book',
+        state: 'planned',
+        orderBy: 'createdAt',
+        direction: 'desc',
+        ...(cursor ? { cursor } : {}),
+      };
       const index = pendingReads.length;
       await show(session('C', 'csrf-rotated-again'));
       if (fail) {
@@ -614,7 +620,9 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
       await show(session('D'));
       expect(windows.pending).toBeUndefined();
       expect(windows.previous).toBeUndefined();
-    } finally { navigation.mockRestore(); }
+    } finally {
+      navigation.mockRestore();
+    }
     await show({ state: 'unavailable', csrfToken: null });
     retired('C');
     expect(hydrationErrors).toEqual([]);
