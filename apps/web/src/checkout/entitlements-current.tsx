@@ -1,3 +1,4 @@
+import { useBuyerHistoryFocus, useBuyerHistoryNavigation, type BuyerHistoryNavigation } from './buyer-history-visit';
 import type { PurchaseHistoryPosition } from './purchase-return';
 import { createPurchaseReaderOrigin } from './purchase-return';
 import { useRouter } from '@tanstack/react-router';
@@ -24,6 +25,7 @@ type PageProps<T> = {
   locale: string;
   retry?: () => void;
   continuation?: boolean;
+  navigation?: BuyerHistoryNavigation | undefined;
   history?: PurchaseHistoryPosition | undefined;
   onOpenReader?: (editionId: string, href: string) => boolean;
 };
@@ -138,6 +140,7 @@ function EntitlementsRead<T extends Page>({
   origin,
   history,
 }: CurrentProps<T> & { subject: string; hydrated: boolean; seed: boolean; origin: BuyerCurrentOrigin }) {
+  const navigation = useBuyerHistoryNavigation('entitlements', address.kind === 'list' ? address.cursor : null, address.locale, origin);
   const [lifetime] = useState(() => crypto.randomUUID());
   const router = useRouter();
   const onOpenReader = useCallback(
@@ -172,8 +175,14 @@ function EntitlementsRead<T extends Page>({
       if (!origin.isCurrent()) return null;
       try {
         const value = await read(address);
-        return origin.isCurrent() && matches(value, subject, address) ? { kind: 'accepted', value } : null;
+        if (!origin.isCurrent() || !matches(value, subject, address)) return null;
+        if (address.kind === 'list') {
+          if (value.page.kind === 'ready') navigation.ready();
+          else navigation.failed();
+        }
+        return { kind: 'accepted', value };
       } catch {
+        navigation.failed();
         return origin.isCurrent() ? { kind: 'failed' } : null;
       }
     },
@@ -197,6 +206,8 @@ function EntitlementsRead<T extends Page>({
       page: query.data.kind === 'accepted' ? query.data.value.page : ({ kind: 'unavailable' } as T),
     });
   }
+  useBuyerHistoryFocus(navigation, address.kind === 'list' && display.page.kind === 'ready' && !query.isFetching,
+    display.page.kind !== 'ready' && display.page.kind !== 'preparing');
   const retry = useCallback(() => {
     if (origin.isCurrent()) void query.refetch();
   }, [origin, query.refetch]);
@@ -207,6 +218,7 @@ function EntitlementsRead<T extends Page>({
       continuation={address.kind === 'list' && address.cursor !== null}
       retry={retry}
       history={history}
+      navigation={address.kind === 'list' ? navigation.controls : undefined}
       {...(address.kind === 'detail' ? { onOpenReader } : {})}
     />
   );

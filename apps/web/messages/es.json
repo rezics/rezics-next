@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "Anterior",
+  "buyer_history_first": "Primera",
+  "buyer_history_next": "Siguiente",
+  "buyer_history_retry": "Reintentar",
+  "buyer_history_ready": "Se ha cargado la página actual del historial.",
   "manga_origin_invalid": "Dirección de corrección inválida. Ábrala desde la lectura actual.",
   "manga_origin_unsupported": "El editor Global no admite este Context o Realm.",
   "manga_origin_changed": "El cómic o su Definition ha cambiado. Vuelva a leerlo o abra una nueva corrección Global.",

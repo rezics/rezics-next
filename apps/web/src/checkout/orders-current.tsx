@@ -1,5 +1,6 @@
 import { purchaseHistorySearch, type PurchaseHistoryPosition } from './purchase-return';
 import { orderHistoryAddress, OrderHistoryAddressPage, type OrderHistorySearch } from './order-history-address';
+import { useBuyerHistoryFocus, useBuyerHistoryNavigation } from './buyer-history-visit';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { isNotFound } from '@tanstack/react-router';
@@ -77,6 +78,7 @@ function CurrentOrdersRead({
   origin: BuyerCurrentOrigin;
   history: PurchaseHistoryPosition;
 }) {
+  const navigation = useBuyerHistoryNavigation('orders', address.cursor, address.locale, origin);
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
   const query = useQuery({
@@ -89,6 +91,7 @@ function CurrentOrdersRead({
         data: { ...(address.cursor ? { cursor: address.cursor } : {}), locale: address.locale },
       });
       if (!origin.isCurrent() || !matches(value, subject, address)) throw new Error('Unaccepted order history read');
+      navigation.ready();
       return value;
     },
     initialData,
@@ -99,6 +102,7 @@ function CurrentOrdersRead({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  useBuyerHistoryFocus(navigation, !!query.data && !query.isFetching, query.isError);
   if (hydrated && !origin.isCurrent()) return <PendingPage />;
   if (query.isError || (query.data && !matches(query.data, subject, address)))
     return isNotFound(query.error) ? (
@@ -118,6 +122,7 @@ function CurrentOrdersRead({
       locale={address.locale}
       continuation={address.cursor !== null}
       history={history}
+      navigation={navigation.controls}
     />
   );
 }

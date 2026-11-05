@@ -1,4 +1,9 @@
 {
+  "buyer_history_previous": "Zurück",
+  "buyer_history_first": "Anfang",
+  "buyer_history_next": "Weiter",
+  "buyer_history_retry": "Erneut versuchen",
+  "buyer_history_ready": "Aktuelle Verlaufsseite geladen.",
   "manga_origin_invalid": "Ungültige Korrekturadresse. Öffnen Sie die Korrektur aus der aktuellen Leseansicht.",
   "manga_origin_unsupported": "Dieser Context oder Realm wird vom Global-Editor nicht unterstützt.",
   "manga_origin_changed": "Comic oder Definition geändert. Erneut lesen oder eine neue Global-Korrektur öffnen.",
