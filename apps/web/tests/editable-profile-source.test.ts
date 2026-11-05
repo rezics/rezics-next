@@ -111,6 +111,12 @@ test('the editable source accepts additive envelope fields but rejects malformed
   expect(accepted).toMatchObject({ accountId: profile.id, editing });
   expect(accepted).not.toHaveProperty('permissions');
 
+  const unicodeLinks = [{ label: '😀'.repeat(64), url: 'https://example.test' }];
+  const unicodeClient = createKernelClient('https://kernel.example.test', {
+    fetch: (async () => Response.json({ profile: { ...profile, links: unicodeLinks }, editing })) as typeof fetch,
+  });
+  expect((await loadProfileRecord(unicodeClient, 'Bearer unchanged', profile.id)).links).toEqual(unicodeLinks);
+
   const advice = {
     ...editing,
     fields: { ...editing.fields, displayName: { ...editing.fields.displayName, applicable: false } },

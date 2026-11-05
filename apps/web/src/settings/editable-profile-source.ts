@@ -66,8 +66,8 @@ const fields = {
   links: v.pipe(
     v.array(
       v.strictObject({
-        label: v.pipe(v.string(), v.maxLength(64)),
-        url: v.pipe(v.string(), v.maxLength(2048)),
+        label: v.pipe(v.string(), v.check((value) => Array.from(value).length <= 64)),
+        url: v.pipe(v.string(), v.check((value) => Array.from(value).length <= 2048)),
       }),
     ),
     v.maxLength(5),
