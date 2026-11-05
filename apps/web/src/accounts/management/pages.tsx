@@ -9,6 +9,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { managedAccountHref } from '../../settings/managed-accounts-read';
+import type { WindowNavigation } from './window-route';
 import { issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
 const linkClass =
@@ -91,17 +92,68 @@ function IdentityLink({ account, management = true }: { account: Identity | null
     <Tombstone shape="row" labels={{ unavailable: m.managed_missing_title() }} />
   );
 }
-function Next({ cursor, field, cursors }: { cursor: string | null; field: keyof Cursors; cursors: Cursors }) {
-  const query = new URLSearchParams({ ...cursors, ...(cursor ? { [field]: cursor } : {}) });
-  return cursor ? (
-    <a className={linkClass} rel="next" href={`?${query}`}>
-      {m.managed_next()}
-    </a>
-  ) : null;
-}
-function Responsibilities({ page, cursors }: { page: Inventory['responsibilities']; cursors: Cursors }) {
+function WindowControls({
+  cursor,
+  field,
+  cursors,
+  navigation,
+}: {
+  cursor: string | null;
+  field: keyof Cursors;
+  cursors: Cursors;
+  navigation?: WindowNavigation;
+}) {
+  const previous = navigation?.previous(field);
+  const control = (target: string | undefined, movement: 'next' | 'previous' | 'first', label: string) => {
+    const search = { ...cursors };
+    if (target === undefined) delete search[field];
+    else search[field] = target;
+    return (
+      <a
+        className={linkClass}
+        rel={movement === 'next' ? 'next' : movement === 'previous' ? 'prev' : undefined}
+        href={`?${new URLSearchParams(search)}`}
+        onClick={(event) => navigation?.move(event, field, target, movement)}
+      >
+        {label}
+      </a>
+    );
+  };
   return (
-    <Card>
+    <nav
+      className="flex flex-wrap gap-x-6 gap-y-2"
+      aria-label={
+        field === 'organizationsCursor'
+          ? m.managed_organizations_title()
+          : field === 'membersCursor'
+            ? m.managed_holders_title()
+            : m.managed_operated_title()
+      }
+    >
+      {previous ? control(previous.cursor, 'previous', m.prq_previous()) : null}
+      {cursors[field] ? control(undefined, 'first', m.settings_managed_start_first_page()) : null}
+      {cursor ? control(cursor, 'next', m.managed_next()) : null}
+    </nav>
+  );
+}
+const regionClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+function Responsibilities({
+  page,
+  cursors,
+  navigation,
+}: {
+  page: Inventory['responsibilities'];
+  cursors: Cursors;
+  navigation?: WindowNavigation;
+}) {
+  return (
+    <Card
+      role="region"
+      aria-label={m.managed_operated_title()}
+      tabIndex={-1}
+      data-management-feed="operatorsCursor"
+      className={regionClass}
+    >
       <CardHeader>
         <CardTitle>
           <ContentItemHeading level={2}>{m.managed_operated_title()}</ContentItemHeading>
@@ -139,7 +191,7 @@ function Responsibilities({ page, cursors }: { page: Inventory['responsibilities
         ) : (
           <p className="text-muted-foreground">{m.managed_no_responsibilities()}</p>
         )}
-        <Next cursor={page.next} field="operatorsCursor" cursors={cursors} />
+        <WindowControls navigation={navigation} cursor={page.next} field="operatorsCursor" cursors={cursors} />
       </CardContent>
     </Card>
   );
@@ -148,15 +200,23 @@ export function ManagedAccountsPage({
   page,
   cursors = {},
   retry,
+  navigation,
 }: {
   page: Page<Inventory>;
   cursors?: Cursors;
   retry: () => void;
+  navigation?: WindowNavigation;
 }) {
   if (page.state !== 'ready')
     return (
       <Frame title={m.managed_title()}>
         <Failure page={page} retry={retry} />
+        {page.state !== 'signed-out' &&
+          (['organizationsCursor', 'operatorsCursor', 'membersCursor'] as const)
+            .filter((field) => cursors[field])
+            .map((field) => (
+              <WindowControls key={field} cursor={null} field={field} cursors={cursors} navigation={navigation} />
+            ))}
       </Frame>
     );
   const create = page.organizationsAvailable === true ? issuerPage(page.issuer, '/organizations/new') : null;
@@ -186,7 +246,13 @@ export function ManagedAccountsPage({
           </nav>
         </CardContent>
       </Card>
-      <Card>
+      <Card
+        role="region"
+        aria-label={m.managed_organizations_title()}
+        tabIndex={-1}
+        data-management-feed="organizationsCursor"
+        className={regionClass}
+      >
         <CardHeader>
           <CardTitle>
             <ContentItemHeading level={2}>{m.managed_organizations_title()}</ContentItemHeading>
@@ -221,7 +287,12 @@ export function ManagedAccountsPage({
               {page.value.organizations.next ? m.managed_no_current_page() : m.managed_no_organizations()}
             </p>
           )}
-          <Next cursor={page.value.organizations.next} field="organizationsCursor" cursors={cursors} />
+          <WindowControls
+            navigation={navigation}
+            cursor={page.value.organizations.next}
+            field="organizationsCursor"
+            cursors={cursors}
+          />
           {create ? (
             <a className={linkClass} href={create}>
               {m.managed_create_organization()}
@@ -233,7 +304,7 @@ export function ManagedAccountsPage({
           )}
         </CardContent>
       </Card>
-      <Responsibilities page={page.value.responsibilities} cursors={cursors} />
+      <Responsibilities page={page.value.responsibilities} cursors={cursors} navigation={navigation} />
       <Alert>
         <AlertTitle>{m.managed_automation_title()}</AlertTitle>
         <AlertDescription>{m.managed_automation_unavailable()}</AlertDescription>
@@ -248,15 +319,23 @@ export function AccountManagementPage({
   page,
   cursors = {},
   retry,
+  navigation,
 }: {
   page: Page<Detail>;
   cursors?: Cursors;
   retry: () => void;
+  navigation?: WindowNavigation;
 }) {
   if (page.state !== 'ready')
     return (
       <Frame title={m.managed_detail_title()}>
         <Failure page={page} retry={retry} />
+        {page.state !== 'signed-out' &&
+          (['organizationsCursor', 'operatorsCursor', 'membersCursor'] as const)
+            .filter((field) => cursors[field])
+            .map((field) => (
+              <WindowControls key={field} cursor={null} field={field} cursors={cursors} navigation={navigation} />
+            ))}
       </Frame>
     );
   const value = page.value;
@@ -317,7 +396,13 @@ export function AccountManagementPage({
         </CardContent>
       </Card>
       {value.account.kind === 'organization' ? (
-        <Card>
+        <Card
+          role="region"
+          aria-label={m.managed_holders_title()}
+          tabIndex={-1}
+          data-management-feed="membersCursor"
+          className={regionClass}
+        >
           <CardHeader>
             <CardTitle>
               <ContentItemHeading level={2}>{m.managed_holders_title()}</ContentItemHeading>
@@ -352,11 +437,18 @@ export function AccountManagementPage({
             ) : (
               <p>{m.managed_no_holders()}</p>
             )}
-            <Next cursor={value.members.next} field="membersCursor" cursors={cursors} />
+            <WindowControls
+              navigation={navigation}
+              cursor={value.members.next}
+              field="membersCursor"
+              cursors={cursors}
+            />
           </CardContent>
         </Card>
       ) : null}
-      {value.responsibilities ? <Responsibilities page={value.responsibilities} cursors={cursors} /> : null}
+      {value.responsibilities ? (
+        <Responsibilities page={value.responsibilities} cursors={cursors} navigation={navigation} />
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>

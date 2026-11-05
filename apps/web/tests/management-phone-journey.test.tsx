@@ -183,6 +183,41 @@ test('directory, organization, account and recovery retain independent phone con
         host.dir = dir;
         await mount(directory());
         assertControls();
+        // A direct address has First but no invented Previous; a live visit supplies exact predecessors.
+        expect(host.querySelector('a[rel="prev"]')).toBeNull();
+        for (const view of [
+          <ManagedAccountsPage
+            page={ready(inventory)}
+            cursors={cursors}
+            retry={retry}
+            navigation={{ previous: () => ({ cursor: undefined }), move: () => {} }}
+          />,
+          <AccountManagementPage
+            page={ready(detail)}
+            cursors={cursors}
+            retry={retry}
+            navigation={{ previous: () => ({ cursor: undefined }), move: () => {} }}
+          />,
+        ]) {
+          await mount(view);
+          assertControls();
+          for (const region of host.querySelectorAll('[data-management-feed]')) {
+            const field = region.getAttribute('data-management-feed') as keyof Cursors;
+            const backward = [...region.querySelectorAll<HTMLAnchorElement>('nav a')].filter(
+              (anchor) => anchor.rel !== 'next',
+            );
+            expect(backward.map((anchor) => anchor.textContent)).toEqual([
+              m.prq_previous(),
+              m.settings_managed_start_first_page(),
+            ]);
+            for (const anchor of backward) {
+              const query = new URL(anchor.href).searchParams;
+              expect(query.has(field)).toBe(false);
+              for (const other of Object.keys(cursors) as (keyof Cursors)[])
+                if (other !== field) expect(query.get(other)).toBe(cursors[other]!);
+            }
+          }
+        }
         // Supplied capability, section preparation and page emptiness remain distinct.
         for (const available of [false, null] as const) {
           await mount(directory({ ...ready(inventory), organizationsAvailable: available }));
