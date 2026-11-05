@@ -34,7 +34,7 @@ import {
   zoneOwnerIsActive,
   type ZoneHead,
 } from './resource-store.ts';
-import { changeTakedown, movesWithheldElement } from './takedown.ts';
+import { changeTakedown, changesWithheldValue } from './takedown.ts';
 
 export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'release_takedown';
 
@@ -338,8 +338,8 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
                   ? { ...requested, primaryLanguage: row.configuration.primaryLanguage }
                   : requested;
               const mounts = (input as ZoneConfigureInput).mounts;
-              // A takedown decision cannot follow a moved or edited array element; refuse instead of guessing.
-              if (movesWithheldElement(row, configured, mounts)) throw new ProblemError('conflict');
+              // A decision keeps the only retained original at its pointer; an edit that changes that value is refused.
+              if (changesWithheldValue(row, configured, mounts)) throw new ProblemError('conflict');
               next.configuration = configured;
               next.mounts = mounts;
               next.releaseDigest = configuration!.releaseDigest;

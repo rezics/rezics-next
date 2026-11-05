@@ -158,7 +158,7 @@ test('takedown is platform-only, names existing fields, and stale or repeated de
   expect(row!.owner_id).toBeTruthy();
 });
 
-test('configuration cannot move or replace a withheld array element, but unrelated fields still save', async () => {
+test('configuration cannot change a withheld value, unrelated fields still save, and delegates read no configuration', async () => {
   const body = createBody();
   body.configuration.scope = [];
   body.configuration.labels.en = `Array label ${randomUUID()}`;
@@ -189,6 +189,20 @@ test('configuration cannot move or replace a withheld array element, but unrelat
     f.conditional(taken.body.zone.revision),
   );
   expect(movedPages.status, JSON.stringify(movedPages.body)).toBe(409);
+  const replaced = await f.call(
+    'owner',
+    'PUT',
+    `${path}/configuration`,
+    {
+      configuration: { ...current, pages: [current.pages[0], { ...current.pages[1], document: page(`Replaced ${randomUUID()}`) }] },
+      mounts: [],
+    },
+    f.conditional(taken.body.zone.revision),
+  );
+  expect(replaced.status, JSON.stringify(replaced.body)).toBe(409);
+
+  await f.grant(created.body.zone.id, 'editor', 'zone:configure');
+  expect((await f.call('editor', 'GET', `${path}/configuration`)).status).toBe(403);
 
   const unrelated = await f.call(
     'owner',

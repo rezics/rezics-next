@@ -77,23 +77,33 @@ export function changeTakedown(row: ZoneHead, pointers: string[], takedown: bool
   return next;
 }
 
-/** A decision on an array element stays bound to that element only while the element is unchanged. Owner
- * configuration that removes, reorders or edits such an element would move the decision, so it is refused. */
-export function movesWithheldElement(row: ZoneHead, configuration: ZoneConfiguration, mounts: string[]): boolean {
+function withheld(row: ZoneHead): Record<string, unknown> {
+  return (row.withholding ?? {}) as Record<string, unknown>;
+}
+
+/** Whether a takedown decision exists. Configuration with one is readable only by the Zone owner. */
+export function hasWithholding(row: ZoneHead): boolean {
+  return Object.keys(withheld(row)).length > 0;
+}
+
+function valueAt(root: unknown, pointer: string): Step {
+  let node: unknown = root;
+  for (const token of pointerTokens(pointer)) {
+    const next = step(node, token);
+    if (!next.found) return next;
+    node = next.value;
+  }
+  return { found: true, value: node };
+}
+
+/** The retained original is the stored value at each decision, so an edit that alters, moves or removes that value
+ * would overwrite the only copy. Such configuration is refused instead of being rebound to a guessed location. */
+export function changesWithheldValue(row: ZoneHead, configuration: ZoneConfiguration, mounts: string[]): boolean {
   const before = document(row.configuration!, row.mounts!);
   const after = document(configuration, mounts);
-  for (const pointer of Object.keys((row.withholding ?? {}) as Record<string, unknown>)) {
-    let previous: unknown = before;
-    let current: unknown = after;
-    for (const token of pointerTokens(pointer)) {
-      const old = step(previous, token);
-      if (!old.found) break;
-      const now = step(current, token);
-      if (Array.isArray(previous) && (!now.found || !sameJson(old.value, now.value))) return true;
-      previous = old.value;
-      if (!now.found) break;
-      current = now.value;
-    }
-  }
-  return false;
+  return Object.keys(withheld(row)).some((pointer) => {
+    const old = valueAt(before, pointer);
+    const now = valueAt(after, pointer);
+    return old.found !== now.found || (old.found && now.found && !sameJson(old.value, now.value));
+  });
 }
