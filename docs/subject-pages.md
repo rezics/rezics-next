@@ -226,8 +226,8 @@ return; at most one member appearance window opens inline, with Back restoring i
 
 Decision: StoryArc correction entries carry the observed Context, admitted Realm, effective Definition digest and one
 same-locale immediate Subject return as bounded intent. Unsupported Context or Realm is explained before the
-Global-only editor mounts; a separately named Global choice clears correction intent and retains only the public
-return.
+Global-only editor mounts. A separately named Global choice drops all correction intent, retains only the public
+return, and obtains a fresh Global reading; direct Global visits remain unchanged.
 
 ### Story arc Cost
 
@@ -241,8 +241,9 @@ same-locale Subject return to the existing address, bounded together to 2,048 ch
 are visit intent; the correction still reads and writes through the unchanged Global native contract. Unsupported
 Context or Realm adds no editor reads. Choosing Global retains only the public return and uses the correction's
 existing active/immutable Definition and current advice reads. Returning is a normal navigation to the original
-Subject address and obtains a fresh admitted public reading; it retains no response body or assertion locator. This
-adds no native rows or retained response and does not change the reader's Subject, Definition or relation-page costs.
+Subject address and obtains a fresh admitted public reading, including the existing arc reader; it retains no response
+body or assertion locator. This adds no native rows or retained response and does not change the reader's Subject,
+Definition or relation-page costs.
 
 ## Read a Recording
 

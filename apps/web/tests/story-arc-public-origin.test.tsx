@@ -1,7 +1,8 @@
 import { expect, mock, test } from 'bun:test';
-import { act, createElement } from 'react';
+import { createKernelClient } from '@rezics/client';
+import { planReads, platformRegistry, PAGE_GLOBAL_CONTEXT, type CompositionDocument } from '@rezics/composition';
+import { act, createContext, createElement, useContext, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { StoryArcProfileEntry } from '../src/features/catalogue/story-arc-profile-entry';
 import {
   parseStoryArcProfileSearch,
@@ -9,13 +10,18 @@ import {
   storyArcGlobalChoiceHref,
   storyArcPublicOrigin,
 } from '../src/features/catalogue/story-arc-public-visit';
+import * as start from '../.storybook/react-start';
+import recordedPage from '../src/kernel/recorded/subject-page.json';
+import { storyArcProfileFixture, storyArcProfileId } from '../src/kernel/fake/catalogue-story-arc-profile';
+import { storyArcType } from '../src/features/catalogue/story-arc-profile';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import { subjectHref } from '../src/subject/subject-href';
 
 const subjectId = '5d0a0000-0000-4000-8000-000000000001';
 const otherSubjectId = '5d0a0000-0000-4000-8000-000000000002';
 const realmId = '5d0a0000-0000-4000-8000-000000000003';
 
-test('the actual Subject entry carries current Context, admitted Realm, Definition and one immediate return', () => {
+test('StoryArc entry encodes current Context, admitted Realm, Definition and one immediate return', () => {
   const subject = subjectHref({ id: subjectId, label: 'A named arc' }, 'en');
   const via = storyArcPublicOrigin({
     currentHref: `${subject.href}?realm=${realmId}`,
@@ -89,74 +95,265 @@ test('canonical slug changes redirect only for the same identity', () => {
   ).toBeUndefined();
 });
 
-test('session refusal mounts no Global profile read and its Global choice retains only the validated return', async () => {
+test('the mounted Subject, canonical route, correction session and existing reader preserve only current admitted intent', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/subjects/story-arc/story-arc' });
-  const globals = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    Element: window.Element,
-    Node: window.Node,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
-  Object.assign(globalThis, globals);
-  const loads: unknown[] = [];
+  const window = new Window({ url: `https://site.test/en/subjects/${storyArcProfileId}/the-journey-arc/story-arc` });
+  const globalNames =
+    'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement HTMLFormElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame scrollTo matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
+      ' ',
+    );
+  const previous = new Map(globalNames.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of globalNames)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, key),
+    });
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
+  const fixture = storyArcProfileFixture();
+  const profileLoads: unknown[] = [];
+  const readerLoads: unknown[] = [];
   mock.module('../src/features/catalogue/story-arc-profile-actions', () => ({
-    loadStoryArcProfile: async ({ data }: { data: unknown }) => {
-      loads.push(data);
+    loadStoryArcProfile: async ({ data }: { data: { id?: string; work?: string } }) => {
+      profileLoads.push(data);
+      return fixture.transport.load(data);
+    },
+  }));
+  mock.module('../src/features/catalogue/story-arc-reader/actions', () => ({
+    loadArcReader: async ({ data }: { data: unknown }) => {
+      readerLoads.push(data);
       return { ok: false, reason: 'unavailable' };
     },
   }));
-  const [{ createRoot }, { QueryClient, QueryClientProvider }, { sessionQueryKey }, { StoryArcProfileSession }] =
-    await Promise.all([
-      import('react-dom/client'),
-      import('@tanstack/react-query'),
-      import('../src/session/browser-state'),
-      import('../src/features/catalogue/story-arc-profile-session'),
-    ]);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(sessionQueryKey, { state: 'signed-in', csrfToken: 'session-token', subject: 'account-id' });
+  const originalKernel = await import('../src/kernel/client');
+  mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => fixture.client }));
+  const [
+    { createRoot },
+    { createMemoryHistory, createRootRoute, createRouter, RouterProvider },
+    { QueryClient, QueryClientProvider },
+    { sessionQuery },
+    { StoryArcProfileSession },
+    { SubjectPage, loadSubjectPage, pageContext },
+    { subjectPageMessages },
+    { Route },
+    { getLocale, setLocale },
+    { m },
+  ] = await Promise.all([
+    import('react-dom/client'),
+    import('@tanstack/react-router'),
+    import('@tanstack/react-query'),
+    import('../src/session/query'),
+    import('../src/features/catalogue/story-arc-profile-session'),
+    import('../src/features/pages/subject'),
+    import('../src/features/pages/route-support'),
+    import('../src/routes/subjects/$id_.$slug_.story-arc'),
+    import('../src/paraglide/runtime'),
+    import('../src/paraglide/messages'),
+  ]);
+  const oldLocale = getLocale();
+  setLocale('en', { reload: false });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const reader = '00000000-0000-4000-8000-000000000099';
+  const signedIn = { state: 'signed-in' as const, subject: reader, csrfToken: 'session-token' };
+  client.setQueryData(sessionQuery.queryKey, signedIn);
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
-  const subject = subjectHref({ id: subjectId, label: 'A named arc' }, 'en');
-  const via = storyArcPublicOrigin({ currentHref: subject.href, id: subjectId, locale: 'en' })!;
-  const choice = storyArcGlobalChoiceHref({ id: subjectId, slug: subject.params.slug, locale: 'en', via });
-  const render = (props: Record<string, unknown>) =>
-    root.render(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(StoryArcProfileSession, { id: subjectId, locale: 'en', via, globalChoiceHref: choice, ...props } as never),
-      ),
-    );
-  try {
-    await act(async () => render({ context: otherSubjectId, definition: 'sha256:source-release', address: 'origin-a' }));
-    expect(host.textContent).toContain('StoryArc correction supports Global only');
-    expect(client.getQueryCache().findAll({ queryKey: ['story-arc-profile'] })).toHaveLength(0);
-    const globalLink = [...host.querySelectorAll('a')].find((link) => link.textContent?.includes('Global correction'))!;
-    expect([...new URL(globalLink.href).searchParams.keys()]).toEqual(['via']);
-
-    await act(async () => {
-      render({ via, address: JSON.stringify([undefined, via]) });
-      await new Promise((resolve) => setTimeout(resolve, 20));
+  const Contents = createContext<ReactNode>(null);
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => useContext(Contents) }),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+  const render = async (node: ReactNode) =>
+    act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(Contents.Provider, { value: node }, createElement(RouterProvider, { router })),
+        ),
+      );
+      await router.load();
     });
-    expect(loads).toEqual([{ id: subjectId, work: undefined }]);
+  const actualSubject = subjectHref({ id: storyArcProfileId, label: 'The journey arc' }, 'en');
+  const selectedContext = '5d0a0000-0000-4000-8000-000000000004';
+  const originHref = (realm?: string) => `${actualSubject.href}${realm ? `?realm=${realm}` : ''}#connections`;
+  const makePage = (context: string, realm?: string, label = 'The journey arc'): SubjectPageData => {
+    const page = structuredClone(recordedPage) as unknown as SubjectPageData;
+    page.subject = storyArcProfileId;
+    page.catalogue = {
+      state: 'released',
+      type: storyArcType,
+      digest: fixture.arc.subject.release,
+      definitions: { types: fixture.release.types, properties: fixture.release.properties },
+    };
+    page.context = realm
+      ? { id: context, population: { kind: 'realm', id: realm, title: 'Readers' } }
+      : undefined;
+    page.requestedRealm = realm;
+    const publicRead = structuredClone(fixture.arc);
+    publicRead.subject.context = context;
+    publicRead.subject.labels = { ...publicRead.subject.labels, en: label };
+    const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
+    for (const [key, descriptor] of Object.entries(reads))
+      if (descriptor.kind === 'subject' && descriptor.id === page.subject)
+        page.reads[key] = { status: 200, body: publicRead };
+    return page;
+  };
+  const subjectEntry = async (context: string, realm?: string, label?: string) => {
+    await render(
+      createElement(SubjectPage, {
+        page: makePage(context, realm, label),
+        locale: 'en',
+        messages: subjectPageMessages(),
+        currentHref: originHref(realm),
+        renderJsonLd: false,
+      }),
+    );
+    return host.querySelector<HTMLAnchorElement>('a[href*="/story-arc?"]')?.getAttribute('href');
+  };
+  const routeLoader = Route.options.loader;
+  if (typeof routeLoader !== 'function') throw new Error('Expected the installed StoryArc route loader.');
+  const loadRoute = (href: string, slug = actualSubject.params.slug) =>
+    routeLoader({
+      params: { id: storyArcProfileId, slug },
+      location: { searchStr: new URL(href, window.location.origin).search, hash: '' },
+    } as never);
+  const sessionFor = (id: string, visit: NonNullable<ReturnType<typeof parseStoryArcProfileSearch>>) =>
+    createElement(StoryArcProfileSession, {
+      id,
+      locale: 'en',
+      ...visit,
+      address: JSON.stringify([visit.definition, visit.via]),
+      globalChoiceHref: storyArcGlobalChoiceHref({ id, slug: actualSubject.params.slug, locale: 'en', via: visit.via }),
+    } as never);
+  const waitFor = async (predicate: () => boolean) => {
+    for (let attempt = 0; attempt < 50 && !predicate(); attempt++)
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(predicate()).toBe(true);
+  };
+  try {
+    const globalEntry = await subjectEntry(PAGE_GLOBAL_CONTEXT);
+    expect(globalEntry).toBeDefined();
+    const globalRoute = new URL(globalEntry!, window.location.origin);
+    const globalVisit = parseStoryArcProfileSearch(globalRoute.search, storyArcProfileId, 'en')!;
+    expect(globalVisit).toMatchObject({ context: PAGE_GLOBAL_CONTEXT, definition: fixture.arc.subject.release });
+    expect(globalVisit.via).toBe(`${actualSubject.href}#connections`);
+    expect(readerLoads).toContainEqual({ id: storyArcProfileId, context: PAGE_GLOBAL_CONTEXT, locale: 'en' });
+
+    const nonGlobalEntry = await subjectEntry(selectedContext);
+    expect(nonGlobalEntry).toBeDefined();
+    const nonGlobalVisit = parseStoryArcProfileSearch(
+      new URL(nonGlobalEntry!, window.location.origin).search,
+      storyArcProfileId,
+      'en',
+    )!;
+    expect(nonGlobalVisit).toMatchObject({ context: selectedContext, realm: undefined });
+    const nonGlobalRoute = await loadRoute(nonGlobalEntry!);
+    const beforeRefusal = profileLoads.length;
+    await render(sessionFor((nonGlobalRoute as { id: string }).id, nonGlobalVisit));
+    expect(host.textContent).toContain(m.story_arc_context_unsupported());
+    expect(profileLoads).toHaveLength(beforeRefusal);
+    expect(client.getQueryCache().findAll({ queryKey: ['story-arc-profile'] })).toHaveLength(0);
+
+    const realmEntry = await subjectEntry(selectedContext, realmId);
+    expect(realmEntry).toBeDefined();
+    const realmVisit = parseStoryArcProfileSearch(new URL(realmEntry!, window.location.origin).search, storyArcProfileId, 'en')!;
+    expect(realmVisit).toMatchObject({ context: selectedContext, realm: realmId, via: originHref(realmId) });
+    const realmRoute = await loadRoute(realmEntry!);
+    await render(sessionFor((realmRoute as { id: string }).id, realmVisit));
+    expect(host.textContent).toContain(m.story_arc_context_unsupported());
+    expect(profileLoads).toHaveLength(beforeRefusal);
+    const publicReturn = [...host.querySelectorAll('a')].find(
+      (link) => link.textContent === m.story_arc_return_public(),
+    )!;
+    expect(publicReturn.getAttribute('href')).toBe(originHref(realmId));
+    const globalChoice = [...host.querySelectorAll('a')].find(
+      (link) => link.textContent === m.story_arc_choose_global(),
+    )!;
+    const globalChoiceUrl = new URL(globalChoice.href, window.location.origin);
+    expect([...globalChoiceUrl.searchParams.keys()]).toEqual(['via']);
+    expect(globalChoiceUrl.searchParams.get('via')).toBe(originHref(realmId));
+
+    const publicReads: unknown[] = [];
+    const returnedPage = makePage(selectedContext, realmId, 'Current returned arc');
+    const publicClient = createKernelClient('https://public.invalid', {
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        publicReads.push(await request.clone().json());
+        return Response.json(returnedPage);
+      }) as typeof fetch,
+    });
+    const returnAddress = new URL(publicReturn.href, window.location.origin);
+    const readBack = await loadSubjectPage(publicClient, storyArcProfileId, undefined, 'en', {
+      realm: returnAddress.searchParams.get('realm') ?? undefined,
+    });
+    expect(publicReads).toEqual([{ target: { subject: storyArcProfileId, realm: realmId }, languages: ['en'] }]);
+    if (readBack.kind !== 'page') throw new Error('Expected a fresh admitted Subject page on return.');
+    const previousReaderLoads = readerLoads.length;
+    await render(
+      createElement(SubjectPage, {
+        page: readBack.page,
+        locale: 'en',
+        messages: subjectPageMessages(),
+        currentHref: returnAddress.href,
+        renderJsonLd: false,
+      }),
+    );
+    await waitFor(() => readerLoads.length > previousReaderLoads);
+    expect(host.textContent).toContain('Current returned arc');
+    expect(readerLoads.at(-1)).toEqual({
+      id: storyArcProfileId,
+      context: selectedContext,
+      locale: 'en',
+      realm: realmId,
+    });
+
+    const validateSearch = Route.options.validateSearch;
+    if (typeof validateSearch !== 'function') throw new Error('Expected the installed StoryArc search validator.');
+    expect(validateSearch(Object.fromEntries(globalRoute.searchParams))).toMatchObject(globalVisit);
+    await expect(loadRoute(`${globalRoute.pathname}?realm=${realmId}&via=${encodeURIComponent(originHref(realmId))}`, 'old-label'))
+      .rejects.toMatchObject({ options: { statusCode: 301 } });
+    const originalId = fixture.arc.subject.id;
+    fixture.arc.subject.id = otherSubjectId;
+    expect(await loadRoute(`${globalRoute.pathname}?${globalRoute.search.slice(1)}`, 'old-label')).toEqual({
+      id: storyArcProfileId,
+    });
+    fixture.arc.subject.id = originalId;
+
+    const globalRouteData = (await loadRoute(globalEntry!)) as { id: string };
+    const beforeGlobal = profileLoads.length;
+    await render(sessionFor(globalRouteData.id, globalVisit));
+    await waitFor(() => profileLoads.length > beforeGlobal);
+    expect(profileLoads[beforeGlobal]).toEqual({ id: storyArcProfileId, work: undefined });
+
+    client.clear();
+    client.setQueryData(sessionQuery.queryKey, signedIn);
+    const choiceVisit = parseStoryArcProfileSearch(globalChoiceUrl.search, storyArcProfileId, 'en')!;
+    const choiceRoute = (await loadRoute(globalChoice.href)) as { id: string };
+    const beforeChoice = profileLoads.length;
+    const beforeNativeRead = fixture.calls.length;
+    await render(sessionFor(choiceRoute.id, choiceVisit));
+    await waitFor(() => profileLoads.length > beforeChoice);
+    expect(profileLoads[beforeChoice]).toEqual({ id: storyArcProfileId, work: undefined });
+    expect(fixture.calls.slice(beforeNativeRead).map(({ method, path }) => `${method} ${path}`)).toContain(
+      `GET /v1/definitions/active`,
+    );
+    expect(fixture.calls.slice(beforeNativeRead).map(({ method, path }) => `${method} ${path}`)).toContain(
+      `GET /v1/subjects/${storyArcProfileId}`,
+    );
+    expect(fixture.calls.slice(beforeNativeRead).every(({ method }) => method === 'GET')).toBe(true);
   } finally {
     await act(async () => root.unmount());
     client.clear();
     mock.restore();
-    window.close();
+    setLocale(oldLocale, { reload: false });
+    await window.happyDOM.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
