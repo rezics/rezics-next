@@ -141,7 +141,7 @@ test('each POST owns five seconds through stalled bodies and abort-ignoring head
             );
       }) as typeof fetch;
       const result = runAccountOperation('key', operation, browser);
-      for (let i = 0; i < 30; i++) await Promise.resolve();
+      await new Promise((resolve) => setTimer(resolve, 0));
       timers.at(-1)!();
       expect(await result).toEqual({ ok: false, reason: phase === 'execution' ? 'unknown' : 'unavailable' });
       expect(calls).toBe(phase === 'execution' ? 2 : 1);
