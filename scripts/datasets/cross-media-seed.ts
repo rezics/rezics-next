@@ -191,7 +191,7 @@ export async function runDevelopmentSeed(
   if (report.state === 'complete') {
     process.stdout.write(
       `Development showcase: work=${report.community.source.subjectId} board=${report.community.board.id} ` +
-        `thread=${report.community.thread.id} post=${report.community.thread.postId} ` +
+        `thread=${report.community.thread.threadId} post=${report.community.thread.postId} ` +
         `edition=${report.edition.editionId} offer=${report.offer.offerId}\n`,
     );
   } else {
