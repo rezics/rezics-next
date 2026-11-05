@@ -94,12 +94,27 @@ test('relation readers and history keep exact selection across continuation keyb
           value: { type: 'value', content: `0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1${index}` },
           qualifiers:
             index === 0
-              ? [{ property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'value', content: { amount: '+2', unit: '1' } } }]
+              ? [
+                  {
+                    property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+                    value: { type: 'value', content: { amount: '+2', unit: '1' } },
+                  },
+                ]
               : [],
-          references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/original' } }] }],
+          references: [
+            {
+              parts: [
+                { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/original' } },
+              ],
+            },
+          ],
           rank: 'normal',
         },
-        summary: { id: `0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1${index}`, type: 'ex:Person', label: { value: label, language: 'ja' } },
+        summary: {
+          id: `0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e1${index}`,
+          type: 'ex:Person',
+          label: { value: label, language: 'ja' },
+        },
         label,
       })),
       next,
@@ -163,8 +178,12 @@ test('relation readers and history keep exact selection across continuation keyb
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document });
-  const render = () => act(async () => root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router }))));
-  const flush = () => act(async () => { await Bun.sleep(0); });
+  const render = () =>
+    act(async () => root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router }))));
+  const flush = () =>
+    act(async () => {
+      await Bun.sleep(0);
+    });
   try {
     await render();
     expect(host.querySelector('[data-slot="subject-history-count"]')?.textContent?.trim()).toBe('');

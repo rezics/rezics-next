@@ -157,7 +157,12 @@ function appearance(target: string, position: number, spoiler = false, extraCita
       ...(spoiler ? [snak('rezics:spoilerLevel', { amount: '+2', unit: '1' })] : []),
     ],
     references: extraCitation
-      ? [citation, { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/copy' } }] }]
+      ? [
+          citation,
+          {
+            parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/copy' } }],
+          },
+        ]
       : [citation],
   };
 }
@@ -303,9 +308,9 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   expect(preview.subject.relationCounts ?? {}).toEqual({});
   const first = preview.subject.statements['ex:appearance'][0];
   expect(first.references).toHaveLength(2);
-  expect(first.references.map((reference: { parts: { value: { content: string } }[] }) => reference.parts[0]?.value.content)).toEqual(
-    ['https://example.test/original', 'https://example.test/copy'],
-  );
+  expect(
+    first.references.map((reference: { parts: { value: { content: string } }[] }) => reference.parts[0]?.value.content),
+  ).toEqual(['https://example.test/original', 'https://example.test/copy']);
   expect(preview.subject.statements['ex:appearance'][1].references).toHaveLength(1);
   const spoiler = preview.subject.statements['ex:appearance'].find((row: any) =>
     row.qualifiers?.some(
@@ -351,8 +356,12 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
     `/v1/subjects/${work}/relations?property=ex:appearance&limit=5&cursor=${encodeURIComponent(editorPage.next)}`,
   );
   expect(retry.relations.map((row: { target: string }) => row.target)).toEqual(
-    (await call('GET', `/v1/subjects/${work}/relations?property=ex:appearance&limit=5&cursor=${encodeURIComponent(editorPage.next)}`))
-      .relations.map((row: { target: string }) => row.target),
+    (
+      await call(
+        'GET',
+        `/v1/subjects/${work}/relations?property=ex:appearance&limit=5&cursor=${encodeURIComponent(editorPage.next)}`,
+      )
+    ).relations.map((row: { target: string }) => row.target),
   );
 
   await call('POST', `/v1/subjects/${hidden}:hide`, 'steward', { reason: 'Concealed relation target' });
@@ -365,7 +374,10 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   expect(publicPreview.related?.[hidden]).toBeUndefined();
 
   const extra = (
-    await call('POST', '/v1/subjects', 'editor', { type: 'ex:Person', labels: { en: 'Published person', ja: '公開された人物' } })
+    await call('POST', '/v1/subjects', 'editor', {
+      type: 'ex:Person',
+      labels: { en: 'Published person', ja: '公開された人物' },
+    })
   ).subject.id;
   partitions.add(partitionOf(routeOf(extra)!));
   const proposed = await handle('POST', `/v1/subjects/${work}/candidates`, 'editor', {
@@ -395,9 +407,13 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   const outsider = await handle('GET', `/v1/subjects/${work}/relations?property=ex:appearance&limit=20`, 'outsider');
   expect(outsider.status).toBe(200);
   expect(outsider.body.relations.map((row: { target: string }) => row.target)).toContain(extra);
-  const denied = await handle('POST', `/v1/subjects/${work}/candidates`, 'outsider', { statement: appearance(extra, 18) });
+  const denied = await handle('POST', `/v1/subjects/${work}/candidates`, 'outsider', {
+    statement: appearance(extra, 18),
+  });
   expect([401, 403]).toContain(denied.status);
-  const missing = await handle('POST', `/v1/subjects/${work}/candidates`, undefined, { statement: appearance(extra, 18) });
+  const missing = await handle('POST', `/v1/subjects/${work}/candidates`, undefined, {
+    statement: appearance(extra, 18),
+  });
   expect(missing.status).toBe(401);
 
   const history = await pageAllHistory(work);
@@ -406,9 +422,11 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   const createDetail = await call('GET', `/v1/subjects/${work}/revisions/${createRevision.revision}`, undefined);
   expect(createDetail.change?.kind === 'terms' || createDetail.revision.kind === 'create').toBe(true);
   const afterPublish = await call('GET', `/v1/subjects/${work}`, undefined);
-  expect(afterPublish.subject.statements['ex:appearance'].some((row: { value: { content: string } }) => row.value.content === extra)).toBe(
-    true,
-  );
+  expect(
+    afterPublish.subject.statements['ex:appearance'].some(
+      (row: { value: { content: string } }) => row.value.content === extra,
+    ),
+  ).toBe(true);
 
   const suspendedBearer = real.bearer('suspended');
   await suspendAccount(admin, accounts.suspended);
