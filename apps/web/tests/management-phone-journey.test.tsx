@@ -276,6 +276,11 @@ test('directory, organization, account and recovery retain independent phone con
         }
       }
     }
+    // An external continuation outside the closed URL grammar cannot become a retained coordinate.
+    await mount(
+      directory(ready({ ...inventory, organizations: { ...inventory.organizations, next: 'x'.repeat(4097) } })),
+    );
+    expect(host.querySelector('[data-management-feed="organizationsCursor"] a[rel="next"]')).toBeNull();
     // Native management pages admit 20 candidates, so a 64-row witness would misrepresent the bound.
     // These supplied-data sizes establish construction only, not native query growth or measured render cost.
     for (const size of [1, 8, 20]) {
