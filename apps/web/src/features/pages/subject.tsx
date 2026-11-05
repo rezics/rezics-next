@@ -48,6 +48,7 @@ import { literaryAddress } from '../catalogue/literary-reader/navigation';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
+import { CharacterAssociationBridge } from '../catalogue/character-public-reading/bridge';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
@@ -1628,31 +1629,33 @@ export function SubjectPage({
                 </SubjectCommunityVerificationContext.Provider>
               </SubjectCommunityContext.Provider>
             </SubjectCommunityRefreshContext.Provider>
-            {overview && read && !page.account && read.subject.type === 'wd:Q95074' ? (
-              <CharacterOverview
-                source={page}
-                viewer={page.requestedReader ?? null}
-                locale={locale}
-                public={composedSubjectRead(read)}
-                documents={read.documents}
-                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                link={ContextLink}
-                {...(reader ? { reader } : {})}
-              />
-            ) : null}
-            {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
-              <PersonOverview
-                source={page}
-                viewer={page.requestedReader ?? null}
-                locale={locale}
-                public={composedSubjectRead(read)}
-                documents={read.documents}
-                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                link={ContextLink}
-                {...(reader ? { reader } : {})}
-              />
-            ) : null}
-            {overview && connections}
+            <CharacterAssociationBridge source={page}>
+              {overview && read && !page.account && read.subject.type === 'wd:Q95074' ? (
+                <CharacterOverview
+                  source={page}
+                  viewer={page.requestedReader ?? null}
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  documents={read.documents}
+                  release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                  link={ContextLink}
+                  {...(reader ? { reader } : {})}
+                />
+              ) : null}
+              {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
+                <PersonOverview
+                  source={page}
+                  viewer={page.requestedReader ?? null}
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  documents={read.documents}
+                  release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                  link={ContextLink}
+                  {...(reader ? { reader } : {})}
+                />
+              ) : null}
+              {overview && connections}
+            </CharacterAssociationBridge>
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
             {overview && <SubjectSourcesLink />}
             {curation}

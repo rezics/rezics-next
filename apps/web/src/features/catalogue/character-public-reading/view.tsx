@@ -7,17 +7,20 @@ import { createConnectionWindow, type ConnectionRead } from '../../pages/subject
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { CharacterWorkRows } from '../character-work-visit/view';
 import { characterWorkStream } from '../character-work-visit/intent';
-import { loadCharacterPublicReading } from './actions';
+import { CharacterAssociationContext } from './bridge';
 
-const productionRead: ConnectionRead = (data, signal) => loadCharacterPublicReading({ data, signal });
 const groups = ['characters', 'credits'] as const;
+const noSubscribe = () => () => {};
+const noBinding = () => undefined;
 const action = 'inline-flex min-h-11 min-w-11 items-center py-2 underline focus-visible:outline-2';
 
 export type CharacterAssociations = { source: object; viewer: string | null; read?: ConnectionRead };
 
 /** A local presentation of the two existing native windows, with no document or per-row reader. */
-export function CharacterPublicReading({ source, viewer, read = productionRead }: CharacterAssociations) {
+export function CharacterPublicReading({ source, viewer, read }: CharacterAssociations) {
   const value = useContext(OverviewContext);
+  const bridge = useContext(CharacterAssociationContext);
+  const binding = useSyncExternalStore(bridge?.subscribe ?? noSubscribe, bridge?.snapshot ?? noBinding, noBinding);
   const descriptor = JSON.stringify([
     value?.subject,
     value?.context,
@@ -37,9 +40,16 @@ export function CharacterPublicReading({ source, viewer, read = productionRead }
   } | null>(null);
   if (!value?.subject) return null;
   if (!lifetime.available) {
-    owned.current?.window.retire(true);
+    if (!bridge) owned.current?.window.retire(true);
     return <p role="status">{m.character_work_unavailable({}, { locale: value.locale as never })}</p>;
   }
+  if (bridge)
+    return binding?.source === source ? (
+      <AssociationWindows window={binding.window} value={value} viewer={viewer} managed />
+    ) : (
+      <p role="status">{m.subject_relation_loading({}, { locale: value.locale as never })}</p>
+    );
+  if (!read) return null;
   if (
     !owned.current ||
     owned.current.source !== source ||
@@ -72,10 +82,12 @@ function AssociationWindows({
   window,
   value,
   viewer,
+  managed = false,
 }: {
   window: ReturnType<typeof createConnectionWindow>;
   value: OverviewValue;
   viewer: string | null;
+  managed?: boolean;
 }) {
   const client = useContext(QueryClientContext);
   const [retired, setRetired] = useState(false);
@@ -84,7 +96,7 @@ function AssociationWindows({
   const focus = useRef<EventTarget | null>(null);
   const o = { locale: value.locale as never };
   useLayoutEffect(() => {
-    window.activate();
+    if (!managed) window.activate();
     const observation = client ? browserObservation(client) : undefined;
     // Establish the initial observation before subscribing to subsequent in-stack retirements.
     const disconnect = observation?.subscribe(() => {});
@@ -105,13 +117,13 @@ function AssociationWindows({
         disconnect?.();
       };
     }
-    void window.load();
+    if (!managed) void window.load();
     return () => {
       stop?.();
       disconnect?.();
-      window.retire(true);
+      if (!managed) window.retire(true);
     };
-  }, [window, client, viewer]);
+  }, [window, client, viewer, managed]);
   useLayoutEffect(() => {
     if (focus.current instanceof Element && !focus.current.isConnected && document.activeElement === document.body)
       heading.current?.focus();

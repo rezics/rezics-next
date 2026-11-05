@@ -17,6 +17,9 @@ mock.module('@tanstack/react-start', () => start);
 const { CharacterReader } = await import('../src/features/pages/showcase-people/character');
 const { m } = await import('../src/paraglide/messages.js');
 const { OverviewContext } = await import('../src/features/pages/overview');
+const { CharacterAssociationBridge, CharacterAssociationBinding } =
+  await import('../src/features/catalogue/character-public-reading/bridge');
+const { createConnectionWindow } = await import('../src/features/pages/subject-connections-window');
 
 test('the Character voice stream uses the released P453 slot key and keeps P725 target as performer', async () => {
   const { connectionStreams, readConnectionStream } = await import('../src/features/pages/subject-connections');
@@ -96,6 +99,7 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     calls.push(address);
     return response(address);
   };
+  let shared: ReturnType<typeof createConnectionWindow> | undefined;
   const render = async (source: object, viewer: string | null = null, context?: string) =>
     act(async () =>
       root.render(
@@ -111,12 +115,27 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
                 ...(context ? { context: { id: context, population: { kind: 'global' as const } } } : {}),
               },
             },
-            createElement(CharacterReader, {
-              public: fixture.profile.read,
-              release: fixture.profile.release,
-              locale: 'en',
-              associations: { source, viewer, read },
-            }),
+            shared
+              ? createElement(
+                  CharacterAssociationBridge,
+                  { source },
+                  createElement(
+                    CharacterAssociationBinding,
+                    { source, window: shared },
+                    createElement(CharacterReader, {
+                      public: fixture.profile.read,
+                      release: fixture.profile.release,
+                      locale: 'en',
+                      associations: { source, viewer, read },
+                    }),
+                  ),
+                )
+              : createElement(CharacterReader, {
+                  public: fixture.profile.read,
+                  release: fixture.profile.release,
+                  locale: 'en',
+                  associations: { source, viewer, read },
+                }),
           ),
         ),
       ),
@@ -210,7 +229,16 @@ test('mounted profile associations preserve exact credits, disclosure, spoilers,
     await render(source, member, '00000000-0000-4000-8000-000000000002');
     await render(source, member, a);
     expect(host.innerHTML).not.toContain('STEINS;GATE');
+    shared = createConnectionWindow({ id: fixture.value.subject!, locale: 'en', viewer: member }, read);
+    await act(async () => {
+      await shared!.load();
+    });
+    const before = calls.length;
+    await render({}, member);
+    expect(host.textContent).toContain('今井麻美');
+    expect(calls).toHaveLength(before); // The mounted Connections controller supplies the profile without another read.
   } finally {
+    shared?.retire(true);
     await act(async () => root.unmount());
     client.clear();
     browser.happyDOM.abort();
