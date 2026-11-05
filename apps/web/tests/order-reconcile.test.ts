@@ -40,7 +40,13 @@ test('native denial, conflict, unavailable and lost responses retain their contr
     [200, { kind: 'unavailable' }],
   ] as const) {
     const client = createKernelClient('https://kernel.test', {
-      fetch: async () => Response.json({ orderId, reconciliation: 'queued' }, { status }),
+      fetch: async () =>
+        Response.json(
+          status === 503
+            ? { status: 503, code: 'unavailable', request_id: 'request-1' }
+            : { orderId, reconciliation: 'queued' },
+          { status },
+        ),
     });
     expect(await nativeOrderReconcile(client, 'Bearer buyer', { orderId, idempotencyKey: key })).toEqual(expected);
   }
