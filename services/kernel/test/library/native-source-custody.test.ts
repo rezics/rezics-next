@@ -10,6 +10,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { runCommand, noEffect, type CommandTransaction, type AuthoritativeTime } from '../../src/command/command.ts';
 import {
   createNativeLibrarySourceCustody,
+  type NativePublicOutputIdentity,
   type NativeSourceIdentity,
   type NativeSourceFrontier,
   type NativeSourceDependency,
@@ -712,4 +713,24 @@ test('unchanged COMPLETE metadata cannot hide an intervening native publication 
     'unavailable',
   );
   expect((await custody.capturePage({ ...work(), identity, frontier: null, limit: 1 })).status).toBe('unavailable');
+});
+
+test('account source capture refuses a public output identity instead of treating it as active explicit output', async () => {
+  const source = await make();
+  const publicOutput: NativePublicOutputIdentity = {
+    scope: 'public_output',
+    route: source.identity.route,
+    collectionId: source.identity.collectionId,
+    incarnation: source.identity.incarnation,
+    generation: source.identity.generation,
+    ownerEpoch: source.identity.ownerEpoch,
+    receivingEpoch: source.identity.receivingEpoch,
+    effectKey: 'a'.repeat(64),
+    outputGeneration: entryKey(),
+    activation: { transactionId: entryKey(), position: '1', sourceGeneration: '1' },
+  };
+  const captured = await custody.capturePage({ ...work(), identity: publicOutput, frontier: null, limit: 1 });
+  expect(captured).toMatchObject({ status: 'unavailable', reason: 'output_authority' });
+  const account = await custody.capturePage({ ...work(), identity: source.identity, frontier: null, limit: 1 });
+  expect(account.status).toBe('pending');
 });

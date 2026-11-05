@@ -6,10 +6,28 @@ import {
   completeCollectionSourceOutput as complete,
   cancelCollectionSourceOutput as cancel,
 } from '../../src/library/collection-source-output.ts';
+import { currentCommand, currentCommandResources } from '../../src/command/command.ts';
 import {
+  bindAndHoldNativePublicCollectionOutput,
   readNativeCollectionMetadata,
   readNativeCollectionRawPage,
+  readNativePublicCollectionOutput,
+  revalidateNativePublicCollectionOutputHold,
+  transferNativePublicCollectionOutputHold,
 } from '../../src/library/collection-source-native.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { declareLibraryIdentityStatement } from '../../src/library/identity-original-work.ts';
+import {
+  nativePublicOutputFootprint,
+  nativePublicOutputWorkDimensions,
+  NATIVE_PUBLIC_OUTPUT_JOURNEYS,
+  PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
+} from '../../src/library/native-public-output-work.ts';
+import type { NativePublicOutputIdentity } from '../../src/library/native-source-output-types.ts';
+import holdSQL from '../../src/library/native-public-output-hold.sql';
+import pageSQL from '../../src/library/collection-source-output-page.sql';
+import partitionSQL from '../../src/partition/read.sql';
+import { partitionOf } from '../../src/route/route.ts';
 import {
   sourceRuntimeFixture,
   sourceAllowance,
@@ -239,4 +257,170 @@ test('a build cannot append or complete after its captured native owner binding 
   });
   expect((await f.inspect(source.collectionId)).selected).toBeNull();
   expect((await f.inspect(source.collectionId)).members).toEqual([]);
+});
+
+test('the public output descriptor refuses unknown shapes and charges plan-node bounds, not observed rows', () => {
+  const work = new NativeCollectionWork(sourceAllowance(), Date.now() + 30000);
+  const id = randomUUID();
+  expect(nativePublicOutputFootprint('SELECT 1', [], work)).toBeUndefined();
+  expect(nativePublicOutputFootprint(pageSQL.sql, [0, id, id, id, 0], work)).toBeUndefined();
+  expect(nativePublicOutputFootprint(pageSQL.sql, [0, id, id, id, 101], work)).toBeUndefined();
+  expect(nativePublicOutputFootprint(holdSQL.sql, [1, id, id, id, 'fabricated'], work)).toBeUndefined();
+  expect(nativePublicOutputFootprint(partitionSQL.sql, [1], work)).toBeUndefined();
+  work.admitResultBytes('partition:1', 64);
+  const admitted = nativePublicOutputFootprint(partitionSQL.sql, [1], work);
+  expect(admitted?.nativeRows).toBe(4);
+  expect(admitted?.bytes).toBeGreaterThanOrEqual(64);
+  const page = nativePublicOutputFootprint(pageSQL.sql, [0, id, id, id, 2], work)!;
+  expect(page.candidateKeys).toBe(2);
+  expect(page.nativeRows).toBe(12);
+  expect(page.nativeRows).toBeGreaterThan(2);
+  const eight = nativePublicOutputWorkDimensions(NATIVE_PUBLIC_OUTPUT_JOURNEYS.read);
+  expect('engineRequests' in eight).toBe(false);
+  expect(() =>
+    nativePublicOutputWorkDimensions({ ...NATIVE_PUBLIC_OUTPUT_JOURNEYS.read, engineRequests: 1 }),
+  ).toThrow(/engine requests/);
+  const declared = declareLibraryIdentityStatement(
+    'native-public-output',
+    PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
+    [1],
+    work,
+  );
+  expect(declared?.engineRequests).toBe(0);
+  expect(declared?.work).toEqual(nativePublicOutputFootprint(PUBLIC_OUTPUT_PARTITION_SIZE_SQL, [1], work));
+});
+
+test('a well-formed public output identity without a retained original hold is unavailable, not empty', async () => {
+  const source = await f.collection();
+  const identity: NativePublicOutputIdentity = {
+    scope: 'public_output',
+    route: source.route,
+    collectionId: source.collectionId,
+    incarnation: `${source.collectionId}:1`,
+    generation: '1',
+    ownerEpoch: 0,
+    receivingEpoch: '1',
+    effectKey: 'a'.repeat(64),
+    outputGeneration: randomUUID(),
+    activation: { transactionId: randomUUID(), position: '1', sourceGeneration: '1' },
+  };
+  const page = await readNativePublicCollectionOutput(f.pool, identity, {
+    deadline: Date.now() + 30000,
+    allowance: sourceAllowance(),
+    after: null,
+    limit: 1,
+  });
+  expect(page.status).toBe('unavailable');
+  expect('rows' in page).toBe(false);
+  expect(page.work.used.nativeRows).toBeGreaterThan(0);
+});
+
+test('changed publication and fabricated successor transfer refuse without creating or consuming a hold', async () => {
+  const source = await f.collection();
+  const a = { ...source, generation: randomUUID() };
+  const id = await f.createSubject('game');
+  await f.command(source.collectionId, { begin: a }, (tx) => begin(tx, { ...a, expectedMembers: 1 }));
+  await f.command(source.collectionId, { append: a }, (tx) => append(tx, { ...a, after: null, subjectIds: [id] }));
+  const committed = await f.command(source.collectionId, { complete: a }, (tx) => complete(tx, a));
+  const holds = async () =>
+    (
+      await f.pool.query(
+        'SELECT hold_id::text FROM library.native_public_output_hold WHERE route=$1 AND collection_id=$2',
+        [source.route, source.collectionId],
+      )
+    ).rows;
+  expect(await holds()).toEqual([]);
+  await f.command(source.collectionId, { bind: true }, async (tx) => {
+    const current = currentCommand(tx);
+    const resources = currentCommandResources(tx);
+    const context = {
+      pool: resources.pool,
+      at: current.time,
+      deadline: resources.deadline,
+      allowance: sourceAllowance(),
+    };
+    const bound = await bindAndHoldNativePublicCollectionOutput(
+      tx,
+      {
+        captureId: randomUUID(),
+        definitionDigest: 'b'.repeat(64),
+        publication: {
+          route: source.route,
+          collectionId: source.collectionId,
+          generation: a.generation,
+          activation: {
+            transactionId: committed.transactionId,
+            position: committed.position.toString(),
+            sourceGeneration: '1',
+          },
+        },
+      },
+      context,
+    );
+    expect(bound.status === 'changed' || bound.status === 'unavailable').toBe(true);
+    expect('binding' in bound).toBe(false);
+    const transferred = await transferNativePublicCollectionOutputHold(
+      tx,
+      {
+        captureId: randomUUID(),
+        holdId: randomUUID(),
+        bindingDigest: 'c'.repeat(64),
+        disposition: {
+          partition: partitionOf(source.route),
+          epoch: 0,
+          position: 1n,
+          transactionId: randomUUID(),
+        },
+      },
+      context,
+    );
+    expect(transferred.status).toBe('unavailable');
+    await expect(
+      revalidateNativePublicCollectionOutputHold(
+        tx,
+        {
+          captureId: randomUUID(),
+          holdId: randomUUID(),
+          definitionDigest: 'b'.repeat(64),
+          bindingDigest: 'c'.repeat(64),
+          tuple: {
+            identity: {
+              scope: 'public_output',
+              route: source.route,
+              collectionId: source.collectionId,
+              incarnation: `${source.collectionId}:1`,
+              generation: '1',
+              ownerEpoch: 0,
+              receivingEpoch: '1',
+              effectKey: 'a'.repeat(64),
+              outputGeneration: a.generation,
+              activation: {
+                transactionId: committed.transactionId,
+                position: committed.position.toString(),
+                sourceGeneration: '1',
+              },
+            },
+            publication: {
+              generation: a.generation,
+              transactionId: committed.transactionId,
+              position: committed.position.toString(),
+              nativeXid: '0',
+              members: '1',
+              memberFence: '0',
+              sourceGeneration: '1',
+            },
+            observation: { partition: partitionOf(source.route), epoch: 0, position: 1n },
+          },
+          accepted: {
+            partition: partitionOf(source.route),
+            epoch: 0,
+            position: 1n,
+            transactionId: committed.transactionId,
+          },
+        },
+        context,
+      ),
+    ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  });
+  expect(await holds()).toEqual([]);
 });
