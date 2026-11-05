@@ -155,7 +155,7 @@ test('review keeps a retained unsupported visibility labelled and offers Use cur
       await act(async () => {
         const select = host.querySelector('select')!;
         select.value = 'unlisted';
-        select.dispatchEvent(new Event('change', { bubbles: true }));
+        select.dispatchEvent(new window.Event('change', { bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       await act(async () => {
