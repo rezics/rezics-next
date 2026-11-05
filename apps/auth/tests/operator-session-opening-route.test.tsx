@@ -83,7 +83,10 @@ async function open(
   const read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const session = spyOn(managementOperations, 'loadManagementSession').mockResolvedValue(initialSession);
   const approve = spyOn(managementOperations, 'approveManagementOperation').mockImplementation(async (input) => ({
-    kind: 'approved', input, reference: 'approval-reference', expiresAt: new Date(Date.now() + 60000).toISOString(),
+    kind: 'approved',
+    input,
+    reference: 'approval-reference',
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
   }));
   const host = document.body.appendChild(document.createElement('div')),
     root = createRoot(host);
@@ -200,7 +203,8 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
     const p = await open();
     try {
       const late = Promise.withResolvers<OpeningRead>();
-      const lateApproval = Promise.withResolvers<Awaited<ReturnType<typeof managementOperations.approveManagementOperation>>>();
+      const lateApproval =
+        Promise.withResolvers<Awaited<ReturnType<typeof managementOperations.approveManagementOperation>>>();
       const reviewStarted = Promise.withResolvers<void>();
       const approvalStarted = Promise.withResolvers<OpeningInput>();
       if (stage === 'review')
@@ -236,15 +240,12 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
       if (stage === 'review') await flush(() => late.resolve(metadata));
       else if (stage === 'approval') {
         lateApproval.resolve({
-          kind: 'approved', input: await approvalStarted.promise, reference: 'approval-reference',
+          kind: 'approved',
+          input: await approvalStarted.promise,
+          reference: 'approval-reference',
           expiresAt: new Date(Date.now() + 60000).toISOString(),
         });
-      }
-      else
-        await p.respond(
-          old,
-          Response.json(proof(stage === 'issuance' || stage === 'readback')),
-        );
+      } else await p.respond(old, Response.json(proof(stage === 'issuance' || stage === 'readback')));
       expect(p.requests).toHaveLength(count);
       expect(p.host.querySelector('#opening-confirm')).toBeNull();
       expect(p.host.querySelector('#opening-current-state-heading')).toBeNull();

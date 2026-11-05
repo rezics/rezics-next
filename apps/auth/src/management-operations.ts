@@ -66,18 +66,16 @@ function parseManagementSession(body: unknown, scopeLimit: number): ManagementSe
   };
 }
 
-const readManagementSession = createServerFn({ method: 'POST' }).handler(
-  async (): Promise<ManagementSessionResult> => {
-    const configuration = await trustedSecurityResponseConfiguration();
-    if (!configuration) return { kind: 'unavailable' };
-    return readSecurityIssuerResponse('/session', undefined, async (response, signal) => {
-      if (response.status === 401) return { kind: 'signed-out' };
-      if (response.status !== 200) return { kind: 'unavailable' };
-      const body = await readJsonBounded(response, configuration.sessionBytes, signal);
-      return parseManagementSession(body, configuration.scopeLimit);
-    });
-  },
-);
+const readManagementSession = createServerFn({ method: 'POST' }).handler(async (): Promise<ManagementSessionResult> => {
+  const configuration = await trustedSecurityResponseConfiguration();
+  if (!configuration) return { kind: 'unavailable' };
+  return readSecurityIssuerResponse('/session', undefined, async (response, signal) => {
+    if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status !== 200) return { kind: 'unavailable' };
+    const body = await readJsonBounded(response, configuration.sessionBytes, signal);
+    return parseManagementSession(body, configuration.scopeLimit);
+  });
+});
 
 /** Reads the full native human proof for advice; native approval remains authoritative. */
 export async function loadManagementSession(signal?: AbortSignal): Promise<ManagementSessionResult> {
