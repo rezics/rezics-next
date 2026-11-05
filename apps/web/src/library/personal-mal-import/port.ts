@@ -9,13 +9,17 @@ const productionPort: MalImportPort = {
     const { readMalSource } = await import('./server');
     return readMalSource({ data: { id } });
   },
-  async captureApply(command) {
-    const { captureMalApply } = await import('./server');
-    return captureMalApply({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
-  },
   async assignments(subjectId) {
     const { readMalAssignments } = await import('./server');
     return readMalAssignments({ data: { subjectId } });
+  },
+  async readQuestion() {
+    const { readMalImportQuestion } = await import('./server');
+    return readMalImportQuestion();
+  },
+  async readVote(input) {
+    const { readMalImportVote } = await import('./server');
+    return readMalImportVote({ data: input });
   },
   async preview(command) {
     const { previewMalImport } = await import('./server');

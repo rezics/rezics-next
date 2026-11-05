@@ -1,5 +1,5 @@
 import { m } from '../../paraglide/messages.js';
-import type { MalFailureKind, MalMatch, MalOutcomeStatus, MalPreviewRow, MalValue } from './contract';
+import type { MalFailureKind, MalMatch, MalOutcomeStatus, MalPreviewRow, MalScoreOutcome, MalValue } from './contract';
 
 export function malValueLabel(value: MalValue): string {
   if (value.kind === 'missing') return m.library_mal_missing();
@@ -17,6 +17,17 @@ export function malScoreLabel(score: MalValue): string {
   if (score.kind === 'zero') return m.library_mal_score_none();
   const scale = score.scale ? m.library_mal_score_scale({ min: score.scale.min, max: score.scale.max }) : '';
   return scale ? `${malValueLabel(score)} (${scale})` : malValueLabel(score);
+}
+
+export function malOriginalScoreLabel(score: MalValue): string {
+  const value =
+    score.kind === 'zero'
+      ? m.library_mal_score_zero_source({ value: score.raw ?? String(score.value ?? 0) })
+      : malValueLabel(score);
+  const scale = score.scale
+    ? m.library_mal_score_source_scale({ min: score.scale.min, max: score.scale.max, step: score.scale.step })
+    : m.library_mal_none();
+  return m.library_mal_score_source_details({ value, scale });
 }
 
 export function malMatchLabel(match: MalMatch, skipped: boolean): string {
@@ -38,6 +49,16 @@ export function malOutcomeLabel(status: MalOutcomeStatus): string {
   if (status === 'stale') return m.library_mal_result_stale();
   if (status === 'unsupported') return m.library_mal_result_unsupported();
   return m.library_mal_result_failed();
+}
+
+export function malScoreOutcomeLabel(status: MalScoreOutcome['status']): string {
+  if (status === 'applied') return m.library_mal_result_applied();
+  if (status === 'unavailable') return m.library_mal_score_unavailable();
+  return malOutcomeLabel(status);
+}
+
+export function malVoteReadKey(row: number, targetId: string, questionId: string): string {
+  return JSON.stringify([row, targetId, questionId]);
 }
 
 export function malFailureLabel(kind: MalFailureKind, detail?: string): string {
