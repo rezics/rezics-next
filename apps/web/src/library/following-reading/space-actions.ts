@@ -3,7 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import * as v from 'valibot';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import { readAdmitted, operationIsAdmitted } from '../../kernel/exposure';
+import { operationIsAdmitted } from '../../kernel/exposure';
 import type { SessionEnv } from '../../session/client';
 import { locales } from '../../paraglide/runtime.js';
 import { readSelectedSpace, type SpaceRead } from './space-reader';
@@ -20,7 +20,8 @@ export const readFollowingSpace = createServerFn({ method: 'GET' })
     const request = getRequest();
     const unavailable: SpaceRead = { ...data, result: { state: 'unavailable' } };
     if ((requestLocale(request) ?? 'en') !== data.locale) return unavailable;
-    return readSelectedSpace(kernelClient(), request, env as Partial<SessionEnv>, data, async (authorization) =>
-      operationIsAdmitted('follow.list', await readAdmitted(authorization)),
-    );
+    return readSelectedSpace(kernelClient(), request, env as Partial<SessionEnv>, data, async (authorization) => {
+      const { readAdmitted } = await import('../../kernel/exposure');
+      return operationIsAdmitted('follow.list', await readAdmitted(authorization));
+    });
   });
