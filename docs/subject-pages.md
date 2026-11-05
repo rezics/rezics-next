@@ -1948,14 +1948,6 @@ operands and twenty exact Realm reads concurrently, with no per-render requests 
 own call. Mounted metadata retains only current/selected keys; unrelated members, votes or imported history do not
 increase the request count. Native examined-work and physical cost remain the producer's verification obligation.
 
-Source and proof are separate: the consumer, generated-client wire, fixtures, eight-locale copy and connected
-Subject/reader/lifetime/keyboard stories and assertions are authored. All new connected assertions remain **UNRUN**.
-Workspace typing establishes compiler compatibility only. Native signatures, native disclosure/growth, browser
-keyboard/focus/layout at phone390 and desktop1280 in all eight locales, physical cost and integration acceptance
-remain unverified. A fixture does not prove private first-render/SSR production or unobserved credential history
-across independent QueryClients; both boundaries remain unresolved. Existing Subject shell, reactions, personal
-preference/own-vote helpers, canonical routing and native producers keep their ordinary owners.
-
 ## Classification assessment on pages
 
 A person assesses one currently disclosed canonical Global classification association from the ordinary Subject page.
