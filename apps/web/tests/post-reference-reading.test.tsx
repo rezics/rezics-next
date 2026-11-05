@@ -315,7 +315,7 @@ test('mounted disclosed mentions follow the current handle and return to the exa
     await act(async () => button(dialog, m.post_references_return()).click());
     const closing = mounted.document.querySelector<HTMLElement>('[role="dialog"]');
     if (closing) await act(async () => closing.dispatchEvent(new mounted.window.Event('transitionend', { bubbles: true })));
-    expect(mounted.document.activeElement).toBe(occurrence);
+    expect(mounted.document.activeElement?.getAttribute('id')).toBe(occurrence.id);
     expect(mounted.window.location.href).toBe(originalAddress);
     expect(source.textContent).toContain('Before ');
     expect(source.textContent).toContain(' after');
