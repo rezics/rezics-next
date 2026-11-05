@@ -2001,6 +2001,7 @@
   "own_drafts_retry": "이 페이지 재시도",
   "own_drafts_restart": "목록 다시 시작",
   "own_drafts_continue": "이전 초안 더 보기",
+  "own_drafts_previous": "이전 페이지",
   "own_drafts_no_title": "제목 없는 초안",
   "own_drafts_board_unavailable": "게시판을 사용할 수 없음",
   "own_drafts_discussion": "토론",

@@ -24,7 +24,12 @@ test('native command advice belongs to the selected author, resource and revisio
 test('erase review retries the same uncertain intent and readback does not claim concealed erasure', async () => {
   const entry = row();
   const reader: OwnDraftReader = {
-    list: async () => ({ state: 'ready', viewer: { accountId, authnEpoch: 2 }, drafts: [entry], next: null }),
+    list: async ({ cursor }) => ({
+      state: 'ready',
+      viewer: { accountId, authnEpoch: 2 },
+      drafts: cursor ? [row({ id: 'older-draft', title: 'Older draft' })] : [entry],
+      next: cursor ? null : 'older',
+    }),
     resume: async () => selected(entry),
   };
   const erasures: unknown[] = [];
@@ -71,6 +76,8 @@ test('erase review retries the same uncertain intent and readback does not claim
     expect(erasures[1]).toEqual(exactIntent);
     expect(fixture.window.document.activeElement?.textContent).toContain('The erase request was acknowledged');
     await fixture.click('Retry this page');
+    expect(fixture.host.textContent).toContain('The erase request was acknowledged');
+    await fixture.click('Continue to older drafts');
     expect(fixture.host.textContent).toContain('The erase request was acknowledged');
     await fixture.click('Read current post');
     expect(fixture.host.textContent).toContain('That does not confirm erasure');

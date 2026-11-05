@@ -61,6 +61,7 @@ type StoryArgs = {
   scenario:
     | 'ready'
     | 'empty'
+    | 'empty-terminal'
     | 'preparing'
     | 'sparse'
     | 'concealed'
@@ -87,6 +88,8 @@ function readerFor(scenario: StoryArgs['scenario'], locale: OwnDraftLocale): Own
     async list(request) {
       if (scenario === 'denied') return 'denied';
       if (scenario === 'empty') return nativePage([]);
+      if (scenario === 'empty-terminal')
+        return request.cursor ? nativePage([]) : nativePage([entry()], 'ready', 'empty-terminal-cursor');
       if (scenario === 'preparing') return nativePage([entry()], 'preparing');
       if (scenario === 'sparse' && request.cursor) return nativePage([entry({ documentKind: 'reply', title: null })]);
       if (scenario === 'sparse') return nativePage([], 'ready', 'opaque-native-cursor');
@@ -189,6 +192,16 @@ type Story = StoryObj<typeof meta>;
 
 export const Ready: Story = {};
 export const InitialEmpty: Story = { args: { scenario: 'empty' } };
+export const EmptyTerminalReturn: Story = {
+  args: { scenario: 'empty-terminal' },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.own_drafts_continue({}, { locale: args.locale }) }));
+    await expect(view.findByText(m.own_drafts_empty({}, { locale: args.locale }))).resolves.toBeVisible();
+    await expect(view.findByRole('button', { name: m.own_drafts_previous({}, { locale: args.locale }) })).resolves.toBeVisible();
+    await expect(view.findByRole('button', { name: m.own_drafts_restart({}, { locale: args.locale }) })).resolves.toBeVisible();
+  },
+};
 export const PreparingWithRows: Story = { args: { scenario: 'preparing' } };
 export const SparseContinuation: Story = { args: { scenario: 'sparse' } };
 export const SelectedUnavailable: Story = { args: { scenario: 'concealed' } };

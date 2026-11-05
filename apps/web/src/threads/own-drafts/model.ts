@@ -150,6 +150,36 @@ export function ownDraftRequestKey(identityKey: string, cursor: string | null): 
   return JSON.stringify([identityKey, cursor]);
 }
 
+export const OWN_DRAFT_CURSOR_MAX_LENGTH = 32768;
+export const OWN_DRAFT_PREDECESSOR_LIMIT = 8;
+
+/** Native continuation coordinates are opaque, nonempty strings bounded in JavaScript code units. */
+export function isOwnDraftCursor(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= OWN_DRAFT_CURSOR_MAX_LENGTH;
+}
+
+export type OwnDraftCoordinate = string | null;
+export type OwnDraftMovement = 'initial' | 'next' | 'previous' | 'first' | 'refresh';
+
+/** Retain only the admitted path coordinates for this mounted private visit. */
+export function moveOwnDraftCoordinates(
+  coordinates: readonly OwnDraftCoordinate[],
+  movement: OwnDraftMovement,
+  target: OwnDraftCoordinate,
+): readonly OwnDraftCoordinate[] {
+  switch (movement) {
+    case 'initial':
+    case 'first':
+      return [null];
+    case 'previous':
+      return coordinates.slice(0, -1);
+    case 'refresh':
+      return coordinates;
+    case 'next':
+      return [...coordinates, target].slice(-(OWN_DRAFT_PREDECESSOR_LIMIT + 1));
+  }
+}
+
 /** A body read is a separate operation that only the explicit selection handler calls. */
 export async function readSelectedOwnDraft(
   reader: OwnDraftReader,
