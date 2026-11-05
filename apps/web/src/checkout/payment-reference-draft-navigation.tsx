@@ -211,7 +211,8 @@ function RouterDraftBoundary({
   useBlocker({
     shouldBlockFn: async ({ next }) => {
       if (protectedNow() && !(await confirm())) return true;
-      return departure ? !departure.beforeLeave(next.href) : false;
+      const href = `${next.pathname}${next.searchStr}${next.hash ?? ''}`;
+      return departure ? !departure.beforeLeave(href) : false;
     },
     enableBeforeUnload: false,
   });
