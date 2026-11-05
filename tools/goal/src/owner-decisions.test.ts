@@ -2,11 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultPolicy } from './policy.ts';
-import {
-  MAX_WORKER_PROMPT_CHARACTERS,
-  prepareOwnerDecisionPrompt,
-  writeOwnerDecisionFile,
-} from './owner-decisions.ts';
+import { MAX_WORKER_PROMPT_CHARACTERS, prepareOwnerDecisionPrompt, writeOwnerDecisionFile } from './owner-decisions.ts';
 import { temporaryDirectory } from './test-support.ts';
 import type { WorkerEvent } from './store.ts';
 import type { Task } from './types.ts';
