@@ -89,13 +89,15 @@ export async function pageDueCollectionDeletions(
     throw new RangeError('Invalid Collection retention partition');
   if (input.after && partitionOf(input.after.route) !== input.partition)
     throw new RangeError('Foreign Collection retention cursor');
-  const rows = await withCollectionRetentionDeclaration('duePage', () => executeCollectionRetentionQuery('due', due, connection, {
-    partition_no: input.partition,
-    cutoff: input.cutoff,
-    after_time: input.after?.purgeAfter ?? null,
-    after_route: input.after?.route ?? null,
-    after_id: input.after?.collectionId ?? null,
-  }));
+  const rows = await withCollectionRetentionDeclaration('duePage', () =>
+    executeCollectionRetentionQuery('due', due, connection, {
+      partition_no: input.partition,
+      cutoff: input.cutoff,
+      after_time: input.after?.purgeAfter ?? null,
+      after_route: input.after?.route ?? null,
+      after_id: input.after?.collectionId ?? null,
+    }),
+  );
   const keys = rows.map((row) => {
     if (row.accountId === null || row.deletionId === null || row.purgeAfter === null)
       throw new Error('Due Collection lacks its exact owner/deletion episode');
@@ -136,7 +138,8 @@ async function removeLocalPage(
   if (await executeCollectionRetentionQuery('state', state, tx, args)) return { status: 'progress', removed: 1 };
   const referenceCount = (await executeCollectionRetentionQuery('references', references, tx, args)).length;
   if (referenceCount > 0) return { status: 'progress', removed: referenceCount };
-  const removed = (await executeCollectionRetentionQuery('metadata', metadata, tx, { ...args, account_id: accountId })).length;
+  const removed = (await executeCollectionRetentionQuery('metadata', metadata, tx, { ...args, account_id: accountId }))
+    .length;
   if (removed > 0) return { status: 'progress', removed };
   const historyRemoved = (await executeCollectionRetentionQuery('metadataHistory', metadataHistory, tx, args)).length;
   if (historyRemoved > 0) return { status: 'progress', removed: historyRemoved };
@@ -163,69 +166,71 @@ export async function purgeExpiredCollectionPage(
   validateKey(key);
   let parent: LockedCollection | null = null;
   let accountLive = false;
-  const outcome = await withCollectionRetentionDeclaration('removeCommand', () => runCommand<CollectionCleanupPage>(
-    pool,
-    {
-      partition: partitionOf(key.route),
-      deadline,
-      clock,
-      authorization: {
-        action: 'library:collection-retention-maintenance',
-        resource: { route: key.route, id: key.collectionId },
-        denied: () => new Error('Collection retention account fence unavailable'),
-        async authorize(tx, attempt) {
-          accountLive = false;
-          parent = null;
-          // Native account anchor first; a terminal account belongs to the single terminal participant.
-          try {
-            await shareAccount(tx, key.accountId);
-            accountLive = true;
-          } catch (error) {
-            if (!(error instanceof LifecycleDeniedError)) throw error;
-          }
-          if (accountLive) {
-            parent = await executeCollectionRetentionQuery('lock', lock, tx, {
-              route: key.route,
-              collection_id: key.collectionId,
-              purge_after: key.purgeAfter,
-              time: authoritativeTimeValue(attempt.time),
-            });
-          }
-          return 'execute';
+  const outcome = await withCollectionRetentionDeclaration('removeCommand', () =>
+    runCommand<CollectionCleanupPage>(
+      pool,
+      {
+        partition: partitionOf(key.route),
+        deadline,
+        clock,
+        authorization: {
+          action: 'library:collection-retention-maintenance',
+          resource: { route: key.route, id: key.collectionId },
+          denied: () => new Error('Collection retention account fence unavailable'),
+          async authorize(tx, attempt) {
+            accountLive = false;
+            parent = null;
+            // Native account anchor first; a terminal account belongs to the single terminal participant.
+            try {
+              await shareAccount(tx, key.accountId);
+              accountLive = true;
+            } catch (error) {
+              if (!(error instanceof LifecycleDeniedError)) throw error;
+            }
+            if (accountLive) {
+              parent = await executeCollectionRetentionQuery('lock', lock, tx, {
+                route: key.route,
+                collection_id: key.collectionId,
+                purge_after: key.purgeAfter,
+                time: authoritativeTimeValue(attempt.time),
+              });
+            }
+            return 'execute';
+          },
         },
       },
-    },
-    async (tx) => {
-      if (!accountLive) return noEffect({ status: 'retained', removed: 0, custody: 'account_fence' });
-      if (
-        !parent ||
-        parent.accountId !== key.accountId ||
-        parent.state !== 'deleted' ||
-        parent.deletionId !== key.deletionId ||
-        parent.revision !== key.revision ||
-        !parent.deadlineMatches
-      )
-        return noEffect({ status: 'stale', removed: 0 });
-      if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
-      const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent, {
-        kind: 'deleted',
-        deletionId: key.deletionId,
-        revision: key.revision,
-        purgeAfter: key.purgeAfter,
-      });
-      if (value.removed === 0) return noEffect(value);
-      return {
-        value,
-        events: [
-          {
-            type: 'com.rezics.library.collection.retention-purged.v1',
-            subject: key.collectionId,
-            data: { collectionId: key.collectionId, deletionId: key.deletionId, removed: value.removed },
-          },
-        ],
-      };
-    },
-  ));
+      async (tx) => {
+        if (!accountLive) return noEffect({ status: 'retained', removed: 0, custody: 'account_fence' });
+        if (
+          !parent ||
+          parent.accountId !== key.accountId ||
+          parent.state !== 'deleted' ||
+          parent.deletionId !== key.deletionId ||
+          parent.revision !== key.revision ||
+          !parent.deadlineMatches
+        )
+          return noEffect({ status: 'stale', removed: 0 });
+        if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
+        const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent, {
+          kind: 'deleted',
+          deletionId: key.deletionId,
+          revision: key.revision,
+          purgeAfter: key.purgeAfter,
+        });
+        if (value.removed === 0) return noEffect(value);
+        return {
+          value,
+          events: [
+            {
+              type: 'com.rezics.library.collection.retention-purged.v1',
+              subject: key.collectionId,
+              data: { collectionId: key.collectionId, deletionId: key.deletionId, removed: value.removed },
+            },
+          ],
+        };
+      },
+    ),
+  );
   return bounded(outcome.value);
 }
 
@@ -239,14 +244,26 @@ export async function purgeTerminalCollectionPage(
   const time = authoritativeTimeValue(currentCommand(tx).time);
   const route = requireRoute(input.accountId);
   if (requireRoute(input.collectionId) !== route) throw new TypeError('Foreign terminal Collection');
-  if (!(await executeCollectionRetentionQuery('terminalScope', terminalScope, tx, { route, account_id: input.accountId })))
+  if (
+    !(await executeCollectionRetentionQuery('terminalScope', terminalScope, tx, { route, account_id: input.accountId }))
+  )
     throw new Error('Collection cleanup requires the current native terminal obligation');
-  let parent = await executeCollectionRetentionQuery('lock', lock, tx, { route, collection_id: input.collectionId, purge_after: null, time });
+  let parent = await executeCollectionRetentionQuery('lock', lock, tx, {
+    route,
+    collection_id: input.collectionId,
+    purge_after: null,
+    time,
+  });
   if (!parent) return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
   const saved = await purgeSavedCollectionPage(tx, input);
   if (saved) return saved;
-  parent = await executeCollectionRetentionQuery('lock', lock, tx, { route, collection_id: input.collectionId, purge_after: null, time });
+  parent = await executeCollectionRetentionQuery('lock', lock, tx, {
+    route,
+    collection_id: input.collectionId,
+    purge_after: null,
+    time,
+  });
   if (!parent) return { status: 'stale', removed: 0 };
   return withCollectionRetentionDeclaration('terminalSharedCleanup', () =>
     removeLocalPage(tx, route, input.collectionId, input.accountId, parent, { kind: 'terminal' }),
@@ -262,27 +279,29 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
   const discover = DBOS.registerStep(
     async (until: string, cursor: Cursor) => {
       bounded(cursor);
-      return withCollectionRetentionDeclaration('discoveryStep', () => withConnection(pool, async (connection) => {
-        await executeCollectionRetentionControl('discover.begin', (sql) => connection.query(sql));
-        try {
-          await executeCollectionRetentionControl('discover.timeout', (sql) => connection.query(sql));
-          const partition = await executeCollectionRetentionQuery('partition', retentionPartition, connection, {
-            partition_no: cursor.partition,
-          });
-          const page =
-            partition?.writeState === 'active'
-              ? {
-                  kind: 'available' as const,
-                  keys: await pageDueCollectionDeletions(connection, { ...cursor, cutoff: until }),
-                }
-              : { kind: 'pending' as const };
-          await executeCollectionRetentionControl('discover.commit', (sql) => connection.query(sql));
-          return page;
-        } catch (error) {
-          await executeCollectionRetentionControl('discover.rollback', (sql) => connection.query(sql));
-          throw error;
-        }
-      }));
+      return withCollectionRetentionDeclaration('discoveryStep', () =>
+        withConnection(pool, async (connection) => {
+          await executeCollectionRetentionControl('discover.begin', (sql) => connection.query(sql));
+          try {
+            await executeCollectionRetentionControl('discover.timeout', (sql) => connection.query(sql));
+            const partition = await executeCollectionRetentionQuery('partition', retentionPartition, connection, {
+              partition_no: cursor.partition,
+            });
+            const page =
+              partition?.writeState === 'active'
+                ? {
+                    kind: 'available' as const,
+                    keys: await pageDueCollectionDeletions(connection, { ...cursor, cutoff: until }),
+                  }
+                : { kind: 'pending' as const };
+            await executeCollectionRetentionControl('discover.commit', (sql) => connection.query(sql));
+            return page;
+          } catch (error) {
+            await executeCollectionRetentionControl('discover.rollback', (sql) => connection.query(sql));
+            throw error;
+          }
+        }),
+      );
     },
     { name: 'library.collectionRetention.discover', ...COMMAND_STEP_RETRIES },
   );
@@ -294,55 +313,60 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
     async (next: Segment) => {
       bounded(next);
       await withCollectionRetentionDeclaration('continuationEnqueue', () =>
-        withCollectionRetentionEngineRequest('continuationEnqueue', () => client.enqueue(
-          {
-            workflowName: SEGMENT_WORKFLOW,
-            queueName: 'maintenance',
-            workflowID: `library.collectionRetention:${next.root}:${next.sequence}`,
-            workflowIDReusePolicy: 'return-existing',
-          },
-          next,
-        )),
+        withCollectionRetentionEngineRequest('continuationEnqueue', () =>
+          client.enqueue(
+            {
+              workflowName: SEGMENT_WORKFLOW,
+              queueName: 'maintenance',
+              workflowID: `library.collectionRetention:${next.root}:${next.sequence}`,
+              workflowIDReusePolicy: 'return-existing',
+            },
+            next,
+          ),
+        ),
       );
     },
     { name: 'library.collectionRetention.continue', ...COMMAND_STEP_RETRIES },
   );
-  const segment = async (input: Segment) => withCollectionRetentionDeclaration('segment', async () => {
-    bounded(input);
-    let { cursor, current } = input;
-    // A segment has a fixed history bound, even for a very large retained graph.
-    for (let n = 0; n < 32 && cursor.partition < PARTITIONS; n++) {
-      if (current) {
-        const pending = current;
-        const result = await withCollectionRetentionEngineRequest('removeStep', () => remove(pending));
-        if (result.status === 'progress') continue;
-        if (result.status === 'retained') break;
-        cursor = {
-          partition: cursor.partition,
-          after: {
-            purgeAfter: pending.purgeAfter,
-            route: pending.route,
-            collectionId: pending.collectionId,
-          },
-        };
-        current = null;
-      } else {
-        const page = await withCollectionRetentionEngineRequest('discoveryStep', () => discover(input.cutoff, cursor));
-        if (page.kind === 'pending') {
-          // The next scheduled sweep retries this home; unavailable is never an empty source proof.
-          cursor = { partition: cursor.partition + 1, after: null };
-          continue;
+  const segment = async (input: Segment) =>
+    withCollectionRetentionDeclaration('segment', async () => {
+      bounded(input);
+      let { cursor, current } = input;
+      // A segment has a fixed history bound, even for a very large retained graph.
+      for (let n = 0; n < 32 && cursor.partition < PARTITIONS; n++) {
+        if (current) {
+          const pending = current;
+          const result = await withCollectionRetentionEngineRequest('removeStep', () => remove(pending));
+          if (result.status === 'progress') continue;
+          if (result.status === 'retained') break;
+          cursor = {
+            partition: cursor.partition,
+            after: {
+              purgeAfter: pending.purgeAfter,
+              route: pending.route,
+              collectionId: pending.collectionId,
+            },
+          };
+          current = null;
+        } else {
+          const page = await withCollectionRetentionEngineRequest('discoveryStep', () =>
+            discover(input.cutoff, cursor),
+          );
+          if (page.kind === 'pending') {
+            // The next scheduled sweep retries this home; unavailable is never an empty source proof.
+            cursor = { partition: cursor.partition + 1, after: null };
+            continue;
+          }
+          // One key is carried durably; the remaining <=7 keys are revisited by the next indexed seek.
+          current = page.keys[0] ?? null;
+          if (!current) cursor = { partition: cursor.partition + 1, after: null };
         }
-        // One key is carried durably; the remaining <=7 keys are revisited by the next indexed seek.
-        current = page.keys[0] ?? null;
-        if (!current) cursor = { partition: cursor.partition + 1, after: null };
       }
-    }
-    if (cursor.partition < PARTITIONS)
-      await withCollectionRetentionEngineRequest('continuationStep', () =>
-        continueSweep({ ...input, sequence: input.sequence + 1, cursor, current }),
-      );
-  });
+      if (cursor.partition < PARTITIONS)
+        await withCollectionRetentionEngineRequest('continuationStep', () =>
+          continueSweep({ ...input, sequence: input.sequence + 1, cursor, current }),
+        );
+    });
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
   DBOS.registerWorkflow(
     async () =>

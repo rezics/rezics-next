@@ -1151,7 +1151,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        return withCollectionRetentionDeclaration('restoreResponse', async () => ({ collection: await written(result.value, actor) }));
+        return withCollectionRetentionDeclaration('restoreResponse', async () => ({
+          collection: await written(result.value, actor),
+        }));
       },
     )
     .get(

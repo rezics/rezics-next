@@ -127,7 +127,8 @@ export function runPublicFilterCollectionReductionQuery<Client, Input extends ob
   if (item.query.sql !== query.sql) throw new TypeError(`Collection public-reduction SQL owner mismatch: ${id}`);
   const actual = bound(item, input as Readonly<Record<string, unknown>>);
   const ceiling = statementBounds[id];
-  if (!withinCeiling(actual, ceiling)) throw new TypeError(`Collection public-reduction bind exceeds its ceiling: ${id}`);
+  if (!withinCeiling(actual, ceiling))
+    throw new TypeError(`Collection public-reduction bind exceeds its ceiling: ${id}`);
   const association = currentCommandWorkAssociation();
   const { engineRequests: _engineRequests, ...work } = actual;
   return association

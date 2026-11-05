@@ -355,7 +355,12 @@ const statementSpecs: readonly StatementSpec[] = Object.freeze([
       maxOverrides: { hold_ids: Array.from({ length: 80 }, () => maxUuid) },
       valid: (values) => {
         const ids = values.hold_ids;
-        return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 && ids.every((id) => typeof id === 'string' && uuid.test(id));
+        return (
+          Array.isArray(ids) &&
+          ids.length >= 1 &&
+          ids.length <= 80 &&
+          ids.every((id) => typeof id === 'string' && uuid.test(id))
+        );
       },
     },
   ),

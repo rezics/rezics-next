@@ -222,7 +222,10 @@ function statement(
     bindExtraBytes,
   });
   const maxValues = valuesFor(query, shape.maxBinds);
-  shapeBounds.set(shape, sqlBound(query, maxValues, shapeWork(shape), projection, projectedRows, projectionExtraBytes, bindExtraBytes));
+  shapeBounds.set(
+    shape,
+    sqlBound(query, maxValues, shapeWork(shape), projection, projectedRows, projectionExtraBytes, bindExtraBytes),
+  );
   return shape;
 }
 
@@ -240,16 +243,32 @@ function shapeWork(shape: SQLShape): Partial<Bound> {
 }
 
 const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
-  accountShare: statement(accountShare, { route: ROUTE, account_id: UUID }, 1, 1, 1, 1, { state: 'deleted', fenced: true }),
+  accountShare: statement(accountShare, { route: ROUTE, account_id: UUID }, 1, 1, 1, 1, {
+    state: 'deleted',
+    fenced: true,
+  }),
   commandTime: statement(commandTime, { at: TIMESTAMP }, 1, 1, 1, 1, { at: PG_TIMESTAMP }),
   receiptRead: statement(
     readReceipt,
-    { partition_no: INT, principal_kind: 'account', principal_id: UUID, command_kind: 'library.collection.restore', idempotency_keys: ['x'.repeat(255), ...Array.from({ length: 4 }, () => `rk1.255.${'x'.repeat(43)}`)] },
+    {
+      partition_no: INT,
+      principal_kind: 'account',
+      principal_id: UUID,
+      command_kind: 'library.collection.restore',
+      idempotency_keys: ['x'.repeat(255), ...Array.from({ length: 4 }, () => `rk1.255.${'x'.repeat(43)}`)],
+    },
     5,
     1,
     1,
     1,
-    { requestDigest: 'A'.repeat(44), epoch: INT, position: BIGINT, transactionId: UUID, response: deletedCollectionRow, payloadState: 'complete' },
+    {
+      requestDigest: 'A'.repeat(44),
+      epoch: INT,
+      position: BIGINT,
+      transactionId: UUID,
+      response: deletedCollectionRow,
+      payloadState: 'complete',
+    },
     1,
     0,
     0,
@@ -257,7 +276,22 @@ const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
   ),
   commandFence: statement(
     commandFence,
-    { partition_no: INT, events: [{ id: UUID, type: ESCAPED(128), subject: UUID, data: { collectionId: UUID, deletionId: UUID, removed: INT } }, { id: UUID, type: ESCAPED(128), subject: UUID, data: { collectionId: UUID } }], transaction_id: UUID, basis: { principal: { kind: 'account', id: UUID }, clientId: UUID, requestedBy: UUID }, receipt: { principal: { kind: 'account', id: UUID }, kind: 'library.collection.delete', key: `rk1.255.${'x'.repeat(43)}`, digest: 'A'.repeat(44), response: deletedCollectionRow } },
+    {
+      partition_no: INT,
+      events: [
+        { id: UUID, type: ESCAPED(128), subject: UUID, data: { collectionId: UUID, deletionId: UUID, removed: INT } },
+        { id: UUID, type: ESCAPED(128), subject: UUID, data: { collectionId: UUID } },
+      ],
+      transaction_id: UUID,
+      basis: { principal: { kind: 'account', id: UUID }, clientId: UUID, requestedBy: UUID },
+      receipt: {
+        principal: { kind: 'account', id: UUID },
+        kind: 'library.collection.delete',
+        key: `rk1.255.${'x'.repeat(43)}`,
+        digest: 'A'.repeat(44),
+        response: deletedCollectionRow,
+      },
+    },
     2,
     16,
     8,
@@ -271,7 +305,17 @@ const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
   ),
   noEffectFence: statement(
     commandNoEffectFence,
-    { partition_no: INT, transaction_id: UUID, receipt: { principal: { kind: 'account', id: UUID }, kind: 'library.collection.restore', key: `rk1.255.${'x'.repeat(43)}`, digest: 'A'.repeat(44), response: collectionRow } },
+    {
+      partition_no: INT,
+      transaction_id: UUID,
+      receipt: {
+        principal: { kind: 'account', id: UUID },
+        kind: 'library.collection.restore',
+        key: `rk1.255.${'x'.repeat(43)}`,
+        digest: 'A'.repeat(44),
+        response: collectionRow,
+      },
+    },
     2,
     8,
     4,
@@ -283,16 +327,27 @@ const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
     0,
     RELEASE_LIMITS.bytes - 2,
   ),
-  collectionRead: statement(collectionRead, { route: ROUTE, id: UUID }, 1, 1, 1, 1, collectionRow, 1, 0, 0, RELEASE_LIMITS.bytes - 2),
-  authorizedCollection: statement(
-    authorizedCollection,
-    { route: ROUTE, collection_id: UUID },
+  collectionRead: statement(
+    collectionRead,
+    { route: ROUTE, id: UUID },
     1,
     1,
     1,
     1,
-    { curatorAccountId: UUID, visibility: 'unlisted', state: 'deleted', membershipKind: 'curated', builtinKind: null, hasSavedRule: true },
+    collectionRow,
+    1,
+    0,
+    0,
+    RELEASE_LIMITS.bytes - 2,
   ),
+  authorizedCollection: statement(authorizedCollection, { route: ROUTE, collection_id: UUID }, 1, 1, 1, 1, {
+    curatorAccountId: UUID,
+    visibility: 'unlisted',
+    state: 'deleted',
+    membershipKind: 'curated',
+    builtinKind: null,
+    hasSavedRule: true,
+  }),
   tombstone: statement(
     collectionTombstone,
     { route: ROUTE, id: UUID, transaction_id: UUID, time: TIMESTAMP },
@@ -306,7 +361,15 @@ const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
     0,
     RELEASE_LIMITS.bytes - 2,
   ),
-  restoreWindow: statement(collectionRestoreWindow, { route: ROUTE, id: UUID, time: TIMESTAMP }, 1, 1, 1, 1, restoreWindowRow),
+  restoreWindow: statement(
+    collectionRestoreWindow,
+    { route: ROUTE, id: UUID, time: TIMESTAMP },
+    1,
+    1,
+    1,
+    1,
+    restoreWindowRow,
+  ),
   restore: statement(
     collectionRestore,
     { route: ROUTE, id: UUID, revision: INT, deletion_id: UUID, transaction_id: UUID, time: TIMESTAMP },
@@ -340,10 +403,28 @@ const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
     4,
     lockRow,
   ),
-  members: statement(collectionMembers, { route: ROUTE, collection_id: UUID }, MAX_PAGE, MAX_PAGE, 1, 1, trueRow, MAX_PAGE),
+  members: statement(
+    collectionMembers,
+    { route: ROUTE, collection_id: UUID },
+    MAX_PAGE,
+    MAX_PAGE,
+    1,
+    1,
+    trueRow,
+    MAX_PAGE,
+  ),
   facts: statement(collectionFacts, { route: ROUTE, collection_id: UUID }, MAX_PAGE, MAX_PAGE, 1, 1, trueRow, MAX_PAGE),
   state: statement(collectionState, { route: ROUTE, collection_id: UUID }, 1, 1, 1, 1, trueRow),
-  references: statement(collectionReferences, { route: ROUTE, collection_id: UUID }, MAX_PAGE, MAX_PAGE, 1, 1, trueRow, MAX_PAGE),
+  references: statement(
+    collectionReferences,
+    { route: ROUTE, collection_id: UUID },
+    MAX_PAGE,
+    MAX_PAGE,
+    1,
+    1,
+    trueRow,
+    MAX_PAGE,
+  ),
   metadata: statement(
     collectionMetadata,
     { route: ROUTE, collection_id: UUID, account_id: UUID },
@@ -375,8 +456,19 @@ const shapes: Readonly<Record<StatementId, SQLShape>> = Object.freeze({
     trueRow,
     1,
   ),
-  retireFence: statement(collectionRetireFence, { route: ROUTE, collection_id: UUID, account_id: UUID }, 3, 1, 3, 2, trueRow),
-  terminalScope: statement(terminalScopeQuery, { route: ROUTE, account_id: UUID }, 1, 1, 1, 1, { version: BIGINT, outcome: ESCAPED(32) }),
+  retireFence: statement(
+    collectionRetireFence,
+    { route: ROUTE, collection_id: UUID, account_id: UUID },
+    3,
+    1,
+    3,
+    2,
+    trueRow,
+  ),
+  terminalScope: statement(terminalScopeQuery, { route: ROUTE, account_id: UUID }, 1, 1, 1, 1, {
+    version: BIGINT,
+    outcome: ESCAPED(32),
+  }),
 });
 
 function runtimeStatementBound(id: StatementId, input: Readonly<Record<string, unknown>>): Bound {
@@ -395,8 +487,7 @@ function runtimeStatementBound(id: StatementId, input: Readonly<Record<string, u
   return bound;
 }
 
-const control = (sql: string) =>
-  sqlBound({ sql, params: [] }, [], { statements: 1, engineRequests: 0 }, {}, 0);
+const control = (sql: string) => sqlBound({ sql, params: [] }, [], { statements: 1, engineRequests: 0 }, {}, 0);
 const begin = control('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
 const commandBegin = control('BEGIN ISOLATION LEVEL SERIALIZABLE');
 const lockTimeout = control("SET LOCAL lock_timeout = '200ms'");
@@ -474,7 +565,14 @@ const headProgress = plus(
   dimensions({ candidateKeys: 8, nativeRows: 8, nativePoints: 8, emptySeeks: 2, statements: 8 }),
   shapeBounds.get(shapes.retireFence)!,
 );
-const childProgress = maxBound(memberPage, factProgress, stateProgress, referenceProgress, metadataProgress, historyProgress);
+const childProgress = maxBound(
+  memberPage,
+  factProgress,
+  stateProgress,
+  referenceProgress,
+  metadataProgress,
+  historyProgress,
+);
 const cleanupPage = maxBound(childProgress, headProgress);
 const lockOnce = plus(
   checkout,
@@ -504,17 +602,44 @@ const removeFailedAfterWork = maxBound(
   plus(lockOnce, nativePage, cleanupPage, finalCommandTimeout, shapeBounds.get(shapes.commandFence)!, rollback),
   plus(lockOnce, nativePage, finalCommandTimeout, shapeBounds.get(shapes.commandFence)!, rollback),
 );
-const removeCommandAttempt = maxBound(removeFresh, removeNoEffect, removeRetained, failedCommand, removeFailedAfterWork);
+const removeCommandAttempt = maxBound(
+  removeFresh,
+  removeNoEffect,
+  removeRetained,
+  failedCommand,
+  removeFailedAfterWork,
+);
 const stepHistory = dimensions({ bytes: 2 * MAX_DURABLE_JSON_BYTES });
 const removeDBOSStep = plus(
   repeated(plus(removeCommandAttempt, stepHistory), RETRY_ATTEMPTS),
   dimensions({ engineRequests: RETRY_ATTEMPTS }),
 );
-const discoveryAvailable = plus(checkout, begin, discoveryTimeout, shapeBounds.get(shapes.partition)!, shapeBounds.get(shapes.due)!, commit);
-const discoveryEmpty = plus(checkout, begin, discoveryTimeout, shapeBounds.get(shapes.partition)!, shapeBounds.get(shapes.due)!, commit);
+const discoveryAvailable = plus(
+  checkout,
+  begin,
+  discoveryTimeout,
+  shapeBounds.get(shapes.partition)!,
+  shapeBounds.get(shapes.due)!,
+  commit,
+);
+const discoveryEmpty = plus(
+  checkout,
+  begin,
+  discoveryTimeout,
+  shapeBounds.get(shapes.partition)!,
+  shapeBounds.get(shapes.due)!,
+  commit,
+);
 const discoveryPending = plus(checkout, begin, discoveryTimeout, shapeBounds.get(shapes.partition)!, commit);
 const discoveryFailed = plus(checkout, begin, discoveryTimeout, shapeBounds.get(shapes.partition)!, rollback);
-const discoveryFailedAfterDue = plus(checkout, begin, discoveryTimeout, shapeBounds.get(shapes.partition)!, shapeBounds.get(shapes.due)!, rollback);
+const discoveryFailedAfterDue = plus(
+  checkout,
+  begin,
+  discoveryTimeout,
+  shapeBounds.get(shapes.partition)!,
+  shapeBounds.get(shapes.due)!,
+  rollback,
+);
 const discoveryAttempt = maxBound(discoveryAvailable, discoveryPending, discoveryFailed, discoveryFailedAfterDue);
 const discoveryStep = plus(
   repeated(plus(discoveryAttempt, stepHistory), RETRY_ATTEMPTS),
@@ -531,10 +656,7 @@ const continuationEnqueue = dimensions({
   engineRequests: RETRY_ATTEMPTS,
   bytes: RETRY_ATTEMPTS * (continueRequestBytes + segmentPayloadBytes),
 });
-const continuationStep = plus(
-  repeated(stepHistory, RETRY_ATTEMPTS),
-  dimensions({ engineRequests: RETRY_ATTEMPTS }),
-);
+const continuationStep = plus(repeated(stepHistory, RETRY_ATTEMPTS), dimensions({ engineRequests: RETRY_ATTEMPTS }));
 const cutoffStep = dimensions({ engineRequests: 1, bytes: SIZE(TIMESTAMP) });
 const segmentIteration = maxBound(discoveryStep, removeDBOSStep);
 const segment = plus(
@@ -544,13 +666,18 @@ const segment = plus(
   continuationEnqueue,
 );
 const publicReductionFull = PUBLIC_FILTER_COLLECTION_REDUCTION_DECLARATION.cost;
-const shelfCounterPlan = shelfMaintenanceStatementPlan(
-  shelfCounterDelta.sql,
-  [ROUTE, UUID, UUID, [{ bucket: 'collections', type_id: '00000000-0000-0000-0000-000000000000', delta: -1 }]],
-)!;
+const shelfCounterPlan = shelfMaintenanceStatementPlan(shelfCounterDelta.sql, [
+  ROUTE,
+  UUID,
+  UUID,
+  [{ bucket: 'collections', type_id: '00000000-0000-0000-0000-000000000000', delta: -1 }],
+])!;
 const shelfCounter = shelfCounterPlan.total;
 function shelfStatement(query: Query, values: Readonly<Record<string, unknown>>): Bound {
-  const plan = shelfMaintenanceStatementPlan(query.sql, query.params.map((name) => values[name]));
+  const plan = shelfMaintenanceStatementPlan(
+    query.sql,
+    query.params.map((name) => values[name]),
+  );
   if (!plan) throw new TypeError('Collection retention could not compose the existing Shelf SQL owner');
   return plan.total;
 }
@@ -669,12 +796,7 @@ const actorBase = plus(
   shapeBounds.get(shapes.receiptRead)!,
   repeated(shapeBounds.get(shapes.authorizedCollection)!, 2),
 );
-const actorDeletePrivateBody = plus(
-  actorBase,
-  shapeBounds.get(shapes.authorizedCollection)!,
-  shelfEntry,
-  deleteBody,
-);
+const actorDeletePrivateBody = plus(actorBase, shapeBounds.get(shapes.authorizedCollection)!, shelfEntry, deleteBody);
 const actorDeleteListedBody = plus(actorDeletePrivateBody, publicReductionFull);
 const actorDeletePrivate = plus(actorDeletePrivateBody, committedEvent);
 const actorDeleteListed = plus(actorDeleteListedBody, committedEvent);
@@ -710,12 +832,7 @@ const actorDelete = maxBound(
   actorDeleteRollback,
   plus(actorBase, rollback),
 );
-const actorUndoFreshBody = plus(
-  actorBase,
-  shapeBounds.get(shapes.authorizedCollection)!,
-  shelfEntry,
-  restoreBody,
-);
+const actorUndoFreshBody = plus(actorBase, shapeBounds.get(shapes.authorizedCollection)!, shelfEntry, restoreBody);
 const actorUndoFresh = plus(actorUndoFreshBody, committedEvent);
 const actorUndoReplay = plus(actorBase, commit);
 const actorUndoStaleOrExpired = plus(
@@ -745,7 +862,9 @@ const actorUndo = maxBound(
   actorUndoRollback,
   plus(actorBase, rollback),
 );
-const mountedDelete = dimensions({ bytes: SIZE({ status: 204, cacheControl: 'private, no-store', deletionId: UUID, revision: INT }) });
+const mountedDelete = dimensions({
+  bytes: SIZE({ status: 204, cacheControl: 'private, no-store', deletionId: UUID, revision: INT }),
+});
 const mountedRestoreCollection = Object.freeze({
   id: UUID,
   curatorAccountId: UUID,
@@ -792,7 +911,10 @@ const paths = Object.freeze({
   discoveryStep,
   removeStep: removeDBOSStep,
   retainedStep: repeated(removeRetained, RETRY_ATTEMPTS),
-  emptyDiscoveryStep: plus(repeated(plus(discoveryEmpty, stepHistory), RETRY_ATTEMPTS), dimensions({ engineRequests: RETRY_ATTEMPTS })),
+  emptyDiscoveryStep: plus(
+    repeated(plus(discoveryEmpty, stepHistory), RETRY_ATTEMPTS),
+    dimensions({ engineRequests: RETRY_ATTEMPTS }),
+  ),
   segment,
   continuationStep,
   continuationEnqueue,
@@ -894,10 +1016,7 @@ export function withCollectionRetentionDeclaration<T>(path: CollectionRetentionP
 }
 
 /** Bind a durable DBOS step/enqueue call to its existing engine-request ceiling. */
-export function withCollectionRetentionEngineRequest<T>(
-  path: CollectionRetentionPath,
-  dispatch: () => T,
-): T {
+export function withCollectionRetentionEngineRequest<T>(path: CollectionRetentionPath, dispatch: () => T): T {
   const cost = paths[path];
   if (cost.engineRequests < 1 || !withinCeiling(cost, cost))
     throw new TypeError('Collection retention engine request exceeds its owner declaration');
@@ -942,4 +1061,3 @@ export function collectionRetentionMaximumStatement(id: StatementId): Bound {
 export const COLLECTION_RETENTION_DBOS_ATTEMPTS = RETRY_ATTEMPTS;
 export const COLLECTION_RETENTION_SEGMENT_BOUND = segment;
 export const COLLECTION_RETENTION_SQL_AXES = BOUND_AXES;
-

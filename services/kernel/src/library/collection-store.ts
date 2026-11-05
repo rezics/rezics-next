@@ -131,7 +131,10 @@ export async function insertCollection(
 }
 
 export async function readCollection(client: Client, route: number, id: string): Promise<Collection | null> {
-  const row = await executeCollectionRetentionQuery('collectionRead', collectionRead, queryClient(client), { route, id });
+  const row = await executeCollectionRetentionQuery('collectionRead', collectionRead, queryClient(client), {
+    route,
+    id,
+  });
   return row ? asCollection(row) : null;
 }
 
@@ -165,7 +168,11 @@ export async function tombstoneCollection(
   id: string,
   context: WriteContext,
 ): Promise<Collection | null> {
-  const [row] = await executeCollectionRetentionQuery('tombstone', collectionTombstone, queryClient(client), { route, id, ...write(context) });
+  const [row] = await executeCollectionRetentionQuery('tombstone', collectionTombstone, queryClient(client), {
+    route,
+    id,
+    ...write(context),
+  });
   return row ? asCollection(row) : null;
 }
 

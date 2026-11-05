@@ -589,129 +589,133 @@ function nativeLibrarySourceCustody(
   }
   return {
     retireCapture(input) {
-      return account(input, async (work, operationUse): Promise<NativeSourceRetirementResult> => {
-        if (hasLiveOperationalTransaction(input.client)) throw new Refused('binding');
-        live(input);
-        validate(input.identity);
-        if (!uuid.test(input.captureId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.sourceGeneration))
-          throw new Refused('binding');
-        const run = executor(
-          input.client,
-          work,
-          Math.min(input.deadline, currentCommandResources(input.client).deadline),
-          false,
-          operationUse!,
-        );
-        const episode = input.episode;
-        if (
-          episode.kind !== 'terminal' &&
-          (episode.kind !== 'deleted' ||
-            !uuid.test(episode.deletionId) ||
-            !Number.isSafeInteger(episode.revision) ||
-            episode.revision < 2 ||
-            !Number.isFinite(Date.parse(episode.purgeAfter)))
-        )
-          throw new Refused('binding');
-        const values = {
-          ...parameters(input.identity),
-          capture_id: input.captureId,
-          purge_after: episode.kind === 'deleted' ? episode.purgeAfter : null,
-          time: authoritativeTimeValue(input.at),
-        };
-        const blocked = (reason: Extract<NativeSourceRetirementResult, { status: 'blocked' }>['reason']) => ({
-          status: 'blocked' as const,
-          reason,
-          work: work.receipt(),
-        });
-        const [partition] = await run<{ epoch: number; writeState: string; movedTo: string | null }>(
-          partitionQuery,
-          values,
-        );
-        if (
-          !partition ||
-          partition.epoch !== input.identity.ownerEpoch ||
-          partition.writeState !== 'active' ||
-          partition.movedTo !== null
-        )
-          throw new Refused('binding');
-        // Same order as adoption/retained release: account, Collection, controls, capture, receipt, holds.
-        const [owner] = await run<{ state: string; fenced: boolean }>(accountQuery, values);
-        if (episode.kind === 'terminal') {
-          if (owner?.state !== 'deleted' || !owner.fenced || !(await terminalOwner(run, values)))
+      return account(
+        input,
+        async (work, operationUse): Promise<NativeSourceRetirementResult> => {
+          if (hasLiveOperationalTransaction(input.client)) throw new Refused('binding');
+          live(input);
+          validate(input.identity);
+          if (!uuid.test(input.captureId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.sourceGeneration))
             throw new Refused('binding');
-        } else if (owner?.state !== 'active' || owner.fenced) throw new Refused('binding');
-        const [source] = await run<{
-          accountId: string | null;
-          incarnation: string;
-          generation: string;
-          state: string;
-          kind: string;
-          builtin: string | null;
-          visibility: string;
-          deletionId: string | null;
-          revision: number;
-          deadlineMatches: boolean | null;
-          due: boolean | null;
-          publicCustody: boolean;
-        }>(retireSource, values);
-        if (
-          !source ||
-          source.accountId !== input.identity.accountId ||
-          source.incarnation !== input.identity.incarnation ||
-          source.generation !== input.sourceGeneration ||
-          (input.identity.scope === 'curated'
-            ? source.kind !== 'curated'
-            : input.identity.scope === 'private_builtin'
-              ? source.kind !== 'dynamic' || (episode.kind !== 'terminal' && source.visibility !== 'private')
-              : source.kind !== 'dynamic' || source.builtin !== null)
-        )
-          return blocked('source');
-        if (
-          (source.publicCustody && !(episode.kind === 'terminal' && input.identity.scope === 'private_builtin')) ||
-          input.identity.scope === 'active_explicit_output'
-        )
-          return blocked('public_custody');
-        if (
-          episode.kind === 'deleted' &&
-          (source.state !== 'deleted' ||
-            source.deletionId !== episode.deletionId ||
-            source.revision !== episode.revision ||
-            !source.deadlineMatches ||
-            !source.due)
-        )
-          return blocked('source');
-        const controls = await run(fencesQuery, values);
-        if (controls.length !== 2) throw new Refused('binding');
-        const [state] = await run<State>(readQuery, values);
-        if (!state) return { status: 'retired', removed: 0, work: work.receipt() };
-        if (!sameIdentity(state, input.identity)) throw new Refused('binding');
-        const [receipt] = await run<{ transactionId: string }>(retireReceipt, values);
-        if (state.complete) {
-          const [proof] = await run<{ transactionId: string }>(proofQuery, values);
-          if (!receipt || !proof || receipt.transactionId !== proof.transactionId) throw new Refused('binding');
-        } else if (receipt) throw new Refused('binding');
-        // Never partially delete receipts/holds below native plan evidence. The FK is also a
-        // concurrent-registration barrier; missing handoff is a retained source, not erased data.
-        if ((await run(identityRetention, values)).length) return blocked('source');
-        if ((await run(retireActive, values)).length) return blocked('live_hold');
-        const children = await run<{ id: string; transactionId: string; released: boolean; committed: boolean }>(
-          retireHolds,
-          values,
-        );
-        if (children.some((child) => !child.released)) return blocked('live_hold');
-        if (children.some((child) => child.transactionId !== receipt?.transactionId)) throw new Refused('binding');
-        if (children.some((child) => !child.committed)) return blocked('release_uncommitted');
-        let removed = 0;
-        if (children.length) {
-          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) })).length;
-          if (removed !== children.length) throw new Refused('binding');
-        }
-        // Leave the two parent keys for another attempt when this raw page is full.
-        if (children.length === 80) return { status: 'progress', removed, work: work.receipt() };
-        removed += (await run(retireProof, values)).length;
-        if ((await run(retireCapture, values)).length !== 1) throw new Refused('binding');
-        return { status: 'retired', removed: removed + 1, work: work.receipt() };
-      }, 'retireCapture');
+          const run = executor(
+            input.client,
+            work,
+            Math.min(input.deadline, currentCommandResources(input.client).deadline),
+            false,
+            operationUse!,
+          );
+          const episode = input.episode;
+          if (
+            episode.kind !== 'terminal' &&
+            (episode.kind !== 'deleted' ||
+              !uuid.test(episode.deletionId) ||
+              !Number.isSafeInteger(episode.revision) ||
+              episode.revision < 2 ||
+              !Number.isFinite(Date.parse(episode.purgeAfter)))
+          )
+            throw new Refused('binding');
+          const values = {
+            ...parameters(input.identity),
+            capture_id: input.captureId,
+            purge_after: episode.kind === 'deleted' ? episode.purgeAfter : null,
+            time: authoritativeTimeValue(input.at),
+          };
+          const blocked = (reason: Extract<NativeSourceRetirementResult, { status: 'blocked' }>['reason']) => ({
+            status: 'blocked' as const,
+            reason,
+            work: work.receipt(),
+          });
+          const [partition] = await run<{ epoch: number; writeState: string; movedTo: string | null }>(
+            partitionQuery,
+            values,
+          );
+          if (
+            !partition ||
+            partition.epoch !== input.identity.ownerEpoch ||
+            partition.writeState !== 'active' ||
+            partition.movedTo !== null
+          )
+            throw new Refused('binding');
+          // Same order as adoption/retained release: account, Collection, controls, capture, receipt, holds.
+          const [owner] = await run<{ state: string; fenced: boolean }>(accountQuery, values);
+          if (episode.kind === 'terminal') {
+            if (owner?.state !== 'deleted' || !owner.fenced || !(await terminalOwner(run, values)))
+              throw new Refused('binding');
+          } else if (owner?.state !== 'active' || owner.fenced) throw new Refused('binding');
+          const [source] = await run<{
+            accountId: string | null;
+            incarnation: string;
+            generation: string;
+            state: string;
+            kind: string;
+            builtin: string | null;
+            visibility: string;
+            deletionId: string | null;
+            revision: number;
+            deadlineMatches: boolean | null;
+            due: boolean | null;
+            publicCustody: boolean;
+          }>(retireSource, values);
+          if (
+            !source ||
+            source.accountId !== input.identity.accountId ||
+            source.incarnation !== input.identity.incarnation ||
+            source.generation !== input.sourceGeneration ||
+            (input.identity.scope === 'curated'
+              ? source.kind !== 'curated'
+              : input.identity.scope === 'private_builtin'
+                ? source.kind !== 'dynamic' || (episode.kind !== 'terminal' && source.visibility !== 'private')
+                : source.kind !== 'dynamic' || source.builtin !== null)
+          )
+            return blocked('source');
+          if (
+            (source.publicCustody && !(episode.kind === 'terminal' && input.identity.scope === 'private_builtin')) ||
+            input.identity.scope === 'active_explicit_output'
+          )
+            return blocked('public_custody');
+          if (
+            episode.kind === 'deleted' &&
+            (source.state !== 'deleted' ||
+              source.deletionId !== episode.deletionId ||
+              source.revision !== episode.revision ||
+              !source.deadlineMatches ||
+              !source.due)
+          )
+            return blocked('source');
+          const controls = await run(fencesQuery, values);
+          if (controls.length !== 2) throw new Refused('binding');
+          const [state] = await run<State>(readQuery, values);
+          if (!state) return { status: 'retired', removed: 0, work: work.receipt() };
+          if (!sameIdentity(state, input.identity)) throw new Refused('binding');
+          const [receipt] = await run<{ transactionId: string }>(retireReceipt, values);
+          if (state.complete) {
+            const [proof] = await run<{ transactionId: string }>(proofQuery, values);
+            if (!receipt || !proof || receipt.transactionId !== proof.transactionId) throw new Refused('binding');
+          } else if (receipt) throw new Refused('binding');
+          // Never partially delete receipts/holds below native plan evidence. The FK is also a
+          // concurrent-registration barrier; missing handoff is a retained source, not erased data.
+          if ((await run(identityRetention, values)).length) return blocked('source');
+          if ((await run(retireActive, values)).length) return blocked('live_hold');
+          const children = await run<{ id: string; transactionId: string; released: boolean; committed: boolean }>(
+            retireHolds,
+            values,
+          );
+          if (children.some((child) => !child.released)) return blocked('live_hold');
+          if (children.some((child) => child.transactionId !== receipt?.transactionId)) throw new Refused('binding');
+          if (children.some((child) => !child.committed)) return blocked('release_uncommitted');
+          let removed = 0;
+          if (children.length) {
+            removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) })).length;
+            if (removed !== children.length) throw new Refused('binding');
+          }
+          // Leave the two parent keys for another attempt when this raw page is full.
+          if (children.length === 80) return { status: 'progress', removed, work: work.receipt() };
+          removed += (await run(retireProof, values)).length;
+          if ((await run(retireCapture, values)).length !== 1) throw new Refused('binding');
+          return { status: 'retired', removed: removed + 1, work: work.receipt() };
+        },
+        'retireCapture',
+      );
     },
     capturePage(input) {
       return account(

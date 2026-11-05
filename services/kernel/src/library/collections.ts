@@ -697,11 +697,12 @@ export function createCollectionCommands(config: {
       },
     };
     try {
-      const operationPath = kind === 'library.collection.delete'
-        ? 'deleteCommand'
-        : kind === 'library.collection.restore'
-          ? 'restoreCommand'
-          : null;
+      const operationPath =
+        kind === 'library.collection.delete'
+          ? 'deleteCommand'
+          : kind === 'library.collection.restore'
+            ? 'restoreCommand'
+            : null;
       const commandOptions = {
         ...identity,
         partition: partitionOf(route),
@@ -710,10 +711,8 @@ export function createCollectionCommands(config: {
         receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
         authorization,
       };
-      const dispatch = () => runCommand(
-        pool,
-        commandOptions,
-        async (tx, command) => {
+      const dispatch = () =>
+        runCommand(pool, commandOptions, async (tx, command) => {
           const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
           if (current.curatorAccountId === null) throw new GrantDeniedError();
           await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
@@ -736,17 +735,14 @@ export function createCollectionCommands(config: {
             },
             route,
           );
-        },
-      );
+        });
       const bindCommonCommand = () =>
         consumeShelfMaintenance(
           'collection.command',
           shelfMaintenanceCommandPlan(pool, commandOptions).total,
           dispatch,
         );
-      return await (operationPath
-        ? withCollectionRetentionDeclaration(operationPath, bindCommonCommand)
-        : dispatch());
+      return await (operationPath ? withCollectionRetentionDeclaration(operationPath, bindCommonCommand) : dispatch());
     } catch (error) {
       if (!(error instanceof CollectionOrderRepairRequired)) throw error;
       const repairKind = 'library.collection.order.repair.begin';
@@ -954,7 +950,11 @@ export function createCollectionCommands(config: {
       requestKey,
       { id, deletionId: input.deletionId, revision: expected },
       async (tx, command, route) => {
-        const current = await executeCollectionRetentionQuery('restoreWindow', restoreWindow, tx, { route, id, time: command.time });
+        const current = await executeCollectionRetentionQuery('restoreWindow', restoreWindow, tx, {
+          route,
+          id,
+          time: command.time,
+        });
         if (!current) throw notFound();
         if (!current.deleted) throw new ProblemError('collection_restore_occupied');
         if (current.revision !== expected || current.deletionId !== input.deletionId)

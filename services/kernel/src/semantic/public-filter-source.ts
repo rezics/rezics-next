@@ -40,9 +40,7 @@ import { readPublicFilterProjectionPage as readProjectionPage } from './public-f
 import { isDeepStrictEqual } from 'node:util';
 import realmOfBoard from '../content/realm-of-board.sql';
 import ownerRead from './public-filter-collection-reduction-owner.sql';
-import {
-  runPublicFilterCollectionReductionQuery,
-} from './public-filter-collection-reduction-work.ts';
+import { runPublicFilterCollectionReductionQuery } from './public-filter-collection-reduction-work.ts';
 
 type SourceConfiguration = Parameters<PublicFilterSourceFactory>[0];
 const origins = new WeakMap<PublicFilterSource, SourceConfiguration>();

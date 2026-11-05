@@ -15,12 +15,7 @@ test('Collection due seek retains one selected episode while unrelated owner, Co
   const db = await openGrowthDatabase();
   const f = await createProfileEntryFixture({ pool: db.pool, clock });
   try {
-    const owner = await f.identity([
-      'subject:read',
-      'collection:create',
-      'collection:read',
-      'collection:delete',
-    ]);
+    const owner = await f.identity(['subject:read', 'collection:create', 'collection:read', 'collection:delete']);
     expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
     const subjectId = await f.createSubject('game');
     const made = await f.send(owner.bearer, 'POST', '/v1/collections', {
@@ -29,7 +24,17 @@ test('Collection due seek retains one selected episode while unrelated owner, Co
     });
     expect(made.status).toBe(201);
     const selected = (await made.json()).collection;
-    expect((await f.send(owner.bearer, 'DELETE', `/v1/collections/${selected.id}?revision=${selected.revision}`, undefined, crypto.randomUUID())).status).toBe(204);
+    expect(
+      (
+        await f.send(
+          owner.bearer,
+          'DELETE',
+          `/v1/collections/${selected.id}?revision=${selected.revision}`,
+          undefined,
+          crypto.randomUUID(),
+        )
+      ).status,
+    ).toBe(204);
     const retained = (
       await f.pool.query<{ purgeAfter: string; deletionId: string; revision: number }>(
         'SELECT purge_after::text AS "purgeAfter", deletion_id::text AS "deletionId", revision FROM library.collection WHERE route=$1 AND collection_id=$2',

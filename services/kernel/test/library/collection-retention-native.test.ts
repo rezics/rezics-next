@@ -108,7 +108,7 @@ test('exact Undo does not revive an independently deleted duplicate; D1 cannot r
   expect((await f.send(owner.bearer, 'POST', `/v1/collections/${id}:restore`, first)).status).toBe(409);
   const shelfBeforeReplay = (
       await f.pool.query(
-        "SELECT generation_id,bucket,type_id,n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 ORDER BY generation_id,bucket,type_id",
+        'SELECT generation_id,bucket,type_id,n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 ORDER BY generation_id,bucket,type_id',
         [d3.route, owner.actor.accountId],
       )
     ).rows,
@@ -124,7 +124,7 @@ test('exact Undo does not revive an independently deleted duplicate; D1 cannot r
   expect(
     (
       await f.pool.query(
-        "SELECT generation_id,bucket,type_id,n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 ORDER BY generation_id,bucket,type_id",
+        'SELECT generation_id,bucket,type_id,n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 ORDER BY generation_id,bucket,type_id',
         [d3.route, owner.actor.accountId],
       )
     ).rows,
