@@ -120,7 +120,7 @@ for (const phase of ['initial', 'reload', 'renamed', 'conflict', 'step-up', 'han
     else if (phase !== 'initial') await submit(ui.host);
     if (phase === 'handoff') await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
     const saved = attempt('replacement');
-    saveRenameContinuation(saved);
+    window.sessionStorage.setItem('rezics.account-rename.pending', JSON.stringify(saved));
     await ui.render(source({ readCurrent: async () => ready('replacement') }));
     await flush(() => {
       read.resolve(ready());

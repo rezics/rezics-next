@@ -942,6 +942,32 @@ This costs one existing rename-page POST and no additional native read; the prec
 remains separately required and is not bounded by this rename-page allowance. Native proof revalidation and
 the three-second native deadline remain required.
 
+Decision: the actual rename command uses a compatible 4,096 UTF-16-code-unit account-ID ceiling,
+matching accepted native descriptor/continuation callers and covering SessionProof/rename-page's 1,024-unit
+opaque IDs without UUID-only rules or truncation. Its raw `String.length` allowance is exactly
+`129 + 2 * 6 * 4096 + 32 + 2 * 64 = 49441` code units. The 129-unit empty-string skeleton
+counts all closed keys, quotes, punctuation, `kind: "rename"` and the longer boolean `false`; both account-ID
+copies allow six JSON output units per input unit (including control escapes and lone surrogates). The generated
+key is 32 lowercase hex characters; the normalized new handle and nullable prior handle each allow ASCII64
+without escaping (a maximum prior string exceeds `null`). The raw reader refuses excess text before parsing,
+copying or reserialization. The canonical writer enforces the same fields and bound and excludes credentials
+and approval references. Sources used for this local decision: the rename writer/parser, signup normalization,
+accepted account-operation and management descriptor contracts, and the rename-page response-bound contract.
+
+Absent, valid and refused/unavailable storage are distinct. Malformed, oversized, unknown-field or unreadable
+storage stays untouched; refusal or a different command encountered during a read, approval or handoff leaves the
+mounted review read-only, using existing unavailable text. Only explicit current-state reads and navigation remain;
+there is no repair, migration, fresh key, approval, execution or step-up overwrite. Cleanup requires a valid exact
+expected command and submitted marker; an unconditional clear does nothing. Another valid command cannot be
+silently displaced. A failed write still permits the original exact in-memory send/retry, but does not claim
+persistence and cannot authorize a handoff. Submitted live work remains unknown across current observations until
+its original protocol acknowledges it; matching handles do not acknowledge execution. Stay/Leave remains one
+decision, and retirement clears private presentation while retaining generic history. Recovery from refused bytes
+requires resolving the original command outside this page; current-state Retry cannot repair or erase them.
+This adds finite local parsing/serialization and zero native calls. Focused raw and mounted tests qualify the local
+boundary and replacement behavior; browser/native qualification, broader acceptance and integration remain pending
+with the controller. No locale changes.
+
 `nativeRenameSource` uses one `GET /session` and one cookie-authenticated `POST /account-management/rename-page`
 per current review, with the existing finite native projection and `account:update` management profile. Each browser
 read has the existing five-second bound, including its body. Entry, cached-document return and explicit read Retry

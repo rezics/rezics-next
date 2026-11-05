@@ -296,9 +296,58 @@ test('a later conflicting handle preserves unknown work; a replacement draft can
   expect(host.textContent).toContain(m.auth_rename_unknown());
   expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
   const newer = createRenameAttempt({ ...target, handle: 'concurrent' }, 'newer')!;
-  saveRenameContinuation(newer);
+  window.sessionStorage.setItem('rezics.account-rename.pending', JSON.stringify(newer));
   await flush(() => host.querySelector<HTMLButtonElement>('button[type=button]:last-child')!.click());
   expect(host.querySelector('form')).toBeNull();
   expect(readRenameContinuation()).toEqual(newer);
   expect(host.textContent).toContain(m.auth_rename_unknown());
 });
+
+for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
+  test(`refused storage on ${phase} keeps recovery read-only and preserves the raw value`, async () => {
+    const key = 'rezics.account-rename.pending', raw = '{private-refused';
+    const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
+    if (phase === 'mount') window.sessionStorage.setItem(key, raw);
+    else if (phase !== 'read') saveRenameContinuation(selected);
+    let runs = 0, navigations = 0, reads = 0, keys = 0;
+    const originalRandom = crypto.getRandomValues;
+    crypto.getRandomValues = ((array) => { keys++; return originalRandom.call(crypto, array); }) as typeof crypto.getRandomValues;
+    try {
+      const host = await mount(source({
+        readCurrent: async () => {
+          reads++;
+          if (phase === 'read') window.sessionStorage.setItem(key, raw);
+          return ready();
+        },
+        run: async () => { runs++; return { kind: 'step-up' }; },
+        stepUp: async (_, owns) => {
+          await Promise.resolve();
+          window.sessionStorage.setItem(key, raw);
+          if (owns?.()) navigations++;
+          return false;
+        },
+      }));
+      if (phase === 'submit' || phase === 'step-up') {
+        await flush(() => host.querySelector<HTMLInputElement>('#rename-confirm')!.click());
+        if (phase === 'submit') window.sessionStorage.setItem(key, raw);
+        await send(host);
+      } else if (phase === 'edit') {
+        window.sessionStorage.setItem(key, raw);
+        await flush(() => {
+          const input = host.querySelector<HTMLInputElement>('#rename-handle')!;
+          Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(input, 'replacement');
+          input.dispatchEvent(new dom.Event('input', { bubbles: true }));
+        });
+      }
+      await flush(() => host.querySelector<HTMLButtonElement>('button[type=button]:last-child')!.click());
+      expect(reads).toBe(2);
+      expect(runs).toBe(phase === 'step-up' ? 1 : 0);
+      expect(navigations).toBe(0);
+      expect(keys).toBe(0);
+      expect(host.querySelector('form')).toBeNull();
+      expect(host.textContent).toContain(m.auth_rename_unavailable());
+      expect(host.textContent).not.toContain('private_');
+      await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+      expect(window.sessionStorage.getItem(key)).toBe(raw);
+    } finally { crypto.getRandomValues = originalRandom; }
+  });

@@ -144,3 +144,93 @@ afterAll(() => {
   if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
   else Reflect.deleteProperty(globalThis, 'window');
 });
+
+const renameKey = 'rezics.account-rename.pending';
+const {
+  RENAME_CONTINUATION_MAX_ID_CODE_UNITS: maxId,
+  RENAME_CONTINUATION_MAX_CODE_UNITS: maxRaw,
+  createRenameAttempt, readRenameContinuationState, saveRenameContinuation,
+  clearRenameContinuation, nativeRenameSource, runRenameAttempt,
+} = await import('../src/account-rename');
+
+test('the canonical writer round-trips maximum escaped IDs and ASCII handles at the raw UTF-16 boundary', () => {
+  const selected = createRenameAttempt({ accountId: '\0'.repeat(maxId), handle: 'b'.repeat(64) }, 'a'.repeat(64))!;
+  expect(saveRenameContinuation({ ...selected, reference: 'secret' } as typeof selected)).toBe(true);
+  const raw = storage.get(renameKey)!;
+  expect(raw.length).toBe(maxRaw);
+  expect(raw).not.toContain('secret');
+  expect(readRenameContinuationState()).toEqual({ kind: 'valid', value: selected });
+  selected.submitted = true;
+  expect(saveRenameContinuation(selected)).toBe(true);
+  expect(storage.get(renameKey)!.length).toBe(maxRaw - 1);
+  expect(readRenameContinuationState()).toEqual({ kind: 'valid', value: selected });
+  storage.clear();
+  expect(saveRenameContinuation({ ...selected, accountId: 'x'.repeat(maxId + 1) })).toBe(false);
+  expect(storage.has(renameKey)).toBe(false);
+});
+
+test('excess raw text never reaches JSON.parse; all refused bytes survive writes and unconditional cleanup', async () => {
+  const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
+  for (const raw of [' '.repeat(maxRaw + 1), '{', 'null', JSON.stringify({ ...selected, extra: true })]) {
+    storage.set(renameKey, raw);
+    const parse = JSON.parse;
+    let parses = 0;
+    JSON.parse = (...args: Parameters<typeof JSON.parse>) => { parses++; return parse(...args); };
+    try {
+      expect(readRenameContinuationState()).toEqual({ kind: 'refused' });
+      if (raw.length > maxRaw) expect(parses).toBe(0);
+    } finally { JSON.parse = parse; }
+    expect(saveRenameContinuation(selected)).toBe(false);
+    clearRenameContinuation();
+    clearRenameContinuation(selected);
+    expect(await nativeRenameSource.stepUp(selected)).toBe(false);
+    expect(await nativeRenameSource.stepUpForReview!(accountId)).toBe(false);
+    expect(storage.get(renameKey)).toBe(raw);
+    expect(storage.size).toBe(1);
+  }
+});
+
+test('unreadable storage refuses dispatch; a write failure retains the exact live submitted command', async () => {
+  const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
+  const slot = window.sessionStorage, get = slot.getItem, set = slot.setItem;
+  const ready = async () => ({ kind: 'ready' as const, target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] } });
+  let posts = 0;
+  globalThis.fetch = (async () => {
+    posts++;
+    return posts === 1 ? Response.json({ reference: 'secret', expiresAt: new Date(Date.now() + 60000).toISOString() }) : new Response(null, { status: 503 });
+  }) as typeof fetch;
+  try {
+    slot.getItem = () => { throw Error('blocked'); };
+    expect(readRenameContinuationState()).toEqual({ kind: 'refused' });
+    expect((await runRenameAttempt(selected, ready)).kind).toBe('unavailable');
+    clearRenameContinuation(selected);
+    expect(posts).toBe(0);
+    slot.getItem = get;
+    slot.setItem = () => { throw Error('quota'); };
+    expect((await runRenameAttempt(selected, ready)).kind).toBe('unknown');
+    expect(selected.submitted).toBe(true);
+    expect(readRenameContinuationState()).toEqual({ kind: 'absent' });
+    expect(await nativeRenameSource.stepUp(selected)).toBe(false);
+    expect((await runRenameAttempt(selected, ready)).kind).toBe('unknown');
+    expect(posts).toBe(3); // exact replay reuses the live reference
+  } finally { slot.getItem = get; slot.setItem = set; }
+});
+
+for (const phase of ['entry', 'read', 'approval'] as const)
+  test(`storage refusal at ${phase} stops the next native stage without removing replacement bytes`, async () => {
+    const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
+    let posts = 0;
+    if (phase === 'entry') storage.set(renameKey, '{');
+    globalThis.fetch = (async () => {
+      posts++;
+      storage.set(renameKey, '{');
+      return Response.json({ reference: 'secret', expiresAt: new Date(Date.now() + 60000).toISOString() });
+    }) as typeof fetch;
+    await runRenameAttempt(selected, async () => {
+      if (phase === 'read') storage.set(renameKey, '{');
+      return { kind: 'ready', target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] } };
+    });
+    expect(posts).toBe(phase === 'approval' ? 1 : 0);
+    expect(selected.submitted).toBe(false);
+    expect(storage.get(renameKey)).toBe('{');
+  });

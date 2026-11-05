@@ -11,7 +11,6 @@ import { loadAccountSession } from './account-operations';
 import { createSignupKey, normalizeSignupHandle } from './signup';
 import {
   clearPendingManagementOperationStepUp,
-  clearPendingRenameReviewStepUp,
   consumeRenameReviewReturn,
   managementOperationStepUpUrl,
   pendingManagementOperationMatches,
@@ -163,6 +162,7 @@ export function parseRenamePage(body: unknown, accountId: string): RenameRead {
   if (!canRename) return { kind: 'refused', target };
   const reviewReturn = pendingRenameReviewStepUpState();
   target.managementReviewReturned =
+    renameContinuationPermits(null) &&
     reviewReturn.kind === 'pending' &&
     reviewReturn.value.accountId === accountId &&
     reviewReturn.value.phase === 'returned' &&
@@ -199,6 +199,21 @@ export type RenameContinuation = {
 };
 export type RenameAttempt = RenameContinuation & { reference?: string };
 const storageKey = 'rezics.account-rename.pending';
+// Compatible with native descriptor/continuation callers (the native page uses 1024).
+export const RENAME_CONTINUATION_MAX_ID_CODE_UNITS = 4096;
+const continuationSkeleton = {
+  accountId: '', operationKey: '',
+  operation: { kind: 'rename', accountId: '', handle: '', expectedHandle: '' },
+  submitted: false,
+};
+/** String.length units: closed JSON punctuation + two escaped IDs + hex32 + two ASCII handle64s. */
+export const RENAME_CONTINUATION_MAX_CODE_UNITS =
+  JSON.stringify(continuationSkeleton).length + 2 * 6 * RENAME_CONTINUATION_MAX_ID_CODE_UNITS + 32 + 2 * 64;
+export type RenameContinuationState =
+  | { kind: 'absent' }
+  | { kind: 'valid'; value: RenameContinuation }
+  | { kind: 'refused' };
+
 
 export function parseRenameContinuation(value: unknown): RenameContinuation | null {
   if (!record(value) || Object.keys(value).sort().join(',') !== 'accountId,operation,operationKey,submitted')
@@ -208,6 +223,7 @@ export function parseRenameContinuation(value: unknown): RenameContinuation | nu
   if (
     typeof value.accountId !== 'string' ||
     !value.accountId ||
+    value.accountId.length > RENAME_CONTINUATION_MAX_ID_CODE_UNITS ||
     op.accountId !== value.accountId ||
     typeof value.operationKey !== 'string' ||
     !/^[a-f0-9]{32}$/.test(value.operationKey) ||
@@ -233,7 +249,8 @@ export function parseRenameContinuation(value: unknown): RenameContinuation | nu
 }
 export function createRenameAttempt(target: RenameTarget, input: string): RenameAttempt | null {
   const handle = normalizeSignupHandle(input);
-  if (!target.accountId || !currentHandle(target.handle) || !handle || handle === target.handle) return null;
+  if (!target.accountId || target.accountId.length > RENAME_CONTINUATION_MAX_ID_CODE_UNITS ||
+      !currentHandle(target.handle) || !handle || handle === target.handle) return null;
   return {
     accountId: target.accountId,
     operationKey: createSignupKey(),
@@ -246,23 +263,57 @@ export function saveRenameContinuation(attempt: RenameContinuation): boolean {
   const closed = parseRenameContinuation({
     accountId: attempt.accountId,
     operationKey: attempt.operationKey,
-    operation: attempt.operation,
+    operation: {
+      kind: attempt.operation.kind,
+      accountId: attempt.operation.accountId,
+      handle: attempt.operation.handle,
+      expectedHandle: attempt.operation.expectedHandle,
+    },
     submitted: attempt.submitted,
   });
   if (!closed) return false;
+  const retained = readRenameContinuationState();
+  if (retained.kind === 'refused' || (retained.kind === 'valid' &&
+      (!sameRenameContinuation(retained.value, closed) || (retained.value.submitted && !closed.submitted)))) return false;
+  const raw = JSON.stringify(closed);
+  if (raw.length > RENAME_CONTINUATION_MAX_CODE_UNITS) return false;
   try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(closed));
+    window.sessionStorage.setItem(storageKey, raw);
     return true;
   } catch {
+    // Dispatch can retain this exact attempt in memory; a handoff requires durability.
     return false;
   }
 }
-export function readRenameContinuation(): RenameContinuation | null {
+export function readRenameContinuationState(): RenameContinuationState {
+  let raw: string | null;
   try {
-    return parseRenameContinuation(JSON.parse(window.sessionStorage.getItem(storageKey) ?? 'null'));
+    raw = window.sessionStorage.getItem(storageKey);
   } catch {
-    return null;
+    return { kind: 'refused' };
   }
+  if (raw === null) return { kind: 'absent' };
+  if (raw.length > RENAME_CONTINUATION_MAX_CODE_UNITS) return { kind: 'refused' };
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    if (error instanceof SyntaxError) return { kind: 'refused' };
+    throw error;
+  }
+  const parsed = parseRenameContinuation(value);
+  return parsed ? { kind: 'valid', value: parsed } : { kind: 'refused' };
+}
+/** Compatibility projection for observations in fixtures; production uses the explicit state. */
+export function readRenameContinuation(): RenameContinuation | null {
+  const state = readRenameContinuationState();
+  return state.kind === 'valid' ? state.value : null;
+}
+/** An absent slot supports a live attempt after a failed write, never a refused slot. */
+export function renameContinuationPermits(expected: RenameContinuation | null): boolean {
+  const state = readRenameContinuationState();
+  return state.kind === 'absent' ||
+    (state.kind === 'valid' && expected !== null && sameRenameContinuation(state.value, expected));
 }
 export function sameRenameContinuation(left: RenameContinuation, right: RenameContinuation): boolean {
   return (
@@ -273,12 +324,14 @@ export function sameRenameContinuation(left: RenameContinuation, right: RenameCo
   );
 }
 export function clearRenameContinuation(expected?: RenameContinuation): void {
-  const continuation = readRenameContinuation();
-  if (expected && (!continuation || !sameRenameContinuation(continuation, expected))) return;
+  // No caller can remove an unknown value or an unrelated command/marker.
+  if (!expected) return;
+  const state = readRenameContinuationState();
+  if (state.kind !== 'valid' || !sameRenameContinuation(state.value, expected) ||
+      state.value.submitted !== expected.submitted) return;
   const pending = pendingManagementOperationStepUpState();
-  if (continuation && pending.kind === 'pending' && pendingManagementOperationMatches(pending.value, continuation))
+  if (pending.kind === 'pending' && pendingManagementOperationMatches(pending.value, expected))
     clearPendingManagementOperationStepUp();
-  if (!expected) clearPendingRenameReviewStepUp();
   try {
     window.sessionStorage.removeItem(storageKey);
   } catch {
@@ -306,9 +359,9 @@ export async function runRenameAttempt(
     submitted: attempt.submitted,
   });
   if (!closed) return { kind: 'denied' };
-  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unavailable' };
   const current = await readCurrent();
-  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unavailable' };
   if (current.kind !== 'ready') return { kind: attempt.submitted ? 'unknown' : 'unavailable', current };
   if (current.target.accountId !== closed.accountId) return { kind: 'denied', current };
   if (!renameSessionMatches(current.target)) return { kind: 'step-up' };
@@ -338,15 +391,17 @@ export async function runRenameAttempt(
     attempt.reference = approval.body.reference;
   }
   // Retirement stops the next browser stage, including retries of an older send.
-  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unavailable' };
   const previouslySubmitted = attempt.submitted;
-  const retained = readRenameContinuation();
-  if (retained && !sameRenameContinuation(retained, attempt)) return { kind: 'unavailable' };
   attempt.submitted = true;
   saveRenameContinuation(attempt);
   const executed = await authPost<unknown>('/account-operations/execute', { ...body, reference: attempt.reference });
+  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unknown' };
   if (!executed.ok) {
-    if ([401, 403, 409].includes(executed.status)) attempt.submitted = previouslySubmitted;
+    if ([401, 403, 409].includes(executed.status)) {
+      if (!previouslySubmitted) clearRenameContinuation(attempt);
+      attempt.submitted = previouslySubmitted;
+    }
     if (executed.status === 409) return { kind: 'conflict', current: await readCurrent() };
     if (executed.status === 401 && executed.code === 'step_up_required') {
       delete attempt.reference;
@@ -393,15 +448,14 @@ export const nativeRenameSource: RenameSource = {
   run: (attempt, isCurrent, signal) =>
     runRenameAttempt(attempt, () => nativeRenameSource.readCurrent(signal), isCurrent),
   stepUp: async (attempt, isCurrent = () => true) => {
-    const retained = readRenameContinuation();
-    if (retained && !sameRenameContinuation(retained, attempt)) return false;
+    if (!renameContinuationPermits(attempt)) return false;
     const input = { accountId: attempt.accountId, operationKey: attempt.operationKey, operation: attempt.operation };
     if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(input)) return false;
     window.location.assign(managementOperationStepUpUrl('rename'));
     return true;
   },
   stepUpForReview: async (accountId, isCurrent = () => true) => {
-    if (!isCurrent() || !storePendingRenameReviewStepUp(accountId)) return false;
+    if (!isCurrent() || !renameContinuationPermits(null) || !storePendingRenameReviewStepUp(accountId)) return false;
     window.location.assign(managementOperationStepUpUrl('rename'));
     return true;
   },

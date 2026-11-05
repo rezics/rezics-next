@@ -30,7 +30,8 @@ import {
   clearRenameContinuation,
   createRenameAttempt,
   nativeRenameSource,
-  readRenameContinuation,
+  readRenameContinuationState,
+  renameContinuationPermits,
   saveRenameContinuation,
   sameRenameContinuation,
   type RenameAttempt,
@@ -127,6 +128,27 @@ function RenameReview({
   const [renamed, setRenamed] = useState('');
   const attempt = useRef<RenameAttempt | null>(null);
   const busy = useRef(false);
+  const storageRefused = useRef(false);
+  const refuseStorage = useCallback(() => {
+    storageRefused.current = true;
+    if (attempt.current?.submitted) remember('unknown');
+    if (attempt.current) delete attempt.current.reference;
+    setCurrent({ kind: 'unavailable' });
+    setHandle('');
+    setConfirmed(false);
+    setReturned(false);
+    setManagementReturned(false);
+    setRenamed('');
+    setMessage('');
+    setInputError('');
+  }, [history]);
+  function permitsCommand(expected: RenameContinuation | null = attempt.current): boolean {
+    if (storageRefused.current || !renameContinuationPermits(expected)) {
+      refuseStorage();
+      return false;
+    }
+    return true;
+  }
   const alert = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const departureDialog = useRef<HTMLDivElement>(null);
@@ -143,9 +165,10 @@ function RenameReview({
     const isCurrent = () => active;
     owner.current = isCurrent;
     busy.current = false;
-    const saved = readRenameContinuation();
-    if (saved?.submitted) {
-      attempt.current = saved;
+    const saved = readRenameContinuationState();
+    if (saved.kind === 'refused') refuseStorage();
+    if (saved.kind === 'valid' && saved.value.submitted) {
+      attempt.current = saved.value;
       remember('unknown');
     } else setOutcome(history.current);
     const retireReview = () => {
@@ -173,7 +196,7 @@ function RenameReview({
         setPending(false);
         setLocked(false);
       });
-      if (!submitted && !readRenameContinuation()?.submitted && !departure?.current.allow) clearRenameContinuation();
+      if (selected && !submitted && !departure?.current.allow) clearRenameContinuation(selected);
     };
     retire.current = retireReview;
     window.addEventListener('pagehide', pagehide);
@@ -182,18 +205,24 @@ function RenameReview({
       retire.current = () => {};
       window.removeEventListener('pagehide', pagehide);
     };
-  }, [departure]);
+  }, [departure, refuseStorage]);
 
   const receiveCurrent = useCallback(
     (result: RenameRead, expected: RenameContinuation | null) => {
       const previous = currentTarget.current;
-      const stored = readRenameContinuation();
+      const state = readRenameContinuationState();
+      if (storageRefused.current || state.kind === 'refused' ||
+          (state.kind === 'valid' && (!expected || !sameRenameContinuation(state.value, expected)))) {
+        refuseStorage();
+        return;
+      }
+      const stored = state.kind === 'valid' ? state.value : null;
       const saved = stored && expected && sameRenameContinuation(stored, expected) ? stored : null;
       const live =
         !stored || (attempt.current && sameRenameContinuation(stored, attempt.current)) ? attempt.current : null;
       if (live?.submitted || stored?.submitted) remember('unknown');
       const recovered =
-        history.current === 'unknown' && saved && !saved.submitted
+        history.current === 'unknown' && saved && !saved.submitted && !live?.submitted
           ? null
           : recoverRenameAttempt(result, saved, live, previous);
       // Later refusal or a replacement viewer cannot settle an earlier unknown send.
@@ -211,7 +240,7 @@ function RenameReview({
       if (!recovered && history.current !== 'unknown') revoke?.();
       setCurrent(result);
     },
-    [revoke, history],
+    [revoke, history, refuseStorage],
   );
 
   // Initial loading and explicit recovery share the same ownership boundary.
@@ -224,7 +253,9 @@ function RenameReview({
     setConfirmed(false);
     const controller = new AbortController();
     reads.current = controller;
-    const expected = readRenameContinuation();
+    const stored = readRenameContinuationState();
+    if (stored.kind === 'refused') refuseStorage();
+    const expected = stored.kind === 'valid' ? stored.value : null;
     try {
       const result = await source.readCurrent(controller.signal);
       if (isCurrent()) receiveCurrent(result, expected);
@@ -240,7 +271,7 @@ function RenameReview({
         }
       }
     }
-  }, [source, receiveCurrent]);
+  }, [source, receiveCurrent, refuseStorage]);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -260,6 +291,7 @@ function RenameReview({
     event.preventDefault();
     const isCurrent = owner.current!;
     if (!isCurrent() || busy.current || current?.kind !== 'ready' || !confirmed) return;
+    if (!permitsCommand()) return;
     const normalized = normalizeSignupHandle(handle);
     if (!normalized || (normalized === current.target.handle && !attempt.current?.submitted)) {
       setInputError(m.auth_rename_invalid());
@@ -276,8 +308,8 @@ function RenameReview({
     try {
       const controller = new AbortController();
       reads.current = controller;
-      const result = await source.run(selected, isCurrent, controller.signal);
-      if (!isCurrent()) return;
+      const result = await source.run(selected, () => isCurrent() && renameContinuationPermits(selected), controller.signal);
+      if (!isCurrent() || !permitsCommand(selected)) return;
       setLocked(selected.submitted);
       if (selected.submitted) remember('unknown');
       if (result.kind === 'renamed') {
@@ -299,13 +331,19 @@ function RenameReview({
         setReturned(false);
         currentTarget.current = null;
         setCurrent({ kind: 'management-auth-required', accountId: selected.accountId });
-        attempt.current = null;
-        const saved = readRenameContinuation();
-        if (saved && !sameRenameContinuation(saved, selected)) return;
-        saveRenameContinuation(selected);
+        // Keep the exact live command if persistence or handoff fails.
+        if (!permitsCommand(selected)) return;
+        if (!saveRenameContinuation(selected)) {
+          setMessage(m.auth_rename_unavailable());
+          return;
+        }
         setConfirmed(false);
         if (departure) departure.current.allow = true;
-        const handedOff = await source.stepUp(selected, isCurrent);
+        const handedOff = await source.stepUp(selected, () => isCurrent() && renameContinuationPermits(selected));
+        if (isCurrent() && !permitsCommand(selected)) {
+          if (departure) departure.current.allow = false;
+          return;
+        }
         if (isCurrent() && !handedOff) {
           if (departure) departure.current.allow = false;
           setMessage(m.auth_rename_unavailable());
@@ -323,6 +361,7 @@ function RenameReview({
     } catch {
       if (isCurrent()) {
         if (departure) departure.current.allow = false;
+        if (!permitsCommand(selected)) return;
         setLocked(selected.submitted);
         if (selected.submitted) remember('unknown');
         setMessage(selected.submitted ? m.auth_rename_unknown() : m.auth_rename_unavailable());
@@ -338,13 +377,21 @@ function RenameReview({
   async function continueWithManagementAuthentication() {
     if (current?.kind !== 'management-auth-required' || !source.stepUpForReview || busy.current) return;
     const isCurrent = owner.current!;
-    if (!isCurrent()) return;
+    const selected = attempt.current;
+    if (!isCurrent() || !permitsCommand(selected)) return;
     busy.current = true;
     setPending(true);
     setMessage('');
     if (departure) departure.current.allow = true;
     try {
-      const handedOff = await source.stepUpForReview(current.accountId, isCurrent);
+      const owns = () => isCurrent() && !storageRefused.current && renameContinuationPermits(selected);
+      const handedOff = selected
+        ? await source.stepUp(selected, owns)
+        : await source.stepUpForReview(current.accountId, owns);
+      if (isCurrent() && !permitsCommand(selected)) {
+        if (departure) departure.current.allow = false;
+        return;
+      }
       if (isCurrent() && !handedOff) {
         if (departure) departure.current.allow = false;
         setMessage(m.auth_rename_unavailable());
@@ -366,13 +413,14 @@ function RenameReview({
   const hasChangedInput =
     handle.trim().length > 0 &&
     (candidate === null || candidate !== (current?.kind === 'ready' ? current.target.handle : null));
+  const retained = readRenameContinuationState();
   if (departure)
     departure.current.protected =
       !renamed &&
       (hasChangedInput ||
         outcome === 'unknown' ||
         Boolean(attempt.current?.submitted) ||
-        Boolean(readRenameContinuation()?.submitted) ||
+        (retained.kind === 'valid' && retained.value.submitted) ||
         (pending && attempt.current !== null));
 
   function stay() {
@@ -382,7 +430,7 @@ function RenameReview({
 
   function leave() {
     departure && (departure.current.allow = true);
-    if (attempt.current && !attempt.current.submitted) {
+    if (!storageRefused.current && attempt.current && !attempt.current.submitted) {
       clearRenameContinuation(attempt.current);
       attempt.current = null;
     }
@@ -482,7 +530,7 @@ function RenameReview({
                   aria-invalid={Boolean(inputError)}
                   aria-describedby={inputError ? 'rename-handle-help rename-handle-error' : 'rename-handle-help'}
                   onChange={(event) => {
-                    if (attempt.current?.submitted || outcome === 'unknown') return;
+                    if (!permitsCommand() || attempt.current?.submitted || outcome === 'unknown') return;
                     setHandle(event.target.value);
                     setConfirmed(false);
                     setReturned(false);

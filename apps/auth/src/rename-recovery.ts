@@ -23,10 +23,16 @@ export function recoverRenameAttempt(
   live: RenameAttempt | null,
   previous: RenameTarget | null,
 ): RenameAttempt | null {
-  const descriptor = saved ?? live;
+  const descriptor = live?.submitted && (!saved || sameRenameContinuation(live, saved)) ? live : saved ?? live;
   if (current.kind !== 'ready' || !descriptor || descriptor.accountId !== current.target.accountId) return null;
   if (!descriptor.submitted && descriptor.operation.expectedHandle !== current.target.handle) return null;
   if (live && sameRenameContinuation(live, descriptor) && previous && sameRenameSession(previous, current.target))
     return live;
-  return saved;
+  // A failed write still leaves an exact live command, but no reference survives a session change.
+  return {
+    accountId: descriptor.accountId,
+    operationKey: descriptor.operationKey,
+    operation: descriptor.operation,
+    submitted: descriptor.submitted,
+  };
 }
