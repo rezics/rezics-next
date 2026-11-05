@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { removePersonalLibraryEntry, restorePersonalLibraryEntry } from '../src/library/entries-read';
+import { PlatformClosedError } from '../src/kernel/platform-closed';
+import { MediaProblem } from '../src/media/kernel';
 
 const subjectId = 'book-one';
 const deletionId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -14,12 +16,14 @@ const entry = {
   subject: { id: subjectId, label: 'A book', type: 'book' },
 };
 
-function clientFor(deleteHeaders = true, restoreResult?: unknown) {
+function clientFor(deleteHeaders = true, restoreResult?: unknown, deleteResult?: unknown) {
   const calls: { method: string; path: string; body?: unknown; headers?: unknown; query?: unknown }[] = [];
   const client = {
     libraryEntries: ({ subjectId: id }: { subjectId: string }) => ({
       delete: async (_body: unknown, options: { query: unknown; headers: unknown }) => {
         calls.push({ method: 'DELETE', path: `/v1/libraryEntries/${id}`, ...options });
+        if (deleteResult instanceof Error) throw deleteResult;
+        if (deleteResult !== undefined) return deleteResult;
         return {
           status: 204,
           data: undefined,
@@ -110,6 +114,43 @@ test('a DELETE without deletion headers succeeds without offering Undo', async (
   );
   expect(result).toMatchObject({ ok: true });
   expect(result).not.toHaveProperty('undo');
+});
+
+test.each([
+  [401, undefined, 'signed-out'],
+  [403, 'forbidden', 'denied'],
+  [403, 'platform_closed', 'closed'],
+] as const)('DELETE %i with %s receives the installed refusal', async (status, code, reason) => {
+  const { client, calls } = clientFor(true, undefined, {
+    status,
+    error: { status, value: code ? { code } : {} },
+  });
+  const result = await removePersonalLibraryEntry(client, request, {}, {
+    subjectId,
+    revision: 7,
+    idempotencyKey: restoreKey,
+  });
+  expect(result).toEqual({ ok: false, reason });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    method: 'DELETE',
+    path: `/v1/libraryEntries/${subjectId}`,
+    query: { revision: 7 },
+    headers: { authorization: 'Bearer reader', 'idempotency-key': restoreKey },
+  });
+});
+
+test.each([
+  [new MediaProblem({ type: 'about:blank', title: 'Unauthorized', status: 401, code: 'unauthorized' }), 'signed-out'],
+  [new MediaProblem({ type: 'about:blank', title: 'Forbidden', status: 403, code: 'forbidden' }), 'denied'],
+  [new PlatformClosedError(403, { code: 'platform_closed' }), 'closed'],
+] as const)('DELETE thrown refusal receives %s', async (error, reason) => {
+  const { client } = clientFor(true, undefined, error);
+  expect(await removePersonalLibraryEntry(client, request, {}, {
+    subjectId,
+    revision: 7,
+    idempotencyKey: restoreKey,
+  })).toEqual({ ok: false, reason });
 });
 
 test('no-JavaScript undo form can submit the deletion id and revision', async () => {
