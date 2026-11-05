@@ -34,10 +34,7 @@ export const AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES = Math.max(
     const hasOperator = value.operator !== null;
     const asciiUnits =
       AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
-      (hasOperator
-        ? AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
-          AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH
-        : 0);
+      (hasOperator ? AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH + AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH : 0);
     const escapableUnits = hasOperator ? AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH : 0;
     // These ASCII skeletons have equal UTF-8 byte and UTF-16 lengths.
     return JSON.stringify(value).length + asciiUnits + escapableUnits * 6;

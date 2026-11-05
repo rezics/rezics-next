@@ -115,13 +115,11 @@ test('native page projection keeps every legal variant and the maximum escaped s
     { selected: null, result: page(null, 'select-operator', 'select-operator') },
     {
       selected: operatorAccountId,
-      result: page(
-        {
-          ...label,
-          handle: `a${'-'.repeat(AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH - 1)}`,
-          displayName: '\u0001'.repeat(AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH),
-        },
-      ),
+      result: page({
+        ...label,
+        handle: `a${'-'.repeat(AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH - 1)}`,
+        displayName: '\u0001'.repeat(AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH),
+      }),
     },
     { selected: operatorAccountId, result: page(null, 'refused', 'none') },
   ];
@@ -142,8 +140,7 @@ test('native page projection refuses invalid viewer identity and over-bound nati
     page({ ...label, handle: 'a'.repeat(AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH + 1) }),
     page({ ...label, displayName: 'x'.repeat(AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH + 1) }),
   ];
-  for (const result of invalid)
-    expect((await fixture(human, result).handler(request())).status).toBe(503);
+  for (const result of invalid) expect((await fixture(human, result).handler(request())).status).toBe(503);
 });
 
 test('ordinary sessions receive only the native safe authentication advice and dependencies stay unavailable', async () => {

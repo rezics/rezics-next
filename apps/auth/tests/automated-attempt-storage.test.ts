@@ -151,7 +151,9 @@ test('malformed, unknown, over-bound and unreadable descriptors stay invalid and
     Object.defineProperty(storage, 'getItem', {
       configurable: true,
       writable: true,
-      value: () => { throw new Error('storage read failed'); },
+      value: () => {
+        throw new Error('storage read failed');
+      },
     });
     expect(restoreAutomatedAttempt()).toBe('invalid');
     expect(saveAutomatedAttempt(valid)).toBe(false);
@@ -160,7 +162,9 @@ test('malformed, unknown, over-bound and unreadable descriptors stay invalid and
     Object.defineProperty(storage, 'setItem', {
       configurable: true,
       writable: true,
-      value: () => { throw new Error('storage write failed'); },
+      value: () => {
+        throw new Error('storage write failed');
+      },
     });
     expect(saveAutomatedAttempt(valid)).toBe(false);
   } finally {

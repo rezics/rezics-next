@@ -50,8 +50,7 @@ export function automatedCreationOperator(value: unknown, operatorAccountId: str
     (row.kind !== 'actor' && row.kind !== 'organization') ||
     (row.handle !== null && !operatorHandle(row.handle)) ||
     (row.displayName !== null &&
-      (typeof row.displayName !== 'string' ||
-        row.displayName.length > AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH))
+      (typeof row.displayName !== 'string' || row.displayName.length > AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH))
   )
     throw new TransportDenied(503);
   return { id: operatorAccountId, kind: row.kind, handle: row.handle, displayName: row.displayName };

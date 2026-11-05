@@ -82,9 +82,7 @@ function attemptStorageStringUnits(reference: boolean) {
   );
 }
 const automatedAttemptStorageVariants = [false, true].flatMap((reference) =>
-  [false, true].map((submitted) =>
-    attemptStorageSkeleton(reference, submitted) + attemptStorageStringUnits(reference),
-  ),
+  [false, true].map((submitted) => attemptStorageSkeleton(reference, submitted) + attemptStorageStringUnits(reference)),
 );
 /** Maximum canonical JSON string length in UTF-16 code units, including all
  * reference/submitted marker combinations. UUIDs/handles are fixed ASCII;
@@ -250,8 +248,7 @@ export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {
     !text(value.operationKey) ||
     value.operationKey.length > AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH ||
     !identity(value.operator) ||
-    (hasReference &&
-      (!text(value.reference) || value.reference.length > AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH)) ||
+    (hasReference && (!text(value.reference) || value.reference.length > AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH)) ||
     (hasSubmitted && value.submitted !== true)
   )
     return null;

@@ -102,11 +102,7 @@ test('installed loader admits all legal page variants and the maximum escaped re
     const value = page(readiness);
     const { result, calls } = await loadWith(json(value), { operatorAccountId: selected });
     expect(result).toEqual({ kind: 'ready', page: value });
-    expect(calls.map(({ path }) => path)).toEqual([
-      '/session',
-      '/account-management/automated/operator',
-      '/session',
-    ]);
+    expect(calls.map(({ path }) => path)).toEqual(['/session', '/account-management/automated/operator', '/session']);
     expect(calls[1]!.init).toMatchObject({
       method: 'POST',
       credentials: 'same-origin',
@@ -121,13 +117,11 @@ test('installed loader admits all legal page variants and the maximum escaped re
   const maximal = maximalReview();
   const serialized = JSON.stringify(maximal);
   expect(new TextEncoder().encode(serialized).byteLength).toBe(AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES);
-  const { result, calls } = await loadWith(new Response(serialized, { headers: { 'content-type': 'application/json' } }));
+  const { result, calls } = await loadWith(
+    new Response(serialized, { headers: { 'content-type': 'application/json' } }),
+  );
   expect(result).toEqual({ kind: 'ready', page: maximal });
-  expect(calls.map(({ path }) => path)).toEqual([
-    '/session',
-    '/account-management/automated/operator',
-    '/session',
-  ]);
+  expect(calls.map(({ path }) => path)).toEqual(['/session', '/account-management/automated/operator', '/session']);
 });
 
 test('bounded stream decoding accepts split UTF-8 and ignores absent or false Content-Length', async () => {
@@ -147,11 +141,7 @@ test('bounded stream decoding accepts split UTF-8 and ignores absent or false Co
   );
   const { result, calls } = await loadWith(response);
   expect(result).toEqual({ kind: 'ready', page: emojiPage });
-  expect(calls.map(({ path }) => path)).toEqual([
-    '/session',
-    '/account-management/automated/operator',
-    '/session',
-  ]);
+  expect(calls.map(({ path }) => path)).toEqual(['/session', '/account-management/automated/operator', '/session']);
 });
 
 test('malformed or over-bound page identity and labels are unavailable after the original three-read sequence', async () => {
@@ -170,11 +160,7 @@ test('malformed or over-bound page identity and labels are unavailable after the
   for (const value of invalid) {
     const { result, calls } = await loadWith(json(value));
     expect(result).toEqual({ kind: 'unavailable' });
-    expect(calls.map(({ path }) => path)).toEqual([
-      '/session',
-      '/account-management/automated/operator',
-      '/session',
-    ]);
+    expect(calls.map(({ path }) => path)).toEqual(['/session', '/account-management/automated/operator', '/session']);
     expect(calls.some(({ path }) => path.startsWith('/account-operations/') || path === '/signin')).toBe(false);
   }
 });
@@ -265,18 +251,14 @@ test('caller cancellation retires stalled page and either session phase even whe
   const current = await cancelledAt('second-session');
   expect(current.result).toEqual({ kind: 'unavailable' });
   expect(current.calls).toEqual(['/session', '/account-management/automated/operator', '/session']);
-  expect(first.calls.concat(pageRead.calls, current.calls).some((path) => path.startsWith('/account-operations/'))).toBe(
-    false,
-  );
+  expect(
+    first.calls.concat(pageRead.calls, current.calls).some((path) => path.startsWith('/account-operations/')),
+  ).toBe(false);
 });
 
 test('post-read session replacement keeps advice unavailable', async () => {
   const replaced = { ...session, authn_epoch: session.authn_epoch + 1 };
   const { result, calls } = await loadWith(json(page('review')), { sessions: [session, replaced] });
   expect(result).toEqual({ kind: 'unavailable' });
-  expect(calls.map(({ path }) => path)).toEqual([
-    '/session',
-    '/account-management/automated/operator',
-    '/session',
-  ]);
+  expect(calls.map(({ path }) => path)).toEqual(['/session', '/account-management/automated/operator', '/session']);
 });
