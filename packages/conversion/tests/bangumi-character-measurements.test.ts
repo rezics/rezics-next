@@ -48,7 +48,7 @@ test('Bangumi Crt quantities preserve explicit units and evidence while unsuppor
 |生日=1984年1月1日
 |BWH=88/60/86
 }}`);
-  expect(converter_revision).toBe('cross-media-entities@14');
+  expect(converter_revision).toBe('cross-media-entities@15');
   expect(result.normalizedRecord).toMatchObject({
     id: 200,
     name: 'Rintaro Okabe',
