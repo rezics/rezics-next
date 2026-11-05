@@ -72,6 +72,7 @@ export type BoardOpeningCard = Readonly<{
 }>;
 export type BoardOpeningPage = Readonly<{
   board: BoardView;
+  pinRevision: string;
   pinnedThreads: readonly BoardOpeningCard[];
   threads: readonly BoardOpeningCard[];
   next: string | null;
@@ -294,6 +295,7 @@ function assertSamePage(
 ): void {
   if (!currentBoard || !isDeepStrictEqual(board, currentBoard)) throw new BoardOpeningChangedError();
   if (
+    first.pinRevision !== current.pinRevision ||
     !isDeepStrictEqual(first.pinnedThreads, current.pinnedThreads) ||
     !isDeepStrictEqual(first.entries, current.entries) ||
     (first.nextCursor === null) !== (current.nextCursor === null) ||
@@ -424,6 +426,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
 
     return {
       board: finalBoard.value!,
+      pinRevision: finalPage.pinRevision,
       pinnedThreads: finalPage.pinnedThreads.map(card),
       threads: finalPage.entries.map(card),
       next: finalPage.nextCursor,
