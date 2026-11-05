@@ -1,28 +1,27 @@
-# Review destination receiver
+# Review destination receiver continuation
 
-Goal: content. Manager: content. Continue with the same receiver owner.
+## Goal content
 
-Authority: [Review destinations](../../services/kernel/src/content/README.md#review-destinations).
-Work in `apps/web/src/threads/review-board-choices.ts` and
-`apps/web/tests/review-destination-journey.test.tsx`; leave shared context and composer lifetimes with their owners.
+Continue the content-owned work-to-review journey from this worktree after the sole complete-input publisher installs
+the actual `GET /v1/realms/:realmId/review-destinations` public export, head and callable in `@rezics/client`.
 
-At base `d4d47cbfdeffe0eb8a79ef5fe3abedd52720857a`, the official public root is
-`packages/client/src/index.ts` (`@rezics/client`). Its installed
-`packages/client/src/kernel/content/routes.d.ts` has no review-destinations declaration. The mounted producer is
-`GET /v1/realms/:realmId/review-destinations` in `services/kernel/src/content/routes.ts`, using
-`ReviewDestinationPageSchema` from `schemas.ts`. The production receiver and existing journey assertions are retained.
+At this attempt's base, `apps/web/src/threads/review-board-choices.ts` still defines a local route/page mirror and calls
+the route through an `unknown` assertion. The installed client resolves to `packages/client` and contains no
+review-destinations declaration or callable. The content owner document already records the decision to preserve the
+current receiver until that publication; no local declaration, endpoint, raw transport or generated file may replace
+it.
 
-Obtain the complete-input publisher's installed export, head and callable before changing the receiver. Publication
-is independent of this consumer; do not edit generated paths or create another declaration, endpoint or generator.
-Then remove the local route mirror, wire DTO and unknown assertion escape. Call the public method directly and derive
-response and preparation types from its result. Preserve boundary validation, complete native states, Subject source,
-Realm head and Board security binding. Preserve the existing supplying action's private transport and cancellation.
+After publication, verify the actual installed public method, call it directly and derive response/preparation types
+from its public result. Keep complete runtime validation of untrusted states and bindings. Continue the existing
+Subject entry, bounded Realm membership preparation, sparse native pages, explicit Board inspection, original
+composer and command, admission navigation and exact return. Preserve the write-review lifetime contract, private
+transport, cancellation, reader/CSRF provenance, retirement, exact-cursor retry, uncertain command ownership,
+disclosure and physical-growth acceptance.
 
-Add focused typing and boundary cases needed by that migration without weakening existing assertions. Retain explicit
-Board inspection, sparse continuation, exact-cursor retry, denial/expiry and permanent visit retirement, including equal
-replacement and A-B-A. No selected label or installed type admits creation.
+## Manager content
 
-Commit before checks. Run Web workspace typing and the focused landing command:
-`bun apps/web/scripts/focused.ts --private-network -- bun test tests/review-destination-journey.test.tsx`.
-Native execution, browser presentation, broader end-to-end/growth and root acceptance remain controller checks after
-integration. Read only the linked contract and relevant mounted/public declarations; no history reconstruction.
+Keep this work in the existing content owner and serial lineage. The only missing prerequisite observed here is the
+publisher's installed public callable. Do not split typing, chooser, composer or return work into successor owners.
+Once the prerequisite is present, finish the receiver and connected journey together, run the landing's focused Web
+journey test command, and leave broader native, browser and root acceptance to the controller as specified by the
+owner brief.
