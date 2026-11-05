@@ -8,6 +8,7 @@ import {
 import { authPost } from './api';
 import { approveManagementOperation } from './management-operations';
 import { markManagementOpeningSubmitted } from './management-operation-step-up';
+import { privateAuthRead } from './private-auth-read';
 
 export type OpeningInput = ManagementOperationInput & {
   operation: { kind: 'opening'; operatorAccountId: string; subjectAccountId: string };
@@ -244,10 +245,13 @@ const nativeOpeningPage = createServerFn({ method: 'POST' })
       return { kind: 'unavailable' };
     }
   });
-export async function loadOpeningMetadata(input: OpeningInput): Promise<OpeningRead> {
+export const operatorOpeningBrowserTransport = {
+  metadata: (input: OpeningInput, signal: AbortSignal) => nativeOpeningPage({ data: input, signal }),
+};
+export async function loadOpeningMetadata(input: OpeningInput, signal?: AbortSignal): Promise<OpeningRead> {
   if (!isOpeningInput(input)) return { kind: 'unavailable' };
   try {
-    return await nativeOpeningPage({ data: input });
+    return await privateAuthRead((readSignal) => operatorOpeningBrowserTransport.metadata(input, readSignal), signal);
   } catch {
     return { kind: 'unavailable' };
   }
@@ -276,16 +280,19 @@ export function openedSession(value: unknown, input: OpeningInput): SessionProof
 }
 /** Read only: never renew cached metadata, replay issuance, restore a human
  * cookie, or treat readback as evidence that this request created the session. */
-export async function readOpenedSession(input: OpeningInput): Promise<OpeningOutcome> {
+export async function readOpenedSession(input: OpeningInput, signal?: AbortSignal): Promise<OpeningOutcome> {
   try {
-    const response = await fetch('/session', {
-      credentials: 'same-origin',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
-    });
-    const session = response.status === 200 ? openedSession(await response.json(), input) : null;
-    return session ? { kind: 'opened', session } : { kind: 'unknown' };
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch('/session', {
+        signal: readSignal,
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      const session = response.status === 200 ? openedSession(await response.json(), input) : null;
+      return session ? { kind: 'opened', session } : { kind: 'unknown' };
+    }, signal);
   } catch {
     return { kind: 'unknown' };
   }

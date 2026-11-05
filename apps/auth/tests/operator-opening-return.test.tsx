@@ -154,9 +154,11 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   const replacement = proof(operator);
   const late = Promise.withResolvers<Response>();
   const baseFetch = globalThis.fetch;
+  const readSignals: AbortSignal[] = [];
   let readbacks = 0;
   globalThis.fetch = ((path, init) => {
     if (String(path) === '/session') {
+      readSignals.push(init?.signal as AbortSignal);
       readbacks++;
       if (readbacks === 1) return late.promise;
       return Promise.resolve(Response.json(readbacks === 2 ? replacement : current));
@@ -167,16 +169,19 @@ test('cached return keeps generic unknown history, ignores a late read and separ
   await flush(() => transition('pageshow'));
   expect(readbacks).toBe(1);
   await flush(() => transition('pagehide'));
+  expect(readSignals[0]!.aborted).toBe(true);
   await flush(() => late.resolve(Response.json(current)));
   expect(page.host.querySelector('#opening-current-state-heading')).toBeNull();
   expect(page.host.querySelector('#opening-return-heading')).not.toBeNull();
 
   await flush(() => transition('pageshow'));
   expect(readbacks).toBe(2);
+  expect(readSignals[1]!.aborted).toBe(false);
   expect(page.host.querySelector('#opening-current-state-heading')).toBeNull();
   expect(page.host.textContent).toContain('Check current session');
   await page.click('Check current session');
   expect(readbacks).toBe(3);
+  expect(readSignals[2]!.aborted).toBe(false);
   expect(page.host.querySelector('#opening-current-state-heading')?.textContent).toContain('Current operated session');
   expect(page.host.textContent).toContain('does not prove that the earlier request created it');
   expect(page.host.querySelector('#opening-return-heading')?.textContent).not.toContain(subject);

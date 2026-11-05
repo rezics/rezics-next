@@ -35,3 +35,41 @@ test('one explicit session readback makes one native read and no approval or ope
     globalThis.fetch = original;
   }
 });
+
+test('readback deadline covers hung headers and body; retirement cancels the call before and after it starts', async () => {
+  const original = globalThis.fetch;
+  const signals: AbortSignal[] = [];
+  globalThis.fetch = ((_path, init) => {
+    signals.push(init?.signal as AbortSignal);
+    return signals.length === 1
+      ? new Promise<Response>(() => {})
+      : Promise.resolve({ status: 200, json: () => new Promise<never>(() => {}) } as Response);
+  }) as typeof fetch;
+  try {
+    const results = await Promise.all([readOpenedSession(input), readOpenedSession(input)]);
+    expect(results.map((result) => result.kind)).toEqual(['unknown', 'unknown']);
+    expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+
+    const retiredBeforeStart = new AbortController();
+    retiredBeforeStart.abort();
+    expect((await readOpenedSession(input, retiredBeforeStart.signal)).kind).toBe('unknown');
+    expect(signals).toHaveLength(2);
+
+    const retiredDuringRead = new AbortController();
+    const late = Promise.withResolvers<Response>();
+    globalThis.fetch = ((_path, init) => {
+      signals.push(init?.signal as AbortSignal);
+      return late.promise;
+    }) as typeof fetch;
+    const result = readOpenedSession(input, retiredDuringRead.signal);
+    await Promise.resolve();
+    await Promise.resolve();
+    retiredDuringRead.abort();
+    expect((await result).kind).toBe('unknown');
+    expect(signals[2]!.aborted).toBe(true);
+    late.resolve(Response.json({ account_id: subject }));
+  } finally {
+    globalThis.fetch = original;
+  }
+});

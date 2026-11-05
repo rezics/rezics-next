@@ -236,6 +236,7 @@ function OpeningReview({
   const [outcome, setOutcome] = useState<OpeningOutcome | null>(null);
   const [outcomeSource, setOutcomeSource] = useState<'opening-response' | 'session-readback' | null>(null);
   const live = useRef(true);
+  const observationOwner = useRef<AbortController | null>(null);
   const bypassDeparture = useRef(false);
   const authority = useRef<ManagementSession | null>(null);
   const progress = useRef<OpeningReturnPhase | null>(null);
@@ -248,6 +249,21 @@ function OpeningReview({
     if (phase === 'acknowledged' || phase === 'unconfirmed' || phase === 'refused') recordHistory(phase);
   };
 
+  function retireObservation() {
+    const owner = observationOwner.current;
+    observationOwner.current = null;
+    owner?.abort();
+  }
+  function beginObservation() {
+    retireObservation();
+    const owner = new AbortController();
+    observationOwner.current = owner;
+    return owner;
+  }
+  function observationIsCurrent(owner: AbortController) {
+    return isCurrent() && observationOwner.current === owner && !owner.signal.aborted;
+  }
+
   const work = () =>
     isCurrent() &&
     !bypassDeparture.current &&
@@ -256,6 +272,7 @@ function OpeningReview({
   function retire() {
     if (!live.current) return;
     // Retire callbacks before clearing private review; submitted recovery stays untouched.
+    retireObservation();
     live.current = false;
     if (progress.current) recordHistory(progress.current);
     authority.current = null;
@@ -275,6 +292,13 @@ function OpeningReview({
     bindRetirement(retire);
     return () => bindRetirement(null);
   });
+  useLayoutEffect(() => {
+    live.current = true;
+    return () => {
+      retireObservation();
+      live.current = false;
+    };
+  }, []);
   async function validateCaller() {
     const owner = authority.current;
     const submitted = () => {
@@ -314,9 +338,9 @@ function OpeningReview({
     return () => window.removeEventListener('focus', validate);
   });
 
-  async function reconcile(saved: OpeningInput) {
-    const result = await readOpenedSession(saved);
-    if (!isCurrent()) return;
+  async function reconcile(saved: OpeningInput, owner: AbortController) {
+    const result = await readOpenedSession(saved, owner.signal);
+    if (!observationIsCurrent(owner)) return;
     setOutcome(result);
     setOutcomeSource(result.kind === 'opened' ? 'session-readback' : null);
     setStatus(result.kind === 'opened' ? '' : 'unknown');
@@ -326,6 +350,7 @@ function OpeningReview({
   // a submitted continuation always goes through native session readback.
   async function restore(local: OpeningInput | null = null) {
     if (!isCurrent() || lock.current) return;
+    const owner = beginObservation();
     lock.current = true;
     setBusy(true);
     setStatus('');
@@ -359,12 +384,12 @@ function OpeningReview({
         if (state.kind === 'pending' && state.value.phase === 'submitted') {
           markProgress('unconfirmed');
           setTerminal(true);
-          await reconcile(saved);
+          await reconcile(saved, owner);
           return;
         }
         markProgress('review');
         const human = await loadManagementSession();
-        if (!isCurrent()) return;
+        if (!observationIsCurrent(owner)) return;
         if (human.kind === 'unavailable') {
           setStatus('unavailable');
           return;
@@ -379,8 +404,8 @@ function OpeningReview({
           setStatus('step-up');
           return;
         }
-        const read = await loadOpeningMetadata(saved);
-        if (!isCurrent()) return;
+        const read = await loadOpeningMetadata(saved, owner.signal);
+        if (!observationIsCurrent(owner)) return;
         if (read.kind === 'ready') setMetadata(read.metadata);
         else if (read.kind === 'refused') {
           markProgress('refused');
@@ -389,13 +414,14 @@ function OpeningReview({
         return;
       }
       const human = await loadManagementSession();
-      if (!isCurrent()) return;
+      if (!observationIsCurrent(owner)) return;
       if (human.kind === 'ready') {
         authority.current = human;
         setAccountId(human.accountId);
       } else setStatus(human.kind);
     } finally {
-      if (isCurrent()) {
+      if (observationIsCurrent(owner)) {
+        observationOwner.current = null;
         lock.current = false;
         setBusy(false);
       }
@@ -436,6 +462,7 @@ function OpeningReview({
     // Recovery is a deliberate new opening and always requires a native fresh
     // human login. No consumed approval, cached human proof or metadata survives.
     const next = restart ? { ...attempt, operationKey: crypto.randomUUID() } : attempt;
+    retireObservation();
     if (!storePendingManagementOperationStepUp(next)) {
       setStatus('unavailable');
       return;
@@ -447,6 +474,7 @@ function OpeningReview({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!isCurrent() || lock.current || !attempt || !metadata || !confirmed || terminal) return;
+    const owner = beginObservation();
     markProgress('preflight');
     lock.current = true;
     setBusy(true);
@@ -454,8 +482,8 @@ function OpeningReview({
     setStatus('');
     try {
       const reviewed = metadata;
-      const current = await loadOpeningMetadata(attempt);
-      if (!isCurrent()) return;
+      const current = await loadOpeningMetadata(attempt, owner.signal);
+      if (!observationIsCurrent(owner)) return;
       if (current.kind === 'refused') {
         markProgress('refused');
         retire();
@@ -484,7 +512,8 @@ function OpeningReview({
       setOutcomeSource(result.kind === 'opened' ? 'opening-response' : null);
       setStatus(result.kind === 'opened' ? '' : result.kind);
     } finally {
-      if (isCurrent()) {
+      if (observationIsCurrent(owner)) {
+        observationOwner.current = null;
         lock.current = false;
         setBusy(false);
       }
@@ -620,12 +649,14 @@ function OpeningReview({
               disabled={busy}
               onClick={async () => {
                 if (!isCurrent() || lock.current) return;
+                const owner = beginObservation();
                 lock.current = true;
                 setBusy(true);
                 try {
-                  await reconcile(attempt);
+                  await reconcile(attempt, owner);
                 } finally {
-                  if (isCurrent()) {
+                  if (observationIsCurrent(owner)) {
+                    observationOwner.current = null;
                     lock.current = false;
                     setBusy(false);
                   }

@@ -847,6 +847,8 @@ Cached-document retirement synchronously removes the keyed review before the bro
 
 Submitted return and explicit Retry call only `GET /session`. A matching automated session is displayed in a separate current-state region and is labelled as an observation; it does not prove which request created that session. Unknown issuance is never replayed. A new opening uses a fresh human step-up, current metadata, and a new explicit confirmation.
 
+Decision: Each explicit opening metadata or session-readback attempt has one five-second private browser-read lifetime through body and BFF completion. Route retirement aborts active reads on pagehide, departure, page replacement and unmount; a deliberate retry receives a fresh lifetime. A timed-out metadata read is unavailable and a timed-out readback remains unknown. The native opening-page service keeps its separate ten-second deadline.
+
 Keep public identity labels explicitly undisclosed under the opening profile; recovery links to `https://rezics.com/{locale}/accounts` and a confirmed operated session can continue to `https://rezics.com/{locale}/`.
 
 Opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
@@ -993,7 +995,7 @@ submission. Recovery and step-up each make one Auth request per submit. Successf
 ### Operated session opening and return
 
 - **Touches:** page entry reads one human `GET /session`; review reads the human session and makes one `POST /account-management/operators/opening-page`. Before confirmation is sent, the page repeats that bounded native point observation, the existing approval stage reads the current human session and makes one `POST /account-operations/approve`, then one `POST /operator-sessions/open` issues the session. The approval reference remains only in the request stack. Submitted return and each explicit current-session Retry make one `GET /session` through `readOpenedSession`.
-- **Bound:** a complete opening uses at most 3 `GET /session` reads, 2 bounded opening-page observations, 1 approval request and 1 issuance request; each unsent Retry repeats at most 1 human-session read and 1 opening-page observation. A submitted return or read Retry uses exactly 1 `GET /session` and 0 metadata, approval or issuance calls. Each ordinary focus validation adds at most 1 human-session read. There is no inventory scan, poll or automatic issuance replay. Required fresh sign-in remains the existing native step-up flow.
+- **Bound:** a complete opening uses at most 3 `GET /session` reads, 2 bounded opening-page observations, 1 approval request and 1 issuance request; each unsent Retry repeats at most 1 human-session read and 1 opening-page observation. A submitted return or read Retry uses exactly 1 `GET /session` and 0 metadata, approval or issuance calls, with one five-second browser read allowance per observation through body/BFF completion. Each ordinary focus validation adds at most 1 human-session read. There is no inventory scan, poll or automatic issuance replay. Required fresh sign-in remains the existing native step-up flow; each native opening-page service read retains its separate ten-second deadline.
 - **Growth check:** `tests/operator-opening-return-cost.test.ts` verifies one readback request and no approval or issuance; `tests/operator-opening-return.test.tsx` verifies cached return, replacement cookies, released late reads and zero replay after Retry.
 
 ## Security headers

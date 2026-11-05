@@ -1,9 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import {
+  loadOpeningMetadata,
   parseOperatorOpeningPage,
+  operatorOpeningBrowserTransport,
   requestOperatorOpeningPage,
   sameOpeningPage,
   type OpeningInput,
+  type OpeningRead,
 } from '../src/operator-session-opening';
 
 const viewer = '11111111-1111-4111-8111-111111111111';
@@ -90,5 +93,25 @@ test('the page request makes one cookie-bound observation with only the selected
     expect(calls).toHaveLength(1);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('metadata BFF waits through its private deadline and an aborted lifetime starts no new request', async () => {
+  const signals: AbortSignal[] = [];
+  const transport = spyOn(operatorOpeningBrowserTransport, 'metadata').mockImplementation((_input, signal) => {
+    signals.push(signal);
+    return new Promise<OpeningRead>(() => {});
+  });
+  try {
+    expect(await loadOpeningMetadata(input)).toEqual({ kind: 'unavailable' });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
+
+    const retired = new AbortController();
+    retired.abort();
+    expect(await loadOpeningMetadata(input, retired.signal)).toEqual({ kind: 'unavailable' });
+    expect(signals).toHaveLength(1);
+  } finally {
+    transport.mockRestore();
   }
 });
