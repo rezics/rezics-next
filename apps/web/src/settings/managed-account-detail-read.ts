@@ -330,17 +330,19 @@ export class ManagedAccountReader {
     const restricted = detail.members.state === 'denied' || detail.responsibilities === null;
     // An authority loss observed by either feed invalidates other in-flight pages as well.
     if (restricted) this.generation++;
+    // The selected feed can settle independently; only the latest admitted read owns shared target identity and proof.
+    const latestObservation = observation === this.actionObservation;
     this.publish({
       retryAt: this.state.retryAt,
-      // An older feed reply cannot restore an entry after a newer read removed its proof.
-      authNavigation: observation === this.actionObservation ? result.authNavigation : this.state.authNavigation,
-      detail: {
+      // Restrictions withdraw proof regardless of which admitted sibling supplied them.
+      authNavigation: restricted ? undefined : latestObservation ? result.authNavigation : this.state.authNavigation,
+      detail: latestObservation ? {
         account: detail.account,
         self: detail.self,
         role: detail.role,
         operator: detail.operator,
         operated: detail.relation !== null,
-      },
+      } : this.state.detail,
       pending: false,
       members:
         !section || section === 'members' || detail.members.state === 'denied'
