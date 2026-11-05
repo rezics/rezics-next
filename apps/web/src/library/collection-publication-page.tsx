@@ -232,15 +232,14 @@ function PublicationIntentView({
     }
     const send = origin.attempt?.send ?? (captureSubmit ? captureSubmit() : submit);
     if (!send) return;
-    const capturedAttempt =
-      origin.attempt ?? {
-        token: {},
-        input,
-        send,
-        sourceKey: origin.sourceKey,
-        review,
-        uncertain: false,
-      };
+    const capturedAttempt = origin.attempt ?? {
+      token: {},
+      input,
+      send,
+      sourceKey: origin.sourceKey,
+      review,
+      uncertain: false,
+    };
     update((previous) => ({
       ...previous,
       busy: true,
@@ -249,37 +248,34 @@ function PublicationIntentView({
     if (!active.current || !isCurrent()) return;
     const settle = (outcome: PublicationResult) => {
       if (!active.current || !isOwnerCurrent()) return;
-      update(
-        (previous) => {
-          if (previous.attempt?.token !== capturedAttempt.token) return previous;
-          if (outcome.ok)
-            return {
-              ...previous,
-              result: outcome,
-              busy: false,
-              complete: outcome,
-              publishedReview: capturedAttempt.review,
-              ...(previous.currentPublishedRevision === null ||
-              previous.currentPublishedRevision <= outcome.collection.revision
-                ? {
-                    currentPublished: publishedMembershipFromComplete(outcome),
-                    currentPublishedRevision: outcome.collection.revision,
-                  }
-                : {}),
-              attempt: null,
-              confirmed: false,
-              selected: previous.sourceKey === capturedAttempt.sourceKey ? previous.selected : [],
-            };
-          const uncertain = previous.attempt.uncertain || outcome.reason === 'unknown';
+      update((previous) => {
+        if (previous.attempt?.token !== capturedAttempt.token) return previous;
+        if (outcome.ok)
           return {
             ...previous,
-            result: uncertain ? { ok: false, reason: 'unknown' } : outcome,
+            result: outcome,
             busy: false,
-            attempt: { ...capturedAttempt, uncertain },
+            complete: outcome,
+            publishedReview: capturedAttempt.review,
+            ...(previous.currentPublishedRevision === null ||
+            previous.currentPublishedRevision <= outcome.collection.revision
+              ? {
+                  currentPublished: publishedMembershipFromComplete(outcome),
+                  currentPublishedRevision: outcome.collection.revision,
+                }
+              : {}),
+            attempt: null,
+            confirmed: false,
+            selected: previous.sourceKey === capturedAttempt.sourceKey ? previous.selected : [],
           };
-        },
-        isOwnerCurrent,
-      );
+        const uncertain = previous.attempt.uncertain || outcome.reason === 'unknown';
+        return {
+          ...previous,
+          result: uncertain ? { ok: false, reason: 'unknown' } : outcome,
+          busy: false,
+          attempt: { ...capturedAttempt, uncertain },
+        };
+      }, isOwnerCurrent);
     };
     let timedOut = false;
     const response = Promise.resolve()
@@ -288,9 +284,7 @@ function PublicationIntentView({
     void response.then((outcome) => {
       if (timedOut) settle(outcome);
     });
-    const outcome = await publicationReadWithin<
-      { state: 'response'; value: PublicationResult } | { state: 'timeout' }
-    >(
+    const outcome = await publicationReadWithin<{ state: 'response'; value: PublicationResult } | { state: 'timeout' }>(
       response.then((value) => ({ state: 'response' as const, value })),
       responseTimeoutMs,
       { state: 'timeout' as const },
@@ -344,11 +338,7 @@ function PublicationIntentView({
           <SavedQueryPublishedMembership published={published} />
           {unknown && review ? <CollectionPublicationReview review={review} /> : null}
           {feedback}
-          <Button
-            type="button"
-            disabled={!unknown || busy || !isOwnerCurrent()}
-            onClick={() => void publish()}
-          >
+          <Button type="button" disabled={!unknown || busy || !isOwnerCurrent()} onClick={() => void publish()}>
             {unknown ? m.library_publication_retry() : m.library_publication_publish()}
           </Button>
           {onReload && !busy ? (
@@ -467,10 +457,7 @@ function PublicationIntentView({
                   className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                   aria-describedby="publication-bounds publication-replacement publication-privacy"
                   disabled={
-                    !confirmed ||
-                    busy ||
-                    refused ||
-                    (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())
+                    !confirmed || busy || refused || (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())
                   }
                   onClick={() => void publish()}
                 >

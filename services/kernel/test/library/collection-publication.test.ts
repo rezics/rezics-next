@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { collectionSelectedPublicationPlan, nativeReceiptBound, nativeWorkDimensions } from '../../src/library/collection-selected-publication-bounds.ts';
+import {
+  collectionSelectedPublicationPlan,
+  nativeReceiptBound,
+  nativeWorkDimensions,
+} from '../../src/library/collection-selected-publication-bounds.ts';
 import { withinCeiling } from '@rezics/bounds';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';

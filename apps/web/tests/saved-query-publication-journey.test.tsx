@@ -27,15 +27,16 @@ const saved = { id: 'saved-dynamic', curatorAccountId: 'owner', membershipKind: 
 const key = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
 const input: PublicationInput = { collectionId: 'saved-dynamic', revision: 7, subjectIds: [], idempotencyKey: key };
 const csrfToken = 'A'.repeat(22);
-const write = () => new Request('https://site.test/_serverFn/publication', {
-  method: 'POST',
-  headers: {
-    authorization: 'Bearer owner-token',
-    cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
-    origin: 'https://site.test',
-    'X-CSRF-Token': csrfToken,
-  },
-});
+const write = () =>
+  new Request('https://site.test/_serverFn/publication', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer owner-token',
+      cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
+      origin: 'https://site.test',
+      'X-CSRF-Token': csrfToken,
+    },
+  });
 const sessionEnv: Partial<SessionEnv> = {
   SITE_ORIGINS: 'https://site.test',
   AUTH_ISSUER: 'https://auth.test',
@@ -122,12 +123,7 @@ test('generated publishSelected keeps revision, unique IDs, credentials and key'
       });
     },
   });
-  const result = await publishSelectedNative(
-    client,
-    write(),
-    sessionEnv,
-    input,
-  );
+  const result = await publishSelectedNative(client, write(), sessionEnv, input);
   expect(result).toEqual({
     ok: true,
     collection: { id: input.collectionId, revision: 8 },

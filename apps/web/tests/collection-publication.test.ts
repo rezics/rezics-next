@@ -61,9 +61,8 @@ test('explicit empty and nonempty requests retain native revision and unique IDs
 });
 
 test('the current dynamic reader preserves header revision and original IDs; selection uses only disclosed canonical summaries from this page', async () => {
-  const { loadCollectionPublication, publicationCandidates, publicationSource } = await import(
-    '../src/library/collection-publication'
-  );
+  const { loadCollectionPublication, publicationCandidates, publicationSource } =
+    await import('../src/library/collection-publication');
   const requests: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (url, init) => {
@@ -162,7 +161,10 @@ test('the installed generated operation sends the exact selected request; unknow
   const uncertain = await publishSelectedNative(client, write(), sessionEnv, selected);
   expect(calls).toHaveLength(1);
   expect(uncertain).toEqual({ ok: false, reason: 'unknown' });
-  expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({ ok: false, reason: 'unavailable' });
+  expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
   expect(calls).toHaveLength(2);
   for (const call of calls) {
     expect(call.method).toBe('POST');

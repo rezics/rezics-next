@@ -217,19 +217,10 @@ async function prepareSelection(
   );
   if (!admission.filter || admission.releaseDigest !== saved.rule.releaseDigest) throw unavailable();
   const checks = await prepareCollectionRuleAuthority(deps, actor, admission.filter, attempt, deadline);
-  const bound = await bindOwnerFilterRead(
-    deps,
-    actor,
-    collectionId,
-    admission,
-    deadline,
-    attempt,
-    undefined,
-    {
-      total: nativeWorkDimensions(plan.perAttempt),
-      binding: plan.bindingWork,
-    },
-  );
+  const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, attempt, undefined, {
+    total: nativeWorkDimensions(plan.perAttempt),
+    binding: plan.bindingWork,
+  });
   if (bound.status !== 'bound') throw unavailable();
   const binding = bound.binding;
   const sourceKey = binding.scope.key.source;
@@ -272,12 +263,10 @@ async function prepareSelection(
           throw unavailable();
         await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
         async function resolveCurrent(originalId: string) {
-      // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
-      // Source membership may return after one positive alias; it does not authorize the remaining closure.
-          const disclosure = work.reserve(
-            nativeWorkDimensions(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST),
-          );
-      disclosure.dispatch();
+          // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
+          // Source membership may return after one positive alias; it does not authorize the remaining closure.
+          const disclosure = work.reserve(nativeWorkDimensions(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST));
+          disclosure.dispatch();
           let resolved;
           try {
             resolved = await resolveSubject(
@@ -310,7 +299,10 @@ async function prepareSelection(
                   }),
                 nativeWorkDimensions(plan.terms.positiveMembership),
               );
-              if (!sameSource(prepared.source.observation, membership.observation) || membership.result === 'not_proven')
+              if (
+                !sameSource(prepared.source.observation, membership.observation) ||
+                membership.result === 'not_proven'
+              )
                 throw unavailable();
               if (!membership.result) throw new ProblemError('not_found');
               const closure = await withNativeCollectionWorkAllowance(
@@ -324,7 +316,8 @@ async function prepareSelection(
               if (!closure.closure.originals.some((original) => original.subjectId === originalId)) throw unavailable();
               const disclosed = new Map([[originalId, resolved.subjectId]]);
               for (const original of closure.closure.originals) {
-                const terminal = disclosed.get(original.subjectId) ?? (await resolveCurrent(original.subjectId)).subjectId;
+                const terminal =
+                  disclosed.get(original.subjectId) ?? (await resolveCurrent(original.subjectId)).subjectId;
                 if (terminal !== resolved.subjectId) throw unavailable();
                 disclosed.set(original.subjectId, terminal);
               }
@@ -444,9 +437,7 @@ export function createCollectionPublications(deps: Dependencies) {
                 prepared.work,
                 nativeWorkAllowance(prepared.plan.terms.preReceipt, prepared.reservationId),
                 async () => {
-                  const compare = prepared.work.reserve(
-                    nativeWorkDimensions(prepared.plan.terms.compareHeaderRule),
-                  );
+                  const compare = prepared.work.reserve(nativeWorkDimensions(prepared.plan.terms.compareHeaderRule));
                   compare.dispatch();
                   try {
                     const current = await header(tx, route, collectionId, actor.accountId, true);
@@ -458,13 +449,7 @@ export function createCollectionPublications(deps: Dependencies) {
                     compare.settle();
                   }
                   await authorizeCollectionRule(tx, attempt, prepared.checks);
-                  await currentScope(
-                    deps,
-                    prepared.binding,
-                    prepared.work,
-                    prepared.plan.terms.scopeCurrentness,
-                    tx,
-                  );
+                  await currentScope(deps, prepared.binding, prepared.work, prepared.plan.terms.scopeCurrentness, tx);
                 },
               );
               // All of the above precedes Core receipt lookup, on replays as well as first execution.

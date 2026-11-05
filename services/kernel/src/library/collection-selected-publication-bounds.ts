@@ -13,8 +13,7 @@ import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-so
 export const COLLECTION_SELECTED_PUBLICATION_LIMIT = 100;
 export const COLLECTION_SELECTED_PUBLICATION_ATTEMPTS = WORK_EXECUTION_ATTEMPT_BOUND;
 
-const cost = (values: Omit<Bound, 'engineRequests'>): Bound =>
-  declareBound({ ...values, engineRequests: 0 });
+const cost = (values: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...values, engineRequests: 0 });
 
 function maximumBounds(...values: readonly Bound[]): Bound {
   const axes = Object.keys(values[0]!) as (keyof Bound)[];
@@ -275,7 +274,11 @@ export type CollectionSelectedPublicationPlan = Readonly<{
 
 /** The complete original closure is bounded separately from the raw selection branch count. */
 export function collectionSelectedPublicationPlan(selectionCount: number): CollectionSelectedPublicationPlan {
-  if (!Number.isSafeInteger(selectionCount) || selectionCount < 0 || selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT)
+  if (
+    !Number.isSafeInteger(selectionCount) ||
+    selectionCount < 0 ||
+    selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT
+  )
     throw new RangeError('Invalid selected publication count');
   const branches = repeatBound(selectedBranch, selectionCount);
   const canonicalDeduplication = canonicalDeduplicationFor(selectionCount);
@@ -352,7 +355,11 @@ export function nativeReceiptBound(receipt: WorkReceipt): Bound {
 }
 
 export function collectionSelectedPublicationOutputReservation(selectionCount: number): Bound {
-  if (!Number.isSafeInteger(selectionCount) || selectionCount < 0 || selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT)
+  if (
+    !Number.isSafeInteger(selectionCount) ||
+    selectionCount < 0 ||
+    selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT
+  )
     throw new RangeError('Invalid selected publication count');
   return nativeTransactionFor(selectionCount);
 }

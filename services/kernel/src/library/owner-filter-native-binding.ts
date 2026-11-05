@@ -518,7 +518,8 @@ export async function bindNativeOwnerFilterRead(
   const root = scopeAllowance(100, reservationId, ceilings?.total);
   // One direct Source request reservation, never renewed by a candidate/refill/closure.
   // Search supplies its own existing ceilings unchanged.
-  const work = inherited?.work ??
+  const work =
+    inherited?.work ??
     new NativeCollectionWork(
       ceilings ? root : { ...root, remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } },
       deadline,
@@ -532,129 +533,127 @@ export async function bindNativeOwnerFilterRead(
     ));
   let retained = false;
   try {
-    const bind = () => withAdmittedOwnerWorkingSource(
-      {
-        pool: dependencies.pool,
-        actor,
-        collectionId,
-        admission,
-        at,
-        deadline,
-        work,
-        ...(attempt ? { attempt } : {}),
-      },
-      async () => {
-        authoritativeTimeValue(at);
-        if (attempt)
-          await ownerFilterBounded(work, { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 }, () =>
-            requireCommandAdmission(
-              dependencies.access,
-              actor,
-              ownerFilterAccessContext(dependencies, deadline, attempt),
-            ),
+    const bind = () =>
+      withAdmittedOwnerWorkingSource(
+        {
+          pool: dependencies.pool,
+          actor,
+          collectionId,
+          admission,
+          at,
+          deadline,
+          work,
+          ...(attempt ? { attempt } : {}),
+        },
+        async () => {
+          authoritativeTimeValue(at);
+          if (attempt)
+            await ownerFilterBounded(work, { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 }, () =>
+              requireCommandAdmission(
+                dependencies.access,
+                actor,
+                ownerFilterAccessContext(dependencies, deadline, attempt),
+              ),
+            );
+          const current = await work.compose((allowance) =>
+            readNativeCollectionMetadata(dependencies.pool, { route, collectionId }, { deadline, allowance }),
           );
-        const current = await work.compose((allowance) =>
-          readNativeCollectionMetadata(dependencies.pool, { route, collectionId }, { deadline, allowance }),
-        );
-        const metadata = current.metadata;
-        if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
-        await revalidateMeaning(dependencies, admission, metadata, deadline, work);
-        if (
-          admission.owner &&
-          (actor.kind !== 'account' ||
-            (metadata.membershipKind === 'dynamic' && metadata.curatorAccountId !== actor.accountId))
-        )
-          throw new ProblemError('not_found');
-        // Only the admitted actual owner can select working metadata. Public/frozen metadata still refuses.
-        if (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin')
-          return { status: 'unavailable' } as const;
-        await privateAuthority(dependencies, actor, admission, at, deadline, work, attempt);
-        const source = await work.compose((allowance) =>
-          collectionSource(dependencies, pagePlan).prepare({ actor, at, deadline, collectionId, allowance }),
-        );
-        const [row] = await withConnection(dependencies.pool, (client) =>
-          ownerFilterQuery<{
-            identity: IdentityScopeLibraryIdentity;
-            captureId: string | null;
-            revision: string | null;
-          }>(
-            deadlineClient(client, deadline),
-            work,
-            scopeQuery,
-            {
-              route,
-              collection_id: collectionId,
-              source_fence: nativeSourceFence(metadata),
-            },
-            { nativeRows: 4, bytes: 6144 },
-          ),
-        );
-        if (
-          !row ||
-          !row.captureId ||
-          row.revision === null ||
-          row.identity.scope === 'public_output' ||
-          row.identity.collectionId !== collectionId ||
-          row.identity.route !== route ||
-          row.identity.incarnation !== metadata.incarnation ||
-          row.identity.generation !== metadata.sourceGeneration ||
-          row.identity.accountId !== metadata.curatorAccountId ||
-          row.identity.ownerEpoch !== metadata.stamp.epoch ||
-          row.identity.scope !== metadata.authority
-        )
-          return { status: 'unavailable' } as const;
-        const scope: IdentityScopeObservation = {
-          key: { source: { kind: 'library', identity: row.identity }, scopeId: 'collection-source' },
-          captureId: row.captureId,
-          committedRevision: BigInt(row.revision),
-        };
-        let ownerFence: string | null = null;
-        if (admission.owner && actor.kind === 'account') {
+          const metadata = current.metadata;
+          if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
+          await revalidateMeaning(dependencies, admission, metadata, deadline, work);
+          if (
+            admission.owner &&
+            (actor.kind !== 'account' ||
+              (metadata.membershipKind === 'dynamic' && metadata.curatorAccountId !== actor.accountId))
+          )
+            throw new ProblemError('not_found');
+          // Only the admitted actual owner can select working metadata. Public/frozen metadata still refuses.
+          if (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin')
+            return { status: 'unavailable' } as const;
+          await privateAuthority(dependencies, actor, admission, at, deadline, work, attempt);
+          const source = await work.compose((allowance) =>
+            collectionSource(dependencies, pagePlan).prepare({ actor, at, deadline, collectionId, allowance }),
+          );
           const [row] = await withConnection(dependencies.pool, (client) =>
-            ownerFilterQuery<{ generation: string }>(
+            ownerFilterQuery<{
+              identity: IdentityScopeLibraryIdentity;
+              captureId: string | null;
+              revision: string | null;
+            }>(
               deadlineClient(client, deadline),
               work,
-              ownerFenceQuery,
-              { route: routeOf(actor.accountId), account_id: actor.accountId },
-              { nativeRows: 4, bytes: 256 },
+              scopeQuery,
+              {
+                route,
+                collection_id: collectionId,
+                source_fence: nativeSourceFence(metadata),
+              },
+              { nativeRows: 4, bytes: 6144 },
             ),
           );
-          if (!row) return { status: 'unavailable' } as const;
-          ownerFence = row.generation;
-        }
-        const binding: OwnerFilterReadBinding = {
-          input: { actor, at, deadline, collectionId, allowance: ownerFilterAllowance(work) },
-          scope,
-        };
-        bindings.set(binding, {
-          dependencies,
-          admission,
-          metadata,
-          observation: source.source.observation,
-          ownsTime: ownTime,
-          ownerFence,
-          ...(pagePlan ? { pagePlan } : {}),
-          originals: new Map(),
-          ...(inherited?.query ? { query: inherited.query } : {}),
-          ...(attempt ? { attempt } : {}),
-        });
-        await revalidateNativeOwnerFilter(binding, work);
-        // Binding work is already spent. Subsequent Source and closure consumers inherit only the remainder.
-        const result: OwnerFilterReadBinding = {
-          ...binding,
-          input: { ...binding.input, allowance: ownerFilterAllowance(work) },
-        };
-        freeze(result);
-        bindings.set(result, bindings.get(binding)!);
-        retained = true;
-        return { status: 'bound', binding: result } as const;
-      },
-    );
+          if (
+            !row ||
+            !row.captureId ||
+            row.revision === null ||
+            row.identity.scope === 'public_output' ||
+            row.identity.collectionId !== collectionId ||
+            row.identity.route !== route ||
+            row.identity.incarnation !== metadata.incarnation ||
+            row.identity.generation !== metadata.sourceGeneration ||
+            row.identity.accountId !== metadata.curatorAccountId ||
+            row.identity.ownerEpoch !== metadata.stamp.epoch ||
+            row.identity.scope !== metadata.authority
+          )
+            return { status: 'unavailable' } as const;
+          const scope: IdentityScopeObservation = {
+            key: { source: { kind: 'library', identity: row.identity }, scopeId: 'collection-source' },
+            captureId: row.captureId,
+            committedRevision: BigInt(row.revision),
+          };
+          let ownerFence: string | null = null;
+          if (admission.owner && actor.kind === 'account') {
+            const [row] = await withConnection(dependencies.pool, (client) =>
+              ownerFilterQuery<{ generation: string }>(
+                deadlineClient(client, deadline),
+                work,
+                ownerFenceQuery,
+                { route: routeOf(actor.accountId), account_id: actor.accountId },
+                { nativeRows: 4, bytes: 256 },
+              ),
+            );
+            if (!row) return { status: 'unavailable' } as const;
+            ownerFence = row.generation;
+          }
+          const binding: OwnerFilterReadBinding = {
+            input: { actor, at, deadline, collectionId, allowance: ownerFilterAllowance(work) },
+            scope,
+          };
+          bindings.set(binding, {
+            dependencies,
+            admission,
+            metadata,
+            observation: source.source.observation,
+            ownsTime: ownTime,
+            ownerFence,
+            ...(pagePlan ? { pagePlan } : {}),
+            originals: new Map(),
+            ...(inherited?.query ? { query: inherited.query } : {}),
+            ...(attempt ? { attempt } : {}),
+          });
+          await revalidateNativeOwnerFilter(binding, work);
+          // Binding work is already spent. Subsequent Source and closure consumers inherit only the remainder.
+          const result: OwnerFilterReadBinding = {
+            ...binding,
+            input: { ...binding.input, allowance: ownerFilterAllowance(work) },
+          };
+          freeze(result);
+          bindings.set(result, bindings.get(binding)!);
+          retained = true;
+          return { status: 'bound', binding: result } as const;
+        },
+      );
     const bound = ceilings
-      ? await work.withinAllowance(
-          { reservationId: work.receipt().reservationId, remaining: ceilings.binding },
-          bind,
-        )
+      ? await work.withinAllowance({ reservationId: work.receipt().reservationId, remaining: ceilings.binding }, bind)
       : await bind();
     if (bound.status !== 'bound' || !ceilings) return bound;
     const previous = bindings.get(bound.binding);

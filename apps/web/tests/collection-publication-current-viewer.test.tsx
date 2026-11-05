@@ -190,9 +190,12 @@ async function mount() {
       ),
     seed: (page: PublicationPage, credential: PublicationViewer) =>
       flush(() => {
-        const query = client.getQueryCache().findAll({
-          queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
-        }).at(-1);
+        const query = client
+          .getQueryCache()
+          .findAll({
+            queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
+          })
+          .at(-1);
         expect(query).toBeDefined();
         client.setQueryData(query!.queryKey, page);
       }),
@@ -344,7 +347,10 @@ test('A timed-out original remains uncertain after a refused replay and accepts 
 test('A confirmed receipt stays separate from newer current output and survives a failed Reload without replay', async () => {
   await mounted(async (page) => {
     await page.show();
-    await page.settle(reads[0]!.work, page.ready(7, page.members, { generation: 'current-output', state: 'complete', itemCount: 3 }));
+    await page.settle(
+      reads[0]!.work,
+      page.ready(7, page.members, { generation: 'current-output', state: 'complete', itemCount: 3 }),
+    );
     await page.choose();
     await page.click(page.m.library_publication_publish());
     expect(writes).toHaveLength(1);

@@ -267,7 +267,8 @@ export async function readNativeOwnerFilterClosure(
   // A missing group cannot be a successful empty closure, nor can a terminal point prove alias coverage.
   if (!keys.length) return { status: 'unavailable' } as const;
   const originalIds = [...new Set([...keys.map((key) => key.storedSubjectId), subjectId])];
-  if (originalIds.length + keys.length > OWNER_FILTER_CLOSURE_REFERENCE_LIMIT) return { status: 'unavailable' } as const;
+  if (originalIds.length + keys.length > OWNER_FILTER_CLOSURE_REFERENCE_LIMIT)
+    return { status: 'unavailable' } as const;
   if (originalIds.length > OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT) return { status: 'unavailable' } as const;
   const originals: { subjectId: string; facts: OwnerFilterFactLocator[] }[] = [];
   const releases = new Map<string, Release>();
@@ -303,7 +304,9 @@ export async function readNativeOwnerFilterClosure(
       // All original keys, including originals excluded by the Source's built-in state, have independent facts.
       // No matching leaf or positive witness chooses the population. LIMIT precedes all fact hydration.
       const remaining = Math.min(
-        OWNER_FILTER_CLOSURE_REFERENCE_LIMIT - originalIds.length - originals.reduce((sum, row) => sum + row.facts.length, 0),
+        OWNER_FILTER_CLOSURE_REFERENCE_LIMIT -
+          originalIds.length -
+          originals.reduce((sum, row) => sum + row.facts.length, 0),
         work.available('candidateKeys'),
       );
       if (remaining < 1) return { status: 'unavailable' } as const;
