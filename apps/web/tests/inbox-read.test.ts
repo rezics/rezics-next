@@ -20,15 +20,15 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
 }));
 mock.module('../src/kernel/client', () => ({ kernelClient: () => configuredKernel }));
-import {
+import type { InboxNotice } from '../src/inbox/inbox-read';
+const {
   decodeInboxPage,
   inboxPageActions,
   loadUnreadCount,
   nativeInboxEnvelope,
   readUnreadCount,
   readyInboxPage,
-  type InboxNotice,
-} from '../src/inbox/inbox-read';
+} = await import('../src/inbox/inbox-read');
 import type { SessionEnv } from '../src/session/client';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
