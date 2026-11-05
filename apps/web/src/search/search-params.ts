@@ -5,7 +5,12 @@ import {
   searchFilterWithScope,
   type SearchResourceScope,
 } from './advanced-scope';
-import { searchInputDependency, searchLoaderDepsFromIntake, searchUrlIntake } from './search-input/intake';
+import {
+  searchInputDependency,
+  searchInputFingerprint,
+  searchLoaderDepsFromIntake,
+  searchUrlIntake,
+} from './search-input/intake';
 import type { FilterDocument, FilterRange } from '@rezics/filter';
 import { RATING_POPULATION_FIELD } from './rating-population';
 import * as v from 'valibot';
@@ -34,7 +39,7 @@ export type SearchLoaderDeps = {
 };
 
 export type { SearchInputIssue, SearchInputIssueReason, SearchUrlIntake } from './search-input/intake';
-export { searchInputDependency, searchUrlIntake } from './search-input/intake';
+export { searchInputDependency, searchInputFingerprint, searchUrlIntake } from './search-input/intake';
 
 export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderDeps {
   return searchLoaderDepsFromIntake(searchUrlIntake(search));

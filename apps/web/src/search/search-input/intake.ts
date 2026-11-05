@@ -1,6 +1,7 @@
 import {
   FilterError,
   FILTER_LIMITS,
+  parseDiscoveryFilter,
   parseFilter,
   type FilterDocument,
   type FilterRange,
@@ -9,6 +10,7 @@ import { isWithinGlobalSearchQueryLimit } from '../query-text-limit';
 import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from '../rating-population';
 import {
   parseSearchResourceScope,
+  removeSearchResourceScope,
   type SearchResourceScope,
 } from '../advanced-scope';
 import { canonicalResourceLanguageValues, RESOURCE_LANGUAGE_PROPERTY } from '../language-refinement';
@@ -227,11 +229,22 @@ function parseFilterInput(
 ): { value?: string; scope?: SearchResourceScope } {
   const value = scalarValue(issues, 'filter', input, (text) => new TextEncoder().encode(text).byteLength <= SEARCH_STRUCTURED_VALUE_BYTE_LIMIT, 'invalid-filter', 'structured');
   if (value === undefined || value === '') return { ...(value === '' ? { value } : {}) };
-  if (!parseStructured(issues, 'filter', value, 'invalid-filter')) return {};
   const scope = parseSearchResourceScope(value);
   if (scope.invalidInput) {
     addIssue(issues, 'filter', value, 'invalid-filter', { removal: 'structured' });
     return {};
+  }
+  const filterWithoutScope = scope.scope ? removeSearchResourceScope(value) : value;
+  if (filterWithoutScope !== undefined) {
+    try {
+      parseDiscoveryFilter(JSON.parse(filterWithoutScope));
+    } catch (error) {
+      if (error instanceof SyntaxError || error instanceof FilterError) {
+        addIssue(issues, 'filter', value, 'invalid-filter', { removal: 'structured' });
+        return {};
+      }
+      throw error;
+    }
   }
   return { value, ...(scope.scope ? { scope: scope.scope } : {}) };
 }
