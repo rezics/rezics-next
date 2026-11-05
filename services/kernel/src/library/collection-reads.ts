@@ -70,8 +70,7 @@ import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './v
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
-import { createSearchScopeForService } from '../search/service-scope.ts';
-import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
+import { readSavedCatalogueMembers } from '../search/service-saved-collection.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -1209,9 +1208,6 @@ export function createCollectionReads(
     if (admission.source === 'catalogue') {
       if (!dependencies.search || !dependencies.routeKey) throw new ProblemError('dependency_unavailable');
       const limit = options.limit ?? DEFAULT_PAGE_SIZE;
-      const reservationId = `library.collection.rule:${collectionId}:${saved.revision}`;
-      const work = new ScopeWork(scopeAllowance(limit + 1, reservationId));
-      const allowance = () => ({ reservationId, remaining: work.remaining().remaining });
       const time = await withConnection(pool, (client) =>
         mintReadTime(deadlineClient(client, deadline), dependencies.clock),
       );
@@ -1239,100 +1235,37 @@ export function createCollectionReads(
         };
         const firstLifetime = await lifetime();
         await authorize(time);
-        const search = createSearchScopeForService(dependencies.search, {
-          access,
+        return await readSavedCatalogueMembers(dependencies.search, {
           actor: viewer,
-          routeKey: dependencies.routeKey,
-          nativeT: time,
-          deadline,
-        });
-        const prepared = await search.prepare(admission.filter!, {
-          releaseDigest: saved.releaseDigest,
-          allowance: allowance(),
-          readOnly: true,
-        });
-        work.native(search.work(prepared));
-        const cursorBinding: CursorBinding = {
-          operation: 'library.collection.saved-catalogue-members',
-          parameters: {
-            collectionId,
-            viewerAccountId: viewer.accountId,
-            collectionRevision: saved.collectionRevision,
+          collection: {
+            id: collectionId,
+            revision: collection.revision,
             ruleRevision: saved.revision,
             sourceGeneration: saved.sourceGeneration,
-            releaseDigest: saved.releaseDigest,
-            queryDigest: admission.queryDigest,
-            limit,
-            view: options.view ?? 'BASIC',
+            reader: firstLifetime,
           },
-        };
-        let afterSubject: string | null = null;
-        const token = cursorToken(options.cursor ?? null);
-        if (token !== null) {
-          const decoded = decodeCursor(tokens, cursorBinding, token);
-          if (
-            !decoded.ok ||
-            decoded.after.length !== 5 ||
-            decoded.after.some((value) => typeof value !== 'string') ||
-            typeof decoded.after[0] !== 'string' ||
-            typeof decoded.after[1] !== 'string' ||
-            typeof decoded.after[2] !== 'string' ||
-            typeof decoded.after[3] !== 'string' ||
-            typeof decoded.after[4] !== 'string' ||
-            routeOf(decoded.after[3]) === null
-          )
-            throw invalidCursor();
-          if (
-            decoded.epoch !== collection.revision ||
-            decoded.after[0] !== prepared.basis.query ||
-            decoded.after[1] !== prepared.basis.canonical ||
-            decoded.after[2] !== firstLifetime.operator ||
-            decoded.after[4] !== firstLifetime.minimumAuthnEpoch ||
-            routeOf(decoded.after[3]) === null
-          )
-            throw new ProblemError('stale_cursor');
-          afterSubject = decoded.after[3];
-        }
-        const page = await search.prefix(prepared, {
-          afterSubject,
-          quota: limit,
-          budget: limit + 1,
-          allowance: allowance(),
+          filter: admission.filter!,
+          release: { digest: saved.releaseDigest, release: admission.release! },
+          limit,
+          cursor: options.cursor,
+          scope: { access, actor: viewer, routeKey: dependencies.routeKey, nativeT: time, deadline },
+          async revalidate() {
+            const finalTime = await withConnection(pool, (client) =>
+              mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+            );
+            try {
+              await authorize(finalTime);
+              const finalLifetime = await lifetime();
+              if (
+                finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
+                finalLifetime.operator !== firstLifetime.operator
+              )
+                throw new ProblemError('stale_cursor');
+            } finally {
+              releaseOperationalTime(finalTime);
+            }
+          },
         });
-        if (page.basis.query !== prepared.basis.query || page.basis.canonical !== prepared.basis.canonical)
-          throw new ProblemError('stale_cursor');
-        work.native(page.usage.work!);
-        const finalTime = await withConnection(pool, (client) =>
-          mintReadTime(deadlineClient(client, deadline), dependencies.clock),
-        );
-        try {
-          await authorize(finalTime);
-          const finalLifetime = await lifetime();
-          if (
-            finalLifetime.minimumAuthnEpoch !== firstLifetime.minimumAuthnEpoch ||
-            finalLifetime.operator !== firstLifetime.operator
-          )
-            throw new ProblemError('stale_cursor');
-        } finally {
-          releaseOperationalTime(finalTime);
-        }
-        const last = page.hits.at(-1);
-        return {
-          members: page.hits.map((hit) => ({ kind: 'dynamic' as const, subjectId: hit.id })),
-          next:
-            page.exhausted || !last
-              ? null
-              : encodeCursor(tokens, cursorBinding, {
-                  epoch: collection.revision,
-                  after: [
-                    page.basis.query,
-                    page.basis.canonical,
-                    firstLifetime.operator,
-                    last.id,
-                    firstLifetime.minimumAuthnEpoch,
-                  ],
-                }),
-        };
       } finally {
         releaseOperationalTime(time);
       }

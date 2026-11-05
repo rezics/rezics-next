@@ -21,7 +21,7 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
-import { activeRelease } from '../semantic/definitions.ts';
+import { activeRelease, readRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import {
@@ -152,6 +152,14 @@ export type PublicSearchReadContext = Readonly<{
   /** The verified request context used only by the service-bound native Scope. */
   scope?: LeafOptions;
   realmAuthority?: RealmRatingQuery['authority'];
+  /** Internal saved Collection read: retain its admitted meaning and bind continuation to its native identity. */
+  savedCollection?: Readonly<{
+    id: string;
+    revision: number;
+    ruleRevision: number;
+    sourceGeneration: string;
+    reader: Readonly<{ minimumAuthnEpoch: string; operator: string }>;
+  }>;
   complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 
@@ -961,6 +969,11 @@ export function createSearchService({
       const assertCurrentRelease = async () => {
         if (!current) return;
         if (releaseBinding) {
+          if (readContext?.savedCollection) {
+            // The saved rule's immutable release remains its meaning after activation changes.
+            if (!(await sourceRequest(() => readRelease(pool, releaseBinding.digest)))) throw indexNotReady();
+            return;
+          }
           const latest = await sourceRequest(() => activeRelease(pool));
           if (
             latest?.digest !== releaseBinding.digest ||
@@ -1192,7 +1205,13 @@ export function createSearchService({
       const cursorRequest = preparedScope
         ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis)
         : bindingRequest;
-      const binding = { operation: 'subjects.search', request: cursorRequest, principal };
+      const binding = {
+        operation: 'subjects.search',
+        request: readContext?.savedCollection
+          ? { query: cursorRequest, savedCollection: readContext.savedCollection, release: native!.digest }
+          : cursorRequest,
+        principal,
+      };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
       const lowerBoundBinding = { ...binding, operation: 'subjects.search.lower_bound' };
@@ -1546,12 +1565,18 @@ export function createSearchService({
       try {
         if (runtime) {
           if (retained) {
-            operations = await indexRequest(() => runtime.resumeRequest(retained.queried, context));
+            operations = await indexRequest(() =>
+              runtime.resumeRequest(retained.queried, context, readContext?.savedCollection ? native!.digest : undefined),
+            );
           } else {
             // Poll the retained preparation instead of reserving a fresh direct
             // allowance on every retry of the same sparse page.
             const bound = await indexRequest(() =>
-              runtime.bindRequest({ plan: capturePlan, snapshot: 'prepared' }, context),
+              runtime.bindRequest(
+                { plan: capturePlan, snapshot: 'prepared' },
+                context,
+                readContext?.savedCollection ? native!.digest : undefined,
+              ),
             );
             operations = bound.operations;
             capture = bound.capture;
