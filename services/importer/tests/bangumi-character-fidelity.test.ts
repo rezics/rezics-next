@@ -62,8 +62,11 @@ test('ordinary selected Character registration converts captured CharacterDetail
     { external_id: 'character:1', record_revision: null, record: officialCharacter },
     { source: crossMediaAliases.bangumi, subjectId: character.id },
   );
-  const nameStatements = result.proposals.filter((command) =>
-    command.op === 'propose' && ['schema:name', 'schema:alternateName'].includes(command.statement.property.id));
+  const nameStatements = result.proposals.flatMap((command) =>
+    command.op === 'propose' && ['schema:name', 'schema:alternateName'].includes(command.statement.property.id)
+      ? [command]
+      : [],
+  );
   expect(nameStatements.map((command) => [command.statement.property.id, command.statement.value])).toEqual([
     ['schema:name', { type: 'value', content: { language: 'und', text: 'ルルーシュ・ランペルージ' } }],
     ['schema:name', { type: 'value', content: { language: 'zh-Hans', text: '鲁路修·兰佩路基' } }],
