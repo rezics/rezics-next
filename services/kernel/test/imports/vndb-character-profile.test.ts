@@ -7,9 +7,10 @@ import { planCrossMediaSeed, type CrossMediaTables } from '../../../importer/src
 import {
   parseVndbCharacterProfileReferences,
   readVndbCharacterProfileBindings,
+  vndbCharacterBloodTypeConceptUri,
 } from '../../../importer/src/vndb-character-profile.ts';
 import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
-import { vndbCharacterBloodTypeConceptUri, vndbCharacterBloodTypeSchemeUri } from '@rezics/conversion/vndb-vocabulary';
+import { vndbCharacterBloodTypeSchemeUri } from '@rezics/conversion/vndb-vocabulary';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';

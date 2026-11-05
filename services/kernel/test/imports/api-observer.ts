@@ -17,6 +17,9 @@ type Candidate =
       retracted: number | null;
       retraction: { source: SourceEnvelope; references: Proposal['references'] } | null;
     };
+function hasStatement(candidate: Candidate): candidate is Extract<Candidate, { statement: Statement }> {
+  return 'statement' in candidate;
+}
 const envelope = (source: SourceEnvelope) => ({
   source: source.source as Source,
   externalId: source.external_id,
@@ -302,13 +305,14 @@ export async function openApiObserver(runtime: ApiRuntime) {
     const listing = await required(
       `/v1/subjects/${id}/candidates?${new URLSearchParams({ property, context, limit: '100' })}`,
     );
-    let candidate = (listing.candidates as Candidate[]).find(
+    const current = (listing.candidates as Candidate[]).filter(hasStatement);
+    let candidate = current.find(
       (c) =>
         JSON.stringify(c.statement.value.content) === JSON.stringify(value) ||
         (property === 'schema:name' && (c.statement.value.content as { text?: string })?.text === value),
     )?.id;
     if (!candidate) {
-      const cited = (listing.candidates as Candidate[]).find((c) => c.statement.references?.length);
+      const cited = current.find((c) => c.statement.references.length > 0);
       if (!cited) throw new Error('Manual community proposal requires a retrieved source reference');
       candidate = (
         await required(

@@ -5,11 +5,12 @@ import {
   mergeCopyConditionFields,
   parseCopyConditionFields,
   presentCopyCondition,
+  type CopyConditionPatch,
 } from '../../src/library/copy-condition.ts';
 import type { LibraryCopyKindDescriptor, LibraryProfilePin } from '../../src/library/profile.ts';
 
 // Structural supplier fixture, not a claim that Definitions currently publishes this capability.
-const physical = {
+const physical: LibraryCopyKindDescriptor = {
   id: 'physical',
   labels: { en: 'Physical copy' },
   statuses: [],
@@ -50,7 +51,7 @@ test('two copies preserve independent media, packaging and original field accept
 
 test('old command operands remain absent and exact retries retain clear versus unknown', () => {
   expect(parseCopyConditionFields({ revision: 4, note: 'Existing intent' })).toEqual({});
-  const input = { mediaCondition: null, packagingCondition: 'unknown' } as const;
+  const input: CopyConditionPatch = { mediaCondition: null, packagingCondition: 'unknown' };
   expect(parseCopyConditionFields(JSON.parse(JSON.stringify(input)))).toEqual(input);
   for (const field of ['mediaCondition', 'packagingCondition']) {
     for (const value of [undefined, '', 'excellent', 0, false, {}, ['mint']]) {
@@ -64,7 +65,9 @@ test('old command operands remain absent and exact retries retain clear versus u
 test('physical labels, digital kinds and missing publication cannot admit writes', () => {
   const unsupported: LibraryCopyKindDescriptor = { id: 'physical', labels: { en: 'Physical' }, statuses: [] };
   expect(copyConditionAdmission(unsupported)).toEqual({ state: 'unavailable', reason: 'unsupported' });
-  const future = { ...physical, condition: 'future' };
+  // A raw imported release can contain a future value before its compiler contract is updated.
+  const futureInput: unknown = JSON.parse(JSON.stringify({ ...physical, condition: 'future' }));
+  const future = futureInput as LibraryCopyKindDescriptor;
   expect(copyConditionAdmission(future)).toEqual({ state: 'unavailable', reason: 'unrecognized_vocabulary' });
   for (const kind of [unsupported, { ...unsupported, id: 'digital' }]) {
     expect(() => mergeCopyConditionFields({}, { mediaCondition: 'mint' }, { kind, pin })).toThrow(

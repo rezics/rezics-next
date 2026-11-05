@@ -7,7 +7,11 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import pinned from '../../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json';
 import { convertBangumi } from '../../../../packages/conversion/src/bangumi.ts';
-import { Importer, type ImportIdentifierResolution } from '../../../importer/src/importer.ts';
+import {
+  Importer,
+  isUnavailableIdentifierResolution,
+  type ImportIdentifierResolution,
+} from '../../../importer/src/importer.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
@@ -35,7 +39,7 @@ let path: string;
 let port: ReturnType<typeof createImportTransport>;
 
 function resolvedReferences(resolution: ImportIdentifierResolution): Readonly<Record<string, string>> {
-  if ('preserveProperties' in resolution && typeof resolution.preserveProperties !== 'string') {
+  if (isUnavailableIdentifierResolution(resolution)) {
     if (!resolution.resolvedReferences) throw new Error('Missing resolved references for reviewed catalogue seed');
     return resolution.resolvedReferences;
   }

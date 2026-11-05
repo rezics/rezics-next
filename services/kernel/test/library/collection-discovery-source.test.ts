@@ -21,6 +21,40 @@ function available(snapshot: CollectionDiscoverySnapshot) {
   if (snapshot.status !== 'available') throw new Error('Native Collection partition unavailable');
   return snapshot;
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function collectionIdentity(value: unknown): { id: string; revision: number } {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.collection) ||
+    typeof value.collection.id !== 'string' ||
+    typeof value.collection.revision !== 'number'
+  )
+    throw new Error('Collection response is invalid');
+  return { id: value.collection.id, revision: value.collection.revision };
+}
+
+function publicationResult(value: unknown): {
+  collection: { revision: number };
+  publication: { generation: string };
+} {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.collection) ||
+    typeof value.collection.revision !== 'number' ||
+    !isRecord(value.publication) ||
+    typeof value.publication.generation !== 'string'
+  )
+    throw new Error('Collection publication response is invalid');
+  return {
+    collection: { revision: value.collection.revision },
+    publication: { generation: value.publication.generation },
+  };
+}
+
 async function saved() {
   const response = await f.send('POST', '/v1/collections', {
     title: 'Public selected output',
@@ -30,7 +64,8 @@ async function saved() {
     rule: { filter: { owner: { presence: true } } },
   });
   expect(response.status).toBe(201);
-  return (await response.json()).collection as { id: string; revision: number };
+  const body: unknown = await response.json();
+  return collectionIdentity(body);
 }
 
 test('native public hints exclude hidden/incomplete sources, retain selected A during B and withdraw before delayed delivery', async () => {
@@ -68,7 +103,7 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
   const requestKey = randomUUID();
   const published = await f.send('POST', `/v1/collections/${dynamic.id}:publishSelected`, input, f.owner, requestKey);
   expect(published.status).toBe(200);
-  const output = await published.json();
+  const output = publicationResult(await published.json());
   const partition = partitionOf(routeOf(curated.id)!);
   const ids = [curated, hidden, unlisted, deleted, incomplete, privateDynamic, unlistedDynamic, dynamic].map(({ id }) =>
     key(id),
@@ -195,12 +230,14 @@ test('native operands use explicit mixed presentation, exact curated time and in
   const collection = await f.collection({ visibility: 'public' });
   const subjects: string[] = [];
   for (let index = 0; index < 5; index++) subjects.push(await f.subject(`Subject operand ${index}`));
+  const selectedSubject = subjects[4];
+  if (selectedSubject === undefined) throw new Error('Collection discovery fixture is missing its fifth subject');
   for (const subjectId of subjects)
     expect((await f.send('POST', `/v1/collections/${collection.id}/members`, { subjectId })).status).toBe(201);
 
   const source = publicCollectionDiscoverySource({ pool: f.database.pool });
   const result = available(
-    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: subjects[4] }),
+    await source.read(partitionOf(routeOf(collection.id)!), [key(collection.id)], { subjectId: selectedSubject }),
   );
   expect(result.items[0]).toMatchObject({
     status: 'indexable',
@@ -209,7 +246,7 @@ test('native operands use explicit mixed presentation, exact curated time and in
       presentationKind: null,
       operands: {
         presentationKind: { kind: 'mixed' },
-        subjectMembership: { subjectId: subjects[4], matches: true },
+        subjectMembership: { subjectId: selectedSubject, matches: true },
         popularity: null,
         recency: [expect.any(String), routeOf(collection.id), collection.id],
       },

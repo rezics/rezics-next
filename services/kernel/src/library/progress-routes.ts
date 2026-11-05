@@ -696,7 +696,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
               readCurrentSubjectSummaries(
                 {
                   pool,
-                  access: runtimeDependencies.access,
+                  access: runtimeDependencies.access(),
                   actor: viewer,
                   routeKey: runtimeDependencies.routeKey,
                   deadline: deadlineFor(WORK_STEP_DEADLINE_MS),

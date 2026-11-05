@@ -218,7 +218,10 @@ export function assertListingCountReaderWork(report: GrowthReport, batch: Listin
       expect(statement).toContain('LIMIT 1');
       expect(statement).toMatch(/route >= .*partition_no \* 16/);
       expect(statement).toMatch(/route < \(.*partition_no \+ 1\) \* 16/);
-      const nodes = product[0]!.planDocuments.flatMap(planNodes);
+      const occurrence = product[0];
+      if (!occurrence || !occurrence.planDocuments)
+        throw new Error('The indexed listing statement is missing its execution plan');
+      const nodes = occurrence.planDocuments.flatMap(planNodes);
       const scans = nodes.filter(
         (node) =>
           node.Schema === 'library' && node['Relation Name'] === 'subject_listing' && Number(node['Actual Loops']) > 0,
