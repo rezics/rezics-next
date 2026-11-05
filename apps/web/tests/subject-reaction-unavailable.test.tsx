@@ -9,7 +9,7 @@ import type { SessionEnv } from '../src/session/client';
 import type { SubjectReactionKind } from '../src/features/pages/subject-reactions';
 import type { ZoneSubjectPersonalTransport } from '../src/zones/zone-shell';
 
-// UNRUN: the connected native-read and actual Zone owner journey is authored; current verification is Web typing only.
+// Exercise the production Subject and Zone owners with gated native reads and writes.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -144,10 +144,9 @@ const fakeKernelClient = {
             counts: [
               { kind: 'like', count: 2 },
               { kind: 'love', count: 1 },
-              { kind: 'laugh', count: 0 },
               { kind: 'insightful', count: 3 },
-              { kind: 'sad', count: 0 },
             ],
+            watermark: null,
           },
         };
       },
