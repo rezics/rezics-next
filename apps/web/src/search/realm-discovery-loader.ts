@@ -1,5 +1,6 @@
 import { QueryObserver, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import * as v from 'valibot';
 import { isValidRealmDiscoveryPage, loadRealmDiscovery } from '../community/realm-discovery/source';
 import type { RealmDiscoverySort, RealmDiscoveryState } from '../community/realm-discovery';
@@ -23,8 +24,10 @@ const input = v.strictObject({
 /** Existing server-function transport, delegating once to Content's original adapter. */
 export const readRealmDiscovery = createServerFn({ method: 'GET' })
   .validator((value: unknown) => v.parse(input, value))
-  .handler(async ({ data, signal }): Promise<RealmDiscoveryPage> => {
+  .handler(async ({ data }): Promise<RealmDiscoveryPage> => {
+    const signal = getRequest().signal;
     try {
+      signal.throwIfAborted();
       const { kernelClient } = await import('../kernel/client');
       return await loadRealmDiscovery(kernelClient(data.locale), {
         sort: data.sort,
