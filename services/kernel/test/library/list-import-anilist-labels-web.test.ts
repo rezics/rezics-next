@@ -7,7 +7,7 @@ import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes
 import { createSessionCommands } from '../../src/library/sessions.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ ownerScopes: ['rating:vote', 'rating:read'] });
+  f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -200,4 +200,68 @@ test('effect-before-ack creation and assignment recover exact keys; source cance
   expect((await calls.apply(id, confirmation)).data).toEqual({ outcomes: [], complete: false });
   expect((await json('/v1/libraryLabelAssignments?subjectId=' + subjectId)).assignments).toHaveLength(1);
   await json(path + ':cancel', 'POST', { remove: true });
+}, 120000);
+
+test('a real native label created before request cancellation resumes its retained creation and assignment through Web', async () => {
+  const subjectId = await f.createSubject('unprofiled');
+  const id = await upload([{ customLists: { Interrupted: true } }], { name: 'Default', isCustomList: false });
+  const client = web(),
+    calls = aniListLabelRequests(client, `Bearer ${f.owner.bearer}`);
+  const reviewed = await calls.review(
+    id,
+    {
+      ordinal: 0,
+      subjectId,
+      selections: [{ key: 'customLists:Interrupted', target: { name: 'Created before cancellation' } }],
+    },
+    crypto.randomUUID(),
+  );
+  const review = reviewed.data!.review,
+    item = review.items[0]!;
+  const { aniListDigest } = await import('../../src/library/list-import-anilist-label-guard.ts');
+  const { createPersonalLabelCommands } = await import('../../src/library/label-commands.ts');
+  const { createAniListImport } = await import('../../src/library/list-import-anilist.ts');
+  const { testRouteKey } = await import('../support/test-kernel.ts');
+  await f.pool.query(
+    "UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{labelWork}', $4::jsonb) WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=0",
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, id, JSON.stringify({ 0: { createStarted: true } })],
+  );
+  const created = await createPersonalLabelCommands({ pool: f.pool, access: f.access, tokens: f.tokens }).createLabel(
+    f.owner.actor,
+    { name: 'Created before cancellation' },
+    item.createKey,
+    {
+      importId: id,
+      ordinal: 0,
+      reviewId: review.id,
+      reviewDigest: aniListDigest(review),
+      sourceDigest: review.sourceDigest,
+      subjectId,
+      identityEpoch: review.identityEpoch,
+    },
+  );
+  const stop = new AbortController();
+  stop.abort();
+  const confirmations = [{ ordinal: 0, reviewId: review.id }];
+  expect(
+    await createAniListImport({
+      pool: f.pool,
+      access: f.access,
+      tokens: f.tokens,
+      routeKey: testRouteKey(),
+    }).applyLabels(f.owner.actor, id, confirmations, stop.signal),
+  ).toEqual({ outcomes: [], complete: false });
+  expect(
+    (await client.libraryLabelAssignments.get({ query: { subjectId, limit: 32, view: 'FULL' } })).data!.assignments,
+  ).toHaveLength(0);
+  const result = await calls.apply(id, { confirmations });
+  expect(result.data!.outcomes[0]!.items[0]!.label!.id).toBe(created.value.label.id);
+  expect(result.data!.outcomes[0]!.items[0]!.status).toBe('applied');
+  const replay = await calls.apply(id, { confirmations });
+  expect(replay.data).toEqual(result.data);
+  expect(
+    (await client.libraryLabelAssignments.get({ query: { subjectId, limit: 32, view: 'FULL' } })).data!.assignments[0]!
+      .id,
+  ).toBe(result.data!.outcomes[0]!.items[0]!.assignment!.id);
+  await json('/v1/libraryImports/anilist/' + id + ':cancel', 'POST', { remove: true });
 }, 120000);
