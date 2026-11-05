@@ -653,6 +653,27 @@ function SpaceHome({
   const [readingReturn, setReadingReturn] = useState(initialReturn);
   const readingReturnRef = useRef(readingReturn);
   readingReturnRef.current = readingReturn;
+  const updateReadingReturn = useCallback((href: string) => {
+    const current = realmReadingSelection(readingReturnRef.current);
+    const next = realmReadingSelection(href);
+    const regionId =
+      current.node === 'boards'
+        ? 'realm-boards-heading'
+        : current.node === 'publications'
+          ? 'realm-published-heading'
+          : undefined;
+    if (
+      regionId &&
+      current.node === next.node &&
+      current.cursor === next.cursor &&
+      current.focus &&
+      current.focus !== regionId &&
+      next.focus === regionId
+    )
+      return;
+    readingReturnRef.current = href;
+    setReadingReturn(href);
+  }, []);
   const pageRoot = useRef<HTMLElement | null>(null);
   const lifetime = useSpacePageLifetime();
   const catalogueRevision = useRef(0);
@@ -697,12 +718,12 @@ function SpaceHome({
     (state: 'removed' | 'orphaned') => {
       catalogueRevision.current++;
       if (!realmId) return;
-      setReadingReturn(`/${getLocale()}/realms/${realmId}`);
+      updateReadingReturn(`/${getLocale()}/realms/${realmId}`);
       restrictRealm((previous) =>
         previous?.id === realmId && previous.state === state ? previous : { id: realmId, state },
       );
     },
-    [realmId],
+    [realmId, updateReadingReturn],
   );
   const spaceRemoved = spaceRestriction?.id === page.space.id && spaceRestriction.state === 'removed';
   const realmRestricted = realmRestriction?.id === page.realm?.id ? realmRestriction?.state : null;
@@ -889,7 +910,7 @@ function SpaceHome({
           realm={page.realm}
           frozen={frozen}
           returnTo={initialReturn}
-          onReadingChange={setReadingReturn}
+          onReadingChange={updateReadingReturn}
           onCompleted={onRealmCompleted}
           {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
         />
