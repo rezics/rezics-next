@@ -3,22 +3,52 @@ import { DEFAULT_INBOX_SELECTION, type InboxPage, type InboxSelection, type Reso
 /** Local to the mounted viewer owner; cursors are native opaque values bound to one selection. */
 export type InboxPagination = {
   selection: InboxSelection;
+  /** The mounted viewer episode owns all addresses in this stack. */
+  episode: number;
+  /** Distinguishes fresh admissions of the same opaque address inside one mounted episode. */
+  readId: number;
   cursor: string | undefined;
+  history: readonly InboxPageAddress[];
   earlier: ResolvedInboxPage | null;
   current: ResolvedInboxPage | null;
   result: InboxPage | undefined;
+  direction: 'next' | 'previous' | null;
 };
+
+export type InboxPageAddress = Readonly<{
+  selection: InboxSelection;
+  cursor: string | undefined;
+  episode: number;
+}>;
+
+export const MAX_INBOX_PRIOR_ADDRESSES = 8;
+export const MAX_INBOX_CURSOR_LENGTH = 4096;
 
 export const emptyInboxPagination: InboxPagination = {
   selection: DEFAULT_INBOX_SELECTION,
+  episode: 0,
+  readId: 0,
   cursor: undefined,
+  history: [],
   earlier: null,
   current: null,
   result: undefined,
+  direction: null,
 };
 
-export function inboxPaginationFor(selection: InboxSelection): InboxPagination {
-  return selection === DEFAULT_INBOX_SELECTION ? emptyInboxPagination : { ...emptyInboxPagination, selection };
+export function inboxPaginationFor(
+  selection: InboxSelection,
+  episode = 0,
+  readId = 0,
+  cursor?: string,
+): InboxPagination {
+  return {
+    ...emptyInboxPagination,
+    selection,
+    episode,
+    readId,
+    ...(cursor !== undefined ? { cursor } : {}),
+  };
 }
 
 /** Native order, one row per notice id; a later duplicate replaces earlier details in that first slot. */
@@ -63,6 +93,10 @@ function transient(result: InboxPage): boolean {
   return retryable !== false && (status === null || status === 408 || status === 429 || status >= 500);
 }
 
+export function transientInboxPageFailure(result: InboxPage): boolean {
+  return transient(result);
+}
+
 /** Consume every refreshed response, including native privacy failures, before rendering. */
 export function receiveInboxPage(
   state: InboxPagination,
@@ -83,9 +117,10 @@ export function receiveInboxPage(
       actions: result.actions,
     };
     // Keep the query data identity so a later render of the same page is a no-op.
-    return { ...state, earlier: null, current, result };
+    return { ...state, earlier: null, current, result, direction: null };
   }
-  if (result && !transient(result)) return { ...state, earlier: null, current: null, result };
+  if (result && !transient(result))
+    return { ...state, history: [], earlier: null, current: null, result, direction: null };
   return { ...state, result };
 }
 
@@ -116,16 +151,52 @@ export function nextInboxPage(state: InboxPagination): InboxPagination {
   if (!state.result?.signedIn || state.result.state !== 'ready') return state;
   const page = readableInboxPage(state);
   if (!page?.next || page.next === state.cursor) return state;
-  return { ...state, cursor: page.next, earlier: page, current: null, result: undefined };
+  const address = Object.freeze({ selection: state.selection, cursor: state.cursor, episode: state.episode });
+  const history = [...state.history, address].slice(-MAX_INBOX_PRIOR_ADDRESSES);
+  return {
+    ...state,
+    readId: state.readId + 1,
+    cursor: page.next,
+    history,
+    earlier: page,
+    current: null,
+    result: undefined,
+    direction: 'next',
+  };
+}
+
+/** Re-admit the preceding exact address; no prior page body is retained as a replacement. */
+export function previousInboxPage(state: InboxPagination): InboxPagination {
+  if (!state.result?.signedIn || state.result.state !== 'ready' || state.history.length === 0) return state;
+  const address = state.history[state.history.length - 1];
+  const page = readableInboxPage(state);
+  if (
+    !address ||
+    !page ||
+    address.selection !== state.selection ||
+    address.episode !== state.episode ||
+    address.cursor === state.cursor
+  )
+    return state;
+  return {
+    ...state,
+    readId: state.readId + 1,
+    cursor: address.cursor,
+    history: state.history.slice(0, -1),
+    earlier: page,
+    current: null,
+    result: undefined,
+    direction: 'previous',
+  };
 }
 
 /** A continuation can be retired by a deliberate first-page refresh after success or failure. */
-export function restartInboxPage(state: InboxPagination): InboxPagination {
-  if (state.cursor === undefined || !state.result?.signedIn) return state;
-  return inboxPaginationFor(state.selection);
+export function restartInboxPage(state: InboxPagination, forceRead = false): InboxPagination {
+  if (!state.result?.signedIn || (state.cursor === undefined && state.history.length === 0 && !forceRead)) return state;
+  return inboxPaginationFor(state.selection, state.episode, state.readId + 1);
 }
 
 /** Changing All/Unread always restarts without a cursor. */
 export function selectInboxPage(state: InboxPagination, selection: InboxSelection): InboxPagination {
-  return state.selection === selection ? state : inboxPaginationFor(selection);
+  return state.selection === selection ? state : inboxPaginationFor(selection, state.episode, state.readId + 1);
 }
