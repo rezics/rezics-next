@@ -1238,7 +1238,16 @@ export function createMalImport(deps: Dependencies) {
         scoreState !== 'stale' &&
         existing.outcome.score?.reason !== 'score-action-not-reviewed'
       ) {
-        outcomes.push(existing.outcome);
+        const acknowledged = structuredClone(existing.outcome);
+        if (acknowledged.score && review.score && review.target) {
+          // Re-authorize Rating disclosure even when the Library outcome is already retained.
+          const current = await votes.readOwnVote(actor, review.score.question.id, review.target);
+          if (acknowledged.score.status === 'applied')
+            acknowledged.score.vote = current
+              ? { units: current.units, revision: current.revision, at: current.changedAt }
+              : null;
+        }
+        outcomes.push(acknowledged);
         continue;
       }
       const intent: Intent = existing ?? {
