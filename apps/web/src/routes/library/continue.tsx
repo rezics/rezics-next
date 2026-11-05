@@ -266,16 +266,7 @@ function ContinuePage() {
       };
       void run();
     },
-    [
-      visit?.staged,
-      resume.result,
-      address.malformed,
-      visitId,
-      queryClient,
-      owner,
-      currentCursor,
-      navigateWindow,
-    ],
+    [visit?.staged, resume.result, address.malformed, visitId, queryClient, owner, currentCursor, navigateWindow],
   );
 
   const navigationAddress = `${locale}:${location.searchStr}`;

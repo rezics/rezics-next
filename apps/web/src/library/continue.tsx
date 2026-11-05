@@ -296,13 +296,7 @@ export function ContinueSection({
             <a
               href={newestHref ?? continueNewestHref(locale)}
               onClick={(event) => {
-                if (
-                  event.button === 0 &&
-                  !event.metaKey &&
-                  !event.ctrlKey &&
-                  !event.shiftKey &&
-                  !event.altKey
-                )
+                if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
                   onNewest?.();
               }}
               className="mt-4 inline-flex min-h-11 max-w-full items-center rounded-sm px-3 py-2 text-sm text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

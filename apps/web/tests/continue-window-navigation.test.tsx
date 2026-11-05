@@ -23,7 +23,9 @@ import { sessionQueryKey } from '../src/session/browser-state';
 import { continueCursorHref, continueNewestHref } from '../src/library/continue-address';
 import { m } from '../src/paraglide/messages.js';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/library/continue' });
 const globals = {
   window,
@@ -42,11 +44,17 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previousGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-let pageReader: (cursor: unknown) => Promise<ContinueResult> = async () => ({ state: 'loaded', entries: [], next: null });
+let pageReader: (cursor: unknown) => Promise<ContinueResult> = async () => ({
+  state: 'loaded',
+  entries: [],
+  next: null,
+});
 const readCalls: unknown[] = [];
 const readContinueEntries = mock(async (input: { data: { cursor?: unknown } }) => {
   readCalls.push(input.data.cursor);
@@ -113,7 +121,9 @@ function page(label: string, next: string | null): ContinueResult {
 }
 
 function link(host: HTMLElement, label: string): HTMLAnchorElement {
-  const result = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((anchor) => anchor.textContent?.trim() === label);
+  const result = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
+    (anchor) => anchor.textContent?.trim() === label,
+  );
   if (!result) throw new Error(`Missing Continue link: ${label}`);
   return result;
 }
@@ -409,12 +419,17 @@ test('coordinate commits are exact, branch from the current page and retain eigh
   expect(branched.path).toEqual(['cursor-3', 'cursor-4', 'cursor-5', 'cursor-6', 'cursor-7', 'cursor-8', 'branch']);
   const replacementClient = new QueryClient();
   replacementClient.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'token' });
-  expect(continueWindowVisit(replacementClient, visitId, continueWindowOwner(replacementClient, 'en', readContinueEntries))).toBe(
-    undefined,
-  );
+  expect(
+    continueWindowVisit(replacementClient, visitId, continueWindowOwner(replacementClient, 'en', readContinueEntries)),
+  ).toBe(undefined);
   expect(continueWindowVisit(client, visitId, continueWindowOwner(client, 'fr', readContinueEntries))).toBeUndefined();
-  expect(continueWindowVisit(client, visitId, continueWindowOwner(client, 'en', () => Promise.resolve(page('Other', null)))))
-    .toBeUndefined();
+  expect(
+    continueWindowVisit(
+      client,
+      visitId,
+      continueWindowOwner(client, 'en', () => Promise.resolve(page('Other', null))),
+    ),
+  ).toBeUndefined();
   replacementClient.clear();
   client.clear();
 });
