@@ -24,6 +24,7 @@ import {
   createLibraryCommandRunner,
   LibraryNotFoundError,
   sameAccountRoute,
+  type LibraryCommandExecutionBinding,
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
@@ -41,9 +42,15 @@ import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from '.
 import {
   executeLabelOperation,
   executeLabelSql,
+  composeLabelOperation,
+  labelCommandComponent,
+  labelOperationComponent,
+  labelOwnerSqlComponent,
   LABEL_PAGE_DEFAULT,
   LABEL_PAGE_MAX,
+  labelAssignmentLifecyclePlan,
   labelAssignmentPagePlan,
+  labelAssignmentSetPlan,
 } from './label-operation-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -177,6 +184,72 @@ export function createLabelAssignmentCommands(deps: {
       },
       requestKey: key,
     };
+    const route = routeOf(account.accountId)!;
+    const timestampBound = '\u0000'.repeat(64);
+    const transactionBound = 'f'.repeat(36);
+    const operationPlan =
+      operation === 'assign'
+        ? labelAssignmentSetPlan({
+            route,
+            accountId: account.accountId,
+            subjectId: guard?.subjectId ?? malLabelFence?.subject ?? parsed.subjectId,
+            labelId,
+            ...(expectedSource === undefined ? {} : { expectedSource }),
+            time: timestampBound,
+            transactionId: transactionBound,
+          })
+        : labelAssignmentLifecyclePlan({
+            route,
+            accountId: account.accountId,
+            subjectId: parsed.subjectId,
+            labelId,
+            assignmentId: parsed.assignmentId!,
+            revision: parsed.revision!,
+            time: timestampBound,
+            transactionId: transactionBound,
+            ...(expectedLabelRevision === undefined ? {} : { expectedLabelRevision }),
+            ...(expectedTarget && 'labelId' in expectedTarget
+              ? {
+                  expectedTarget: {
+                    labelId: expectedTarget.labelId,
+                    assignmentId: expectedTarget.assignmentId,
+                    revision: expectedTarget.revision,
+                    labelRevision: expectedTarget.labelRevision,
+                  },
+                }
+              : {}),
+            ...(operation === 'restore' ? { restore: true } : {}),
+          });
+    const execution: LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) =>
+      executeLabelOperation(
+        composeLabelOperation(
+          operationPlan,
+          [
+            labelCommandComponent(request.kind, request.input, operation === 'unassign'
+              ? { deleted: true, revision: 2_147_483_647 }
+              : { assignment: { id: 'f'.repeat(36), revision: 2_147_483_647 } }),
+            ...(guard
+              ? [labelOwnerSqlComponent('import.anilist.label-fence', guard, { payload: { source: {}, labelReview: {} } }, 2, 2)]
+              : []),
+            ...(malLabelFence
+              ? [
+                  labelOwnerSqlComponent(
+                    'import.mal.label-fence',
+                    malLabelFence,
+                    { row: {}, sourceDigest: 'f'.repeat(64), selectionDigest: 'f'.repeat(64) },
+                    malLabelFence.label ? 2 : 1,
+                    malLabelFence.label ? 2 : 1,
+                  ),
+                ]
+              : []),
+            ...(admission?.work
+              ? [labelOperationComponent('import.preparation-source-fence', admission.work)]
+              : []),
+          ],
+          false,
+        ),
+        dispatch,
+      );
     const execute = async (
       tx: Client,
       command: { transactionId: string; time: AuthoritativeTime },
@@ -297,11 +370,12 @@ export function createLabelAssignmentCommands(deps: {
       }
     };
     if (operation === 'unassign' && expectedLabelRevision === undefined)
-      return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
+      return runner.ownAccount(actor, { ...request, execution }, (tx, command) => execute(tx, command, {}));
     return (guard || malLabelFence ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
+        execution,
         async prepare(attempt) {
           try {
             if (operation === 'unassign') {

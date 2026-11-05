@@ -15,6 +15,7 @@ import {
   createLibraryCommandRunner,
   LibraryNotFoundError,
   sameAccountRoute,
+  type LibraryCommandExecutionBinding,
   type LibraryCommandBody,
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
@@ -27,8 +28,15 @@ import { deadlineFor } from '../request/deadline.ts';
 import {
   executeLabelOperation,
   executeLabelSql,
+  composeLabelOperation,
+  labelCommandComponent,
+  labelOwnerSqlComponent,
+  labelOperationComponent,
+  labelSnapshotComponent,
   LABEL_PAGE_DEFAULT,
   LABEL_PAGE_MAX,
+  LABEL_NAME_SCALARS,
+  labelCreatePlan,
   labelCataloguePlan,
   labelLifecyclePlan,
   labelRenamePlan,
@@ -89,6 +97,7 @@ export function createPersonalLabelCommands(config: {
     requestKey: string,
     body: LibraryCommandBody<T>,
     guard?: AniListLabelGuard,
+    execution?: LibraryCommandExecutionBinding,
   ) {
     try {
       const request = {
@@ -96,6 +105,7 @@ export function createPersonalLabelCommands(config: {
         kind,
         input: guard ? { input, importReview: guard } : input,
         requestKey,
+        ...(execution ? { execution } : {}),
       };
       if (guard) {
         const owner = account(actor, 'library_entry:update');
@@ -170,16 +180,66 @@ export function createPersonalLabelCommands(config: {
     const admission = importGuard && 'prepare' in importGuard ? importGuard : undefined;
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input);
-    const body: LibraryCommandBody<LabelValue> = async (tx, command) => {
-      if (malLabelFence) await assertMalLabelFence(tx, owner, malLabelFence);
-      const route = routeOf(owner.accountId)!;
-      const label = await store.insertPersonalLabel(
-        tx,
-        route,
-        { accountId: owner.accountId, id: newId(route), name: parsed.normalized },
-        { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+    const route = routeOf(owner.accountId)!;
+    const operation = labelCreatePlan({
+      route,
+      accountId: owner.accountId,
+      labelId: 'f'.repeat(36),
+      name: parsed.normalized,
+      transactionId: 'f'.repeat(36),
+      time: '\u0000'.repeat(64),
+    });
+    const execution = (dispatch: () => Promise<unknown>) =>
+      executeLabelOperation(
+        composeLabelOperation(
+          operation,
+          [
+            labelCommandComponent('library_label.create', { name: parsed.name, requestKey: key }, {
+              label: { id: 'f'.repeat(36), revision: 2_147_483_647 },
+            }),
+            ...(guard
+              ? [labelOwnerSqlComponent('import.anilist.label-fence', guard, { payload: { source: {}, labelReview: {} } }, 2, 2)]
+              : []),
+            ...(malLabelFence
+              ? [
+                  labelOwnerSqlComponent(
+                    'import.mal.label-fence',
+                    malLabelFence,
+                    { row: {}, sourceDigest: 'f'.repeat(64), selectionDigest: 'f'.repeat(64) },
+                    malLabelFence.label ? 2 : 1,
+                    malLabelFence.label ? 2 : 1,
+                  ),
+                ]
+              : []),
+            ...(admission?.work
+              ? [labelOperationComponent('import.preparation-source-fence', admission.work)]
+              : []),
+          ],
+          false,
+        ),
+        dispatch,
       );
-      return { value: minimal(label), events: events(owner, label.id) };
+    const body: LibraryCommandBody<LabelValue> = async (tx, command) => {
+      const labelId = newId(route);
+      const time = authoritativeTimeValue(command.time);
+      const base = labelCreatePlan({
+        route,
+        accountId: owner.accountId,
+        labelId,
+        name: parsed.normalized,
+        transactionId: command.transactionId,
+        time,
+      });
+      return executeLabelOperation(base, async () => {
+        if (malLabelFence) await assertMalLabelFence(tx, owner, malLabelFence);
+        const label = await store.insertPersonalLabel(
+          tx,
+          route,
+          { accountId: owner.accountId, id: labelId, name: parsed.normalized },
+          { transactionId: command.transactionId, time },
+        );
+        return { value: minimal(label), events: events(owner, label.id) };
+      });
     };
     if (admission) {
       try {
@@ -190,6 +250,7 @@ export function createPersonalLabelCommands(config: {
             kind: 'library_label.create',
             requestKey: key,
             input: { name: parsed.name, review: admission.input },
+            execution,
             prepare: (attempt) => admission.prepare(attempt.time),
           },
           async (tx, command, validate) => {
@@ -206,7 +267,8 @@ export function createPersonalLabelCommands(config: {
         throw error;
       }
     }
-    if (!malLabelFence) return run(actor, 'library_label.create', { name: parsed.name }, key, body, guard);
+    if (!malLabelFence)
+      return run(actor, 'library_label.create', { name: parsed.name }, key, body, guard, execution);
     if (!config.access) throw new TypeError('MAL label adoption requires Subject access');
     const access = config.access,
       deadline = deadlineFor(5000);
@@ -217,6 +279,7 @@ export function createPersonalLabelCommands(config: {
         kind: 'library_label.create',
         requestKey: key,
         input: { name: parsed.name, malLabelFence },
+        execution,
         async prepare(attempt) {
           try {
             await prepareMalLabelFence({ pool, access }, owner, malLabelFence, attempt.time, deadline);
@@ -237,6 +300,29 @@ export function createPersonalLabelCommands(config: {
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input, true);
     const expected = parsed.revision!;
+    const plan = labelRenamePlan({
+      route: routeOf(owner.accountId)!,
+      accountId: owner.accountId,
+      labelId,
+      name: parsed.normalized,
+      revision: expected,
+      transactionId: 'f'.repeat(36),
+      time: '\u0000'.repeat(64),
+      includeRead: true,
+    });
+    const execution = (dispatch: () => Promise<unknown>) =>
+      executeLabelOperation(
+        composeLabelOperation(
+          plan,
+          [
+            labelCommandComponent('library_label.rename', { labelId, name: parsed.name, revision: expected, requestKey: key }, {
+              label: { id: 'f'.repeat(36), revision: 2_147_483_647 },
+            }),
+          ],
+          false,
+        ),
+        dispatch,
+      );
     return run(
       actor,
       'library_label.rename',
@@ -254,7 +340,16 @@ export function createPersonalLabelCommands(config: {
           time: authoritativeTimeValue(command.time),
           includeRead: true,
         });
-        return executeLabelOperation(operation, async () => {
+        const composed = composeLabelOperation(
+          operation,
+          [
+            labelCommandComponent('library_label.rename', { labelId, name: parsed.name, revision: expected, requestKey: key }, {
+              label: { id: 'f'.repeat(36), revision: 2_147_483_647 },
+            }),
+          ],
+          true,
+        );
+        return executeLabelOperation(composed, async () => {
           const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId);
           if (!current) throw new LibraryNotFoundError();
           if (current.revision !== expected) throw new LibraryConflictError();
@@ -272,6 +367,8 @@ export function createPersonalLabelCommands(config: {
           return { value: minimal(changed), events: events(owner, labelId) };
         });
       },
+      undefined,
+      execution,
     );
   }
 
@@ -285,6 +382,33 @@ export function createPersonalLabelCommands(config: {
   ) {
     const owner = account(actor, 'library_entry:update');
     const expected = revision(expectedRevision);
+    const plan = labelLifecyclePlan({
+      route: routeOf(owner.accountId)!,
+      accountId: owner.accountId,
+      labelId,
+      revision: expected,
+      transactionId: 'f'.repeat(36),
+      time: '\u0000'.repeat(64),
+      restore,
+      includeRead: true,
+    });
+    const execution = (dispatch: () => Promise<unknown>) =>
+      executeLabelOperation(
+        composeLabelOperation(
+          plan,
+          [
+            labelCommandComponent(
+              restore ? 'library_label.restore' : 'library_label.delete',
+              { labelId, revision: expected, requestKey: key },
+              restore
+                ? { label: { id: 'f'.repeat(36), revision: 2_147_483_647 } }
+                : { deleted: true, revision: 2_147_483_647 },
+            ),
+          ],
+          false,
+        ),
+        dispatch,
+      );
     return run(
       actor,
       restore ? 'library_label.restore' : 'library_label.delete',
@@ -303,7 +427,20 @@ export function createPersonalLabelCommands(config: {
           restore,
           includeRead: true,
         });
-        return executeLabelOperation(operation, async () => {
+        const composed = composeLabelOperation(
+          operation,
+          [
+            labelCommandComponent(
+              restore ? 'library_label.restore' : 'library_label.delete',
+              { labelId, revision: expected, requestKey: key },
+              restore
+                ? { label: { id: 'f'.repeat(36), revision: 2_147_483_647 } }
+                : { deleted: true, revision: 2_147_483_647 },
+            ),
+          ],
+          true,
+        );
+        return executeLabelOperation(composed, async () => {
           const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId, true);
           if (!current) throw new LibraryNotFoundError();
           if (restore) {
@@ -331,6 +468,8 @@ export function createPersonalLabelCommands(config: {
           return { value: value(changed), events: events(owner, labelId) };
         });
       },
+      undefined,
+      execution,
     );
   }
 
@@ -371,7 +510,34 @@ export function createPersonalLabelCommands(config: {
     const limit = parsed.limit === undefined ? LABEL_PAGE_DEFAULT : parsed.limit;
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LABEL_PAGE_MAX)
       throw new RangeError(`Page limit must be an integer from 1 to ${LABEL_PAGE_MAX}`);
-    return snapshot(actor, 'library_entry:list', async (client, owner, route) => {
+    const owner = account(actor, 'library_entry:list');
+    const route = routeOf(owner.accountId)!;
+    const hasCursor = parsed.cursor !== undefined;
+    const operation = labelCataloguePlan({
+      route,
+      accountId: owner.accountId,
+      ...(q
+        ? {
+            prefix: q,
+            upper: store.personalLabelPrefixEnd(q),
+            afterName: hasCursor ? '\u{10ffff}'.repeat(LABEL_NAME_SCALARS) : q,
+          }
+        : {}),
+      afterLabelId: hasCursor ? 'f'.repeat(36) : '00000000-0000-0000-0000-000000000000',
+      limit,
+    });
+    const composed = composeLabelOperation(
+      operation,
+      [
+        labelSnapshotComponent(
+          'label.catalogue.partition-cursor-serialization-snapshot',
+          { owner: owner.accountId, cursor: parsed.cursor ?? null, prefix: q, limit },
+          limit * (LABEL_NAME_SCALARS * 4 + 128) + 4096,
+        ),
+      ],
+      true,
+    );
+    return executeLabelOperation(composed, () => snapshot(actor, 'library_entry:list', async (client, owner, route) => {
       const partition = await readPartition(client, partitionOf(route));
       if (!partition) throw new Error('Missing owner partition');
       const binding = {
@@ -403,16 +569,16 @@ export function createPersonalLabelCommands(config: {
         if (!last || !last.name.startsWith(q)) throw new ProblemError('stale_cursor');
         afterName = last.name;
       }
-      const operation = labelCataloguePlan({
+      const pageOperation = labelCataloguePlan({
         route,
         accountId: owner.accountId,
         ...(q ? { prefix: q, upper: store.personalLabelPrefixEnd(q), afterName } : {}),
         afterLabelId: after,
         limit,
       });
-      const leaf = operation.leaves[0]!;
+      const leaf = pageOperation.leaves[0]!;
       const db = { query: client.query.bind(client) };
-      const rows = await executeLabelOperation(operation, () =>
+      const rows = await executeLabelOperation(pageOperation, () =>
         executeLabelSql(leaf, (operands) =>
           q
             ? prefixPage.run(db, operands as Parameters<typeof prefixPage.run>[1])
@@ -433,7 +599,7 @@ export function createPersonalLabelCommands(config: {
               )
             : null,
       };
-    });
+    }));
   }
 
   return { createLabel, renameLabel, deleteLabel, restoreLabel, readLabel, listLabels };
