@@ -25,6 +25,16 @@ infrastructure running. A child startup failure ends the other children.
 | PostgreSQL                   | 127.0.0.1:54329        |
 | OpenSearch                   | http://127.0.0.1:59200 |
 
+OpenSearch uses the pinned image in `services/kernel/db/search/opensearch/Dockerfile`, including `analysis-icu`.
+The `cjk_bigram_v2` analyzer requires ICU normalization and Traditional/Simplified Chinese and kana transforms;
+the upstream image alone does not supply them. Inspect the configured node's `/_cat/plugins?format=json`, then run
+`bun run --cwd services/kernel check test/search/index-definition.test.ts` for native analyzer regressions.
+That isolated check does not establish publication or page acceptance on the development stack.
+
+When reusing retained services, their owning checkout's Kernel configuration selects the actual node. Preserve its
+OpenSearch volume and native generations; an unrelated test node with ICU does not establish readiness there.
+Workers whose setup refuses local container startup hand the exact error to the stack owner for recovery.
+
 Open Web and choose Sign in. Auth offers password sign-in, passkeys and sign-up. Sign-up works without an email
 provider or Cloudflare account. The development widget completes locally; it and its verifier exist only in the
 explicit local host. Use `127.0.0.1` throughout, including callbacks. Cookies are host-bound. The API token audience

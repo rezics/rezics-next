@@ -330,6 +330,10 @@ outcomes after owner adoption. Shared consumer acceptance is catalogue-jobs and 
 
 **User job:** operate documented OpenSearch/ICU analysis and observe converged public HTTP after real source events,
 outage/recovery and safe rebuild. **Personas:** operator, editor/acceptor and all common read personas.
+Decision: retained-stack multilingual acceptance reuses its existing source identities, node volume and native
+publication lifecycle. Isolated analyzer checks and unavailable page walks supply no positive journey evidence.
+Retry-After waits preserve identical server and initial hydration markup even when the deadline expires in transit;
+the mounted clock enables manual retry without dispatching a request.
 **Released fixtures:** original Chinese/Kana/Latin cases, real Semantic source keys/routeKey, source chunks256 EACH
 including tails, exact source snapshot versions, checkpoints and actual physical indices.
 
