@@ -682,13 +682,7 @@ function MineFollowingPageState({
           variant="outline"
           disabled={!!status || navigationDisabled}
           onClick={() => {
-            if (
-              refreshCurrent
-                ? !refreshCurrent()
-                : page.forbidden
-                  ? !origin.isCurrent()
-                  : !reading.returnCurrent()
-            )
+            if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent())
               return;
             reading.close(false);
             onRefresh();

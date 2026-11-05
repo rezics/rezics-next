@@ -278,9 +278,7 @@ for (const loss of ['unknown', 'signed-out', 'csrf', 'admission'] as const) {
     else
       await target(
         props,
-        loss === 'csrf'
-          ? { ...viewer(), csrfToken: null }
-          : { state: loss, subject: null, csrfToken: null },
+        loss === 'csrf' ? { ...viewer(), csrfToken: null } : { state: loss, subject: null, csrfToken: null },
       );
     expect(host.querySelector<HTMLButtonElement>('button')?.disabled ?? true).toBe(loss !== 'csrf');
     await target(props, viewer());
