@@ -221,10 +221,10 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
       ...(streams[0] ? { stream: streams[0] } : {}),
       rows: listed,
       labels: producerHistoryLabels(release, listed, locale),
-      next: scenario === 'partial' ? 'native-next' : null,
+      next: scenario === 'windows' ? 'window-2' : scenario === 'partial' ? 'native-next' : null,
       count: { value: 2, exact: scenario !== 'partial' },
       caughtUp: scenario !== 'partial',
-      session: 'producer-session',
+      session: scenario === 'windows' ? 'window-session-1' : 'producer-session',
     };
   }
   return {
