@@ -58,6 +58,7 @@ const { useReleaseWindowQuery } = await import('../src/search/release-window-que
 const { ReleaseSearchPage } = await import('../src/search/release-search-page');
 const { browserObservation } = await import('../src/session');
 const { sessionQuery } = await import('../src/session/query');
+const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 notifyManager.setScheduler((callback) => callback());
 const id = '018f0000-0000-7000-8000-000000000001';
@@ -109,8 +110,8 @@ function page(next: string | null = 'next', status = 'ready', as_of = checkpoint
                   cover: null,
                 },
                 figure: {
-                  questionId: '018f0000-0000-7000-8000-000000000010',
-                  populationId: '018f0000-0000-7000-8000-000000000011',
+                  questionId: QUESTION,
+                  populationId: GLOBAL,
                   scale: { min: 0, max: 10, displayStep: 1 },
                   count: 0,
                   state: 'insufficient_data',
