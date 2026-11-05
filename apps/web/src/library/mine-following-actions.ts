@@ -44,7 +44,7 @@ async function readFollowingRequest(data: MineFollowingInput): Promise<MineFollo
   // preparation can leave older WeakMap entries behind, so never stamp those around a signed-out page.
   const subject = loaded.signedIn ? (sessionSubject(request) ?? null) : null;
   const page = subject ? loaded : { signedIn: false, follows: [], next: null };
-  if (!page.addressInvalid)
+  if (!page.addressInvalid && !page.forbidden)
     await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
   return {
     subject,

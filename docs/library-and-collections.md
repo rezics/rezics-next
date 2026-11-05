@@ -556,6 +556,11 @@ Liked, pinned Collections and All Collections. Desktop uses a short pinned sideb
 and a few pins. State is a tile chip in profile wording and a filter; state Collections may be pinned, never compulsory
 navigation tabs. Following holds subjects, Collections and Spaces, with no following feed or public follower totals.
 
+Decision: Commerce receives an ordinary native Following list denial as a private permission page under the original
+kind, cursor and locale, replacing rows and inspection without supplying read or Follow authority. Explicit current-owner
+refresh may replace it; list denial never settles or replaces a captured uncertain Follow command. Accounts owns requested
+and issued website scope alignment; native permissions, preparations, admission and session ceilings remain authoritative.
+
 Decision: Native `GET /v1/follows?view=FULL` retains Subject and Collection summaries, and resolves Spaces only through a current active address or a current readable Realm; stale non-null addresses never fall back, UUIDs are never fabricated as Realm IDs or paths, unavailable targets have unavailable destination/actions, viewer actions are current for the caller and destination, following implies no membership or permission, pages batch at most 100 rows, and outgoing follow responses are `private, no-store`.
 
 For a page of `P <= 100`, the existing outgoing reader selects at most 100 follow rows and preserves its signed

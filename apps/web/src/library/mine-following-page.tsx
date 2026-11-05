@@ -339,6 +339,7 @@ function MineFollowingPageState({
       origin.isCurrent() &&
       getLocale() === locale &&
       !status &&
+      !page.forbidden &&
       !addressRejected,
   });
   useFollowingReturn(reading.returnCurrent, reading.suspend, onRefresh, reading.restoreFocus);
@@ -371,6 +372,7 @@ function MineFollowingPageState({
           </Link>
         ))}
       </nav>
+      {!addressRejected && page.forbidden ? <p role="status">{m.library_my_ratings_denied()}</p> : null}
       {!addressRejected && status ? (
         <div className="space-y-3">
           <p role="status">{status === 'preparing' ? m.library_follow_loading() : m.library_follow_unavailable()}</p>
@@ -391,10 +393,10 @@ function MineFollowingPageState({
           </a>
         </div>
       ) : null}
-      {!addressRejected && page.signedIn && page.cursorReset ? (
+      {!addressRejected && !page.forbidden && page.signedIn && page.cursorReset ? (
         <p role="status">{m.library_collections_cursor_reset()}</p>
       ) : null}
-      {!addressRejected && page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
+      {!addressRejected && !page.forbidden && page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
       {reading.suspended ? <p role="status">{m.following_reading_return_preparing()}</p> : null}
       {!addressRejected && page.signedIn && onRefresh ? (
         <Button
@@ -402,7 +404,7 @@ function MineFollowingPageState({
           variant="outline"
           disabled={!!status}
           onClick={() => {
-            if (!reading.returnCurrent()) return;
+            if (!origin.isCurrent()) return;
             reading.close(false);
             onRefresh();
           }}
@@ -421,7 +423,7 @@ function MineFollowingPageState({
           readSpace={readSpace}
         />
       ) : null}
-      {!addressRejected && active.length ? (
+      {!addressRejected && !page.forbidden && active.length ? (
         <ul className="list-none space-y-1" aria-label={m.library_following_heading()}>
           {active.map((row) => {
             const { follow, title, kind, reason, destination } = row;
@@ -490,7 +492,7 @@ function MineFollowingPageState({
             );
           })}
         </ul>
-      ) : !addressRejected && page.signedIn ? (
+      ) : !addressRejected && !page.forbidden && page.signedIn ? (
         <Empty>
           <EmptyHeader>
             <EmptyDescription>
@@ -504,7 +506,7 @@ function MineFollowingPageState({
           </EmptyContent>
         </Empty>
       ) : null}
-      {!addressRejected && page.signedIn && (page.next || restart) ? (
+      {!addressRejected && !page.forbidden && page.signedIn && (page.next || restart) ? (
         <Exposure operation="follow.list">
           <nav aria-label={m.library_following_heading()} className="flex flex-wrap items-center gap-3">
             {page.next ? (
