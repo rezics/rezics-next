@@ -249,6 +249,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
       const result = await captured.sender({ data: captured.data, headers: captured.headers });
       if (!isCurrentAttempt()) return;
       if (result.ok) {
+        retain = false;
         await Promise.all(refresh());
       } else if (result.reason === 'conflict') {
         retain = false;
