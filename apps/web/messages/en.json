@@ -11406,5 +11406,20 @@
   "library_mal_retry_source_evidence": "Retry source evidence admission",
   "library_mal_score_zero_source": "{value} (zero means unrated)",
   "library_mal_score_source_details": "Value: {value}; MAL scale: {scale}",
-  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}"
+  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}",
+  "library_vndb_score_apply_ready": "Confirming applies your selected native units to the displayed question. A counted vote contributes to its public aggregate.",
+  "library_vndb_score_choose_native_units": "No exact native candidate exists. Choose native units explicitly; the source score is retained unchanged.",
+  "library_vndb_score_consent_apply_vote": "I consent to apply these deliberately selected native vote units.",
+  "library_vndb_score_consent_apply_clear": "I consent to clear the displayed native vote.",
+  "library_vndb_progress_title": "Play time in minutes",
+  "library_vndb_progress_help": "Choose one current occurrence or explicitly start a new one. Zero is an amount. Missing source data preserves current progress; clearing is a separate choice.",
+  "library_vndb_progress_occurrence": "Progress occurrence",
+  "library_vndb_progress_choose": "Choose an occurrence",
+  "library_vndb_progress_start": "Start a new occurrence measured in minutes",
+  "library_vndb_progress_adopt": "Adopt exported minutes",
+  "library_vndb_progress_clear": "Clear this occurrence’s minutes",
+  "library_vndb_progress_replace": "Replace an existing minute amount with the exported value",
+  "library_vndb_progress_consent": "I selected this occurrence and consent to this minute measure change.",
+  "library_vndb_progress_read_unavailable": "Current occurrences could not be read. Retry the selection or open Progress.",
+  "library_vndb_progress_more": "More occurrences are available on the Progress page."
 }

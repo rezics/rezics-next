@@ -96,7 +96,7 @@ function rowEffects(row: VndbRow): VndbEffect[] {
       status: row.decision.status,
     });
   }
-  if (score?.status === 'reviewed') {
+  if (score && ['reviewed', 'applying'].includes(score.status)) {
     effects.push({
       ordinal: row.ordinal,
       kind: 'score',
@@ -271,6 +271,14 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   function restoreRowOutcome(row: VndbRow): void {
+    const score = scoreDecision(row);
+    if (score && ['applied', 'stale', 'failed'].includes(score.status)) {
+      const outcome: VndbOutcome = { ordinal: row.ordinal, scoreReviewId: score.reviewId,
+        status: score.status as 'applied' | 'stale' | 'failed' };
+      outcomes.set(outcomeKey(outcome), outcome);
+      effectReferences.set(outcomeKey(outcome), { ordinal: row.ordinal, kind: 'score',
+        reviewId: score.reviewId, targetId: score.targetId, status: score.status });
+    }
     const decision = row.decision;
     if (
       decision &&

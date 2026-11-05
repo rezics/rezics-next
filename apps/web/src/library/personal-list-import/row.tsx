@@ -9,6 +9,7 @@ import type { VndbReviewInput, VndbRow, VndbState } from './contract';
 import { VndbAction, VndbCheck } from './controls';
 import { VndbEvidence } from './fields';
 import { VndbScoreReview } from './score-review';
+import { VndbProgressReview } from './progress-review';
 import { VndbTargetSearch } from './target';
 
 type StateChoice = { id: string; label: string };
@@ -36,8 +37,9 @@ export function VndbRowReview({
   onReview: (body: VndbReviewInput) => void;
 }) {
   const id = useId();
-  const notMappable = row.kind === 'retained' || row.match.status === 'unsupported';
-  const [action, setAction] = useState<'state' | 'skip' | 'retain'>(notMappable ? 'retain' : 'state');
+  const hasMinutes = !!row.fields.minutes && !!row.identifier;
+  const notMappable = (row.kind === 'retained' && !hasMinutes) || row.match.status === 'unsupported';
+  const [action, setAction] = useState<'state' | 'progress' | 'skip' | 'retain'>(hasMinutes ? 'progress' : notMappable ? 'retain' : 'state');
   const [target, setTarget] = useState<EntityPickerSubject | null>(null);
   const [nativeChosen, setNativeChosen] = useState(false);
   const [states, setStates] = useState<StateChoice[]>([]);
@@ -105,7 +107,7 @@ export function VndbRowReview({
     };
   }, [row.target, target, nativeChosen]);
 
-  function selectAction(next: 'state' | 'skip' | 'retain') {
+  function selectAction(next: 'state' | 'progress' | 'skip' | 'retain') {
     setAction(next);
     setReplace(false);
   }
@@ -114,7 +116,7 @@ export function VndbRowReview({
     if (action === 'state') {
       if (!targetId || !stateId || !states.some((item) => item.id === stateId)) return;
       onReview({ ordinal: row.ordinal, action, targetId, state: stateId, replace });
-    } else {
+    } else if (action !== 'progress') {
       onReview({ ordinal: row.ordinal, action });
     }
   }
@@ -152,7 +154,7 @@ export function VndbRowReview({
       <fieldset className="space-y-3">
         <legend className="font-medium">{m.library_vndb_review_action()}</legend>
         <div className="flex flex-wrap gap-2">
-          {(notMappable ? (['skip', 'retain'] as const) : (['state', 'skip', 'retain'] as const)).map((choice) => (
+          {(notMappable ? (['skip', 'retain'] as const) : hasMinutes ? (['progress', 'skip', 'retain'] as const) : (['state', 'skip', 'retain'] as const)).map((choice) => (
             <VndbAction
               key={choice}
               type="button"
@@ -161,7 +163,7 @@ export function VndbRowReview({
               aria-pressed={action === choice}
               onClick={() => selectAction(choice)}
             >
-              {choice === 'state'
+              {choice === 'progress' ? m.library_vndb_progress_title() : choice === 'state'
                 ? m.library_vndb_action_state()
                 : choice === 'skip'
                   ? m.library_vndb_action_skip()
@@ -170,7 +172,7 @@ export function VndbRowReview({
           ))}
         </div>
       </fieldset>
-      {action === 'state' && !notMappable ? (
+      {(action === 'state' || action === 'progress') && !notMappable ? (
         <div className="space-y-3">
           {row.target ? (
             <div className="space-y-2 rounded-md border p-3">
@@ -201,7 +203,7 @@ export function VndbRowReview({
               setReplace(false);
             }}
           />
-          {targetId ? (
+          {targetId && action === 'state' ? (
             <Field>
               <FieldLabel htmlFor={`${id}-state`} className="min-h-11 items-center">
                 {m.library_vndb_state_label()}
@@ -226,7 +228,7 @@ export function VndbRowReview({
           ) : null}
           {row.suggestedRole ? <p>{m.library_vndb_role_is_only_suggestion({ role: row.suggestedRole })}</p> : null}
           {baseline ? <p>{m.library_bangumi_current({ state: baseline.state, revision: baseline.revision })}</p> : null}
-          {baseline ? (
+          {baseline && action === 'state' ? (
             <VndbCheck
               id={`${id}-replace`}
               checked={replace}
@@ -237,14 +239,15 @@ export function VndbRowReview({
           ) : null}
         </div>
       ) : null}
+      {action === 'progress' ? <VndbProgressReview row={row} targetId={targetId ?? row.target?.targetId ?? null} busy={busy} onReview={onReview} /> : null}
       {notMappable ? <p>{m.library_vndb_unmappable_help()}</p> : null}
-      <VndbAction
+      {action !== 'progress' ? <VndbAction
         type="button"
         disabled={busy || (action === 'state' && (!targetId || !stateId || loading))}
         onClick={save}
       >
         {m.library_bangumi_save_review()}
-      </VndbAction>
+      </VndbAction> : null}
     </article>
   );
 }
