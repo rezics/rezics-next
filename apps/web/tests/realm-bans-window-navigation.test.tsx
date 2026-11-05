@@ -98,23 +98,33 @@ test('failed directions retry exactly, sparse pages continue, expiration restart
   expect(button(m.realm_bans_previous()).disabled).toBe(true);
 });
 
-test('Stay preserves review and drafts; Leave retires the episode before rereading the same address', async () => {
+test('exact inspection and Stay preserve review; Leave retires it before rereading the same address', async () => {
   let reads = 0,
     writes = 0;
   const initial: BanReadState = { state: 'ready', page: { items: [row('original episode')], next: 'next' } };
+  const inspections: unknown[] = [];
   await paint({
     ...props(realm, initial, async () => (++reads, initial)),
+    inspect: async (input) => (inspections.push(input), { state: 'current', input, ban: row('exact episode') }),
     write: async () => (++writes, { ok: false, reason: 'unavailable' }),
   });
+  await activate(m.realm_bans_next());
+  const account = host.querySelectorAll('input')[1]!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(account, realm);
+    account.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  await activate(m.realm_bans_inspect_action());
+  expect(inspections).toEqual([{ realmId: realm, accountId: realm, cursor: 'next' }]);
   await activate(m.realm_bans_unban());
   const original = button(m.realm_bans_confirm());
   await activate(m.realm_bans_refresh());
-  expect(reads).toBe(0);
+  expect(reads).toBe(1);
   await activate(m.thread_authoring_stay());
   expect(button(m.realm_bans_confirm())).toBe(original);
   await activate(m.realm_bans_refresh());
   await activate(m.thread_authoring_leave());
-  expect(reads).toBe(1);
+  expect(reads).toBe(2);
   expect(button(m.realm_bans_confirm())).toBeUndefined();
   await act(async () => original.click());
   expect(writes).toBe(0);
@@ -126,8 +136,8 @@ test('Stay preserves review and drafts; Leave retires the episode before rereadi
   await activate(m.realm_bans_next());
   await activate(m.thread_authoring_stay());
   expect(reason.value).toBe(' ');
-  expect(reads).toBe(1);
+  expect(reads).toBe(2);
   await activate(m.realm_bans_next());
   await activate(m.thread_authoring_leave());
-  expect(reads).toBe(2);
+  expect(reads).toBe(3);
 });
