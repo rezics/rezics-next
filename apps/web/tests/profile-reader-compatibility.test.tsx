@@ -576,7 +576,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveRead(recoveryRead, successRead(nativeProfile));
     await recovery;
     expect(writableEditor.snapshot().attempt).toBeNull();
-    expect(writableEditor.snapshot().phase).toBe('saved');
+    expect(writableEditor.snapshot().phase).toBe('review');
 
     // The production avatar component owns and cancels its own upload promise on credential replacement.
     const fileInput = host.querySelector<HTMLInputElement>('input[type="file"]');
