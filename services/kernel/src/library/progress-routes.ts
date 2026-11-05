@@ -860,19 +860,15 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         return { journal: result.value };
       },
     )
-    .post(
-      recordPath,
-      recordOperation.options,
-      async ({ params, body, headers, actor, admission, job, session }) => {
-        requireAccount(actor);
-        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run('normal', job, () =>
-          mapped(() => sessionCommands().recordProgress(actor, params.sessionId, body, requestKey)),
-        );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { progressSession: sessionView(result.value) };
-      },
-    )
+    .post(recordPath, recordOperation.options, async ({ params, body, headers, actor, admission, job, session }) => {
+      requireAccount(actor);
+      const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+      const result = await admission.run('normal', job, () =>
+        mapped(() => sessionCommands().recordProgress(actor, params.sessionId, body, requestKey)),
+      );
+      session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+      return { progressSession: sessionView(result.value) };
+    })
     .post(
       customMethod('/v1/progressSessions/:sessionId', 'complete'),
       {

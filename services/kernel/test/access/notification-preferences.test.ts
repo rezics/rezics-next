@@ -123,13 +123,16 @@ test('a mandatory or unknown kind in a patch is refused with 400 and changes not
     expect((await stored(person.accountId)).rows).toHaveLength(0);
   }
   expect((await call(person)).value).toEqual(
-    withReadingPreferencePage({
-      spoilerLevel: 0,
-      suitability: 'blur',
-      shelf: {},
-      notifications: DEFAULT_NOTIFICATIONS,
-      version: 0,
-    }, { writable: true }),
+    withReadingPreferencePage(
+      {
+        spoilerLevel: 0,
+        suitability: 'blur',
+        shelf: {},
+        notifications: DEFAULT_NOTIFICATIONS,
+        version: 0,
+      },
+      { writable: true },
+    ),
   );
   await call(person, { expectedVersion: 0, notifications: allOff });
   const before = (await stored(person.accountId)).rows;

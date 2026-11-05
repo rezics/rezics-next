@@ -1,10 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import {
-  admitFilter,
-  parseFilter,
-  type FilterDocument,
-  type FilterRelease,
-} from '@rezics/filter';
+import { admitFilter, parseFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { compileFilter } from '../../src/search/filter.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 
