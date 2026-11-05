@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { continueAddress } from './continue-address';
 import {
   CONTINUE_LIMIT,
@@ -113,7 +114,8 @@ export const nativeContinueSource: ContinueSource = async (client, authorization
     if (result.status !== 200 || result.error)
       return continueFailure(result.status, new Headers(result.headers).get('retry-after'), result.error?.value);
     return presentContinuePage(result.data);
-  } catch {
+  } catch (error) {
+    if (isPlatformClosedError(error)) return { state: 'closed' };
     return { state: 'unavailable' };
   }
 };

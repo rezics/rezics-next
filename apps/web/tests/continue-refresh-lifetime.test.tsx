@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import { m } from '../src/paraglide/messages.js';
 import type { ContinueEntry, ContinueResult, ContinueView } from '../src/library/continue-source';
 
 // UNRUN: default mounted hook and presentation regressions for the integration gate.
@@ -240,13 +241,14 @@ test('initial and scope replacements show their own state and retire late comple
   expect(host.textContent).not.toContain('Retired initial result');
 
   const { pending: oldScopeRead } = await startRefresh();
-  await paint(replacement, read, 'cursor-two');
-  expect(state()).toBe('preparing');
-  expect(busy()).toBe(false);
-  await settle(1, loaded('Retired scope result'));
+  await paint(loaded('Current scope result'), read, 'cursor-two');
+  expect(state()).toBe('loaded');
+  expect(host.textContent).toContain('Current scope result');
+  await settle(1, { state: 'closed' });
   await oldScopeRead;
-  expect(state()).toBe('preparing');
-  expect(host.textContent).not.toContain('Retired scope result');
+  expect(state()).toBe('loaded');
+  expect(host.textContent).toContain('Current scope result');
+  expect(host.textContent).not.toContain(m.platform_closed_message({}, { locale: 'en' }));
 
   const { pending: unmountedRead } = await startRefresh();
   await act(async () => root.unmount());
@@ -254,6 +256,44 @@ test('initial and scope replacements show their own state and retire late comple
   await settle(2, loaded('After unmount'));
   expect(await unmountedRead).toEqual(loaded('After unmount'));
   expect(host.innerHTML).toBe('');
+});
+
+test('closed Continue shows the native gate, retires rows and never retries', async () => {
+  const timers = controlledPreparationTimers();
+  const read = reader();
+  const closed = { state: 'closed' } as const;
+  const message = m.platform_closed_message({}, { locale: 'en' });
+  try {
+    await paint(closed, read, 'closed-initial');
+    expect(state()).toBe('closed');
+    expect(host.textContent).toContain(message);
+    expect(host.textContent).not.toContain(m.library_continue_empty({}, { locale: 'en' }));
+    expect(host.textContent).not.toContain(m.library_continue_denied({}, { locale: 'en' }));
+    expect(host.querySelectorAll('a')).toHaveLength(0);
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect(timers.timers.size).toBe(0);
+
+    await paint(loaded('Retained subject'), read, 'closed-refresh');
+    const { pending } = await startRefresh();
+    expect(state()).toBe('unknown');
+    expect(host.textContent).not.toContain('Retained subject');
+    await settle(0, closed);
+    await pending;
+    expect(state()).toBe('closed');
+    expect(host.textContent).toContain(message);
+    expect(host.textContent).not.toContain('Retained subject');
+    expect(host.textContent).not.toContain(m.library_continue_empty({}, { locale: 'en' }));
+    expect(host.textContent).not.toContain(m.library_continue_denied({}, { locale: 'en' }));
+    expect(host.querySelectorAll('a')).toHaveLength(0);
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect(timers.timers.size).toBe(0);
+  } finally {
+    if (mounted) {
+      await act(async () => root.unmount());
+      mounted = false;
+    }
+    timers.restore();
+  }
 });
 
 test('preparation retries stay on their lifetime, clamp delays and stop after two attempts', async () => {

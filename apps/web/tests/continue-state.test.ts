@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { PlatformClosedError } from '../src/kernel/platform-closed';
 import { continueFailure, continueRetryDelay, type ContinueSource } from '../src/library/continue-source';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -50,6 +51,19 @@ test('the delivered default caller reads one native FULL page and signed-out mak
   expect(await loadContinueState(client, new Request('https://site.example.test/en'), {}, {}, source)).toEqual({
     state: 'signed-out',
   });
+});
+
+test('the prepared reader preserves typed and serialized platform closure from its source', async () => {
+  const failures = [
+    new PlatformClosedError(403, { code: 'platform_closed' }),
+    Object.assign(new Error('rezics-platform-closed'), { name: 'PlatformClosedError' }),
+  ];
+  for (const failure of failures) {
+    const source: ContinueSource = async () => {
+      throw failure;
+    };
+    expect(await loadContinueState(client, request(), {}, {}, source)).toEqual({ state: 'closed' });
+  }
 });
 
 test('only preparation retries, with a capped delay and two automatic attempts', () => {

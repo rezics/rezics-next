@@ -243,9 +243,11 @@ export function ContinueSection({
             ? m.library_continue_preparing({}, options)
             : result.state === 'unknown'
               ? m.library_continue_loading({}, options)
-              : result.state === 'denied'
-                ? m.library_continue_denied({}, options)
-                : m.library_continue_unavailable({}, options);
+              : result.state === 'closed'
+                ? m.platform_closed_message({}, options)
+                : result.state === 'denied'
+                  ? m.library_continue_denied({}, options)
+                  : m.library_continue_unavailable({}, options);
   return (
     <section aria-label={title} data-continue-state={result.state} className="min-w-0 max-w-full space-y-4">
       {!destination ? (

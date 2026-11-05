@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SubjectSummary } from '../media/summary';
 import type { ProgressLabelInput } from './progress-label';
 
@@ -16,6 +17,7 @@ export type ContinueEntry = {
 /** Consumer presentation, not a replacement native DTO or a second Library index. */
 export type ContinueFailure =
   | { state: 'unavailable'; status?: number; reason?: 'missing-binding' | 'invalid-address' | 'stale-address' }
+  | { state: 'closed' }
   | { state: 'preparing'; retryAfter?: number }
   | { state: 'denied'; status: 401 | 403 }
   | { state: 'signed-out' };
@@ -66,6 +68,7 @@ export function continueRetryDelay(result: ContinueView, attempts: number): numb
 
 /** Map the native response status without turning an error or readiness response into empty success. */
 export function continueFailure(status: number, retryAfter?: string | null, problem?: unknown): ContinueFailure {
+  if (isPlatformClosedProblem(status, problem)) return { state: 'closed' };
   if (status === 202) {
     const seconds = retryAfter ? Number(retryAfter) : NaN;
     return { state: 'preparing', ...(Number.isFinite(seconds) && seconds > 0 ? { retryAfter: seconds } : {}) };
