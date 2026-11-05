@@ -84,7 +84,7 @@ function tags(entries: readonly { id: string; label?: string; lang?: string; red
   ) as unknown as Related;
 }
 
-test('mounted work tags paginate, retain source assertions, gate each spoiler, and reset on caller and release replacement', async () => {
+test('mounted work tags paginate, retain source assertions, exclude hidden membership, and reset on caller and release replacement', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -185,25 +185,25 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
     expect(host.innerHTML).not.toContain('Secret plot tag fourteen');
     expect(host.innerHTML).not.toContain('https://vndb.org/v15');
     expect(host.innerHTML).not.toContain(conceptIds[14]!);
-    const reveal = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Reveal spoiler tag',
-    )!;
-    await act(async () => reveal.click());
-    expect(host.textContent).toContain('Secret plot tag fourteen');
-    expect(host.textContent).not.toContain('Secret plot tag eighteen');
-    expect(host.innerHTML).toContain('https://vndb.org/v15');
-    const spoilerWhy = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
-      (link) => link.textContent?.trim() === 'Why this tag applies' && link.href.includes(conceptIds[14]!),
-    );
-    expect(spoilerWhy).toBeDefined();
-    expect(new URL(spoilerWhy!.href).searchParams.get('tagQualifiers')).toBe(
-      JSON.stringify([{ property: 'rezics:spoilerLevel', in: ['2'] }]),
-    );
+    expect(host.textContent).not.toContain('Reveal spoiler tag');
 
     await act(async () => more()!.click());
     expect(host.textContent).toContain('Tag label unavailable.');
     expect(host.innerHTML).not.toContain(conceptIds[29]!);
     expect(host.textContent).toContain('27 tags');
+
+    await act(async () => root.render(<SubjectConceptTags {...props} spoilerThreshold={2} />));
+    await act(async () => more()!.click());
+    expect(host.textContent).toContain('Secret plot tag fourteen');
+    expect(host.textContent).toContain('Secret plot tag eighteen');
+    expect(host.innerHTML).toContain('https://vndb.org/v15');
+    const spoilerWhy = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (link) => link.textContent?.trim() === 'Why this tag applies' && link.href.includes(conceptIds[14]!),
+    )!;
+    expect(new URL(spoilerWhy.href).searchParams.get('tagQualifiers')).toBe(
+      JSON.stringify([{ property: 'rezics:spoilerLevel', in: ['2'] }]),
+    );
+    expect(new URL(spoilerWhy.href).searchParams.get('spoiler')).toBe('2');
 
     const nextId = uuid(200);
     const nextSubject = work(uuid(2), 'release-b', [statement(31, nextId)]);
