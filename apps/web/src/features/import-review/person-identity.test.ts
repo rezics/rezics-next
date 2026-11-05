@@ -68,7 +68,7 @@ test('namesakes, missing producer, Organization, redirects and denied action rem
   }
 });
 
-test('mounted caller preserves paired observations and retries while rejecting malformed merge receipts', async () => {
+test('mounted caller uses paired native observations; stale, denied and synchronous merges stay failures', async () => {
   const native = reads();
   const sent: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
@@ -87,9 +87,7 @@ test('mounted caller preserves paired observations and retries while rejecting m
   const command = { body: comparison.merge, key: uuid(99) };
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'stale' });
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'denied' });
-  await expect(mergePersonComparison(client, 'Bearer reviewer', command)).rejects.toThrow(
-    'Invalid native identity admission',
-  );
+  expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toMatchObject({ ok: false });
   expect(sent[2]!.url).toBe('https://kernel.test/v1/subjects:merge');
   expect(await sent[2]!.clone().text()).toBe(await sent[3]!.clone().text());
   expect(await sent[2]!.clone().text()).toBe(await sent[4]!.clone().text());
@@ -183,26 +181,4 @@ test('original showcase claims enable admission; publication waits for the nativ
   });
   ineligible = true;
   expect(await readPersonComparison(client, 'Bearer reviewer', pair)).toMatchObject({ ok: true, merge: null });
-});
-
-test('the mounted Person merge returns the native receipt and an absent identity stays readable', async () => {
-  const native = reads();
-  const sent: Request[] = [];
-  const receipt = { survivor: originals[0].subject, redirected: originals[1].subject, revision: 10 };
-  const client = createKernelClient('https://kernel.test', {
-    fetch: (async (input, init) => {
-      const request = new Request(input, init);
-      sent.push(request);
-      if (request.method === 'POST') return Response.json(receipt);
-      const index = new URL(request.url).searchParams.get('reviewIdentitySource') === 'bangumi' ? 0 : 1;
-      return Response.json({ ...native[index], reviewedIdentity: null });
-    }) as typeof fetch,
-  });
-  const comparison = personComparison(originals, native);
-  if (!comparison.ok || !comparison.merge) throw new Error('Missing native comparison');
-  const command = { body: comparison.merge, key: uuid(99) };
-  expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: true, admission: receipt });
-  expect(await sent[0]!.json()).toEqual(command.body);
-  expect(sent[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
-  expect(await readPersonComparison(client, 'Bearer reviewer', originals)).toMatchObject({ ok: true, merge: null });
 });

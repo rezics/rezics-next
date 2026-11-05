@@ -38,7 +38,8 @@ independently of future source candidates or unfinished consumers.
 Decision: public client aliases retain their names while referencing native modules; provisional transports are removed
 when complete mounted declarations provide their callables. Reviewed Person transport stays unchanged until its
 native Semantic operands are admitted. The admitted producer now declares the guarded read/merge operands and a
-200 merge receipt (`survivor`, `redirected`, `revision`); callers bind that receipt when the complete output lands.
+202 merge admission (`operation.id`) and operation-status read; callers retain the original admission and
+read the completed operation before checking publication. Public helper types derive from those mounted callables.
 Grouped release match evidence is optional because the native grouped reader omits it; ordinary catalogue evidence
 retains its explicit state. Focused publication tests exercise installed public-root callables and retained operational
 engine-request accounting; broader native/browser/root acceptance remains with integration.

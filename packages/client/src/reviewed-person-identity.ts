@@ -15,6 +15,10 @@ export type ReviewedPersonAdmission = NonNullable<
   Awaited<ReturnType<KernelClient['subjects']['$merge']['post']>>['data']
 >;
 
+export type ReviewedPersonOperation = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjectIdentityOperations']>['get']>>['data']
+>['operation'];
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 export function isReviewedPersonSource(value: unknown): value is ReviewedPersonSource {
