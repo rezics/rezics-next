@@ -54,7 +54,10 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
     ...personalRead,
     queryKey: scope.queryKey,
     enabled: typeof window !== 'undefined' && personalRead.enabled && scope.enabled && scope.current(),
-    queryFn: async ({ signal }) => {
+    queryFn: async (context) => {
+      // Let StrictMode reattach the owned observer before consuming Query's lazy cancellation signal.
+      await Promise.resolve();
+      const { signal } = context;
       const expectedReader = scope.reader;
       const unavailable = {
         kind: 'default' as const,
