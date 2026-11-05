@@ -39,17 +39,27 @@ function isAgentType(read: SubjectRead): boolean {
   return agentRoots.has(read.subject.type) || (read.summary?.types.some((type) => agentRoots.has(type)) ?? false);
 }
 
-export async function verifiedHandle(client: KernelClient, read: SubjectRead): Promise<string | undefined> {
+export async function verifiedHandle(
+  client: KernelClient,
+  read: SubjectRead,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  signal?.throwIfAborted();
   const subject = read.subject;
   if (!read.account && !isAgentType(read)) return undefined;
   try {
-    const result = await client.accounts.get({ query: { agent: subject.id } });
+    const result = await client.accounts.get({
+      query: { agent: subject.id },
+      ...(signal ? { fetch: { signal } } : {}),
+    });
+    signal?.throwIfAborted();
     const accounts = result.data?.accounts;
     if (result.error || !accounts || accounts.length !== 1) return undefined;
     const account = accounts[0];
     const handle = account && 'handle' in account ? account.handle : undefined;
     return typeof handle === 'string' && handle.length > 0 ? handle : undefined;
   } catch {
+    signal?.throwIfAborted();
     return undefined;
   }
 }
@@ -58,10 +68,19 @@ export async function verifiedHandle(client: KernelClient, read: SubjectRead): P
  * Reads the subject before page data. The kernel follows a merged id's single 308 to its survivor; verified agents
  * use their account address. Optional account failures leave the catalogue subject address in place.
  */
-export async function loadSubject(client: KernelClient, id: string, locale: Locale): Promise<SubjectLoad> {
+export async function loadSubject(
+  client: KernelClient,
+  id: string,
+  locale: Locale,
+  signal?: AbortSignal,
+): Promise<SubjectLoad> {
+  signal?.throwIfAborted();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return { kind: 'missing' };
 
-  let result = await client.subjects({ id }).get({ fetch: { redirect: 'manual' } });
+  let result = await client.subjects({ id }).get({
+    fetch: { redirect: 'manual', ...(signal ? { signal } : {}) },
+  });
+  signal?.throwIfAborted();
   if (result.status === 308) {
     // Eden reports a 308 body through `error.value`, since it is not a successful response.
     const body = result.data ?? result.error?.value;
@@ -73,14 +92,20 @@ export async function loadSubject(client: KernelClient, id: string, locale: Loca
       redirect.to === id
     )
       throw new Error('Subject redirect was invalid');
-    result = await client.subjects({ id: redirect.to }).get({ fetch: { redirect: 'manual' } });
+    signal?.throwIfAborted();
+    result = await client.subjects({ id: redirect.to }).get({
+      fetch: { redirect: 'manual', ...(signal ? { signal } : {}) },
+    });
+    signal?.throwIfAborted();
   }
   if (result.status === 404) return { kind: 'missing' };
   if (result.status !== 200 || result.error || !result.data?.subject) throw new Error('Subject read failed');
 
   const subject = result.data.subject as Subject;
   const label = subjectLabel(subject, locale);
-  const handle = await verifiedHandle(client, result.data);
+  signal?.throwIfAborted();
+  const handle = await verifiedHandle(client, result.data, signal);
+  signal?.throwIfAborted();
   const href = handle ? accountHref(locale, handle) : subjectHref({ id: subject.id, label }, locale).href;
   return {
     kind: 'subject',

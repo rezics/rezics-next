@@ -567,11 +567,24 @@
       "capabilities": ["curation-opening-read-transport"]
     },
     {
+      "id": "subject-canonical-lifetime",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/subject-canonical-lifetime/**"],
+      "publicEntries": ["apps/web/src/features/pages/subject-canonical-lifetime/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["subject-canonical-read-lifetime"]
+    },
+    {
       "id": "web-search",
       "kind": "UI/transport library",
       "owner": "search",
       "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
-      "excludes": ["apps/web/src/search/personal-recovery/**", "apps/web/src/features/pages/curation-opening-read/**"],
+      "excludes": [
+        "apps/web/src/search/personal-recovery/**",
+        "apps/web/src/features/pages/curation-opening-read/**",
+        "apps/web/src/features/pages/subject-canonical-lifetime/**"
+      ],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/search-window/index.ts",
@@ -712,6 +725,7 @@
         "web-library",
         "web-performance",
         "web-search",
+        "subject-canonical-lifetime",
         "web-semantic"
       ],
       "capabilities": []

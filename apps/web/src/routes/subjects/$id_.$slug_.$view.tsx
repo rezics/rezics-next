@@ -5,6 +5,7 @@ import { useSubjectPersonalReader } from '../../features/pages/subject-personal-
 import { isView, type View } from '@rezics/composition';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectPageType } from '../../features/pages/subject';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
@@ -34,6 +35,7 @@ import { subjectRouteSearchLimit, subjectVisitReturn } from '../../features/page
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { SubjectViewError } from '../../subject/view-error';
 import { env } from 'cloudflare:workers';
+import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pages/subject-canonical-lifetime';
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -89,6 +91,8 @@ const readView = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
     const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
     const verification = {
       sitekey: config.TURNSTILE_SITE_KEY ?? '',
@@ -103,8 +107,14 @@ const readView = createServerFn({ method: 'GET', strict: false })
         verification,
       };
     const { loadContextSubject } = await import('../../features/pages/context-subject');
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    const canonical = await loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization });
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader, signal);
+    signal.throwIfAborted();
+    const canonical = await loadContextSubject(client, data.id, data.locale, {
+      realm: data.realm,
+      authorization,
+      signal,
+    });
+    signal.throwIfAborted();
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, data.view), data.search));
@@ -158,29 +168,38 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     streamDirection: search.streamDirection,
     via: search.via,
   }),
-  loader: async ({ params, location, context, deps }) => {
-    const reader = await subjectRequestReader({ data: { realm: deps.realm } });
+  loader: async ({ params, location, context, deps, abortController }) => {
+    const signal = abortController.signal;
+    const reader = await awaitSubjectRoute(signal, () =>
+      subjectRequestReader({ data: { realm: deps.realm }, signal }),
+    );
     if (!isView(params.view) || params.view === 'overview') throw notFound();
     const cursor = validateViewCursor(deps.cursor);
-    let canonical = await readView({
-      data: {
-        realm: deps.realm,
-        reader,
-        id: params.id,
-        slug: params.slug,
-        view: params.view,
-        locale: getLocale(),
-        search: keepSearch('', location.searchStr, location.hash),
-        cursor,
-      },
-    });
-    // Reuse the current native reading for the head, never a retained navigation result.
-    const loaded = await context.queryClient.fetchQuery(
-      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node, reader),
+    let canonical = await awaitSubjectRoute(signal, () =>
+      readView({
+        data: {
+          realm: deps.realm,
+          reader,
+          id: params.id,
+          slug: params.slug,
+          view: params.view,
+          locale: getLocale(),
+          search: keepSearch('', location.searchStr, location.hash),
+          cursor,
+        },
+        signal,
+      }),
     );
+    // Reuse the current native reading for the head, never a retained navigation result.
+    const loaded = await awaitSubjectRoute(signal, () =>
+      context.queryClient.fetchQuery(
+        subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node, reader),
+      ),
+    );
+    signal.throwIfAborted();
     if (loaded.kind === 'missing') {
-      const overview = await context.queryClient.fetchQuery(
-        subjectPageQuery(params.id, getLocale(), 'overview', deps.realm, reader),
+      const overview = await awaitSubjectRoute(signal, () =>
+        context.queryClient.fetchQuery(subjectPageQuery(params.id, getLocale(), 'overview', deps.realm, reader)),
       );
       if (overview.kind !== 'page') throw notFound();
       throw redirect(canonicalRedirect(canonical.href, location.searchStr, location.hash, 302));
@@ -192,8 +211,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
           statusCode: 301,
           headers: { 'Cache-Control': 'private, no-store' },
         });
-      const survivor = await context.queryClient.fetchQuery(
+      const survivor = await readSubjectCanonicalQuery(
+        context.queryClient,
         subjectCanonicalQuery(loaded.id, getLocale(), deps.realm, reader),
+        signal,
       );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
@@ -215,14 +236,20 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       (loaded.overview.views !== undefined && !loaded.overview.views.includes(params.view)) ||
       ((params.view === 'reviews' || params.view === 'discussion') && !tabs.some((tab) => tab.view === params.view))
     ) {
-      const survivor = await context.queryClient.fetchQuery(
+      const survivor = await readSubjectCanonicalQuery(
+        context.queryClient,
         subjectCanonicalQuery(params.id, getLocale(), deps.realm, reader),
+        signal,
       );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect(canonicalRedirect(subjectUrlForView(survivor.value), location.searchStr, location.hash, 302));
     }
     const type = subjectPageType(loaded.overview);
-    const typeData = type ? await context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {};
+    const typeData = type
+      ? await awaitSubjectRoute(signal, () =>
+          context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())),
+        )
+      : {};
     const nextHref =
       loaded.next !== undefined
         ? `${canonical.href}/${encodeURIComponent(params.view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}${deps.via ? `&via=${encodeURIComponent(deps.via)}` : ''}`

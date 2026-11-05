@@ -392,6 +392,48 @@ describe('Close current Context and Realm Subject navigation cache and continuat
     }
   });
 
+  test('retirement after a selected Realm merge read prevents its survivor stage and Global fallback', async () => {
+    let startRead!: () => void;
+    let finishRead!: (response: Response) => void;
+    const started = new Promise<void>((resolve) => (startRead = resolve));
+    const delayed = new Promise<Response>((resolve) => (finishRead = resolve));
+    const requests: { path: string; authorization: string | null; body: unknown; signal: AbortSignal }[] = [];
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push({
+          path: new URL(request.url).pathname,
+          authorization: request.headers.get('authorization'),
+          body: await request.json(),
+          signal: request.signal,
+        });
+        startRead();
+        return delayed;
+      },
+    });
+    const controller = new AbortController();
+    const pending = loadContextSubject(client, recording.subject, 'en', {
+      realm,
+      authorization: 'Bearer selected-reader',
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort();
+    finishRead(Response.json({ ...recordedPage(), subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e81' }));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requests).toEqual([
+      expect.objectContaining({
+        path: '/v1/pages:read',
+        authorization: 'Bearer selected-reader',
+        signal: expect.objectContaining({ aborted: true }),
+      }),
+    ]);
+    expect(requests[0]?.body).toEqual({
+      target: { subject: recording.subject, realm },
+      languages: ['en'],
+    });
+  });
+
   test('anonymous, account, Realm, language and independent node cursors have separate cache identities', async () => {
     const client = new QueryClient();
     const first = subjectViewPagesQuery(

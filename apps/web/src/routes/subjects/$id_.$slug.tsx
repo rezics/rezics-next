@@ -8,6 +8,7 @@ import { validatePageNode, validatePageRealm } from '../../features/pages/view-c
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import { isView } from '@rezics/composition';
 import { SubjectPage, pageRelationProperties, subjectPageTitle, subjectPageType } from '../../features/pages/subject';
 import { catalogueFileSourceId } from '../../features/catalogue/catalogue-file-reader/navigation';
@@ -52,6 +53,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { env } from 'cloudflare:workers';
 import type { SessionEnv } from '../../session/client';
 import { pageHeadContext } from '../../shell/head-context';
+import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pages/subject-canonical-lifetime';
 
 // Page documents type their props as unknown. The kernel already returned JSON.
 const readSubject = createServerFn({ method: 'GET', strict: false })
@@ -91,11 +93,16 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
     let paths;
     if (!data.realm) {
-      const { client } = await subjectKernelClient(data.locale);
+      const { client } = await subjectKernelClient(data.locale, undefined, undefined, signal);
+      signal.throwIfAborted();
       const { loadContextSubject } = await import('../../features/pages/context-subject');
-      const canonical = await loadContextSubject(client, data.id, data.locale);
+      signal.throwIfAborted();
+      const canonical = await loadContextSubject(client, data.id, data.locale, { signal });
+      signal.throwIfAborted();
       if (canonical.kind === 'missing') throw notFound();
       const requestedView = canonical.value.slug === data.slug ? undefined : data.view;
       if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
@@ -268,30 +275,39 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     undoAssignmentId: search.undoAssignmentId,
     undoRevision: search.undoRevision,
   }),
-  loader: async ({ params, deps, location, context }) => {
-    const reader = await subjectRequestReader({ data: { realm: deps.realm } });
-    const data = await readSubject({
-      data: {
-        realm: deps.realm,
-        reader,
-        id: params.id,
-        slug: params.slug,
-        locale: getLocale(),
-        search: keepSearch('', location.searchStr, location.hash),
-        loadCollections: deps.slot === 'collections',
-        slotResult: deps.slotResult,
-        view: isView(params.slug) && params.slug !== 'overview' ? params.slug : undefined,
-      },
-    });
+  loader: async ({ params, deps, location, context, abortController }) => {
+    const signal = abortController.signal;
+    const reader = await awaitSubjectRoute(signal, () =>
+      subjectRequestReader({ data: { realm: deps.realm }, signal }),
+    );
+    const data = await awaitSubjectRoute(signal, () =>
+      readSubject({
+        data: {
+          realm: deps.realm,
+          reader,
+          id: params.id,
+          slug: params.slug,
+          locale: getLocale(),
+          search: keepSearch('', location.searchStr, location.hash),
+          loadCollections: deps.slot === 'collections',
+          slotResult: deps.slotResult,
+          view: isView(params.slug) && params.slug !== 'overview' ? params.slug : undefined,
+        },
+        signal,
+      }),
+    );
     const view = 'overview' as const;
     // Fetch current native proof for both the reading and its permitted share-card projection.
     const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm, reader);
-    const page = await context.queryClient.fetchQuery(pageQuery);
+    const page = await awaitSubjectRoute(signal, () => context.queryClient.fetchQuery(pageQuery));
+    signal.throwIfAborted();
     if (page.kind === 'redirect') {
       if (page.target === 'account')
         throw redirect(canonicalRedirect(accountHref(getLocale(), page.id, view), location.searchStr, location.hash));
-      const survivor = await context.queryClient.fetchQuery(
+      const survivor = await readSubjectCanonicalQuery(
+        context.queryClient,
         subjectCanonicalQuery(page.id, getLocale(), deps.realm, reader),
+        signal,
       );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({

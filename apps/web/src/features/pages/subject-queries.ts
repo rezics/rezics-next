@@ -26,24 +26,30 @@ import { projectShareCardPage } from '../../media/share-card-page';
 import { locales } from '../../paraglide/runtime.js';
 
 export const subjectKernelClient = createServerOnlyFn(
-  async (locale: string, realm?: string, expectedReader?: string | null) => {
+  async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
     const { kernelClient } = await import('../../kernel/client');
+    signal?.throwIfAborted();
     // Eden's treaty client is thenable; wrap it so this async boundary does not make a request to /v1.
     if (realm === undefined) return { client: kernelClient(locale), authorization: undefined, reader: null };
     const { env } = await import('cloudflare:workers');
     const { prepareSession, viewerCredential, sessionSubject } = await import('../../session/request');
+    signal?.throwIfAborted();
     setResponseHeader('cache-control', 'private, no-store');
-    await prepareSession(getRequest(), env as Partial<SessionEnv>);
-    const authorization = viewerCredential(getRequest()) ?? undefined;
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    signal?.throwIfAborted();
+    const authorization = viewerCredential(request) ?? undefined;
     // Explicit bearer callers have no BFF subject. A digest partitions their cache without exposing the credential.
     const digest =
-      authorization && !sessionSubject(getRequest())
+      authorization && !sessionSubject(request)
         ? Array.from(
             new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(authorization))),
             (byte) => byte.toString(16).padStart(2, '0'),
           ).join('')
         : null;
-    const reader = authorization ? (sessionSubject(getRequest()) ?? `credential:${digest}`) : null;
+    signal?.throwIfAborted();
+    const reader = authorization ? (sessionSubject(request) ?? `credential:${digest}`) : null;
     if (expectedReader !== undefined && reader !== expectedReader)
       throw new PageReadError('dependency_unavailable', 503);
     return { client: kernelClient(locale), authorization, reader };
@@ -55,7 +61,9 @@ export const subjectRequestReader = createServerFn({ method: 'GET', strict: fals
   .validator((input: { realm?: string | undefined }) => ({ realm: validatePageRealm(input.realm) }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return (await subjectKernelClient('en', data.realm)).reader;
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
+    return (await subjectKernelClient('en', data.realm, undefined, signal)).reader;
   });
 
 function validateReader(value: unknown): string | null {
@@ -197,8 +205,11 @@ const readSubjectCanonical = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    return loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization });
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader, signal);
+    signal.throwIfAborted();
+    return loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization, signal });
   });
 
 const readSubjectFrame = createServerFn({ method: 'GET', strict: false })
@@ -543,7 +554,7 @@ export const subjectCanonicalQuery = (id: string, locale: string, realm?: string
     retry: false,
     gcTime: 0,
     queryKey: ['subject-canonical', id, locale, realm ?? null, reader] as const,
-    queryFn: () => readSubjectCanonical({ data: { id, locale, realm, reader } }),
+    queryFn: ({ signal }) => readSubjectCanonical({ data: { id, locale, realm, reader }, signal }),
   });
 
 export const subjectFrameQuery = (type: string, locale: string) =>

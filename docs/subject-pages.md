@@ -737,6 +737,11 @@ a further merge response is unavailable, not a successful stale subject. The nat
 is translated to the same website 301, including verification that changes between canonical and page reads.
 The existing exported native redirect adapter retains its 308 shape for compatibility.
 
+Decision: canonical reads carry their route lifetime through the BFF to native stages. A route holds an observer on
+the exact canonical Query, so retirement releases only that route's interest while another mounted observer can
+finish shared work; ignored aborts cannot redirect or fail the current visit, and an explicit return reads current
+native authority again.
+
 A verified account with a current handle has one page at `/@handle`, with every supported view retained. A
 handleless account supplies no invented `@` address: keep its readable subject identity. Account case correction
 uses 308; a current native `movedTo` uses 302 to the current handle, without alias walks. Web does not reproduce

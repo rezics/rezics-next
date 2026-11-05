@@ -4,6 +4,7 @@ import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import { RelationsView } from '../../features/pages/relations-view';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
@@ -32,6 +33,7 @@ import { validateViewCursor, validatePageRealm, validatePageNode } from '../../f
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
 import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { awaitSubjectRoute, readSubjectCanonicalQuery } from '../../features/pages/subject-canonical-lifetime';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const curiePattern = /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9_.-]+$/;
@@ -69,11 +71,19 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
     if (data.realm)
       return { href: `/${data.locale}/subjects/${data.id}/${data.slug}`, paths: {} as Record<string, string> };
     const { loadContextSubject } = await import('../../features/pages/context-subject');
-    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    const canonical = await loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization });
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader, signal);
+    signal.throwIfAborted();
+    const canonical = await loadContextSubject(client, data.id, data.locale, {
+      realm: data.realm,
+      authorization,
+      signal,
+    });
+    signal.throwIfAborted();
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect({
@@ -107,34 +117,45 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
     node: search.node,
     via: search.via,
   }),
-  loader: async ({ params, deps, location, context }) => {
-    const reader = await subjectRequestReader({ data: { realm: deps.realm } });
+  loader: async ({ params, deps, location, context, abortController }) => {
+    const signal = abortController.signal;
+    const reader = await awaitSubjectRoute(signal, () =>
+      subjectRequestReader({ data: { realm: deps.realm }, signal }),
+    );
     const cursor = validateViewCursor(deps.cursor);
-    let canonical = await readRelations({
-      data: {
-        realm: deps.realm,
-        reader,
-        id: params.id,
-        slug: params.slug,
-        locale: getLocale(),
-        property: deps.property,
-        cursor,
-        search: keepSearch('', location.searchStr, location.hash),
-      },
-    });
+    let canonical = await awaitSubjectRoute(signal, () =>
+      readRelations({
+        data: {
+          realm: deps.realm,
+          reader,
+          id: params.id,
+          slug: params.slug,
+          locale: getLocale(),
+          property: deps.property,
+          cursor,
+          search: keepSearch('', location.searchStr, location.hash),
+        },
+        signal,
+      }),
+    );
     // Configured groups use their native incoming/outgoing descriptors and independent signed continuations.
     // Keep the older Global property-only URL for callers whose profile has no corresponding view node.
     if (!deps.property || deps.realm || deps.node) {
-      const loaded = await context.queryClient.fetchQuery(
-        subjectViewPagesQuery(params.id, getLocale(), 'relations', cursor, deps.realm, deps.node, reader),
+      const loaded = await awaitSubjectRoute(signal, () =>
+        context.queryClient.fetchQuery(
+          subjectViewPagesQuery(params.id, getLocale(), 'relations', cursor, deps.realm, deps.node, reader),
+        ),
       );
+      signal.throwIfAborted();
       if (loaded.kind === 'redirect') {
         if (loaded.target === 'account')
           throw redirect(
             canonicalRedirect(accountHref(getLocale(), loaded.id, 'relations'), location.searchStr, location.hash),
           );
-        const survivor = await context.queryClient.fetchQuery(
+        const survivor = await readSubjectCanonicalQuery(
+          context.queryClient,
           subjectCanonicalQuery(loaded.id, getLocale(), deps.realm, reader),
+          signal,
         );
         if (survivor.kind === 'missing') throw notFound();
         throw redirect(
@@ -155,6 +176,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
         context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale())),
       ]);
+      signal.throwIfAborted();
       return {
         configured: true as const,
         reader,
@@ -170,17 +192,24 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         via: deps.via,
       };
     }
-    const [overview, links] = await Promise.all([
-      context.queryClient.fetchQuery(subjectPageQuery(params.id, getLocale(), 'overview')),
-      context.queryClient.ensureQueryData(subjectLinksQuery(params.id, getLocale(), deps.property, cursor)),
-    ]);
+    const [overview, links] = await awaitSubjectRoute(signal, () =>
+      Promise.all([
+        context.queryClient.fetchQuery(subjectPageQuery(params.id, getLocale(), 'overview')),
+        context.queryClient.ensureQueryData(subjectLinksQuery(params.id, getLocale(), deps.property, cursor)),
+      ]),
+    );
+    signal.throwIfAborted();
     if (links.status === 400) throw notFound();
     if (overview.kind === 'redirect') {
       if (overview.target === 'account')
         throw redirect(
           canonicalRedirect(accountHref(getLocale(), overview.id, 'relations'), location.searchStr, location.hash),
         );
-      const survivor = await context.queryClient.fetchQuery(subjectCanonicalQuery(overview.id, getLocale()));
+      const survivor = await readSubjectCanonicalQuery(
+        context.queryClient,
+        subjectCanonicalQuery(overview.id, getLocale()),
+        signal,
+      );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
         href: keepSearch(subjectUrlForView(survivor.value, 'relations'), location.searchStr, location.hash),
@@ -202,6 +231,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
       context.queryClient.ensureQueryData(subjectRelationsQuery([...properties], getLocale())),
     ]);
+    signal.throwIfAborted();
     return {
       configured: false as const,
       reader,
