@@ -6,8 +6,7 @@ import { readCurrentSubjectSummaries } from '../semantic/current-subject-summari
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SubjectSummary } from '../semantic/summaries.ts';
 import type { PresentationDependencies } from './collection-presentation.ts';
-import membersRead from './collection-preview-members.sql';
-import fencesRead from './collection-preview-fences.sql';
+import { collectionPreviewStatements } from './collection-directory-bounds.ts';
 
 export type CollectionPreview = {
   previewMembers: { subjectId: string; subject: SubjectSummary }[];
@@ -55,12 +54,8 @@ export async function readCollectionPreviews(
     source_generations: selected.map((parent) => parent.sourceGeneration),
     revisions: selected.map((parent) => parent.revision),
   };
-  const rows = await withReadTransaction(deps.pool, (client) =>
-    membersRead.run(deadlineClient(client, deadline), {
-      ...binding,
-      per_parent: quota,
-    }),
-  );
+  const plan = collectionPreviewStatements(binding, quota);
+  const rows = await withReadTransaction(deps.pool, (client) => plan.members.run(deadlineClient(client, deadline)));
   const originals = [
     ...new Set(rows.flatMap((row) => (row.subjectId && row.deletionId === null ? [row.subjectId] : []))),
   ];
@@ -87,9 +82,7 @@ export async function readCollectionPreviews(
   }
   await prepareUnresolved?.(result);
   await display.verify();
-  const current = await withReadTransaction(deps.pool, (client) =>
-    fencesRead.run(deadlineClient(client, deadline), binding),
-  );
+  const current = await withReadTransaction(deps.pool, (client) => plan.fences.run(deadlineClient(client, deadline)));
   const generations = new Map(current.map((row) => [row.collectionId, row.nativeGeneration]));
   if (
     selected.some((parent) => {

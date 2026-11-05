@@ -359,7 +359,33 @@ at most the requested positive pairs, including the sentinel. The declaration co
 rows, one seek/statement, original serialized binds, literal SQL and the escaped UUID/int4/timestamp projection.
 Empty results do not reduce the declaration. This SQL leaf has no identity, witness or Search producer.
 
-This is a leaf, not the complete reverse-discovery operation or a native grant. Subject resolution, maintained
-count, partition/currentness, repeated curator checks, connection controls and FULL disclosure still belong to the
-enclosing immutable operation. Count and pair observations remain independent; no atomic snapshot, refill or
-count recomputation is introduced. Directory/preview composition retains its existing callers and limits.
+The maintained-count declaration freezes its original Subject keys separately. Both leaves retain missing probes,
+SQL/bind/projection bytes and schema int4 widths. They do not construct identity evidence or call Search.
+Subject resolution, partition/currentness, repeated curator checks, connection controls and FULL disclosure remain
+enclosing work. Count and pair observations stay independent; no atomic snapshot, refill or recomputation is implied.
+
+## Collection directory and preview SQL
+
+Decision: keep mounted FULL hydration inside reader currentness; require partition evidence even on a short first
+directory or Subject page. The original deadline reaches hydration and terminal native reads. A disappeared parent
+retains current 404; a withdrawn positive Subject pair remains dependency unavailable. Curator/public-view changes,
+source incarnation changes and changed partition assignment cannot publish a previously assembled page.
+
+`collection-directory-bounds.ts` dispatches frozen operands at the existing native readers. Directory branches count
+both indexed candidate arms, their limits, append/order/final limit and scalar limit producers. The original
+remaining-slot limit includes the sentinel independently of returned/disclosed rows. Collection projections derive
+from 200/2000-character schema fields, UUID/int4/int8 widths and escaped timestamps; a presentation Type is bounded
+by its immutable Definitions release byte limit. These are SQL declarations, not complete operation reservations.
+
+Preview declarations freeze every parent-array operand once for the member and final fence batches. Their raw
+quota includes tombstones and repeated originals, before current Semantic display coalesces identities. Empty-parent
+outer rows, parent/fence points, member scan/limit/join/order and final generation reads are distinct producers.
+There is no retained preview preparation, refill, partial pending success, Search request, receipt or event in these
+SQL closures. Native generation comparison remains after display verification, followed by parent authorization.
+
+The enclosing immutable nine-axis operation still needs account/action/group/public-view admission, builtin
+discovery/presentation, both Subject resolution passes, Semantic/Content nested producers, response serialization,
+connection/transaction controls and terminal cleanup composed through existing execution owners. SQL-only zero
+engine requests does not establish that axis for the enclosing operation. Existing native ceilings and money
+guards remain authoritative; declarations supply no new allowance. The explicit eight/nine-axis owner translation
+must cover that enclosing composition rather than borrowing the unrelated ordinary Members page plan.

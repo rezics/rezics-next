@@ -772,18 +772,28 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           const { preview, ...options } = query;
           if (preview !== undefined && (query.view !== 'FULL' || (query.limit ?? 20) > 20))
             throw new ProblemError('invalid_request');
-          const page = await read().listCollections(
+          return read().listCollections(
             actor,
             {
               ...basicQuery(options),
               ...(query.ownerManagement === undefined ? {} : { ownerManagement: query.ownerManagement }),
             },
             preview === undefined ? undefined : { deadline: job.deadline },
+            {
+              deadline: job.deadline,
+              present: (page) =>
+                fullView(
+                  viewDependencies(),
+                  actor,
+                  query.view,
+                  {
+                    ...page,
+                    collections: page.collections.map(collectionReadView),
+                  },
+                  { deadline: job.deadline },
+                ),
+            },
           );
-          return fullView(viewDependencies(), actor, query.view, {
-            ...page,
-            collections: page.collections.map(collectionReadView),
-          });
         }),
     )
     .get(
@@ -805,14 +815,27 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () => {
-          const page = await read().listAccountCollections(actor, {
-            curatorAccountId: params.accountId,
-            ...basicQuery(query),
-          });
-          return fullView(viewDependencies(), actor, query.view, {
-            ...page,
-            collections: page.collections.map(collectionReadView),
-          });
+          return read().listAccountCollections(
+            actor,
+            {
+              curatorAccountId: params.accountId,
+              ...basicQuery(query),
+            },
+            {
+              deadline: job.deadline,
+              present: (page) =>
+                fullView(
+                  viewDependencies(),
+                  actor,
+                  query.view,
+                  {
+                    ...page,
+                    collections: page.collections.map(collectionReadView),
+                  },
+                  { deadline: job.deadline },
+                ),
+            },
+          );
         }),
     )
     .get(
@@ -1427,7 +1450,10 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () =>
-          fullView(viewDependencies(), actor, query.view, await read().listSubjectCollections(actor, params.id, query)),
+          read().listSubjectCollections(actor, params.id, query, {
+            deadline: job.deadline,
+            present: (page) => fullView(viewDependencies(), actor, query.view, page, { deadline: job.deadline }),
+          }),
         ),
     );
 }

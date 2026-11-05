@@ -25,6 +25,7 @@ import { testKernel, registerTestClient } from '../support/test-kernel.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { observeRetentionQueries } from './entry-retention-worker-runtime.ts';
 
 const owner = newId(0x6c31);
 const other = newId(0x6c31);
@@ -959,43 +960,149 @@ test('Subject BASIC and FULL continuations preserve the public Collection popula
     await add(shelf.id);
     await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
   }
+  const withheld = await collection('public', 'other');
+  await json(await request('POST', members(withheld.id), { subjectId }, 'other'), 201);
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: withheld.id });
+  const original = (await db.admin.query('SELECT public_views FROM access.account WHERE account_id=$1', [other]))
+    .rows[0]!;
+  await db.admin.query(
+    "UPDATE access.account SET public_views=jsonb_set(public_views,'{collections}','false') WHERE account_id=$1",
+    [other],
+  );
   const populations: string[][] = [];
-  for (const view of ['BASIC', 'FULL']) {
-    const url = `/v1/subjects/${subjectId}/collections?limit=1&view=${view}`;
-    let cursor: string | null = null;
-    const ids: string[] = [];
-    do {
-      const result: { collections: { id: string }[]; next: string | null; count: SubjectCollectionCount } = await json(
-        await request('GET', `${url}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, 'anonymous'),
-      );
-      expect(result.count.exact).toBe(true);
-      expect(result.count.value).toBeGreaterThanOrEqual(shelves.length);
-      ids.push(...result.collections.map(({ id }) => id));
-      if (cursor === null) {
-        expect(result.next).toBeString();
-        const foreignView = view === 'BASIC' ? 'FULL' : 'BASIC';
-        await problem(
-          await request(
-            'GET',
-            `/v1/subjects/${subjectId}/collections?limit=1&view=${foreignView}&cursor=${encodeURIComponent(result.next!)}`,
-          ),
-          400,
-          'invalid_cursor',
-        );
-        await problem(
-          await request(
-            'GET',
-            `/v1/subjects/${subjectId}/collections?limit=2&view=${view}&cursor=${encodeURIComponent(result.next!)}`,
-          ),
-          400,
-          'invalid_cursor',
-        );
-      }
-      cursor = result.next;
-    } while (cursor);
-    expect(ids).toEqual([...new Set(ids)].sort());
-    expect(ids).toEqual(expect.arrayContaining(shelves.map(({ id }) => id)));
-    populations.push(ids);
+  try {
+    for (const view of ['BASIC', 'FULL']) {
+      const url = `/v1/subjects/${subjectId}/collections?limit=1&view=${view}`;
+      let cursor: string | null = null;
+      const ids: string[] = [];
+      let emptyPages = 0;
+      do {
+        const result: { collections: { id: string }[]; next: string | null; count: SubjectCollectionCount } =
+          await json(
+            await request(
+              'GET',
+              `${url}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+              undefined,
+              'anonymous',
+            ),
+          );
+        expect(result.count.exact).toBe(true);
+        expect(result.count.value).toBeGreaterThanOrEqual(shelves.length);
+        if (!result.collections.length) emptyPages++;
+        ids.push(...result.collections.map(({ id }) => id));
+        if (cursor === null) {
+          expect(result.next).toBeString();
+          const foreignView = view === 'BASIC' ? 'FULL' : 'BASIC';
+          await problem(
+            await request(
+              'GET',
+              `/v1/subjects/${subjectId}/collections?limit=1&view=${foreignView}&cursor=${encodeURIComponent(result.next!)}`,
+            ),
+            400,
+            'invalid_cursor',
+          );
+          await problem(
+            await request(
+              'GET',
+              `/v1/subjects/${subjectId}/collections?limit=2&view=${view}&cursor=${encodeURIComponent(result.next!)}`,
+            ),
+            400,
+            'invalid_cursor',
+          );
+        }
+        cursor = result.next;
+      } while (cursor);
+      expect(ids).toEqual([...new Set(ids)].sort());
+      expect(ids).toEqual(expect.arrayContaining(shelves.map(({ id }) => id)));
+      expect(ids).not.toContain(withheld.id);
+      expect(emptyPages).toBeGreaterThan(0);
+      populations.push(ids);
+    }
+    expect(populations[0]).toEqual(populations[1]);
+  } finally {
+    await db.admin.query('UPDATE access.account SET public_views=$2 WHERE account_id=$1', [
+      other,
+      original.public_views,
+    ]);
   }
-  expect(populations[0]).toEqual(populations[1]);
+});
+
+test('FULL directory and Subject pages retain partition evidence through presentation, then recover', async () => {
+  const shelf = await collection('public');
+  await add(shelf.id);
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  let partition = routeOf(owner)! >> 4;
+  let original = (await db.admin.query('SELECT * FROM core.partition WHERE partition_no=$1', [partition])).rows[0]!;
+  let armed = false;
+  let removed = false;
+  await observeRetentionQueries(db.pool, async ({ sql }) => {
+    // This is the real FULL curator summary query, after the native page snapshot.
+    if (!armed || removed || !sql.includes('AS "avatarUrl"')) return;
+    removed = true;
+    const client = await db.admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL session_replication_role=replica');
+      await client.query('DELETE FROM core.partition WHERE partition_no=$1', [partition]);
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+  });
+  async function restore() {
+    await db.admin.query(
+      `INSERT INTO core.partition(partition_no,node,write_state,moved_to,epoch,position)
+       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (partition_no) DO NOTHING`,
+      [
+        original.partition_no,
+        original.node,
+        original.write_state,
+        original.moved_to,
+        original.epoch,
+        original.position,
+      ],
+    );
+  }
+  for (const url of [
+    `/v1/accounts/${owner}/collections?view=FULL&limit=100`,
+    `/v1/subjects/${subjectId}/collections?view=FULL&limit=100`,
+  ]) {
+    partition = routeOf(url.startsWith('/v1/subjects/') ? subjectId : owner)! >> 4;
+    original = (await db.admin.query('SELECT * FROM core.partition WHERE partition_no=$1', [partition])).rows[0]!;
+    expect((await request('GET', url, undefined, 'anonymous')).status).toBe(200);
+    armed = true;
+    removed = false;
+    try {
+      await problem(await request('GET', url, undefined, 'anonymous'), 503, 'partition_unavailable');
+      expect(removed).toBe(true);
+      // A short first page must also fail when the partition was already lost.
+      await problem(await request('GET', url, undefined, 'anonymous'), 503, 'partition_unavailable');
+    } finally {
+      armed = false;
+      await restore();
+    }
+    expect((await request('GET', url, undefined, 'anonymous')).status).toBe(200);
+  }
+});
+
+test('a Subject positive withdrawn during FULL presentation stays unavailable until native listing catches up', async () => {
+  const shelf = await collection('public');
+  await add(shelf.id);
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  let armed = true;
+  await observeRetentionQueries(db.pool, async ({ sql }) => {
+    if (!armed || !sql.includes('AS "avatarUrl"')) return;
+    armed = false;
+    await json(await request('PATCH', path(shelf.id), { revision: shelf.revision, visibility: 'private' }));
+  });
+  const url = `/v1/subjects/${subjectId}/collections?view=FULL&limit=100`;
+  try {
+    await problem(await request('GET', url, undefined, 'anonymous'), 503, 'dependency_unavailable');
+    expect(armed).toBe(false);
+  } finally {
+    armed = false;
+  }
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  const result = await json<{ collections: { id: string }[] }>(await request('GET', url, undefined, 'anonymous'));
+  expect(result.collections.map(({ id }) => id)).not.toContain(shelf.id);
 });

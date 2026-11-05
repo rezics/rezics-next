@@ -105,6 +105,47 @@ test('same-owner pending list preview remains read-only and does not reserve Mem
   expect(statements.some((sql) => /library\.members_preparation/i.test(sql))).toBe(false);
 }, 120_000);
 
+test('deleted and duplicate raw originals consume the preview prefix before current display', async () => {
+  const collection = await f.collection('public');
+  const subject = await f.createSubject('game', 'Repeated original beside a tombstone');
+  const deleted = await f.append(collection.id, subject);
+  await f.populate(collection.id, Array<string>(99).fill(subject));
+  const current = await f.send(f.previewOwner.bearer, 'GET', `/v1/collections/${collection.id}`);
+  const revision = ((await current.json()) as { collection: { revision: number } }).collection.revision;
+  expect(
+    (
+      await f.send(
+        f.previewOwner.bearer,
+        'DELETE',
+        `/v1/collections/${collection.id}/members/${deleted}?revision=${revision}`,
+      )
+    ).status,
+  ).toBe(204);
+  let reading = true;
+  const raw: { deletionId: string | null }[] = [];
+  await observeRetentionQueries(f.pool, ({ sql, result }) => {
+    if (reading && sql.includes('WITH ORDINALITY AS requested')) raw.push(...result.rows);
+  });
+  const page = await f.page('anonymous', '&view=FULL&preview=3&limit=1').finally(() => {
+    reading = false;
+  });
+  const row = page.collections[0]!;
+  expect(row.id).toBe(collection.id);
+  expect(row.previewStatus).toBe('pending');
+  expect(row.previewMembers).toEqual([]);
+  expect(raw).toHaveLength(100);
+  expect(raw.filter((original) => original.deletionId !== null)).toHaveLength(1);
+  const second = await f.createSubject('game', 'Second disclosed member');
+  const third = await f.createSubject('game', 'Third disclosed member');
+  await f.append(collection.id, second);
+  await f.append(collection.id, third);
+  expectReadyPreview((await f.page('anonymous', '&view=FULL&preview=3&limit=1')).collections[0], [
+    third,
+    second,
+    subject,
+  ]);
+}, 120_000);
+
 test('a changed native source during summary projection returns typed unavailable', async () => {
   const collection = await f.collection('public');
   const subject = await f.createSubject('game', 'Preview source changes during projection');

@@ -1,5 +1,6 @@
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import page from './listing-page.sql';
+import counts from './listing-counts.sql';
 
 // listing.ts has already admitted a numeric helper limit; PostgreSQL's generic
 // LIMIT bind also accepts string/bigint, which are not this caller's contract.
@@ -71,4 +72,41 @@ export function executeSubjectCollectionPairs(
   plan: SubjectCollectionPairPlan,
 ): ReturnType<typeof page.run> {
   return page.run(client, plan.input);
+}
+
+/** Maintained public-pair counts are independent observations, never a visible-row recomputation. */
+export function subjectCollectionCountPlan(input: Parameters<typeof counts.run>[1]) {
+  const original = Object.freeze({ ...input, subject_ids: Object.freeze([...input.subject_ids]) });
+  const keys = original.subject_ids.length;
+  const total = sumBounds(
+    declareBound({
+      candidateKeys: keys,
+      // unnest, full-key point, LIMIT and lateral join per requested Subject.
+      nativeRows: 4 * keys,
+      identityMetadataRows: 0,
+      nativePoints: keys,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: 0,
+      emptySeeks: keys,
+      engineRequests: 0,
+    }),
+    bytes(Buffer.byteLength(counts.sql) + Buffer.byteLength(JSON.stringify(original)) + 2),
+    repeatBound(
+      bytes(
+        Buffer.byteLength(
+          JSON.stringify({
+            subjectId: 'f'.repeat(36),
+            publicCollectionCount: -2147483648,
+          }),
+        ) + 1,
+      ),
+      keys,
+    ),
+  );
+  return Object.freeze({
+    input: original,
+    total,
+    run: (client: Parameters<typeof counts.run>[0]) => counts.run(client, original),
+  });
 }
