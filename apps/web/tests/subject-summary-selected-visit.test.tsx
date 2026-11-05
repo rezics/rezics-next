@@ -272,7 +272,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(
       synopsisVisitHref(
         `${href}/authored`,
-        `${href}${summaryReadingFragment({ ...selection, documentId: '字'.repeat(100), context: candidateContext })}`,
+        `${href}${summaryReadingFragment({ ...selection, documentId: '字'.repeat(140), context: candidateContext })}`,
         'en',
       ),
     ).toBeUndefined();
