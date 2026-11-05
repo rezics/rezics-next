@@ -109,35 +109,112 @@ test('four real provider review/apply paths retain their requested, canonical, v
       };
       let outcome: unknown;
       if (provider === 'vndb') {
-        const upload = await request(':preview', { xml: '<vndb-export version="1.0" uid="u1"><vns><vn id="v42"><vote>8</vote></vn></vns></vndb-export>' });
-        const review = await request(`/${upload.uploadId}:review`, { ordinal: 0, action: 'score', targetId: requested, questionId: STANDARD_QUESTION_ID, questionRevision: 1, selection: { kind: 'vote', units: 16 }, consent: 'adopt-native-vote' });
+        const upload = await request(':preview', {
+          xml: '<vndb-export version="1.0" uid="u1"><vns><vn id="v42"><vote>8</vote></vn></vns></vndb-export>',
+        });
+        const review = await request(`/${upload.uploadId}:review`, {
+          ordinal: 0,
+          action: 'score',
+          targetId: requested,
+          questionId: STANDARD_QUESTION_ID,
+          questionRevision: 1,
+          selection: { kind: 'vote', units: 16 },
+          consent: 'adopt-native-vote',
+        });
         expect(review).toMatchObject({ status: 'reviewed', units: 16 });
-        outcome = (await request(`/${upload.uploadId}:apply`, { rows: [{ ordinal: 0, scoreReviewId: review.reviewId }] })).outcomes[0];
+        outcome = (
+          await request(`/${upload.uploadId}:apply`, { rows: [{ ordinal: 0, scoreReviewId: review.reviewId }] })
+        ).outcomes[0];
       } else if (provider === 'bangumi') {
-        const upload = await request(':preview', { upload: JSON.stringify({ format: 'rezics.bangumi-collection.v1', collections: [{ subject_id: 42, subject_type: 4, type: 1, rate: 8 }] }) });
-        const { review } = await request(`/${upload.uploadId}:review`, { ordinal: 0, target: requested, score: { action: 'set', units: 16 } });
+        const upload = await request(':preview', {
+          upload: JSON.stringify({
+            format: 'rezics.bangumi-collection.v1',
+            collections: [{ subject_id: 42, subject_type: 4, type: 1, rate: 8 }],
+          }),
+        });
+        const { review } = await request(`/${upload.uploadId}:review`, {
+          ordinal: 0,
+          target: requested,
+          score: { action: 'set', units: 16 },
+        });
         expect(review.score.native.questionId).toBe(STANDARD_QUESTION_ID);
-        outcome = (await request(`/${upload.uploadId}:apply`, { rows: [{ ordinal: 0, reviewToken: review.token, state: 'omit', skip: false, score: { action: 'set', units: 16, consent: true } }] })).outcomes[0].score;
+        outcome = (
+          await request(`/${upload.uploadId}:apply`, {
+            rows: [
+              {
+                ordinal: 0,
+                reviewToken: review.token,
+                state: 'omit',
+                skip: false,
+                score: { action: 'set', units: 16, consent: true },
+              },
+            ],
+          })
+        ).outcomes[0].score;
       } else if (provider === 'mal') {
-        const upload = await request(':preview', { xml: '<myanimelist><anime><series_animedb_id>42</series_animedb_id><my_status>Completed</my_status><my_score>8</my_score></anime></myanimelist>' });
+        const upload = await request(':preview', {
+          xml: '<myanimelist><anime><series_animedb_id>42</series_animedb_id><my_status>Completed</my_status><my_score>8</my_score></anime></myanimelist>',
+        });
         const version = randomUUID();
-        await request(`/${upload.id}/review`, { row: 0, target: requested, skip: false, replace: false, score: { action: 'adopt', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 } }, version);
-        outcome = (await request(`/${upload.id}/apply`, { confirm: true, rows: [{ row: 0, version, fields: ['score'] }] })).outcomes[0].score;
+        await request(
+          `/${upload.id}/review`,
+          {
+            row: 0,
+            target: requested,
+            skip: false,
+            replace: false,
+            score: { action: 'adopt', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
+          },
+          version,
+        );
+        outcome = (
+          await request(`/${upload.id}/apply`, { confirm: true, rows: [{ row: 0, version, fields: ['score'] }] })
+        ).outcomes[0].score;
       } else {
-        const upload = await request(':preview', { upload: JSON.stringify([{ mediaId: 42, score: 8 }]), scoreFormat: 'POINT_10' });
-        const { review } = await request(`/${upload.id}:review`, { ordinal: 0, subjectId: requested, fields: [], replace: false, score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 } });
+        const upload = await request(':preview', {
+          upload: JSON.stringify([{ mediaId: 42, score: 8 }]),
+          scoreFormat: 'POINT_10',
+        });
+        const { review } = await request(`/${upload.id}:review`, {
+          ordinal: 0,
+          subjectId: requested,
+          fields: [],
+          replace: false,
+          score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
+        });
         expect(review.score.native.guard.subject.canonicalId).toBe(requested);
-        outcome = (await request(`/${upload.id}:apply`, { confirmations: [{ ordinal: 0, reviewId: review.id, confirmNativeVoteEffects: true }] })).outcomes[0].score;
+        outcome = (
+          await request(`/${upload.id}:apply`, {
+            confirmations: [{ ordinal: 0, reviewId: review.id, confirmNativeVoteEffects: true }],
+          })
+        ).outcomes[0].score;
       }
       expect(outcome).toMatchObject({ status: 'unavailable' });
       const native = await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, requested);
-      const review = await readIdentityRatingReview(f.pool, { requestedOriginalId: requested, canonicalTerminalId: native.guard.subject.canonicalId, deadline: Date.now() + 5000 });
+      const review = await readIdentityRatingReview(f.pool, {
+        requestedOriginalId: requested,
+        canonicalTerminalId: native.guard.subject.canonicalId,
+        deadline: Date.now() + 5000,
+      });
       if (review.state !== 'reviewed') throw new Error(`Provider ${provider}: ${review.state}`);
       const commandHome = partitionOf(routeOf(caller.actor.accountId)!);
       const participant = createIdentityRatingCommitParticipant();
-      await expect(runCommand(f.pool, { partition: commandHome }, async (tx) => noEffect(await participant.admit(tx, participant.prepare(review.operand)))))
-        .rejects.toMatchObject({ reason: 'atomic_guard_unavailable', identityState: 'foreign-control' });
-      tuples.push({ provider, requested, canonical: native.guard.subject.canonicalId, question: STANDARD_QUESTION_ID, questionHome: partitionOf(routeOf(STANDARD_QUESTION_ID)!), voter: caller.actor.accountId, commandHome, sourceHomes: review.operand.sourceHomes, controls: review.operand.controlLocators });
+      await expect(
+        runCommand(f.pool, { partition: commandHome }, async (tx) =>
+          noEffect(await participant.admit(tx, participant.prepare(review.operand))),
+        ),
+      ).rejects.toMatchObject({ reason: 'atomic_guard_unavailable', identityState: 'foreign-control' });
+      tuples.push({
+        provider,
+        requested,
+        canonical: native.guard.subject.canonicalId,
+        question: STANDARD_QUESTION_ID,
+        questionHome: partitionOf(routeOf(STANDARD_QUESTION_ID)!),
+        voter: caller.actor.accountId,
+        commandHome,
+        sourceHomes: review.operand.sourceHomes,
+        controls: review.operand.controlLocators,
+      });
       expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toBeNull();
     }
     console.info('Native provider Rating caller tuples', tuples);
@@ -153,20 +230,60 @@ test('persisted control replacement invalidates the exact review without changin
     const selected = await reviewedSelf(f, 0x5d30);
     const participant = createIdentityRatingCommitParticipant();
     const prepared = participant.prepare(selected.operand);
-    const before = (await f.admin.query('SELECT epoch FROM semantic.identity_epoch_mapping WHERE original=$1', [selected.subjectId])).rows;
-    // Fault injection represents a released replacement of the selected native directory.
-    // The requested/canonical pair and mapping epoch deliberately remain identical.
-    await f.admin.query('UPDATE semantic.identity_epoch_group SET generation=$3 WHERE partition_no=$1 AND terminal=$2', [selected.home, selected.subjectId, randomUUID()]);
-    await expect(runCommand(f.pool, { partition: selected.home }, async (tx) => noEffect(await participant.admit(tx, prepared))))
-      .rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
-    expect((await f.admin.query('SELECT epoch FROM semantic.identity_epoch_mapping WHERE original=$1', [selected.subjectId])).rows).toEqual(before);
+    const before = (
+      await f.admin.query('SELECT epoch FROM semantic.identity_epoch_mapping WHERE original=$1', [selected.subjectId])
+    ).rows;
+    // Imported replacement/ABA cuts keep the pair and mapping epoch identical.
+    // Restore only the test's fault injection between independent witnesses.
+    for (const [table, column, where, keys] of [
+      ['core.partition', 'epoch', 'partition_no=$1', [selected.home]],
+      [
+        'semantic.identity_epoch_group',
+        'generation',
+        'partition_no=$1 AND terminal=$2',
+        [selected.home, selected.subjectId],
+      ],
+      [
+        'semantic.identity_epoch_group',
+        'closure_incarnation',
+        'partition_no=$1 AND terminal=$2',
+        [selected.home, selected.subjectId],
+      ],
+      [
+        'semantic.identity_epoch_original',
+        'closure_registration_transaction',
+        'partition_no=$1 AND original=$2 AND present',
+        [selected.home, selected.subjectId],
+      ],
+    ] as const) {
+      const previous = (await f.admin.query(`SELECT ${column} AS value FROM ${table} WHERE ${where}`, [...keys]))
+        .rows[0]!.value;
+      const replacement = column === 'epoch' ? Number(previous) + 2 : randomUUID();
+      await f.admin.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, replacement]);
+      try {
+        await expect(
+          runCommand(f.pool, { partition: selected.home }, async (tx) =>
+            noEffect(await participant.admit(tx, prepared)),
+          ),
+        ).rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
+      } finally {
+        await f.admin.query(`UPDATE ${table} SET ${column}=$${keys.length + 1} WHERE ${where}`, [...keys, previous]);
+      }
+    }
+    expect(
+      (await f.admin.query('SELECT epoch FROM semantic.identity_epoch_mapping WHERE original=$1', [selected.subjectId]))
+        .rows,
+    ).toEqual(before);
   } finally {
     await f.close();
   }
 }, 180_000);
 
 /** Limit only this attempt's actual native writer, without changing its SQL or executor. */
-async function contendedWriter(f: Awaited<ReturnType<typeof createIdentityMappingFixture>>, write: () => Promise<unknown>) {
+async function contendedWriter(
+  f: Awaited<ReturnType<typeof createIdentityMappingFixture>>,
+  write: () => Promise<unknown>,
+) {
   const originals = new Map<PoolClient, PoolClient['query']>();
   const acquire = (client: PoolClient) => {
     if (originals.has(client)) return;
@@ -229,8 +346,9 @@ test('real admission, mapping, dirty capture and terminal closure cannot commit 
     await held(() => stepIdentityEpochBootstrap(f.pool, selected.home), true);
     const claim = randomUUID();
     await held(() => drainIdentityTerminalClosure(f.pool, selected.subjectId, claim), false);
-    await expect(runCommand(f.pool, { partition: selected.home }, async (tx) => noEffect(await participant.admit(tx, prepared))))
-      .rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
+    await expect(
+      runCommand(f.pool, { partition: selected.home }, async (tx) => noEffect(await participant.admit(tx, prepared))),
+    ).rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
   } finally {
     await f.close();
   }

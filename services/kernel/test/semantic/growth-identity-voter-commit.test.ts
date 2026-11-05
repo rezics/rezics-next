@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { randomUUID } from 'node:crypto';
-import { cancelIdentityEpochAdmission, stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
+import {
+  cancelIdentityEpochAdmission,
+  stepIdentityEpochAdmission,
+} from '../../src/semantic/identity-epoch-admission.ts';
 import { release } from './support/identity-epoch.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
@@ -25,7 +28,12 @@ test('review and held identity costs stay fixed as unrelated native identities g
     const home = partitionOf(routeOf(subjectId)!);
     const historyOriginal = (await f.create('Unrelated job original', route)).id;
     const historySurvivor = (await f.create('Unrelated job survivor', route)).id;
-    const history = await f.prepare({ kind: 'merge', redirected: historyOriginal, survivor: historySurvivor, release: release.digest });
+    const history = await f.prepare({
+      kind: 'merge',
+      redirected: historyOriginal,
+      survivor: historySurvivor,
+      release: release.digest,
+    });
     await cancelIdentityEpochAdmission(db.pool, history);
     for (let step = 0; step < 16; step++) {
       if ((await stepIdentityEpochAdmission(db.pool, history)).state === 'cancelled') break;
@@ -61,19 +69,23 @@ test('review and held identity costs stay fixed as unrelated native identities g
         for (let n = previous; n < scale; n++) await f.create(`Unrelated rating identity ${n}`, route);
         // Retained noncurrent directory generations at the selected key must not
         // turn a point review into a history scan. Current evidence stays fixed.
-        await db.admin.query(`INSERT INTO semantic.identity_epoch_original
+        await db.admin.query(
+          `INSERT INTO semantic.identity_epoch_original
           (partition_no,generation,original,terminal,source_partition,source_generation,present)
           SELECT $1,generation,$2,$2,$1,1,false FROM unnest($3::uuid[]) generation`,
-          [home, subjectId, Array.from({ length: scale - previous }, () => randomUUID())]);
+          [home, subjectId, Array.from({ length: scale - previous }, () => randomUUID())],
+        );
         // Clone a genuine cancelled record as imported retained history; no row
         // can claim a current group, native receipt or successful publication.
-        await db.admin.query(`INSERT INTO semantic.identity_epoch_job
+        await db.admin.query(
+          `INSERT INTO semantic.identity_epoch_job
           SELECT (jsonb_populate_record(NULL::semantic.identity_epoch_job,
             to_jsonb(j) || jsonb_build_object('job_id',gen_random_uuid(),'epoch',n,
               'receipt_key',gen_random_uuid()::text))).*
           FROM semantic.identity_epoch_job j CROSS JOIN generate_series($3::bigint,$4::bigint) n
           WHERE j.partition_no=$1 AND j.job_id=$2`,
-          [home, history.jobId, 100000 + previous, 99999 + scale]);
+          [home, history.jobId, 100000 + previous, 99999 + scale],
+        );
       },
       operation,
       async verify(_database, _scale, _repetition, value) {
@@ -90,7 +102,10 @@ test('review and held identity costs stay fixed as unrelated native identities g
       expect(entry.cost.responseBytes).toBeLessThan(16_384);
       for (const backends of entry.backendRepetitions ?? []) expect(new Set(backends).size).toBeLessThanOrEqual(1);
     }
-    console.info('Native identity selected history costs', report.samples.map(({ scale, cost }) => ({ scale, ...cost })));
+    console.info(
+      'Native identity selected history costs',
+      report.samples.map(({ scale, cost }) => ({ scale, ...cost })),
+    );
   } finally {
     await f.close();
     await db.close();
