@@ -5,15 +5,17 @@ import { peopleBiographyRequested } from '../people-biography';
 
 export type PersonDefinitions = Pick<Release, 'types' | 'properties'>;
 export type PersonStatement = SubjectRead['subject']['statements'][string][number];
+export type PersonField = {
+  id: string;
+  label: ReturnType<typeof pickText>;
+  facts: PersonStatement[];
+  more: boolean;
+  presentable: boolean;
+  admitted: boolean;
+};
 export type PersonGroup = {
   kind: keyof typeof peopleBiographyRequested;
-  fields: {
-    id: string;
-    label: ReturnType<typeof pickText>;
-    facts: PersonStatement[];
-    more: boolean;
-    presentable: boolean;
-  }[];
+  fields: PersonField[];
   more: boolean;
 };
 export const personBounds = { fields: 15, facts: 20, qualifiers: 32, references: 32, parts: 32 };
@@ -50,7 +52,12 @@ export function personScalarFields(release: PersonDefinitions, read: SubjectRead
 }
 
 /** Select current native rank and document language once for each displayed field. */
-export function profileFields(release: PersonDefinitions, read: SubjectRead, ids: readonly string[], locale: string) {
+export function profileFields(
+  release: PersonDefinitions,
+  read: SubjectRead,
+  ids: readonly string[],
+  locale: string,
+): PersonField[] {
   const admitted = release.types[read.subject.type]?.properties ?? [];
   return ids
     .filter((id) => admitted.includes(id) && release.properties[id])
@@ -61,33 +68,45 @@ export function profileFields(release: PersonDefinitions, read: SubjectRead, ids
         id,
         label: pickText(release.properties[id]?.labels ?? {}, locale),
         presentable: true,
+        admitted: true,
         facts: facts.slice(0, personBounds.facts),
         more: facts.length > personBounds.facts,
       };
     });
 }
 
-/** Only emitted effective properties confer support. Credits never supply occupation facts. */
+/** Requested biography fields stay named even when this release does not admit them. Credits never supply occupation facts. */
 export function personGroups(release: PersonDefinitions, read: SubjectRead, locale: string): PersonGroup[] {
   if (read.subject.type !== 'schema:Person') return [];
   const admitted = release.types[read.subject.type]?.properties ?? [];
   const kinds: PersonGroup['kind'][] = ['biography', 'occupations', 'languages'];
   return kinds.map((kind) => {
     const requested: readonly string[] = peopleBiographyRequested[kind];
-    const ids =
-      kind === 'biography'
-        ? [...new Set([...requested, ...admitted.filter((id) => release.properties[id]?.datatype === 'document')])]
-        : requested;
+    const extra =
+      kind === 'biography' ? admitted.filter((id) => release.properties[id]?.datatype === 'document') : [];
+    const ids = [...new Set([...requested, ...extra])];
     const supported = ids.filter((id) => admitted.includes(id) && release.properties[id]);
     return {
       kind,
       more: supported.length > personBounds.fields,
-      fields: profileFields(release, read, supported, locale).map((field) => {
+      fields: ids.slice(0, personBounds.fields).map((id) => {
+        const definition = admitted.includes(id) ? release.properties[id] : undefined;
+        if (!definition) {
+          return {
+            id,
+            label: pickText(release.properties[id]?.labels ?? {}, locale),
+            presentable: false,
+            admitted: false,
+            facts: [],
+            more: false,
+          };
+        }
+        const [field] = profileFields(release, read, [id], locale);
         return {
-          ...field,
+          ...field!,
           presentable:
-            field.id === 'wdt:P106' ||
-            release.properties[field.id]?.datatype === (kind === 'biography' ? 'document' : 'wikibase-item'),
+            field!.id === 'wdt:P106' ||
+            definition.datatype === (kind === 'biography' ? 'document' : 'wikibase-item'),
         };
       }),
     };
