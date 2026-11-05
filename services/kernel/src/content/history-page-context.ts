@@ -334,9 +334,7 @@ async function readHistoryActions(
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
   }
-  const refs: HistoryActionReference[] = [
-    { type: 'content.thread', id: thread.id },
-  ];
+  const refs: HistoryActionReference[] = [{ type: 'content.thread', id: thread.id }];
   if ('revisionId' in head && head.availability === 'available')
     refs.push({ type: 'content.post', id: head.id, sourceRevisionId: head.revisionId });
   if (

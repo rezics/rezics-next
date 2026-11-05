@@ -496,7 +496,9 @@ export async function claimReviewGrowthFixture() {
       expect(await listAt(100, filteredDeep.next!, 'reviewer', growthKernel)).toEqual(expectedPage([], null));
       const filteredOne = await listAt(1, undefined, 'reviewer', growthKernel);
       expect(filteredOne).toEqual(expectedPage([], expect.any(String)));
-      expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual(expectedPage([], expect.any(String)));
+      expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual(
+        expectedPage([], expect.any(String)),
+      );
       await setReviewTime(2);
       expect(await listAt(100, filtered.next!, 'reviewer', growthKernel)).toEqual(
         expectedPage(expected.slice(20), expect.any(String)),

@@ -115,7 +115,9 @@ test('registered owner erasure supplies the original episode and native HTTP req
 
     await fixture.revokeDuringList();
     await fixture.rejectedList('not_found', 'reviewer');
-    expect(await fixture.list(100, undefined, 'control')).toEqual(reviewPageResult(expected.slice(0, 20), expect.any(String)));
+    expect(await fixture.list(100, undefined, 'control')).toEqual(
+      reviewPageResult(expected.slice(0, 20), expect.any(String)),
+    );
 
     // Each pressure axis is grown alone. The real registered Kernel route,
     // production Access, native cursor, and shared growth classifier stay in

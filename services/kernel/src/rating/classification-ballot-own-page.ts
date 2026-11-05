@@ -72,32 +72,32 @@ type PageItemCommon = {
 type PageItem = PageItemCommon &
   (
     | {
-      state: 'available';
-      subject: { id: string; type: string; label: string | null; href: string };
-      target: { id: string; type: string; label: string | null; href: string };
-      association: {
-    subjectId: string;
-    associationId: string;
-    slotId: string;
-    property: string;
-    targetId: string;
-    contextId: typeof GLOBAL_CONTEXT;
-    origin: 'global';
-    release: string;
-    revision: number;
-    bindingHash: string;
-    statementDigest: string;
-    qualifiersDigest: string;
-      };
-      aggregate: ReturnType<typeof classificationAggregateView> | null;
-    }
+        state: 'available';
+        subject: { id: string; type: string; label: string | null; href: string };
+        target: { id: string; type: string; label: string | null; href: string };
+        association: {
+          subjectId: string;
+          associationId: string;
+          slotId: string;
+          property: string;
+          targetId: string;
+          contextId: typeof GLOBAL_CONTEXT;
+          origin: 'global';
+          release: string;
+          revision: number;
+          bindingHash: string;
+          statementDigest: string;
+          qualifiersDigest: string;
+        };
+        aggregate: ReturnType<typeof classificationAggregateView> | null;
+      }
     | {
-      state: 'withheld';
-      subject: null;
-      target: null;
-      association: null;
-      aggregate: null;
-    }
+        state: 'withheld';
+        subject: null;
+        target: null;
+        association: null;
+        aggregate: null;
+      }
   );
 export type ClassificationBallotOwnPage = {
   viewer: { accountId: string };
