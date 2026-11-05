@@ -274,7 +274,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     expect(first.status).toBe('imported-with-gaps');
     expect(first.converterRevision).toBe(converter_revision);
     expect(first.tagWeightObservations[0]).toMatchObject({ workId: 'v410', state: 'available' });
-    expect(first.bindings.concepts.map((item) => item.code).sort()).toEqual(['g311', 'g44']);
+    expect(first.bindings.concepts.map((item) => item.code).sort()).toEqual(['g12', 'g311', 'g44']);
     expect(
       recorded
         .filter((item) => item.state === 'adopted')
