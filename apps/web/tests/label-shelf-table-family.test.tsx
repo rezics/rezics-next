@@ -299,7 +299,13 @@ test('received-assignment reading keeps exact supplied values, bounded compariso
         locator: null,
       },
     },
-    { id: 'concealed', labelId: label.id, subjectId: 'unavailable', revision: 1, subject: null },
+    {
+      id: 'concealed',
+      labelId: label.id,
+      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000009999',
+      revision: 1,
+      subject: null,
+    },
   ].map((row) => ({ ...row, workContext: prepareShelfWorkContext(row, contextExampleRelease, 'en') }));
   const source = { observation: {}, entries: rows, label, locale: 'en', isCurrent: () => true };
   const visit = current.captureReceivedVisit(source);
