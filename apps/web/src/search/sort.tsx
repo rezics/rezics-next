@@ -1,6 +1,5 @@
 import type { SearchLoaderDeps } from './search-params';
 import { discoverySearchHref, searchFormFields } from './search-params';
-import { useRouter } from '@tanstack/react-router';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -17,14 +16,13 @@ export function searchSortHref(
   ratingPopulation?: string | null,
 ): string {
   const next = changeRatingOrder(state, sort, ratingPopulation);
-  const [path, search] = discoverySearchHref(locale, { ...state, ...next }).split('?');
-  const searchParams = new URLSearchParams(search);
-  searchParams.delete('ratingPopulation');
-  if (next.ratingPopulation) searchParams.set('ratingPopulation', next.ratingPopulation);
-  return `${path}${searchParams.size ? `?${searchParams}` : ''}`;
+  return discoverySearchHref(locale, { ...state, ...next, ratingPopulation: next.ratingPopulation });
 }
 
-/** A single search sort selector that preserves the query and filters while starting a fresh cursor. */
+/** Native GET owns application and recovery, including when JavaScript is available.
+ * The form holds a pending pair until deliberate submission; no field change navigates.
+ * Replacing the executed observation remounts its controls, permanently retiring old edits.
+ */
 export function SearchSort({
   sort,
   locale,
@@ -51,12 +49,11 @@ export function SearchSort({
   ratingReadiness?: RealmRatingReadiness | undefined;
   disabled?: boolean;
 }) {
-  // The selector also supports static form rendering outside the connected application.
-  const router = useRouter({ warn: false });
   const sortId = useId();
   const messageLocale = { locale: locale as never };
   return (
     <form
+      key={JSON.stringify([locale, state, query, type, facets, sort, ratingPopulation, ratingPopulations, ratingReadiness, disabled])}
       method="get"
       action={`/${locale}/search`}
       className="grid w-full min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,24rem)_auto] sm:justify-end"
@@ -69,26 +66,8 @@ export function SearchSort({
           id={sortId}
           name={disabled ? undefined : 'sort'}
           disabled={disabled}
-          value={sort === 'rating' ? 'rating' : ''}
+          defaultValue={sort === 'rating' ? 'rating' : ''}
           className="w-full min-w-0 [&_select]:block [&_select]:min-h-11"
-          onChange={(event) => {
-            void router?.navigate({
-              href: searchSortHref(
-                locale,
-                {
-                  ...state,
-                  query,
-                  type,
-                  facets,
-                  cursor: state?.cursor,
-                  sort: sort === 'rating' ? 'rating' : undefined,
-                  ratingPopulation,
-                },
-                event.currentTarget.value === 'rating' ? 'rating' : 'relevance',
-                ratingPopulation,
-              ),
-            });
-          }}
         >
           <NativeSelectOption value="">{m.search_sort_relevance({}, messageLocale)}</NativeSelectOption>
           <NativeSelectOption value="rating">{m.search_sort_rating({}, messageLocale)}</NativeSelectOption>
@@ -121,6 +100,7 @@ export function SearchSort({
           kinds: state.kinds,
           language: state.languages,
           filter: state.filter,
+          resourceScope: state.resourceScope,
           condition: state.condition ? JSON.stringify(state.condition) : undefined,
           ...Object.fromEntries(
             Object.entries(state.ranges ?? {}).map(([property, range]) => [`r.${property}`, JSON.stringify(range)]),

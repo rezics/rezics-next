@@ -67,6 +67,12 @@ Keyed-template removal confirmation binds to the reviewed keyed entry and its ed
 or reader/visit retirement retires it, while equivalent rerenders and unrelated sibling changes keep a still-valid
 intention.
 
+Search rating order and population are one pending native GET pair, applied only by Submit in both hydrated and
+unhydrated visits. A field change never dispatches. Application starts a first traversal, retaining every other
+executed operand; an unchanged submission retains ordinary native GET canonicalization. Request, reader, locale
+or native rating-advice replacement retires pending edits. Recovery links always restart the exact executed pair,
+using native readiness without promoting missing adapters or replacing an unlisted committed population.
+
 ## Ownership
 
 Owns `services/kernel/{src,db,test}/search/**`, OpenSearch development setup,

@@ -969,6 +969,7 @@ export function SearchPage({
   const retryFocus = useSearchRetryFocus({ scope: stateKey, locale, session }, data?.recovery?.status !== 'loading');
   const results = (
     <SearchResultsRegion
+      key={JSON.stringify([stateKey, locale, session])}
       query={query}
       result={result}
       locale={locale}
