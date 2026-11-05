@@ -10713,5 +10713,8 @@
   "identifiers_origin_changed": "The selected Realm no longer resolves to the same Context for this subject. Earlier values are not shown.",
   "identifiers_origin_missing": "The selected Realm reading is no longer available for this subject.",
   "identifiers_origin_refused": "The selected Realm reading could not be accessed. Its values are not shown.",
-  "identifiers_origin_unavailable": "The selected Realm reading is temporarily unavailable. Its values are not shown."
+  "identifiers_origin_unavailable": "The selected Realm reading is temporarily unavailable. Its values are not shown.",
+  "character_visit_context": "Selected Context: {context}",
+  "character_visit_unsupported": "This Character reading is admitted, but correction and candidate review are available only in Global.",
+  "character_visit_global": "Open a separate Global Character correction"
 }

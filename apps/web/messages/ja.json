@@ -10620,5 +10620,8 @@
   "identifiers_origin_changed": "この Subject の選択 Realm は、同じ Context に解決されなくなりました。以前の値は表示しません。",
   "identifiers_origin_missing": "この Subject の選択 Realm 読み取りは利用できなくなりました。",
   "identifiers_origin_refused": "選択した Realm 読み取りにアクセスできなかったため、値は表示しません。",
-  "identifiers_origin_unavailable": "選択した Realm 読み取りは一時的に利用できないため、値は表示しません。"
+  "identifiers_origin_unavailable": "選択した Realm 読み取りは一時的に利用できないため、値は表示しません。",
+  "character_visit_context": "選択中のコンテキスト: {context}",
+  "character_visit_unsupported": "このキャラクターの読み取りは利用できますが、修正と候補の確認はGlobalのみ対応しています。",
+  "character_visit_global": "Globalで別のキャラクター修正を開く"
 }

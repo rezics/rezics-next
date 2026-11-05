@@ -10526,5 +10526,8 @@
   "identifiers_origin_changed": "Le Realm sélectionné ne résout plus vers le même Context pour ce sujet. Les anciennes valeurs ne sont pas affichées.",
   "identifiers_origin_missing": "La lecture du Realm sélectionné n’est plus disponible pour ce sujet.",
   "identifiers_origin_refused": "La lecture du Realm sélectionné est inaccessible. Ses valeurs ne sont pas affichées.",
-  "identifiers_origin_unavailable": "La lecture du Realm sélectionné est temporairement indisponible. Ses valeurs ne sont pas affichées."
+  "identifiers_origin_unavailable": "La lecture du Realm sélectionné est temporairement indisponible. Ses valeurs ne sont pas affichées.",
+  "character_visit_context": "Contexte sélectionné : {context}",
+  "character_visit_unsupported": "Cette lecture du personnage est disponible, mais la correction et l’examen des propositions ne sont disponibles que dans Global.",
+  "character_visit_global": "Ouvrir une correction distincte du personnage dans Global"
 }

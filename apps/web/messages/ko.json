@@ -10526,5 +10526,8 @@
   "identifiers_origin_changed": "이 항목의 선택한 Realm이 더 이상 같은 Context로 확인되지 않습니다. 이전 값은 표시하지 않습니다.",
   "identifiers_origin_missing": "이 항목의 선택한 Realm 읽기를 더 이상 사용할 수 없습니다.",
   "identifiers_origin_refused": "선택한 Realm 읽기에 접근할 수 없어 값을 표시하지 않습니다.",
-  "identifiers_origin_unavailable": "선택한 Realm 읽기를 일시적으로 사용할 수 없어 값을 표시하지 않습니다."
+  "identifiers_origin_unavailable": "선택한 Realm 읽기를 일시적으로 사용할 수 없어 값을 표시하지 않습니다.",
+  "character_visit_context": "선택한 컨텍스트: {context}",
+  "character_visit_unsupported": "이 캐릭터 읽기는 사용할 수 있지만 수정과 후보 검토는 Global에서만 지원합니다.",
+  "character_visit_global": "Global에서 별도의 캐릭터 수정 열기"
 }

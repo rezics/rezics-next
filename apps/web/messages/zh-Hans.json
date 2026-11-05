@@ -10533,5 +10533,8 @@
   "identifiers_origin_changed": "此条目的所选 Realm 已不再解析到相同的 Context。不会显示先前的值。",
   "identifiers_origin_missing": "此条目的所选 Realm 阅读已无法使用。",
   "identifiers_origin_refused": "无法访问所选 Realm 阅读，因此不会显示其值。",
-  "identifiers_origin_unavailable": "所选 Realm 阅读暂时无法使用，因此不会显示其值。"
+  "identifiers_origin_unavailable": "所选 Realm 阅读暂时无法使用，因此不会显示其值。",
+  "character_visit_context": "所选 Context：{context}",
+  "character_visit_unsupported": "此角色阅读可用，但更正和候选审核仅支持 Global。",
+  "character_visit_global": "另开 Global 角色更正"
 }
