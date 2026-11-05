@@ -9,8 +9,9 @@ task dev
 ```
 
 `dev:infra` starts persistent PostgreSQL and OpenSearch, migrates Kernel and a separate `rezics_auth` database,
-creates development keys and configures the Web worker. It can be repeated. Identical generated configuration is not rewritten, so repeating setup while app servers run
-does not trigger configuration reloads. An interrupted setup can be repeated too.
+creates development keys, configures the Web worker, supplies Content's exact source-host list to Kernel's API, and
+configures the shared content worker's storage. It can be repeated. Identical generated configuration is not rewritten, so repeating setup
+while app servers run does not trigger configuration reloads. An interrupted setup can be repeated too.
 `dev` also runs setup, then starts these processes together; Ctrl-C ends the processes it launched and leaves
 infrastructure running. A child startup failure ends the other children.
 
@@ -63,6 +64,20 @@ both app servers bind loopback. Do not expose this development database or host 
 If an opening fails, setup reports the group and native error, exits unsuccessfully and tells you which task to rerun
 after resolving it. Seed does not continue after a failed persona step.
 
+## Imported covers and Character images
+
+`dev:infra` trusts the exact Bangumi media host `lain.bgm.tv` for selected cover and Character image imports. It adds
+that host to an explicit `CONTENT_SOURCE_HOSTS` list without removing the operator's entries. When no complete R2
+storage group is configured, it selects the development-only file store at
+`.temp/local-stack/content-media` and sets `NODE_ENV=development` for Kernel. The API reads the same source list as
+the shared content worker; that worker writes originals and normalized variants through the existing `MediaStorage`
+port. Each object is limited to 20 MiB and keys remain under the fixed local root. Re-running setup and restarting
+Kernel preserve the reservations and stored bytes. A complete R2 group remains selected unchanged; a partial R2
+group fails with the name of its first missing variable.
+
+Decision: local development uses the existing media port with a fixed 20 MiB-per-object file store and the exact
+Bangumi media host `lain.bgm.tv`; R2 remains the only production storage configuration.
+
 ## Keys and reset
 
 Generated Auth signing, website, importer, and staging keys and the persona password live under
@@ -86,7 +101,9 @@ task dev:reset
 ```
 
 This explicitly deletes the configured local PostgreSQL container and volume, including both development databases,
-then migrates fresh databases. It keeps generated keys and the OpenSearch volume, and allocates a fresh local search
+then migrates fresh databases. When the fixed local media root is selected, it also removes only
+`.temp/local-stack/content-media`; it never deletes an R2 bucket or other files under `.temp/local-stack`. It keeps
+generated keys and the OpenSearch volume, and allocates a fresh local search
 namespace so generations in the deleted database cannot collide with retained indices. Ordinary setup preserves that
 namespace. It retires the active local importer journals under
 `.temp/local-stack/seed-archives/`, preserving their contents while the next seed starts without old native UUIDs. Re-run `task dev`; the persona and

@@ -15,7 +15,7 @@ tasks:
     cmds: ['bun services/auth/scripts/dev-stack.ts start']
 
   dev:infra:
-    desc: Start the persistent development PostgreSQL and OpenSearch services
+    desc: Start development PostgreSQL and OpenSearch and configure local content media
     run: once
     cmds:
       - bun run --cwd services/kernel db up
@@ -28,7 +28,7 @@ tasks:
     cmds: ['bun services/auth/scripts/dev-stack.ts persona']
 
   dev:reset:
-    desc: Delete the local Kernel and Auth development databases and regenerate setup (stop task dev first)
+    desc: Reset local Kernel and Auth databases and local media, then regenerate setup (stop task dev first)
     cmds:
       - bun run --cwd services/kernel db reset
       - bun services/auth/scripts/dev-stack.ts reset

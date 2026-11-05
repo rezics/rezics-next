@@ -30,6 +30,9 @@ test('content configuration binds the real Siteverify transport to the report ho
     CONTENT_SOURCE_HOSTS: 'images.example.test,cdn.example.test',
   });
   expect(config.fetchConfig).toEqual({ allowedHosts: ['images.example.test', 'cdn.example.test'] });
+  expect(readContentConfig({ CONTENT_SOURCE_HOSTS: 'lain.bgm.tv' }).fetchConfig).toEqual({
+    allowedHosts: ['lain.bgm.tv'],
+  });
   await expect(config.anonymousVerifier!.verify('provider-one-use-token')).resolves.toMatchObject({
     ok: true,
     hostname: 'content.example.test',
