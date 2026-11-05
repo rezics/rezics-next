@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { ClassificationWindows } from '../../ratings/own-classifications/window-navigation';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useHistoryCurrentOrigin } from '../../library/history-current-origin';
@@ -64,6 +64,8 @@ function ClassificationAssessmentsRoute() {
     document.addEventListener('focusin', cancelFocus);
     return () => { document.removeEventListener('focusin', cancelFocus); windows.retire(); };
   }, [windows]);
+  const read = useCallback((original: import('../../ratings/own-classifications/types').ClassificationFrontier, signal?: AbortSignal) =>
+    readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) }), []);
   const state = !frontier
     ? 'invalid-address'
     : origin.session.state === 'signed-out'
@@ -81,9 +83,7 @@ function ClassificationAssessmentsRoute() {
       subject={origin.subject}
       state={state}
       isCurrent={() => address.isCurrent() && origin.current(0)}
-      read={(original, signal) =>
-        readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) })
-      }
+      read={read}
       onNext={(next, keyboard) => {
         if (!address.isCurrent() || !origin.current(0)) return;
         windows.stage(next, keyboard ?? false);
