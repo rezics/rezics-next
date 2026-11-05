@@ -29,6 +29,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 mock.module('../src/kernel/client', () => ({
+  acceptLanguage: () => 'en',
   kernelClient: () => ({
     subjects: {
       $search: {
@@ -282,7 +283,7 @@ test('an empty native continuation stays open and offers its exact next cursor',
 
   expect(markup).toContain('There are no Collections on this page');
   expect(markup).toContain(
-    `href="/en/collections?presentationKind=mixed&curator=${selection.curator}&subject=${selection.subject}&order=popular&cursor=next%2B%2F%3D"`,
+    `href="/en/collections?presentationKind=mixed&amp;curator=${selection.curator}&amp;subject=${selection.subject}&amp;order=popular&amp;cursor=next%2B%2F%3D"`,
   );
   expect(markup).toContain('name="presentationKind"');
   expect(markup).toContain('value="mixed"');
