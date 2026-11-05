@@ -426,9 +426,9 @@ export function useOwnVotesCoordinates(authorityKey: string, cursor: string | nu
   };
 }
 
-export function useOwnVotesPendingCoordinate(cursor: string | null, responseVersion: number) {
+export function useOwnVotesPendingCoordinate(cursor: string | null) {
   const pending = useContext(OwnVotesReturnContext).pendingCoordinate();
-  return pending?.readState === 'staged' && pending.cursor === cursor && responseVersion > pending.responseVersion;
+  return pending?.readState === 'staged' && pending.cursor === cursor;
 }
 
 export function useOwnVotesReturn({
