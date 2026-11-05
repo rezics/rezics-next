@@ -31,7 +31,8 @@ existing `access.account` profile. Point actions without one exact target type r
 `prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
 `permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
 validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
-target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
+target type is not registered or inferable. The native projection includes `deadlineLive` alongside `assignmentValid`;
+an omitted primitive cannot establish authority. The adapter evaluates every target at the same native snapshot and uses
 the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
 excludes that floor and resource-role grants. A core decision reached through registered Global authority still
