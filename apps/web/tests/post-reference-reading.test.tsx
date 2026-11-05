@@ -278,7 +278,6 @@ test('published reader inspects one occurrence, returns without changing its fra
   }
 });
 
-
 test('mounted disclosed mentions follow the current handle and return to the exact occurrence and cursor', async () => {
   const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
   const hiddenId = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
@@ -289,7 +288,11 @@ test('mounted disclosed mentions follow the current handle and return to the exa
         { type: 'text', text: 'Before ' },
         { type: 'mention', attrs: { accountId } },
         { type: 'mention', attrs: { accountId: hiddenId }, marks: [{ type: 'spoiler' }] },
-        { type: 'text', text: ' ordinary source ', marks: [{ type: 'link', attrs: { href: 'https://source.example/' } }] },
+        {
+          type: 'text',
+          text: ' ordinary source ',
+          marks: [{ type: 'link', attrs: { href: 'https://source.example/' } }],
+        },
         { type: 'mention', attrs: { accountId } },
         { type: 'text', text: ' after' },
       ],
@@ -314,7 +317,8 @@ test('mounted disclosed mentions follow the current handle and return to the exa
     expect(dialog.querySelector('a')?.getAttribute('href')).toBe('/en/@current_handle');
     await act(async () => button(dialog, m.post_references_return()).click());
     const closing = mounted.document.querySelector<HTMLElement>('[role="dialog"]');
-    if (closing) await act(async () => closing.dispatchEvent(new mounted.window.Event('transitionend', { bubbles: true })));
+    if (closing)
+      await act(async () => closing.dispatchEvent(new mounted.window.Event('transitionend', { bubbles: true })));
     expect(mounted.document.activeElement?.getAttribute('id')).toBe(occurrence.id);
     expect(mounted.window.location.href).toBe(originalAddress);
     expect(source.textContent).toContain('Before ');
