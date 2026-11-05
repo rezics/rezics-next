@@ -99,6 +99,7 @@ const { InboxPageView } = await import('../src/inbox/inbox-page');
 const { UnreadBadge } = await import('../src/inbox/unread-badge');
 const { fetchInboxUnreadCount, inboxViewerQueryKey, unreadCountQueryFor } = await import('../src/inbox/inbox-query');
 const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
+const { subscribeInboxReturn } = await import('../src/inbox/inbox-return');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
@@ -562,6 +563,10 @@ test('Previous and browser return re-admit the exact unread address and restore 
       noticeAcknowledgements.push(attempt);
     },
   );
+  const returnEvents: Array<{ phase: string | null; historyKey: string | null }> = [];
+  const stopReturnEvents = subscribeInboxReturn(view.router, (receipt) =>
+    returnEvents.push({ phase: receipt?.phase ?? null, historyKey: receipt?.historyKey ?? null }),
+  );
   try {
     await view.settle(() => view.host.textContent?.includes('all-first') === true);
     await view.click(m.inbox_triage_filter_unread());
@@ -581,7 +586,10 @@ test('Previous and browser return re-admit the exact unread address and restore 
     await tick();
     expect(view.router.state.location.pathname).toBe('/threads/thread');
     await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
+    expect(returnEvents.map(({ phase }) => phase)).toEqual(['armed', 'departed']);
     await act(async () => view.router.history.back());
+    await tick();
+    expect(returnEvents.some(({ phase }) => phase === 'arrived')).toBe(true);
     await view.settle(() => view.host.textContent?.includes('Current native replacement') === true);
 
     expect(queries).toEqual([
@@ -599,6 +607,7 @@ test('Previous and browser return re-admit the exact unread address and restore 
     expect(noticeAcknowledgements).toEqual([]);
     expect(seenCommands).toEqual([]);
   } finally {
+    stopReturnEvents();
     await view.unmount();
   }
 });
