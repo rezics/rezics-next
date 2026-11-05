@@ -46,12 +46,13 @@ test('production registration advice bounds BFF completion and cancellation with
       expect(path).toBe('/registration-page'); nativeReads++; return Response.json(body);
     } }));
     mock.module('@tanstack/react-start', () => ({ createServerFn: () => ({ handler: fn => async options => {
+      const phase = mode, held = late, finish = completed;
       calls++; signal = options?.signal; started.resolve();
-      if (mode === 'waiting') return late.promise;
+      if (phase === 'waiting') return held.promise;
       const result = await fn();
-      completed.resolve();
-      if (mode === 'completion') return late.promise;
-      if (mode === 'rejected') throw new Error('BFF delivery failed');
+      finish.resolve();
+      if (phase === 'completion') return held.promise;
+      if (phase === 'rejected') throw new Error('BFF delivery failed');
       return result;
     } }) }));
     const { readRegistrationPage } = await import('../src/registration-page');
@@ -76,7 +77,7 @@ test('production registration advice bounds BFF completion and cancellation with
       expect(configReads).toBe(before[1] + (['completion', 'config'].includes(phase) ? 1 : 0));
       expect(nativeReads).toBe(before[2] + (phase === 'completion' ? 1 : 0));
       // A new deliberate read uses current native advice while old transport is still pending.
-      const obsolete = late, oldConfig = configWait;
+      const obsolete = late, oldConfig = configWait, oldCompletion = completed;
       prepare('ready');
       body = { ...native, kind: 'already-signed-in', viewer: { account_id: 'current-account' },
         verification: { configured: false }, actions: { register: false, continue: true } };
@@ -84,6 +85,7 @@ test('production registration advice bounds BFF completion and cancellation with
       const current = await readRegistrationPage();
       expect(current).toEqual(body);
       obsolete.resolve({ ...native, siteKey: 'obsolete', scriptUrl: 'obsolete' }); oldConfig.resolve(config);
+      if (phase === 'config') await oldCompletion.promise;
       expect(await pending).toEqual(unavailable);
       expect(current.viewer.account_id).toBe('current-account');
     }
