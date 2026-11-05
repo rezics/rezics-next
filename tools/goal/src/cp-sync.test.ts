@@ -518,15 +518,18 @@ await sync({
 });
 `,
   );
-  const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
-  closers.push(() => {
+  const child = spawn(process.execPath, [runner], { stdio: 'ignore', detached: true });
+  expect(child.pid).toBeGreaterThan(0);
+  expect(child.pid).not.toBe(process.pid);
+  const stopRunner = () => {
     try {
-      if (child.pid) process.kill(child.pid, 'SIGKILL');
+      if (child.pid) process.kill(-child.pid, 'SIGKILL');
     } catch {}
     try {
       if (existsSync(pidFile)) process.kill(Number(readFileSync(pidFile, 'utf8').trim()), 'SIGKILL');
     } catch {}
-  });
+  };
+  closers.push(stopRunner);
   const deadline = Date.now() + 15_000;
   let pid = 0;
   while (Date.now() < deadline) {
