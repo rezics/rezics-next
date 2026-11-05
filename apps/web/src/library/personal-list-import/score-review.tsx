@@ -85,7 +85,7 @@ export function VndbScoreReview({
     targetMatchesPreview &&
     supportedMeaning &&
     native.currentVote.state !== 'unavailable' &&
-    ((choice === 'vote' && exactCandidate !== null && units !== '' && (!currentSet || replace)) ||
+    ((choice === 'vote' && sourceSupported && units !== '' && (!currentSet || replace)) ||
       (choice === 'clear' && currentSet));
   const scoreValue = row.scoreDecision;
   const scoreDecision =
@@ -159,9 +159,9 @@ export function VndbScoreReview({
       {sourceSupported && exactCandidate !== null ? (
         <p className="break-words text-sm">{m.library_vndb_score_exact_candidate({ units: exactCandidate })}</p>
       ) : sourceSupported ? (
-        <p className="break-words text-sm">{m.library_vndb_score_no_exact_candidate()}</p>
+        <p className="break-words text-sm">{m.library_vndb_score_choose_native_units()}</p>
       ) : null}
-      <p className="break-words text-sm text-muted-foreground">{m.library_vndb_score_apply_unavailable()}</p>
+      <p className="break-words text-sm text-muted-foreground">{native.admission.status === 'conditional' ? m.library_vndb_score_apply_ready() : m.library_vndb_score_current_unavailable()}</p>
       {scoreDecision ? (
         <div className="space-y-1 rounded-sm bg-muted/40 p-2 text-sm" data-vndb-score-decision={scoreDecision.reviewId}>
           <p role="status">{m.library_vndb_score_reviewed({ status: scoreDecision.status })}</p>
@@ -196,7 +196,7 @@ export function VndbScoreReview({
                 setConsent(false);
                 setReplace(false);
               }}
-              disabled={!sourceSupported || exactCandidate === null}
+              disabled={!sourceSupported}
             >
               {m.library_vndb_score_use_candidate()}
             </VndbAction>
@@ -230,7 +230,7 @@ export function VndbScoreReview({
                 }}
               >
                 <option value="">{m.library_vndb_score_select_units()}</option>
-                {exactCandidate !== null ? <option value={exactCandidate}>{exactCandidate}</option> : null}
+                {Array.from({ length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 }, (_, index) => question.scale.min + index * question.scale.step).map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </Field>
           ) : null}
@@ -250,7 +250,7 @@ export function VndbScoreReview({
             <VndbCheck
               id={`${id}-consent`}
               checked={consent}
-              label={choice === 'vote' ? m.library_vndb_score_consent_vote() : m.library_vndb_score_consent_clear()}
+              label={choice === 'vote' ? m.library_vndb_score_consent_apply_vote() : m.library_vndb_score_consent_apply_clear()}
               onToggle={setConsent}
             />
           ) : null}

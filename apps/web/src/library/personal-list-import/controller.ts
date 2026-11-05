@@ -217,38 +217,6 @@ function isScoreDecision(value: VndbReviewResult): value is VndbScoreDecision {
   return 'action' in value && (value.action === 'vote' || value.action === 'clear');
 }
 
-function scoreReviewFitsPreview(row: VndbRow, body: Extract<VndbReviewInput, { action: 'score' }>): boolean {
-  const { question, currentVote, exactUnits } = row.nativeScore;
-  if (
-    row.kind !== 'vn' ||
-    !row.target ||
-    row.target.targetId !== body.targetId ||
-    !question ||
-    question.grain !== 'work' ||
-    !question.meaning?.trim() ||
-    question.id !== body.questionId ||
-    question.revision !== body.questionRevision ||
-    currentVote.state === 'unavailable'
-  )
-    return false;
-  if (body.selection.kind === 'clear') return currentVote.state === 'set' && body.consent === 'clear-native-vote';
-  const source = row.fields.score;
-  return (
-    body.consent === 'adopt-native-vote' &&
-    source?.kind === 'value' &&
-    typeof source.value === 'number' &&
-    source.scale?.min === 1 &&
-    source.scale.max === 10 &&
-    source.scale.step === 0.1 &&
-    exactUnits !== null &&
-    exactUnits === body.selection.units &&
-    Number.isSafeInteger(exactUnits) &&
-    exactUnits >= question.scale.min &&
-    exactUnits <= question.scale.max &&
-    (exactUnits - question.scale.min) % question.scale.step === 0
-  );
-}
-
 export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   const { port, visit } = input;
   const sender = { subject: visit.subject, csrfToken: visit.csrfToken };
@@ -613,7 +581,6 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     if (!row || (row.kind === 'retained' && body.action === 'state')) return snapshot();
     if (body.action === 'state' && (typeof body.targetId !== 'string' || !VNDB_ID.test(body.targetId) || !body.state))
       return snapshot();
-    if (body.action === 'score' && !scoreReviewFitsPreview(row, body)) return snapshot();
     const command = retryCommand ?? freezeVndbCommand({ kind: 'review', uploadId, key: newVndbKey(), body });
     // A replacement review withdraws the prior confirmation even if admission is refused.
     stage = 'review';
