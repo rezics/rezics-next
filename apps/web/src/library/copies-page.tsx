@@ -1004,7 +1004,13 @@ function LoadedCopiesPage({
   const comparisonId = useId();
   const comparison = useCopyInventoryReview({
     copies,
-    scope: returnTo,
+    scope: JSON.stringify([
+      locale(),
+      page.subjectId,
+      page.kind ?? null,
+      page.status ?? null,
+      page.requestedCursor ?? null,
+    ]),
     current: () => currentPage('copy.list'),
   });
   const currentEditor = (operation: GatedOperation = editing ? 'copy.get' : 'copy.create') =>

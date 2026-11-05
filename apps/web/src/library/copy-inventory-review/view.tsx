@@ -69,7 +69,7 @@ function ReceivedCopy({
   position: number;
   selected: CopyItem[];
   editorOpen: boolean;
-  returnTo: string;
+  returnTo: string | undefined;
   onEdit: () => void;
   onRemove: () => void;
 }) {
@@ -77,7 +77,11 @@ function ReceivedCopy({
   const locale = getLocale();
   const title = copy.subject ? displayLibraryTitle(copy.subject.label, locale) : null;
   const href = copy.subject
-    ? withSubjectVisitReturn(subjectHref({ id: copy.subject.id, label: title!.text }, locale).href, returnTo, locale)
+    ? withSubjectVisitReturn(
+        subjectHref({ id: copy.subject.id, label: title!.text }, locale).href,
+        returnTo ?? '',
+        locale,
+      )
     : null;
   const compared = selected.length > 1;
   const different = (field: 'location' | 'source' | 'note' | 'acquiredOn' | 'disposedOn') =>
@@ -303,7 +307,7 @@ export function CopyInventoryReview({
   id: string;
   selection: CopyInventorySelection;
   copies: CopyItem[];
-  returnTo: string;
+  returnTo: string | undefined;
   editorOpen: boolean;
   onEdit: (row: CopyItem, trigger: HTMLButtonElement | null) => void;
   onReturnToEditor: () => void;
