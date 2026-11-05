@@ -700,8 +700,11 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await visit('/security');
       await started;
       await page.locator('#security-sessions-heading').waitFor();
-      page.once('dialog', (dialog) => void dialog.accept());
       await page.locator('section[aria-labelledby="security-sessions-heading"] article button').first().click();
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: copy.auth_security_confirm_session, exact: true })
+        .click();
       await page.waitForURL(`${origin}/login`);
       releaseIdentity!();
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
