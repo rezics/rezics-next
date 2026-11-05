@@ -29,6 +29,10 @@ export class ManagementWindow {
     return target;
   }
 
+  pendingField(): Feed | undefined {
+    return this.pending?.field;
+  }
+
   /** Failure and refresh do not alter the last admitted history or the pending exact target. */
   admit(cursors: Cursors, admitted: (field: Feed) => boolean): void {
     if (this.retired) return;

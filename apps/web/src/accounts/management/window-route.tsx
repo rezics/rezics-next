@@ -5,16 +5,18 @@ import { getLocale } from '../../paraglide/runtime.js';
 import type { Cursors, Detail, Inventory, Page } from './data';
 import { ManagementWindow, type Feed, type Movement } from './window';
 
-export type WindowRead<T> = { page: Page<T>; reader: number | null };
+export type WindowRead<T> = { page: Page<T>; reader: number | null; scope: string };
 
 /** Stamp client work before dispatch; an A/B/A session can never admit the former A's response. */
 export async function readManagementWindow<T>(
   client: QueryClient,
+  target: string,
   read: () => Promise<Page<T>>,
 ): Promise<WindowRead<T>> {
   const observation = browserObservation(client).getSnapshot();
   const reader = observation.state === 'signed-in' ? observation.observation.id : null;
-  return { page: await read(), reader };
+  const scope = `${getLocale()}:${target}`;
+  return { page: await read(), reader, scope };
 }
 
 export type WindowNavigation = {
@@ -39,17 +41,18 @@ export function useManagementWindow<T extends Inventory | Detail>({
   const observation = browserObservation(useQueryClient());
   const snapshot = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const reader = snapshot.state === 'signed-in' ? snapshot.observation.id : null;
-  const key = `${getLocale()}:${target}:${reader}`;
+  const scope = `${getLocale()}:${target}`;
+  const key = `${scope}:${reader}`;
   const [, render] = useReducer((value: number) => value + 1, 0);
-  const bootstrap = useRef(read.reader === null ? read : null);
+  const bootstrap = useRef(new WeakSet<object>(read.reader === null ? [read] : []));
   const owner = useRef<{
     key: string;
     history: ManagementWindow;
-    initial: WindowRead<T>;
+    initial: WeakSet<object>;
     hydrated: boolean;
-    reader: number | null;
     attached: boolean;
     retired: boolean;
+    signedOut?: boolean;
     handoff?: { control: HTMLElement; field: Feed; cancel: () => void };
   } | null>(null);
   const retire = () => {
@@ -60,15 +63,14 @@ export function useManagementWindow<T extends Inventory | Detail>({
     owner.current.handoff = undefined;
   };
   if (!owner.current || owner.current.key !== key) {
-    const hydrated = bootstrap.current === read && (snapshot.state === 'unknown' || snapshot.state === 'signed-in');
-    if (reader !== null || snapshot.state === 'signed-out') bootstrap.current = null;
+    const hydrated = bootstrap.current.has(read) && (snapshot.state === 'unknown' || snapshot.state === 'signed-in');
+    if (reader !== null || snapshot.state === 'signed-out') bootstrap.current = new WeakSet();
     retire();
     owner.current = {
       key,
       history: new ManagementWindow(cursors),
-      initial: read,
+      initial: new WeakSet([read]),
       hydrated,
-      reader,
       attached: false,
       retired: false,
     };
@@ -77,10 +79,14 @@ export function useManagementWindow<T extends Inventory | Detail>({
   const current = () => !visit.retired && observation.getSnapshot() === snapshot;
   const accepted =
     current() &&
-    ((reader !== null && read.reader === reader) || (visit.hydrated && read === visit.initial && read.reader === null));
-  const page: Page<T> = accepted
-    ? read.page
-    : { state: snapshot.state === 'signed-out' ? 'signed-out' : 'unavailable' };
+    read.scope === scope &&
+    ((reader !== null && read.reader === reader) ||
+      (visit.hydrated && visit.initial.has(read) && read.reader === null));
+  const page: Page<T> = visit.signedOut
+    ? { state: 'signed-out' }
+    : accepted
+      ? read.page
+      : { state: snapshot.state === 'signed-out' ? 'signed-out' : 'unavailable' };
   const admitted = (field: Feed) => {
     if (page.state !== 'ready') return false;
     const value = page.value;
@@ -101,6 +107,11 @@ export function useManagementWindow<T extends Inventory | Detail>({
   };
   useLayoutEffect(() => {
     if (!current()) return;
+    if (accepted && page.state === 'signed-out') {
+      visit.signedOut = true;
+      retire();
+      render();
+    }
     if (accepted && page.state === 'ready') {
       visit.history.admit(cursors, admitted);
       const focus = visit.handoff;
@@ -143,7 +154,7 @@ export function useManagementWindow<T extends Inventory | Detail>({
     move: (event, field, cursor, movement) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      if (!current()) return;
+      if (!visit.attached || !current()) return;
       if (event.detail === 0 && document.activeElement === event.currentTarget) handoff(event.currentTarget, field);
       else {
         visit.handoff?.cancel();
@@ -155,8 +166,12 @@ export function useManagementWindow<T extends Inventory | Detail>({
   return {
     page,
     navigation,
-    retry: () => {
-      if (current()) retry();
+    retry: (event?: MouseEvent<HTMLElement>) => {
+      if (!visit.attached || !current()) return;
+      const field = visit.history.pendingField();
+      if (field && event?.detail === 0 && document.activeElement === event.currentTarget)
+        handoff(event.currentTarget, field);
+      retry();
     },
   };
 }

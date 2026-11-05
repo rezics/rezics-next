@@ -14,7 +14,7 @@ export const Route = createFileRoute('/accounts/$accountId')({
   loaderDeps: ({ search }) => search,
   gcTime: 0,
   loader: ({ params, deps, abortController, context }) =>
-    readManagementWindow(context.queryClient, () =>
+    readManagementWindow(context.queryClient, params.accountId, () =>
       readAccountManagement({ data: { accountId: params.accountId, ...deps }, signal: abortController.signal }),
     ),
   head: ({ match }) =>
@@ -22,6 +22,10 @@ export const Route = createFileRoute('/accounts/$accountId')({
   component: AccountRoute,
 });
 function AccountRoute() {
+  const hasChild = useRouterState({ select: (state) => state.matches.at(-1)?.routeId !== Route.id });
+  return hasChild ? <Outlet /> : <AccountWindow />;
+}
+function AccountWindow() {
   const router = useRouter();
   const cursors = Route.useSearch();
   const window = useManagementWindow({
@@ -35,8 +39,6 @@ function AccountRoute() {
       void router.invalidate();
     },
   });
-  const hasChild = useRouterState({ select: (state) => state.matches.at(-1)?.routeId !== Route.id });
-  if (hasChild) return <Outlet />;
   return (
     <AccountManagementPage page={window.page} cursors={cursors} navigation={window.navigation} retry={window.retry} />
   );

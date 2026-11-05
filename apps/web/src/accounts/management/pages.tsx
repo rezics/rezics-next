@@ -10,7 +10,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { managedAccountHref } from '../../settings/managed-accounts-read';
 import type { WindowNavigation } from './window-route';
-import { issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
+import { readCursors, issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal wrap-anywhere rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -104,6 +104,7 @@ function WindowControls({
   navigation?: WindowNavigation;
 }) {
   const previous = navigation?.previous(field);
+  const next = readCursors({ [field]: cursor })[field];
   const control = (target: string | undefined, movement: 'next' | 'previous' | 'first', label: string) => {
     const search = { ...cursors };
     if (target === undefined) delete search[field];
@@ -132,7 +133,7 @@ function WindowControls({
     >
       {previous ? control(previous.cursor, 'previous', m.prq_previous()) : null}
       {cursors[field] ? control(undefined, 'first', m.settings_managed_start_first_page()) : null}
-      {cursor ? control(cursor, 'next', m.managed_next()) : null}
+      {next ? control(next, 'next', m.managed_next()) : null}
     </nav>
   );
 }
