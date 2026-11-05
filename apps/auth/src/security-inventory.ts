@@ -3,6 +3,8 @@ import { securityResponseLimits } from '@rezics/auth-contract';
 import { authPost } from './api';
 import { readConsent } from './consent';
 import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
+import { serverSecurityInventoryResponseByteBudget } from './security-response-config';
 import type { SecurityPageEnvelope, SecurityAdvice } from '../../../services/auth/src/security-page';
 export type { SecurityPageEnvelope, SecurityAdvice } from '../../../services/auth/src/security-page';
 
@@ -101,7 +103,7 @@ export const issuerSecurityRequest = createServerOnlyFn(async (path: string, bod
     // workerd supports manual redirects; reject them without forwarding issuer cookies.
     redirect: 'manual',
     cache: 'no-store',
-    signal: AbortSignal.any([request.signal, AbortSignal.timeout(5000)]),
+    signal: request.signal,
   });
   if (response.status >= 300 && response.status < 400) throw new Error('Unexpected issuer redirect');
   return response;
@@ -124,12 +126,16 @@ const readInventory = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<InventoryPage<InventoryView>> => {
     const query = data.cursor ? `?${new URLSearchParams({ cursor: data.cursor })}` : '';
     try {
+      const { getRequest } = await import('@tanstack/react-start/server');
+      const request = getRequest();
+      const maxBytes = await serverSecurityInventoryResponseByteBudget(data.view);
+      if (maxBytes === null) return { kind: 'unavailable' };
       const response = await issuerSecurityRequest(`/${data.view}${query}`);
       if (response.status === 401) return { kind: 'signed-out' };
       if (response.status === 403) return { kind: 'denied' };
       if (response.status === 400 && data.cursor) return { kind: 'expired' };
       if (response.status !== 200) return { kind: 'unavailable' };
-      return parseInventoryPage(data.view, await response.json());
+      return parseInventoryPage(data.view, await readJsonBounded(response, maxBytes, request.signal));
     } catch {
       return { kind: 'unavailable' };
     }

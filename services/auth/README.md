@@ -405,9 +405,19 @@ Six bytes per UTF-16 unit covers escaping, lone surrogates and UTF-8. All arithm
 nonnegative safe finite integers; invalid composition fails before serving. Totals derive from
 closed fields and count limits, including worst-case escaped text, rather than row counts alone.
 
-Accounts' serial browser successor must carry C from the trusted deployment composition that
-mounts Auth's actual action union into the existing Auth-page server configuration, then deliver
-these derived allowances with that trusted page configuration before reading private responses.
+Accounts' Auth-page receiver gets C from the trusted native composition that supplies the actual Access
+`siteActions` map to `createAuthHost`. Deployment passes `AUTH_SECURITY_SCOPE_CONFIGURATION=catalogue:<C>`, computed
+as `securityScopeLimit(siteActions.keys())`, to the Auth-page Worker. Only a composition that explicitly has no
+catalogue may pass `native-no-catalogue` and receive the native 1,000 fallback. The Web client's requested scopes,
+issued session scopes and mounted website scope list do not establish C. Local pages launch builds the value from
+its mounted Kernel and Access catalogue; production deployment must provide the equivalent value from its own
+native composition.
+
+The Auth-page `/clients` and `/consents` receivers use `securityResponseByteBudgets(C, 20).clients` and `.consents`
+with `readJsonBounded` before parsing. Each admitted page still makes one selected native read of 20 rows; byte
+admission adds no native reads or per-row probes. The five-second private read signal covers issuer fetch, body
+consumption and BFF delivery. This slice receives neither `/security-page`, `/passkeys`, `/registration-page` nor
+the distinct `/session` response; the `/session` receiver still needs the same trusted C/native-mode input.
 The page/BFF imports only the public pure helpers, never service/database code. Neither response
 Content-Length nor an arbitrary response header may raise a cap. There is no new metadata endpoint,
 scan, per-row read, polling or storage migration. Browser parsing/migration and native journey

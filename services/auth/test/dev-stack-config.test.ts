@@ -4,6 +4,9 @@ import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   developmentKeys,
+  authSecurityScopeConfiguration,
+  developmentAuthPageBindings,
+  developmentWebsiteConfiguration,
   developmentBindings,
   developmentRegistrationPassword,
   developmentContentBindings,
@@ -20,6 +23,25 @@ import {
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
+
+test('Auth page scope configuration follows the real mounted Access union and records native fallback explicitly', async () => {
+  const mounted = Array.from({ length: 1200 }, (_, index) => `action:${index}`);
+  expect(authSecurityScopeConfiguration([...mounted, 'openid', 'offline_access', 'media:complete', 'openid'])).toBe(
+    'catalogue:1203',
+  );
+  expect(authSecurityScopeConfiguration(undefined)).toBe('native-no-catalogue');
+
+  const key = Buffer.alloc(32, 17).toString('base64url');
+  const website = await developmentWebsiteConfiguration({
+    DATABASE_URL: 'postgres://127.0.0.1:1/rezics',
+    KERNEL_ROUTE_KEY: key,
+    KERNEL_SESSION_KEYS: `1:${key}`,
+  });
+  expect(website.AUTH_SECURITY_SCOPE_CONFIGURATION).toMatch(/^catalogue:[1-9]\d*$/);
+  expect(developmentAuthPageBindings(website)).toEqual({
+    AUTH_SECURITY_SCOPE_CONFIGURATION: website.AUTH_SECURITY_SCOPE_CONFIGURATION,
+  });
+});
 
 test('persona creator capabilities are registered separately from ordinary importer scopes', () => {
   const creator = ['collection:create', 'collection:read', 'collection:update'];

@@ -26,6 +26,10 @@ export default {
     },
     env: {
       KERNEL_ORIGIN: { type: 'text', value: process.env.KERNEL_ORIGIN ?? '' },
+      AUTH_SECURITY_SCOPE_CONFIGURATION: {
+        type: 'text',
+        value: process.env.AUTH_SECURITY_SCOPE_CONFIGURATION ?? '',
+      },
       PRIVACY_CONTACT_URL: { type: 'text', value: process.env.PRIVACY_CONTACT_URL ?? '' },
       TURNSTILE_SITE_KEY: { type: 'text', value: process.env.TURNSTILE_SITE_KEY ?? '' },
       // Development can point the widget at a local script. Production ignores this value.

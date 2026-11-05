@@ -4,6 +4,7 @@ import { chmod, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
+import { securityScopeLimit } from '@rezics/auth-contract';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
@@ -25,27 +26,40 @@ export const origins = {
   kernel: 'http://127.0.0.1:4100',
   audience: 'https://api.rezics.test',
 };
+
+export function authSecurityScopeConfiguration(siteActions?: Iterable<string>): string {
+  return siteActions === undefined ? 'native-no-catalogue' : `catalogue:${securityScopeLimit(siteActions)}`;
+}
+
+export function developmentAuthPageBindings(website: { AUTH_SECURITY_SCOPE_CONFIGURATION: string }) {
+  return { AUTH_SECURITY_SCOPE_CONFIGURATION: website.AUTH_SECURITY_SCOPE_CONFIGURATION };
+}
+
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   await import('reylo/register');
-  const [{ createKernel }, { readConfig }, { actionCatalogue }] = await Promise.all([
+  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] = await Promise.all([
     import('../../kernel/src/http/kernel.ts'),
     import('../../kernel/src/server.ts'),
     import('../../kernel/src/http/request.ts'),
+    import('../../kernel/src/access/index.ts'),
   ]);
   const config = readConfig(env ?? (await kernelEnvironment()));
   const pool = new Pool({ connectionString: config.databaseUrl });
   try {
-    return mountedWebsiteConfiguration(
-      actionCatalogue(
-        createKernel({
-          pool,
-          tokens: config.tokens,
-          routeKey: config.routeKey,
-          ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
-        }),
-      ),
+    const catalogue = actionCatalogue(
+      createKernel({
+        pool,
+        tokens: config.tokens,
+        routeKey: config.routeKey,
+        ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+      }),
     );
+    const siteActions = accessActionCatalogue(catalogue);
+    return {
+      ...mountedWebsiteConfiguration(catalogue),
+      AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(siteActions.keys()),
+    };
   } finally {
     await pool.end();
   }
@@ -629,6 +643,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
         ...process.env,
         AUTH_ORIGIN: origins.native,
         ...developmentWebsiteBindings(keys, website),
+        ...(pages ? developmentAuthPageBindings(website) : {}),
         PUBLIC_ORIGIN: origins.web,
         TURNSTILE_SITE_KEY: 'local',
         TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,

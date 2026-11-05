@@ -397,16 +397,28 @@ for 1,578 bytes. It uses the installed `privateAuthRead` signal and five-second 
 timer or retry. Sign-in keeps its native 16,384-byte allowance, five-second full-call bound and request count: zero
 extra requests.
 
-Decision: the received native exports are `securityResponseLimits`, `securityScopeLimit(siteActions?)`,
-`securityJsonStringBytes(units)` and `securityResponseByteBudgets(scopeLimit, selectedLimit=20)`. The combined
-budget helper requires a scope operand even though `securityPage`, `passkeys` and `registrationPage` are fixed
-independently of that operand. No public scope-independent fixed-budget accessor is present, so this receiver
-does not guess C or duplicate the native formulas. No Security fixed-shape endpoint is qualified for bounded
-reading yet: `/security-page`, `/passkeys` and both `/registration-page` reads (registration advice and password
-change limits) still need the native budgets through `readJsonBounded`. `issuerSecurityRequest` also needs to expose
-the live request/deadline signal to that body reader. Preserve valid configured names/scopes, native DTO/account
-checks, row caps and classifications. The separate `/session`, `/clients` and `/consents` receivers still need C
-from trusted deployment composition; the public consent approval page remains outside this slice.
+Decision: selected Security inventory reads carry C from trusted native `siteActions` into the Auth-page Worker,
+then use the admitted native byte formulas with the existing five-second whole-call signal.
+
+The public `@rezics/auth-contract` exports are `securityResponseLimits`, `securityScopeLimit(siteActions?)`,
+`securityJsonStringBytes(units)` and `securityResponseByteBudgets(scopeLimit, selectedLimit=20)`. The required,
+nonsecret `AUTH_SECURITY_SCOPE_CONFIGURATION` Worker binding is `catalogue:<C>`, where deployment derives
+`C=securityScopeLimit(siteActions.keys())` from the same Access `siteActions` map passed to native Auth. Only an
+explicit `native-no-catalogue` value selects the native 1,000-scope fallback; a missing, malformed or overflowing
+configuration makes the dependent read unavailable. Local `pages` launch derives this value from its actual mounted
+Kernel and Access composition. Production deployment supplies it from its own mounted composition, never from the
+Web client's requested scopes.
+
+`/clients` and `/consents` each retain one native page read of 20 selected rows. Their BFF admits bytes with
+`securityResponseByteBudgets(C, 20).clients` or `.consents` through `readJsonBounded` before UTF-8 decoding and JSON
+parsing. The existing `privateAuthRead` five-second deadline reaches the issuer fetch and body reader through the
+same BFF request signal; there is no second timer or extra native call. Overflow, malformed input, missing
+configuration, a stalled body and retirement are unavailable. 401 remains signed-out, 403 denied, and 400 with a
+cursor expired. Exact cursor forwarding and browser history still commit only after an admitted replacement.
+
+This receiving slice covers only `/clients` and `/consents`; public consent approval is separate. The fixed-response
+receiver still owns `/security-page`, `/passkeys` and `/registration-page`, and the distinct `/session` receiver
+still needs the same server-only C/native-mode configuration. Those endpoints do not gain byte coverage here.
 
 ## Security
 
