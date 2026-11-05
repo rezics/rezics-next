@@ -13,7 +13,6 @@ import {
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { nativeWorkDimensions } from './native-work-dimensions.ts';
 import { nativeCommandScaffoldPlan } from './shelf-maintenance-bounds.ts';
-import { COLLECTION_NATIVE_COST } from './collection-order-bounds.ts';
 import { sessionSourceWork } from './session-operation-bounds.ts';
 import { collectionPrivacyReductionPlan } from '../semantic/public-filter-collection-reduction-bounds.ts';
 import accountRead from '../access/account-read.sql';
@@ -107,7 +106,8 @@ export function memberRetentionDuePlan(input: Parameters<typeof due.run>[1]) {
   );
 }
 
-export function memberRetentionRemovalPlan(input: Parameters<typeof remove.run>[1], n: number) {
+export async function memberRetentionRemovalPlan(input: Parameters<typeof remove.run>[1], n: number) {
+  const c = await retainedCosts();
   const values = remove.params.map((key) =>
     key === 'items' ? JSON.stringify(input.items) : input[key as keyof typeof input],
   );
@@ -122,7 +122,7 @@ export function memberRetentionRemovalPlan(input: Parameters<typeof remove.run>[
   return Object.freeze({
     ...statement,
     values: Object.freeze(values),
-    total: sumBounds(statement.total, repeatBound(sumBounds(structureChange, indexChanges), n)),
+    total: sumBounds(statement.total, repeatBound(sumBounds(structureChange(c), indexChanges), n)),
   });
 }
 
@@ -134,15 +134,17 @@ export function memberRetentionReadPlan(input: Parameters<typeof read.run>[1]) {
     memberBytes + size({ deletedAt: timestamp, purgeAfter: timestamp, deletionRevision: '9223372036854775807' }),
   );
 }
-export function memberRetentionRestorePlan(input: Parameters<typeof restore.run>[1]) {
+export async function memberRetentionRestorePlan(input: Parameters<typeof restore.run>[1]) {
+  const c = await retainedCosts();
   const statement = memberRetentionPoint(
     restore.sql,
     restore.params.map((key) => input[key as keyof typeof input]),
     8,
   );
-  return Object.freeze({ ...statement, total: sumBounds(statement.total, structureChange, indexChanges) });
+  return Object.freeze({ ...statement, total: sumBounds(statement.total, structureChange(c), indexChanges) });
 }
-export function memberRetentionPurgePlan(input: Parameters<typeof purge.run>[1]) {
+export async function memberRetentionPurgePlan(input: Parameters<typeof purge.run>[1]) {
+  const c = await retainedCosts();
   // Parent/member target probes, exact DELETE and public UPDATE alternatives and RETURNING.
   const statement = memberRetentionPoint(
     purge.sql,
@@ -273,9 +275,15 @@ const control = (sql: string) =>
     candidates: 0,
   }).total;
 const snapshot = sumBounds(...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map(control));
-const c = COLLECTION_NATIVE_COST;
+type NativeCosts = typeof import('./collection-order-bounds.ts').COLLECTION_NATIVE_COST;
+// The installed ordinal owner also loads native Access. Resolve its producer at
+// execution, after module initialization, without duplicating its declarations.
+async function retainedCosts(): Promise<NativeCosts> {
+  return (await import('./collection-order-bounds.ts')).COLLECTION_NATIVE_COST;
+}
 /** Ordinary admitted Collection lookup, including the compatibility overload before mutate. */
-export function readRetainedCollection<T>(dispatch: () => Promise<T>): Promise<T> {
+export async function readRetainedCollection<T>(dispatch: () => Promise<T>): Promise<T> {
+  const c = await retainedCosts();
   return consumeMemberRetention('collection-read', c.collectionRow, dispatch);
 }
 export function retainedMemberBuiltin<T>(dispatch: () => Promise<T>): Promise<T> {
@@ -303,18 +311,19 @@ const structureCleanup = retentionCost({
   statements: 1 + historyRows,
   bytes: historyRows * (32_768 + 256),
 });
-const structureChange = sumBounds(
-  c.memberGuards,
-  c.structurePending,
-  c.structureAppend,
-  // Pending DELETE, bounded before/after states, per-occurrence prune and gap-head updates.
-  retentionCost({
-    nativeRows: 2 * historyRows + 8,
-    nativePoints: historyRows + 8,
-    statements: 6,
-    bytes: 2 * 32_768 + historyRows * 256,
-  }),
-);
+const structureChange = (c: NativeCosts) =>
+  sumBounds(
+    c.memberGuards,
+    c.structurePending,
+    c.structureAppend,
+    // Pending DELETE, bounded before/after states, per-occurrence prune and gap-head updates.
+    retentionCost({
+      nativeRows: 2 * historyRows + 8,
+      nativePoints: historyRows + 8,
+      statements: 6,
+      bytes: 2 * 32_768 + historyRows * 256,
+    }),
+  );
 // Parent PK/curator/listing indexes and member PK/deletion/live/raw/due/subject
 // indexes: each changed index has old/new entries. Both OLD/NEW native and export
 // source anchors upsert native_source_fence; export also point-reads the curator.
@@ -331,11 +340,12 @@ const indexChanges = sumBounds(
   }),
 );
 
-export function memberRetentionCommandPlan(
+export async function memberRetentionCommandPlan(
   pool: Pool,
   options: LegacyCommandOptions | PrincipalCommandOptions,
   original: Episode,
 ) {
+  const c = await retainedCosts();
   const response = original.kind === 'purge' ? { purged: true } : MEMBER_RETENTION_MEMBER;
   const events = [
     {
@@ -372,9 +382,11 @@ export function memberRetentionCommandPlan(
   const mutation =
     original.kind === 'remove'
       ? sumBounds(
-          memberRetentionRemovalPlan(
-            { route, collection_id, expected_revision, items: [{ member_id, deletion_id }], time, transaction_id },
-            1,
+          (
+            await memberRetentionRemovalPlan(
+              { route, collection_id, expected_revision, items: [{ member_id, deletion_id }], time, transaction_id },
+              1,
+            )
           ).total,
           collectionPrivacyReductionPlan(route, collection_id).total,
         )
@@ -382,27 +394,31 @@ export function memberRetentionCommandPlan(
         ? sumBounds(
             repeatBound(memberRetentionReadPlan({ route, collection_id, member_id }).total, 2),
             sessionSourceWork(uuid, false),
-            memberRetentionRestorePlan({
-              route,
-              collection_id,
-              member_id,
-              deletion_id,
-              expected_revision,
-              time,
-              transaction_id,
-            }).total,
+            (
+              await memberRetentionRestorePlan({
+                route,
+                collection_id,
+                member_id,
+                deletion_id,
+                expected_revision,
+                time,
+                transaction_id,
+              })
+            ).total,
             memberRetentionPoint(MEMBER_RETENTION_SQL.collision, [route, collection_id, '\0'.repeat(48), member_id])
               .total,
           )
         : sumBounds(
-            memberRetentionPurgePlan({
-              route,
-              collection_id,
-              member_id,
-              deletion_id,
-              expected_purge_after: original.purgeAfter!,
-              time,
-            }).total,
+            (
+              await memberRetentionPurgePlan({
+                route,
+                collection_id,
+                member_id,
+                deletion_id,
+                expected_purge_after: original.purgeAfter!,
+                time,
+              })
+            ).total,
           );
   const terms = Object.freeze({
     scaffold,
@@ -439,7 +455,7 @@ export function memberRetentionCommandPlan(
  * Charge disjoint Library/Core terms per reached attempt; existing Access/Shelf terms
  * remain with their native owners. Covered retained SQL cannot be charged twice.
  */
-export function runMemberRetentionCommand<T>(
+export async function runMemberRetentionCommand<T>(
   pool: Pool,
   options: LegacyCommandOptions | PrincipalCommandOptions,
   body: (
@@ -450,7 +466,7 @@ export function runMemberRetentionCommand<T>(
   const original = episode.getStore();
   const dispatch = () => ('principal' in options ? runCommand(pool, options, body) : runCommand(pool, options, body));
   if (!original) return dispatch();
-  const plan = memberRetentionCommandPlan(pool, options, original);
+  const plan = await memberRetentionCommandPlan(pool, options, original);
   return withCommandAttemptWork(
     options,
     () =>

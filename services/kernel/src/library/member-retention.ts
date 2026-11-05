@@ -136,7 +136,7 @@ export async function purgeExpiredMemberDeletion(
           expected_purge_after: purgeAfter,
           time: authoritativeTimeValue(command.time),
         };
-        const result = await consumeMemberRetention('purge', memberRetentionPurgePlan(operands).total, () =>
+        const result = await consumeMemberRetention('purge', (await memberRetentionPurgePlan(operands)).total, () =>
           purge.run(tx, operands),
         );
         if (!result && present) throw new Error('Locked due member episode failed its exact native CAS');
