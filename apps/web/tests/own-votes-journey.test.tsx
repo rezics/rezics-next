@@ -402,7 +402,9 @@ test('the single departure decision preserves a dirty editor on Stay and retires
     expect((view.host.querySelector('input') as HTMLInputElement | null)?.value).toBe('2');
     expect(button(view, m.library_my_ratings_save())).toBeDefined();
 
-    const currentSubjectLink = [...view.host.querySelectorAll('a')].find((link) => link.textContent?.trim() === 'Kokoro');
+    const currentSubjectLink = [...view.host.querySelectorAll('a')].find(
+      (link) => link.textContent?.trim() === 'Kokoro',
+    );
     if (!currentSubjectLink) throw new Error('Expected the current Subject return link');
     await click(view, currentSubjectLink);
     expect(view.window.document.body.textContent).toContain(m.library_my_ratings_departure_title());

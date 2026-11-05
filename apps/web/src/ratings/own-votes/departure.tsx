@@ -87,10 +87,10 @@ export function OwnVotesDeparture({
     confirmMovement.current = {
       confirm: decide,
       allowNavigation: () => {
-      approvedMovement.current = true;
+        approvedMovement.current = true;
       },
       clearNavigation: () => {
-      approvedMovement.current = false;
+        approvedMovement.current = false;
       },
     };
 

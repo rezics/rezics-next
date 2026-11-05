@@ -214,7 +214,10 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
       const currentCursor = visit.cursors[visit.currentIndex];
       if (currentCursor !== cursor && !(move.kind === 'first' && move.cursor === null)) return null;
       if (move.kind === 'first' && move.cursor !== null) return null;
-      if (move.kind === 'previous' && (visit.currentIndex === 0 || visit.cursors[visit.currentIndex - 1] !== move.cursor))
+      if (
+        move.kind === 'previous' &&
+        (visit.currentIndex === 0 || visit.cursors[visit.currentIndex - 1] !== move.cursor)
+      )
         return null;
       const pending: PendingCoordinateMove = {
         ...move,

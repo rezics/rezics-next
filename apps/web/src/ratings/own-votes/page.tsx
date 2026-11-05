@@ -41,7 +41,13 @@ export function CurrentViewerOwnVotesPage({
   const locale = getLocale();
   const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
   const pendingCoordinate = useOwnVotesPendingCoordinate(cursor);
-  const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt || pendingCoordinate, responseVersion);
+  const origin = useOwnVotesCurrentOrigin(
+    initial,
+    cursor,
+    invalidAddress,
+    !!receipt || pendingCoordinate,
+    responseVersion,
+  );
   const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
   const confirmMovement = useRef<OwnVotesDepartureControl | null>(null);
   const acceptRead = useCallback(

@@ -282,7 +282,9 @@ async function waitForBodyText(view: Awaited<ReturnType<typeof mounted>>, text: 
   return waitForText(document.body, text);
 }
 function bodyButton(view: Awaited<ReturnType<typeof mounted>>, name: string) {
-  const button = [...document.body.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+  const button = [...document.body.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
   if (!button) throw new Error(`Expected ${name} button`);
   return button;
 }
@@ -302,7 +304,9 @@ async function back(view: Awaited<ReturnType<typeof mounted>>, index = reads.len
 
 async function editDraft(view: Awaited<ReturnType<typeof mounted>>, value = '2') {
   const findButton = (name: string) => {
-    const button = [...view.host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+    const button = [...view.host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
     if (!button) throw new Error(`Expected ${name} button`);
     return button;
   };
@@ -519,7 +523,10 @@ test('real route pagination retries the exact cursor, preserves sparse and termi
   const result = (cursor: string | null, page: OwnVotesPage) => nativeRead(account, cursor, getLocale(), page);
   const plans = new Map<string, OwnVotesRead[]>([
     ['first', [result(null, firstPage), result(null, firstPage)]],
-    ['cursor-a', [unavailable('cursor-a'), result('cursor-a', sparseB), result('cursor-a', sparseC), result('cursor-a', sparseC)]],
+    [
+      'cursor-a',
+      [unavailable('cursor-a'), result('cursor-a', sparseB), result('cursor-a', sparseC), result('cursor-a', sparseC)],
+    ],
     ['cursor-b', [result('cursor-b', terminal)]],
     ['cursor-c', [result('cursor-c', terminal)]],
   ]);
@@ -665,7 +672,9 @@ test('dirty movement keeps the draft on Stay, retires it on Leave, then returns 
     return link;
   };
   const findButton = (name: string) => {
-    const button = [...view.host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+    const button = [...view.host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
     if (!button) throw new Error(`Expected ${name} button`);
     return button;
   };
@@ -730,7 +739,9 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
     return link;
   };
   const findButton = (name: string) => {
-    const button = [...view.host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+    const button = [...view.host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === name,
+    );
     if (!button) throw new Error(`Expected ${name} button`);
     return button;
   };
@@ -765,7 +776,8 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
 
   for (const replace of [
     (view: Awaited<ReturnType<typeof mounted>>) => view.expose('55555555-5555-4555-8555-555555555555', 'csrf-b'),
-    (view: Awaited<ReturnType<typeof mounted>>) => view.exposeSequence(['55555555-5555-4555-8555-555555555555', account]),
+    (view: Awaited<ReturnType<typeof mounted>>) =>
+      view.exposeSequence(['55555555-5555-4555-8555-555555555555', account]),
   ]) {
     reads.length = 0;
     readWaiters.length = 0;
