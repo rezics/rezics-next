@@ -333,3 +333,46 @@ test('a PATCH without the matching account acknowledgement keeps the original un
   );
   expect(acknowledged).toEqual({ ok: true, profile: { ...before, displayName: 'Submitted name' } });
 });
+
+test('native applicability and each public-view flag gate complete patches without granting missing advice', async () => {
+  const { profilePatchAdmitted, profileFieldAdmitted } = await import('../src/settings/profile-data');
+  const advice = closedProfileEditing(profile);
+  advice.fields.displayName.applicable = false;
+  advice.fields.publicViews.flags = ['posts'];
+  expect(profileFieldAdmitted('displayName', advice)).toBe(false);
+  expect(profileFieldAdmitted('biography', advice)).toBe(true);
+  expect(profilePatchAdmitted({ displayName: 'Unadmitted' }, advice)).toBe(false);
+  expect(profilePatchAdmitted({ biography: 'Admitted' }, advice)).toBe(true);
+  expect(profilePatchAdmitted({ publicViews: { posts: true } }, advice)).toBe(true);
+  expect(profilePatchAdmitted({ publicViews: { posts: true, reviews: false } }, advice)).toBe(false);
+  expect(profilePatchAdmitted({ speakersListed: true }, advice)).toBe(false);
+  expect(profilePatchAdmitted({ displayName: 'Unavailable' }, null)).toBe(false);
+  advice.fields.publicViews.applicable = false;
+  expect(profilePatchAdmitted({ publicViews: { posts: true } }, advice)).toBe(false);
+  let writes = 0;
+  const editor = new ProfileEditor({
+    read: async () => ({
+      accountId: profile.id,
+      kind: 'actor',
+      displayName: profile.displayName,
+      biography: profile.bio,
+      avatar: profile.avatar,
+      links: profile.links,
+      publicViews: profile.publicViews,
+      editing: advice,
+    }),
+    save: async () => {
+      writes++;
+      throw new Error('Unadmitted patch');
+    },
+  });
+  await editor.reload();
+  editor.edit({ displayName: 'Keep for review' });
+  await editor.submit('profile');
+  expect(editor.snapshot()).toMatchObject({
+    phase: 'review',
+    attempt: null,
+    draft: { displayName: 'Keep for review' },
+  });
+  expect(writes).toBe(0);
+});

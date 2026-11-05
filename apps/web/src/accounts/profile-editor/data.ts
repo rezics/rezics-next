@@ -9,7 +9,12 @@ import {
   type EditableProfileFailure,
 } from '../../settings/editable-profile-source';
 import { settingsCommandKeyHeader } from '../../settings/command-headers';
-import { loadProfileRecord, type ObservedProfile, type ProfilePatch } from '../../settings/profile-data';
+import {
+  loadProfileRecord,
+  profilePatchAdmitted,
+  type ObservedProfile,
+  type ProfilePatch,
+} from '../../settings/profile-data';
 import { profileFieldErrors } from '../../settings/profile-write';
 
 const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
@@ -114,6 +119,8 @@ export async function writeTarget(
       ...(error.failure ? { failure: error.failure } : {}),
     };
   }
+  if (!profilePatchAdmitted(input.patch, current.profile.editing))
+    return { ok: false as const, status: 403, message: '' };
   if (current.profile.kind !== 'organization' && input.patch.speakersListed !== undefined)
     return { ok: false as const, status: 400, message: '' };
   // PATCH evaluates current actor/principal/assignment/floor, grants, operator and consent natively at command T.

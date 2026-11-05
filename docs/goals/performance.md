@@ -64,6 +64,13 @@ derived before implementation; use the prescribed Auth scales above where applic
 not only calls, and observe projection or worker work within its operation context. Report independently owned
 background work separately.
 
+The Settings Profile–Watches return consumes the installed private Profile advice and native watch episode
+contracts. Advice applicability, selected public-view flags, exact-original recovery, confirmed-current preview and
+post-dispatch notification choices are pinned in the existing focused Web suites. One exact-account advice preflight
+adds bounded native work per Profile dispatch, with no account or subscription enumeration. The native owner suites
+retain responsibility for SQL/binds, examined rows, buffers and nested engine work at independent growth scales;
+consumer fixtures do not establish those measurements or a real Auth-app browser journey.
+
 Root, module and native evidence retain separate meaning. Root SQL acceptance uses the supported Reylo types through
 the affected Web/root checks; fast copy-on-write preparation does not establish SQL closure. Infrastructure failure
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)

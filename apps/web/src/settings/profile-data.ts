@@ -126,16 +126,32 @@ export function profileCommandValues(profile: ProfileValues): ProfileValues {
   };
 }
 
+/** Native field presence alone does not admit a change. Null means the current read lost advice. */
+export function profileFieldAdmitted(
+  field: keyof ProfilePatch,
+  editing: ProfileEditing | null | undefined,
+  flag?: keyof ProfileValues['publicViews'],
+): boolean {
+  // Existing local fixtures omit advice; production observations always supply it.
+  if (editing === undefined) return true;
+  if (editing === null || !(field in editing.fields)) return false;
+  if (field === 'speakersListed') return 'speakersListed' in editing.fields && editing.fields.speakersListed.applicable;
+  const advice = editing.fields[field];
+  return (
+    advice.applicable &&
+    (field !== 'publicViews' || flag === undefined || editing.fields.publicViews.flags.includes(flag))
+  );
+}
+
 export function profilePatchAdmitted(patch: ProfilePatch, editing: ProfileEditing | null | undefined): boolean {
-  if (!editing) return true;
-  for (const key of Object.keys(patch) as (keyof ProfilePatch)[]) {
-    if (key === 'publicViews') {
-      if (!('publicViews' in editing.fields)) return false;
-      continue;
-    }
-    if (!(key in editing.fields)) return false;
-  }
-  return true;
+  return (Object.keys(patch) as (keyof ProfilePatch)[]).every(
+    (field) =>
+      profileFieldAdmitted(field, editing) &&
+      (field !== 'publicViews' ||
+        (Object.keys(patch.publicViews!) as (keyof ProfileValues['publicViews'])[]).every((flag) =>
+          profileFieldAdmitted(field, editing, flag),
+        )),
+  );
 }
 
 export async function loadProfileRecord(
@@ -183,9 +199,9 @@ export function profileHasLocalPreview(
   changed: boolean,
   localAvatar: boolean,
   attempt: unknown,
-  acknowledged: unknown,
+  acknowledged: boolean,
 ): boolean {
-  return changed || localAvatar || attempt != null || acknowledged != null;
+  return changed || localAvatar || attempt != null || acknowledged;
 }
 
 export async function saveProfileRecord(
@@ -290,15 +306,23 @@ export async function runSaveProfile(data: {
           status: 403,
           message: 'You can only change your own profile.',
         });
+      const client = kernelClient();
       return serializeProfileResult(
-        await saveProfileRecord(
-          kernelClient(),
-          authorization,
-          accountId,
-          profileCommandValues(data.before),
-          profileCommandValues(data.after),
-          data.idempotencyKey,
-        ),
+        await withProfileDeadline(async (signal) => {
+          // Preflight and PATCH share one absolute wait. Recovery keeps the original body and key.
+          const current = await loadProfileRecord(client, authorization, accountId, undefined, signal);
+          if (!profilePatchAdmitted(profileChanges(data.before, data.after), current.editing))
+            return { ok: false as const, status: 403, message: '' };
+          return saveProfileRecord(
+            client,
+            authorization,
+            accountId,
+            profileCommandValues(data.before),
+            profileCommandValues(data.after),
+            data.idempotencyKey,
+            signal,
+          );
+        }, request.signal),
       );
     } catch (error) {
       profileControlFlow(error);

@@ -256,3 +256,29 @@ test('The BFF binds the current cookie viewer and rejects Origin, CSRF and beare
   await expect(boundViewer(request({ origin: 'https://foreign.example.test' }), env, viewerId)).rejects.toBeDefined();
   await expect(boundViewer(request({ 'X-CSRF-Token': newCsrfToken() }), env, viewerId)).rejects.toBeDefined();
 });
+
+test('delegated retries reacquire field advice without changing the original command or borrowing viewer identity', async () => {
+  const api = boundary();
+  await api.editor.reload();
+  api.loseReply();
+  api.editor.edit({ displayName: 'Original organization name' });
+  await api.editor.submit('profile');
+  await api.editor.confirm();
+  const original = api.editor.snapshot().attempt;
+  expect(original).not.toBeNull();
+  const { accountId: id, biography: bio, ...fields } = profile();
+  const read = officialProfileRead({ id, handle: null, bio, ...fields }, viewerId);
+  read.editing.fields.displayName.applicable = false;
+  api.response(read);
+  await api.editor.retry();
+  expect(api.writes).toHaveLength(1);
+  expect(api.editor.snapshot().attempt).toBe(original);
+  expect(api.editor.snapshot().phase).toBe('uncertain');
+  read.editing.fields.displayName.applicable = true;
+  api.response(read);
+  await api.editor.retry();
+  expect(api.writes).toHaveLength(2);
+  expect(api.writes[1]).toEqual(api.writes[0]);
+  expect(api.requests.every((request) => request.headers.get('authorization') === 'Bearer current-viewer')).toBe(true);
+  expect(api.requests.filter((request) => request.method === 'GET')).toHaveLength(5);
+});

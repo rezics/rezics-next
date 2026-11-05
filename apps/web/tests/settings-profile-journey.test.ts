@@ -636,3 +636,65 @@ test('the shared activity draft and local image selection also require a discard
     expect(profileNeedsNavigationDecision(editor.snapshot(), { phase, url: 'blob:local-selection' })).toBe(true);
   expect(profileNeedsNavigationDecision(editor.snapshot(), { phase: 'cancelled', url: null })).toBe(false);
 });
+
+test('the ten-second Profile deadline releases a stalled command, ignores late acknowledgement and retries only its immutable original', async () => {
+  const set = globalThis.setTimeout,
+    clear = globalThis.clearTimeout;
+  let expire: (() => void) | undefined;
+  let delay: number | undefined;
+  globalThis.setTimeout = ((callback: () => void, milliseconds?: number) => {
+    expire = callback;
+    delay = milliseconds;
+    return 1 as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+  let settle!: (result: Awaited<ReturnType<ProfileEditorIO['save']>>) => void;
+  const sent: ProfileAttempt[] = [];
+  let reads = 0;
+  const editor = new ProfileEditor(
+    {
+      read: async () => {
+        reads++;
+        return { ...initial(), displayName: 'Submitted' };
+      },
+      save: (attempt) => {
+        sent.push(attempt);
+        return sent.length === 1
+          ? new Promise((resolve) => {
+              settle = resolve;
+            })
+          : Promise.resolve({ ok: true, profile: attempt.after });
+      },
+    },
+    initial(),
+  );
+  try {
+    editor.edit({ displayName: 'Submitted' });
+    const saving = editor.submit('profile');
+    expect(delay).toBe(10_000);
+    const original = editor.snapshot().attempt;
+    editor.edit({ biography: 'Later draft' });
+    expire!();
+    await saving;
+    expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', acknowledged: false });
+    expect(editor.snapshot().attempt).toBe(original);
+    settle({ ok: true, profile: original!.after });
+    await Promise.resolve();
+    expect(reads).toBe(0);
+    expect(editor.snapshot().acknowledged).toBe(false);
+    await editor.retry();
+    expect(sent[1]).toBe(original);
+    expect(reads).toBe(1);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      attempt: null,
+      acknowledged: false,
+      known: { displayName: 'Submitted' },
+      draft: { biography: 'Later draft' },
+    });
+  } finally {
+    globalThis.setTimeout = set;
+    globalThis.clearTimeout = clear;
+    editor.retire();
+  }
+});
