@@ -333,17 +333,16 @@ test('an interrupted claim whose dispatch already committed archives onto the ex
   const sweep = await sweepBacklog(f.runtime);
 
   expect(f.dispatched).toEqual([]);
-  expect(sweep.dispatched).toEqual([
-    { goal: 'web', taskId: id, brief: 'work.md', lintWarnings: ['stored warning'] },
-  ]);
+  expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: id, brief: 'work.md', lintWarnings: ['stored warning'] }]);
   expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched')).sort()).toEqual([
     `${id}-work.md`,
     'older-prior.md',
   ]);
   expect(readFileSync(join(f.state, 'backlog', 'web', 'dispatched', `${id}-work.md`), 'utf8')).toBe(text);
-  expect(
-    f.db.query("SELECT last_dispatch_at, last_written_at FROM backlog_goals WHERE goal='web'").get(),
-  ).toEqual({ last_dispatch_at: NOW, last_written_at: NOW - 60_000 });
+  expect(f.db.query("SELECT last_dispatch_at, last_written_at FROM backlog_goals WHERE goal='web'").get()).toEqual({
+    last_dispatch_at: NOW,
+    last_written_at: NOW - 60_000,
+  });
   expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
   expect(f.dispatched).toEqual([]);
 });
