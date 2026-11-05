@@ -42,7 +42,7 @@ export const Route = createFileRoute('/creator/sales/')({
         locationKey={router.state.location.key}
         locale={locale}
         {...search}
-        navigate={(href, started) => navigateCreatorSales(router, Route.id, href, started)}
+        navigate={(href, started) => navigateCreatorSales(router, href, started)}
       />
     );
   },
