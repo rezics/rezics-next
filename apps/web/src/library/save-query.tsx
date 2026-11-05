@@ -2,12 +2,13 @@ import { Link } from '@tanstack/react-router';
 import { parseFilter, type FilterDocument } from '@rezics/filter';
 import { m } from '../paraglide/messages.js';
 import { useCollectionOwnerCurrent } from './collection-owner-current';
-import type { SavedQuerySelection } from './saved-query-editor/selection';
+import type { SavedQuerySelection, SavedQuerySource } from './saved-query-editor/selection';
 
 export type SavedQueryHandoff = {
   viewerId: string;
   filter: FilterDocument;
   sort: 'id';
+  source: SavedQuerySource;
 };
 
 /** A one-use, in-memory handoff. It has no server or browser-storage instance. */
@@ -15,9 +16,19 @@ export function createSavedQueryHandoffStore() {
   let pending: SavedQueryHandoff | null = null;
   return {
     write(value: SavedQueryHandoff): boolean {
-      if (!value.viewerId || value.sort !== 'id') return false;
+      if (
+        !value.viewerId ||
+        value.sort !== 'id' ||
+        (value.source.kind !== 'owner' && value.source.kind !== 'catalogue')
+      )
+        return false;
       try {
-        pending = { viewerId: value.viewerId, filter: parseFilter(value.filter), sort: 'id' };
+        pending = {
+          viewerId: value.viewerId,
+          filter: parseFilter(value.filter),
+          sort: 'id',
+          source: value.source,
+        };
         return true;
       } catch {
         pending = null;
@@ -76,7 +87,12 @@ export function SaveQueryLink({ id, selection }: { id: string; selection: SavedQ
         if (
           !owner.subject ||
           !owner.isOwnerCurrent() ||
-          !writeSavedQueryHandoff({ viewerId: owner.subject, filter: selection.filter, sort: selection.sort })
+          !writeSavedQueryHandoff({
+            viewerId: owner.subject,
+            filter: selection.filter,
+            sort: selection.sort,
+            source: selection.source,
+          })
         )
           event.preventDefault();
       }}

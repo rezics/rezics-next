@@ -756,13 +756,14 @@ export function createCollectionCommands(config: {
   async function updateCollectionRule(
     actor: Actor,
     id: string,
-    input: { revision: number; filter: unknown; sort?: string },
+    input: { revision: number; filter: unknown; sort?: string; source?: unknown },
     requestKey: string,
   ): Promise<CommandOutcome<Collection>> {
     const revision = input.revision === 0 ? 0 : revisionOf(input.revision);
     const rule = parseCollectionRule({
       filter: input.filter,
       ...(input.sort === undefined ? {} : { sort: input.sort }),
+      ...(input.source === undefined ? {} : { source: input.source }),
     });
     return mutate(
       actor,
@@ -770,7 +771,13 @@ export function createCollectionCommands(config: {
       'collection:update',
       'library.collection.rule.update',
       requestKey,
-      { collectionId: id, revision, filter: input.filter, ...(input.sort === undefined ? {} : { sort: input.sort }) },
+      {
+        collectionId: id,
+        revision,
+        filter: input.filter,
+        ...(input.sort === undefined ? {} : { sort: input.sort }),
+        ...(input.source === undefined ? {} : { source: input.source }),
+      },
       async (tx, command, route) => {
         if (!command.rule) throw new Error('Missing admitted Collection rule');
         const previous = await activeCollection(tx, route, id);
@@ -780,6 +787,7 @@ export function createCollectionCommands(config: {
           saved &&
           isDeepStrictEqual(saved.filter, command.rule.filter) &&
           saved.sort === command.rule.sort &&
+          saved.source.kind === command.rule.source.kind &&
           saved.releaseDigest === command.rule.releaseDigest
         )
           return { value: previous, events: collectionEvents('updated', id, false) };

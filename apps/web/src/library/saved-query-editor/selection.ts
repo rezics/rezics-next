@@ -2,10 +2,12 @@ import { parseFilter, type FilterDocument } from '@rezics/filter';
 
 const presence: FilterDocument = { owner: { presence: true } };
 
+export type SavedQuerySource = Readonly<{ kind: 'owner' | 'catalogue' }>;
+
 export type SavedQueryIssue = { key: string; reason: 'invalid' | 'unrepresentable' };
 export type SavedQuerySelection =
   | { state: 'empty' }
-  | { state: 'admitted'; filter: FilterDocument; sort: 'id' }
+  | { state: 'admitted'; filter: FilterDocument; sort: 'id'; source: SavedQuerySource }
   | { state: 'invalid'; issues: SavedQueryIssue[] };
 
 export type SavedQueryInput = {
@@ -13,6 +15,7 @@ export type SavedQueryInput = {
   type?: string;
   search?: string | URLSearchParams;
   invalid?: boolean;
+  source?: SavedQuerySource;
 };
 
 function hasPresence(filter: FilterDocument): boolean {
@@ -80,7 +83,16 @@ export function admitSavedQuerySelection(input: SavedQueryInput): SavedQuerySele
 
   const combined = clauses.length === 1 ? clauses[0]! : { and: clauses };
   try {
-    return { state: 'admitted', filter: withPresence(parseFilter(combined)), sort: 'id' };
+    const source = input.source ?? { kind: 'owner' as const };
+    if (source.kind !== 'owner' && source.kind !== 'catalogue')
+      return { state: 'invalid', issues: [{ key: 'source', reason: 'invalid' }] };
+    const filter = parseFilter(combined);
+    return {
+      state: 'admitted',
+      filter: source.kind === 'owner' ? withPresence(filter) : filter,
+      sort: 'id',
+      source,
+    };
   } catch {
     return { state: 'invalid', issues: [{ key: 'filter', reason: 'invalid' }] };
   }
@@ -92,6 +104,13 @@ export function savedQuerySeed(
   selection: SavedQuerySelection,
 ): FilterDocument | undefined {
   return collectionId === null && selection.state === 'admitted' ? selection.filter : undefined;
+}
+
+export function savedQuerySourceSeed(
+  collectionId: string | null,
+  selection: SavedQuerySelection,
+): SavedQuerySource | undefined {
+  return collectionId === null && selection.state === 'admitted' ? selection.source : undefined;
 }
 
 /** The selection lives only in a same-tab module handoff, never in the destination URL. */

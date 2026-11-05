@@ -15,6 +15,7 @@ import {
 } from './collection-records';
 import { loadCollectionRule, loadCollectionRuleChoices } from './collection-rule-read';
 import { validateRuleLabelPage } from './collection-rule-label-input';
+import type { SavedQuerySource } from './saved-query-editor/selection';
 
 export type RuleWrite = {
   id?: string;
@@ -23,6 +24,7 @@ export type RuleWrite = {
   description?: string;
   filter: FilterDocument;
   sort: 'id';
+  source?: SavedQuerySource;
   idempotencyKey: string;
 };
 export function validateRuleWrite(input: unknown): RuleWrite {
@@ -30,7 +32,7 @@ export function validateRuleWrite(input: unknown): RuleWrite {
   const value = input as Record<string, unknown>;
   if (
     Object.keys(value).some(
-      (key) => !['id', 'revision', 'title', 'description', 'filter', 'sort', 'idempotencyKey'].includes(key),
+      (key) => !['id', 'revision', 'title', 'description', 'filter', 'sort', 'source', 'idempotencyKey'].includes(key),
     ) ||
     typeof value.idempotencyKey !== 'string' ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.idempotencyKey) ||
@@ -38,6 +40,7 @@ export function validateRuleWrite(input: unknown): RuleWrite {
   )
     throw new Error('Invalid rule');
   const filter = parseFilter(value.filter);
+  const source = value.source === undefined ? undefined : parseSavedQuerySource(value.source);
   if (value.id !== undefined) {
     if (
       value.title !== undefined ||
@@ -50,7 +53,14 @@ export function validateRuleWrite(input: unknown): RuleWrite {
       value.revision < 0
     )
       throw new Error('Invalid rule revision');
-    return { id: value.id, revision: value.revision, filter, sort: 'id', idempotencyKey: value.idempotencyKey };
+    return {
+      id: value.id,
+      revision: value.revision,
+      filter,
+      sort: 'id',
+      ...(source ? { source } : {}),
+      idempotencyKey: value.idempotencyKey,
+    };
   }
   if (
     value.revision !== undefined ||
@@ -66,8 +76,22 @@ export function validateRuleWrite(input: unknown): RuleWrite {
     description: value.description,
     filter,
     sort: 'id',
+    ...(source ? { source } : {}),
     idempotencyKey: value.idempotencyKey,
   };
+}
+
+function parseSavedQuerySource(value: unknown): SavedQuerySource {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    !('kind' in value) ||
+    (value.kind !== 'owner' && value.kind !== 'catalogue')
+  )
+    throw new Error('Invalid rule source');
+  return { kind: value.kind };
 }
 
 /** One unchanged intent per retry. Native create and PUT retain all scope, gate and execution decisions. */
@@ -85,14 +109,22 @@ export async function submitCollectionRule(
     const result = input.id
       ? await client
           .collections({ collectionId: input.id })
-          .rule.put({ revision: input.revision!, filter: input.filter, sort: input.sort }, { headers })
+          .rule.put(
+            {
+              revision: input.revision!,
+              filter: input.filter,
+              sort: input.sort,
+              ...(input.source ? { source: input.source } : {}),
+            },
+            { headers },
+          )
       : await client.collections.post(
           {
             membershipKind: 'dynamic',
             title: input.title!,
             description: input.description!,
             visibility: 'private',
-            rule: { filter: input.filter, sort: input.sort },
+            rule: { filter: input.filter, sort: input.sort, ...(input.source ? { source: input.source } : {}) },
           },
           { headers },
         );

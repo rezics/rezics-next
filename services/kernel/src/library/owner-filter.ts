@@ -550,6 +550,9 @@ export async function admitSavedCollectionMemberQuery(
   deadline: number,
 ): Promise<CollectionMemberAdmission> {
   requireAccessDeadline(deadline);
+  // This adapter owns private OWNER execution only. Search-origin catalogue rules must enter
+  // through the composed Search Source instead of being narrowed to these private facts.
+  if (rule.source.kind === 'catalogue') throw new ProblemError('dependency_unavailable');
   if (options.sort !== undefined && options.sort !== rule.sort) throw new ProblemError('unsupported_query');
   const release = await readRelease(deps.pool, rule.releaseDigest);
   requireAccessDeadline(deadline);

@@ -21,8 +21,14 @@ import read from './collection-rules-read.sql';
 import insert from './collection-rules-insert.sql';
 import update from './collection-rules-update.sql';
 
+/** Source selection is stored beside the shared predicate, never inside its grammar. */
+export type CollectionRuleSource = Readonly<{ kind: 'owner' | 'catalogue' }>;
 /** Uses the actual common preparation order declaration; no caller-local sort language. */
-export type CollectionRule = Readonly<{ filter: FilterDocument; sort: Extract<PreparationDefinition['sort'], 'id'> }>;
+export type CollectionRule = Readonly<{
+  filter: FilterDocument;
+  sort: Extract<PreparationDefinition['sort'], 'id'>;
+  source: CollectionRuleSource;
+}>;
 export type AdmittedCollectionRule = CollectionRule & Readonly<{ releaseDigest: string }>;
 export type SavedCollectionRule = AdmittedCollectionRule &
   Readonly<{
@@ -35,13 +41,23 @@ type Client = Pick<PoolClient, 'query'>;
 /** Shared parser owns every predicate node, including nested and saved-filter operands. */
 export function parseCollectionRule(input: unknown): CollectionRule {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ProblemError('invalid_request');
-  if (Object.keys(input).some((key) => key !== 'filter' && key !== 'sort') || !('filter' in input))
+  if (Object.keys(input).some((key) => key !== 'filter' && key !== 'sort' && key !== 'source') || !('filter' in input))
     throw new ProblemError('invalid_request');
   const sort = 'sort' in input ? input.sort : 'id';
   if (typeof sort !== 'string') throw new ProblemError('invalid_request');
   if (sort !== 'id') throw new ProblemError('unsupported_query');
+  const sourceValue = 'source' in input ? input.source : { kind: 'owner' };
+  if (
+    !sourceValue ||
+    typeof sourceValue !== 'object' ||
+    Array.isArray(sourceValue) ||
+    Object.keys(sourceValue).length !== 1 ||
+    !('kind' in sourceValue) ||
+    (sourceValue.kind !== 'owner' && sourceValue.kind !== 'catalogue')
+  )
+    throw new ProblemError('invalid_request');
   try {
-    return { filter: parseFilter(input.filter), sort };
+    return { filter: parseFilter(input.filter), sort, source: { kind: sourceValue.kind } };
   } catch (error) {
     if (error instanceof FilterError) throw new ProblemError(error.problem, { errors: error.errors });
     throw error;
@@ -70,11 +86,13 @@ export async function admitCollectionRule(pool: Pool, rule: CollectionRule): Pro
   if (!current) throw new ProblemError('semantic_not_ready');
   try {
     const filter = admitFilter(rule.filter, current.release, { owner: true });
-    // Compile the actual expanded native plan before accepting a definition. Saving needs no result Source.
-    compileCurrentOwnerFilter(filter);
+    // OWNER rules compile against Commerce's private population. Catalogue rules retain shared Search meaning;
+    // their execution admission belongs to the installed Search Source and is not certified by this write.
+    if (rule.source.kind === 'owner') compileCurrentOwnerFilter(filter);
     return {
       filter,
       sort: rule.sort,
+      source: rule.source,
       releaseDigest: current.digest,
     };
   } catch (error) {
@@ -177,8 +195,8 @@ export async function readSavedCollectionRule(
   collectionId: string,
 ): Promise<SavedCollectionRule | null> {
   const row = await read.run({ query: client.query.bind(client) }, { route, collection_id: collectionId });
-  if (!row || row.releaseDigest === null || row.filter === null || row.sort === null) return null;
-  const rule = parseCollectionRule({ filter: JSON.parse(row.filter), sort: row.sort });
+  if (!row || row.releaseDigest === null || row.filter === null || row.sort === null || row.source === null) return null;
+  const rule = parseCollectionRule({ filter: JSON.parse(row.filter), sort: row.sort, source: { kind: row.source } });
   return {
     ...rule,
     revision: Number(row.ruleRevision),
@@ -207,6 +225,7 @@ export async function insertSavedCollection(
     cover_media_id: draft.coverMediaId ?? null,
     filter: JSON.stringify(rule.filter),
     sort: rule.sort,
+    source: rule.source.kind,
     release_digest: rule.releaseDigest,
     transaction_id: command.transactionId,
     time: command.time,
@@ -234,6 +253,7 @@ export async function updateSavedCollectionRule(
     revision,
     filter: JSON.stringify(rule.filter),
     sort: rule.sort,
+    source: rule.source.kind,
     release_digest: rule.releaseDigest,
     transaction_id: command.transactionId,
     time: command.time,

@@ -27,7 +27,7 @@ const filter = parseFilter({
 });
 
 function SeededRulePage() {
-  writeSavedQueryHandoff({ viewerId: storyViewerId, filter, sort: 'id' });
+  writeSavedQueryHandoff({ viewerId: storyViewerId, filter, sort: 'id', source: { kind: 'owner' } });
   return <PageStory visitor="Signed In" path="/library/rules/new" />;
 }
 

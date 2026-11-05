@@ -15,6 +15,8 @@ import { DiscoveryResults } from '../discovery-results';
 import { realmCatalogueSubjectHref } from '../realm-catalogue-handoff';
 import { SearchWindowControls } from '../search-window';
 import type { SearchWindowNavigation } from '../search-window';
+import { SaveQueryLink } from '../../library/save-query';
+import { searchSavedQuerySelection } from '../saved-query-selection';
 
 import type { SearchPageData } from '../search';
 import type { useSearchRetryFocus } from '../search-retry-focus';
@@ -96,6 +98,7 @@ export function SearchResultsRegion({
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
   const executedState = retryState ?? data?.queryState;
+  const savedQuery = searchSavedQuerySelection(executedState);
   const retryWithoutWaiting = onRetry
     ? () => {
         void onRetry();
@@ -115,18 +118,21 @@ export function SearchResultsRegion({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{m.search_results({}, options)}</p>
-          <SearchSort
-            sort={data?.sort ?? 'relevance'}
-            locale={locale}
-            query={query}
-            type={type}
-            facets={selectedFacets}
-            state={retryState}
-            ratingPopulations={data?.ratingPopulations}
-            ratingPopulation={retryState?.ratingPopulation}
-            ratingReadiness={data?.ratingReadiness}
-            disabled={invalid}
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            {savedQuery.state === 'admitted' ? <SaveQueryLink id="catalogue-search" selection={savedQuery} /> : null}
+            <SearchSort
+              sort={data?.sort ?? 'relevance'}
+              locale={locale}
+              query={query}
+              type={type}
+              facets={selectedFacets}
+              state={retryState}
+              ratingPopulations={data?.ratingPopulations}
+              ratingPopulation={retryState?.ratingPopulation}
+              ratingReadiness={data?.ratingReadiness}
+              disabled={invalid}
+            />
+          </div>
         </div>
         {data?.queryState && !result && (
           <ResultKindNavigation

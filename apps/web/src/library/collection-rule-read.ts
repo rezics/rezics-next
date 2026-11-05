@@ -6,10 +6,12 @@ import type { Release } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { validateRuleLabelPage } from './collection-rule-label-input';
+import type { SavedQuerySource } from './saved-query-editor/selection';
 
 export type SavedRule = {
   filter: FilterDocument;
   sort: 'id';
+  source?: SavedQuerySource;
   revision: number;
   collectionRevision: number;
   releaseDigest: string;

@@ -204,12 +204,12 @@ test('terminal saved views retain only completed public A; pending B, private an
   expect(
     (
       await f.db.admin.query(
-        `SELECT curator_account_id,rule_filter FROM library.collection
+        `SELECT curator_account_id,rule_filter,rule_source FROM library.collection
     WHERE route=$1 AND collection_id=$2`,
         [route, collection.id],
       )
     ).rows,
-  ).toEqual([{ curator_account_id: null, rule_filter: null }]);
+  ).toEqual([{ curator_account_id: null, rule_filter: null, rule_source: null }]);
   expect((await f.request(null, 'GET', `/v1/collections/${privateView.id}`)).status).toBe(404);
   await expect(writeB()).rejects.toThrow();
   expect((await f.json(null, 'GET', `/v1/collections/${collection.id}`, 200)).collection.id).toBe(collection.id);

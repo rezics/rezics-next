@@ -33,9 +33,9 @@ test('saved rule create/CAS/replay/denial stay indexed as unrelated rules, facts
           `
           INSERT INTO library.collection
             (route,collection_id,curator_account_id,title,visibility,state,revision,member_count,order_epoch,
-             created_at,updated_at,transaction_id,membership_kind,rule_filter,rule_sort,rule_release_digest,rule_revision)
+             created_at,updated_at,transaction_id,membership_kind,rule_filter,rule_sort,rule_source,rule_release_digest,rule_revision)
           SELECT $1,id,$2,'Unrelated saved rule','private','active',1,0,0,now(),now(),id,
-                 'dynamic',$4::jsonb,'id',$5,1 FROM unnest($3::uuid[]) noise(id)`,
+                 'dynamic',$4::jsonb,'id','owner',$5,1 FROM unnest($3::uuid[]) noise(id)`,
           [route, f.runtime.identity.ordinary.accountId, ids, JSON.stringify(filter), bundledDigest],
         );
       },
