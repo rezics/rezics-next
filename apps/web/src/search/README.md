@@ -238,7 +238,7 @@ W * (1 work + max(3, 20) children) + S <= 420. The native page keeps its preview
 accepted windows. Over-limit responses fail the installed native parser; they are never sliced. Preview size is not
 a release total. Current-window announcements include sparse windows and use the supplied locale.
 
-Decision: each work retains at most 12 distinct successful requested cursors, then offers First window rather than
+Decision: each work retains at most 12 distinct successful requested cursors plus the current next token, then offers First window rather than
 continuing; a ready response pointing to any retained token also requires restart. A preparing response can lawfully
 retry its own token. First window deliberately navigates to the same exact released form without the group-page
 cursor; it does not replay the child chain. This is a reversible visit-local ceiling, not a native expiry policy.
