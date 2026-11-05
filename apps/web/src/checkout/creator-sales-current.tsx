@@ -150,15 +150,6 @@ export function CreatorSalesCurrent(props: Props) {
       (!visit.windows.transferredLoadId || visit.windows.transferredLoadId === loadId) &&
       (!visit.windows.completed || visit.windows.completed.loadId === loadId) &&
       visit.windows.coordinates.staged.cursor === cursor;
-    console.log('creator-sales transfer', {
-      transfer,
-      staged: visit.windows.coordinates.staged?.cursor,
-      target: visit.windows.targetLocationKey,
-      locationKey,
-      stagedLoadId: visit.windows.transferredLoadId,
-      loadId,
-      cursor,
-    });
     active = {
       authority,
       client: current.client,
@@ -365,21 +356,6 @@ function CurrentSalesRead({
   if (windows.source !== source) windows.retrying = false;
   windows.source = source;
   const activeStage = windows.coordinates.staged;
-  if (activeStage && windows.completed)
-    console.log('creator-sales admission', {
-      activeStage: activeStage.cursor,
-      completed: windows.completed,
-      locationKey,
-      loadId,
-      cursor,
-      admitting: windows.admitting,
-      ready: value?.page.kind,
-      current: sourceIsCurrent(),
-      fetch: client.getQueryState(queryKey)?.fetchStatus,
-      observation,
-      queryObservation: client.getQueryState(queryKey)?.dataUpdateCount,
-      sameData: client.getQueryData(queryKey) === value,
-    });
   useLayoutEffect(() => {
     if (value?.page.kind !== 'ready' && value?.page.kind !== 'loading') windows.focus = undefined;
     if (
@@ -433,7 +409,6 @@ function CurrentSalesRead({
     windows.navigationFailed = false;
     const attempt = windows.coordinates.staged;
     windows.focus = keyboard ? element : undefined;
-    redraw((n) => n + 1);
     if (sourceIsCurrent()) {
       void navigate(creatorSalesHref(locale, target), (targetLocationKey) => {
         if (windows.coordinates.staged !== attempt) return;
@@ -480,6 +455,7 @@ function CurrentSalesRead({
       windows.focus = undefined;
       settled();
     }
+    redraw((n) => n + 1);
   };
   if (hydrated && !origin.isCurrent())
     return (
