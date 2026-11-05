@@ -19,6 +19,31 @@ the author's current rating. Native thread/post IDs and exact revision IDs selec
 display labels. A replacement page/revision remounts disclosure controls. Profile return preserves the original
 locale, view, cursor and query bytes and restores the exact surviving link without overriding newer focus.
 
+Decision: retain only accepted cursor coordinates in tab-local memory, keyed by canonical account, contribution
+view, locale and publication state; keep eight predecessors plus the current coordinate, reuse the localized First
+page label, and translate Previous in all eight supported locales.
+
+## Public contribution window navigation
+
+Posts, Reviews and Discussion navigate through the existing named account route. One explicit movement retains the
+route's existing anonymous plan: `POST /v1/pages:read` for the named composition and overview, then one replacing
+`GET /v1/accounts/{id}/posts?limit=20&cursor=…` or
+`GET /v1/accounts/{id}/threads?kind=review|discussion&limit=20&cursor=…`. First omits the cursor. The list endpoint
+is Content's `author_posts.list` or `author_threads.list`; no cursor chain, row point reads or additional page bodies
+are retained. Collections and Realms keep their current readers.
+
+The live visit stores at most eight accepted predecessor cursor strings and one current coordinate (nine coordinates
+total), each within the route's 4096-character cursor limit. A direct cursor address starts with no predecessor.
+Only an admitted native replacement moves the history; failure keeps the exact attempted target for Retry and leaves
+the last accepted coordinates in place. The rendered replacement contains at most twenty contributions. Tab-local
+state does not contain rows, excerpts, disclosures, private advice or action state, and does not survive a reload.
+
+## Cost: public contribution cursor movement
+
+- **Touches:** One named `POST /v1/pages:read`, one overview `POST /v1/pages:read` and one anonymous native list read for the selected cursor; Posts use `author_posts.list`, Reviews and Discussion use `author_threads.list` with the selected `kind`.
+- **Bound:** At most 20 contributions replace the displayed body; at most 9 cursor coordinates are retained. Reads do not grow with cursor depth or account history.
+- **Growth check:** The served-route acceptance advances and rereads exact native cursors on Posts, Reviews and Discussion, checking the bounded request set and replacing row window.
+
 ## Native context seam
 
 Content owns `author_posts.list` / `author_threads.list`. Their source response schemas now add bounded
