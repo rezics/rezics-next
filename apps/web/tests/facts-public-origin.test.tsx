@@ -204,9 +204,14 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(
       visitValidator({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'queue' }),
     ).toMatchObject({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'queue' });
-    expect(
-      visitValidator({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'changes' }),
-    ).toMatchObject({ returnTo: 'changes', reviewInvalid: false });
+    const changesReview = visitValidator({
+      reviewProperty: 'schema:abstract',
+      candidate: addonWorkId,
+      context: addonWorkId,
+      returnTo: 'changes',
+    });
+    expect(changesReview).toMatchObject({ returnTo: 'changes' });
+    expect(changesReview.reviewInvalid).toBeFalsy();
     expect(visitValidator({ property: 'schema:abstract', returnTo: 'sources' })).toMatchObject({ returnTo: 'sources' });
 
     await load('harbor-northern-lights', originHref);

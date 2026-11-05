@@ -117,7 +117,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
         input.returnTo === 'queue' || input.returnTo === 'changes' || input.returnTo === 'sources'
           ? input.returnTo
           : undefined,
-      reviewInvalid: hasExact && !validExact,
+      ...(hasExact && !validExact ? { reviewInvalid: true } : {}),
     };
   },
   loader: async ({ params, location }) => {
