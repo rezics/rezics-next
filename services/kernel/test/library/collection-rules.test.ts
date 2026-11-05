@@ -34,8 +34,11 @@ test('saving a supported native rule admits the definition without claiming a co
   );
 }, 120_000);
 
-test('a catalogue source is retained beside its predicate and is never narrowed to the curator OWNER population', async () => {
+test('a catalogue source is retained and executes through current Search membership without Library facts', async () => {
   const source = { kind: 'catalogue' } as const;
+  const catalogueBook = await f.subject('Catalogue book without a Library entry');
+  const libraryMovie = await f.subject('Nonmatching Library movie', 'schema:Movie');
+  await f.entry(libraryMovie, 'schema:Movie');
   const created = await f.send('POST', '/v1/collections', {
     ...draft,
     rule: { filter: { type: { in: ['schema:Book'] } }, sort: 'id', source },
@@ -47,6 +50,12 @@ test('a catalogue source is retained beside its predicate and is never narrowed 
   expect(await saved.json()).toMatchObject({
     rule: { filter: { type: { in: ['schema:Book'] } }, sort: 'id', source, revision: 1 },
   });
+
+  const members = await f.send('GET', `/v1/collections/${collection.id}/members`);
+  expect(members.status).toBe(200);
+  const firstPage = await members.json();
+  expect(firstPage.members).toContainEqual({ kind: 'dynamic', subjectId: catalogueBook });
+  expect(firstPage.members).not.toContainEqual({ kind: 'dynamic', subjectId: libraryMovie });
 
   const update = {
     revision: collection.revision,
@@ -64,9 +73,11 @@ test('a catalogue source is retained beside its predicate and is never narrowed 
     rule: { filter: { not: { type: { in: ['schema:Book'] } } }, source, revision: 2, collectionRevision: 2 },
   });
 
-  const members = await f.send('GET', `/v1/collections/${collection.id}/members`);
-  expect(members.status).toBe(503);
-  expect(await members.json()).toMatchObject({ code: 'dependency_unavailable' });
+  const notBooks = await f.send('GET', `/v1/collections/${collection.id}/members`);
+  expect(notBooks.status).toBe(200);
+  const secondPage = await notBooks.json();
+  expect(secondPage.members).toContainEqual({ kind: 'dynamic', subjectId: libraryMovie });
+  expect(secondPage.members).not.toContainEqual({ kind: 'dynamic', subjectId: catalogueBook });
 }, 120_000);
 
 test('Saved dynamic definitions use actual shared admission while current dynamic readers distinguish private execution from explicit public output', async () => {

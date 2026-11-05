@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { Collection, CollectionDraft, CollectionVisibility } from './collection-model.ts';
 import type { CoverSummary } from '../semantic/summaries.ts';
+import { runLibraryBoundedStep } from './command-support.ts';
 import {
   COLLECTION_METADATA_HISTORY_LIMIT,
   COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
@@ -96,7 +97,7 @@ export async function initializeCollectionMetadataHistory(
   },
   plan = collectionMetadataHistoryInitializePlan(input),
 ): Promise<void> {
-  await executeCollectionMetadataHistoryInitialize(client, plan);
+  await runLibraryBoundedStep(plan.kind, plan.total, () => executeCollectionMetadataHistoryInitialize(client, plan));
 }
 
 /** Capture one committed metadata transition; replay and no-op metadata commands add no row. */
@@ -116,12 +117,21 @@ export async function captureCollectionMetadataHistory(
   if (plan.changedFields.length === 0) return;
   const { owner: ownerPlan, append: appendPlan, prune: prunePlan, pruned: prunedPlan } = plan.leaves;
   if (!ownerPlan || !appendPlan || !prunePlan || !prunedPlan) throw new Error('Metadata transition plan is incomplete');
-  await executeCollectionMetadataHistoryOwner(client, ownerPlan);
-  const rows = await executeCollectionMetadataHistoryAppend(client, appendPlan);
+  await runLibraryBoundedStep(ownerPlan.kind, ownerPlan.total, () =>
+    executeCollectionMetadataHistoryOwner(client, ownerPlan),
+  );
+  const rows = await runLibraryBoundedStep(appendPlan.kind, appendPlan.total, () =>
+    executeCollectionMetadataHistoryAppend(client, appendPlan),
+  );
   if (rows.length !== 1) throw new Error('Collection metadata history did not record one native change');
-  const removed = await executeCollectionMetadataHistoryPrune(client, prunePlan);
+  const removed = await runLibraryBoundedStep(prunePlan.kind, prunePlan.total, () =>
+    executeCollectionMetadataHistoryPrune(client, prunePlan),
+  );
   if (removed.length > 1) throw new Error('Collection metadata history exceeded its one-row prune bound');
-  if (removed.length === 1) await executeCollectionMetadataHistoryPruned(client, prunedPlan);
+  if (removed.length === 1)
+    await runLibraryBoundedStep(prunedPlan.kind, prunedPlan.total, () =>
+      executeCollectionMetadataHistoryPruned(client, prunedPlan),
+    );
 }
 
 export type CollectionMetadataHistoryState = {
@@ -135,7 +145,9 @@ export async function readCollectionMetadataHistoryState(
   input: { route: number; collectionId: string; curatorAccountId: string },
   plan = collectionMetadataHistoryStatePlan(input),
 ): Promise<CollectionMetadataHistoryState> {
-  const row = await executeCollectionMetadataHistoryState(client, plan);
+  const row = await runLibraryBoundedStep(plan.kind, plan.total, () =>
+    executeCollectionMetadataHistoryState(client, plan),
+  );
   if (!row) return { coverage: 'unknown', knownFromRevision: null, prunedBeforeRevision: null };
   if (row.coverage !== 'complete' && row.coverage !== 'partial' && row.coverage !== 'unknown')
     throw new Error('Invalid Collection metadata history coverage');
@@ -163,7 +175,7 @@ export async function pageCollectionMetadataHistory(
     limit: input.limit,
   }),
 ) {
-  return executeCollectionMetadataHistoryPage(client, plan);
+  return runLibraryBoundedStep(plan.kind, plan.total, () => executeCollectionMetadataHistoryPage(client, plan));
 }
 
 export function collectionMetadataHistoryFields(value: readonly (string | null)[]): CollectionMetadataField[] {
@@ -182,7 +194,9 @@ export async function readCollectionMetadataHistoryEntry(
   input: { route: number; collectionId: string; curatorAccountId: string; revision: number },
   plan = collectionMetadataHistoryEntryPlan(input),
 ) {
-  return await executeCollectionMetadataHistoryEntry(client, plan);
+  return await runLibraryBoundedStep(plan.kind, plan.total, () =>
+    executeCollectionMetadataHistoryEntry(client, plan),
+  );
 }
 
 export function collectionMetadataHistoryEntry(row: {

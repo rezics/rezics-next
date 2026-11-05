@@ -14,12 +14,20 @@ import { type Access, type AccessCheck, type AccountActor } from '../request/acc
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
+import { runLibraryBoundedStep } from './command-support.ts';
 import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
-import read from './collection-rules-read.sql';
-import insert from './collection-rules-insert.sql';
-import update from './collection-rules-update.sql';
+import {
+  collectionRuleReadPlan,
+  executeCollectionRuleRead,
+} from './collection-rule-read-bounds.ts';
+import {
+  collectionRuleInsertPlan,
+  collectionRuleUpdatePlan,
+  executeCollectionRuleInsert,
+  executeCollectionRuleUpdate,
+} from './collection-rule-edit-bounds.ts';
 
 /** Source selection is stored beside the shared predicate, never inside its grammar. */
 export type CollectionRuleSource = Readonly<{ kind: 'owner' | 'catalogue' }>;
@@ -194,7 +202,10 @@ export async function readSavedCollectionRule(
   route: number,
   collectionId: string,
 ): Promise<SavedCollectionRule | null> {
-  const row = await read.run({ query: client.query.bind(client) }, { route, collection_id: collectionId });
+  const plan = collectionRuleReadPlan({ route, collection_id: collectionId });
+  const row = await runLibraryBoundedStep(plan.operation, plan.total, () =>
+    executeCollectionRuleRead({ query: client.query.bind(client) }, plan),
+  );
   if (!row || row.releaseDigest === null || row.filter === null || row.sort === null || row.source === null)
     return null;
   const rule = parseCollectionRule({ filter: JSON.parse(row.filter), sort: row.sort, source: { kind: row.source } });
@@ -215,7 +226,7 @@ export async function insertSavedCollection(
   rule: AdmittedCollectionRule,
   command: { transactionId: string; time: string },
 ): Promise<void> {
-  await insert.run(tx, {
+  const plan = collectionRuleInsertPlan({
     route,
     collection_id: draft.id,
     curator_account_id: draft.curatorAccountId,
@@ -231,6 +242,7 @@ export async function insertSavedCollection(
     transaction_id: command.transactionId,
     time: command.time,
   });
+  await runLibraryBoundedStep(plan.operation, plan.total, () => executeCollectionRuleInsert(tx, plan));
   await initializeCollectionMetadataHistory(tx, {
     route,
     collection: draft,
@@ -248,7 +260,7 @@ export async function updateSavedCollectionRule(
   rule: AdmittedCollectionRule,
   command: { transactionId: string; time: string },
 ): Promise<void> {
-  const row = await update.run(tx, {
+  const plan = collectionRuleUpdatePlan({
     route,
     collection_id: collectionId,
     revision,
@@ -259,5 +271,6 @@ export async function updateSavedCollectionRule(
     transaction_id: command.transactionId,
     time: command.time,
   });
+  const row = await runLibraryBoundedStep(plan.operation, plan.total, () => executeCollectionRuleUpdate(tx, plan));
   if (!row) throw new ProblemError('conflict');
 }

@@ -102,6 +102,8 @@ export interface OwnerFilterLeafProvider {
 export type CollectionMemberAdmission = {
   filter: FilterDocument | undefined;
   sort: 'id';
+  /** Saved population is part of the admitted meaning; it selects the native receiving Source. */
+  source: 'owner' | 'catalogue';
   plan: CurrentOwnerFilterPlan | null;
   /** Immutable admitted meaning and exact expanded query; private cursor/preparation input, never permission. */
   releaseDigest: string | null;
@@ -550,9 +552,6 @@ export async function admitSavedCollectionMemberQuery(
   deadline: number,
 ): Promise<CollectionMemberAdmission> {
   requireAccessDeadline(deadline);
-  // This adapter owns private OWNER execution only. Search-origin catalogue rules must enter
-  // through the composed Search Source instead of being narrowed to these private facts.
-  if (rule.source.kind === 'catalogue') throw new ProblemError('dependency_unavailable');
   if (options.sort !== undefined && options.sort !== rule.sort) throw new ProblemError('unsupported_query');
   const release = await readRelease(deps.pool, rule.releaseDigest);
   requireAccessDeadline(deadline);
@@ -568,7 +567,16 @@ export async function admitSavedCollectionMemberQuery(
       invalidFilter(error);
     }
   }
-  return finishCollectionMemberAdmission(deps, viewer, filter, release, rule.releaseDigest, deadline, true);
+  return finishCollectionMemberAdmission(
+    deps,
+    viewer,
+    filter,
+    release,
+    rule.releaseDigest,
+    deadline,
+    true,
+    rule.source.kind,
+  );
 }
 
 async function finishCollectionMemberAdmission(
@@ -579,6 +587,7 @@ async function finishCollectionMemberAdmission(
   releaseDigest: string | null,
   deadline: number,
   retainedMeaning = false,
+  source: 'owner' | 'catalogue' = 'owner',
 ): Promise<CollectionMemberAdmission> {
   const reads = filter === undefined ? [] : collectionMemberPrivateReads(filter);
   if (reads.length) {
@@ -612,13 +621,14 @@ async function finishCollectionMemberAdmission(
   const admission: CollectionMemberAdmission = {
     filter,
     sort: 'id',
+    source,
     plan: filter === undefined ? null : compileCurrentOwnerFilter(filter),
     releaseDigest,
     release,
     queryDigest:
       'sha256:' +
       createHash('sha256')
-        .update(canonicalize({ filter: filter ?? null, sort: 'id', releaseDigest })!)
+        .update(canonicalize({ filter: filter ?? null, sort: 'id', source, releaseDigest })!)
         .digest('hex'),
     owner:
       filter !== undefined && reads.length && viewer.kind === 'account'

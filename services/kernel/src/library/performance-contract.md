@@ -6,6 +6,8 @@ those suites have passed. Shared native bounds and evidence are owned by the [Ke
 
 ## Collection operation costs
 
+Decision: saved catalogue rules page through the registered Search scope using their pinned release; owner rules keep the private Library Source path.
+
 Decision: keep each native repair page at 128 raw original occurrences, independently of Source's 100-key ceiling; charge the failed edit, separately authorized begin, each outbox/DBOS continuation, and deliberate retry as separate stages.
 
 Price the complete operation: request and status reads, checkpoints, activation, preparation, authorization, locks,
