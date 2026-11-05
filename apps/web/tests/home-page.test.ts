@@ -1,13 +1,15 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { slug } from '@rezics/definitions/slug';
 import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch, createStoryRecordedKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadRoutePage, RoutePage } from '../src/features/pages/route.tsx';
-import { HomeCatalogue } from '../src/features/pages/home-catalogue';
-import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadRoutePage, RoutePage } = await import('../src/features/pages/route.tsx');
+const { HomeCatalogue } = await import('../src/features/pages/home-catalogue');
+const { m } = await import('../src/paraglide/messages.js');
 
 const messages = {
   unknown: '不明',
