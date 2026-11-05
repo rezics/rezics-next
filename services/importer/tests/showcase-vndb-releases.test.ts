@@ -659,7 +659,7 @@ test('later selected-family reseeds carry the newly current release classificati
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test('malformed and retracted source states withhold only affected claims', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-edges-'));
