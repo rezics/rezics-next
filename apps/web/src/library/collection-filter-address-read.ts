@@ -19,7 +19,7 @@ export function collectionFilterSearch(input: object): Record<string, string | s
 export function readCollectionFilterAddress(
   search: Record<string, string | string[]>,
   release: FilterRelease,
-  type: string,
+  type?: string,
 ) {
   const filterParams = readCollectionFilterParams(
     new URLSearchParams(

@@ -115,7 +115,7 @@ export function CollectionFilters({
   facetLoader,
 }: {
   id: string;
-  type: string;
+  type: string | undefined;
   properties: CollectionFilterProperty[];
   params: CollectionFilterParams;
   filterReleaseKey?: string;
@@ -126,7 +126,7 @@ export function CollectionFilters({
   const search = useRouterState({ select: (state) => state.location.searchStr });
   const saveQueryInput = {
     ...(params.document ? { document: params.document } : {}),
-    type,
+    ...(type ? { type } : {}),
     search,
     invalid: Boolean(params.issues?.length || params.ignored.length),
   };
@@ -292,7 +292,7 @@ export function CollectionFilters({
       className="min-w-0"
     >
       <>
-        <input type="hidden" name="type" value={type} />
+        {type ? <input type="hidden" name="type" value={type} /> : null}
         {Object.entries(draftLabels).map(([property, label]) =>
           label && draftConditions.facetValues[property]?.length ? (
             <input key={property} type="hidden" name={`l.${property}`} value={label} />
@@ -341,7 +341,7 @@ export function CollectionFilters({
             const request = collectionFacetRequest(
               {
                 resource: { kind: 'collection', id },
-                type,
+                ...(type ? { type } : {}),
                 release: filterReleaseKey ?? 'unavailable',
                 ...(params.document ? { filter: params.document } : {}),
                 languages: requestLanguages(locale),

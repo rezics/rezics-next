@@ -2113,7 +2113,7 @@ function CollectionPageLifetime({
             {page.filterProperties && page.filterParams ? (
               <CollectionFilters
                 id={page.id}
-                type={page.filterType ?? 'schema:Book'}
+                type={page.filterType}
                 properties={page.filterProperties}
                 params={page.filterParams}
                 {...(page.filterReleaseKey ? { filterReleaseKey: page.filterReleaseKey } : {})}

@@ -93,7 +93,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
     let filterProperties: CollectionFilterProperty[] = [];
     let filterReleaseKey: string | undefined;
     const requested = data.search ?? {};
-    const type = typeof requested.type === 'string' ? requested.type : 'schema:Book';
+    const type = typeof requested.type === 'string' ? requested.type : undefined;
     if (filtersOn) {
       try {
         if (!release) throw new Error('Definitions unavailable');
@@ -132,12 +132,23 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
         ...data,
         ...(filter?.document ? { filter: filter.document } : {}),
         ...(filterStatus ? { filterStatus } : {}),
-        ...(filter ? { filterIgnored: filter.ignored, filterType: type, filterProperties, filterParams: filter } : {}),
+        ...(filter
+          ? {
+              filterIgnored: filter.ignored,
+              ...(type ? { filterType: type } : {}),
+              filterProperties,
+              filterParams: filter,
+            }
+          : {}),
         ...(filterReleaseKey ? { filterReleaseKey } : {}),
       },
       data.credentialMode,
     );
-    await nameSubjectTypes(page.members.map((member) => member.subject));
+    await nameSubjectTypes(
+      [...page.members, ...(!('preparing' in page) ? (page.filteredMembers ?? []) : [])].map(
+        (member) => member.subject,
+      ),
+    );
     const typeRatios = release
       ? Object.fromEntries(
           Object.entries(release.types).flatMap(([id, type]) => (type.coverRatio ? [[id, type.coverRatio]] : [])),

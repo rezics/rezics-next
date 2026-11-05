@@ -396,7 +396,7 @@ function DynamicCollectionPageLifetime({
           {current.filterProperties && current.filterParams ? (
             <CollectionFilters
               id={current.id}
-              type={current.filterType ?? 'schema:Book'}
+              type={current.filterType}
               properties={current.filterProperties}
               params={current.filterParams}
               {...(current.filterReleaseKey ? { filterReleaseKey: current.filterReleaseKey } : {})}

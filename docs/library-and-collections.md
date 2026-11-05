@@ -391,6 +391,8 @@ A Collection has one identity, curator, visibility, title/description, follow ta
 `ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain
 editable. Dynamic membership derives unique subjects from native truth. One shared Collection members service and
 page serves curated, Everything, state and Liked, with shared filters, sorts, summaries, cursors and actions.
+Decision: Collection filters without an explicit Type use the released cross-Type facet roster; applying or clearing a filter preserves that absence, and filtered rows retain their own released Type labels.
+
 Grid/list/table layout is a client UI choice. Collection presentation kind is an owner-selected or derived
 definitions Type; members keep their own Types. Neither changes membership or authorization. The joint
 [Collection presentation and editor contract](collection-presentation.md) owns the selected fields, editor operations
