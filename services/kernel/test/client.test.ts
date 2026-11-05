@@ -1,11 +1,7 @@
 import { expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
-import {
-  assertNoServiceImports,
-  clientDeclarations,
-  committedDeclarations,
-} from '../scripts/client.ts';
+import { assertNoServiceImports, clientDeclarations, committedDeclarations } from '../scripts/client.ts';
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
 const timeout = 60_000;
@@ -165,17 +161,22 @@ test('client compilation preserves prepared SQL analysis without a database URL'
     const config = resolve(fixture, '.reylo.yaml');
     writeFileSync(config, 'direct_url: ""\n');
     const compiler = resolve(fixture, 'compiler');
-    writeFileSync(compiler, `#!/usr/bin/env bun
+    writeFileSync(
+      compiler,
+      `#!/usr/bin/env bun
 if (process.env.REYLO_CONFIG !== ${JSON.stringify(config)} || process.env.DATABASE_URL !== undefined)
   throw new Error('Prepared SQL analysis environment was lost');
 const result = Bun.spawnSync([${JSON.stringify(resolve(PROJECT_ROOT, 'node_modules/.bin/tsc'))}, ...process.argv.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
 process.exit(result.exitCode);
-`);
+`,
+    );
     chmodSync(compiler, 0o755);
     process.env.REYLO_CONFIG = config;
     delete process.env.DATABASE_URL;
-    expect([...clientDeclarations(kernel, { repositoryRoot: fixture, compiler }).keys()])
-      .toEqual(['http/kernel.d.ts', 'http/request.d.ts']);
+    expect([...clientDeclarations(kernel, { repositoryRoot: fixture, compiler }).keys()]).toEqual([
+      'http/kernel.d.ts',
+      'http/request.d.ts',
+    ]);
   } finally {
     if (previousConfig === undefined) delete process.env.REYLO_CONFIG;
     else process.env.REYLO_CONFIG = previousConfig;

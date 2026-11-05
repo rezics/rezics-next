@@ -80,7 +80,6 @@ test('installed public root exposes the mounted reading, review, rating and shel
   expect(new URL(sent[12]!.url).searchParams.get('cursor')).toBe('next-page');
 });
 
-
 test('reviewed Person uses the mounted original read, asynchronous merge and operation routes', async () => {
   const sent: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
@@ -93,13 +92,22 @@ test('reviewed Person uses the mounted original read, asynchronous merge and ope
   const requests = reviewedPersonRequests(client);
   await requests.read(id, { source: 'bangumi', externalId: 'person:8' });
   const endpoint = {
-    subject: id, revision: 2, securityRevision: '9007199254740993', source: 'bangumi' as const,
-    externalId: 'person:8', claimTransactionId: id, property: 'wdt:P6298' as const, value: '8',
+    subject: id,
+    revision: 2,
+    securityRevision: '9007199254740993',
+    source: 'bangumi' as const,
+    externalId: 'person:8',
+    claimTransactionId: id,
+    property: 'wdt:P6298' as const,
+    value: '8',
   };
   const other = '019a1b2c-3d4e-7f00-8a00-000000000002';
-  const body = { subjects: [id, other] as [string, string], expectedIdentity: {
-    endpoints: [endpoint, { ...endpoint, subject: other }] as [typeof endpoint, typeof endpoint],
-  } };
+  const body = {
+    subjects: [id, other] as [string, string],
+    expectedIdentity: {
+      endpoints: [endpoint, { ...endpoint, subject: other }] as [typeof endpoint, typeof endpoint],
+    },
+  };
   const response = await requests.merge(body, { headers: { 'idempotency-key': '"original-intent"' } });
   expect(response.status).toBe(202);
   expect(response.data).toEqual({ operation: { id } });
