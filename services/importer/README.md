@@ -183,7 +183,6 @@ R is source records, B binding/journal rows, N input bytes, M record/request/res
 - **Bound:** requests are sequential with a 250 ms gap under the shared deadline; each response is at most 64 KiB and contains at most seven bounded careers. No archive revision is invented.
 - **Growth check:** services/importer/tests/showcase-bangumi-person-careers.test.ts covers archive precedence, receipt, malformed response and sealed replay; services/kernel/test/imports/bangumi-person-careers.test.ts covers review/adoption and current reads. Native execution remains integration-owned.
 
-
 ### Interrupted source acquisition cleanup
 
 At most one cleanup per unfinished iterator; cancellation prevents further reads and acquisition writes.

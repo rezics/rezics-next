@@ -734,7 +734,6 @@ receipt locator: it cannot publish without the two fixed participant receipts. A
 full positive undo/publication, generation minimization/erasure and inclusive native cost evidence remain
 pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
 
-
 ### Durable publication and caller contract
 
 Merge, unmerge, repoint, `verifyAccountAgent` and `unverifyAccountAgent` use the same native durable mechanism.
