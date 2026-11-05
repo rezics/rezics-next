@@ -137,7 +137,7 @@ test('served named Collections route replaces sparse/empty windows, survives cur
     expect(window.document.activeElement?.tagName).toBe('H2');
     fail = true;
     await click('continuation');
-    expect(link('retry')).not.toBeNull();
+    expect(link('retry'), JSON.stringify({ page: host.textContent, href: router.state.location.href, calls: requests.map((url) => url.search) })).not.toBeNull();
     await click('retry');
     expect(requests.slice(-2).map((url) => url.searchParams.get('cursor'))).toEqual(['final', 'final']);
     expect(link('continuation')).toBeNull();
