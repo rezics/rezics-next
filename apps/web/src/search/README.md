@@ -230,6 +230,10 @@ obsolete repair state. Coverage describes committed endpoints, precision and pos
 dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
 Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.
 
+## Release criteria authoring
+
+Decision: Draft release criteria against the current native-admitted controls, retain incompatible operands for explicit correction, and apply only a valid GET that starts a fresh result traversal. Display-language preferences reuse Search's bounded ordered-language control; release-language conditions remain separate, and header suggestions are labelled but not role-restricted, so native validation remains final.
+
 ## Release child windows
 
 The released-edition journey consumes native grouped responses without reconstructing groups or cursors. Each work
