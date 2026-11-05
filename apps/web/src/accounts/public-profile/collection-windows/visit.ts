@@ -10,8 +10,12 @@ export class CollectionVisit {
   private cancelHandoff: (() => void) | undefined;
   private handoff: (() => void) | undefined;
 
-  get current(): Coordinate { return this.coordinates.at(-1) ?? null; }
-  get previous(): Coordinate | undefined { return this.coordinates.at(-2); }
+  get current(): Coordinate {
+    return this.coordinates.at(-1) ?? null;
+  }
+  get previous(): Coordinate | undefined {
+    return this.coordinates.at(-2);
+  }
 
   retire() {
     this.live = false;
@@ -54,7 +58,10 @@ export class CollectionVisit {
   receive(cursor: Coordinate, admitted: boolean) {
     if (!this.live) return;
     this.pending = false;
-    if (!admitted) { this.cancelFocus(); return; }
+    if (!admitted) {
+      this.cancelFocus();
+      return;
+    }
     const target = this.target;
     if (target && target.cursor === cursor) {
       if (target.movement === 'first') this.coordinates = [null];
@@ -75,7 +82,10 @@ export class CollectionVisit {
 
 /** Remove only cursor fields, preserving unrelated query bytes, duplicates and fragment. */
 export function collectionWindowHref(search: string, hash: string, cursor: Coordinate): string {
-  const retained = search.replace(/^\?/, '').split('&').filter((part) => !new URLSearchParams(part).has('cursor'));
+  const retained = search
+    .replace(/^\?/, '')
+    .split('&')
+    .filter((part) => !new URLSearchParams(part).has('cursor'));
   if (cursor !== null) retained.push(`cursor=${encodeURIComponent(cursor)}`);
   const query = retained.filter((part, index) => part || index > 0).join('&');
   return `${query ? `?${query}` : '?'}${hash ? `#${hash.replace(/^#/, '')}` : ''}`;

@@ -1,4 +1,7 @@
-import { CollectionWindowControls, CollectionWindowsContext } from '../../accounts/public-profile/collection-windows/host';
+import {
+  CollectionWindowControls,
+  CollectionWindowsContext,
+} from '../../accounts/public-profile/collection-windows/host';
 import { PublicAccountState } from '../../accounts/public-profile/view';
 import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
@@ -361,15 +364,20 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
         </h2>
         {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
         {actionList}
-        {windowed ? <CollectionWindowControls next={next} locale={value.locale} /> : next && (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
-          <a
-            data-slot="continuation"
-            rel="next"
-            href={`?cursor=${encodeURIComponent(next)}`}
-            className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
-          >
-            {m.threads_next_page({}, { locale: value.locale as never })}
-          </a>
+        {windowed ? (
+          <CollectionWindowControls next={next} locale={value.locale} />
+        ) : (
+          next &&
+          (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
+            <a
+              data-slot="continuation"
+              rel="next"
+              href={`?cursor=${encodeURIComponent(next)}`}
+              className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
+            >
+              {m.threads_next_page({}, { locale: value.locale as never })}
+            </a>
+          )
         )}
       </section>
     );

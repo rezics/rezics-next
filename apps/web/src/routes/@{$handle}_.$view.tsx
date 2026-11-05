@@ -107,7 +107,7 @@ function AgentViewRoute() {
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
-  const { searchStr, hash } = useLocation();
+  const { searchStr, hash, pathname } = useLocation();
   const queryClient = useQueryClient();
   const query = agentViewQuery(handle, locale, view, cursor, searchStr);
   const { data, dataUpdatedAt } = useSuspenseQuery(query);
@@ -115,7 +115,9 @@ function AgentViewRoute() {
   useEffect(() => {
     if (view !== 'collections') return;
     // Cursor coordinates survive; predecessor response bodies do not become a second page cache.
-    return () => { queryClient.removeQueries({ queryKey: JSON.parse(queryIdentity), exact: true }); };
+    return () => {
+      queryClient.removeQueries({ queryKey: JSON.parse(queryIdentity), exact: true });
+    };
   }, [queryClient, queryIdentity, view]);
   const reading = useProfileReading({
     handle,
@@ -127,9 +129,19 @@ function AgentViewRoute() {
   const windows = useCollectionWindows({
     ...(data.kind === 'page' ? { page: data.page } : {}),
     failure: data.kind === 'state' ? data.state : undefined,
-    owner: handle, revision: dataUpdatedAt, view, locale, cursor: cursor ?? null, search: searchStr, hash,
-    navigate: (href) => { void router.navigate({ href }); },
-    retry: () => { void router.invalidate(); },
+    owner: handle,
+    revision: dataUpdatedAt,
+    view,
+    locale,
+    cursor: cursor ?? null,
+    search: searchStr,
+    hash,
+    navigate: (href) => {
+      void router.navigate({ href: `${pathname}${href}` });
+    },
+    retry: () => {
+      void router.invalidate();
+    },
   });
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
@@ -149,27 +161,28 @@ function AgentViewRoute() {
     );
   return (
     <CollectionWindowsContext.Provider value={windows}>
-    <PublicProfilePage key={cursor ?? 'first'}
-      page={data.page}
-      cursor={data.cursor ?? null}
-      locale={locale}
-      messages={subjectPageMessages()}
-      reading={reading}
-      relations={data.relations}
-      {...(data.operator ? { operator: data.operator } : {})}
-      link={SubjectLink}
-      view={view}
-      tabs={data.tabs}
-      tabLabels={viewTabLabels()}
-      base={`/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`}
-      heading={{
-        title: data.title,
-        label: viewLabel[view](),
-        href: `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`,
-      }}
-      publicRealms={data.publicRealms}
-      renderJsonLd={false}
-    />
+      <PublicProfilePage
+        key={cursor ?? 'first'}
+        page={data.page}
+        cursor={data.cursor ?? null}
+        locale={locale}
+        messages={subjectPageMessages()}
+        reading={reading}
+        relations={data.relations}
+        {...(data.operator ? { operator: data.operator } : {})}
+        link={SubjectLink}
+        view={view}
+        tabs={data.tabs}
+        tabLabels={viewTabLabels()}
+        base={`/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`}
+        heading={{
+          title: data.title,
+          label: viewLabel[view](),
+          href: `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`,
+        }}
+        publicRealms={data.publicRealms}
+        renderJsonLd={false}
+      />
     </CollectionWindowsContext.Provider>
   );
 }
