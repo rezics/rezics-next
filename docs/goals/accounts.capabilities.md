@@ -85,14 +85,14 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                                                                                                      |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cell                       | Acceptance                                                                                                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `catalogue`                | `specs/agent-profile-outcomes.test.ts` (native binding: `services/kernel/test/access/agent-profile-outcomes.test.ts`) resolves public identities for people, organizations and software agents, including verified-subject canonical resolution and operator attribution. |
-| `curated`                  | Not applicable: identity resolution does not enumerate curated Collection membership.                                                                           |
-| `Everything without state` | Not applicable: identity resolution does not enumerate Everything membership.                                                                                   |
-| `own state`                | Not applicable: identity resolution is public identity, not personal state.                                                                                     |
-| `mounted Zone`             | The same native suite exercises Kernel page-address responses for verified subject addresses; it does not establish public website publication or browser qualification.        |
-| `TypeList`                 | Not applicable: identity resolution does not enumerate a TypeList.                                                                                              |
+| `curated`                  | Not applicable: identity resolution does not enumerate curated Collection membership.                                                                                                                                                                                     |
+| `Everything without state` | Not applicable: identity resolution does not enumerate Everything membership.                                                                                                                                                                                             |
+| `own state`                | Not applicable: identity resolution is public identity, not personal state.                                                                                                                                                                                               |
+| `mounted Zone`             | The same native suite exercises Kernel page-address responses for verified subject addresses; it does not establish public website publication or browser qualification.                                                                                                  |
+| `TypeList`                 | Not applicable: identity resolution does not enumerate a TypeList.                                                                                                                                                                                                        |
 
 **Frozen scenarios:** Existing: “automated profile and attribution disclose operator while private data stays absent” (`specs/account-lifecycle-outcomes.test.ts`; native binding: `services/kernel/test/access/account-lifecycle-outcome.test.ts`) and the complete `specs/agent-profile-outcomes.test.ts` suite installed by `services/kernel/test/access/agent-profile-outcomes.test.ts`. Named assertions cover correctly typed public identities for person, organization and software agent (no Person fallback), software operator attribution, verified-person subject redirect while active and subject page while suspended, operator-only account:manage editing, outsider/private-field concealment, and public collections/posts visibility controls. This is source coverage, not website publication or browser qualification.
 
@@ -108,14 +108,14 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Surface cells:**
 
-| Cell                       | Acceptance                                                                                                                             |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Cell                       | Acceptance                                                                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `catalogue`                | `services/kernel/test/access/account-profile-http.test.ts` covers a native PATCH and public handle read, including public-view changes. |
-| `curated`                  | Not applicable: profile mutation and disclosure are account operations, not curated membership.                                        |
-| `Everything without state` | Not applicable: profile fields do not change Everything membership.                                                                    |
-| `own state`                | `services/kernel/test/access/account-profile-http.test.ts` covers native profile update and owner-visible resulting state.   |
-| `mounted Zone`             | Not applicable: profile edits are not Zone mounted-list operations.                                                                    |
-| `TypeList`                 | Not applicable: profile edits do not affect TypeList membership.                                                                       |
+| `curated`                  | Not applicable: profile mutation and disclosure are account operations, not curated membership.                                         |
+| `Everything without state` | Not applicable: profile fields do not change Everything membership.                                                                     |
+| `own state`                | `services/kernel/test/access/account-profile-http.test.ts` covers native profile update and owner-visible resulting state.              |
+| `mounted Zone`             | Not applicable: profile edits are not Zone mounted-list operations.                                                                     |
+| `TypeList`                 | Not applicable: profile edits do not affect TypeList membership.                                                                        |
 
 **Frozen scenarios:** Existing: “actors and organizations default to all public views and can independently turn each off and on” and “invalid view patches and other accounts cannot change presentation fields” (`services/kernel/test/access/account-public-views.test.ts`); “profile patch sets and clears links, refuses invalid links and preserves the previous value on refusal” (`services/kernel/test/access/account-profile-read.test.ts`). Native `services/kernel/test/access/account-profile-http.test.ts` scenarios cover one PATCH and public handle read; omitted fields and null clearing; automated operator authority and consent; organization-only `speakersListed`; completed avatar ownership; boundary/invalid input without partial change; idempotent replay; display-name events; served OpenAPI/generated-client operation; and bounded growth. The complete agent-profile wrapper imports its frozen suite covering all agent kinds, verified-subject resolution, operator attribution, private-field concealment and public-view control. Profile update remains per-field merge-patch with stable replay; verification and preferences retain their own commands. Source presence establishes implemented coverage, not execution or promotion.
 
