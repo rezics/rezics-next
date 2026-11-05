@@ -418,7 +418,7 @@ async function retainedSummaryContract() {
         m.benefit_acquisition({}, { locale }),
         `${m.benefit_licence({}, { locale })}: ${zero.contentEdition!.source.licence}`,
       ],
-      [unknownCapture, m.benefit_terms_unavailable({}, { locale })],
+      [`${unknownCapture} · ${m.commerce_before_tax({}, { locale })}`, m.benefit_terms_unavailable({}, { locale })],
       [wholeCapture, m.benefit_terms_unavailable({}, { locale })],
     ]);
     expect(document.querySelector('a[href*="/editions/"], form')).toBeNull();
