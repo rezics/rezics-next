@@ -1,7 +1,9 @@
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import page from './listing-page.sql';
 
-type PageInput = Parameters<typeof page.run>[1];
+// listing.ts has already admitted a numeric helper limit; PostgreSQL's generic
+// LIMIT bind also accepts string/bigint, which are not this caller's contract.
+type PageInput = Omit<Parameters<typeof page.run>[1], 'limit'> & { limit: number };
 
 /** A native pair-seek leaf; Subject admission and FULL disclosure are enclosing work. */
 export type SubjectCollectionPairPlan = Readonly<{
