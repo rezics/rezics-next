@@ -45,7 +45,7 @@ test('late rollout precedence and a growing file match measureLog in one travers
     { timestamp: start, type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ text: 'Final report' }] } },
     { timestamp: '2026-10-25T01:00:20.000Z', type: 'response_item', payload: { type: 'command_execution', id: 'check', command: 'bun test' } },
     { timestamp: '2026-10-25T01:00:30.000Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(1300, 700, 150) } } },
-    { timestamp: end, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(9000, 8000, 900) } } },
+    { timestamp: '2026-10-25T01:01:01.000Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(9000, 8000, 900) } } },
   ]);
   const appended = jsonl([
     { timestamp: end, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: tokens(10000, 9000, 1000) } } },
