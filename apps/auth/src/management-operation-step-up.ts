@@ -448,10 +448,11 @@ export function pendingManagementOperationMatches(
 export function markManagementOperationReturned(pending: PendingManagementOperationStepUp): boolean {
   if (!validPendingInput(pending) || pending.phase !== 'awaiting') return false;
   const state = pendingManagementOperationStepUpState();
+  const input = { accountId: pending.accountId, operationKey: pending.operationKey, operation: pending.operation };
   if (
     state.kind !== 'pending' ||
     state.value.phase !== 'awaiting' ||
-    !pendingManagementOperationMatches(state.value, pending)
+    !pendingManagementOperationMatches(state.value, input)
   )
     return false;
   const next = canonicalPending({
