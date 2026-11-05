@@ -735,6 +735,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     if (quotation?.[2] === 'quotations') {
       const keys = [...url.searchParams.keys()];
       const quote = url.searchParams.get('quote');
+      const context = url.searchParams.get('context');
       const marker = url.searchParams.get('quotationReturn');
       const origin = url.searchParams.get('returnTo');
       if (
@@ -742,8 +743,9 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
         (locale !== undefined && quotation[1] !== locale) ||
         url.hash ||
         new Set(keys).size !== keys.length ||
-        keys.some((key) => !['quote', 'quotationReturn', 'returnTo'].includes(key)) ||
+        keys.some((key) => !['quote', 'context', 'quotationReturn', 'returnTo'].includes(key)) ||
         (quote !== null && !new RegExp(`^${uuid}$`, 'i').test(quote)) ||
+        (context !== null && !new RegExp(`^${uuid}$`, 'i').test(context)) ||
         (marker !== null && !boundedToken(marker, 128)) ||
         (origin !== null &&
           (origin.length > 2048 ||
@@ -760,12 +762,15 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       const keys = [...url.searchParams.keys()];
       const stream = url.searchParams.get('stream');
       const cursor = url.searchParams.get('cursor');
+      const context = url.searchParams.get('context');
       if (
         url.origin !== 'https://rezics.invalid' ||
         (locale !== undefined && musicContext[1] !== locale) ||
         url.hash ||
+        new TextEncoder().encode(`${url.pathname}${url.search}`).byteLength > returnAddressCap ||
         new Set(keys).size !== keys.length ||
-        keys.some((key) => key !== 'stream' && key !== 'cursor') ||
+        keys.some((key) => key !== 'stream' && key !== 'cursor' && key !== 'context') ||
+        (context !== null && !new RegExp(`^${uuid}$`, 'i').test(context)) ||
         (stream !== null && !/^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u001f\u007f]{1,128}$/u.test(stream)) ||
         (cursor !== null && (!stream || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor)))
       )

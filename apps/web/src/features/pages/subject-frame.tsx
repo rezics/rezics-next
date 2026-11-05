@@ -397,7 +397,15 @@ export function SubjectFrame({
         )}
       </header>
       <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
-      <SubjectExploreSlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+      <SubjectExploreSlot
+        subjectId={frame.id}
+        subjectType={frame.type}
+        label={title}
+        locale={locale}
+        context={observedContext}
+        realm={realm}
+        returnTo={location.publicHref}
+      />
       <ReleaseFidelitySlot
         subjectId={frame.id}
         subjectType={frame.type}

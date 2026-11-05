@@ -6,6 +6,7 @@ import type { MusicContextAddress } from '../src/features/catalogue/music-contex
 import { musicContextRouteSearch } from '../src/features/catalogue/music-context-profile/navigation';
 import { MusicContextProfile } from '../src/features/pages/music-context-profile';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { candidateContext } from '../src/subject/candidates';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -218,10 +219,17 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     if (!retry) throw new Error('The failed native address did not expose retry');
     await settle(() => retry.click());
     expect(calls.slice(-2)).toEqual([
-      { stream: 'schema:location', cursor: 'next-1', session: 'current-token' },
-      { stream: 'schema:location', cursor: 'next-1', session: 'current-token' },
+      { context: candidateContext, stream: 'schema:location', cursor: 'next-1', session: 'current-token' },
+      { context: candidateContext, stream: 'schema:location', cursor: 'next-1', session: 'current-token' },
     ]);
     expect(host.textContent).toContain('Second page endpoint');
+
+    const previous = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Previous page'));
+    if (!previous) throw new Error('The bounded Previous address was not available');
+    await settle(() => previous.click());
+    expect(calls.at(-1)).toEqual({ context: candidateContext, stream: 'schema:location', session: 'page-token' });
+    await settle(() => pending[4]!.resolve(successful('schema:location', 'Fresh Previous page', 'previous-token')));
+    expect(host.textContent).toContain('Fresh Previous page');
 
     const related = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
       link.textContent?.includes('Second page endpoint'),
