@@ -853,70 +853,56 @@ refill, polling, per-row authorization or automatic command on restoration, Retr
 
 ## Operator transfer
 
-Imported transfer data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts);
-destination presentation cannot establish source approval or execution.
+Imported data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts).
+Destination advice cannot establish source approval or execution.
 
-Decision: Bound the stored attempt envelope to 54,109 UTF-16 units: its nested serialized request contributes at most
-4,096; the 128-unit accountId contributes 770 including quotes; and source acceptance and reference can coexist
-at 4,096 units each, contributing 49,156 including quotes at six escaped units per input unit for lone surrogates.
-The outer keys, punctuation and quoted source/readback values contribute 87. This storage limit leaves the
-separate 4,096-unit handoff request limit unchanged.
+Decision: the stored attempt envelope is bounded to 54,109 UTF-16 units: nested request 4,096; quoted accountId
+770 (128 units); acceptance and reference together 49,156 (4,096 units each at six escaped units per input unit);
+outer syntax 87. The separate handoff request limit remains 4,096 units.
 
-Operator-transfer read failures offer Retry within the mounted page. A failed session read preserves the saved
-attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
-fresh confirmation. Signed-out or changed accounts cannot act on it. Relation retries repeat only the failed read;
-after a submit failure, Retry reads the current relationship and leaves approval/execution in the original explicit
-reconciliation flow, retaining the request, operation key and references. If native execution may have occurred, its
-generic unresolved notice and Stay/Leave protection survive authority retirement and cached-page return. A current
-relationship observation never attributes that relationship to the earlier operation; an exact retry remains a
-separate, freshly reviewed and explicitly confirmed action using the retained descriptor.
+Failed reads offer deliberate exact Retry. A failed session read preserves the saved attempt; only its initiating
+account may recover it, after fresh confirmation. Signed-out or changed accounts cannot act. Relation Retry repeats
+the selected read; submit-failure Retry retains the original tuple, key, references and command stage for separate
+explicit reconciliation. A current relation cannot attribute that relation to an earlier operation. Native retries
+keep their original deadlines, relation lock and current-authorized confirmation.
 
-Retirement invalidates operation/read and file generations before synchronously removing private identity, review,
-credentials, handoff, references, relation and native advice from the DOM. Generic mounted history retains the first
-unresolved source execution plus the latest local review/outcome (at most two classifications), without identifiers,
-timestamps or account binding. Known source acknowledgement survives matching, failed and conflicting readback,
-missing/invalid/replaced storage and cached return. Destination acceptance is not source execution. A later
-acknowledgement, refusal or current relation never settles an earlier unknown send. Dismissal clears presentation
-only; exact descriptors and submitted markers remain under their installed ownership. Ordinary documents without
-saved evidence make no historical claim.
+Retirement invalidates operation, read and file generations before synchronously removing private identity,
+credentials, handoff, references, relation and advice from the DOM. Generic mounted history keeps the first unresolved
+source execution and latest review/outcome (at most two classifications), without identifiers, timestamps or account
+binding. Acknowledgement survives matching, failed or conflicting readback, missing/invalid/replaced storage and
+cached return. Destination acceptance is separate from source execution. Later acknowledgement, refusal or current
+advice cannot settle an earlier unknown. Dismissal clears presentation only; exact descriptors and submitted markers
+retain their installed ownership. Ordinary documents without saved evidence make no historical claim.
 
-Decision: visible current-state Retry after retirement opens a fresh bounded read lifetime using current management
-session/readiness and the exact saved descriptor; it never reuses a retired callback. Missing, invalid or replaced
-continuation cannot reconstruct private credentials or enable a replacement operation. A same-account descriptor
-still requires matching native advice and a separate human confirmation for its exact next command.
+Decision: retired Retry creates a fresh read lifetime with current management session/readiness and the exact saved
+descriptor. Missing, invalid or replaced continuation cannot reconstruct credentials or enable a replacement command.
+Matching same-account advice still requires separate human confirmation of the exact next command.
 
-An explicit current-state recovery action is bounded to one existing `/session` binding and one operator-transfer review
-request (2 Auth requests total), with zero approve or execute requests. Source execution uncertainty and acknowledged
-readback recovery read only the current relation; destination acceptance recovery rereads only destination advice.
-Unavailable reads can be retried deliberately. Entry costs one session binding plus one readiness request when
-an initial session is supplied, or two session reads plus readiness otherwise. Restoring an approval-stage descriptor
-adds one session binding and one selected native advice request. Cached return and retired Retry use fresh session,
-readiness and selected recovery: at most five Auth requests (three session reads, readiness, selected review).
-An active relation/advice Retry costs two Auth requests. Each native transfer-review request retains its ten-second
-whole-call bound, including authentication and at most two selected relation reads; source preparation uses the same
-session/selected-source pair and allocates one local operation key, and destination import review uses one
-session/selected-destination pair. After unavailable source preparation, read Retry observes that selected relation
-without allocating a key; a separate deliberate preparation is required to create the review. Browser transport retains
-its five-second bound through response-body completion. There is no list scan, refill, per-row authorization, polling,
-file replay, operation allocation, approval or execution in return/read Retry. Native command retries retain their
-original tuple, reference, operation key, deadlines, relation lock and explicit current-authorized confirmation.
+Whole-call costs: recovery reads one session binding and one selected review (two Auth requests), with zero commands.
+Source uncertainty/acknowledgement recovery reads the relation; destination recovery reads destination advice only.
+Entry costs one session plus readiness with a supplied initial session, otherwise two sessions plus readiness.
+Restoring approval-stage work adds one session plus selected review. Cached return and retired Retry cost at most
+five requests: three sessions, readiness and selected review. Active read Retry costs two requests. Source preparation
+uses one session/selected-source pair and allocates one local key; destination import uses one session/selected-
+destination pair. Retry after unavailable source preparation reads that relation without allocating a key; new review
+requires deliberate preparation. Each native review retains its ten-second deadline and at most two bounded selected
+snapshots, including source consistency or destination preparation. No list scan, refill, polling, per-row authority,
+file replay, approval or execution is added to return/Retry.
 
-Decision: transfer review uses the public `@rezics/auth-contract` operator-page response bounds, composed from
-shared UUID36 and canonical nonnegative PostgreSQL bigint decimal fields; opening owns its separate endpoint budget.
-The source allowance is its empty-field closed JSON skeleton plus `3 × 36 + 19` bytes; destination uses its skeleton
-plus 36. All fixed viewer, continuation, stage and action branches are included. IDs and versions are unescaped ASCII,
-so punctuation is counted exactly and no arbitrary string can enlarge the projection. Error bodies use the maximum
-of the native refused/refused and ready/unavailable skeletons. These allowances are independent of catalogue C.
-The selected read-only POST uses `privateAuthRead` and `readJsonBounded`: one effective five-second lifetime covers
-headers and body even if abort is ignored; actual bytes are limited before fatal UTF-8 decoding and JSON parsing.
-Content-Length never raises the allowance. Invalid or excess advice is unavailable, retaining the original handoff,
-command stage and unknown history for deliberate exact Retry. It cannot approve, accept or acknowledge execution.
-This adds zero native calls to the one selected review; source consistency and destination preparation costs above
-remain unchanged. Native/browser acceptance and broader integration checks remain controller-owned qualifications.
+Decision: selected read-only POST uses `privateAuthRead`/`readJsonBounded` and the public `@rezics/auth-contract`
+operator-page bounds. Shared fields are UUID36 and canonical nonnegative PostgreSQL bigint decimal19, from Kernel's
+closed relation projection; opening owns its separate endpoint allowance. Source costs its empty-field JSON skeleton
+plus `3 × 36 + 19`; destination adds 36. Fixed viewer/continuation, stages, actions, quotes and punctuation are counted.
+IDs/versions are unescaped ASCII; no arbitrary text or catalogue C enlarges the projection. The error allowance is the
+larger refused/refused or ready/unavailable skeleton. Actual bytes are limited before fatal UTF-8 decoding and parsing;
+Content-Length cannot raise the limit. One five-second lifetime covers headers/body even when abort is ignored.
+Invalid/excess advice becomes unavailable, preserving original handoff, command stage and unknown history for exact
+Retry. This adds zero native calls and cannot approve, accept or acknowledge execution. Native/browser acceptance
+and broader integration checks remain controller-owned qualifications.
 
-Departure protects meaningful input and unresolved review with Stay/Leave; only a review created here and never
-submitted is discarded, while restored attempts are conservatively retained because approval may already have reached
-native. Caller replacement and permission loss retire local authority without prompting away an unresolved send.
+Stay/Leave protects meaningful input and unresolved review. Only a review created here and never submitted is
+discarded; restored attempts are retained because approval may already have reached native. Caller replacement and
+permission loss retire authority without prompting away an unresolved send.
 
 ## Rename account
 

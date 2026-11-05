@@ -1024,47 +1024,30 @@ cancellation. Awaiting, substituted or malformed continuations cannot execute.
 Stale sessions require another step-up; approval expiry and current native checks
 still apply. An unknown execution result is not final workflow/readback evidence.
 
-`POST /account-management/operators/transfer-review` is the bounded same-origin
-page read for Transfer. It accepts exactly `{ kind: "readiness" }`,
-`{ kind: "source", subjectAccountId }`, or
-`{ kind: "destination", request }`. A normal human session may learn only that
-the exact transfer management profile is needed; it receives no source relation.
-An admitted source review uses the existing `readOperatorTransferState` source
-authority and returns its exact tuple/version with source action entry advice.
-A destination review treats the source tuple as supplied file data, checks the
-proposed destination with the same `account:manage` action/resource as
-transfer-acceptance, and returns only its action advice. It never reads the
-source-private relation. Every response is closed, `private, no-store`, and
-revalidates the same Auth human/profile after native I/O. The read performs no
-approval, execution, receipt lookup or command lock.
+`POST /account-management/operators/transfer-review` accepts exactly `{ kind: "readiness" }`,
+`{ kind: "source", subjectAccountId }` or `{ kind: "destination", request }`. Ordinary human sessions learn only
+that the exact transfer profile is required, without source disclosure. Source uses `readOperatorTransferState` for
+its exact tuple/version and action advice. Destination uses the supplied handoff and transfer-acceptance's destination
+`account:manage` action/resource. Decision: destination displays the source tuple as file data and never reads the
+source-private relation. Advice never approves, executes, looks up receipts or acquires command locks.
 
-Whole-call cost is finite: readiness performs one bounded Auth session/profile
-proof. A selected review checks that proof and creates the server-only native
-Access token before the source call, then rechecks the same proof afterward.
-Access authenticates the token once. Source review runs the existing relation
-reader's two bounded snapshots (subject and current-operator homes/accounts,
-slot/version, actor floor and assignment), with one released `account:manage`
-preparation and one final action check. Destination review runs two bounded
-actor/destination snapshots (their homes/accounts and current actor floor, plus
-at most one principal and assignment), with one released preparation and one
-final check. It does not read a source account or relation. No lists, profile
-fanout, writes, pool preflight or generated client publication are involved.
+Readiness checks one Auth session/profile proof. Selected review obtains the server-only Access token, authenticates
+it once natively, then rechecks the same human/profile after I/O. The ten-second deadline remains. Source uses two
+bounded snapshots of subject/operator homes/accounts, slot/version, actor floor and assignment, one released
+`account:manage` preparation and final action check. Destination uses two actor/destination snapshots of homes/accounts
+and actor floor, at most one principal/assignment, one released preparation and final check. No source relation,
+lists, profile fanout, writes, pool preflight or client publication is added.
 
-Decision: transfer review publishes its finite UTF-8 success/error allowances through the shared
-`@rezics/auth-contract` operator-page bounds entry. The shared fields are routed lowercase UUID36 and canonical
-nonnegative PostgreSQL bigint decimal `0..9223372036854775807`, preserved as strings above the safe-integer limit.
-Provenance is Kernel `operator-transfer-page-source.ts`, `management-source.ts`, `management-source-operator.sql`
-(`operator_relation_version::text`) and `access.account.operator_relation_version bigint`. Source JSON costs its
-empty-field skeleton plus `3 × 36 + 19`; destination costs its skeleton plus 36. Every fixed viewer, continuation,
-stage and action branch is included; syntax is counted by serialization, and the variable alphabets need no JSON
-escaping. Non-200 bodies are exactly refused/refused or ready/unavailable, whose larger skeleton sets the error
-allowance. Native port projection validates these fields and closed branches before serialization; invalid versions,
-IDs, extra fields or mismatched selections become unavailable without inventing relation authority. Opening composes
-its separate endpoint allowance from the same shared fields. This adds no native read, command or deadline; the
-browser's selected POST has one five-second bounded-body lifetime. Native/browser and integration acceptance remain
-controller-owned qualifications.
-
-Decision: destination review displays the source tuple only as handoff-file data and does not make an optional source-native read; acceptance needs only destination admission.
+Decision: closed `private, no-store` responses publish public `@rezics/auth-contract` operator-page bounds. Shared
+fields are lowercase routed UUID36 and canonical nonnegative bigint decimal `0..9223372036854775807`, kept as strings.
+Provenance: Kernel `operator-transfer-page-source.ts`, `management-source.ts`, `management-source-operator.sql`
+(`operator_relation_version::text`) and `access.account.operator_relation_version bigint`. Source's empty-field JSON
+skeleton adds `3 × 36 + 19`; destination adds 36. Fixed viewers/continuation, stages, action flags and syntax are counted;
+variable alphabets need no escaping. Non-200 allowance is the larger refused/refused or ready/unavailable skeleton.
+Native port fields/branches are validated before serialization; invalid IDs/versions, extra fields or wrong selections
+become unavailable. Opening composes its separate endpoint from these shared fields. Browser receiving limits actual
+bytes before decoding/parsing within five seconds, adding zero native calls. Native/browser and integration
+acceptance remain controller-owned qualifications.
 
 `POST /account-management/operators/relation` is the private native source for the
 existing transfer page. Its exact JSON body is `{ subjectAccountId: string }`;
