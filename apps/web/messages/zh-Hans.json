@@ -2599,6 +2599,8 @@
   "discovery_loading": "正在加载结果…",
   "discovery_not_in_library": "不在你的收藏库中。",
   "discovery_viewer_unavailable": "你的收藏库和评分详情暂时不可用。请重新加载此搜索并重试。",
+  "discovery_kind_preparing": "正在准备{kind}的搜索结果。",
+  "discovery_kind_unavailable": "目前无法使用{kind}的搜索结果。",
   "discovery_not_ready": "搜索正在准备中。请稍后重试。",
   "discovery_unnamed_account": "未命名帐号",
   "discovery_verified_as": "已认证为 {name}",

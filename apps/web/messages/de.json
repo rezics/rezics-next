@@ -2599,6 +2599,8 @@
   "discovery_loading": "Ergebnisse werden geladen…",
   "discovery_not_in_library": "Nicht in deiner Bibliothek.",
   "discovery_viewer_unavailable": "Deine Bibliotheks- und Bewertungsdetails sind nicht verfügbar. Lade diese Suche erneut, um es noch einmal zu versuchen.",
+  "discovery_kind_preparing": "Die Ergebnisse für {kind} werden noch vorbereitet.",
+  "discovery_kind_unavailable": "Die Ergebnisse für {kind} sind derzeit nicht verfügbar.",
   "discovery_not_ready": "Die Suche wird vorbereitet. Versuche es gleich noch einmal.",
   "discovery_unnamed_account": "Unbenanntes Konto",
   "discovery_verified_as": "Verifiziert als {name}",

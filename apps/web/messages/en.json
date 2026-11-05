@@ -2660,6 +2660,8 @@
   "discovery_loading": "Loading results…",
   "discovery_not_in_library": "Not in your Library.",
   "discovery_viewer_unavailable": "Your Library and rating details are unavailable. Reload this search to try again.",
+  "discovery_kind_preparing": "The {kind} results are still being prepared.",
+  "discovery_kind_unavailable": "The {kind} results are currently unavailable.",
   "discovery_not_ready": "Search is getting ready. Try again in a moment.",
   "discovery_unnamed_account": "Unnamed account",
   "discovery_verified_as": "Verified as {name}",

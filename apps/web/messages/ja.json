@@ -2599,6 +2599,8 @@
   "discovery_loading": "検索結果を読み込み中…",
   "discovery_not_in_library": "ライブラリにありません。",
   "discovery_viewer_unavailable": "ライブラリと評価の詳細を利用できません。この検索を再読み込みしてもう一度お試しください。",
+  "discovery_kind_preparing": "{kind} の検索結果を準備しています。",
+  "discovery_kind_unavailable": "{kind} の検索結果は現在利用できません。",
   "discovery_not_ready": "検索を準備中です。しばらくしてからもう一度お試しください。",
   "discovery_unnamed_account": "名前のないアカウント",
   "discovery_verified_as": "{name} として認証済み",
