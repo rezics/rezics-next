@@ -157,6 +157,14 @@ export class LocalMediaStorage implements MediaStorage {
     });
   }
 
+  delete(key: string): Promise<void> {
+    const { mediaId, variant } = parsedKey(key);
+    return this.#exclusive(async () => {
+      const directory = await checkMediaDirectory(mediaId, false);
+      if (directory !== null) await rm(resolve(directory, variant), { force: true });
+    });
+  }
+
   deletePrefix(prefix: string): Promise<void> {
     const mediaId = parsedPrefix(prefix);
     return this.#exclusive(async () => {

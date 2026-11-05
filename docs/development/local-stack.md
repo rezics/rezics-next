@@ -168,6 +168,17 @@ group fails with the name of its first missing variable.
 Decision: local development uses the existing media port with a fixed 20 MiB-per-object file store and the exact
 Bangumi media host `lain.bgm.tv`; R2 remains the only production storage configuration.
 
+The site uses the same original and derivative files through a private loopback object transport on the native
+host. Setup writes its purpose-bound credential and origin into the ignored Web bindings. The existing site
+reservation, uploader-bound upload, completion and current download handlers remain the only browser media
+transport; their Auth/Access decisions run before object access. The object endpoint accepts at most 20 MiB per
+original, confines keys to the native media layout and exposes neither its credential nor storage URLs to pages.
+Upload cleanup deletes the failed original only, preserving any independently produced derivatives.
+
+Decision: local media serving adapts the existing site object port to the native file store; it adds no upload
+writer, public object URL or production endpoint. Focused transport acceptance covers unauthorized access,
+invalid keys, oversized external bytes, range reads, producer readback and exact original cleanup.
+
 Decision: local media acceptance starts the supported `setup`/`start` composition against its owning check's
 isolated database and search node, with separate loopback application ports, before testing site media admission.
 

@@ -1,12 +1,27 @@
+import { localMediaStorage, type LocalMediaBindings, type MediaStorage } from './storage.ts';
 import { download, validVariant } from './download.ts';
 import { dependencyUnavailable, notFound, problem, problemResponse } from './kernel.ts';
 import { upload } from './upload.ts';
 import { avatarUploadAdvice, reserve, read } from './reservation.ts';
 
-export type MediaEnv = { KERNEL_ORIGIN: string; MEDIA: R2Bucket };
+export type MediaEnv = { KERNEL_ORIGIN: string; MEDIA: MediaStorage };
 
-export async function mediaRequest(request: Request, env: Partial<MediaEnv> = {}): Promise<Response> {
+export async function mediaRequest(
+  request: Request,
+  bindings: Partial<MediaEnv & LocalMediaBindings> = {},
+): Promise<Response> {
   try {
+    const env = {
+      ...bindings,
+      MEDIA:
+        bindings.MEDIA ??
+        (bindings.LOCAL_MEDIA_ORIGIN && bindings.LOCAL_MEDIA_TOKEN
+          ? localMediaStorage({
+              LOCAL_MEDIA_ORIGIN: bindings.LOCAL_MEDIA_ORIGIN,
+              LOCAL_MEDIA_TOKEN: bindings.LOCAL_MEDIA_TOKEN,
+            })
+          : undefined),
+    };
     if (!env.MEDIA || !env.KERNEL_ORIGIN) throw dependencyUnavailable(503);
     const pathname = new URL(request.url).pathname;
     if (pathname === '/media/avatar-upload-advice') {

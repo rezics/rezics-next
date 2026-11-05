@@ -56,10 +56,14 @@ test('supported local stack starts the real site and serves media through native
   });
   const output = new Response(child.stdout).text();
   let diagnostics = '';
+  let firstDiagnostics = '';
   const errors = (async () => {
     const decoder = new TextDecoder();
-    for await (const chunk of child.stderr)
-      diagnostics = (diagnostics + decoder.decode(chunk, { stream: true })).slice(-16_384);
+    for await (const chunk of child.stderr) {
+      const value = decoder.decode(chunk, { stream: true });
+      if (firstDiagnostics.length < 32_768) firstDiagnostics += value.slice(0, 32_768 - firstDiagnostics.length);
+      diagnostics = (diagnostics + value).slice(-8192);
+    }
   })();
   let exited = false;
   void child.exited.then(() => {
@@ -81,7 +85,9 @@ test('supported local stack starts the real site and serves media through native
       if (!ready) await Bun.sleep(1000);
     }
     if (!ready)
-      throw new Error(`Local site ${exited ? 'exited' : 'did not become ready'}: ${lastResponse}\n${diagnostics}`);
+      throw new Error(
+        `Local site ${exited ? 'exited' : 'did not become ready'}: ${lastResponse}\n${firstDiagnostics}\nLast process errors:\n${diagnostics}`,
+      );
     const response = await fetch(`${origin(web)}/media/00000000-0000-7000-8000-000000000001/webp-320`);
     expect(response.status).toBe(404);
     const persona = Object.fromEntries(
