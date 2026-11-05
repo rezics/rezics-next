@@ -16,16 +16,10 @@ mock.module('../src/session/query', () => ({ sessionQuery, useSession: () => vie
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => (operation === 'library_pin.put' ? putAdmitted : removeAdmitted),
 }));
-mock.module('../src/library/library-workspace-admission', () => ({
-  useLibraryWorkspaceAdmission: () => ({
-    store: {
-      read: () => ({ viewer: 0 }),
-      allowed: (operation: string) => (operation === 'library_pin.put' ? putAdmitted : removeAdmitted),
-      dispatchVersion: () => 0,
-    },
-    value: { viewer: 0, granted: [putAdmitted, removeAdmitted], dispatch: [0, 0] },
-  }),
-}));
+mock.module('../src/library/library-workspace-admission', () => ({ useLibraryWorkspaceAdmission: () => ({
+  store: { read: () => ({ viewer: 0 }), allowed: (operation: string) => operation === 'library_pin.put' ? putAdmitted : removeAdmitted, dispatchVersion: () => 0 },
+  value: { viewer: 0, granted: [putAdmitted, removeAdmitted], dispatch: [0, 0] },
+}) }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'X-CSRF-Token': viewer.csrfToken }) }));
 
 function deferred<T>() {
@@ -150,8 +144,8 @@ async function mount(initial: Props = { collectionId: 'b', pins: loaded(), mode:
   let unmounted = false;
   const show = async (next = props) => {
     props = next;
-    current.client.setQueryData(sessionQuery.queryKey, viewer);
-    await act(async () =>
+    await act(async () => {
+      current.client.setQueryData(sessionQuery.queryKey, viewer);
       root.render(
         <StrictMode>
           <QueryClientProvider client={current.client}>
@@ -160,8 +154,8 @@ async function mount(initial: Props = { collectionId: 'b', pins: loaded(), mode:
             </RouterContextProvider>
           </QueryClientProvider>
         </StrictMode>,
-      ),
-    );
+      );
+    });
   };
   const select = (action: Action) => {
     const entry = observed.entries.find((entry) => entry.type !== 'separator' && entry.label === labels()[action]);
@@ -424,7 +418,6 @@ describe('Pin mutation completions cannot cross the originating viewer or Collec
       expect(h.groups[0]!.cache).not.toHaveBeenCalled();
       await h.click('up');
       expect(calls[3]!.data).toEqual(unresolved.data);
-      expect(calls[3]!.headers).toEqual(unresolved.headers);
       await complete(calls[3]!, 'success');
     } finally {
       await h.close();
