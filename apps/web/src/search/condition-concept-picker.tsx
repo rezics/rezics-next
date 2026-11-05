@@ -31,10 +31,7 @@ type FocusIntent =
 
 function ownsFocusOrLostTrigger(from: HTMLElement): boolean {
   const active = document.activeElement;
-  return (
-    active === from ||
-    (!from.isConnected && (active === document.body || active === document.documentElement))
-  );
+  return active === from || (!from.isConnected && (active === document.body || active === document.documentElement));
 }
 
 type Props = {
@@ -58,10 +55,7 @@ function referenceMessage(
   return m.condition_concept_unavailable({}, options);
 }
 
-function searchMessage(
-  result: ConditionConceptSuggestions | undefined,
-  options: { locale: (typeof locales)[number] },
-) {
+function searchMessage(result: ConditionConceptSuggestions | undefined, options: { locale: (typeof locales)[number] }) {
   if (!result || result.status === 'ready') return undefined;
   if (result.status === 'preparing') return m.condition_concept_search_preparing({}, options);
   if (result.status === 'restart') return m.condition_concept_restart({}, options);
@@ -209,17 +203,17 @@ function ConceptPicker({
         : lookup.blocked === 'metadata'
           ? m.condition_concept_metadata_unavailable({}, options)
           : undefined;
-  const message = referenceLoading
-    ? m.condition_concept_reading({}, options)
-    : referenceMessage(reference, options);
+  const message = referenceLoading ? m.condition_concept_reading({}, options) : referenceMessage(reference, options);
   const searchStatusMessage = searchLoading
     ? m.condition_concept_searching({}, options)
     : searchMessage(searchResult, options);
   const showSearchRetry =
-    (searchResult?.status === 'preparing' || searchResult?.status === 'unavailable') ||
+    searchResult?.status === 'preparing' ||
+    searchResult?.status === 'unavailable' ||
     (searchLoading && currentSearchView?.phase === 'loading' && currentSearchView.retryable);
   const showReferenceRetry =
-    (reference?.status === 'preparing' || reference?.status === 'unavailable') ||
+    reference?.status === 'preparing' ||
+    reference?.status === 'unavailable' ||
     (referenceLoading && currentReferenceView?.phase === 'loading' && currentReferenceView.retryable);
   const searchRetryPending = searchLoading && currentSearchView?.phase === 'loading' && currentSearchView.retryable;
   const referenceRetryPending =
@@ -357,10 +351,7 @@ function ConceptPicker({
   }, [open, lookup.enabled, lookup.filter, query, locale, requestLookup, nextSearchOwner]);
 
   const shouldReadReference =
-    lookup.enabled &&
-    !!targetId &&
-    !!lookup.releaseDigest &&
-    (open || (!hasOpened.current && !!existingId));
+    lookup.enabled && !!targetId && !!lookup.releaseDigest && (open || (!hasOpened.current && !!existingId));
   useEffect(() => {
     if (!shouldReadReference || !targetId) return;
     if (referenceViewRef.current?.owner === nextReferenceOwner && referenceViewRef.current.phase === 'settled') return;
@@ -442,14 +433,7 @@ function ConceptPicker({
       schemeSelect.current?.focus();
     else referenceStatusElement.current?.focus();
     focusIntent.current = undefined;
-  }, [
-    open,
-    visitEpoch,
-    nextSearchOwner,
-    nextReferenceOwner,
-    currentSearchView,
-    currentReferenceView,
-  ]);
+  }, [open, visitEpoch, nextSearchOwner, nextReferenceOwner, currentSearchView, currentReferenceView]);
 
   return (
     <FieldSet className="min-w-0 gap-2 rounded-md border border-border/60 p-3" data-condition-concept>
@@ -625,7 +609,10 @@ function ConceptPicker({
                   id={modeSelectId}
                   value={mode}
                   onChange={(event) =>
-                    setModeState({ owner: selectionOwner, value: event.currentTarget.value as '' | 'exact' | 'descendants' })
+                    setModeState({
+                      owner: selectionOwner,
+                      value: event.currentTarget.value as '' | 'exact' | 'descendants',
+                    })
                   }
                   disabled={disabled}
                 >

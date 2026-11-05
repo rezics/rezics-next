@@ -128,13 +128,7 @@ async function mountedConceptForm(
   }
 }
 
-function ConceptForm({
-  onApplied,
-  onSubmit,
-}: {
-  onApplied(next: FilterDocument): void;
-  onSubmit(): void;
-}) {
+function ConceptForm({ onApplied, onSubmit }: { onApplied(next: FilterDocument): void; onSubmit(): void }) {
   const [value, setValue] = useState(initialCondition);
   const composition = useConditionComposition('concept-condition-form');
   return createElement(
@@ -387,7 +381,7 @@ describe('Search Concept conditions', () => {
       expect(host.querySelector('ul')?.id).toBeTruthy();
       expect(host.ownerDocument.activeElement === host.querySelector('ul')).toBe(true);
 
-      const composingEnter = new (host.ownerDocument.defaultView!.KeyboardEvent)('keydown', {
+      const composingEnter = new host.ownerDocument.defaultView!.KeyboardEvent('keydown', {
         key: 'Enter',
         bubbles: true,
         cancelable: true,
@@ -395,7 +389,7 @@ describe('Search Concept conditions', () => {
       });
       input.dispatchEvent(composingEnter);
       expect(composingEnter.defaultPrevented).toBe(true);
-      input.dispatchEvent(new (host.ownerDocument.defaultView!.KeyboardEvent)('keyup', { key: 'Enter', bubbles: true }));
+      input.dispatchEvent(new host.ownerDocument.defaultView!.KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
       expect(submissions).toBe(0);
 
       await clickButton(host, 'Drama');

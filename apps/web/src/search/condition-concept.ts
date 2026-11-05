@@ -21,10 +21,7 @@ export type ConditionConceptSuggestions = Readonly<
     }
 >;
 
-function retryableResult(
-  status: 'preparing' | 'unavailable',
-  response: Response,
-): ConditionConceptSuggestions {
+function retryableResult(status: 'preparing' | 'unavailable', response: Response): ConditionConceptSuggestions {
   const retryAfter = conditionConceptRetryAdvice(response.headers.get('retry-after'));
   return { status, choices: [], ...(retryAfter ? { retryAfter } : {}) };
 }
@@ -32,7 +29,9 @@ function retryableResult(
 async function responseCode(response: Response): Promise<unknown> {
   try {
     const body: unknown = await response.clone().json();
-    return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>).code : undefined;
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>).code
+      : undefined;
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof TypeError) return;
     throw error;
@@ -112,8 +111,7 @@ export async function readConditionConceptReference(
   if (signal.aborted) return { status: 'unavailable', id };
   const retryAfter = conditionConceptRetryAdvice(response.headers.get('retry-after'));
   // Response.ok includes 202. Keep the native preparation advice visible to the reader.
-  if (response.status === 202)
-    return { status: 'preparing', id, ...(retryAfter ? { retryAfter } : {}) };
+  if (response.status === 202) return { status: 'preparing', id, ...(retryAfter ? { retryAfter } : {}) };
   if (!response.ok) {
     if (response.status === 403 || response.status === 401) return { status: 'refused', id };
     if (response.status === 404 || response.status === 422) return { status: 'unsupported', id };
@@ -129,7 +127,8 @@ export async function readConditionConceptReference(
     const advice = retryAfter ?? reference.retryAfter;
     return { ...reference, ...(advice ? { retryAfter: advice } : {}) };
   } catch (error) {
-    if (signal.aborted || error instanceof SyntaxError || error instanceof TypeError) return { status: 'unavailable', id };
+    if (signal.aborted || error instanceof SyntaxError || error instanceof TypeError)
+      return { status: 'unavailable', id };
     throw error;
   }
 }
