@@ -80,11 +80,16 @@ test('Person current visit rejects wrong Person, locale, nested return, contradi
       sourceAddress: `/en/subjects/${personId}/mira-sato?context=${contextId}`,
     }),
   );
-  const invalid = (value: unknown) => validatePeopleCurrentVisitSearch({ visit: JSON.stringify(value) }, personId, 'en');
-  expect(validatePeopleCurrentVisitSearch({ visit: JSON.stringify(origin) }, '00000000-0000-4000-8000-000000000999', 'en')).toEqual({
+  const invalid = (value: unknown) =>
+    validatePeopleCurrentVisitSearch({ visit: JSON.stringify(value) }, personId, 'en');
+  expect(
+    validatePeopleCurrentVisitSearch({ visit: JSON.stringify(origin) }, '00000000-0000-4000-8000-000000000999', 'en'),
+  ).toEqual({
     kind: 'invalid',
   });
-  expect(validatePeopleCurrentVisitSearch({ visit: JSON.stringify(origin) }, personId, 'fr')).toEqual({ kind: 'invalid' });
+  expect(validatePeopleCurrentVisitSearch({ visit: JSON.stringify(origin) }, personId, 'fr')).toEqual({
+    kind: 'invalid',
+  });
   expect(
     invalid({
       ...origin,

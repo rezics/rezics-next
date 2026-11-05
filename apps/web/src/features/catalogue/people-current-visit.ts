@@ -46,7 +46,10 @@ function routeSearch(visit?: string, correction?: 'global') {
 }
 
 function overviewSourceAddress(input: PeopleCurrentVisitInput): string {
-  const fallback = new URL(subjectHref({ id: input.id, label: input.label }, input.locale).href, 'https://rezics.invalid');
+  const fallback = new URL(
+    subjectHref({ id: input.id, label: input.label }, input.locale).href,
+    'https://rezics.invalid',
+  );
   fallback.searchParams.set('context', input.context);
   if (input.realm) fallback.searchParams.set('realm', input.realm);
 
@@ -91,8 +94,10 @@ export function peopleCurrentVisitHref(input: PeopleCurrentVisitInput): string {
 
 function exactKeys(value: Record<string, unknown>, required: string[], optional: string[]): boolean {
   const keys = Object.keys(value);
-  return required.every((key) => Object.hasOwn(value, key)) &&
-    keys.every((key) => required.includes(key) || optional.includes(key));
+  return (
+    required.every((key) => Object.hasOwn(value, key)) &&
+    keys.every((key) => required.includes(key) || optional.includes(key))
+  );
 }
 
 function definitionValue(value: unknown): value is string {
@@ -120,7 +125,12 @@ function validReturnAddress(address: string, origin: PeopleCurrentVisitOrigin): 
   );
 }
 
-function validOrigin(value: unknown, encoded: string, id: string, locale: string): PeopleCurrentVisitOrigin | undefined {
+function validOrigin(
+  value: unknown,
+  encoded: string,
+  id: string,
+  locale: string,
+): PeopleCurrentVisitOrigin | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const record = value as Record<string, unknown>;
   if (

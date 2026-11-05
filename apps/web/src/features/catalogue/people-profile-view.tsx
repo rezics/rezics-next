@@ -107,15 +107,7 @@ const peopleRelationsSurface = [
   'md:pointer-fine:[&_details>summary]:py-1',
 ].join(' ');
 
-function ProfileIntro({
-  read,
-  locale,
-  returnHref,
-}: {
-  read: Current;
-  locale: string;
-  returnHref?: string;
-}) {
+function ProfileIntro({ read, locale, returnHref }: { read: Current; locale: string; returnHref?: string }) {
   const o = { locale: locale as never };
   const subject = read.public?.subject;
   const profile = read.profiles.find((entry) => entry.id === subject?.type);
@@ -551,9 +543,7 @@ function PeopleProfileEditorLive({
               properties: (current) => peopleScalarFields(current.release, current.public.subject.type, locale),
             }}
             profileHeadingRef={retryHeading}
-            profileIntro={
-              <ProfileIntro read={privateRead} locale={locale} {...(returnHref ? { returnHref } : {})} />
-            }
+            profileIntro={<ProfileIntro read={privateRead} locale={locale} {...(returnHref ? { returnHref } : {})} />}
             transport={{
               propose,
               read: async () => {
@@ -682,7 +672,7 @@ function PeopleProfileEditorLive({
             href={`/auth/sign-in?return_to=${encodeURIComponent(
               id && read.public
                 ? (returnAfterSignIn ??
-                  `${subjectHref({ id, label: definitionText(read.public.subject.labels, locale).text }, locale).href}/people`)
+                    `${subjectHref({ id, label: definitionText(read.public.subject.labels, locale).text }, locale).href}/people`)
                 : `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
             )}`}
           >

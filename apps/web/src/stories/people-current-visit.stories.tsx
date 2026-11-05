@@ -19,7 +19,13 @@ import { PatternStory } from './page';
 const otherContext = '00000000-0000-4000-8000-000000000801';
 const realm = '00000000-0000-4000-8000-000000000802';
 const localeNames = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es'] as const;
-type VisitState = 'global' | 'unsupported' | 'selected-global' | 'unavailable-return' | 'removed-selection' | 'cancelled-focus';
+type VisitState =
+  | 'global'
+  | 'unsupported'
+  | 'selected-global'
+  | 'unavailable-return'
+  | 'removed-selection'
+  | 'cancelled-focus';
 
 function PeopleCurrentVisitStory({ state }: { state: VisitState }) {
   const locale = getLocale();
@@ -110,7 +116,12 @@ function AllLocales() {
         return (
           <section key={locale} lang={locale} className="rounded-xl border border-border p-4">
             <p className="mb-3 text-xs font-medium uppercase">{locale}</p>
-            <PeopleCurrentVisitView locale={locale} pathname={`/${locale}/subjects/${peoplePersonId}/mira-sato/people`} visit={visit} renderEditor={() => null} />
+            <PeopleCurrentVisitView
+              locale={locale}
+              pathname={`/${locale}/subjects/${peoplePersonId}/mira-sato/people`}
+              visit={visit}
+              renderEditor={() => null}
+            />
           </section>
         );
       })}
