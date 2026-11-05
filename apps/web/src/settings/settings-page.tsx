@@ -37,10 +37,7 @@ import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
 import { SectionsNavigation, settingsSections, type SettingsSection } from './sections-navigation';
 import { ManagedAccountDetail } from './managed-account-detail';
-import {
-  managedAccountTarget,
-  managedAccountsBackHref,
-} from './managed-account-detail-read';
+import { managedAccountTarget, managedAccountsBackHref } from './managed-account-detail-read';
 import { readSettingsPage, saveNotifications, savePreferences } from './actions';
 import type { ReadingIO } from './reading-preferences';
 import type { NotificationEditorIO } from './notification-recovery';
